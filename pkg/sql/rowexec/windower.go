@@ -122,7 +122,7 @@ func newWindower(
 		for i, argIdx := range windowFn.ArgsIdxs {
 			argTypes[i] = w.inputTypes[argIdx]
 		}
-		windowConstructor, outputType, err := execinfrapb.GetWindowFunctionInfo(windowFn.Func, argTypes...)
+		windowConstructor, outputType, err := execinfra.GetWindowFunctionInfo(windowFn.Func, argTypes...)
 		if err != nil {
 			return nil, err
 		}
@@ -145,14 +145,11 @@ func newWindower(
 	// windower will overflow to disk if this limit is not enough.
 	limit := execinfra.GetWorkMemLimit(flowCtx)
 	if limit < memRequiredByWindower {
-		if !flowCtx.Cfg.TestingKnobs.ForceDiskSpill && flowCtx.Cfg.TestingKnobs.MemoryLimitBytes == 0 {
-			return nil, errors.Errorf(
-				"window functions require %d bytes of RAM but only %d are in the budget. "+
-					"Consider increasing sql.distsql.temp_storage.workmem cluster setting or distsql_workmem session variable",
-				memRequiredByWindower, limit)
-		}
-		// The limit is set very low by the tests, but the windower requires
-		// some amount of RAM, so we override the limit.
+		// The limit is set very low (likely by the tests in order to improve
+		// the test coverage), but the windower requires some amount of RAM, so
+		// we override the limit. This behavior is acceptable given that we
+		// don't expect anyone to lower the setting to less than 100KiB in
+		// production.
 		limit = memRequiredByWindower
 	}
 	limitedMon := mon.NewMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon)

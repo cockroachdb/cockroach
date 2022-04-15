@@ -10,7 +10,10 @@
 
 package descpb
 
-import "github.com/cockroachdb/cockroach/pkg/sql/types"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+)
 
 // IndexFetchSpecVersionInitial is the initial IndexFetchSpec version.
 const IndexFetchSpecVersionInitial = 1
@@ -54,4 +57,12 @@ func (c *IndexFetchSpec_KeyColumn) DatumEncoding() DatumEncoding {
 		return DatumEncoding_DESCENDING_KEY
 	}
 	return DatumEncoding_ASCENDING_KEY
+}
+
+// EncodingDirection returns the encoding direction for the key column.
+func (c *IndexFetchSpec_KeyColumn) EncodingDirection() encoding.Direction {
+	if c.Direction == IndexDescriptor_DESC {
+		return encoding.Descending
+	}
+	return encoding.Ascending
 }

@@ -49,13 +49,17 @@ const (
 	NOCREATEDB
 	CREATELOGIN
 	NOCREATELOGIN
+	// VIEWACTIVITY is responsible for controlling access to DB Console
+	// endpoints that allow a user to view data in the UI without having
+	// the Admin role. In addition, the VIEWACTIVITY role permits viewing
+	// *unredacted* data in the `/nodes` and `/nodes_ui` endpoints which
+	// display IP addresses and hostnames.
 	VIEWACTIVITY
 	NOVIEWACTIVITY
 	CANCELQUERY
 	NOCANCELQUERY
 	MODIFYCLUSTERSETTING
 	NOMODIFYCLUSTERSETTING
-	DEFAULTSETTINGS
 	VIEWACTIVITYREDACTED
 	NOVIEWACTIVITYREDACTED
 	SQLLOGIN
@@ -121,7 +125,6 @@ var ByName = map[string]Option{
 	"NOCANCELQUERY":          NOCANCELQUERY,
 	"MODIFYCLUSTERSETTING":   MODIFYCLUSTERSETTING,
 	"NOMODIFYCLUSTERSETTING": NOMODIFYCLUSTERSETTING,
-	"DEFAULTSETTINGS":        DEFAULTSETTINGS,
 	"VIEWACTIVITYREDACTED":   VIEWACTIVITYREDACTED,
 	"NOVIEWACTIVITYREDACTED": NOVIEWACTIVITYREDACTED,
 	"SQLLOGIN":               SQLLOGIN,
@@ -165,9 +168,8 @@ func (rol List) GetSQLStmts(op string) (map[string]func() (bool, string, error),
 		// Skip PASSWORD and DEFAULTSETTINGS options.
 		// Since PASSWORD still resides in system.users, we handle setting PASSWORD
 		// outside of this set stmt.
-		// DEFAULTSETTINGS is stored in system.database_role_settings.
 		// TODO(richardjcai): migrate password to system.role_options
-		if ro.Option == PASSWORD || ro.Option == DEFAULTSETTINGS {
+		if ro.Option == PASSWORD {
 			continue
 		}
 

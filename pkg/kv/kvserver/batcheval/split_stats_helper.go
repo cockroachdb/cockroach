@@ -25,11 +25,12 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 //   but nothing in this code relies on that). Since we have no reason to
 //   introduce ContainsEstimates in a split trigger, this typically has
 //   ContainsEstimates unset, but the results will be estimate free either way.
-// - AbsPostSplitLeft: the stats of the range after applying the split, i.e.
-//   accounting both for the shrinking as well as for the writes in DeltaBatch
-//   related to the shrunk keyrange.
-//   In practice, we obtain this by recomputing the stats, and so we don't
-//   expect ContainsEstimates to be set in them.
+// - AbsPostSplit{Left,Right}: the stats of either the left or right hand side
+//   range after applying the split, i.e. accounting both for the shrinking as
+//   well as for the writes in DeltaBatch related to the shrunk keyrange. In
+//   practice, we obtain this by recomputing the stats using the corresponding
+//   AbsPostSplit{Left,Right}Fn, and so we don't expect ContainsEstimates to be
+//   set in them. The choice of which side to scan is controlled by ScanRightFirst.
 //
 // We are interested in computing from this the quantities
 //
@@ -103,48 +104,86 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 type splitStatsHelper struct {
 	in splitStatsHelperInput
 
+	absPostSplitLeft  *enginepb.MVCCStats
 	absPostSplitRight *enginepb.MVCCStats
 }
+
+// splitStatsScanFn scans a post-split keyspace to compute its stats. The
+// computed stats should not contain estimates.
+type splitStatsScanFn func() (enginepb.MVCCStats, error)
 
 // splitStatsHelperInput is passed to makeSplitStatsHelper.
 type splitStatsHelperInput struct {
 	AbsPreSplitBothEstimated enginepb.MVCCStats
 	DeltaBatchEstimated      enginepb.MVCCStats
-	AbsPostSplitLeft         enginepb.MVCCStats
+	// AbsPostSplitLeftFn returns the stats for the left hand side of the
+	// split.
+	AbsPostSplitLeftFn splitStatsScanFn
 	// AbsPostSplitRightFn returns the stats for the right hand side of the
-	// split. This is only called (and only once) when either of the first two
-	// fields above contains estimates, so that we can guarantee that the
-	// post-splits stats don't.
-	AbsPostSplitRightFn func() (enginepb.MVCCStats, error)
+	// split.
+	AbsPostSplitRightFn splitStatsScanFn
+	// ScanRightFirst controls whether the left hand side or the right hand
+	// side of the split is scanned first. In cases where neither of the
+	// input stats contain estimates, this is the only side that needs to
+	// be scanned.
+	ScanRightFirst bool
 }
 
 // makeSplitStatsHelper initializes a splitStatsHelper. The values in the input
 // are assumed to not change outside of the helper and must no longer be used.
-// The provided AbsPostSplitRightFn recomputes the right hand side of the split
-// after accounting for the split trigger batch. This is only invoked at most
-// once, and only when necessary.
+// The provided AbsPostSplitLeftFn and AbsPostSplitRightFn recompute the left
+// and right hand sides of the split after accounting for the split trigger
+// batch. Each are only invoked at most once, and only when necessary.
 func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error) {
 	h := splitStatsHelper{
 		in: input,
 	}
 
-	if h.in.AbsPreSplitBothEstimated.ContainsEstimates == 0 &&
-		h.in.DeltaBatchEstimated.ContainsEstimates == 0 {
-		// We have CombinedErrorDelta zero, so use arithmetic to compute
-		// AbsPostSplitRight().
-		ms := h.in.AbsPreSplitBothEstimated
-		ms.Subtract(h.in.AbsPostSplitLeft)
-		ms.Add(h.in.DeltaBatchEstimated)
-		h.absPostSplitRight = &ms
-		return h, nil
+	// Scan to compute the stats for the first side.
+	var absPostSplitFirst enginepb.MVCCStats
+	var err error
+	if h.in.ScanRightFirst {
+		absPostSplitFirst, err = input.AbsPostSplitRightFn()
+		h.absPostSplitRight = &absPostSplitFirst
+	} else {
+		absPostSplitFirst, err = input.AbsPostSplitLeftFn()
+		h.absPostSplitLeft = &absPostSplitFirst
 	}
-	// Estimates are contained in the input, so ask the oracle for
-	// AbsPostSplitRight().
-	ms, err := input.AbsPostSplitRightFn()
 	if err != nil {
 		return splitStatsHelper{}, err
 	}
-	h.absPostSplitRight = &ms
+
+	if h.in.AbsPreSplitBothEstimated.ContainsEstimates == 0 &&
+		h.in.DeltaBatchEstimated.ContainsEstimates == 0 {
+		// We have CombinedErrorDelta zero, so use arithmetic to compute the
+		// stats for the second side.
+		ms := h.in.AbsPreSplitBothEstimated
+		ms.Subtract(absPostSplitFirst)
+		ms.Add(h.in.DeltaBatchEstimated)
+		if h.in.ScanRightFirst {
+			h.absPostSplitLeft = &ms
+		} else {
+			h.absPostSplitRight = &ms
+		}
+		return h, nil
+	}
+
+	// Estimates are contained in the input, so ask the oracle to scan to compute
+	// the stats for the second side. We only scan the second side when either of
+	// the input stats above (AbsPreSplitBothEstimated or DeltaBatchEstimated)
+	// contains estimates, so that we can guarantee that the post-splits stats
+	// don't.
+	var absPostSplitSecond enginepb.MVCCStats
+	if h.in.ScanRightFirst {
+		absPostSplitSecond, err = input.AbsPostSplitLeftFn()
+		h.absPostSplitLeft = &absPostSplitSecond
+	} else {
+		absPostSplitSecond, err = input.AbsPostSplitRightFn()
+		h.absPostSplitRight = &absPostSplitSecond
+	}
+	if err != nil {
+		return splitStatsHelper{}, err
+	}
 	return h, nil
 }
 
@@ -167,7 +206,7 @@ func (h splitStatsHelper) DeltaPostSplitLeft() enginepb.MVCCStats {
 	// NB: if we ever wanted to also write to the left hand side after init'ing
 	// the helper, we can make that work, too.
 	// NB: note how none of this depends on mutations to absPostSplitRight.
-	ms := h.in.AbsPostSplitLeft
+	ms := *h.absPostSplitLeft
 	ms.Subtract(h.in.AbsPreSplitBothEstimated)
 
 	return ms

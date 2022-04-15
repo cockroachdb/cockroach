@@ -14,6 +14,7 @@ import (
 	"container/list"
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -76,6 +77,7 @@ type rangeIDQueue struct {
 
 	// High priority.
 	priorityID     roachpb.RangeID
+	priorityStack  []byte // for debugging in case of assertion failure; see #75939
 	priorityQueued bool
 }
 
@@ -121,14 +123,12 @@ func (q *rangeIDQueue) Len() int {
 }
 
 func (q *rangeIDQueue) SetPriorityID(id roachpb.RangeID) {
-	if q.priorityID != 0 && q.priorityID != id &&
-		// This assertion is temporarily disabled, see:
-		// https://github.com/cockroachdb/cockroach/issues/75939
-		false {
+	if q.priorityID != 0 && q.priorityID != id {
 		panic(fmt.Sprintf(
-			"priority range ID already set: old=%d, new=%d",
-			q.priorityID, id))
+			"priority range ID already set: old=%d, new=%d, first set at:\n\n%s",
+			q.priorityID, id, q.priorityStack))
 	}
+	q.priorityStack = debug.Stack()
 	q.priorityID = id
 }
 

@@ -34,14 +34,15 @@ import {
   takeTracingSnapshot,
 } from "src/util/api";
 import { CaretRight } from "@cockroachlabs/icons";
+import { Switch } from "antd";
 import ISnapshotInfo = cockroach.server.serverpb.ISnapshotInfo;
+import ITracingSpan = cockroach.server.serverpb.ITracingSpan;
 import GetTracingSnapshotRequest = cockroach.server.serverpb.GetTracingSnapshotRequest;
 import GetTraceRequest = cockroach.server.serverpb.GetTraceRequest;
 import IGetTraceResponse = cockroach.server.serverpb.IGetTraceResponse;
 import ISpanTag = cockroach.server.serverpb.ISpanTag;
 import SetTraceRecordingTypeRequest = cockroach.server.serverpb.SetTraceRecordingTypeRequest;
 import RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
-import { Switch } from "antd";
 
 const TS_FORMAT = "MMMM Do YYYY, h:mm:ss a"; // January 28th 2022, 7:12:40 pm;
 
@@ -53,7 +54,7 @@ const SnapshotSelector = ({
   snapshots,
   currentSnapshot,
 }: {
-  setSnapshot: (id: string) => void;
+  setSnapshot: (id: Long) => void;
   snapshots: ISnapshotInfo[];
   currentSnapshot: Snapshot;
 }) => {
@@ -67,15 +68,16 @@ const SnapshotSelector = ({
         };
       })}
       selected={`${currentSnapshot.id}`}
-      onChange={dropdownOption => setSnapshot(dropdownOption.value)}
+      onChange={dropdownOption =>
+        setSnapshot(Long.fromString(dropdownOption.value))
+      }
     />
   );
 };
 
 interface SnapshotRow {
-  span: cockroach.server.serverpb.ITracingSpan;
+  span: ITracingSpan;
   stack: string;
-  verbose?: boolean;
 }
 
 const GoroutineToggler = ({ id, stack }: { id: Long; stack: string }) => {
@@ -182,9 +184,9 @@ const TagCell = (props: {
 };
 
 const snapshotColumns = (
-  setRecording: (span: cockroach.server.serverpb.ITracingSpan) => void,
+  setRecording: (span: ITracingSpan) => void,
   setSearch: (s: string) => void,
-  setTraceRecordingVerbose: (trace_id: Long) => void,
+  setTraceRecordingVerbose: (span: ITracingSpan) => void,
 ): ColumnDescriptor<SnapshotRow>[] => {
   return [
     {
@@ -199,16 +201,16 @@ const snapshotColumns = (
       cell: sr => <TagCell sr={sr} setSearch={setSearch} />,
     },
     {
-      title: "Verbose",
-      name: "verbose",
+      title: "Recording",
+      name: "recording",
       cell: sr => (
         <Switch
-          checked={sr.verbose}
-          // TODO(davidh): Implement toggling back and forth
-          onClick={() => setTraceRecordingVerbose(sr.span.trace_id)}
+          disabled={!sr.span.current}
+          checked={sr.span.current_recording_mode != RecordingMode.OFF}
+          onClick={() => setTraceRecordingVerbose(sr.span)}
         />
       ),
-      sort: sr => `${sr.verbose}`,
+      sort: sr => `${sr.span.current_recording_mode}`,
     },
     {
       title: "Start Time",
@@ -240,7 +242,7 @@ const CurrentSnapshot = ({
   search: string;
   setRecording: (trace: cockroach.server.serverpb.ITracingSpan) => void;
   setSearch: (s: string) => void;
-  setTraceRecordingVerbose: (trace_id: Long) => void;
+  setTraceRecordingVerbose: (span: ITracingSpan) => void;
 }) => {
   const [sortSetting, setSortSetting] = useState<SortSetting>({
     ascending: true,
@@ -288,27 +290,32 @@ export const Tracez = () => {
   const [showTrace, setShowTrace] = useState<boolean>(false);
   const [showLiveTrace, setShowLiveTrace] = useState<boolean>(false);
 
-  const takeSnapshot = () => {
-    takeTracingSnapshot().then(() => {
-      refreshTracingSnapshots();
-    });
-  };
-
-  const setSnapshotID = (id: string) => {
+  const setSnapshotID = (id: Long) => {
     const req = new GetTracingSnapshotRequest({
-      snapshot_id: Long.fromString(id),
+      snapshot_id: id,
     });
     getTracingSnapshot(req).then(req => {
       setSnapshot({
         id: req.snapshot.snapshot_id,
         captured_at: req.snapshot.captured_at,
-        rows: req.snapshot.spans.map(span => {
-          return {
-            span,
-            stack: req.snapshot.stacks[`${span.goroutine_id}`],
-          };
-        }),
+        rows: req.snapshot.spans.map(
+          (span: cockroach.server.serverpb.ITracingSpan): SnapshotRow => {
+            return {
+              span,
+              stack: req.snapshot.stacks[`${span.goroutine_id}`],
+            };
+          },
+        ),
       });
+    });
+  };
+
+  // takeSnapshot takes a snapshot and displays it.
+  const takeSnapshot = () => {
+    takeTracingSnapshot().then(resp => {
+      refreshTracingSnapshots();
+      // Load the new snapshot.
+      setSnapshotID(resp.snapshot.snapshot_id);
     });
   };
 
@@ -346,20 +353,24 @@ export const Tracez = () => {
     }
   }, [showTrace, snapshot, requestedSpan, showLiveTrace]);
 
-  const setTraceRecordingVerbose = (t: Long) => {
+  const setTraceRecordingVerbose = (span: ITracingSpan) => {
+    const recMode =
+      span.current_recording_mode != RecordingMode.OFF
+        ? RecordingMode.OFF
+        : RecordingMode.VERBOSE;
     setTraceRecordingType(
       new SetTraceRecordingTypeRequest({
-        trace_id: t,
-        recording_mode: RecordingMode.VERBOSE,
-        // TODO(davidh): do we need `span_id` on this request?
+        trace_id: span.trace_id,
+        recording_mode: recMode,
       }),
     ).then(() => {
+      // We modify the snapshot in place.
       setSnapshot({
         id: snapshot.id,
         captured_at: snapshot.captured_at,
         rows: snapshot.rows.map(r => {
-          if (r.span.trace_id === t) {
-            r.verbose = true;
+          if (r.span.trace_id === span.trace_id) {
+            r.span.current_recording_mode = recMode;
           }
           return r;
         }),
@@ -447,13 +458,13 @@ const TraceView = ({
 
 interface SnapshotViewProps {
   takeSnapshot: () => void;
-  setSnapshotID: (s: string) => void;
+  setSnapshotID: (s: Long) => void;
   snapshots: ISnapshotInfo[];
   snapshot: Snapshot;
   setSearch: (s: string) => void;
   search: string;
   setRecording: (s: cockroach.server.serverpb.ITracingSpan) => void;
-  setTraceRecordingVerbose: (trace_id: Long) => void;
+  setTraceRecordingVerbose: (span: ITracingSpan) => void;
 }
 
 const SnapshotView = ({

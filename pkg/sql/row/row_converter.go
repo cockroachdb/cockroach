@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -182,7 +183,8 @@ type KVBatch struct {
 	// Progress represents the fraction of the input that generated this row.
 	Progress float32
 	// KVs is the actual converted KV data.
-	KVs []roachpb.KeyValue
+	KVs     []roachpb.KeyValue
+	MemSize int64
 }
 
 // DatumRowConverter converts Datums into kvs and streams it to the destination
@@ -224,6 +226,8 @@ var kvDatumRowConverterBatchSize = util.ConstantWithMetamorphicTestValue(
 	1,    /* metamorphicValue */
 )
 
+const kvDatumRowConverterBatchMemSize = 4 << 20
+
 // TestingSetDatumRowConverterBatchSize sets kvDatumRowConverterBatchSize and
 // returns function to reset this setting back to its old value.
 func TestingSetDatumRowConverterBatchSize(newSize int) func() {
@@ -258,7 +262,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 	// TODO(postamar): give the tree.EvalContext a useful interface
 	// instead of cobbling a descs.Collection in this way.
 	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
-	descsCol := cf.MakeCollection(evalCtx.Context, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
+	descsCol := cf.MakeCollection(evalCtx.Context, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack), nil /* monitor */)
 	err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)
@@ -291,7 +295,7 @@ func NewDatumRowConverter(
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,
 	seqChunkProvider *SeqChunkProvider,
-	metrics *Metrics,
+	metrics *rowinfra.Metrics,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,
@@ -420,6 +424,7 @@ func NewDatumRowConverter(
 	padding := 2 * (len(tableDesc.PublicNonPrimaryIndexes()) + len(tableDesc.GetFamilies()))
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
+	c.KvBatch.MemSize = 0
 
 	colsOrdered := make([]catalog.Column, len(cols))
 	for _, col := range c.tableDesc.PublicColumns() {
@@ -493,6 +498,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		KVInserter(func(kv roachpb.KeyValue) {
 			kv.Value.InitChecksum(kv.Key)
 			c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
+			c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
 		}),
 		insertRow,
 		pm,
@@ -502,7 +508,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		return errors.Wrap(err, "insert row")
 	}
 	// If our batch is full, flush it and start a new one.
-	if len(c.KvBatch.KVs) >= kvDatumRowConverterBatchSize {
+	if len(c.KvBatch.KVs) >= kvDatumRowConverterBatchSize || c.KvBatch.MemSize > kvDatumRowConverterBatchMemSize {
 		if err := c.SendBatch(ctx); err != nil {
 			return err
 		}
@@ -528,5 +534,6 @@ func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
 		return ctx.Err()
 	}
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
+	c.KvBatch.MemSize = 0
 	return nil
 }

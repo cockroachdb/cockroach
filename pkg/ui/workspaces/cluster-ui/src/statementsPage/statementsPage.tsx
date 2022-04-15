@@ -15,7 +15,6 @@ import classNames from "classnames/bind";
 import { getValidErrorsList, Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
-  ColumnDescriptor,
   handleSortSettingFromQueryString,
   SortSetting,
   updateSortSettingQueryParamsOnTab,
@@ -71,13 +70,14 @@ import ClearStats from "../sqlActivity/clearStats";
 import SQLActivityError from "../sqlActivity/errorComponent";
 import {
   TimeScaleDropdown,
-  defaultTimeScaleSelected,
   TimeScale,
   toDateRange,
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
 import { flattenTreeAttributes, planNodeToString } from "../statementDetails";
+import { isSelectedColumn } from "src/columnsSelector/utils";
+import { StatementViewType } from "./statementPageTypes";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -135,6 +135,7 @@ export interface StatementsPageState {
   pagination: ISortedTablePagination;
   filters?: Filters;
   activeFilters?: number;
+  startRequest?: Date;
 }
 
 export type StatementsPageProps = StatementsPageDispatchProps &
@@ -183,6 +184,7 @@ export class StatementsPage extends React.Component<
         pageSize: 20,
         current: 1,
       },
+      startRequest: new Date(),
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
@@ -250,6 +252,9 @@ export class StatementsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
+    this.setState({
+      startRequest: new Date(),
+    });
   };
 
   resetPagination = (): void => {
@@ -270,9 +275,15 @@ export class StatementsPage extends React.Component<
   resetSQLStats = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.resetSQLStats(req);
+    this.setState({
+      startRequest: new Date(),
+    });
   };
 
   componentDidMount(): void {
+    this.setState({
+      startRequest: new Date(),
+    });
     this.refreshStatements();
     this.props.refreshUserSQLRoles();
     if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
@@ -524,15 +535,6 @@ export class StatementsPage extends React.Component<
       .filter(c => !(c.name === "regionNodes" && regions.length < 2))
       .filter(c => !(isTenant && c.hideIfTenant));
 
-    const isColumnSelected = (c: ColumnDescriptor<AggregateStatistics>) => {
-      return (
-        (userSelectedColumnsToShow === null && c.showByDefault !== false) || // show column if list of visible was never defined and can be show by default.
-        (userSelectedColumnsToShow !== null &&
-          userSelectedColumnsToShow.includes(c.name)) || // show column if user changed its visibility.
-        c.alwaysShow === true // show column if alwaysShow option is set explicitly.
-      );
-    };
-
     // Iterate over all available columns and create list of SelectOptions with initial selection
     // values based on stored user selections in local storage and default column configs.
     // Columns that are set to alwaysShow are filtered from the list.
@@ -542,12 +544,14 @@ export class StatementsPage extends React.Component<
         (c): SelectOption => ({
           label: getLabel(c.name as StatisticTableColumnKeys, "statement"),
           value: c.name,
-          isSelected: isColumnSelected(c),
+          isSelected: isSelectedColumn(userSelectedColumnsToShow, c),
         }),
       );
 
     // List of all columns that will be displayed based on the column selection.
-    const displayColumns = columns.filter(c => isColumnSelected(c));
+    const displayColumns = columns.filter(c =>
+      isSelectedColumn(userSelectedColumnsToShow, c),
+    );
 
     return (
       <div>
@@ -575,6 +579,7 @@ export class StatementsPage extends React.Component<
             renderNoResult={
               <EmptyStatementsPlaceholder
                 isEmptySearchResults={isEmptySearchResults}
+                statementView={StatementViewType.FINGERPRINTS}
               />
             }
             pagination={pagination}
@@ -611,7 +616,12 @@ export class StatementsPage extends React.Component<
       ? []
       : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
     const { filters, activeFilters } = this.state;
+
+    const timeNow = new Date();
+    const timeWaitingResponse =
+      (timeNow.getTime() - this.state.startRequest.getTime()) / 1000;
     const longLoadingMessage = isNil(this.props.statements) &&
+      timeWaitingResponse > 2 &&
       isNil(getValidErrorsList(this.props.statementsError)) && (
         <InlineAlert
           intent="info"
@@ -620,11 +630,11 @@ export class StatementsPage extends React.Component<
       );
 
     return (
-      <div className={cx("root", "table-area")}>
+      <div className={cx("root")}>
         <PageConfig>
           <PageConfigItem>
             <Search
-              onSubmit={this.onSubmitSearchField as any}
+              onSubmit={this.onSubmitSearchField}
               onClear={this.onClearSearchField}
               defaultValue={search}
             />
@@ -651,31 +661,35 @@ export class StatementsPage extends React.Component<
               setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
-          <PageConfigItem className={commonStyles("separator")}>
+          <PageConfigItem
+            className={`${commonStyles("separator")} ${cx("reset-btn-area")} `}
+          >
             <ClearStats
               resetSQLStats={this.resetSQLStats}
               tooltipType="statement"
             />
           </PageConfigItem>
         </PageConfig>
-        <Loading
-          loading={isNil(this.props.statements)}
-          page={"statements"}
-          error={this.props.statementsError}
-          render={() => this.renderStatements(regions)}
-          renderError={() =>
-            SQLActivityError({
-              statsType: "statements",
-            })
-          }
-        />
-        {longLoadingMessage}
-        <ActivateStatementDiagnosticsModal
-          ref={this.activateDiagnosticsRef}
-          activate={onActivateStatementDiagnostics}
-          refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
-          onOpenModal={onDiagnosticsModalOpen}
-        />
+        <div className={cx("table-area")}>
+          <Loading
+            loading={isNil(this.props.statements)}
+            page={"statements"}
+            error={this.props.statementsError}
+            render={() => this.renderStatements(regions)}
+            renderError={() =>
+              SQLActivityError({
+                statsType: "statements",
+              })
+            }
+          />
+          {longLoadingMessage}
+          <ActivateStatementDiagnosticsModal
+            ref={this.activateDiagnosticsRef}
+            activate={onActivateStatementDiagnostics}
+            refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
+            onOpenModal={onDiagnosticsModalOpen}
+          />
+        </div>
       </div>
     );
   }

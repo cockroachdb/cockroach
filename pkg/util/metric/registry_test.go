@@ -164,6 +164,25 @@ func TestRegistry(t *testing.T) {
 		t.Fatalf("missed names: %v", expNames)
 	}
 
+	// Test Select
+	selectExpNames := map[string]struct{}{
+		"top.histogram":   {},
+		"top.gauge":       {},
+		"not.in.registry": {},
+	}
+
+	r.Select(
+		selectExpNames,
+		func(name string, _ interface{}) {
+			if _, exist := selectExpNames[name]; !exist {
+				t.Errorf("unexpected name: %s", name)
+			}
+			delete(selectExpNames, name)
+		})
+	if len(selectExpNames) != 1 {
+		t.Fatalf("missed or selected names not in registry: %v", selectExpNames)
+	}
+
 	// Test get functions
 	if g := r.getGauge("top.gauge"); g != topGauge {
 		t.Errorf("getGauge returned %v, expected %v", g, topGauge)

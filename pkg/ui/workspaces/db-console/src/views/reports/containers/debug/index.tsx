@@ -175,7 +175,7 @@ const ProxyToNodeSelector = (props: ProxyToNodeSelectorProps) => {
       return cookie[0] === remoteNodeIDCookieName;
     });
   const setNodeIDCookie = (nodeID: string) => {
-    document.cookie = `${remoteNodeIDCookieName}=${nodeID}`;
+    document.cookie = `${remoteNodeIDCookieName}=${nodeID};path=/`;
     location.reload();
   };
   let currentNodeID = props.nodeID;
@@ -195,7 +195,7 @@ const ProxyToNodeSelector = (props: ProxyToNodeSelectorProps) => {
       Proxied to {currentNodeID}{" "}
       <button
         onClick={() =>
-          setNodeIDCookie(";expires=Thu, 01 Jan 1970 00:00:01 GMT")
+          setNodeIDCookie(";expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/")
         }
       >
         Reset

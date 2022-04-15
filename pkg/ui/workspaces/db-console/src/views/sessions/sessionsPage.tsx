@@ -83,7 +83,7 @@ export const sessionColumnsLocalSetting = new LocalSetting(
   null,
 );
 
-export const filtersLocalSetting = new LocalSetting(
+export const filtersLocalSetting = new LocalSetting<AdminUIState, Filters>(
   "filters/SessionsPage",
   (state: AdminUIState) => state.localSettings,
   defaultFilters,

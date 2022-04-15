@@ -399,23 +399,27 @@ func checkServerArgsForCluster(
 	return nil
 }
 
-// AddAndStartServer creates a server with the specified arguments and appends it to
+// AddAndStartServer calls through to AddAndStartServerE.
+func (tc *TestCluster) AddAndStartServer(t *testing.T, serverArgs base.TestServerArgs) {
+	t.Helper()
+	require.NoError(t, tc.AddAndStartServerE(serverArgs))
+}
+
+// AddAndStartServerE creates a server with the specified arguments and appends it to
 // the TestCluster. It also starts it.
 //
 // The new Server's copy of serverArgs might be changed according to the
 // cluster's ReplicationMode.
-func (tc *TestCluster) AddAndStartServer(t testing.TB, serverArgs base.TestServerArgs) {
+func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error {
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
 		serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 	}
 	_, err := tc.AddServer(serverArgs)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 
-	if err := tc.startServer(len(tc.Servers)-1, serverArgs); err != nil {
-		t.Fatal(err)
-	}
+	return tc.startServer(len(tc.Servers)-1, serverArgs)
 }
 
 // AddServer is like AddAndStartServer, except it does not start it.
@@ -878,6 +882,35 @@ func (tc *TestCluster) SwapVoterWithNonVoterOrFatal(
 	return afterDesc
 }
 
+// RebalanceVoter is part of TestClusterInterface.
+func (tc *TestCluster) RebalanceVoter(
+	ctx context.Context, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+) (*roachpb.RangeDescriptor, error) {
+	key := keys.MustAddr(startKey)
+	var beforeDesc roachpb.RangeDescriptor
+	if err := tc.Servers[0].DB().GetProto(
+		ctx, keys.RangeDescriptorKey(key), &beforeDesc,
+	); err != nil {
+		return nil, errors.Wrap(err, "range descriptor lookup error")
+	}
+	changes := []roachpb.ReplicationChange{
+		{ChangeType: roachpb.REMOVE_VOTER, Target: src},
+		{ChangeType: roachpb.ADD_VOTER, Target: dest},
+	}
+	return tc.Servers[0].DB().AdminChangeReplicas(ctx, key, beforeDesc, changes)
+}
+
+// RebalanceVoterOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) RebalanceVoterOrFatal(
+	ctx context.Context, t *testing.T, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+) *roachpb.RangeDescriptor {
+	afterDesc, err := tc.RebalanceVoter(ctx, startKey, src, dest)
+	if err != nil {
+		t.Fatalf("could not rebalance voter: %+v", err)
+	}
+	return afterDesc
+}
+
 // TransferRangeLease is part of the TestServerInterface.
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
@@ -899,22 +932,20 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 	}
 }
 
-// RemoveLeaseHolderOrFatal is a convenience wrapper around RemoveVoter
+// RemoveLeaseHolderOrFatal is a convenience version of TransferRangeLease and RemoveVoter
 func (tc *TestCluster) RemoveLeaseHolderOrFatal(
-	t testing.TB, rangeDesc roachpb.RangeDescriptor, src roachpb.ReplicationTarget,
+	t testing.TB,
+	rangeDesc roachpb.RangeDescriptor,
+	src roachpb.ReplicationTarget,
+	dest roachpb.ReplicationTarget,
 ) {
 	testutils.SucceedsSoon(t, func() error {
+		if err := tc.TransferRangeLease(rangeDesc, dest); err != nil {
+			return err
+		}
 		if _, err := tc.RemoveVoters(rangeDesc.StartKey.AsRawKey(), src); err != nil {
-			if strings.Contains(err.Error(), "to remove self (leaseholder)") ||
-				strings.Contains(err.Error(), "leaseholder moved") ||
-				strings.Contains(err.Error(), "isn't the Raft leader") {
+			if strings.Contains(err.Error(), "to remove self (leaseholder)") {
 				return err
-			} else if strings.Contains(err.Error(),
-				"trying to remove a replica that doesn't exist") {
-				// It's possible that on leaseholder initiates the removal but another one completes it.
-				// The first attempt throws an error because the leaseholder moves, the second attempt
-				// fails with the exception that the voter doesn't exist, which is expected.
-				return nil
 			}
 			t.Fatal(err)
 		}

@@ -1322,7 +1322,12 @@ func (c *transientCluster) AcquireDemoLicense(ctx context.Context) (chan error, 
 		go func() {
 			defer db.Close()
 
-			success, err := GetAndApplyLicense(db, c.firstServer.ClusterID(), demoOrg)
+			// TODO(knz): The wisdom of reporting the randomly generated
+			// storage cluster ID of a demo cluster in the license request
+			// is questionable.  What would a product analyst do with this
+			// information? Perhaps best to use a common, fixed string that
+			// identifies a demo cluster.
+			success, err := GetAndApplyLicense(db, c.firstServer.StorageClusterID(), demoOrg)
 			if err != nil {
 				select {
 				case licenseDone <- err:

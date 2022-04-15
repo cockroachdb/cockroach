@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"text/template"
 
 	"github.com/spf13/cobra"
 )
@@ -32,11 +34,11 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 		Long:    `Generate the specified files.`,
 		Example: `
         dev generate
-        dev generate bazel
-        dev generate docs
-        dev generate go
-        dev generate protobuf
-        dev generate go+docs
+        dev generate bazel     # DEPS.bzl and BUILD.bazel files
+        dev generate cgo       # files that help non-Bazel systems (IDEs, go) link to our C dependencies
+        dev generate docs      # generates documentation
+        dev generate go        # generates go code (execgen, stringer, protobufs, etc.)
+        dev generate protobuf  # *.pb.go files (subset of 'dev generate go')
 `,
 		Args: cobra.MinimumNArgs(0),
 		// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
@@ -44,7 +46,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 		// (especially considering we've SilenceErrors-ed things away).
 		RunE: runE,
 	}
-	generateCmd.Flags().Bool(mirrorFlag, false, "mirror new dependencies to cloud storage")
+	generateCmd.Flags().Bool(mirrorFlag, false, "mirror new dependencies to cloud storage (use if vendoring)")
 	generateCmd.Flags().Bool(forceFlag, false, "force regeneration even if relevant files are unchanged from upstream")
 	return generateCmd
 }
@@ -52,17 +54,31 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
 		"bazel":    d.generateBazel,
+		"cgo":      d.generateCgo,
 		"docs":     d.generateDocs,
 		"go":       d.generateGo,
 		"protobuf": d.generateProtobuf,
-		"go+docs":  d.generateGoAndDocs,
 	}
 
 	if len(targets) == 0 {
-		targets = append(targets, "bazel", "go+docs")
+		targets = append(targets, "bazel", "go", "docs", "cgo")
 	}
 
+	targetsMap := make(map[string]struct{})
 	for _, target := range targets {
+		targetsMap[target] = struct{}{}
+	}
+	_, includesGo := targetsMap["go"]
+	_, includesDocs := targetsMap["docs"]
+	if includesGo && includesDocs {
+		delete(targetsMap, "go")
+		delete(targetsMap, "docs")
+		if err := d.generateGoAndDocs(cmd); err != nil {
+			return err
+		}
+	}
+
+	for target := range targetsMap {
 		generator, ok := generatorTargetMapping[target]
 		if !ok {
 			return fmt.Errorf("unrecognized target: %s", target)
@@ -148,4 +164,65 @@ func (d *dev) generateRedactSafe(ctx context.Context) error {
 	return d.os.WriteFile(
 		filepath.Join(workspace, "docs", "generated", "redact_safe.md"), string(output),
 	)
+}
+
+func (d *dev) generateCgo(cmd *cobra.Command) error {
+	ctx := cmd.Context()
+	args := []string{"build", "//c-deps:libjemalloc", "//c-deps:libproj", "//c-deps:libgeos"}
+	if runtime.GOOS == "linux" {
+		args = append(args, "//c-deps:libkrb5")
+	}
+	logCommand("bazel", args...)
+	if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
+		return err
+	}
+	bazelBin, err := d.getBazelBin(ctx)
+	if err != nil {
+		return err
+	}
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+	const cgoTmpl = `// GENERATED FILE DO NOT EDIT
+
+package {{ .Package }}
+
+// #cgo CPPFLAGS: {{ .CPPFlags }}
+// #cgo LDFLAGS: {{ .LDFlags }}
+import "C"
+`
+
+	tpl := template.Must(template.New("source").Parse(cgoTmpl))
+	cppFlags := fmt.Sprintf("-I%s", filepath.Join(bazelBin, "c-deps/libjemalloc/include"))
+	ldFlags := fmt.Sprintf("-L%s -L%s", filepath.Join(bazelBin, "c-deps/libjemalloc/lib"), filepath.Join(bazelBin, "c-deps/libproj/lib"))
+	if runtime.GOOS == "linux" {
+		cppFlags += fmt.Sprintf(" -I%s", filepath.Join(bazelBin, "c-deps/libkrb5/include"))
+		ldFlags += fmt.Sprintf(" -L%s", filepath.Join(bazelBin, "c-deps/libkrb5/lib"))
+	}
+
+	cgoPkgs := []string{
+		"pkg/cli",
+		"pkg/cli/clisqlshell",
+		"pkg/server/status",
+		"pkg/ccl/gssapiccl",
+		"pkg/geo/geoproj",
+	}
+
+	for _, cgoPkg := range cgoPkgs {
+		out, err := os.Create(filepath.Join(workspace, cgoPkg, "zcgo_flags.go"))
+		if err != nil {
+			return err
+		}
+		err = tpl.Execute(out, struct {
+			Package  string
+			CPPFlags string
+			LDFlags  string
+		}{Package: filepath.Base(cgoPkg), CPPFlags: cppFlags, LDFlags: ldFlags})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

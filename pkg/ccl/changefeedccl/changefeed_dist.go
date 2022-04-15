@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -75,7 +76,11 @@ func distChangefeedFlow(
 		// We want to set the highWater and thus avoid an initial scan if either
 		// this is a cursor and there was no request for one, or we don't have a
 		// cursor but we have a request to not have an initial scan.
-		if noHighWater && !initialScanFromOptions(details.Opts) {
+		initialScanType, err := initialScanTypeFromOpts(details.Opts)
+		if err != nil {
+			return err
+		}
+		if noHighWater && initialScanType == changefeedbase.NoInitialScan {
 			// If there is a cursor, the statement time has already been set to it.
 			progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
 		}
@@ -115,8 +120,14 @@ func distChangefeedFlow(
 	if cf := progress.GetChangefeed(); cf != nil && cf.Checkpoint != nil {
 		checkpoint = *cf.Checkpoint
 	}
+
+	var distflowKnobs changefeeddist.TestingKnobs
+	if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs != nil {
+		distflowKnobs = knobs.DistflowKnobs
+	}
+
 	return changefeeddist.StartDistChangefeed(
-		ctx, execCtx, jobID, details, trackedSpans, initialHighWater, checkpoint, resultsCh)
+		ctx, execCtx, jobID, details, trackedSpans, initialHighWater, checkpoint, resultsCh, distflowKnobs)
 }
 
 func fetchSpansForTargets(

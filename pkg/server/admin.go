@@ -510,6 +510,10 @@ func (s *adminServer) databaseDetailsHelper(
 		if err != nil {
 			return nil, err
 		}
+		resp.Stats.NumIndexRecommendations, err = s.getNumDatabaseIndexRecommendations(ctx, req.Database, resp.TableNames)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &resp, nil
@@ -605,6 +609,25 @@ func (s *adminServer) getDatabaseStats(
 	})
 
 	return &stats, nil
+}
+
+func (s *adminServer) getNumDatabaseIndexRecommendations(
+	ctx context.Context, databaseName string, tableNames []string,
+) (int32, error) {
+	var numDatabaseIndexRecommendations int
+	idxUsageStatsProvider := s.server.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
+	for _, tableName := range tableNames {
+		tableIndexStatsRequest := &serverpb.TableIndexStatsRequest{
+			Database: databaseName,
+			Table:    tableName,
+		}
+		tableIndexStatsResponse, err := getTableIndexUsageStats(ctx, tableIndexStatsRequest, idxUsageStatsProvider, s.ie, s.server.st, s.server.sqlServer.execCfg)
+		if err != nil {
+			return 0, err
+		}
+		numDatabaseIndexRecommendations += len(tableIndexStatsResponse.IndexRecommendations)
+	}
+	return int32(numDatabaseIndexRecommendations), nil
 }
 
 // getFullyQualifiedTableName, given a database name and a tableName that either
@@ -960,6 +983,16 @@ func (s *adminServer) tableDetailsHelper(
 		resp.RangeCount = rangeCount
 	}
 
+	idxUsageStatsProvider := s.server.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
+	tableIndexStatsRequest := &serverpb.TableIndexStatsRequest{
+		Database: req.Database,
+		Table:    req.Table,
+	}
+	tableIndexStatsResponse, err := getTableIndexUsageStats(ctx, tableIndexStatsRequest, idxUsageStatsProvider, s.ie, s.server.st, s.server.sqlServer.execCfg)
+	if err != nil {
+		return nil, err
+	}
+	resp.HasIndexRecommendations = len(tableIndexStatsResponse.IndexRecommendations) > 0
 	return &resp, nil
 }
 
@@ -1750,11 +1783,40 @@ func (s *adminServer) Settings(
 		}
 	}
 
+	// Read the system.settings table to determine the settings for which we have
+	// explicitly set values -- the in-memory SV has the set and default values
+	// flattened for quick reads, but we'd only need the non-defaults for comparison.
+	alteredSettings := make(map[string]*time.Time)
+	if it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
+		ctx, "read-setting", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		`SELECT name, "lastUpdated" FROM system.settings`,
+	); err != nil {
+		log.Warningf(ctx, "failed to read settings: %s", err)
+	} else {
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
+			name := string(tree.MustBeDString(row[0]))
+			lastUpdated := row[1].(*tree.DTimestamp)
+			alteredSettings[name] = &lastUpdated.Time
+		}
+		if err != nil {
+			// No need to clear AlteredSettings map since we only make best
+			// effort to populate it.
+			log.Warningf(ctx, "failed to read settings: %s", err)
+		}
+	}
+
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
 	for _, k := range keys {
 		v, ok := settings.Lookup(k, lookupPurpose, settings.ForSystemTenant)
 		if !ok {
 			continue
+		}
+		var altered *time.Time
+		if val, ok := alteredSettings[k]; ok {
+			altered = val
 		}
 		resp.KeyValues[k] = serverpb.SettingsResponse_Value{
 			Type: v.Typ(),
@@ -1762,9 +1824,9 @@ func (s *adminServer) Settings(
 			Value:       v.String(&s.server.st.SV),
 			Description: v.Description(),
 			Public:      v.Visibility() == settings.Public,
+			LastUpdated: altered,
 		}
 	}
-
 	return &resp, nil
 }
 
@@ -1772,8 +1834,8 @@ func (s *adminServer) Settings(
 func (s *adminServer) Cluster(
 	_ context.Context, req *serverpb.ClusterRequest,
 ) (*serverpb.ClusterResponse, error) {
-	clusterID := s.server.ClusterID()
-	if clusterID == (uuid.UUID{}) {
+	storageClusterID := s.server.StorageClusterID()
+	if storageClusterID == (uuid.UUID{}) {
 		return nil, status.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
 
@@ -1781,10 +1843,15 @@ func (s *adminServer) Cluster(
 	// feature "BACKUP", although enterprise licenses do not yet distinguish
 	// between different features.
 	organization := sql.ClusterOrganization.Get(&s.server.st.SV)
-	enterpriseEnabled := base.CheckEnterpriseEnabled(s.server.st, clusterID, organization, "BACKUP") == nil
+	enterpriseEnabled := base.CheckEnterpriseEnabled(
+		s.server.st,
+		s.server.rpcContext.LogicalClusterID.Get(),
+		organization,
+		"BACKUP") == nil
 
 	return &serverpb.ClusterResponse{
-		ClusterID:         clusterID.String(),
+		// TODO(knz): Respond with the logical cluster ID as well.
+		ClusterID:         storageClusterID.String(),
 		ReportingEnabled:  logcrash.DiagnosticsReportingEnabled.Get(&s.server.st.SV),
 		EnterpriseEnabled: enterpriseEnabled,
 	}, nil
@@ -1928,7 +1995,8 @@ func (s *adminServer) jobsHelper(
               when ` + retryRevertingCondition + ` then 'retry-reverting' 
               else status
             end as status, running_status, created, started, finished, modified, fraction_completed,
-            high_water_timestamp, error, last_run, next_run, num_runs, execution_events::string::bytes
+            high_water_timestamp, error, last_run, next_run, num_runs, execution_events::string::bytes,
+            coordinator_id
         FROM crdb_internal.jobs
        WHERE true
 	`)
@@ -1999,6 +2067,7 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 	var highwaterOrNil *apd.Decimal
 	var runningStatusOrNil *string
 	var executionFailures []byte
+	var coordinatorOrNil *int64
 	if err := scanner.ScanAll(
 		row,
 		&job.ID,
@@ -2020,6 +2089,7 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 		&job.NextRun,
 		&job.NumRuns,
 		&executionFailures,
+		&coordinatorOrNil,
 	); err != nil {
 		return errors.Wrap(err, "scan")
 	}
@@ -2055,6 +2125,9 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 			}
 		}
 	}
+	if coordinatorOrNil != nil {
+		job.CoordinatorID = *coordinatorOrNil
+	}
 	return nil
 }
 
@@ -2083,7 +2156,8 @@ func (s *adminServer) jobHelper(
 	        SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
 	  						 running_status, created, started, finished, modified,
 	  						 fraction_completed, high_water_timestamp, error, last_run,
-	  						 next_run, num_runs, execution_events::string::bytes
+								 next_run, num_runs, execution_events::string::bytes,
+                 coordinator_id
 	          FROM crdb_internal.jobs
 	         WHERE job_id = $1`
 	row, cols, err := s.server.sqlServer.internalExecutor.QueryRowExWithCols(
@@ -2302,6 +2376,7 @@ func (s *adminServer) decommissionStatusHelper(
 	// Get the number of replicas on each node. We *may* not need all of them,
 	// but that would be more complicated than seems worth it right now.
 	nodeIDs := req.NodeIDs
+	numReplicaReport := req.NumReplicaReport
 
 	// If no nodeIDs given, use all nodes.
 	if len(nodeIDs) == 0 {
@@ -2312,6 +2387,24 @@ func (s *adminServer) decommissionStatusHelper(
 		for _, status := range ns.Nodes {
 			nodeIDs = append(nodeIDs, status.Desc.NodeID)
 		}
+	}
+
+	// If the client specified a number of decommissioning replicas to report,
+	// prepare to get decommissioning replicas to report to the operator.
+	// numReplicaReport is the number of replicas reported for each node.
+	var replicasToReport map[roachpb.NodeID][]*serverpb.DecommissionStatusResponse_Replica
+	if numReplicaReport > 0 {
+		log.Ops.Warning(ctx, "possible decommission stall detected")
+		replicasToReport = make(map[roachpb.NodeID][]*serverpb.DecommissionStatusResponse_Replica)
+	}
+
+	isDecommissioningNode := func(n roachpb.NodeID) bool {
+		for _, nodeID := range nodeIDs {
+			if n == nodeID {
+				return true
+			}
+		}
+		return false
 	}
 
 	// Compute the replica counts for the target nodes only. This map doubles as
@@ -2331,6 +2424,24 @@ func (s *adminServer) decommissionStatusHelper(
 						return errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
 					}
 					for _, r := range rangeDesc.Replicas().Descriptors() {
+						if numReplicaReport > 0 {
+							if len(replicasToReport[r.NodeID]) < int(numReplicaReport) {
+								if isDecommissioningNode(r.NodeID) {
+									replicasToReport[r.NodeID] = append(replicasToReport[r.NodeID],
+										&serverpb.DecommissionStatusResponse_Replica{
+											ReplicaID: r.ReplicaID,
+											RangeID:   rangeDesc.RangeID,
+										},
+									)
+									log.Ops.Warningf(ctx,
+										"n%d still has replica id %d for range r%d",
+										r.NodeID,
+										r.ReplicaID,
+										rangeDesc.RangeID,
+									)
+								}
+							}
+						}
 						if _, ok := replicaCounts[r.NodeID]; ok {
 							replicaCounts[r.NodeID]++
 						}
@@ -2368,15 +2479,15 @@ func (s *adminServer) decommissionStatusHelper(
 			return nil, errors.Newf("unable to get liveness for %d", nodeID)
 		}
 		nodeResp := serverpb.DecommissionStatusResponse_Status{
-			NodeID:       l.NodeID,
-			ReplicaCount: replicaCounts[l.NodeID],
-			Membership:   l.Membership,
-			Draining:     l.Draining,
+			NodeID:           l.NodeID,
+			ReplicaCount:     replicaCounts[l.NodeID],
+			Membership:       l.Membership,
+			Draining:         l.Draining,
+			ReportedReplicas: replicasToReport[l.NodeID],
 		}
 		if l.IsLive(s.server.clock.Now().GoTime()) {
 			nodeResp.IsLive = true
 		}
-
 		res.Status = append(res.Status, nodeResp)
 	}
 
@@ -2415,7 +2526,7 @@ func (s *adminServer) Decommission(
 		return &serverpb.DecommissionStatusResponse{}, nil
 	}
 
-	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
+	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs, NumReplicaReport: req.NumReplicaReport})
 }
 
 // DataDistribution returns a count of replicas on each node for each table.
@@ -2974,6 +3085,18 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		}
 		*d = int64(s)
 
+	case **int64:
+		s, ok := src.(*tree.DInt)
+		if !ok {
+			if src != tree.DNull {
+				return errors.Errorf("source type assertion failed")
+			}
+			*d = nil
+			break
+		}
+		val := int64(*s)
+		*d = &val
+
 	case *[]descpb.ID:
 		s, ok := tree.AsDArray(src)
 		if !ok {
@@ -3439,12 +3562,13 @@ func (s *adminServer) GetTracingSnapshot(
 	}
 
 	id := tracing.SnapshotID(req.SnapshotId)
-	snapshot, err := s.server.cfg.Tracer.GetSnapshot(id)
+	tr := s.server.cfg.Tracer
+	snapshot, err := tr.GetSnapshot(id)
 	if err != nil {
 		return nil, err
 	}
 
-	spansList := tracingui.ProcessSnapshot(snapshot)
+	spansList := tracingui.ProcessSnapshot(snapshot, tr.GetActiveSpansRegistry())
 
 	spans := make([]*serverpb.TracingSpan, len(spansList.Spans))
 	stacks := make(map[string]string)
@@ -3467,13 +3591,15 @@ func (s *adminServer) GetTracingSnapshot(
 		}
 
 		spans[i] = &serverpb.TracingSpan{
-			Operation:     s.Operation,
-			TraceID:       s.TraceID,
-			SpanID:        s.SpanID,
-			ParentSpanID:  s.ParentSpanID,
-			Start:         &s.Start,
-			GoroutineID:   s.GoroutineID,
-			ProcessedTags: tags,
+			Operation:            s.Operation,
+			TraceID:              s.TraceID,
+			SpanID:               s.SpanID,
+			ParentSpanID:         s.ParentSpanID,
+			Start:                s.Start,
+			GoroutineID:          s.GoroutineID,
+			ProcessedTags:        tags,
+			Current:              s.Current,
+			CurrentRecordingMode: s.CurrentRecordingMode.ToProto(),
 		}
 	}
 
@@ -3527,7 +3653,7 @@ func (s *adminServer) GetTrace(
 	// recording mode. If we were asked to display the current trace (as opposed
 	// to the trace saved in a snapshot), we also collect the recording.
 	traceStillExists := false
-	if err := s.server.cfg.Tracer.SpanRegistry().VisitSpans(func(sp tracing.RegistrySpan) error {
+	if err := s.server.cfg.Tracer.SpanRegistry().VisitRoots(func(sp tracing.RegistrySpan) error {
 		if sp.TraceID() != traceID {
 			return nil
 		}
@@ -3564,7 +3690,8 @@ func (s *adminServer) SetTraceRecordingType(
 		if sp.TraceID() != req.TraceID {
 			return nil
 		}
-		sp.SetRecordingType(tracing.RecordingVerbose) // NB: The recording type propagates to the children, recursively.
+		// NB: The recording type propagates to the children, recursively.
+		sp.SetRecordingType(tracing.RecordingTypeFromProto(req.RecordingMode))
 		return nil
 	})
 	return &serverpb.SetTraceRecordingTypeResponse{}, nil

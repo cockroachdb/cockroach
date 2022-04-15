@@ -16,10 +16,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/require"
@@ -434,7 +438,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		c := &connector{
 			TenantID: roachpb.MakeTenantID(42),
 		}
-		c.Directory = &testTenantResolver{
+		c.DirectoryCache = &testTenantDirectoryCache{
 			reportFailureFn: func(fnCtx context.Context, tenantID roachpb.TenantID, addr string) error {
 				reportFailureFnCount++
 				require.Equal(t, ctx, fnCtx)
@@ -477,156 +481,203 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 func TestConnector_lookupAddr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
-	t.Run("only routing rule", func(t *testing.T) {
-		c := &connector{
-			ClusterName: "foo-bar-baz",
-			TenantID:    roachpb.MakeTenantID(10),
-			RoutingRule: `{{clusterName}}.foo`,
-		}
+	balancer, err := balancer.NewBalancer(
+		ctx,
+		stopper,
+		nil, /* metrics */
+		nil, /* directoryCache */
+		nil, /* connTracker */
+		balancer.NoRebalanceLoop(),
+	)
+	require.NoError(t, err)
 
-		var resolveTCPAddrCalled bool
-		defer testutils.TestingHook(
-			&resolveTCPAddr,
-			func(network, addr string) (*net.TCPAddr, error) {
-				resolveTCPAddrCalled = true
-				require.Equal(t, "tcp", network)
-				require.Equal(t, "foo-bar-baz-10.foo", addr)
-				return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26257}, nil
-			},
-		)()
+	t.Run("successful", func(t *testing.T) {
+		var lookupTenantPodsFnCount int
 
-		addr, err := c.lookupAddr(ctx)
-		require.True(t, resolveTCPAddrCalled)
-		require.NoError(t, err)
-		require.Equal(t, "foo-bar-baz-10.foo", addr)
-	})
-
-	t.Run("error for only routing rule", func(t *testing.T) {
-		c := &connector{
-			ClusterName: "cluster-name",
-			TenantID:    roachpb.MakeTenantID(10),
-			RoutingRule: "foo-bar-baz",
-		}
-
-		var resolveTCPAddrCalled bool
-		defer testutils.TestingHook(
-			&resolveTCPAddr,
-			func(network, addr string) (*net.TCPAddr, error) {
-				resolveTCPAddrCalled = true
-				require.Equal(t, "tcp", network)
-				require.Equal(t, "foo-bar-baz", addr)
-				return nil, errors.New("foo")
-			},
-		)()
-
-		addr, err := c.lookupAddr(ctx)
-		require.True(t, resolveTCPAddrCalled)
-		require.EqualError(t, err, "codeParamsRoutingFailed: cluster cluster-name-10 not found")
-		require.Equal(t, "", addr)
-	})
-
-	t.Run("directory", func(t *testing.T) {
-		var ensureTenantAddrFnCount int
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
+			Balancer:    balancer,
 		}
-		c.Directory = &testTenantResolver{
-			ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
-				ensureTenantAddrFnCount++
+		c.DirectoryCache = &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				lookupTenantPodsFnCount++
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
-				return "127.0.0.10:80", nil
+				return []*tenant.Pod{
+					{Addr: "127.0.0.10:70", State: tenant.DRAINING},
+					{Addr: "127.0.0.10:80", State: tenant.RUNNING},
+				}, nil
 			},
 		}
 
 		addr, err := c.lookupAddr(ctx)
 		require.NoError(t, err)
 		require.Equal(t, "127.0.0.10:80", addr)
-		require.Equal(t, 1, ensureTenantAddrFnCount)
+		require.Equal(t, 1, lookupTenantPodsFnCount)
 	})
 
-	t.Run("routing rule fallback with directory", func(t *testing.T) {
-		var ensureTenantAddrFnCount int
+	t.Run("load balancing", func(t *testing.T) {
+		var mu struct {
+			syncutil.Mutex
+			pods map[string]float32
+		}
+		mu.pods = make(map[string]float32)
+		addPod := func(addr string, load float32) {
+			mu.Lock()
+			defer mu.Unlock()
+			mu.pods[addr] = load
+		}
+		removePod := func(addr string) {
+			mu.Lock()
+			defer mu.Unlock()
+			delete(mu.pods, addr)
+		}
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			RoutingRule: "foo.bar",
+			Balancer:    balancer,
 		}
-		c.Directory = &testTenantResolver{
-			ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
-				ensureTenantAddrFnCount++
-				require.Equal(t, ctx, fnCtx)
-				require.Equal(t, c.TenantID, tenantID)
-				require.Equal(t, c.ClusterName, clusterName)
-				return "", status.Errorf(codes.NotFound, "foo")
+		c.DirectoryCache = &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				mu.Lock()
+				defer mu.Unlock()
+
+				pods := make([]*tenant.Pod, 0, len(mu.pods))
+				for addr, load := range mu.pods {
+					pods = append(pods, &tenant.Pod{
+						Addr:  addr,
+						Load:  load,
+						State: tenant.RUNNING,
+					})
+				}
+				return pods, nil
 			},
 		}
 
-		var resolveTCPAddrCalled bool
-		defer testutils.TestingHook(
-			&resolveTCPAddr,
-			func(network, addr string) (*net.TCPAddr, error) {
-				resolveTCPAddrCalled = true
-				require.Equal(t, "tcp", network)
-				require.Equal(t, "foo.bar", addr)
-				return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26257}, nil
-			},
-		)()
+		// Create two pods with similar load.
+		const (
+			addr1 = "127.0.0.10:80"
+			addr2 = "127.0.0.20:90"
+		)
+		addPod(addr1, 0)
+		addPod(addr2, 0)
 
+		// lookupAddr should evenly distribute the load.
+		responses := map[string]int{}
+		for i := 0; i < 100; i++ {
+			addr, err := c.lookupAddr(ctx)
+			require.NoError(t, err)
+			responses[addr]++
+		}
+		require.InDelta(t, responses[addr1], 50, 25)
+		require.InDelta(t, responses[addr2], 50, 25)
+
+		// Adjust load such that the distribution will be a 1/9 split.
+		addPod(addr1, 0.1)
+		addPod(addr2, 0.9)
+
+		// We should see that the distribution is skewed towards addr1.
+		responses = map[string]int{}
+		for i := 0; i < 100; i++ {
+			addr, err := c.lookupAddr(ctx)
+			require.NoError(t, err)
+			responses[addr]++
+		}
+		require.InDelta(t, responses[addr1], 90, 25)
+		require.InDelta(t, responses[addr2], 10, 25)
+
+		// Delete the first pod.
+		removePod(addr1)
+
+		// Lookup will still work.
 		addr, err := c.lookupAddr(ctx)
-		require.True(t, resolveTCPAddrCalled)
 		require.NoError(t, err)
-		require.Equal(t, "foo.bar", addr)
-		require.Equal(t, 1, ensureTenantAddrFnCount)
+		require.Equal(t, addr2, addr)
 	})
 
-	t.Run("directory with retriable error", func(t *testing.T) {
-		var ensureTenantAddrFnCount int
+	t.Run("FailedPrecondition error", func(t *testing.T) {
+		var lookupTenantPodsFnCount int
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			RoutingRule: "foo.bar",
+			Balancer:    balancer,
 		}
-		c.Directory = &testTenantResolver{
-			ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
-				ensureTenantAddrFnCount++
+		c.DirectoryCache = &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				lookupTenantPodsFnCount++
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
-				return "", errors.New("foo")
-			},
-		}
-
-		addr, err := c.lookupAddr(ctx)
-		require.EqualError(t, err, "foo")
-		require.Equal(t, "", addr)
-		require.Equal(t, 1, ensureTenantAddrFnCount)
-	})
-
-	t.Run("directory with FailedPrecondition error", func(t *testing.T) {
-		var ensureTenantAddrFnCount int
-		c := &connector{
-			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
-			RoutingRule: "foo.bar",
-		}
-		c.Directory = &testTenantResolver{
-			ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
-				ensureTenantAddrFnCount++
-				require.Equal(t, ctx, fnCtx)
-				require.Equal(t, c.TenantID, tenantID)
-				require.Equal(t, c.ClusterName, clusterName)
-				return "", status.Errorf(codes.FailedPrecondition, "foo")
+				return nil, status.Errorf(codes.FailedPrecondition, "foo")
 			},
 		}
 
 		addr, err := c.lookupAddr(ctx)
 		require.EqualError(t, err, "codeUnavailable: foo")
 		require.Equal(t, "", addr)
-		require.Equal(t, 1, ensureTenantAddrFnCount)
+		require.Equal(t, 1, lookupTenantPodsFnCount)
+	})
+
+	t.Run("NotFound error", func(t *testing.T) {
+		var lookupTenantPodsFnCount int
+		c := &connector{
+			ClusterName: "my-foo",
+			TenantID:    roachpb.MakeTenantID(10),
+			Balancer:    balancer,
+		}
+		c.DirectoryCache = &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				lookupTenantPodsFnCount++
+				require.Equal(t, ctx, fnCtx)
+				require.Equal(t, c.TenantID, tenantID)
+				require.Equal(t, c.ClusterName, clusterName)
+				return nil, status.Errorf(codes.NotFound, "foo")
+			},
+		}
+
+		addr, err := c.lookupAddr(ctx)
+		require.EqualError(t, err, "codeParamsRoutingFailed: cluster my-foo-10 not found")
+		require.Equal(t, "", addr)
+		require.Equal(t, 1, lookupTenantPodsFnCount)
+	})
+
+	t.Run("retriable error", func(t *testing.T) {
+		var lookupTenantPodsFnCount int
+		c := &connector{
+			ClusterName: "my-foo",
+			TenantID:    roachpb.MakeTenantID(10),
+			Balancer:    balancer,
+		}
+		c.DirectoryCache = &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				lookupTenantPodsFnCount++
+				require.Equal(t, ctx, fnCtx)
+				require.Equal(t, c.TenantID, tenantID)
+				require.Equal(t, c.ClusterName, clusterName)
+				return nil, errors.New("foo")
+			},
+		}
+
+		addr, err := c.lookupAddr(ctx)
+		require.EqualError(t, err, "foo")
+		require.True(t, isRetriableConnectorError(err))
+		require.Equal(t, "", addr)
+		require.Equal(t, 1, lookupTenantPodsFnCount)
 	})
 }
 
@@ -731,31 +782,32 @@ func TestRetriableConnectorError(t *testing.T) {
 	require.True(t, errors.Is(err, errRetryConnectorSentinel))
 }
 
-var _ TenantResolver = &testTenantResolver{}
+var _ tenant.DirectoryCache = &testTenantDirectoryCache{}
 
-// testTenantResolver is a test implementation of the tenant resolver.
-type testTenantResolver struct {
-	ensureTenantAddrFn  func(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
-	lookupTenantAddrsFn func(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
-	reportFailureFn     func(ctx context.Context, tenantID roachpb.TenantID, addr string) error
+// testTenantDirectoryCache is a test implementation of the tenant directory
+// cache.
+type testTenantDirectoryCache struct {
+	lookupTenantPodsFn    func(ctx context.Context, tenantID roachpb.TenantID, clusterName string) ([]*tenant.Pod, error)
+	trylookupTenantPodsFn func(ctx context.Context, tenantID roachpb.TenantID) ([]*tenant.Pod, error)
+	reportFailureFn       func(ctx context.Context, tenantID roachpb.TenantID, addr string) error
 }
 
-// EnsureTenantAddr implements the TenantResolver interface.
-func (r *testTenantResolver) EnsureTenantAddr(
+// LookupTenantPods implements the tenant.DirectoryCache interface.
+func (r *testTenantDirectoryCache) LookupTenantPods(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
-) (string, error) {
-	return r.ensureTenantAddrFn(ctx, tenantID, clusterName)
+) ([]*tenant.Pod, error) {
+	return r.lookupTenantPodsFn(ctx, tenantID, clusterName)
 }
 
-// LookupTenantAddrs implements the TenantResolver interface.
-func (r *testTenantResolver) LookupTenantAddrs(
+// TryLookupTenantPods implements the tenant.DirectoryCache interface.
+func (r *testTenantDirectoryCache) TryLookupTenantPods(
 	ctx context.Context, tenantID roachpb.TenantID,
-) ([]string, error) {
-	return r.lookupTenantAddrsFn(ctx, tenantID)
+) ([]*tenant.Pod, error) {
+	return r.trylookupTenantPodsFn(ctx, tenantID)
 }
 
-// ReportFailure implements the TenantResolver interface.
-func (r *testTenantResolver) ReportFailure(
+// ReportFailure implements the tenant.DirectoryCache interface.
+func (r *testTenantDirectoryCache) ReportFailure(
 	ctx context.Context, tenantID roachpb.TenantID, addr string,
 ) error {
 	return r.reportFailureFn(ctx, tenantID, addr)

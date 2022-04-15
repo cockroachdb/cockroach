@@ -70,3 +70,22 @@ type GeneratorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error
 // ValueGenerators that gives implementations the ability to see the builtin's
 // arguments before evaluation, as Exprs.
 type GeneratorWithExprsFactory func(ctx *EvalContext, args Exprs) (ValueGenerator, error)
+
+// streamingValueGenerator is a marker-type indicating that the wrapped
+// generator is of "streaming" nature, thus, projectSet processor must be
+// streaming too.
+type streamingValueGenerator struct {
+	ValueGenerator
+}
+
+// MakeStreamingValueGenerator marks the generator as "streaming".
+func MakeStreamingValueGenerator(gen ValueGenerator) ValueGenerator {
+	return streamingValueGenerator{ValueGenerator: gen}
+}
+
+// IsStreamingValueGenerator returns whether the generator is of the "streaming"
+// nature.
+func IsStreamingValueGenerator(gen ValueGenerator) bool {
+	_, ok := gen.(streamingValueGenerator)
+	return ok
+}

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -339,7 +338,7 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx = &tree.EvalContext{
 			Settings:         ds.ServerConfig.Settings,
 			SessionDataStack: sessiondata.NewStack(sd),
-			ClusterID:        ds.ServerConfig.ClusterID.Get(),
+			ClusterID:        ds.ServerConfig.LogicalClusterID.Get(),
 			ClusterName:      ds.ServerConfig.ClusterName,
 			NodeID:           ds.ServerConfig.NodeID,
 			Codec:            ds.ServerConfig.Codec,
@@ -407,24 +406,11 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	// Figure out what txn the flow needs to run in, if any. For gateway flows
-	// that have no remote flows and also no concurrency, the txn comes from
-	// localState.Txn. Otherwise, we create a txn based on the request's
-	// LeafTxnInputState.
-	useLeaf := false
-	if req.LeafTxnInputState != nil && row.CanUseStreamer(ctx, ds.Settings) {
-		for _, proc := range req.Flow.Processors {
-			if jr := proc.Core.JoinReader; jr != nil {
-				if jr.IsIndexJoin() {
-					// Index joins are executed via the Streamer API that has
-					// concurrency.
-					useLeaf = true
-					break
-				}
-			}
-		}
-	}
+	// that have no remote flows and also no concurrency, the (root) txn comes
+	// from localState.Txn if we haven't already created a leaf txn. Otherwise,
+	// we create, if necessary, a txn based on the request's LeafTxnInputState.
 	var txn *kv.Txn
-	if localState.IsLocal && !f.ConcurrentTxnUse() && !useLeaf {
+	if localState.IsLocal && !f.ConcurrentTxnUse() && leafTxn == nil {
 		txn = localState.Txn
 	} else {
 		// If I haven't created the leaf already, do it now.

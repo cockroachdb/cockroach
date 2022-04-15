@@ -87,8 +87,12 @@ func buildFromLeftBatch(b *crossJoinerBase, currentBatch coldata.Batch, sel []in
 						if srcNulls.NullAt(srcStartIdx) {
 							outNulls.SetNull(outStartIdx)
 						} else {
+							// {{if .IsBytesLike}}
+							outCol.Copy(srcCol, outStartIdx, srcStartIdx)
+							// {{else}}
 							val := srcCol.Get(srcStartIdx)
 							outCol.Set(outStartIdx, val)
+							// {{end}}
 						}
 						outStartIdx++
 						bs.curSrcStartIdx++
@@ -102,6 +106,7 @@ func buildFromLeftBatch(b *crossJoinerBase, currentBatch coldata.Batch, sel []in
 						} else {
 							srcStartIdx = bs.curSrcStartIdx
 						}
+						// {{/* toAppend will always be positive. */}}
 						toAppend := leftNumRepeats - bs.numRepeatsIdx
 						if outStartIdx+toAppend > outputCapacity {
 							// We don't have enough space to repeat the current
@@ -120,14 +125,40 @@ func buildFromLeftBatch(b *crossJoinerBase, currentBatch coldata.Batch, sel []in
 						}
 						if srcNulls.NullAt(srcStartIdx) {
 							outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-							outStartIdx += toAppend
 						} else {
+							// {{if not .IsBytesLike}}
+							// {{if .Sliceable}}
+							outCol := outCol[outStartIdx:]
+							_ = outCol[toAppend-1]
+							// {{end}}
 							val := srcCol.Get(srcStartIdx)
+							// {{end}}
 							for i := 0; i < toAppend; i++ {
-								outCol.Set(outStartIdx, val)
-								outStartIdx++
+								// {{if .IsBytesLike}}
+								outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
+								// {{else}}
+								// {{if .Sliceable}}
+								// {{/*
+								//     For the sliceable types, we sliced outCol
+								//     to start at outStartIdx, so we use index
+								//     i directly.
+								// */}}
+								//gcassert:bce
+								outCol.Set(i, val)
+								// {{else}}
+								// {{/*
+								//     For the non-sliceable types, outCol
+								//     vector is the original one (i.e. without
+								//     an adjustment), so we need to add
+								//     outStartIdx to set the element at the
+								//     correct index.
+								// */}}
+								outCol.Set(outStartIdx+i, val)
+								// {{end}}
+								// {{end}}
 							}
 						}
+						outStartIdx += toAppend
 					}
 				}
 				// {{end}}
@@ -219,8 +250,12 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									if srcNulls.NullAt(bs.curSrcStartIdx) {
 										outNulls.SetNull(outStartIdx)
 									} else {
+										// {{if .IsBytesLike}}
+										outCol.Copy(srcCol, outStartIdx, bs.curSrcStartIdx)
+										// {{else}}
 										v := srcCol.Get(bs.curSrcStartIdx)
 										outCol.Set(outStartIdx, v)
+										// {{end}}
 									}
 								} else {
 									out.Copy(

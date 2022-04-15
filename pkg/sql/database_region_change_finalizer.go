@@ -66,7 +66,8 @@ func newDatabaseRegionChangeFinalizer(
 			txn,
 			dbID,
 			tree.DatabaseLookupFlags{
-				Required: true,
+				Required:    true,
+				AvoidLeased: true,
 			},
 		)
 		if err != nil {
@@ -176,13 +177,16 @@ func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
 		ctx,
 		txn,
 		r.dbID,
-		tree.DatabaseLookupFlags{Required: true},
+		tree.DatabaseLookupFlags{
+			Required:    true,
+			AvoidLeased: true,
+		},
 	)
 	if err != nil {
 		return err
 	}
 
-	err = r.localPlanner.updateZoneConfigsForTables(ctx, dbDesc, WithOnlyGlobalTables)
+	err = r.localPlanner.refreshZoneConfigsForTables(ctx, dbDesc, WithOnlyGlobalTables)
 	if err != nil {
 		return err
 	}

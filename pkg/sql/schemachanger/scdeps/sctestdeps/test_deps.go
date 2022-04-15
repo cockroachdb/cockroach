@@ -334,7 +334,11 @@ func (s *TestState) mayGetByName(
 		ParentSchemaID: parentSchemaID,
 		Name:           name,
 	}
-	id := s.catalog.LookupNamespaceEntry(key)
+	ne := s.catalog.LookupNamespaceEntry(key)
+	if ne == nil {
+		return nil
+	}
+	id := ne.GetID()
 	if id == descpb.InvalidID {
 		return nil
 	}
@@ -669,12 +673,13 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	})
 	for _, nameInfo := range names {
 		expectedID := b.namesToDelete[nameInfo]
-		actualID := b.s.catalog.LookupNamespaceEntry(nameInfo)
-		if actualID == descpb.InvalidID {
+		ne := b.s.catalog.LookupNamespaceEntry(nameInfo)
+		if ne == nil {
 			return errors.AssertionFailedf(
 				"cannot delete missing namespace entry %v", nameInfo)
 		}
-		if actualID != expectedID {
+
+		if actualID := ne.GetID(); actualID != expectedID {
 			return errors.AssertionFailedf(
 				"expected deleted namespace entry %v to have ID %d, instead is %d", nameInfo, expectedID, actualID)
 		}
@@ -740,13 +745,20 @@ func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) error {
 		return errors.New("invalid 0 job ID")
 	}
 	record.JobID = jobspb.JobID(1 + len(s.jobs))
+	s.createdJobsInCurrentTxn = append(s.createdJobsInCurrentTxn, record.JobID)
 	s.jobs = append(s.jobs, record)
-	s.LogSideEffectf("create job #%d: %q\n  descriptor IDs: %v",
+	s.LogSideEffectf("create job #%d (non-cancelable: %v): %q\n  descriptor IDs: %v",
 		record.JobID,
+		record.NonCancelable,
 		record.Description,
 		record.DescriptorIDs,
 	)
 	return nil
+}
+
+// CreatedJobs implements the scexec.TransactionalJobRegistry interface.
+func (s *TestState) CreatedJobs() []jobspb.JobID {
+	return s.createdJobsInCurrentTxn
 }
 
 // CheckPausepoint is a no-op.
@@ -792,7 +804,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 	}
 	updateProgress := func(progress *jobspb.Progress) {
 		scJob.Progress = *progress.GetNewSchemaChange()
-		s.LogSideEffectf("update progress of schema change job #%d", scJob.JobID)
+		s.LogSideEffectf("update progress of schema change job #%d: %q", scJob.JobID, progress.RunningStatus)
 	}
 	setNonCancelable := func() {
 		scJob.NonCancelable = true

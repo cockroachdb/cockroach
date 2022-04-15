@@ -89,17 +89,18 @@ const (
 type Registry struct {
 	serverCtx context.Context
 
-	ac       log.AmbientContext
-	stopper  *stop.Stopper
-	db       *kv.DB
-	ex       sqlutil.InternalExecutor
-	clock    *hlc.Clock
-	nodeID   *base.SQLIDContainer
-	settings *cluster.Settings
-	execCtx  jobExecCtxMaker
-	metrics  Metrics
-	td       *tracedumper.TraceDumper
-	knobs    TestingKnobs
+	ac        log.AmbientContext
+	stopper   *stop.Stopper
+	db        *kv.DB
+	ex        sqlutil.InternalExecutor
+	clock     *hlc.Clock
+	clusterID *base.ClusterIDContainer
+	nodeID    *base.SQLIDContainer
+	settings  *cluster.Settings
+	execCtx   jobExecCtxMaker
+	metrics   Metrics
+	td        *tracedumper.TraceDumper
+	knobs     TestingKnobs
 
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
 	// potentially attempt to claim jobs.
@@ -182,6 +183,7 @@ func MakeRegistry(
 	clock *hlc.Clock,
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
+	clusterID *base.ClusterIDContainer,
 	nodeID *base.SQLIDContainer,
 	sqlInstance sqlliveness.Instance,
 	settings *cluster.Settings,
@@ -198,6 +200,7 @@ func MakeRegistry(
 		clock:               clock,
 		db:                  db,
 		ex:                  ex,
+		clusterID:           clusterID,
 		nodeID:              nodeID,
 		sqlInstance:         sqlInstance,
 		settings:            settings,
@@ -275,27 +278,29 @@ func (r *Registry) MakeJobID() jobspb.JobID {
 }
 
 // newJob creates a new Job.
-func (r *Registry) newJob(record Record) *Job {
+func (r *Registry) newJob(ctx context.Context, record Record) *Job {
 	job := &Job{
 		id:        record.JobID,
 		registry:  r,
 		createdBy: record.CreatedBy,
 	}
-	job.mu.payload = r.makePayload(&record)
+	job.mu.payload = r.makePayload(ctx, &record)
 	job.mu.progress = r.makeProgress(&record)
 	job.mu.status = StatusRunning
 	return job
 }
 
 // makePayload creates a Payload structure based on the given Record.
-func (r *Registry) makePayload(record *Record) jobspb.Payload {
+func (r *Registry) makePayload(ctx context.Context, record *Record) jobspb.Payload {
 	return jobspb.Payload{
-		Description:   record.Description,
-		Statement:     record.Statements,
-		UsernameProto: record.Username.EncodeProto(),
-		DescriptorIDs: record.DescriptorIDs,
-		Details:       jobspb.WrapPayloadDetails(record.Details),
-		Noncancelable: record.NonCancelable,
+		Description:            record.Description,
+		Statement:              record.Statements,
+		UsernameProto:          record.Username.EncodeProto(),
+		DescriptorIDs:          record.DescriptorIDs,
+		Details:                jobspb.WrapPayloadDetails(record.Details),
+		Noncancelable:          record.NonCancelable,
+		CreationClusterVersion: r.settings.Version.ActiveVersion(ctx).Version,
+		CreationClusterID:      r.clusterID.Get(),
 	}
 }
 
@@ -344,7 +349,7 @@ func (r *Registry) createJobsInBatchWithTxn(
 		start = txn.ReadTimestamp().GoTime()
 	}
 	modifiedMicros := timeutil.ToUnixMicros(start)
-	stmt, args, jobIDs, err := r.batchJobInsertStmt(s.ID(), records, modifiedMicros)
+	stmt, args, jobIDs, err := r.batchJobInsertStmt(ctx, s.ID(), records, modifiedMicros)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +364,7 @@ func (r *Registry) createJobsInBatchWithTxn(
 // batchJobInsertStmt creates an INSERT statement and its corresponding arguments
 // for batched jobs creation.
 func (r *Registry) batchJobInsertStmt(
-	sessionID sqlliveness.SessionID, records []*Record, modifiedMicros int64,
+	ctx context.Context, sessionID sqlliveness.SessionID, records []*Record, modifiedMicros int64,
 ) (string, []interface{}, []jobspb.JobID, error) {
 	instanceID := r.ID()
 	const numColumns = 6
@@ -377,7 +382,7 @@ func (r *Registry) batchJobInsertStmt(
 		`claim_session_id`:  func(rec *Record) interface{} { return sessionID.UnsafeBytes() },
 		`claim_instance_id`: func(rec *Record) interface{} { return instanceID },
 		`payload`: func(rec *Record) interface{} {
-			payload := r.makePayload(rec)
+			payload := r.makePayload(ctx, rec)
 			return marshalPanic(&payload)
 		},
 		`progress`: func(rec *Record) interface{} {
@@ -439,7 +444,7 @@ func (r *Registry) CreateJobWithTxn(
 	// TODO(sajjad): Clean up the interface - remove jobID from the params as
 	// Record now has JobID field.
 	record.JobID = jobID
-	j := r.newJob(record)
+	j := r.newJob(ctx, record)
 
 	s, err := r.sqlInstance.Session(ctx)
 	if err != nil {
@@ -476,7 +481,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 	// TODO(sajjad): Clean up the interface - remove jobID from the params as
 	// Record now has JobID field.
 	record.JobID = jobID
-	j := r.newJob(record)
+	j := r.newJob(ctx, record)
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
 		// Note: although the following uses ReadTimestamp and
 		// ReadTimestamp can diverge from the value of now() throughout a
@@ -659,7 +664,7 @@ func (r *Registry) UpdateJobWithTxn(
 // TODO (sajjad): make maxAdoptionsPerLoop a cluster setting.
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
 
-const removeClaimsQuery = `
+const removeClaimsForDeadSessionsQuery = `
 UPDATE system.jobs
    SET claim_session_id = NULL
  WHERE claim_session_id in (
@@ -669,6 +674,14 @@ SELECT claim_session_id
    AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)
  FETCH FIRST $2 ROWS ONLY)
 `
+const removeClaimsForSessionQuery = `
+UPDATE system.jobs
+   SET claim_session_id = NULL
+ WHERE claim_session_id in (
+SELECT claim_session_id
+ WHERE claim_session_id = $1
+   AND status IN ` + claimableStatusTupleString + `
+)`
 
 type withSessionFunc func(ctx context.Context, s sqlliveness.Session)
 
@@ -707,7 +720,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			_, err := r.ex.ExecEx(
 				ctx, "expire-sessions", nil,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-				removeClaimsQuery,
+				removeClaimsForDeadSessionsQuery,
 				s.ID().UnsafeBytes(),
 				cancellationsUpdateLimitSetting.Get(&r.settings.SV),
 			)
@@ -732,17 +745,44 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// claimJobs iterates the set of jobs which are not currently claimed and
 	// claims jobs up to maxAdoptionsPerLoop.
 	claimJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
+		if r.adoptionDisabled(ctx) {
+			log.Warningf(ctx, "job adoption is disabled, registry will not claim any jobs")
+			return
+		}
 		r.metrics.AdoptIterations.Inc(1)
 		if err := r.claimJobs(ctx, s); err != nil {
 			log.Errorf(ctx, "error claiming jobs: %s", err)
 		}
 	})
+	// removeClaimsFromJobs queries the jobs table for non-terminal jobs and
+	// nullifies their claims if the claims are owned by the current session.
+	removeClaimsFromSession := func(ctx context.Context, s sqlliveness.Session) {
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Run the expiration transaction at low priority to ensure that it does
+			// not contend with foreground reads. Note that the adoption and cancellation
+			// queries also use low priority so they will interact nicely.
+			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
+				return errors.WithAssertionFailure(err)
+			}
+			_, err := r.ex.ExecEx(
+				ctx, "remove-claims-for-session", nil,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				removeClaimsForSessionQuery, s.ID().UnsafeBytes(),
+			)
+			return err
+		}); err != nil {
+			log.Errorf(ctx, "error expiring job sessions: %s", err)
+		}
+	}
 	// processClaimedJobs iterates the jobs claimed by the current node that
 	// are in the running or reverting state, and then it starts those jobs if
 	// they are not already running.
 	processClaimedJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
+		// If job adoption is disabled for the registry then we remove our claim on
+		// all adopted job, and cancel them.
 		if r.adoptionDisabled(ctx) {
-			log.Warningf(ctx, "canceling all adopted jobs due to liveness failure")
+			log.Warningf(ctx, "job adoptions is disabled, canceling all adopted jobs due to liveness failure")
+			removeClaimsFromSession(ctx, s)
 			r.cancelAllAdoptedJobs()
 			return
 		}
@@ -1120,7 +1160,11 @@ func (r *Registry) stepThroughStateMachine(
 		var err error
 		func() {
 			jm.CurrentlyRunning.Inc(1)
-			defer jm.CurrentlyRunning.Dec(1)
+			r.metrics.RunningNonIdleJobs.Inc(1)
+			defer func() {
+				jm.CurrentlyRunning.Dec(1)
+				r.metrics.RunningNonIdleJobs.Dec(1)
+			}()
 			err = resumer.Resume(resumeCtx, execCtx)
 		}()
 
@@ -1144,7 +1188,7 @@ func (r *Registry) stepThroughStateMachine(
 			if err := r.PauseRequested(ctx, nil, job.ID(), err.Error()); err != nil {
 				return err
 			}
-			return errPauseSelfSentinel
+			return errors.Wrap(err, PauseRequestExplained)
 		}
 		// TODO(spaskob): enforce a limit on retries.
 
@@ -1214,7 +1258,11 @@ func (r *Registry) stepThroughStateMachine(
 		var err error
 		func() {
 			jm.CurrentlyRunning.Inc(1)
-			defer jm.CurrentlyRunning.Dec(1)
+			r.metrics.RunningNonIdleJobs.Inc(1)
+			defer func() {
+				jm.CurrentlyRunning.Dec(1)
+				r.metrics.RunningNonIdleJobs.Dec(1)
+			}()
 			err = resumer.OnFailOrCancel(onFailOrCancelCtx, execCtx)
 		}()
 		if successOnFailOrCancel := err == nil; successOnFailOrCancel {
@@ -1302,8 +1350,10 @@ func (r *Registry) MarkIdle(job *Job, isIdle bool) {
 		if aj.isIdle != isIdle {
 			log.Infof(r.serverCtx, "%s job %d: toggling idleness to %+v", jobType, job.ID(), isIdle)
 			if isIdle {
+				r.metrics.RunningNonIdleJobs.Dec(1)
 				jm.CurrentlyIdle.Inc(1)
 			} else {
+				r.metrics.RunningNonIdleJobs.Inc(1)
 				jm.CurrentlyIdle.Dec(1)
 			}
 			aj.isIdle = isIdle

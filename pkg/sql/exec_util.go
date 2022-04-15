@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -64,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -74,8 +76,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -196,14 +198,11 @@ const secondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.allow_fo
 // to set zone configurations. It has no effect for the system tenant.
 //
 // This setting has no effect on zone configurations that have already been set.
-//
-// TODO(irfansharif): This should be a tenant-readonly setting, possible after
-// the work for #73349 is completed.
 var secondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.TenantReadOnly,
 	secondaryTenantsZoneConfigsEnabledSettingName,
 	"allow secondary tenants to set zone configurations; does not affect the system tenant",
-	true,
+	false,
 )
 
 // traceTxnThreshold can be used to log SQL transactions that take
@@ -632,26 +631,24 @@ var dateStyle = settings.RegisterEnumSetting(
 const intervalStyleEnabledClusterSetting = "sql.defaults.intervalstyle.enabled"
 
 // intervalStyleEnabled controls intervals representation.
-// TODO(#sql-experience): remove session setting in v22.1 and have this
-// always enabled.
+// TODO(sql-exp): retire this setting in 22.2.
 var intervalStyleEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	intervalStyleEnabledClusterSetting,
 	"default value for intervalstyle_enabled session setting",
 	false,
-).WithPublic()
+)
 
 const dateStyleEnabledClusterSetting = "sql.defaults.datestyle.enabled"
 
 // dateStyleEnabled controls dates representation.
-// TODO(#sql-experience): remove session setting in v22.1 and have this
-// always enabled.
+// TODO(sql-exp): retire this setting in 22.2.
 var dateStyleEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	dateStyleEnabledClusterSetting,
 	"default value for datestyle_enabled session setting",
 	false,
-).WithPublic()
+)
 
 var txnRowsWrittenLog = settings.RegisterIntSetting(
 	settings.TenantWritable,
@@ -1130,10 +1127,18 @@ func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
 
 // NodeInfo contains metadata about the executing node and cluster.
 type NodeInfo struct {
-	ClusterID func() uuid.UUID
-	NodeID    *base.SQLIDContainer
-	AdminURL  func() *url.URL
-	PGURL     func(*url.Userinfo) (*pgurl.URL, error)
+	// LogicalClusterID is the cluster ID of the tenant, unique per
+	// tenant.
+	LogicalClusterID func() uuid.UUID
+	// NodeID is either the SQL instance ID or node ID, depending on
+	// circumstances.
+	// TODO(knz): Split this across node ID and instance ID. Likely,
+	// the SQL layer only needs instance ID.
+	NodeID *base.SQLIDContainer
+	// AdminURL is the URL of the DB Console for this server.
+	AdminURL func() *url.URL
+	// PGURL is the SQL connection URL for this server.
+	PGURL func(*url.Userinfo) (*pgurl.URL, error)
 }
 
 // nodeStatusGenerator is a limited portion of the status.MetricsRecorder
@@ -1145,7 +1150,7 @@ type nodeStatusGenerator interface {
 // An ExecutorConfig encompasses the auxiliary objects and configuration
 // required to create an executor.
 // All fields holding a pointer or an interface are required to create
-// a Executor; the rest will have sane defaults set if omitted.
+// an Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
 	Settings *cluster.Settings
 	NodeInfo
@@ -1183,8 +1188,8 @@ type ExecutorConfig struct {
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
-	RowMetrics           *row.Metrics
-	InternalRowMetrics   *row.Metrics
+	RowMetrics           *rowinfra.Metrics
+	InternalRowMetrics   *rowinfra.Metrics
 
 	TestingKnobs                         ExecutorTestingKnobs
 	MigrationTestingKnobs                *migration.TestingKnobs
@@ -1203,6 +1208,8 @@ type ExecutorConfig struct {
 	TelemetryLoggingTestingKnobs         *TelemetryLoggingTestingKnobs
 	SpanConfigTestingKnobs               *spanconfig.TestingKnobs
 	CaptureIndexUsageStatsKnobs          *scheduledlogging.CaptureIndexUsageStatsTestingKnobs
+	UnusedIndexRecommendationsKnobs      *idxusage.UnusedIndexRecommendationTestingKnobs
+
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
@@ -1268,6 +1275,10 @@ type ExecutorConfig struct {
 	// control.
 	TenantUsageServer multitenant.TenantUsageServer
 
+	// KVStoresIterator is used by various crdb_internal builtins to directly
+	// access stores on this node.
+	KVStoresIterator kvserverbase.StoresIterator
+
 	// CollectionFactory is used to construct a descs.Collection.
 	CollectionFactory *descs.CollectionFactory
 
@@ -1277,6 +1288,13 @@ type ExecutorConfig struct {
 	// SpanConfigReconciler is used to drive the span config reconciliation job
 	// and related migrations.
 	SpanConfigReconciler spanconfig.Reconciler
+
+	// SpanConfigSplitter is used during migrations to seed system.span_count with
+	// the right number of tenant spans.
+	SpanConfigSplitter spanconfig.Splitter
+
+	// SpanConfigLimiter is used to limit how many span configs installed.
+	SpanConfigLimiter spanconfig.Limiter
 
 	// SpanConfigKVAccessor is used when creating and deleting tenant
 	// records.
@@ -1438,6 +1456,10 @@ type ExecutorTestingKnobs struct {
 		txnID uuid.UUID,
 		txnFingerprintID roachpb.TransactionFingerprintID,
 	)
+
+	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
+	// is written.
+	AfterBackupCheckpoint func()
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -3178,6 +3200,14 @@ func (m *sessionDataMutator) SetEnableImplicitTransactionForBatchStatements(val 
 	m.data.EnableImplicitTransactionForBatchStatements = val
 }
 
+func (m *sessionDataMutator) SetExpectAndIgnoreNotVisibleColumnsInCopy(val bool) {
+	m.data.ExpectAndIgnoreNotVisibleColumnsInCopy = val
+}
+
+func (m *sessionDataMutator) SetMultipleModificationsOfTable(val bool) {
+	m.data.MultipleModificationsOfTable = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
@@ -3298,18 +3328,18 @@ func TestingDescsTxn(
 	return DescsTxn(ctx, &execCfg, f)
 }
 
-// NewRowMetrics creates a row.Metrics struct for either internal or user
+// NewRowMetrics creates a rowinfra.Metrics struct for either internal or user
 // queries.
-func NewRowMetrics(internal bool) row.Metrics {
-	return row.Metrics{
-		MaxRowSizeLogCount: metric.NewCounter(getMetricMeta(row.MetaMaxRowSizeLog, internal)),
-		MaxRowSizeErrCount: metric.NewCounter(getMetricMeta(row.MetaMaxRowSizeErr, internal)),
+func NewRowMetrics(internal bool) rowinfra.Metrics {
+	return rowinfra.Metrics{
+		MaxRowSizeLogCount: metric.NewCounter(getMetricMeta(rowinfra.MetaMaxRowSizeLog, internal)),
+		MaxRowSizeErrCount: metric.NewCounter(getMetricMeta(rowinfra.MetaMaxRowSizeErr, internal)),
 	}
 }
 
-// GetRowMetrics returns the proper RowMetrics for either internal or user
+// GetRowMetrics returns the proper rowinfra.Metrics for either internal or user
 // queries.
-func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *row.Metrics {
+func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *rowinfra.Metrics {
 	if internal {
 		return cfg.InternalRowMetrics
 	}

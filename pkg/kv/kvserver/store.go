@@ -1156,13 +1156,13 @@ func NewStore(
 			cfg.StorePool,
 			cfg.RPCContext.RemoteClocks.Latency,
 			cfg.TestingKnobs.AllocatorKnobs,
+			s.metrics,
 		)
 	} else {
 		s.allocator = MakeAllocator(
 			cfg.StorePool, func(string) (time.Duration, bool) {
 				return 0, false
-			},
-			cfg.TestingKnobs.AllocatorKnobs,
+			}, cfg.TestingKnobs.AllocatorKnobs, s.metrics,
 		)
 	}
 	s.replRankings = newReplicaRankings()
@@ -1510,7 +1510,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						r,
 						desc,
 						conf,
-						transferLeaseOptions{},
+						transferLeaseOptions{excludeLeaseRepl: true},
 					)
 					duration := timeutil.Since(start).Microseconds()
 
@@ -2294,7 +2294,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 						if r == nil {
 							continue
 						}
-						r.handleClosedTimestampUpdate(ctx, r.GetClosedTimestamp(ctx))
+						r.handleClosedTimestampUpdate(ctx, r.GetCurrentClosedTimestamp(ctx))
 					}
 				case <-confCh:
 					// Loop around to use the updated timer.
@@ -2966,7 +2966,11 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.LogicalBytes = logicalBytes
 	capacity.QueriesPerSecond = totalQueriesPerSecond
 	capacity.WritesPerSecond = totalWritesPerSecond
-	capacity.ReadAmplification = s.metrics.RdbReadAmplification.Value()
+	// We gossip the maximum number of L0 sub-levels that have been seen in
+	// past 2 windows. The recording length may vary between 5 and 10 minutes
+	// accordingly.
+	windowedL0Sublevels, _ := s.metrics.L0SubLevelsHistogram.Windowed()
+	capacity.L0Sublevels = windowedL0Sublevels.Max()
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)
@@ -3156,7 +3160,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if w := metrics.LockTableMetrics.TopKLocksByWaitDuration[0].MaxWaitDurationNanos; w > maxLockWaitDurationNanos {
 			maxLockWaitDurationNanos = w
 		}
-		mc := rep.GetClosedTimestamp(ctx)
+		mc := rep.GetCurrentClosedTimestamp(ctx)
 		if minMaxClosedTS.IsEmpty() || mc.Less(minMaxClosedTS) {
 			minMaxClosedTS = mc
 		}

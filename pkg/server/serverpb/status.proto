@@ -20,8 +20,7 @@ import "roachpb/data.proto";
 import "roachpb/index_usage_stats.proto";
 import "roachpb/metadata.proto";
 import "server/diagnostics/diagnosticspb/diagnostics.proto";
-import "util/tracing/tracingpb/recorded_span.proto";
-import "util/tracing/tracingpb/tracing.proto";
+import "server/serverpb/index_recommendations.proto";
 import "server/status/statuspb/status.proto";
 import "sql/contentionpb/contention.proto";
 import "sql/execinfrapb/api.proto";
@@ -34,6 +33,8 @@ import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "util/log/logpb/log.proto";
 import "util/unresolved_addr.proto";
 import "util/hlc/timestamp.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
+import "util/tracing/tracingpb/tracing.proto";
 
 import "etcd/raft/v3/raftpb/raft.proto";
 
@@ -274,8 +275,7 @@ message NodeResponse {
   ];
 
   message NetworkActivity {
-    int64 incoming = 1; // in bytes
-    int64 outgoing = 2; // in bytes
+    reserved 1, 2;
     int64 latency = 3;  // in nanoseconds
   }
   // activity is a map of nodeIDs to network statistics from this node
@@ -1683,6 +1683,7 @@ message TableIndexStatsResponse {
   repeated ExtendedCollectedIndexUsageStatistics statistics = 1;
   // Timestamp of the last index usage stats reset.
   google.protobuf.Timestamp last_reset = 2 [(gogoproto.stdtime) = true];
+  repeated cockroach.sql.IndexRecommendation index_recommendations = 3;
 }
 
 // Request object for issuing a index usage stats reset request.

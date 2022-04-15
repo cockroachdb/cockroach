@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
@@ -65,15 +66,6 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 		}
 		return nil
 	}); err != nil {
-		return err
-	}
-
-	// We check for concurrently running SQL Stats compaction jobs. We only allow
-	// one job to be running at the same time.
-	if err := persistedsqlstats.CheckExistingCompactionJob(ctx, r.job, ie, nil /* txn */); err != nil {
-		if errors.Is(err, persistedsqlstats.ErrConcurrentSQLStatsCompaction) {
-			log.Infof(ctx, "exiting due to a running sql stats compaction job")
-		}
 		return err
 	}
 
@@ -172,6 +164,7 @@ func (e *scheduledSQLStatsCompactionExecutor) OnDrop(
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 ) error {
 	return persistedsqlstats.ErrScheduleUndroppable
 }
@@ -202,7 +195,7 @@ func (e *scheduledSQLStatsCompactionExecutor) createSQLStatsCompactionJob(
 		persistedsqlstats.CreateCompactionJob(ctx, &jobs.CreatedByInfo{
 			ID:   sj.ScheduleID(),
 			Name: jobs.CreatedByScheduledJobs,
-		}, txn, cfg.InternalExecutor, p.(*planner).ExecCfg().JobRegistry)
+		}, txn, p.(*planner).ExecCfg().JobRegistry)
 
 	if err != nil {
 		return err
@@ -247,6 +240,7 @@ func (e *scheduledSQLStatsCompactionExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	sj *jobs.ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {

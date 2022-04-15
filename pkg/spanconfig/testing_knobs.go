@@ -41,6 +41,14 @@ type TestingKnobs struct {
 	// job from persisting checkpoints.
 	JobDisablePersistingCheckpoints bool
 
+	// JobDisableInternalRetry disables the span config reconciliation job's
+	// internal retry loop.
+	JobDisableInternalRetry bool
+
+	// JobPersistCheckpointInterceptor, if set, is invoked before the
+	// reconciliation job persists checkpoints.
+	JobOnCheckpointInterceptor func() error
+
 	// KVSubscriberRangeFeedKnobs control lifecycle events for the rangefeed
 	// underlying the KVSubscriber.
 	KVSubscriberRangeFeedKnobs base.ModuleTestingKnobs
@@ -48,6 +56,14 @@ type TestingKnobs struct {
 	// StoreKVSubscriberOverride is used to override the KVSubscriber used when
 	// setting up a new store.
 	StoreKVSubscriberOverride KVSubscriber
+
+	// KVAccessorPaginationInterceptor, if set, is invoked on every pagination
+	// event.
+	KVAccessorPaginationInterceptor func()
+
+	// KVAccessorBatchSizeOverride overrides the batch size KVAccessor makes use
+	// of internally.
+	KVAccessorBatchSizeOverrideFn func() int
 
 	// SQLWatcherOnEventInterceptor, if set, is invoked when the SQLWatcher
 	// receives an event on one of its rangefeeds.
@@ -78,6 +94,10 @@ type TestingKnobs struct {
 	// ProtectedTSReaderOverrideFn returns a ProtectedTSReader which is used to
 	// override the ProtectedTSReader used when setting up a new store.
 	ProtectedTSReaderOverrideFn func(clock *hlc.Clock) ProtectedTSReader
+
+	// LimiterLimitOverride, if set, allows tests to dynamically override the span
+	// config limit.
+	LimiterLimitOverride func() int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

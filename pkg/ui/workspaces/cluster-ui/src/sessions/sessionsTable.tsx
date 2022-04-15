@@ -35,7 +35,6 @@ import {
 import { Button } from "src/button/button";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { computeOrUseStmtSummary } from "../util";
-import { StatementLinkTarget } from "../statementsTable";
 import {
   statisticsTableTitles,
   StatisticType,
@@ -87,12 +86,16 @@ const StatementTableCell = (props: { session: ISession }) => {
   }
   const stmt = session.active_queries[0];
   const sql = stmt.sql;
-  const stmtSummary = session.active_queries[0].sql_summary;
-  const stmtCellText = computeOrUseStmtSummary(sql, stmtSummary);
+  const sqlNoConstants = stmt.sql_no_constants;
+  const stmtQuery = sql.length > 0 ? sql : sqlNoConstants;
+  const stmtSummary = stmt.sql_summary;
+  const stmtCellText = computeOrUseStmtSummary(stmtQuery, stmtSummary);
   return (
-    <Tooltip placement="bottom" style="tableTitle" content={<>{sql}</>}>
-      <div className={cx("cl-table__col-query-text")}>{stmtCellText}</div>
-    </Tooltip>
+    <Link to={`execution/statement/${stmt.id}`}>
+      <Tooltip placement="bottom" style="tableTitle" content={<>{sql}</>}>
+        <div className={cx("cl-table__col-query-text")}>{stmtCellText}</div>
+      </Tooltip>
+    </Link>
   );
 };
 
@@ -114,7 +117,6 @@ function formatStatementStart(session: ISession): string {
 
   return start.format(formatStr);
 }
-
 const SessionStatus = (props: { session: ISession }) => {
   const { session } = props;
   const status = session.active_queries.length > 0 ? "Active" : "Idle";
@@ -218,28 +220,28 @@ export function makeSessionsColumns(
       cell: ({ session }) => {
         const menuItems: DropdownItem[] = [
           {
-            value: "terminateStatement",
-            name: "Terminate Statement",
+            value: "cancelStatement",
+            name: "Cancel Statement",
             disabled: session.active_queries?.length === 0,
           },
           {
-            value: "terminateSession",
-            name: "Terminate Session",
+            value: "cancelSession",
+            name: "Cancel Session",
           },
         ];
 
         const onMenuItemChange = (
-          value: "terminateStatement" | "terminateSession",
+          value: "cancelStatement" | "cancelSession",
         ) => {
           switch (value) {
-            case "terminateSession":
+            case "cancelSession":
               onTerminateSessionClick && onTerminateSessionClick();
               terminateSessionRef?.current?.showModalFor({
                 session_id: session.id,
                 node_id: session.node_id.toString(),
               });
               break;
-            case "terminateStatement":
+            case "cancelStatement":
               if (session.active_queries?.length > 0) {
                 onTerminateStatementClick && onTerminateStatementClick();
                 terminateQueryRef?.current?.showModalFor({

@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -36,7 +35,7 @@ type TestingKnobs struct {
 	// daemon logic.
 	// This function will be passed in a function which the caller
 	// may invoke directly, bypassing normal job scheduler daemon logic.
-	TakeOverJobsScheduling func(func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error)
+	TakeOverJobsScheduling func(func(ctx context.Context, maxSchedules int64) error)
 
 	// CaptureJobScheduler is a function which will be passed a fully constructed job scheduler.
 	// The scheduler is passed in as interface{} because jobScheduler is an unexported type.

@@ -24,13 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
 )
 
 const (
-	// storeRebalancerTimerDuration is how frequently to check the store-level
+	// defaultLoadBasedRebalancingInterval is how frequently to check the store-level
 	// balance of the cluster.
-	storeRebalancerTimerDuration = time.Minute
+	defaultLoadBasedRebalancingInterval = time.Minute
 
 	// minQPSThresholdDifference is the minimum QPS difference from the cluster
 	// mean that this system should care about. In other words, we won't worry
@@ -94,12 +95,28 @@ var qpsRebalanceThreshold = func() *settings.FloatSetting {
 		settings.SystemOnly,
 		"kv.allocator.qps_rebalance_threshold",
 		"minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull",
-		0.25,
+		0.10,
 		settings.NonNegativeFloat,
 	)
 	s.SetVisibility(settings.Public)
 	return s
 }()
+
+var loadBasedRebalanceInterval = settings.RegisterPublicDurationSettingWithExplicitUnit(
+	settings.SystemOnly,
+	"kv.allocator.load_based_rebalancing_interval",
+	"the rough interval at which each store will check for load-based lease / replica rebalancing opportunities",
+	defaultLoadBasedRebalancingInterval,
+	func(d time.Duration) error {
+		// Setting this interval to a very low duration is generally going to be a
+		// bad idea without any real benefit, so let's disallow that.
+		const min = 10 * time.Second
+		if d < min {
+			return errors.Errorf("must specify a minimum of %s", min)
+		}
+		return nil
+	},
+)
 
 // minQPSDifferenceForTransfers is the minimum QPS difference that the store
 // rebalancer would care to reconcile (via lease or replica rebalancing) between
@@ -203,7 +220,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "store-rebalancer", func(ctx context.Context) {
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
-		timer.Reset(jitteredInterval(storeRebalancerTimerDuration))
+		timer.Reset(jitteredInterval(loadBasedRebalanceInterval.Get(&sr.st.SV)))
 		for {
 			// Wait out the first tick before doing anything since the store is still
 			// starting up and we might as well wait for some qps/wps stats to
@@ -213,7 +230,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				return
 			case <-timer.C:
 				timer.Read = true
-				timer.Reset(jitteredInterval(storeRebalancerTimerDuration))
+				timer.Reset(jitteredInterval(loadBasedRebalanceInterval.Get(&sr.st.SV)))
 			}
 
 			mode := LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV))
@@ -232,8 +249,9 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 // `scorerOptions` here, which sets the range count rebalance threshold.
 // Instead, we use our own implementation of `scorerOptions` that promotes QPS
 // balance.
-func (sr *StoreRebalancer) scorerOptions() *qpsScorerOptions {
+func (sr *StoreRebalancer) scorerOptions(ctx context.Context) *qpsScorerOptions {
 	return &qpsScorerOptions{
+		storeHealthOptions:    sr.rq.allocator.storeHealthOptions(ctx),
 		deterministic:         sr.rq.allocator.storePool.deterministic,
 		qpsRebalanceThreshold: qpsRebalanceThreshold.Get(&sr.st.SV),
 		minRequiredQPSDiff:    minQPSDifferenceForTransfers.Get(&sr.st.SV),
@@ -253,7 +271,7 @@ func (sr *StoreRebalancer) scorerOptions() *qpsScorerOptions {
 func (sr *StoreRebalancer) rebalanceStore(
 	ctx context.Context, mode LBRebalancingMode, allStoresList StoreList,
 ) {
-	options := sr.scorerOptions()
+	options := sr.scorerOptions(ctx)
 	var localDesc *roachpb.StoreDescriptor
 	for i := range allStoresList.stores {
 		if allStoresList.stores[i].StoreID == sr.rq.store.StoreID() {
@@ -343,7 +361,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 			&replicasToMaybeRebalance,
 			localDesc,
 			allStoresList,
-			sr.scorerOptions(),
+			sr.scorerOptions(ctx),
 		)
 		if replWithStats.repl == nil {
 			log.Infof(ctx,
@@ -375,7 +393,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 				true, /* transferLeaseToFirstVoter */
 			)
 		}); err != nil {
-			log.Errorf(ctx, "unable to relocate range to %v: %+v", voterTargets, err)
+			log.Errorf(ctx, "unable to relocate range to %v: %v", voterTargets, err)
 			continue
 		}
 		sr.metrics.RangeRebalanceCount.Inc(1)
@@ -470,8 +488,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			replWithStats.repl.leaseholderStats,
 			true, /* forceDecisionWithoutStats */
 			transferLeaseOptions{
-				goal:                     qpsConvergence,
-				checkTransferLeaseSource: true,
+				goal: qpsConvergence,
 			},
 		)
 

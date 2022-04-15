@@ -49,6 +49,13 @@ SELECT v, k FROM kv
 1  2
 2  3
 
+query IIII rowsort
+SELECT v, k, k, v FROM kv
+----
+1  1  1  1
+1  2  2  1
+2  3  3  2
+
 query III rowsort
 SELECT k, v, k + v FROM kv
 ----
@@ -142,5 +149,5 @@ SELECT * FROM [EXPLAIN SELECT n,a,b FROM a WHERE a = 5 AND b = 2] OFFSET 2
   left columns: (n, a)
   left fixed values: 1 column
   right table: a@b_idx
-  right columns: (b)
+  right columns: (n, b)
   right fixed values: 1 column

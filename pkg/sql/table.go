@@ -23,8 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -106,13 +105,13 @@ func (p *planner) createNonDropDatabaseChangeJob(
 func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context, tableDesc *tabledesc.Mutable, jobDesc string, mutationID descpb.MutationID,
 ) error {
+
+	// If there is a concurrent schema change using the declarative schema
+	// changer, then we must fail and wait for that schema change to conclude.
+	// The error here will be dealt with in
+	// (*connExecutor).handleWaitingForConcurrentSchemaChanges().
 	if tableDesc.GetDeclarativeSchemaChangerState() != nil {
-		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"cannot perform a schema change on table %q while it is undergoing a declarative schema change",
-			// We use the cluster version because the table may have been renamed.
-			// This is a bit of a hack.
-			tableDesc.ClusterVersion.GetName(),
-		)
+		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
 
 	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[tableDesc.ID]
@@ -135,7 +134,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		}
 	}
 	span := tableDesc.PrimaryIndexSpan(p.ExecCfg().Codec)
-	for i := len(tableDesc.ClusterVersion.Mutations) + len(spanList); i < len(tableDesc.Mutations); i++ {
+	for i := len(tableDesc.ClusterVersion().Mutations) + len(spanList); i < len(tableDesc.Mutations); i++ {
 		var resumeSpans []roachpb.Span
 		mut := tableDesc.Mutations[i]
 		if mut.GetIndex() != nil && mut.GetIndex().UseDeletePreservingEncoding {

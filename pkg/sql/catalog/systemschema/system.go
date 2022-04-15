@@ -251,10 +251,10 @@ CREATE TABLE system.table_statistics (
 	"rowCount"      INT8       NOT NULL,
 	"distinctCount" INT8       NOT NULL,
 	"nullCount"     INT8       NOT NULL,
-	"avgSize"       INT8       NOT NULL DEFAULT 0,
 	histogram       BYTES,
+	"avgSize"       INT8       NOT NULL DEFAULT 0,
 	CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
-	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", "avgSize", histogram)
+	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize")
 );`
 
 	// locations are used to map a locality specified by a node to geographic
@@ -666,6 +666,15 @@ CREATE TABLE system.tenant_settings (
 	reason       STRING,
 	CONSTRAINT "primary" PRIMARY KEY (tenant_id, name),
 	FAMILY (tenant_id, name, value, last_updated, value_type, reason)
+);`
+
+	SpanCountTableSchema = `
+CREATE TABLE system.span_count (
+	singleton  BOOL DEFAULT TRUE,
+	span_count INT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (singleton),
+	CONSTRAINT single_row CHECK (singleton),
+	FAMILY "primary" (singleton, span_count)
 );`
 )
 
@@ -1311,12 +1320,12 @@ var (
 				{Name: "rowCount", ID: 6, Type: types.Int},
 				{Name: "distinctCount", ID: 7, Type: types.Int},
 				{Name: "nullCount", ID: 8, Type: types.Int},
-				{Name: "avgSize", ID: 9, Type: types.Int, DefaultExpr: &zeroIntString},
-				{Name: "histogram", ID: 10, Type: types.Bytes, Nullable: true},
+				{Name: "histogram", ID: 9, Type: types.Bytes, Nullable: true},
+				{Name: "avgSize", ID: 10, Type: types.Int, DefaultExpr: &zeroIntString},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
-					Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_avgSize_histogram",
+					Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram",
 					ID:   0,
 					ColumnNames: []string{
 						"tableID",
@@ -1327,8 +1336,8 @@ var (
 						"rowCount",
 						"distinctCount",
 						"nullCount",
-						"avgSize",
 						"histogram",
+						"avgSize",
 					},
 					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				},
@@ -2357,6 +2366,36 @@ var (
 				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		))
+
+	// SpanCountTable is the descriptor for the split count table.
+	SpanCountTable = registerSystemTable(
+		SpanCountTableSchema,
+		systemTable(
+			catconstants.SpanCountTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "singleton", ID: 1, Type: types.Bool, DefaultExpr: &trueBoolString},
+				{Name: "span_count", ID: 2, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					DefaultColumnID: 2,
+					ColumnNames:     []string{"singleton", "span_count"},
+					ColumnIDs:       []descpb.ColumnID{1, 2},
+				},
+			},
+			pk("singleton"),
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Name:      "single_row",
+				Expr:      "singleton",
+				ColumnIDs: []descpb.ColumnID{1},
+			}}
+		},
+	)
 )
 
 type descRefByName struct {

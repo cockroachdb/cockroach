@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexecjoin",
         "//pkg/sql/colexec/colexecproj",
+        "//pkg/sql/colexec/colexecprojconst",
         "//pkg/sql/colexec/colexecsel",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/colexecwindow",
@@ -35,6 +36,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/mon",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

@@ -72,28 +72,28 @@ func (node *ShowClusterSettingList) Format(ctx *FmtCtx) {
 	ctx.WriteString(" CLUSTER SETTINGS")
 }
 
-// BackupDetails represents the type of details to display for a SHOW BACKUP
+// ShowBackupDetails represents the type of details to display for a SHOW BACKUP
 // statement.
-type BackupDetails int
+type ShowBackupDetails int
 
 const (
 	// BackupDefaultDetails identifies a bare SHOW BACKUP statement.
-	BackupDefaultDetails BackupDetails = iota
+	BackupDefaultDetails ShowBackupDetails = iota
 	// BackupRangeDetails identifies a SHOW BACKUP RANGES statement.
 	BackupRangeDetails
 	// BackupFileDetails identifies a SHOW BACKUP FILES statement.
 	BackupFileDetails
-	// BackupManifestAsJSON displays full backup manifest as json
-	BackupManifestAsJSON
+	// BackupSchemaDetails identifies a SHOW BACKUP SCHEMAS statement.
+	BackupSchemaDetails
 )
 
 // ShowBackup represents a SHOW BACKUP statement.
 type ShowBackup struct {
-	Path                 Expr
-	InCollection         Expr
-	Details              BackupDetails
-	ShouldIncludeSchemas bool
-	Options              KVOptions
+	Path         Expr
+	InCollection Expr
+	From         bool
+	Details      ShowBackupDetails
+	Options      KVOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -104,14 +104,20 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		return
 	}
 	ctx.WriteString("SHOW BACKUP ")
-	if node.Details == BackupRangeDetails {
+
+	switch node.Details {
+	case BackupRangeDetails:
 		ctx.WriteString("RANGES ")
-	} else if node.Details == BackupFileDetails {
+	case BackupFileDetails:
 		ctx.WriteString("FILES ")
-	}
-	if node.ShouldIncludeSchemas {
+	case BackupSchemaDetails:
 		ctx.WriteString("SCHEMAS ")
 	}
+
+	if node.From {
+		ctx.WriteString("FROM ")
+	}
+
 	ctx.FormatNode(node.Path)
 	if node.InCollection != nil {
 		ctx.WriteString(" IN ")
@@ -327,6 +333,8 @@ const (
 	ShowRegionsFromAllDatabases
 	// ShowRegionsFromDefault represents SHOW REGIONS.
 	ShowRegionsFromDefault
+	// ShowSuperRegionsFromDatabase represents SHOW SUPER REGIONS FROM DATABASE.
+	ShowSuperRegionsFromDatabase
 )
 
 // ShowRegions represents a SHOW REGIONS statement
@@ -337,12 +345,16 @@ type ShowRegions struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRegions) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW REGIONS")
+	if node.ShowRegionsFrom == ShowSuperRegionsFromDatabase {
+		ctx.WriteString("SHOW SUPER REGIONS")
+	} else {
+		ctx.WriteString("SHOW REGIONS")
+	}
 	switch node.ShowRegionsFrom {
 	case ShowRegionsFromDefault:
 	case ShowRegionsFromAllDatabases:
 		ctx.WriteString(" FROM ALL DATABASES")
-	case ShowRegionsFromDatabase:
+	case ShowRegionsFromDatabase, ShowSuperRegionsFromDatabase:
 		ctx.WriteString(" FROM DATABASE")
 		if node.DatabaseName != "" {
 			ctx.WriteString(" ")
@@ -872,6 +884,9 @@ func (n *ShowSchedules) Format(ctx *FmtCtx) {
 type ShowDefaultPrivileges struct {
 	Roles       RoleSpecList
 	ForAllRoles bool
+	// If Schema is not specified, SHOW DEFAULT PRIVILEGES is being
+	// run on the current database.
+	Schema Name
 }
 
 var _ Statement = &ShowDefaultPrivileges{}
@@ -890,6 +905,10 @@ func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
 		ctx.WriteString(" ")
 	} else if n.ForAllRoles {
 		ctx.WriteString("FOR ALL ROLES ")
+	}
+	if n.Schema != Name("") {
+		ctx.WriteString("IN SCHEMA ")
+		ctx.FormatNode(&n.Schema)
 	}
 }
 

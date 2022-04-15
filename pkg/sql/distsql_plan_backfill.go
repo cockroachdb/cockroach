@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"context"
 	"time"
 	"unsafe"
 
@@ -55,12 +56,16 @@ func initIndexBackfillerSpec(
 }
 
 func initIndexBackfillMergerSpec(
-	desc descpb.TableDescriptor, addedIndexes []descpb.IndexID, temporaryIndexes []descpb.IndexID,
+	desc descpb.TableDescriptor,
+	addedIndexes []descpb.IndexID,
+	temporaryIndexes []descpb.IndexID,
+	mergeTimestamp hlc.Timestamp,
 ) (execinfrapb.IndexBackfillMergerSpec, error) {
 	return execinfrapb.IndexBackfillMergerSpec{
 		Table:            desc,
 		AddedIndexes:     addedIndexes,
 		TemporaryIndexes: temporaryIndexes,
+		MergeTimestamp:   mergeTimestamp,
 	}, nil
 }
 
@@ -68,9 +73,9 @@ func initIndexBackfillMergerSpec(
 // processors, one for each node that has spans that we are reading. The plan is
 // finalized.
 func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
-	planCtx *PlanningCtx, spec execinfrapb.BackfillerSpec, spans []roachpb.Span,
+	ctx context.Context, planCtx *PlanningCtx, spec execinfrapb.BackfillerSpec, spans []roachpb.Span,
 ) (*PhysicalPlan, error) {
-	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +108,10 @@ func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
 // of index merger processors, one for each node that has spans that
 // we are reading. The plan is finalized.
 func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
-	planCtx *PlanningCtx, spec execinfrapb.IndexBackfillMergerSpec, spans [][]roachpb.Span,
+	ctx context.Context,
+	planCtx *PlanningCtx,
+	spec execinfrapb.IndexBackfillMergerSpec,
+	spans [][]roachpb.Span,
 ) (*PhysicalPlan, error) {
 
 	var n int
@@ -136,7 +144,7 @@ func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
 		return idx
 	}
 
-	spanPartitions, err := dsp.PartitionSpans(planCtx, indexSpans)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, indexSpans)
 	if err != nil {
 		return nil, err
 	}

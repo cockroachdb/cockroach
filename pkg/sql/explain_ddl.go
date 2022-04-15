@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -26,23 +27,24 @@ type explainDDLNode struct {
 	optColumnsSlot
 	options *tree.ExplainOptions
 	plan    planComponents
-	run     bool
-	values  tree.Datums
+	next    int
+	values  []tree.Datums
 }
 
 func (n *explainDDLNode) Next(params runParams) (bool, error) {
-	if n.run {
+	if n.next >= len(n.values) {
 		return false, nil
 	}
-	n.run = true
+	n.next++
 	return true, nil
 }
 
 func (n *explainDDLNode) Values() tree.Datums {
-	return n.values
+	return n.values[n.next-1]
 }
 
 func (n *explainDDLNode) Close(ctx context.Context) {
+	n.next = len(n.values)
 }
 
 var _ planNode = (*explainDDLNode)(nil)
@@ -52,12 +54,12 @@ var explainNotPossibleError = pgerror.New(pgcode.FeatureNotSupported,
 
 func (n *explainDDLNode) startExec(params runParams) error {
 	// TODO(postamar): better error messages for each error case
-	scNodes, ok := n.plan.main.planNode.(*schemaChangePlanNode)
+	scNode, ok := n.plan.main.planNode.(*schemaChangePlanNode)
 	if !ok {
 		if n.plan.main.physPlan == nil {
 			return explainNotPossibleError
 		} else if len(n.plan.main.physPlan.planNodesToClose) > 0 {
-			scNodes, ok = n.plan.main.physPlan.planNodesToClose[0].(*schemaChangePlanNode)
+			scNode, ok = n.plan.main.physPlan.planNodesToClose[0].(*schemaChangePlanNode)
 			if !ok {
 				return explainNotPossibleError
 			}
@@ -65,25 +67,38 @@ func (n *explainDDLNode) startExec(params runParams) error {
 			return explainNotPossibleError
 		}
 	}
-	sc, err := scplan.MakePlan(scNodes.plannedState, scplan.Params{
+	return n.setExplainValues(scNode.plannedState)
+}
+
+func (n *explainDDLNode) setExplainValues(scState scpb.CurrentState) (err error) {
+	defer func() {
+		err = errors.WithAssertionFailure(err)
+	}()
+	var p scplan.Plan
+	p, err = scplan.MakePlan(scState, scplan.Params{
 		ExecutionPhase:             scop.StatementPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
 	})
 	if err != nil {
-		return errors.WithAssertionFailure(err)
+		return err
 	}
-	var vizURL string
-	if n.options.Flags[tree.ExplainFlagDeps] {
-		if vizURL, err = sc.DependenciesURL(); err != nil {
-			return errors.WithAssertionFailure(err)
+	if n.options.Flags[tree.ExplainFlagViz] {
+		stagesURL, depsURL, err := p.ExplainViz()
+		n.values = []tree.Datums{
+			{tree.NewDString(stagesURL)},
+			{tree.NewDString(depsURL)},
 		}
+		return err
+	}
+
+	var info string
+	if n.options.Flags[tree.ExplainFlagVerbose] {
+		info, err = p.ExplainVerbose()
 	} else {
-		if vizURL, err = sc.StagesURL(); err != nil {
-			return errors.WithAssertionFailure(err)
-		}
+		info, err = p.ExplainCompact()
 	}
-	n.values = tree.Datums{
-		tree.NewDString(vizURL),
+	n.values = []tree.Datums{
+		{tree.NewDString(info)},
 	}
-	return nil
+	return err
 }

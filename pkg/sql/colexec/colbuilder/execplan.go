@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecprojconst"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecsel"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func checkNumIn(inputs []colexecargs.OpWithMetaInfo, numIn int) error {
@@ -339,11 +341,11 @@ func (r opResult) createDiskBackedSort(
 	matchLen uint32,
 	maxNumberPartitions int,
 	processorID int32,
-	opNamePrefix string,
+	opNamePrefix redact.RedactableString,
 	factory coldata.ColumnFactory,
 ) colexecop.Operator {
 	var (
-		sorterMemMonitorName string
+		sorterMemMonitorName redact.RedactableString
 		inMemorySorter       colexecop.Operator
 	)
 	if len(ordering.Columns) == int(matchLen) {
@@ -453,7 +455,7 @@ func (r opResult) makeDiskBackedSorterConstructor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
-	opNamePrefix string,
+	opNamePrefix redact.RedactableString,
 	factory coldata.ColumnFactory,
 ) colexec.DiskBackedSorterConstructor {
 	return func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) colexecop.Operator {
@@ -762,7 +764,7 @@ func NewColOperator(
 				ctx, getStreamingAllocator(ctx, args),
 				colmem.NewAllocator(ctx, cFetcherMemAcc, factory),
 				kvFetcherMemAcc, streamerBudgetAcc, flowCtx,
-				inputs[0].Root, core.JoinReader, inputTypes, streamerDiskMonitor,
+				inputs[0].Root, core.JoinReader, post, inputTypes, streamerDiskMonitor,
 			)
 			if err != nil {
 				return r, err
@@ -837,7 +839,7 @@ func NewColOperator(
 			result.ColumnTypes = newAggArgs.OutputTypes
 
 			if needHash {
-				opName := "hash-aggregator"
+				opName := redact.RedactableString("hash-aggregator")
 				outputUnlimitedAllocator := colmem.NewAllocator(
 					ctx,
 					args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName+"-output", spec.ProcessorID),
@@ -911,7 +913,7 @@ func NewColOperator(
 						outputUnlimitedAllocator,
 						maxOutputBatchMemSize,
 					)
-					ehaOpName := "external-hash-aggregator"
+					ehaOpName := redact.RedactableString("external-hash-aggregator")
 					ehaMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID)
 					// Note that we will use an unlimited memory account here
 					// even for the in-memory hash aggregator since it is easier
@@ -986,7 +988,7 @@ func NewColOperator(
 					allocator, inputs[0].Root, core.Distinct.DistinctColumns, result.ColumnTypes,
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
-				edOpName := "external-distinct"
+				edOpName := redact.RedactableString("external-distinct")
 				diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
 				result.Root = colexec.NewOneInputDiskSpiller(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
@@ -1034,7 +1036,7 @@ func NewColOperator(
 			if len(core.HashJoiner.LeftEqColumns) == 0 {
 				// We are performing a cross-join, so we need to plan a
 				// specialized operator.
-				opName := "cross-joiner"
+				opName := redact.RedactableString("cross-joiner")
 				crossJoinerMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID)
 				crossJoinerDiskAcc := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 				unlimitedAllocator := colmem.NewAllocator(ctx, crossJoinerMemAccount, factory)
@@ -1050,7 +1052,7 @@ func NewColOperator(
 				)
 				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 			} else {
-				opName := "hash-joiner"
+				opName := redact.RedactableString("hash-joiner")
 				hashJoinerMemAccount, hashJoinerMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategy(
 					ctx, flowCtx, opName, spec.ProcessorID,
 				)
@@ -1077,7 +1079,7 @@ func NewColOperator(
 					// in-memory hash joiner.
 					result.Root = inMemoryHashJoiner
 				} else {
-					opName := "external-hash-joiner"
+					opName := redact.RedactableString("external-hash-joiner")
 					diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 					result.Root = colexec.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
@@ -1135,7 +1137,7 @@ func NewColOperator(
 				onExpr = &core.MergeJoiner.OnExpr
 			}
 
-			opName := "merge-joiner"
+			opName := redact.RedactableString("merge-joiner")
 			// We are using an unlimited memory monitor here because merge
 			// joiner itself is responsible for making sure that we stay within
 			// the memory limit, and it will fall back to disk if necessary.
@@ -1183,7 +1185,7 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return r, err
 			}
-			opNamePrefix := "window-"
+			opNamePrefix := redact.RedactableString("window-")
 			input := inputs[0].Root
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
@@ -1364,7 +1366,7 @@ func NewColOperator(
 					}
 				} else if wf.Func.AggregateFunc != nil {
 					// This is an aggregate window function.
-					opName := opNamePrefix + strings.ToLower(wf.Func.AggregateFunc.String())
+					opName := opNamePrefix + redact.RedactableString(strings.ToLower(wf.Func.AggregateFunc.String()))
 					result.finishBufferedWindowerArgs(
 						ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
 						spec.ProcessorID, factory, true, /* needsBuffer */
@@ -1672,7 +1674,7 @@ func (r opResult) finishBufferedWindowerArgs(
 	flowCtx *execinfra.FlowCtx,
 	monitorRegistry *colexecargs.MonitorRegistry,
 	args *colexecwindow.WindowArgs,
-	opName string,
+	opName redact.RedactableString,
 	processorID int32,
 	factory coldata.ColumnFactory,
 	needsBuffer bool,
@@ -2334,7 +2336,7 @@ func planProjectionExpr(
 		resultIdx = len(typs)
 		// The projection result will be outputted to a new column which is
 		// appended to the input batch.
-		op, err = colexecproj.GetProjectionLConstOperator(
+		op, err = colexecprojconst.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
 			rightIdx, lConstArg, resultIdx, evalCtx, binFn, cmpExpr,
 		)
@@ -2380,7 +2382,7 @@ func planProjectionExpr(
 				switch cmpProjOp.Symbol {
 				case treecmp.Like, treecmp.NotLike:
 					negate := cmpProjOp.Symbol == treecmp.NotLike
-					op, err = colexecproj.GetLikeProjectionOperator(
+					op, err = colexecprojconst.GetLikeProjectionOperator(
 						allocator, evalCtx, input, leftIdx, resultIdx,
 						string(tree.MustBeDString(rConstArg)), negate,
 					)
@@ -2411,7 +2413,7 @@ func planProjectionExpr(
 			if op == nil || err != nil {
 				// op hasn't been created yet, so let's try the constructor for
 				// all other projection operators.
-				op, err = colexecproj.GetProjectionRConstOperator(
+				op, err = colexecprojconst.GetProjectionRConstOperator(
 					allocator, typs, right.ResolvedType(), outputType, projOp,
 					input, leftIdx, rConstArg, resultIdx, evalCtx, binFn, cmpExpr,
 				)

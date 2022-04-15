@@ -21,6 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -40,8 +43,29 @@ var reconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
 )
 
 // Resume implements the jobs.Resumer interface.
-func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
+func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr error) {
+	defer func() {
+		// This job retries internally, any error here should fail the entire job
+		// (at which point we expect the spanconfig.Manager to create a new one).
+		// Between the job's internal retries and the spanconfig.Manager, we don't
+		// need/want to rely on the job system's internal backoff (where retry
+		// durations aren't configurable on a per-job basis).
+		jobErr = jobs.MarkAsPermanentJobError(jobErr)
+	}()
+
 	execCtx := execCtxI.(sql.JobExecContext)
+	if !execCtx.ExecCfg().LogicalClusterID().Equal(r.job.Payload().CreationClusterID) {
+		// When restoring a cluster, we don't want to end up with two instances of
+		// the singleton reconciliation job.
+		//
+		// TODO(irfansharif): We could instead give the reconciliation job a fixed
+		// ID; comparing cluster IDs during restore doesn't help when we're
+		// restoring into the same cluster the backup was run from.
+		log.Infof(ctx, "duplicate restored job (source-cluster-id=%s, dest-cluster-id=%s); exiting",
+			r.job.Payload().CreationClusterID, execCtx.ExecCfg().LogicalClusterID())
+		return nil
+	}
+
 	rc := execCtx.SpanConfigReconciler()
 	stopper := execCtx.ExecCfg().DistSQLSrv.Stopper
 
@@ -80,36 +104,84 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	// timestamp.
 
 	settingValues := &execCtx.ExecCfg().Settings.SV
-	persistCheckpoints := util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+	persistCheckpointsMu := struct {
+		syncutil.Mutex
+		util.EveryN
+	}{}
+	persistCheckpointsMu.EveryN = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+
 	reconciliationJobCheckpointInterval.SetOnChange(settingValues, func(ctx context.Context) {
-		persistCheckpoints = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+		persistCheckpointsMu.Lock()
+		defer persistCheckpointsMu.Unlock()
+		persistCheckpointsMu.EveryN = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
 	})
 
-	shouldPersistCheckpoint := true
-	if knobs := execCtx.ExecCfg().SpanConfigTestingKnobs; knobs != nil && knobs.JobDisablePersistingCheckpoints {
-		shouldPersistCheckpoint = false
-	}
-	if err := rc.Reconcile(ctx, hlc.Timestamp{}, func() error {
-		if !shouldPersistCheckpoint {
-			return nil
-		}
-		if !persistCheckpoints.ShouldProcess(timeutil.Now()) {
-			return nil
-		}
+	checkpointingDisabled := false
+	shouldSkipRetry := false
+	var onCheckpointInterceptor func() error
 
-		return r.job.SetProgress(ctx, nil, jobspb.AutoSpanConfigReconciliationProgress{
-			Checkpoint: rc.Checkpoint(),
-		})
-	}); err != nil {
-		return err
+	if knobs := execCtx.ExecCfg().SpanConfigTestingKnobs; knobs != nil {
+		if knobs.JobDisablePersistingCheckpoints {
+			checkpointingDisabled = true
+		}
+		shouldSkipRetry = knobs.JobDisableInternalRetry
+		onCheckpointInterceptor = knobs.JobOnCheckpointInterceptor
 	}
 
-	return nil
+	retryOpts := retry.Options{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		Multiplier:     1.3,
+		MaxRetries:     40, // ~20 mins
+	}
+
+	const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
+	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
+		started := timeutil.Now()
+		if err := rc.Reconcile(ctx, hlc.Timestamp{}, func() error {
+			if onCheckpointInterceptor != nil {
+				if err := onCheckpointInterceptor(); err != nil {
+					return err
+				}
+			}
+
+			if checkpointingDisabled {
+				return nil
+			}
+
+			persistCheckpointsMu.Lock()
+			shouldPersistCheckpoint := persistCheckpointsMu.ShouldProcess(timeutil.Now())
+			persistCheckpointsMu.Unlock()
+			if !shouldPersistCheckpoint {
+				return nil
+			}
+
+			if timeutil.Since(started) > aWhile {
+				retrier.Reset()
+			}
+
+			return r.job.SetProgress(ctx, nil, jobspb.AutoSpanConfigReconciliationProgress{
+				Checkpoint: rc.Checkpoint(),
+			})
+		}); err != nil {
+			log.Errorf(ctx, "reconciler failed with %v, retrying...", err)
+			if shouldSkipRetry {
+				break
+			}
+			continue
+		}
+		return nil // we're done here (the stopper was stopped, Reconcile exited cleanly)
+	}
+
+	return errors.Newf("reconciliation unsuccessful, failing job")
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (r *resumer) OnFailOrCancel(context.Context, interface{}) error {
-	return errors.AssertionFailedf("span config reconciliation job can never fail or be canceled")
+func (r *resumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
+	if jobs.HasErrJobCanceled(errors.DecodeError(ctx, *r.job.Payload().FinalResumeError)) {
+		return errors.AssertionFailedf("span config reconciliation job cannot be canceled")
+	}
+	return nil
 }
 
 func init() {

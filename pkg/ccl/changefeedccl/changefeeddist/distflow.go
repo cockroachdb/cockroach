@@ -40,6 +40,7 @@ func StartDistChangefeed(
 	initialHighWater hlc.Timestamp,
 	checkpoint jobspb.ChangefeedProgress_Checkpoint,
 	resultsCh chan<- tree.Datums,
+	knobs TestingKnobs,
 ) error {
 	// Changefeed flows handle transactional consistency themselves.
 	var noTxn *kv.Txn
@@ -47,7 +48,7 @@ func StartDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn,
-		sql.DistributionTypeSystemTenantOnly)
+		sql.DistributionTypeAlways)
 
 	var spanPartitions []sql.SpanPartition
 	if details.SinkURI == `` {
@@ -56,7 +57,7 @@ func StartDistChangefeed(
 	} else {
 		// All other feeds get a ChangeAggregator local on the leaseholder.
 		var err error
-		spanPartitions, err = dsp.PartitionSpans(planCtx, trackedSpans)
+		spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
 		if err != nil {
 			return err
 		}
@@ -69,7 +70,7 @@ func StartDistChangefeed(
 		Spans: checkpoint.Spans,
 	}
 
-	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
+	aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
 		for watchIdx, nodeSpan := range sp.Spans {
@@ -79,15 +80,13 @@ func StartDistChangefeed(
 			}
 		}
 
-		spec := &execinfrapb.ChangeAggregatorSpec{
+		aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
 			Watches:    watches,
 			Checkpoint: aggregatorCheckpoint,
 			Feed:       details,
 			UserProto:  execCtx.User().EncodeProto(),
 			JobID:      jobID,
 		}
-		corePlacement[i].SQLInstanceID = sp.SQLInstanceID
-		corePlacement[i].Core.ChangeAggregator = spec
 	}
 
 	// NB: This SpanFrontier processor depends on the set of tracked spans being
@@ -101,8 +100,18 @@ func StartDistChangefeed(
 		UserProto:    execCtx.User().EncodeProto(),
 	}
 
+	if knobs.OnDistflowSpec != nil {
+		knobs.OnDistflowSpec(aggregatorSpecs, &changeFrontierSpec)
+	}
+
+	aggregatorCorePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
+	for i, sp := range spanPartitions {
+		aggregatorCorePlacement[i].SQLInstanceID = sp.SQLInstanceID
+		aggregatorCorePlacement[i].Core.ChangeAggregator = aggregatorSpecs[i]
+	}
+
 	p := planCtx.NewPhysicalPlan()
-	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, ChangefeedResultTypes, execinfrapb.Ordering{})
+	p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, ChangefeedResultTypes, execinfrapb.Ordering{})
 	p.AddSingleGroupStage(
 		dsp.GatewayID(),
 		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
@@ -141,7 +150,7 @@ func StartDistChangefeed(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)()
+	dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)()
 	return resultRows.Err()
 }
 

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -456,7 +457,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if params.SessionData().SafeUpdates {
 				err := pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
 					"remove all data in that column")
-				if !params.extendedEvalCtx.TxnImplicit {
+				if !params.extendedEvalCtx.TxnIsSingleStmt {
 					err = errors.WithIssueLink(err, errors.IssueLink{
 						IssueURL: "https://github.com/cockroachdb/cockroach/issues/46541",
 						Detail: "when used in an explicit transaction combined with other " +
@@ -707,7 +708,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if !ok {
 				return errors.AssertionFailedf("missing stats data")
 			}
-			if !params.p.EvalContext().TxnImplicit {
+			if !params.extendedEvalCtx.TxnIsSingleStmt {
 				return errors.New("cannot inject statistics in an explicit transaction")
 			}
 			if err := injectTableStats(params, n.tableDesc, sd); err != nil {
@@ -846,7 +847,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 	mutationID := descpb.InvalidMutationID
 	if addedMutations {
-		mutationID = n.tableDesc.ClusterVersion.NextMutationID
+		mutationID = n.tableDesc.ClusterVersion().NextMutationID
 	}
 	if err := params.p.writeSchemaChange(
 		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
@@ -1234,6 +1235,7 @@ func injectTableStats(
 	}
 
 	// Insert each statistic.
+StatsLoop:
 	for i := range jsonStats {
 		s := &jsonStats[i]
 		h, err := s.GetHistogram(&params.p.semaCtx, params.EvalContext())
@@ -1254,7 +1256,11 @@ func injectTableStats(
 		for _, colName := range s.Columns {
 			col, err := desc.FindColumnWithName(tree.Name(colName))
 			if err != nil {
-				return err
+				params.p.BufferClientNotice(
+					params.ctx,
+					pgnotice.Newf("column %q does not exist", colName),
+				)
+				continue StatsLoop
 			}
 			if err := columnIDs.Append(tree.NewDInt(tree.DInt(col.GetID()))); err != nil {
 				return err

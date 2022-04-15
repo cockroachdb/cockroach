@@ -293,6 +293,12 @@ var (
 		Measurement: "Keys/Sec",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaL0SubLevelHistogram = metric.Metadata{
+		Name:        "rebalancing.l0_sublevels_histogram",
+		Help:        "The summary view of sub levels in level 0 of the stores LSM",
+		Measurement: "Storage",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Metric for tracking follower reads.
 	metaFollowerReadsCount = metric.Metadata{
@@ -404,7 +410,7 @@ var (
 	}
 	metaRdbNumSSTables = metric.Metadata{
 		Name:        "rocksdb.num-sstables",
-		Help:        "Number of rocksdb SSTables",
+		Help:        "Number of storage engine SSTables",
 		Measurement: "SSTables",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -413,6 +419,12 @@ var (
 		Help:        "Estimated pending compaction bytes",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
+	}
+	metaRdbMarkedForCompactionFiles = metric.Metadata{
+		Name:        "storage.marked-for-compaction-files",
+		Help:        "Count of SSTables marked for compaction",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
 	}
 	metaRdbL0Sublevels = metric.Metadata{
 		Name:        "storage.l0-sublevels",
@@ -494,6 +506,18 @@ var (
 		Name:        "range.snapshots.applied-non-voter",
 		Help:        "Number of snapshots applied by non-voter replicas",
 		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.rcvd-bytes",
+		Help:        "Number of snapshot bytes received",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotSentBytes = metric.Metadata{
+		Name:        "range.snapshots.sent-bytes",
+		Help:        "Number of snapshot bytes sent",
+		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRangeRaftLeaderTransfers = metric.Metadata{
@@ -1345,6 +1369,7 @@ type StoreMetrics struct {
 	// Rebalancing metrics.
 	AverageQueriesPerSecond *metric.GaugeFloat64
 	AverageWritesPerSecond  *metric.GaugeFloat64
+	L0SubLevelsHistogram    *metric.Histogram
 
 	// Follower read metrics.
 	FollowerReadsCount *metric.Counter
@@ -1370,6 +1395,7 @@ type StoreMetrics struct {
 	RdbReadAmplification        *metric.Gauge
 	RdbNumSSTables              *metric.Gauge
 	RdbPendingCompaction        *metric.Gauge
+	RdbMarkedForCompactionFiles *metric.Gauge
 	RdbL0Sublevels              *metric.Gauge
 	RdbL0NumFiles               *metric.Gauge
 	RdbWriteStalls              *metric.Gauge
@@ -1384,16 +1410,20 @@ type StoreMetrics struct {
 	// accordingly.
 
 	// Range event metrics.
-	RangeSplits                                  *metric.Counter
-	RangeMerges                                  *metric.Counter
-	RangeAdds                                    *metric.Counter
-	RangeRemoves                                 *metric.Counter
+	RangeSplits                 *metric.Counter
+	RangeMerges                 *metric.Counter
+	RangeAdds                   *metric.Counter
+	RangeRemoves                *metric.Counter
+	RangeRaftLeaderTransfers    *metric.Counter
+	RangeLossOfQuorumRecoveries *metric.Counter
+
+	// Range snapshot metrics.
 	RangeSnapshotsGenerated                      *metric.Counter
 	RangeSnapshotsAppliedByVoters                *metric.Counter
 	RangeSnapshotsAppliedForInitialUpreplication *metric.Counter
 	RangeSnapshotsAppliedByNonVoters             *metric.Counter
-	RangeRaftLeaderTransfers                     *metric.Counter
-	RangeLossOfQuorumRecoveries                  *metric.Counter
+	RangeSnapshotRcvdBytes                       *metric.Counter
+	RangeSnapshotSentBytes                       *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -1786,6 +1816,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Rebalancing metrics.
 		AverageQueriesPerSecond: metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
 		AverageWritesPerSecond:  metric.NewGaugeFloat64(metaAverageWritesPerSecond),
+		L0SubLevelsHistogram: metric.NewHistogram(
+			metaL0SubLevelHistogram,
+			l0SublevelInterval,
+			l0SublevelMaxSampled,
+			1, /* sig figures (integer) */
+		),
 
 		// Follower reads metrics.
 		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
@@ -1811,6 +1847,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbReadAmplification:        metric.NewGauge(metaRdbReadAmplification),
 		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
 		RdbPendingCompaction:        metric.NewGauge(metaRdbPendingCompaction),
+		RdbMarkedForCompactionFiles: metric.NewGauge(metaRdbMarkedForCompactionFiles),
 		RdbL0Sublevels:              metric.NewGauge(metaRdbL0Sublevels),
 		RdbL0NumFiles:               metric.NewGauge(metaRdbL0NumFiles),
 		RdbWriteStalls:              metric.NewGauge(metaRdbWriteStalls),
@@ -1828,6 +1865,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotsAppliedByVoters: metric.NewCounter(metaRangeSnapshotsAppliedByVoters),
 		RangeSnapshotsAppliedForInitialUpreplication: metric.NewCounter(metaRangeSnapshotsAppliedForInitialUpreplication),
 		RangeSnapshotsAppliedByNonVoters:             metric.NewCounter(metaRangeSnapshotsAppliedByNonVoter),
+		RangeSnapshotRcvdBytes:                       metric.NewCounter(metaRangeSnapshotRcvdBytes),
+		RangeSnapshotSentBytes:                       metric.NewCounter(metaRangeSnapshotSentBytes),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 
@@ -2036,7 +2075,9 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbTableReadersMemEstimate.Update(m.TableCache.Size)
 	sm.RdbReadAmplification.Update(int64(m.ReadAmp()))
 	sm.RdbPendingCompaction.Update(int64(m.Compact.EstimatedDebt))
+	sm.RdbMarkedForCompactionFiles.Update(int64(m.Compact.MarkedFiles))
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
+	sm.L0SubLevelsHistogram.RecordValue(int64(m.Levels[0].Sublevels))
 	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)
 	sm.RdbNumSSTables.Update(m.NumSSTables())
 	sm.RdbWriteStalls.Update(m.WriteStallCount)

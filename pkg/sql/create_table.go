@@ -375,9 +375,9 @@ func (n *createTableNode) startExec(params runParams) error {
 			return err
 		}
 
-		// If we have an implicit txn we want to run CTAS async, and consequently
-		// ensure it gets queued as a SchemaChange.
-		if params.p.ExtendedEvalContext().TxnImplicit {
+		// If we have a single statement txn we want to run CTAS async, and
+		// consequently ensure it gets queued as a SchemaChange.
+		if params.extendedEvalCtx.TxnIsSingleStmt {
 			desc.State = descpb.DescriptorState_ADD
 		}
 	} else {
@@ -445,7 +445,10 @@ func (n *createTableNode) startExec(params runParams) error {
 			params.ctx,
 			params.p.txn,
 			desc.ParentID,
-			tree.DatabaseLookupFlags{Required: true},
+			tree.DatabaseLookupFlags{
+				Required:    true,
+				AvoidLeased: true,
+			},
 		)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")
@@ -500,9 +503,9 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	// If we are in an explicit txn or the source has placeholders, we execute the
-	// CTAS query synchronously.
-	if n.n.As() && !params.p.ExtendedEvalContext().TxnImplicit {
+	// If we are in a multi-statement txn or the source has placeholders, we
+	// execute the CTAS query synchronously.
+	if n.n.As() && !params.extendedEvalCtx.TxnIsSingleStmt {
 		err = func() error {
 			// The data fill portion of CREATE AS must operate on a read snapshot,
 			// so that it doesn't end up observing its own writes.
@@ -1547,6 +1550,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
+				primaryIndexColumnSet[shardCol.GetName()] = struct{}{}
 				checkConstraint, err := makeShardCheckConstraintDef(int(buckets), shardCol)
 				if err != nil {
 					return nil, err
@@ -1598,6 +1602,7 @@ func NewTableDesc(
 			if err := desc.AddPrimaryIndex(*implicitColumnDefIdx.idx); err != nil {
 				return nil, err
 			}
+			primaryIndexColumnSet[string(implicitColumnDefIdx.def.Name)] = struct{}{}
 		} else {
 			// If it is a non-primary index that is implicitly created, ensure
 			// partitioning for PARTITION ALL BY.
@@ -1975,6 +1980,14 @@ func NewTableDesc(
 
 	for i := range desc.Columns {
 		if _, ok := primaryIndexColumnSet[desc.Columns[i].Name]; ok {
+			if !st.Version.IsActive(ctx, clusterversion.Start22_1) {
+				if desc.Columns[i].Virtual {
+					return nil, pgerror.Newf(
+						pgcode.FeatureNotSupported,
+						"cannot use virtual column %q in primary key", desc.Columns[i].Name,
+					)
+				}
+			}
 			desc.Columns[i].Nullable = false
 		}
 	}

@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -917,7 +918,7 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds))
+	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
@@ -930,6 +931,8 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
 	ex.extraTxnState.atomicAutoRetryCounter = new(int32)
+
+	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
 	ex.initPlanner(ctx, &ex.planner)
 
@@ -1244,6 +1247,10 @@ type connExecutor struct {
 		// statement traces to give more information in statement diagnostic bundles.
 		autoRetryReason error
 
+		// firstStmtExecuted indicates that the first statement inside this
+		// transaction has been executed.
+		firstStmtExecuted bool
+
 		// numDDL keeps track of how many DDL statements have been
 		// executed so far.
 		numDDL int
@@ -1376,6 +1383,10 @@ type connExecutor struct {
 		// has admin privilege. hasAdminRoleCache is set for the first statement
 		// in a transaction.
 		hasAdminRoleCache HasAdminRoleCache
+
+		// createdSequences keeps track of sequences created in the current transaction.
+		// The map key is the sequence descpb.ID.
+		createdSequences map[descpb.ID]struct{}
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -1625,6 +1636,7 @@ func (ns *prepStmtNamespace) resetTo(
 // (e.g. onTxnFinish() and onTxnRestart()).
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
+	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.schemaChangerState = SchemaChangerState{
 		mode: ex.sessionData().NewSchemaChangerMode,
@@ -1644,6 +1656,8 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 
 	// Close all cursors.
 	ex.extraTxnState.sqlCursors.closeAll()
+
+	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
 	switch ev.eventType {
 	case txnCommit, txnRollback:
@@ -2305,12 +2319,21 @@ func isCopyToExternalStorage(cmd CopyIn) bool {
 func (ex *connExecutor) execCopyIn(
 	ctx context.Context, cmd CopyIn,
 ) (_ fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	logStatements := logStatementsExecuteEnabled.Get(ex.planner.execCfg.SV())
+
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	defer func() {
 		if retErr == nil && !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(cmd.Stmt)
 		}
+		if retErr != nil {
+			log.SqlExec.Errorf(ctx, "error executing %s: %+v", cmd, retErr)
+		}
 	}()
+
+	if logStatements {
+		log.SqlExec.Infof(ctx, "executing %s", cmd)
+	}
 
 	// When we're done, unblock the network connection.
 	defer cmd.CopyDone.Done()
@@ -2669,6 +2692,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.TxnState = ex.getTransactionState()
 	evalCtx.TxnReadOnly = ex.state.readOnly
 	evalCtx.TxnImplicit = ex.implicitTxn()
+	evalCtx.TxnIsSingleStmt = false
 	if newTxn || !ex.implicitTxn() {
 		// Only update the stmt timestamp if in a new txn or an explicit txn. This is because this gets
 		// called multiple times during an extended protocol implicit txn, but we
@@ -2734,6 +2758,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
+	p.createdSequences = ex.getCreatedSequencesAccessor()
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
@@ -2749,9 +2774,14 @@ func (ex *connExecutor) resetPlanner(
 	p.cancelChecker.Reset(ctx)
 
 	p.semaCtx = tree.MakeSemaContext()
+	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
+		p.semaCtx.IntervalStyleEnabled = true
+		p.semaCtx.DateStyleEnabled = true
+	} else {
+		p.semaCtx.IntervalStyleEnabled = ex.sessionData().IntervalStyleEnabled
+		p.semaCtx.DateStyleEnabled = ex.sessionData().DateStyleEnabled
+	}
 	p.semaCtx.SearchPath = ex.sessionData().SearchPath
-	p.semaCtx.IntervalStyleEnabled = ex.sessionData().IntervalStyleEnabled
-	p.semaCtx.DateStyleEnabled = ex.sessionData().DateStyleEnabled
 	p.semaCtx.Annotations = nil
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.TableNameResolver = p
@@ -2825,7 +2855,9 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case txnStart:
 		atomic.StoreInt32(ex.extraTxnState.atomicAutoRetryCounter, 0)
 		ex.extraTxnState.autoRetryReason = nil
+		ex.extraTxnState.firstStmtExecuted = false
 		ex.recordTransactionStart(advInfo.txnEvent.txnID)
+		// Start of the transaction, so no statements were executed earlier.
 		// Bump the txn counter for logging.
 		ex.extraTxnState.txnCounter++
 		if !ex.server.cfg.Codec.ForSystemTenant() {
@@ -2918,18 +2950,12 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 	ctx context.Context, descID descpb.ID,
 ) error {
-	if err := ex.planner.WaitForDescriptorSchemaChanges(
+	if err := ex.planner.waitForDescriptorSchemaChanges(
 		ctx, descID, ex.extraTxnState.schemaChangerState,
 	); err != nil {
 		return err
 	}
-	// Restart the transaction at a higher timestamp after waiting.
-	ex.state.mu.Lock()
-	defer ex.state.mu.Unlock()
-	userPriority := ex.state.mu.txn.UserPriority()
-	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db,
-		ex.transitionCtx.nodeIDOrZero, ex.QualityOfService())
-	return ex.state.mu.txn.SetUserPriority(userPriority)
+	return ex.resetTransactionOnSchemaChangeRetry(ctx)
 }
 
 // initStatementResult initializes res according to a query.
@@ -3096,6 +3122,12 @@ func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 
 func (ex *connExecutor) getCursorAccessor() sqlCursors {
 	return connExCursorAccessor{
+		ex: ex,
+	}
+}
+
+func (ex *connExecutor) getCreatedSequencesAccessor() createdSequences {
+	return connExCreatedSequencesAccessor{
 		ex: ex,
 	}
 }

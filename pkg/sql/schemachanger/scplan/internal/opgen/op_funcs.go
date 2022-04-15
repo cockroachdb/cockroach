@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func newLogEventOp(e scpb.Element, md targetsWithElementMap) *scop.LogEvent {
@@ -38,6 +39,19 @@ func newLogEventOp(e scpb.Element, md targetsWithElementMap) *scop.LogEvent {
 	}
 }
 
+func statementForDropJob(e scpb.Element, md targetsWithElementMap) scop.StatementForDropJob {
+	stmtID := md.Targets[md.elementToTarget[e]].Metadata.StatementID
+	return scop.StatementForDropJob{
+		// Using the redactable string but with stripped markers gives us a
+		// normalized and fully-qualified string value for display use.
+		Statement: redact.RedactableString(
+			md.Statements[stmtID].RedactedStatement,
+		).StripMarkers(),
+		StatementID: stmtID,
+		Rollback:    md.InRollback,
+	}
+}
+
 // targetsWithElementMap is one of the available arguments to an opgen
 // function. It allows access to the fields of the TargetState and, via
 // a lookup map, the fields of the element itself.
@@ -47,10 +61,12 @@ func newLogEventOp(e scpb.Element, md targetsWithElementMap) *scop.LogEvent {
 type targetsWithElementMap struct {
 	scpb.TargetState
 	elementToTarget map[scpb.Element]int
+	InRollback      bool
 }
 
 func makeTargetsWithElementMap(cs scpb.CurrentState) targetsWithElementMap {
 	md := targetsWithElementMap{
+		InRollback:      cs.InRollback,
 		TargetState:     cs.TargetState,
 		elementToTarget: make(map[scpb.Element]int),
 	}

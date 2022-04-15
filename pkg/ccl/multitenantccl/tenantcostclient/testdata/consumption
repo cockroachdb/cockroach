@@ -3,6 +3,7 @@
 usage
 ----
 RU:  0.00
+KVRU:  0.00
 Reads:  0 requests (0 bytes)
 Writes:  0 requests (0 bytes)
 SQL Pods CPU seconds:  0.00
@@ -14,6 +15,7 @@ read bytes=1024000
 usage
 ----
 RU:  105.83
+KVRU:  105.83
 Reads:  1 requests (1024000 bytes)
 Writes:  0 requests (0 bytes)
 SQL Pods CPU seconds:  0.00
@@ -25,6 +27,7 @@ write bytes=1024
 usage
 ----
 RU:  113.58
+KVRU:  113.58
 Reads:  1 requests (1024000 bytes)
 Writes:  1 requests (1024 bytes)
 SQL Pods CPU seconds:  0.00
@@ -37,6 +40,7 @@ cpu
 usage
 ----
 RU:  1113.58
+KVRU:  113.58
 Reads:  1 requests (1024000 bytes)
 Writes:  1 requests (1024 bytes)
 SQL Pods CPU seconds:  1.00
@@ -54,6 +58,7 @@ write bytes=4096
 usage
 ----
 RU:  1148.39
+KVRU:  148.39
 Reads:  2 requests (1089536 bytes)
 Writes:  3 requests (9216 bytes)
 SQL Pods CPU seconds:  1.00
@@ -66,6 +71,7 @@ cpu
 usage
 ----
 RU:  3601148.39
+KVRU:  148.39
 Reads:  2 requests (1089536 bytes)
 Writes:  3 requests (9216 bytes)
 SQL Pods CPU seconds:  3601.00
@@ -78,6 +84,7 @@ pgwire-egress
 usage
 ----
 RU:  3601158.74
+KVRU:  148.39
 Reads:  2 requests (1089536 bytes)
 Writes:  3 requests (9216 bytes)
 SQL Pods CPU seconds:  3601.00

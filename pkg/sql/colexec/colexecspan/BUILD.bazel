@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "colexecspan",
@@ -35,7 +36,6 @@ go_library(
 go_test(
     name = "colexecspan_test",
     srcs = [
-        "dep_test.go",
         "main_test.go",
         "span_assembler_test.go",
     ],
@@ -63,7 +63,6 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/span",
         "//pkg/sql/types",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/skip",
         "//pkg/util",
         "//pkg/util/leaktest",
@@ -85,3 +84,18 @@ eg_go_filegroup(
 
 # Define gen rules for individual eg.go files.
 gen_eg_go_rules(targets)
+
+disallowed_imports_test(
+    "colexecspan",
+    [
+        "//pkg/sql/colexec",
+        "//pkg/sql/colexec/colexecagg",
+        "//pkg/sql/colexec/colexecbase",
+        "//pkg/sql/colexec/colexechash",
+        "//pkg/sql/colexec/colexecjoin",
+        "//pkg/sql/colexec/colexecproj",
+        "//pkg/sql/colexec/colexecprojconst",
+        "//pkg/sql/colexec/colexecsel",
+        "//pkg/sql/colexec/colexecwindow",
+    ],
+)

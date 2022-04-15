@@ -17,8 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -71,7 +74,7 @@ func (cf *CollectionFactory) Txn(
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			modifiedDescriptors = nil
 			deletedDescs = catalog.DescriptorIDSet{}
-			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */)
+			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
 			defer descsCol.ReleaseAll(ctx)
 			if !cf.settings.Version.IsActive(
 				ctx, clusterversion.DisableSystemConfigGossipTrigger,
@@ -90,6 +93,12 @@ func (cf *CollectionFactory) Txn(
 				return err
 			}
 			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
+
+			if err := CheckSpanCountLimit(
+				ctx, &descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
+			); err != nil {
+				return err
+			}
 			retryErr, err := CheckTwoVersionInvariant(
 				ctx, db.Clock(), ie, &descsCol, txn, nil /* onRetryBackoff */)
 			if retryErr {
@@ -218,4 +227,45 @@ func CheckTwoVersionInvariant(
 		}
 	}
 	return true, retryErr
+}
+
+// CheckSpanCountLimit checks whether committing the set of uncommitted tables
+// would exceed the span count limit we're allowed (applicable only to secondary
+// tenants).
+func CheckSpanCountLimit(
+	ctx context.Context,
+	descsCol *Collection,
+	splitter spanconfig.Splitter,
+	limiter spanconfig.Limiter,
+	txn *kv.Txn,
+) error {
+	if !descsCol.codec().ForSystemTenant() {
+		var totalSpanCountDelta int
+		for _, ut := range descsCol.GetUncommittedTables() {
+			uncommittedMutTable, err := descsCol.GetUncommittedMutableTableByID(ut.GetID())
+			if err != nil {
+				return err
+			}
+
+			var originalTableDesc catalog.TableDescriptor
+			if originalDesc := uncommittedMutTable.OriginalDescriptor(); originalDesc != nil {
+				originalTableDesc = originalDesc.(catalog.TableDescriptor)
+			}
+			delta, err := spanconfig.Delta(ctx, splitter, originalTableDesc, uncommittedMutTable)
+			if err != nil {
+				return err
+			}
+			totalSpanCountDelta += delta
+		}
+
+		shouldLimit, err := limiter.ShouldLimit(ctx, txn, totalSpanCountDelta)
+		if err != nil {
+			return err
+		}
+		if shouldLimit {
+			return pgerror.New(pgcode.ConfigurationLimitExceeded, "exceeded limit for number of table spans")
+		}
+	}
+
+	return nil
 }

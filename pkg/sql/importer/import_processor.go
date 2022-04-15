@@ -92,16 +92,6 @@ var importIndexAdderMaxBufferSize = func() *settings.ByteSizeSetting {
 	return s
 }()
 
-var importBufferIncrementSize = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
-		"kv.bulk_ingest.buffer_increment",
-		"the size by which the BulkAdder attempts to grow its buffer before flushing",
-		32<<20,
-	)
-	return s
-}()
-
 var importAtNow = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"bulkio.import_at_current_time.enabled",
@@ -119,15 +109,13 @@ var readerParallelismSetting = settings.RegisterIntSetting(
 
 // ImportBufferConfigSizes determines the minimum, maximum and step size for the
 // BulkAdder buffer used in import.
-func importBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, func() int64, int64) {
+func importBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, func() int64) {
 	if isPKAdder {
 		return importPKAdderBufferSize.Get(&st.SV),
-			func() int64 { return importPKAdderMaxBufferSize.Get(&st.SV) },
-			importBufferIncrementSize.Get(&st.SV)
+			func() int64 { return importPKAdderMaxBufferSize.Get(&st.SV) }
 	}
 	return importIndexAdderBufferSize.Get(&st.SV),
-		func() int64 { return importIndexAdderMaxBufferSize.Get(&st.SV) },
-		importBufferIncrementSize.Get(&st.SV)
+		func() int64 { return importIndexAdderMaxBufferSize.Get(&st.SV) }
 }
 
 // readImportDataProcessor is a processor that does not take any inputs. It
@@ -193,7 +181,6 @@ func newReadImportDataProcessor(
 func (idp *readImportDataProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", idp.spec.JobID)
 	ctx = idp.StartInternal(ctx, readImportDataProcessorName)
-	log.Infof(ctx, "starting read import")
 	// We don't have to worry about this go routine leaking because next we loop over progCh
 	// which is closed only after the go routine returns.
 	go func() {
@@ -391,7 +378,7 @@ func ingestKvs(
 	// of the pkIndexAdder buffer be set below that of the indexAdder buffer.
 	// Otherwise, as a consequence of filling up faster the pkIndexAdder buffer
 	// will hog memory as it tries to grow more aggressively.
-	minBufferSize, maxBufferSize, stepSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
+	minBufferSize, maxBufferSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
 		true /* isPKAdder */)
 	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     pkAdderName,
@@ -399,7 +386,6 @@ func ingestKvs(
 		SkipDuplicates:           true,
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
-		StepBufferSize:           stepSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
 		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
 	})
@@ -408,7 +394,7 @@ func ingestKvs(
 	}
 	defer pkIndexAdder.Close(ctx)
 
-	minBufferSize, maxBufferSize, stepSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
+	minBufferSize, maxBufferSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
 		false /* isPKAdder */)
 	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     indexAdderName,
@@ -416,7 +402,6 @@ func ingestKvs(
 		SkipDuplicates:           true,
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
-		StepBufferSize:           stepSize,
 		InitialSplitsIfUnordered: int(spec.InitialSplits),
 		WriteAtBatchTimestamp:    writeAtBatchTimestamp,
 	})

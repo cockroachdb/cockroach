@@ -26,42 +26,37 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// proxyConnHandler defines the signature of the function that handles each
-// individual new incoming connection.
-type proxyConnHandler func(ctx context.Context, conn *proxyConn) error
-
 // Server is a TCP server that proxies SQL connections to a configurable
 // backend. It may also run an HTTP server to expose a health check and
 // prometheus metrics.
 type Server struct {
 	Stopper         *stop.Stopper
-	connHandler     proxyConnHandler
+	handler         *proxyHandler
 	mux             *http.ServeMux
 	metrics         *metrics
 	metricsRegistry *metric.Registry
 
-	promMu             syncutil.Mutex
 	prometheusExporter metric.PrometheusExporter
 }
 
 // NewServer constructs a new proxy server and provisions metrics and health
 // checks as well.
 func NewServer(ctx context.Context, stopper *stop.Stopper, options ProxyOptions) (*Server, error) {
+	registry := metric.NewRegistry()
+
 	proxyMetrics := makeProxyMetrics()
-	handler, err := newProxyHandler(ctx, stopper, &proxyMetrics, options)
+	registry.AddMetricStruct(&proxyMetrics)
+
+	handler, err := newProxyHandler(ctx, stopper, registry, &proxyMetrics, options)
 	if err != nil {
 		return nil, err
 	}
 
 	mux := http.NewServeMux()
 
-	registry := metric.NewRegistry()
-
-	registry.AddMetricStruct(&proxyMetrics)
-
 	s := &Server{
 		Stopper:            stopper,
-		connHandler:        handler.handle,
+		handler:            handler,
 		mux:                mux,
 		metrics:            &proxyMetrics,
 		metricsRegistry:    registry,
@@ -105,12 +100,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleVars(w http.ResponseWriter, r *http.Request) {
-	s.promMu.Lock()
-	defer s.promMu.Unlock()
-
 	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
-	s.prometheusExporter.ScrapeRegistry(s.metricsRegistry, true /* includeChildMetrics*/)
-	if err := s.prometheusExporter.PrintAsText(w); err != nil {
+	scrape := func(pm *metric.PrometheusExporter) {
+		pm.ScrapeRegistry(s.metricsRegistry, true /* includeChildMetrics*/)
+	}
+	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, scrape); err != nil {
 		log.Errorf(r.Context(), "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -182,7 +176,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 			defer s.metrics.CurConnCount.Dec(1)
 			remoteAddr := conn.RemoteAddr()
 			ctxWithTag := logtags.AddTag(ctx, "client", log.SafeOperational(remoteAddr))
-			if err := s.connHandler(ctxWithTag, conn); err != nil {
+			if err := s.handler.handle(ctxWithTag, conn); err != nil {
 				log.Infof(ctxWithTag, "connection error: %v", err)
 			}
 		})

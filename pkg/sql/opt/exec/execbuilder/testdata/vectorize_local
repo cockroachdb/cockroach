@@ -82,6 +82,7 @@ regions: <hidden>
 │ KV contention time: 0µs
 │ KV rows read: 1
 │ KV bytes read: 8 B
+│ estimated max memory allocated: 0 B
 │ table: d@d_pkey
 │ equality: (b) = (b)
 │
@@ -98,7 +99,7 @@ regions: <hidden>
       table: c@sec
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk91q20AQhe_7FMNctbB1JF2UslAwNSk4TazihNwUUVa7Q6pa2lG1I2pj_Fh9gT5Z0W4CSU1Kf3J5zs4f32H3GL62qPHy9Px0cQV2ZuDdurwAC2flcgUOyhW4WQ1vwM5qVOjZ0cp0FFB_xBwrhf3AlkLgYbL2sWDptqgzhY3vR5nsSqHlgVDvURppCTVembqlNRlHw0mGCh2Jado41s4DWVS44HbsfNBgFEy7L3szqZeo8P01SNORhuzH95C0ZS_kpWF_9DTwtwADGaehSE69E7qz8lfwFhVeXC8WEIR6sDx6gee0lZPGywsNWbwwFRBtHivozBY66njYgWlbtkbIacji9NqI_UwBeJR-FA1TfTzrziiwOihM6hZZEHNDqPOD-nOsZ9z4W6r5Q6pu7j71G9qhwnPmzdjDF248sNcwL-7TnlCX00nzaUJcFgkmeEkHMW17xPnfIsmPI3n9RInQlux4vP8_wij-Jow1hZ59oAdBPDY5O1QKyd1Q-keBx8HSh4FtXJNkGfui4ShIes2TWPr0NB14vzn_bXPxS3N1ePYzAAD__51rTyQ=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k99q1EAUxu99isO5Uhi3SS5EBoTFpcLWdiPb0hsJMpk51LjJnJg5wV2WfSxfwCeTzLTQulRU7OX3zfnH72P2GL62qPHy9Px0cQV2ZuDdurwAC2flcgUOyhW4WQ1vwM5qVOjZ0cp0FFB_xBwrhf3AlkLgYbL2sWDptqgzhY3vR5nsSqHlgVDvURppCTVembqlNRlHw0mGCh2Jado41s4DWVS44HbsfNBgFEy7L3szqZeo8P01SNORhuzH95C0ZS_kpWF_9DTwtwADGaehSE69E7qz8lfwFhVeXC8WEIR6sDx6gee0lZPGywsNWbwwFRBtHivozBY66njYgWlbtkbIacji9NqI_UwBeJR-FA1TfTzrziiwOihM6hZZEHNDqPOD-nOsZ9z4W6r5Q6pu7j71G9qhwnPmzdjDF248sNcwL-7TnlCX00nzaUJcFgkmeEkHMW17xPnfIsmPI3n9nxKhLdnxeP8TBVX8TVBrCj37QA9CemxydqgUkruh9McCj4OlDwPbuCbJMvZFw1GQ9JonsfTpaTrwfnP-2-bil-bq8OxnAAAA__-PPFhI
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
@@ -221,7 +222,10 @@ SELECT * FROM tpar
 
 # Make sure that the scan actually gets parallelized.
 statement ok
-SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
+SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10
+
+statement ok
+SET tracing = off
 
 # The span "sending partial batch" means that the scan was parallelized. We're
 # seeing duplicate "querying next range" entries because we first use the range
@@ -277,7 +281,7 @@ EXPLAIN (VEC) SELECT stddev((t46404_1.c0 > ANY (0, 0))::INT) FROM t46404_0, t464
 └ Node 1
   └ *colexec.hashAggregator
     └ *colexecbase.castBoolIntOp
-      └ *colexecproj.defaultCmpRConstProjOp
+      └ *colexecprojconst.defaultCmpRConstProjOp
         └ *colexecjoin.crossJoiner
           ├ *colfetcher.ColBatchScan
           └ *colfetcher.ColBatchScan
@@ -324,7 +328,7 @@ EXPLAIN (VEC) SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
     └ *colexecbase.castInt2IntOp
       └ *colexecbase.castInt2IntOp
         └ *colexecsel.selEQInt64Int64Op
-          └ *colexecproj.projPlusInt64Int64ConstOp
+          └ *colexecprojconst.projPlusInt64Int64ConstOp
             └ *colexecproj.projPlusInt64Int64Op
               └ *colexecbase.castInt4IntOp
                 └ *colexecbase.castInt4IntOp

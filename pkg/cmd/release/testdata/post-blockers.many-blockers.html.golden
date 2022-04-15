@@ -3,7 +3,7 @@
     <p>Hello!</p>
     <p>
       The <strong>v19.1.0-rc.3</strong> release is scheduled for prep & qualification on
-      <strong>Saturday, April 1</strong> for a scheduled release of <strong>Saturday, April 11</strong>.
+      <strong>Saturday, April 2</strong> for a scheduled release of <strong>Monday, April 11</strong>.
     </p>
     
     
@@ -14,8 +14,8 @@
         backports for master will be reviewed at Monday's triage meeting.
       </p>
     
-    
-    
+      
+  
       
       
       <p>
@@ -25,15 +25,15 @@
       </p>
       
       <ul>
-        
+      
         <li>Project 1: 4</li>
-        
+      
         <li>Project 2: 2</li>
-        
+      
         <li>Project 3: 3</li>
-        
+      
       </ul>
-    
+  
     <p>
       Thanks,<br />
       Release Engineering

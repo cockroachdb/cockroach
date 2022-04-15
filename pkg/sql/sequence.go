@@ -135,16 +135,32 @@ func (p *planner) incrementSequenceUsingCache(
 ) (int64, error) {
 	seqOpts := descriptor.GetSequenceOpts()
 
-	cacheSize := seqOpts.EffectiveCacheSize()
+	sequenceID := descriptor.GetID()
+	createdInCurrentTxn := p.createdSequences.isCreatedSequence(sequenceID)
+	var cacheSize int64
+	if createdInCurrentTxn {
+		cacheSize = 1
+	} else {
+		cacheSize = seqOpts.EffectiveCacheSize()
+	}
 
 	fetchNextValues := func() (currentValue, incrementAmount, sizeOfCache int64, err error) {
-		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.GetID()))
+		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(sequenceID))
 
-		// We *do not* use the planner txn here, since nextval does not respect
-		// transaction boundaries. This matches the specification at
-		// https://www.postgresql.org/docs/14/functions-sequence.html
-		endValue, err := kv.IncrementValRetryable(
-			ctx, p.ExecCfg().DB, seqValueKey, seqOpts.Increment*cacheSize)
+		// The planner txn is only used if the sequence is accessed in the same
+		// transaction that it was created. Otherwise, we *do not* use the planner
+		// txn here, since nextval does not respect transaction boundaries.
+		// This matches the specification at
+		// https://www.postgresql.org/docs/14/functions-sequence.html.
+		var endValue int64
+		if createdInCurrentTxn {
+			var res kv.KeyValue
+			res, err = p.txn.Inc(ctx, seqValueKey, seqOpts.Increment*cacheSize)
+			endValue = res.ValueInt()
+		} else {
+			endValue, err = kv.IncrementValRetryable(
+				ctx, p.ExecCfg().DB, seqValueKey, seqOpts.Increment*cacheSize)
+		}
 
 		if err != nil {
 			if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
@@ -188,7 +204,7 @@ func (p *planner) incrementSequenceUsingCache(
 			return 0, err
 		}
 	} else {
-		val, err = p.GetOrInitSequenceCache().NextValue(uint32(descriptor.GetID()), uint32(descriptor.GetVersion()), fetchNextValues)
+		val, err = p.GetOrInitSequenceCache().NextValue(uint32(sequenceID), uint32(descriptor.GetVersion()), fetchNextValues)
 		if err != nil {
 			return 0, err
 		}
@@ -271,30 +287,7 @@ func (p *planner) SetSequenceValueByID(
 	if !descriptor.IsSequence() {
 		return sqlerrors.NewWrongObjectTypeError(seqName, "sequence")
 	}
-	if err := setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName); err != nil {
-		return err
-	}
 
-	// Clear out the cache and update the last value if needed.
-	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-		m.initSequenceCache()
-		if isCalled {
-			m.RecordLatestSequenceVal(seqID, newVal)
-		}
-	})
-	return nil
-}
-
-// setSequenceValueHelper is shared by SetSequenceValue and SetSequenceValueByID
-// to set the given sequence to a new given value.
-func setSequenceValueHelper(
-	ctx context.Context,
-	p *planner,
-	descriptor catalog.TableDescriptor,
-	newVal int64,
-	isCalled bool,
-	seqName *tree.TableName,
-) error {
 	if err := p.CheckPrivilege(ctx, descriptor, privilege.UPDATE); err != nil {
 		return err
 	}
@@ -314,13 +307,33 @@ func setSequenceValueHelper(
 		return err
 	}
 
-	// We *do not* use the planner txn here, since setval does not respect
-	// transaction boundaries. This matches the specification at
-	// https://www.postgresql.org/docs/14/functions-sequence.html
-	// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
-	// according to comments on Inc operation. Switch to Inc if `desired-current`
-	// overflows correctly.
-	return p.ExecCfg().DB.Put(ctx, seqValueKey, newVal)
+	createdInCurrentTxn := p.createdSequences.isCreatedSequence(descriptor.GetID())
+	if createdInCurrentTxn {
+		if err := p.txn.Put(ctx, seqValueKey, newVal); err != nil {
+			return err
+		}
+	} else {
+		// The planner txn is only used if the sequence is accessed in the same
+		// transaction that it was created. Otherwise, we *do not* use the planner
+		// txn here, since setval does not respect transaction boundaries.
+		// This matches the specification at
+		// https://www.postgresql.org/docs/14/functions-sequence.html.
+		// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
+		// according to comments on Inc operation. Switch to Inc if `desired-current`
+		// overflows correctly.
+		if err := p.ExecCfg().DB.Put(ctx, seqValueKey, newVal); err != nil {
+			return err
+		}
+	}
+
+	// Clear out the cache and update the last value if needed.
+	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		m.initSequenceCache()
+		if isCalled {
+			m.RecordLatestSequenceVal(seqID, newVal)
+		}
+	})
+	return nil
 }
 
 // MakeSequenceKeyVal returns the key and value of a sequence being set

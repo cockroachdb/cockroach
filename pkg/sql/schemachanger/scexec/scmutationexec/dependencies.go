@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
@@ -89,23 +90,35 @@ type MutationVisitorStateUpdater interface {
 	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
 
 	// AddNewGCJobForTable enqueues a GC job for the given table.
-	AddNewGCJobForTable(descriptor catalog.TableDescriptor)
+	AddNewGCJobForTable(stmt scop.StatementForDropJob, descriptor catalog.TableDescriptor)
 
 	// AddNewGCJobForDatabase enqueues a GC job for the given database.
-	AddNewGCJobForDatabase(descriptor catalog.DatabaseDescriptor)
+	AddNewGCJobForDatabase(stmt scop.StatementForDropJob, descriptor catalog.DatabaseDescriptor)
 
 	// AddNewGCJobForIndex enqueues a GC job for the given table index.
-	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
+	AddNewGCJobForIndex(stmt scop.StatementForDropJob, tbl catalog.TableDescriptor, index catalog.Index)
 
 	// AddNewSchemaChangerJob adds a schema changer job.
-	AddNewSchemaChangerJob(jobID jobspb.JobID, stmts []scpb.Statement, auth scpb.Authorization, descriptors descpb.IDs) error
+	AddNewSchemaChangerJob(
+		jobID jobspb.JobID,
+		stmts []scpb.Statement,
+		isNonCancelable bool,
+		auth scpb.Authorization,
+		descriptors descpb.IDs,
+		runningStatus string,
+	) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
 	// schema changer job.
-	UpdateSchemaChangerJob(jobID jobspb.JobID, isNonCancelable bool) error
+	UpdateSchemaChangerJob(jobID jobspb.JobID, isNonCancelable bool, runningStatus string) error
 
 	// EnqueueEvent will enqueue an event to be written to the event log.
-	EnqueueEvent(id descpb.ID, metadata scpb.TargetMetadata, details eventpb.CommonSQLEventDetails, event eventpb.EventPayload) error
+	EnqueueEvent(
+		id descpb.ID,
+		metadata scpb.TargetMetadata,
+		details eventpb.CommonSQLEventDetails,
+		event eventpb.EventPayload,
+	) error
 
 	// DeleteSchedule deletes a scheduled job.
 	DeleteSchedule(scheduleID int64)

@@ -1795,19 +1795,6 @@ func (c *clusterImpl) StartE(
 
 	startOpts.RoachprodOpts.EncryptedStores = c.encAtRest
 
-	// Set some env vars. The first two also the default for `roachprod start`,
-	// but we have to add them so that the third one doesn't wipe them out.
-	if !envExists(settings.Env, "COCKROACH_ENABLE_RPC_COMPRESSION") {
-		// RPC compressions costs around 5% on kv95, so we disable it. It might help
-		// when moving snapshots around, though.
-		settings.Env = append(settings.Env, "COCKROACH_ENABLE_RPC_COMPRESSION=false")
-	}
-
-	if !envExists(settings.Env, "COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED") {
-		// Get rid of an annoying popup in the UI.
-		settings.Env = append(settings.Env, "COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true")
-	}
-
 	if !envExists(settings.Env, "COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH") {
 		// Panic on span use-after-Finish, so we catch such bugs.
 		settings.Env = append(settings.Env, "COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH=true")
@@ -1906,18 +1893,6 @@ func (c *clusterImpl) Stop(
 	if err := c.StopE(ctx, l, stopOpts, opts...); err != nil {
 		c.t.Fatal(err)
 	}
-}
-
-func (c *clusterImpl) Reset(ctx context.Context, l *logger.Logger) error {
-	if c.t.Failed() {
-		return errors.New("already failed")
-	}
-	if ctx.Err() != nil {
-		return errors.Wrap(ctx.Err(), "cluster.Reset")
-	}
-	c.status("resetting cluster")
-	defer c.status()
-	return errors.Wrap(roachprod.Reset(l, c.name), "cluster.Reset")
 }
 
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a

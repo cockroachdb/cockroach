@@ -604,6 +604,13 @@ var charts = []sectionDescription{
 					"range.snapshots.applied-non-voter",
 				},
 			},
+			{
+				Title: "Snapshot Bytes",
+				Metrics: []string{
+					"range.snapshots.rcvd-bytes",
+					"range.snapshots.sent-bytes",
+				},
+			},
 		},
 	},
 	{
@@ -638,6 +645,55 @@ var charts = []sectionDescription{
 			{
 				Title:   "QPS",
 				Metrics: []string{"rebalancing.queriespersecond"},
+			},
+		},
+	},
+	{
+		Organization: [][]string{
+			{DistributionLayer, "Rebalancing"},
+		},
+		Charts: []chartDescription{
+			{
+				Title:   "L0 sub-level rebalancing",
+				Metrics: []string{"rebalancing.l0_sublevels_histogram"},
+			},
+		},
+	},
+	{
+		Organization: [][]string{
+			{DistributionLayer, "Rebalancing"},
+			{ReplicationLayer, "Leases"},
+		},
+		Charts: []chartDescription{
+			{
+				Title: "Allocator Load-Based Lease Transfer Decisions",
+				Metrics: []string{
+					"kv.allocator.load_based_lease_transfers.should_transfer",
+					"kv.allocator.load_based_lease_transfers.significantly_switches_relative_disposition",
+					"kv.allocator.load_based_lease_transfers.missing_stats_for_existing_stores",
+					"kv.allocator.load_based_lease_transfers.delta_not_significant",
+					"kv.allocator.load_based_lease_transfers.existing_not_overfull",
+					"kv.allocator.load_based_lease_transfers.cannot_find_better_candidate",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{
+			{DistributionLayer, "Rebalancing"},
+			{ReplicationLayer, "Replicas"},
+		},
+		Charts: []chartDescription{
+			{
+				Title: "Allocator Load-Based Lease Transfer Decisions",
+				Metrics: []string{
+					"kv.allocator.load_based_replica_rebalancing.should_transfer",
+					"kv.allocator.load_based_replica_rebalancing.significantly_switches_relative_disposition",
+					"kv.allocator.load_based_replica_rebalancing.missing_stats_for_existing_store",
+					"kv.allocator.load_based_replica_rebalancing.delta_not_significant",
+					"kv.allocator.load_based_replica_rebalancing.existing_not_overfull",
+					"kv.allocator.load_based_replica_rebalancing.cannot_find_better_candidate",
+				},
 			},
 		},
 	},
@@ -2225,6 +2281,13 @@ var charts = []sectionDescription{
 				AxisLabel: "Latency",
 			},
 			{
+				Title: "Connection Failures",
+				Metrics: []string{
+					"sql.conn.failures",
+				},
+				AxisLabel: "Failures",
+			},
+			{
 				Title: "Open Transactions",
 				Metrics: []string{
 					"sql.txns.open",
@@ -2559,6 +2622,15 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{StorageLayer, "RocksDB", "Migrations"}},
+		Charts: []chartDescription{
+			{
+				Title:   "SSTables Marked for Compaction",
+				Metrics: []string{"storage.marked-for-compaction-files"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Overview"}},
 		Charts: []chartDescription{
 			{
@@ -2805,6 +2877,12 @@ var charts = []sectionDescription{
 	{
 		Organization: [][]string{{Jobs, "Execution"}},
 		Charts: []chartDescription{
+			{
+				Title: "Active",
+				Metrics: []string{
+					"jobs.running_non_idle",
+				},
+			},
 			{
 				Title: "Currently Running",
 				Metrics: []string{

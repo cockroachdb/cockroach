@@ -17,13 +17,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/idle"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -31,6 +34,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/jackc/pgproto3/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
@@ -74,8 +78,10 @@ type ProxyOptions struct {
 	// Insecure if set, will not use TLS for the backend connection. For testing.
 	Insecure bool
 	// RoutingRule for constructing the backend address for each incoming
-	// connection. Optionally use '{{clusterName}}'
-	// which will be substituted with the cluster name.
+	// connection.
+	//
+	// TODO(jaylim-crl): Rename RoutingRule to TestRoutingRule to be
+	// explicit that this is only used in a testing environment.
 	RoutingRule string
 	// DirectoryAddr specified optional {HOSTNAME}:{PORT} for service that does
 	// the resolution from backend id to IP address. If specified - it will be
@@ -97,9 +103,15 @@ type ProxyOptions struct {
 	// response to the first connection failure.
 	ThrottleBaseDelay time.Duration
 
-	// Used for testing.
+	// testingKnobs are knobs used for testing.
 	testingKnobs struct {
-		afterForward func(*forwarder) error
+		// dirOpts is used to customize the directory cache created by the
+		// proxy.
+		dirOpts []tenant.DirOption
+
+		// directoryServer represents the in-memory directory server that is
+		// created whenever a routing rule is used.
+		directoryServer tenant.DirectoryServer
 	}
 }
 
@@ -126,11 +138,18 @@ type proxyHandler struct {
 	// idleMonitor will detect idle connections to DRAINING pods.
 	idleMonitor *idle.Monitor
 
-	// directory is optional and if set, will be used to resolve
-	// backend id to IP addresses.
-	directory *tenant.Directory
+	// directoryCache is used to resolve tenants to their IP addresses.
+	directoryCache tenant.DirectoryCache
 
-	// CertManger keeps up to date the certificates used.
+	// balancer is used to load balance incoming connections.
+	balancer *balancer.Balancer
+
+	// connTracker is used to track all forwarder instances. The proxy handler
+	// uses this to register/unregister forwarders, whereas the balancer uses
+	// this to rebalance connections.
+	connTracker *balancer.ConnTracker
+
+	// certManager keeps up to date the certificates used.
 	certManager *certmgr.CertManager
 }
 
@@ -145,8 +164,14 @@ var throttledError = errors.WithHint(
 // newProxyHandler will create a new proxy handler with configuration based on
 // the provided options.
 func newProxyHandler(
-	ctx context.Context, stopper *stop.Stopper, proxyMetrics *metrics, options ProxyOptions,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	registry *metric.Registry,
+	proxyMetrics *metrics,
+	options ProxyOptions,
 ) (*proxyHandler, error) {
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+
 	handler := proxyHandler{
 		stopper:      stopper,
 		metrics:      proxyMetrics,
@@ -154,12 +179,10 @@ func newProxyHandler(
 		certManager:  certmgr.NewCertManager(ctx),
 	}
 
-	err := handler.setupIncomingCert()
+	err := handler.setupIncomingCert(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
 	// If denylist functionality is requested, create the denylist service.
 	if options.Denylist != "" {
@@ -173,33 +196,73 @@ func newProxyHandler(
 		throttler.WithBaseDelay(handler.ThrottleBaseDelay),
 	)
 
+	var conn *grpc.ClientConn
 	if handler.DirectoryAddr != "" {
-		//lint:ignore SA1019 grpc.WithInsecure is deprecated
-		conn, err := grpc.Dial(handler.DirectoryAddr, grpc.WithInsecure())
+		conn, err = grpc.Dial(
+			handler.DirectoryAddr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
 		if err != nil {
 			return nil, err
 		}
-		// nolint:grpcconnclose
-		stopper.AddCloser(stop.CloserFn(func() { _ = conn.Close() /* nolint:grpcconnclose */ }))
-
-		// If a drain timeout has been specified, then start the idle monitor
-		// and the pod watcher. When a pod enters the DRAINING state, the pod
-		// watcher will set the idle monitor to detect connections without
-		// activity and terminate them.
-		var dirOpts []tenant.DirOption
-		if options.DrainTimeout != 0 {
-			handler.idleMonitor = idle.NewMonitor(ctx, options.DrainTimeout)
-
-			podWatcher := make(chan *tenant.Pod)
-			go handler.startPodWatcher(ctx, podWatcher)
-			dirOpts = append(dirOpts, tenant.PodWatcher(podWatcher))
-		}
-
-		client := tenant.NewDirectoryClient(conn)
-		handler.directory, err = tenant.NewDirectory(ctx, stopper, client, dirOpts...)
+	} else {
+		// If no directory address was specified, assume routing rule, and
+		// start an in-memory simple directory server.
+		directoryServer, grpcServer := tenantdirsvr.NewTestSimpleDirectoryServer(handler.RoutingRule)
+		ln, err := tenantdirsvr.ListenAndServeInMemGRPC(ctx, stopper, grpcServer)
 		if err != nil {
 			return nil, err
 		}
+		handler.testingKnobs.directoryServer = directoryServer
+
+		dialerFunc := func(ctx context.Context, addr string) (net.Conn, error) {
+			return ln.DialContext(ctx)
+		}
+		conn, err = grpc.DialContext(
+			ctx,
+			"",
+			grpc.WithContextDialer(dialerFunc),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	stopper.AddCloser(stop.CloserFn(func() {
+		_ = conn.Close() // nolint:grpcconnclose
+	}))
+
+	// If a drain timeout has been specified, then start the idle monitor and
+	// the pod watcher. When a pod enters the DRAINING state, the pod watcher
+	// will set the idle monitor to detect connections without activity and
+	// terminate them.
+	var dirOpts []tenant.DirOption
+	if options.DrainTimeout != 0 {
+		handler.idleMonitor = idle.NewMonitor(ctx, options.DrainTimeout)
+
+		podWatcher := make(chan *tenant.Pod)
+		go handler.startPodWatcher(ctx, podWatcher)
+		dirOpts = append(dirOpts, tenant.PodWatcher(podWatcher))
+	}
+	if handler.testingKnobs.dirOpts != nil {
+		dirOpts = append(dirOpts, handler.testingKnobs.dirOpts...)
+	}
+
+	client := tenant.NewDirectoryClient(conn)
+	handler.directoryCache, err = tenant.NewDirectoryCache(ctx, stopper, client, dirOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the connection tracker and balancer components.
+	balancerMetrics := balancer.NewMetrics()
+	registry.AddMetricStruct(balancerMetrics)
+	handler.connTracker = balancer.NewConnTracker()
+	handler.balancer, err = balancer.NewBalancer(
+		ctx, stopper, balancerMetrics, handler.directoryCache, handler.connTracker,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	return &handler, nil
@@ -208,27 +271,27 @@ func newProxyHandler(
 // handle is called by the proxy server to handle a single incoming client
 // connection.
 func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn) error {
-	conn, msg, err := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
-	defer func() { _ = conn.Close() }()
-	if err != nil {
-		SendErrToClient(conn, err)
-		return err
+	fe := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
+	defer func() { _ = fe.conn.Close() }()
+	if fe.err != nil {
+		SendErrToClient(fe.conn, fe.err)
+		return fe.err
 	}
 
 	// This currently only happens for CancelRequest type of startup messages
 	// that we don't support. Return nil to the server, which simply closes the
 	// connection.
-	if msg == nil {
+	if fe.msg == nil {
 		return nil
 	}
 
 	// NOTE: Errors returned from this function are user-facing errors so we
 	// should be careful with the details that we want to expose.
-	backendStartupMsg, clusterName, tenID, err := clusterNameAndTenantFromParams(ctx, msg)
+	backendStartupMsg, clusterName, tenID, err := clusterNameAndTenantFromParams(ctx, fe)
 	if err != nil {
 		clientErr := &codeError{codeParamsRoutingFailed, err}
 		log.Errorf(ctx, "unable to extract cluster name and tenant id: %s", err.Error())
-		updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
+		updateMetricsAndSendErrToClient(clientErr, fe.conn, handler.metrics)
 		return clientErr
 	}
 
@@ -237,11 +300,11 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 
 	// Use an empty string as the default port as we only care about the
 	// correctly parsing the IP address here.
-	ipAddr, _, err := addr.SplitHostPort(conn.RemoteAddr().String(), "")
+	ipAddr, _, err := addr.SplitHostPort(fe.conn.RemoteAddr().String(), "")
 	if err != nil {
 		clientErr := newErrorf(codeParamsRoutingFailed, "unexpected connection address")
 		log.Errorf(ctx, "could not parse address: %v", err.Error())
-		updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
+		updateMetricsAndSendErrToClient(clientErr, fe.conn, handler.metrics)
 		return clientErr
 	}
 
@@ -260,7 +323,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	if err != nil {
 		log.Errorf(ctx, "connection matched denylist: %v", err)
 		err = newErrorf(codeProxyRefusedConnection, "connection refused")
-		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
+		updateMetricsAndSendErrToClient(err, fe.conn, handler.metrics)
 		return err
 	}
 	defer removeListener()
@@ -270,18 +333,16 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	if err != nil {
 		log.Errorf(ctx, "throttler refused connection: %v", err.Error())
 		err = throttledError
-		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
+		updateMetricsAndSendErrToClient(err, fe.conn, handler.metrics)
 		return err
 	}
 
 	connector := &connector{
-		ClusterName: clusterName,
-		TenantID:    tenID,
-		RoutingRule: handler.RoutingRule,
-		StartupMsg:  backendStartupMsg,
-	}
-	if handler.directory != nil {
-		connector.Directory = handler.directory
+		ClusterName:    clusterName,
+		TenantID:       tenID,
+		DirectoryCache: handler.directoryCache,
+		Balancer:       handler.balancer,
+		StartupMsg:     backendStartupMsg,
 	}
 
 	// TLS options for the proxy are split into Insecure and SkipVerify.
@@ -307,7 +368,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		}
 	}
 
-	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, conn,
+	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, fe.conn,
 		func(status throttler.AttemptStatus) error {
 			if err := handler.throttleService.ReportAttempt(
 				ctx, throttleTags, throttleTime, status,
@@ -323,7 +384,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		if sentToClient {
 			handler.metrics.updateForError(err)
 		} else {
-			updateMetricsAndSendErrToClient(err, conn, handler.metrics)
+			updateMetricsAndSendErrToClient(err, fe.conn, handler.metrics)
 		}
 		return err
 	}
@@ -338,7 +399,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}()
 
 	// Pass ownership of conn and crdbConn to the forwarder.
-	f, err := forward(ctx, connector, handler.metrics, conn, crdbConn)
+	f, err := forward(ctx, connector, handler.metrics, fe.conn, crdbConn)
 	if err != nil {
 		// Don't send to the client here for the same reason below.
 		handler.metrics.updateForError(err)
@@ -346,14 +407,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 	defer f.Close()
 
-	if handler.testingKnobs.afterForward != nil {
-		if err := handler.testingKnobs.afterForward(f); err != nil {
-			select {
-			case errConnection <- err: /* error reported */
-			default: /* the channel already contains an error */
-			}
-		}
-	}
+	// Register the forwarder with the connection tracker.
+	handler.connTracker.OnConnect(tenID, f)
+	defer handler.connTracker.OnDisconnect(tenID, f)
 
 	// Block until an error is received, or when the stopper starts quiescing,
 	// whichever that happens first.
@@ -427,7 +483,7 @@ func (handler *proxyHandler) incomingTLSConfig() *tls.Config {
 // using self-signed, runtime generated cert (if cert is set to *) or
 // using file based cert where the cert/key values refer to file names
 // containing the information.
-func (handler *proxyHandler) setupIncomingCert() error {
+func (handler *proxyHandler) setupIncomingCert(ctx context.Context) error {
 	if (handler.ListenKey == "") != (handler.ListenCert == "") {
 		return errors.New("must specify either both or neither of cert and key")
 	}
@@ -437,7 +493,6 @@ func (handler *proxyHandler) setupIncomingCert() error {
 	}
 
 	// TODO(darin): change the cert manager so it uses the stopper.
-	ctx, _ := handler.stopper.WithCancelOnQuiesce(context.Background())
 	certMgr := certmgr.NewCertManager(ctx)
 	var cert certmgr.Cert
 	if handler.ListenCert == "*" {
@@ -461,7 +516,10 @@ func (handler *proxyHandler) setupIncomingCert() error {
 // the connection parameters, and rewrites the database and options parameters,
 // if necessary.
 //
-// We currently support embedding the cluster identifier in two ways:
+// We currently support embedding the cluster identifier in three ways:
+//
+// - Through server name identification (SNI) when using TLS connections
+//   (e.g. serverless-101.5xj.gcp-us-central1.cockroachlabs.cloud)
 //
 // - Within the database param (e.g. "happy-koala-3.defaultdb")
 //
@@ -470,23 +528,28 @@ func (handler *proxyHandler) setupIncomingCert() error {
 //   through its command-line options, i.e. "-c NAME=VALUE", "-cNAME=VALUE", and
 //   "--NAME=VALUE".
 func clusterNameAndTenantFromParams(
-	ctx context.Context, msg *pgproto3.StartupMessage,
+	ctx context.Context, fe *FrontendAdmitInfo,
 ) (*pgproto3.StartupMessage, string, roachpb.TenantID, error) {
-	clusterIdentifierDB, databaseName, err := parseDatabaseParam(msg.Parameters["database"])
+	clusterIdentifierDB, databaseName, err := parseDatabaseParam(fe.msg.Parameters["database"])
 	if err != nil {
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
-	clusterIdentifierOpt, newOptionsParam, err := parseOptionsParam(msg.Parameters["options"])
+	clusterIdentifierOpt, newOptionsParam, err := parseOptionsParam(fe.msg.Parameters["options"])
 	if err != nil {
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
+
+	sniTenID, sniPresent := parseSNI(fe.sniServerName)
 
 	// No cluster identifiers were specified.
 	if clusterIdentifierDB == "" && clusterIdentifierOpt == "" {
+		if sniPresent {
+			return fe.msg, "", sniTenID, nil
+		}
 		err := errors.New("missing cluster identifier")
 		err = errors.WithHint(err, clusterIdentifierHint)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	// Ambiguous cluster identifiers.
@@ -497,7 +560,7 @@ func clusterNameAndTenantFromParams(
 			"Is '%s' or '%s' the identifier for the cluster that you're connecting to?",
 			clusterIdentifierDB, clusterIdentifierOpt)
 		err = errors.WithHint(err, clusterIdentifierHint)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	if clusterIdentifierDB == "" {
@@ -511,7 +574,7 @@ func clusterNameAndTenantFromParams(
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
 		err = errors.WithHint(err, missingTenantIDHint)
 		err = errors.WithHint(err, clusterNameFormHint)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	clusterName, tenantIDStr := clusterIdentifierDB[:sepIdx], clusterIdentifierDB[sepIdx+1:]
@@ -521,7 +584,7 @@ func clusterNameAndTenantFromParams(
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
 		err = errors.WithHintf(err, "Is '%s' a valid cluster name?", clusterName)
 		err = errors.WithHint(err, clusterNameFormHint)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	// Tenant ID cannot be parsed.
@@ -532,7 +595,7 @@ func clusterNameAndTenantFromParams(
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
 		err = errors.WithHintf(err, "Is '%s' a valid tenant ID?", tenantIDStr)
 		err = errors.WithHint(err, clusterNameFormHint)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	// This case only happens if tenID is 0 or 1 (system tenant).
@@ -541,13 +604,13 @@ func clusterNameAndTenantFromParams(
 		log.Errorf(ctx, "%s contains an invalid tenant ID", clusterIdentifierDB)
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
 		err = errors.WithHintf(err, "Tenant ID %d is invalid.", tenID)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	// Make and return a copy of the startup msg so the original is not modified.
 	// We will rewrite database and options in the new startup message.
 	paramsOut := map[string]string{}
-	for key, value := range msg.Parameters {
+	for key, value := range fe.msg.Parameters {
 		if key == "database" {
 			paramsOut[key] = databaseName
 		} else if key == "options" {
@@ -559,11 +622,54 @@ func clusterNameAndTenantFromParams(
 		}
 	}
 
+	// Cluster ID provided through one of options or database (or both and the
+	// info is matching). If sni has been provided as well - check for match.
+	if sniPresent && tenID != sniTenID.InternalValue {
+		err := errors.New("multiple different tenant IDs provided")
+		err = errors.WithHintf(err,
+			"Is '%d' (SNI) or '%d' (database/options) the identifier for the cluster that you're connecting to?",
+			sniTenID.InternalValue, tenID)
+		err = errors.WithHint(err, clusterIdentifierHint)
+		return fe.msg, "", roachpb.MaxTenantID, err
+	}
+
 	outMsg := &pgproto3.StartupMessage{
-		ProtocolVersion: msg.ProtocolVersion,
+		ProtocolVersion: fe.msg.ProtocolVersion,
 		Parameters:      paramsOut,
 	}
 	return outMsg, clusterName, roachpb.MakeTenantID(tenID), nil
+}
+
+// parseSNI parses the sni server name parameter if provided and returns the
+// extracted tenant id. If the extraction was successful the second parameter
+// will be true. If not - false.
+func parseSNI(sniServerName string) (roachpb.TenantID, bool) {
+	if sniServerName == "" {
+		return roachpb.MaxTenantID, false
+	}
+
+	// Try to obtain tenant ID from SNI
+	parts := strings.Split(sniServerName, ".")
+	if len(parts) == 0 {
+		return roachpb.MaxTenantID, false
+	}
+
+	hostname := parts[0]
+	hostnameParts := strings.Split(hostname, "-")
+	// TODO serverless prefix may not be appropriate for all cases where the proxy
+	// is used so it needs to be mad configurable. A better design would be to pass
+	// the options (database, options, sni server name) to the tenant directory
+	// and get back a routing id.
+	if len(hostnameParts) != 2 || !strings.EqualFold("serverless", hostnameParts[0]) {
+		return roachpb.MaxTenantID, false
+	}
+
+	tenID, err := strconv.ParseUint(hostnameParts[1], 10, 64)
+	if err != nil || tenID < roachpb.MinTenantID.ToUint64() {
+		return roachpb.MaxTenantID, false
+	}
+
+	return roachpb.MakeTenantID(tenID), true
 }
 
 // parseDatabaseParam parses the database parameter from the PG connection
@@ -651,6 +757,11 @@ following methods:
 2) Options parameter:
    Use "--cluster=<cluster identifier>" as the options parameter.
    (e.g. options="--cluster=active-roach-42")
+
+3) Host name:
+   Use a driver that supports server name identification (SNI) with TLS 
+   connection and the hostname assigned to your cluster 
+   (e.g. serverless-101.5xj.gcp-us-central1.cockroachlabs.cloud)
 
 For more details, please visit our docs site at:
 	https://www.cockroachlabs.com/docs/cockroachcloud/connect-to-a-serverless-cluster

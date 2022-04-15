@@ -111,7 +111,7 @@ export const StatementTableCell = {
                   return {
                     name: (
                       <div className={cx("diagnostic-report-dropdown-option")}>
-                        {`Cancel current diagnostic request`}
+                        {`Cancel diagnostic request`}
                       </div>
                     ),
                     value: dr,
@@ -161,7 +161,6 @@ type StatementLinkTargetProps = {
   aggregatedTs?: number;
   appNames?: string[];
   implicitTxn: boolean;
-  statementNoConstants?: string;
 };
 
 // StatementLinkTarget returns the link to the relevant statement page, given
@@ -190,7 +189,7 @@ interface StatementLinkProps {
   statement: string;
   statementSummary: string;
   search: string;
-  statementNoConstants?: string;
+  statementQuery?: string;
   onClick?: (statement: string) => void;
 }
 
@@ -202,7 +201,6 @@ export const StatementLink = ({
   statement,
   statementSummary,
   search,
-  statementNoConstants,
   onClick,
 }: StatementLinkProps): React.ReactElement => {
   const onStatementClick = React.useCallback(() => {
@@ -216,8 +214,6 @@ export const StatementLink = ({
     aggregationInterval,
     appNames,
     implicitTxn,
-    statement,
-    statementNoConstants,
   };
 
   const summary = computeOrUseStmtSummary(statement, statementSummary);
@@ -247,7 +243,7 @@ export const NodeLink = (props: {
   nodeNames?: NodeNames;
 }): React.ReactElement => (
   <Link to={`/node/${props.nodeId}`}>
-    <div className={cx("node-name-tooltip__info-icon")}>
+    <div className={cx("node-link")}>
       {props.nodeNames ? props.nodeNames[props.nodeId] : "N" + props.nodeId}
     </div>
   </Link>

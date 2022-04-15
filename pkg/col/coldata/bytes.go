@@ -170,6 +170,9 @@ func NewBytes(n int) *Bytes {
 // Get returns the ith []byte in Bytes. Note that the returned byte slice is
 // unsafe for reuse if any write operation happens.
 //
+// If the returned value is then Set() into another Bytes, then use Bytes.Copy
+// instead.
+//
 // Note this function call is mostly inlined except in a handful of very large
 // generated functions, so we can't add the gcassert directive for it.
 func (b *Bytes) Get(i int) []byte {
@@ -177,6 +180,9 @@ func (b *Bytes) Get(i int) []byte {
 }
 
 // Set sets the ith []byte in Bytes.
+//
+// If the provided value is obtained via Get() from another Bytes, then use
+// Bytes.Copy instead.
 //
 // Note this function call is mostly inlined except in a handful of very large
 // generated functions, so we can't add the gcassert directive for it.
@@ -211,9 +217,9 @@ func (b *Bytes) Window(start, end int) *Bytes {
 	}
 }
 
-// copy copies a single value from src at position srcIdx into position destIdx
+// Copy copies a single value from src at position srcIdx into position destIdx
 // of the receiver. It is faster than b.Set(destIdx, src.Get(srcIdx)).
-func (b *Bytes) copy(src *Bytes, destIdx, srcIdx int) {
+func (b *Bytes) Copy(src *Bytes, destIdx, srcIdx int) {
 	if buildutil.CrdbTestBuild {
 		if b.isWindow {
 			panic("copy is called on a window into Bytes")
@@ -238,6 +244,14 @@ func (b *Bytes) copyElements(srcElementsToCopy []element, src *Bytes, destIdx in
 	// Optimize copying of the elements by copying all of them directly into the
 	// destination. This way all inlined values become correctly set, and we
 	// only need to set the non-inlined values separately.
+	//
+	// Note that this behavior results in losing the references to the old
+	// non-inlined values, even if they could be reused. If Bytes is not Reset,
+	// then that unused space in Bytes.buffer can accumulate. However, checking
+	// whether there are old non-inlined values with non-zero capacity leads to
+	// performance regressions, and in the production code we do reset the Bytes
+	// in all cases, so we accept this poor behavior in such a hypothetical /
+	// test-only scenario. See #78703 for more details.
 	copy(destElements, srcElementsToCopy)
 	// Early bounds checks.
 	_ = destElements[len(srcElementsToCopy)-1]

@@ -58,7 +58,7 @@ copy_from_stmt ::=
 
 comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
-	| 'COMMENT' 'ON' 'SCHEMA' schema_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'SCHEMA' qualifiable_schema_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'TABLE' table_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'COLUMN' column_path 'IS' comment_text
 	| 'COMMENT' 'ON' 'INDEX' table_index_name 'IS' comment_text
@@ -159,7 +159,6 @@ create_stmt ::=
 	| create_stats_stmt
 	| create_schedule_for_backup_stmt
 	| create_changefeed_stmt
-	| create_replication_stream_stmt
 	| create_extension_stmt
 
 delete_stmt ::=
@@ -204,7 +203,7 @@ restore_stmt ::=
 	| 'RESTORE' targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' targets 'FROM' 'REPLICATION' 'STREAM' 'FROM' string_or_placeholder_opt_list opt_as_of_clause
+	| 'RESTORE' targets 'FROM' 'REPLICATION' 'STREAM' 'FROM' string_or_placeholder_opt_list opt_as_of_clause opt_as_tenant_clause
 
 resume_stmt ::=
 	resume_jobs_stmt
@@ -299,8 +298,9 @@ comment_text ::=
 	'SCONST'
 	| 'NULL'
 
-schema_name ::=
+qualifiable_schema_name ::=
 	name
+	| name '.' name
 
 column_path ::=
 	name
@@ -533,9 +533,6 @@ create_schedule_for_backup_stmt ::=
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
 
-create_replication_stream_stmt ::=
-	'CREATE' 'REPLICATION' 'STREAM' 'FOR' targets opt_changefeed_sink opt_with_replication_options
-
 create_extension_stmt ::=
 	'CREATE' 'EXTENSION' 'IF' 'NOT' 'EXISTS' name
 	| 'CREATE' 'EXTENSION' name
@@ -650,6 +647,11 @@ opt_with_restore_options ::=
 	| 'WITH' 'OPTIONS' '(' restore_options_list ')'
 	| 
 
+opt_as_tenant_clause ::=
+	'AS' 'TENANT' iconst64
+	| 'AS' 'TENANT' 'identifier'
+	| 
+
 resume_jobs_stmt ::=
 	'RESUME' 'JOB' a_expr
 	| 'RESUME' 'JOBS' select_stmt
@@ -698,10 +700,12 @@ use_stmt ::=
 
 show_backup_stmt ::=
 	'SHOW' 'BACKUPS' 'IN' string_or_placeholder
-	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder opt_with_options
 	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_options
 	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder 'IN' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_options
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
@@ -791,6 +795,7 @@ show_regions_stmt ::=
 	| 'SHOW' 'REGIONS' 'FROM' 'ALL' 'DATABASES'
 	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE' database_name
 	| 'SHOW' 'REGIONS'
+	| 'SHOW' 'SUPER' 'REGIONS' 'FROM' 'DATABASE' database_name
 
 show_survival_goal_stmt ::=
 	'SHOW' 'SURVIVAL' 'GOAL' 'FROM' 'DATABASE'
@@ -855,8 +860,8 @@ show_full_scans_stmt ::=
 	'SHOW' 'FULL' 'TABLE' 'SCANS'
 
 show_default_privileges_stmt ::=
-	'SHOW' 'DEFAULT' 'PRIVILEGES' opt_for_roles
-	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES'
+	'SHOW' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schema
+	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schema
 
 opt_table ::=
 	'TABLE'
@@ -1008,6 +1013,7 @@ unreserved_keyword ::=
 	| 'FORCE_INDEX'
 	| 'FORCE_ZIGZAG'
 	| 'FORWARD'
+	| 'FREEZE'
 	| 'FUNCTION'
 	| 'FUNCTIONS'
 	| 'GENERATED'
@@ -1023,6 +1029,7 @@ unreserved_keyword ::=
 	| 'GRANTS'
 	| 'GROUPS'
 	| 'HASH'
+	| 'HEADER'
 	| 'HIGH'
 	| 'HISTOGRAM'
 	| 'HOLD'
@@ -1158,6 +1165,7 @@ unreserved_keyword ::=
 	| 'PUBLICATION'
 	| 'QUERIES'
 	| 'QUERY'
+	| 'QUOTE'
 	| 'RANGE'
 	| 'RANGES'
 	| 'READ'
@@ -1376,10 +1384,6 @@ privilege ::=
 type_name_list ::=
 	( type_name ) ( ( ',' type_name ) )*
 
-qualifiable_schema_name ::=
-	name
-	| name '.' name
-
 type_list ::=
 	( typename ) ( ( ',' typename ) )*
 
@@ -1462,6 +1466,7 @@ alter_database_stmt ::=
 	| alter_database_survival_goal_stmt
 	| alter_database_primary_region_stmt
 	| alter_database_add_super_region
+	| alter_database_alter_super_region
 	| alter_database_drop_super_region
 
 alter_range_stmt ::=
@@ -1550,7 +1555,7 @@ backup_options_list ::=
 	( backup_options ) ( ( ',' backup_options ) )*
 
 a_expr ::=
-	( c_expr | '+' a_expr | '-' a_expr | '~' a_expr | 'SQRT' a_expr | 'CBRT' a_expr | qual_op a_expr | 'NOT' a_expr | 'NOT' a_expr | 'DEFAULT' ) ( ( 'TYPECAST' cast_target | 'TYPEANNOTATE' typename | 'COLLATE' collation_name | 'AT' 'TIME' 'ZONE' a_expr | '+' a_expr | '-' a_expr | '*' a_expr | '/' a_expr | 'FLOORDIV' a_expr | '%' a_expr | '^' a_expr | '#' a_expr | '&' a_expr | '|' a_expr | '<' a_expr | '>' a_expr | '?' a_expr | 'JSON_SOME_EXISTS' a_expr | 'JSON_ALL_EXISTS' a_expr | 'CONTAINS' a_expr | 'CONTAINED_BY' a_expr | '=' a_expr | 'CONCAT' a_expr | 'LSHIFT' a_expr | 'RSHIFT' a_expr | 'FETCHVAL' a_expr | 'FETCHTEXT' a_expr | 'FETCHVAL_PATH' a_expr | 'FETCHTEXT_PATH' a_expr | 'REMOVE_PATH' a_expr | 'INET_CONTAINED_BY_OR_EQUALS' a_expr | 'AND_AND' a_expr | 'INET_CONTAINS_OR_EQUALS' a_expr | 'LESS_EQUALS' a_expr | 'GREATER_EQUALS' a_expr | 'NOT_EQUALS' a_expr | qual_op a_expr | 'AND' a_expr | 'OR' a_expr | 'LIKE' a_expr | 'LIKE' a_expr 'ESCAPE' a_expr | 'NOT' 'LIKE' a_expr | 'NOT' 'LIKE' a_expr 'ESCAPE' a_expr | 'ILIKE' a_expr | 'ILIKE' a_expr 'ESCAPE' a_expr | 'NOT' 'ILIKE' a_expr | 'NOT' 'ILIKE' a_expr 'ESCAPE' a_expr | 'SIMILAR' 'TO' a_expr | 'SIMILAR' 'TO' a_expr 'ESCAPE' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr 'ESCAPE' a_expr | '~' a_expr | 'NOT_REGMATCH' a_expr | 'REGIMATCH' a_expr | 'NOT_REGIMATCH' a_expr | 'IS' 'NAN' | 'IS' 'NOT' 'NAN' | 'IS' 'NULL' | 'ISNULL' | 'IS' 'NOT' 'NULL' | 'NOTNULL' | 'IS' 'TRUE' | 'IS' 'NOT' 'TRUE' | 'IS' 'FALSE' | 'IS' 'NOT' 'FALSE' | 'IS' 'UNKNOWN' | 'IS' 'NOT' 'UNKNOWN' | 'IS' 'DISTINCT' 'FROM' a_expr | 'IS' 'NOT' 'DISTINCT' 'FROM' a_expr | 'IS' 'OF' '(' type_list ')' | 'IS' 'NOT' 'OF' '(' type_list ')' | 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'NOT' 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'NOT' 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'IN' in_expr | 'NOT' 'IN' in_expr | subquery_op sub_type a_expr ) )*
+	( c_expr | '+' a_expr | '-' a_expr | '~' a_expr | 'SQRT' a_expr | 'CBRT' a_expr | qual_op a_expr | 'NOT' a_expr | 'NOT' a_expr | row 'OVERLAPS' row | 'DEFAULT' ) ( ( 'TYPECAST' cast_target | 'TYPEANNOTATE' typename | 'COLLATE' collation_name | 'AT' 'TIME' 'ZONE' a_expr | '+' a_expr | '-' a_expr | '*' a_expr | '/' a_expr | 'FLOORDIV' a_expr | '%' a_expr | '^' a_expr | '#' a_expr | '&' a_expr | '|' a_expr | '<' a_expr | '>' a_expr | '?' a_expr | 'JSON_SOME_EXISTS' a_expr | 'JSON_ALL_EXISTS' a_expr | 'CONTAINS' a_expr | 'CONTAINED_BY' a_expr | '=' a_expr | 'CONCAT' a_expr | 'LSHIFT' a_expr | 'RSHIFT' a_expr | 'FETCHVAL' a_expr | 'FETCHTEXT' a_expr | 'FETCHVAL_PATH' a_expr | 'FETCHTEXT_PATH' a_expr | 'REMOVE_PATH' a_expr | 'INET_CONTAINED_BY_OR_EQUALS' a_expr | 'AND_AND' a_expr | 'INET_CONTAINS_OR_EQUALS' a_expr | 'LESS_EQUALS' a_expr | 'GREATER_EQUALS' a_expr | 'NOT_EQUALS' a_expr | qual_op a_expr | 'AND' a_expr | 'OR' a_expr | 'LIKE' a_expr | 'LIKE' a_expr 'ESCAPE' a_expr | 'NOT' 'LIKE' a_expr | 'NOT' 'LIKE' a_expr 'ESCAPE' a_expr | 'ILIKE' a_expr | 'ILIKE' a_expr 'ESCAPE' a_expr | 'NOT' 'ILIKE' a_expr | 'NOT' 'ILIKE' a_expr 'ESCAPE' a_expr | 'SIMILAR' 'TO' a_expr | 'SIMILAR' 'TO' a_expr 'ESCAPE' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr 'ESCAPE' a_expr | '~' a_expr | 'NOT_REGMATCH' a_expr | 'REGIMATCH' a_expr | 'NOT_REGIMATCH' a_expr | 'IS' 'NAN' | 'IS' 'NOT' 'NAN' | 'IS' 'NULL' | 'ISNULL' | 'IS' 'NOT' 'NULL' | 'NOTNULL' | 'IS' 'TRUE' | 'IS' 'NOT' 'TRUE' | 'IS' 'FALSE' | 'IS' 'NOT' 'FALSE' | 'IS' 'UNKNOWN' | 'IS' 'NOT' 'UNKNOWN' | 'IS' 'DISTINCT' 'FROM' a_expr | 'IS' 'NOT' 'DISTINCT' 'FROM' a_expr | 'IS' 'OF' '(' type_list ')' | 'IS' 'NOT' 'OF' '(' type_list ')' | 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'NOT' 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'NOT' 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'IN' in_expr | 'NOT' 'IN' in_expr | subquery_op sub_type a_expr ) )*
 
 for_schedules_clause ::=
 	'FOR' 'SCHEDULES' select_stmt
@@ -1632,11 +1637,6 @@ changefeed_targets ::=
 
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
-
-opt_with_replication_options ::=
-	'WITH' replication_options_list
-	| 'WITH' 'OPTIONS' '(' replication_options_list ')'
-	| 
 
 with_clause ::=
 	'WITH' cte_list
@@ -1765,6 +1765,11 @@ var_value ::=
 	a_expr
 	| extra_var_value
 
+show_backup_details ::=
+	'SCHEMAS'
+	| 'FILES'
+	| 'RANGES'
+
 with_comment ::=
 	'WITH' 'COMMENT'
 	| 
@@ -1819,6 +1824,10 @@ partition_name ::=
 
 opt_for_roles ::=
 	'FOR' role_or_group_or_user role_spec_list
+	| 
+
+opt_in_schema ::=
+	'IN' 'SCHEMA' schema_name
 	| 
 
 relation_expr ::=
@@ -2003,6 +2012,9 @@ alter_database_primary_region_stmt ::=
 alter_database_add_super_region ::=
 	'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' name 'VALUES' name_list
 
+alter_database_alter_super_region ::=
+	'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' name 'VALUES' name_list
+
 alter_database_drop_super_region ::=
 	'ALTER' 'DATABASE' database_name 'DROP' 'SUPER' 'REGION' name
 
@@ -2019,6 +2031,9 @@ alter_zone_partition_stmt ::=
 	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
+
+schema_name ::=
+	name
 
 opt_add_val_placement ::=
 	'BEFORE' 'SCONST'
@@ -2245,9 +2260,6 @@ changefeed_target ::=
 	| table_name
 	| 'TABLE' table_name 'FAMILY' family_name
 	| table_name 'FAMILY' family_name
-
-replication_options_list ::=
-	( replication_options ) ( ( ',' replication_options ) )*
 
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*
@@ -2769,10 +2781,6 @@ enum_val_list ::=
 
 family_name ::=
 	name
-
-replication_options ::=
-	'CURSOR' '=' a_expr
-	| 'DETACHED'
 
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'

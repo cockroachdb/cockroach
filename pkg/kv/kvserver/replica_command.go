@@ -184,7 +184,7 @@ func splitTxnAttempt(
 ) error {
 	txn.SetDebugName(splitTxnName)
 
-	_, dbDescValue, err := conditionalGetDescValueFromDB(
+	_, dbDescValue, _, err := conditionalGetDescValueFromDB(
 		ctx, txn, oldDesc.StartKey, false /* forUpdate */, checkDescsEqual(oldDesc))
 	if err != nil {
 		return err
@@ -256,7 +256,7 @@ func splitTxnAttempt(
 func splitTxnStickyUpdateAttempt(
 	ctx context.Context, txn *kv.Txn, desc *roachpb.RangeDescriptor, expiration hlc.Timestamp,
 ) error {
-	_, dbDescValue, err := conditionalGetDescValueFromDB(
+	_, dbDescValue, _, err := conditionalGetDescValueFromDB(
 		ctx, txn, desc.StartKey, false /* forUpdate */, checkDescsEqual(desc))
 	if err != nil {
 		return err
@@ -473,7 +473,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, dbDescValue, err := conditionalGetDescValueFromDB(
+		_, dbDescValue, _, err := conditionalGetDescValueFromDB(
 			ctx, txn, desc.StartKey, false /* forUpdate */, checkDescsEqual(desc))
 		if err != nil {
 			return err
@@ -613,7 +613,7 @@ func (r *Replica) AdminMerge(
 		// the merge's transaction record. It is critical to the range merge
 		// protocol that the transaction record be placed on the the left hand
 		// side's descriptor, as the MergeTrigger depends on this.
-		_, dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(
+		_, dbOrigLeftDescValue, _, err := conditionalGetDescValueFromDB(
 			ctx, txn, origLeftDesc.StartKey, true /* forUpdate */, checkDescsEqual(origLeftDesc))
 		if err != nil {
 			return err
@@ -1058,21 +1058,6 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	// Before we initialize learners, check that we're not removing the leaseholder.
-	// Or if we are, ensure that leaseholder is collocated with the Raft leader.
-	// A leaseholder that isn't the Raft leader doesn't know whether other replicas
-	// are sufficiently up-to-date (have the latest snapshot), and so choosing a
-	// target for lease transfer is riskier as it may result in temporary unavailability.
-	for _, target := range targets.voterRemovals {
-		if r.NodeID() == target.NodeID && r.StoreID() == target.StoreID {
-			raftStatus := r.RaftStatus()
-			if raftStatus == nil || len(raftStatus.Progress) == 0 {
-				log.VErrEventf(ctx, 5, "%v", errLeaseholderNotRaftLeader)
-				return nil, errLeaseholderNotRaftLeader
-			}
-		}
-	}
-
 	if adds := targets.voterAdditions; len(adds) > 0 {
 		// For all newly added voters, first add LEARNER replicas. They accept raft
 		// traffic (so they can catch up) but don't get to vote (so they don't
@@ -1139,7 +1124,7 @@ func (r *Replica) changeReplicasImpl(
 
 	if removals := targets.nonVoterRemovals; len(removals) > 0 {
 		for _, rem := range removals {
-			iChgs := []internalReplicationChange{{target: rem, typ: internalChangeTypeRemove}}
+			iChgs := []internalReplicationChange{{target: rem, typ: internalChangeTypeRemoveNonVoter}}
 			var err error
 			desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs,
 				changeReplicasTxnArgs{
@@ -1210,56 +1195,43 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 	// complete. If we don't find the current leaseholder there this means it's being removed,
 	// and we're going to transfer the lease to another voter below, before exiting the JOINT config.
 	beingRemoved := true
+	voterIncomingTarget := roachpb.ReplicaDescriptor{}
 	for _, v := range voters {
-		if v.ReplicaID == r.ReplicaID() {
+		if beingRemoved && v.ReplicaID == r.ReplicaID() {
 			beingRemoved = false
-			break
+		}
+		if voterIncomingTarget == (roachpb.ReplicaDescriptor{}) &&
+			v.GetType() == roachpb.VOTER_INCOMING {
+			voterIncomingTarget = v
 		}
 	}
 	if !beingRemoved {
 		return nil
 	}
-	// TransferLeaseTarget looks for a suitable target for lease transfer.
-	// Replicas are filtered from considerations based on the arguments passed,
-	// as well as various indicators. One such filtering is a requirement that a
-	// target replica has applied a snapshot. We exclude VOTER_INCOMING replicas
-	// from this check, since they only move to this state after applying a
-	// snapshot. Another filtering is based on the lieveness status of nodes
-	// We do not transfer the lease to nodes in draining or unknown state.
-	// Unknown is a temporary state, and is usually resolved after receiving a
-	// gossip message. But we do not know whether a particular node is alive,
-	// and would rather stay in the JOINT config than transferring the lease
-	// to a dead node. If no candidates are found, we will remain in a JOINT
-	// config, and rely on upper layers to retry exiting from the config.
-	target := r.store.allocator.TransferLeaseTarget(
-		ctx,
-		r.SpanConfig(),
-		voters,
-		r,
-		r.leaseholderStats,
-		true, /* forceDecisionWithoutStats */
-		transferLeaseOptions{
-			goal:                     followTheWorkload,
-			checkTransferLeaseSource: false,
-			checkCandidateFullness:   false,
-			dryRun:                   false,
-		},
-	)
-	if target == (roachpb.ReplicaDescriptor{}) {
-		err := errors.Errorf(
-			"could not find a better lease transfer target for r%d", desc.RangeID)
-		log.VErrEventf(ctx, 5, "%v", err)
-		// Couldn't find a target. Returning nil means we're not exiting the JOINT config, and the
-		// caller will retry. Note that the JOINT config isn't rolled back.
-		return err
+
+	if voterIncomingTarget == (roachpb.ReplicaDescriptor{}) {
+		// Couldn't find a VOTER_INCOMING target. When the leaseholder is being
+		// removed, we only enter a JOINT config if there is a VOTER_INCOMING
+		// replica. We also do not allow a demoted replica to accept the lease
+		// during a JOINT config. However, it is possible that our replica lost
+		// the lease and the new leaseholder is trying to remove it. In this case,
+		// it is possible that there is no VOTER_INCOMING replica.
+		// We check for this case in replica_raft propose, so here it is safe
+		// to continue trying to leave the JOINT config. If this is the case,
+		// our replica will not be able to leave the JOINT config, but the new
+		// leaseholder will be able to do so.
+		log.Infof(ctx, "no VOTER_INCOMING to transfer lease to. This replica probably lost the lease,"+
+			" but still thinks its the leaseholder. In this case the new leaseholder is expected to "+
+			"complete LEAVE_JOINT. Range descriptor: %v", desc)
+		return nil
 	}
 	log.VEventf(ctx, 5, "current leaseholder %v is being removed through an"+
-		" atomic replication change. Transferring lease to %v", r.String(), target)
-	err := r.store.DB().AdminTransferLease(ctx, r.startKey, target.StoreID)
+		" atomic replication change. Transferring lease to %v", r.String(), voterIncomingTarget)
+	err := r.store.DB().AdminTransferLease(ctx, r.startKey, voterIncomingTarget.StoreID)
 	if err != nil {
 		return err
 	}
-	log.VEventf(ctx, 5, "leaseholder transfer to %v complete", target)
+	log.VEventf(ctx, 5, "leaseholder transfer to %v complete", voterIncomingTarget)
 	return nil
 }
 
@@ -1306,6 +1278,27 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 		})
 }
 
+// TestingRemoveLearner is used by tests to manually remove a learner replica.
+func (r *Replica) TestingRemoveLearner(
+	ctx context.Context, beforeDesc *roachpb.RangeDescriptor, target roachpb.ReplicationTarget,
+) (*roachpb.RangeDescriptor, error) {
+	desc, err := execChangeReplicasTxn(
+		ctx, beforeDesc, kvserverpb.ReasonAbandonedLearner, "",
+		[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
+		changeReplicasTxnArgs{
+			db:                                   r.store.DB(),
+			liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+			logChange:                            r.store.logChange,
+			testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
+			testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
+		},
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, `removing learners from %s`, beforeDesc)
+	}
+	return desc, err
+}
+
 // maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
 // returns, all remaining replicas will be of type VOTER_FULL or NON_VOTER.
@@ -1317,6 +1310,9 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 		return nil, err
 	}
 
+	if fn := r.store.TestingKnobs().BeforeRemovingDemotedLearner; fn != nil {
+		fn()
+	}
 	// Now the config isn't joint any more, but we may have demoted some voters
 	// into learners. These learners should go as well.
 	learners := desc.Replicas().LearnerDescriptors()
@@ -1339,7 +1335,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 		var err error
 		desc, err = execChangeReplicasTxn(
 			ctx, desc, kvserverpb.ReasonAbandonedLearner, "",
-			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
+			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
 			changeReplicasTxnArgs{db: store.DB(),
 				liveAndDeadReplicas:                  store.allocator.storePool.liveAndDeadReplicas,
 				logChange:                            store.logChange,
@@ -1859,7 +1855,7 @@ func (r *Replica) execReplicationChangesForVoters(
 	}
 
 	for _, target := range voterRemovals {
-		typ := internalChangeTypeRemove
+		typ := internalChangeTypeRemoveLearner
 		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.GetType() == roachpb.VOTER_FULL {
 			typ = internalChangeTypeDemoteVoterToLearner
 		}
@@ -1898,10 +1894,19 @@ func (r *Replica) tryRollbackRaftLearner(
 	details string,
 ) {
 	repDesc, ok := rangeDesc.GetReplicaDescriptor(target.StoreID)
-	isLearnerOrNonVoter := repDesc.GetType() == roachpb.LEARNER || repDesc.GetType() == roachpb.NON_VOTER
-	if !ok || !isLearnerOrNonVoter {
+	if !ok {
 		// There's no learner to roll back.
 		log.Event(ctx, "learner to roll back not found; skipping")
+		return
+	}
+	var removeChgType internalChangeType
+	switch repDesc.GetType() {
+	case roachpb.NON_VOTER:
+		removeChgType = internalChangeTypeRemoveNonVoter
+	case roachpb.LEARNER:
+		removeChgType = internalChangeTypeRemoveLearner
+	default:
+		log.Event(ctx, "replica to rollback is no longer a learner; skipping")
 		return
 	}
 
@@ -1914,7 +1919,7 @@ func (r *Replica) tryRollbackRaftLearner(
 	rollbackFn := func(ctx context.Context) error {
 		_, err := execChangeReplicasTxn(
 			ctx, rangeDesc, reason, details,
-			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
+			[]internalReplicationChange{{target: target, typ: removeChgType}},
 			changeReplicasTxnArgs{
 				db:                                   r.store.DB(),
 				liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
@@ -1968,7 +1973,8 @@ const (
 	// NB: can't remove multiple learners at once (need to remove at least one
 	// voter with them), see:
 	// https://github.com/cockroachdb/cockroach/pull/40268
-	internalChangeTypeRemove
+	internalChangeTypeRemoveLearner
+	internalChangeTypeRemoveNonVoter
 )
 
 // internalReplicationChange is a replication target together with an internal
@@ -1989,6 +1995,9 @@ func (c internalReplicationChanges) useJoint() bool {
 	isDemotion := c[0].typ == internalChangeTypeDemoteVoterToNonVoter ||
 		c[0].typ == internalChangeTypeDemoteVoterToLearner
 	return len(c) > 1 || isDemotion
+}
+func (c internalReplicationChanges) isSingleLearnerRemoval() bool {
+	return len(c) == 1 && c[0].typ == internalChangeTypeRemoveLearner
 }
 
 func prepareChangeReplicasTrigger(
@@ -2041,7 +2050,7 @@ func prepareChangeReplicasTrigger(
 						chg.target)
 				}
 				added = append(added, rDesc)
-			case internalChangeTypeRemove:
+			case internalChangeTypeRemoveLearner, internalChangeTypeRemoveNonVoter:
 				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
 				if !ok {
 					return nil, errors.Errorf("target %s not found", chg.target)
@@ -2197,19 +2206,39 @@ func execChangeReplicasTxn(
 
 	descKey := keys.RangeDescriptorKey(referenceDesc.StartKey)
 
-	check := func(kvDesc *roachpb.RangeDescriptor) bool {
+	check := func(kvDesc *roachpb.RangeDescriptor) (matched, skip bool) {
 		// NB: We might fail to find the range if the range has been merged away
 		// in which case we definitely want to fail the check below.
-		if kvDesc != nil && kvDesc.RangeID == referenceDesc.RangeID && chgs.leaveJoint() {
-			// If there are no changes, we're trying to leave a joint config,
-			// so that's all we care about. But since leaving a joint config
-			// is done opportunistically whenever one is encountered, this is
-			// more likely to race than other operations. So we verify literally
-			// nothing about the descriptor, but once we get the descriptor out
-			// from conditionalGetDescValueFromDB, we'll check if it's in a
-			// joint config and if not, noop.
-			return true
+		if kvDesc != nil && kvDesc.RangeID == referenceDesc.RangeID {
+			if chgs.leaveJoint() && !kvDesc.Replicas().InAtomicReplicationChange() {
+				// If there are no changes, we're trying to leave a joint config, so
+				// that's all we care about. But since leaving a joint config is done
+				// opportunistically whenever one is encountered, this is more likely to
+				// race than other operations. So we verify that the descriptor fetched
+				// from kv is indeed in a joint config, and hint to the caller that it
+				// can no-op this replication change.
+				log.Infof(
+					ctx, "we were trying to exit a joint config but found that we are no longer in one; skipping",
+				)
+				return false /* matched */, true /* skip */
+			}
+			if chgs.isSingleLearnerRemoval() {
+				// If we're simply trying to remove a learner replica, but find that
+				// that learner has already been removed from the range, we can no-op.
+				learnerAlreadyRemoved := true
+				for _, repl := range kvDesc.Replicas().Descriptors() {
+					if repl.StoreID == chgs[0].target.StoreID {
+						learnerAlreadyRemoved = false
+						break
+					}
+				}
+				if learnerAlreadyRemoved {
+					log.Infof(ctx, "skipping learner removal because it was already removed")
+					return false /* matched */, true /* skip */
+				}
+			}
 		}
+
 		// Otherwise, check that the descriptors are equal.
 		//
 		// TODO(tbg): check that the replica sets are equal only. I was going to
@@ -2220,13 +2249,13 @@ func execChangeReplicasTxn(
 	if err := args.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
-		desc, dbDescValue, err := conditionalGetDescValueFromDB(
+		desc, dbDescValue, skip, err := conditionalGetDescValueFromDB(
 			ctx, txn, referenceDesc.StartKey, false /* forUpdate */, check)
 		if err != nil {
 			return err
 		}
-		if chgs.leaveJoint() && !desc.Replicas().InAtomicReplicationChange() {
-			// Nothing to do. See comment in 'check' above for details.
+		if skip {
+			// The new descriptor already reflects what we needed to get done.
 			returnDesc = desc
 			return nil
 		}
@@ -2619,6 +2648,7 @@ func (r *Replica) sendSnapshot(
 				snap,
 				newBatchFn,
 				sent,
+				r.store.metrics.RangeSnapshotSentBytes,
 			)
 		})
 	if err != nil {
@@ -2662,9 +2692,11 @@ func replicasCollocated(a, b []roachpb.ReplicaDescriptor) bool {
 	return true
 }
 
-func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescriptor) bool {
-	return func(desc2 *roachpb.RangeDescriptor) bool {
-		return desc.Equal(desc2)
+func checkDescsEqual(
+	desc *roachpb.RangeDescriptor,
+) func(*roachpb.RangeDescriptor) (matched bool, skip bool) {
+	return func(desc2 *roachpb.RangeDescriptor) (matched, skip bool) {
+		return desc.Equal(desc2) /* matched */, false /* skip */
 	}
 }
 
@@ -2672,6 +2704,11 @@ func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescripto
 // checks that it matches the given expectation using proto Equals, and returns
 // the raw fetched roachpb.Value. If the fetched value doesn't match the
 // expectation, a ConditionFailedError is returned.
+//
+// The supplied `check` method verifies whether the descriptor fetched from kv
+// matches expectations and returns a "skip" hint. When this hint is returned
+// true, we don't care if the descriptor matches or not. This hint is true for
+// callers that are determined to be performing idempotent operations.
 //
 // The method allows callers to specify whether a locking read should be used or
 // not. A locking read can be used to manage contention and avoid transaction
@@ -2699,8 +2736,8 @@ func conditionalGetDescValueFromDB(
 	txn *kv.Txn,
 	startKey roachpb.RKey,
 	forUpdate bool,
-	check func(*roachpb.RangeDescriptor) bool,
-) (*roachpb.RangeDescriptor, []byte, error) {
+	check func(*roachpb.RangeDescriptor) (matched, skip bool),
+) (kvDesc *roachpb.RangeDescriptor, kvDescBytes []byte, skip bool, err error) {
 	get := txn.Get
 	if forUpdate {
 		get = txn.GetForUpdate
@@ -2708,20 +2745,26 @@ func conditionalGetDescValueFromDB(
 	descKey := keys.RangeDescriptorKey(startKey)
 	existingDescKV, err := get(ctx, descKey)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "fetching current range descriptor value")
+		return nil, nil, false /* skip */, errors.Wrap(err, "fetching current range descriptor value")
 	}
 	var existingDesc *roachpb.RangeDescriptor
 	if existingDescKV.Value != nil {
 		existingDesc = &roachpb.RangeDescriptor{}
 		if err := existingDescKV.Value.GetProto(existingDesc); err != nil {
-			return nil, nil, errors.Wrap(err, "decoding current range descriptor value")
+			return nil, nil, false /* skip */, errors.Wrap(err, "decoding current range descriptor value")
 		}
 	}
 
-	if !check(existingDesc) {
-		return nil, nil, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
+	matched, skip := check(existingDesc)
+	if skip {
+		// If the `check` method returned `skip=true`, we don't care whether the
+		// descriptor matched or not.
+		return existingDesc, existingDescKV.Value.TagAndDataBytes(), true /* skip */, nil
 	}
-	return existingDesc, existingDescKV.Value.TagAndDataBytes(), nil
+	if !matched {
+		return nil, nil, false /* skip */, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
+	}
+	return existingDesc, existingDescKV.Value.TagAndDataBytes(), false /* skip */, nil
 }
 
 // updateRangeDescriptor adds a ConditionalPut on the range descriptor. The
@@ -2870,30 +2913,13 @@ func (r *Replica) relocateReplicas(
 			if err != nil {
 				return rangeDesc, err
 			}
-
-			if !r.store.cfg.Settings.Version.IsActive(ctx,
-				clusterversion.EnableLeaseHolderRemoval) {
-				if leaseTarget != nil {
-					// NB: we may need to transfer even if there are no ops, to make
-					// sure the attempt is made to make the first target the final
-					// leaseholder.
-					if err := transferLease(*leaseTarget); err != nil {
-						return rangeDesc, err
-					}
+			if leaseTarget != nil {
+				if err := transferLease(*leaseTarget); err != nil {
+					return rangeDesc, err
 				}
-				if len(ops) == 0 {
-					// Done
-					return rangeDesc, ctx.Err()
-				}
-			} else if len(ops) == 0 {
-				if len(voterTargets) > 0 && transferLeaseToFirstVoter {
-					// NB: we may need to transfer even if there are no ops, to make
-					// sure the attempt is made to make the first target the final
-					// leaseholder.
-					if err := transferLease(voterTargets[0]); err != nil {
-						return rangeDesc, err
-					}
-				}
+			}
+			if len(ops) == 0 {
+				// Done
 				return rangeDesc, ctx.Err()
 			}
 
@@ -3034,7 +3060,7 @@ func (r *Replica) relocateOne(
 			conf,
 			existingVoters,
 			existingNonVoters,
-			r.store.allocator.scorerOptions(),
+			r.store.allocator.scorerOptions(ctx),
 			// NB: Allow the allocator to return target stores that might be on the
 			// same node as an existing replica. This is to ensure that relocations
 			// that require "lateral" movement of replicas within a node can succeed.
@@ -3086,6 +3112,7 @@ func (r *Replica) relocateOne(
 		shouldAdd = true
 	}
 
+	lhRemovalAllowed := false
 	var transferTarget *roachpb.ReplicationTarget
 	if len(args.targetsToRemove()) > 0 {
 		// Pick a replica to remove. Note that existingVoters/existingNonVoters may
@@ -3103,7 +3130,7 @@ func (r *Replica) relocateOne(
 			existingVoters,
 			existingNonVoters,
 			args.targetType,
-			r.store.allocator.scorerOptions(),
+			r.store.allocator.scorerOptions(ctx),
 		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(
@@ -3127,9 +3154,12 @@ func (r *Replica) relocateOne(
 		if err := r.store.DB().Run(ctx, &b); err != nil {
 			return nil, nil, errors.Wrap(err, "looking up lease")
 		}
-		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
-		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) ||
+		// Determines whether we can remove the leaseholder without first
+		// transferring the lease away.
+		lhRemovalAllowed = len(args.votersToAdd) > 0 &&
 			r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
+		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
+		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) || lhRemovalAllowed
 		if args.targetType == voterTarget {
 			// If the voter being removed is about to be added as a non-voter, then we
 			// can just demote it.
@@ -3321,6 +3351,11 @@ func (r *Replica) adminScatter(
 	maxAttempts := len(r.Desc().Replicas().Descriptors())
 	currentAttempt := 0
 
+	if args.MaxSize > 0 {
+		if existing, limit := r.GetMVCCStats().Total(), args.MaxSize; existing > limit {
+			return roachpb.AdminScatterResponse{}, errors.Errorf("existing range size %d exceeds specified limit %d", existing, limit)
+		}
+	}
 	// Loop until the replicate queue decides there is nothing left to do or until
 	// we hit `maxAttempts` for the range. Note that we disable lease transfers
 	// until the final step as transferring the lease prevents any further action
@@ -3356,14 +3391,17 @@ func (r *Replica) adminScatter(
 	// probability 1/N of choosing each.
 	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
 		desc := r.Desc()
-		// Learner replicas aren't allowed to become the leaseholder or raft leader,
-		// so only consider the `VoterDescriptors` replicas.
-		voterReplicas := desc.Replicas().VoterDescriptors()
-		newLeaseholderIdx := rand.Intn(len(voterReplicas))
-		targetStoreID := voterReplicas[newLeaseholderIdx].StoreID
-		if targetStoreID != r.store.StoreID() {
-			if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
-				log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
+		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
+			ctx, r.SpanConfig(), desc.Replicas().VoterDescriptors(), r, false, /* excludeLeaseRepl */
+		)
+		if len(potentialLeaseTargets) > 0 {
+			newLeaseholderIdx := rand.Intn(len(potentialLeaseTargets))
+			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID
+			if targetStoreID != r.store.StoreID() {
+				log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
+				if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
+					log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
+				}
 			}
 		}
 	}

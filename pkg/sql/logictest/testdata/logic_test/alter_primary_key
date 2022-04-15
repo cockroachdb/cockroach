@@ -269,7 +269,7 @@ t  CREATE TABLE public.t (
    INDEX i2 (y ASC),
    UNIQUE INDEX i4 (z ASC),
    UNIQUE INDEX i5 (w ASC) STORING (y),
-   INVERTED INDEX i6 (v),
+   INVERTED INDEX i6 (v ASC),
    INDEX i7 (z ASC) USING HASH WITH (bucket_count=4),
    FAMILY fam_0_x_y_z_w_v (x, y, z, w, v)
 )
@@ -1585,3 +1585,51 @@ SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
 COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
 COMMENT ON CONSTRAINT pkey_comment_a_b_key ON public.pkey_comment IS 'const';
 COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+
+subtest test-index-deduplication
+
+# Regression for #78046: `ALTER PRIMARY KEY` should not create a secondary
+# index on the (old) primary key columns when there is already a secondary
+# index thereof.
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL, UNIQUE INDEX t_a_key (a));
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b);
+
+query TTT
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t]
+----
+t_pkey   b  ASC
+t_pkey   a  N/A
+t_a_key  a  ASC
+t_a_key  b  ASC
+
+# But if the existing index is not strictly equal to the (old) primary key
+# (even if, for example, the (old) primary key is a strict prefix of an
+# existing index), a secondary index on the (old) PK columns will still be
+# created.
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL, UNIQUE INDEX t_a_b_key (a, b));
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b);
+
+# Note that index `t_a_b_key` and `t_a_key` shall not be deemed as identical
+# even if they both have columns (a, b) in the sense that one enforces uniqueness
+# on only (a) but the other on (a, b).
+query TTTB
+SELECT index_name, column_name, direction, storing FROM [SHOW INDEXES FROM t]
+----
+t_pkey     b  ASC  false
+t_pkey     a  N/A  true
+t_a_b_key  a  ASC  false
+t_a_b_key  b  ASC  false
+t_a_key    a  ASC  false
+t_a_key    b  ASC  true

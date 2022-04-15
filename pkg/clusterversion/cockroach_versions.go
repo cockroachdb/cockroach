@@ -53,7 +53,7 @@ type Key int
 //     is as yet inactive. Consider the sender:
 //
 //      func invokeSomeRPC(req) {
-//	        if (specific-version is active) {
+//          if (specific-version is active) {
 //              // Like mentioned above, this implies that all nodes in the
 //              // cluster are running binaries that can handle this new
 //              // feature. We may have learned about this fact before the
@@ -63,9 +63,9 @@ type Key int
 //              // where that happens. Still, it's safe for us to enable the new
 //              // feature flags as we trust the recipient to know how to deal
 //              // with it.
-//		        req.NewFeatureFlag = true
-//	        }
-//	        send(req)
+//            req.NewFeatureFlag = true
+//          }
+//          send(req)
 //      }
 //
 //    And consider the recipient:
@@ -313,10 +313,38 @@ const (
 	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
 	PebbleFormatSplitUserKeysMarked
-
 	// IncrementalBackupSubdir enables backing up new incremental backups to a
 	// dedicated subdirectory, to make it easier to apply a different ttl.
 	IncrementalBackupSubdir
+	// DateStyleIntervalStyleCastRewrite rewrites cast that cause inconsistencies
+	// when DateStyle/IntervalStyle is enabled.
+	DateStyleIntervalStyleCastRewrite
+	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
+	// 22.1.
+	EnableNewStoreRebalancer
+	// ClusterLocksVirtualTable enables querying the crdb_internal.cluster_locks
+	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
+	ClusterLocksVirtualTable
+	// AutoStatsTableSettings is the version where we allow auto stats related
+	// table settings.
+	AutoStatsTableSettings
+	// ForecastStats enables statistics forecasting per table.
+	ForecastStats
+	// SuperRegions enables the usage on super regions.
+	SuperRegions
+	// EnableNewChangefeedOptions enables the usage of new changefeed options
+	// such as end_time, initial_scan_only, and setting the value of initial_scan
+	// to 'yes|no|only'
+	EnableNewChangefeedOptions
+	// SpanCountTable adds system.span_count to track the number of committed
+	// tenant spans.
+	SpanCountTable
+	// PreSeedSpanCountTable precedes PreSeedSpanCountTable, it enables span
+	// accounting for incremental schema changes.
+	PreSeedSpanCountTable
+	// SeedSpanCountTable seeds system.span_count with the number of committed
+	// tenant spans.
+	SeedSpanCountTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -528,6 +556,47 @@ var versionsSingleton = keyedVersions{
 		Key:     IncrementalBackupSubdir,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 92},
 	},
+	{
+		Key:     DateStyleIntervalStyleCastRewrite,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
+	},
+	{
+		Key:     EnableNewStoreRebalancer,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
+	},
+	{
+		Key:     ClusterLocksVirtualTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 98},
+	},
+	{
+		Key:     AutoStatsTableSettings,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 100},
+	},
+	{
+		Key:     ForecastStats,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 102},
+	},
+	{
+		Key:     SuperRegions,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 104},
+	},
+	{
+		Key:     EnableNewChangefeedOptions,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
+	},
+	{
+		Key:     SpanCountTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 108},
+	},
+	{
+		Key:     PreSeedSpanCountTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 110},
+	},
+	{
+		Key:     SeedSpanCountTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 112},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

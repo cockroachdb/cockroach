@@ -172,6 +172,25 @@ func (tc *Collection) getDescriptorsByID(
 		return nil, err
 	}
 	for j, desc := range kvDescs {
+		// Callers expect the descriptors to come back hydrated.
+		// In practice, array types here are not hydrated, and that's a bummer.
+		// Nobody presently is upset about it, but it's not a good thing.
+		// Ideally we'd have a clearer contract regarding hydration and the values
+		// stored in the various maps inside the collection. One might want to
+		// store only hydrated values in the various maps. This turns out to be
+		// somewhat tricky because we'd need to make sure to properly re-hydrate
+		// all the relevant descriptors when a type descriptor change. Leased
+		// descriptors are at least as tricky, plus, there we have a cache that
+		// works relatively well.
+		//
+		// TODO(ajwerner): Sort out the hydration mess; define clearly what is
+		// hydrated where and test the API boundary accordingly.
+		if table, isTable := desc.(catalog.TableDescriptor); isTable {
+			desc, err = tc.hydrateTypesInTableDesc(ctx, txn, table)
+			if err != nil {
+				return nil, err
+			}
+		}
 		descs[indexes[j]] = desc
 	}
 	return descs, nil
@@ -271,13 +290,17 @@ func (tc *Collection) getByName(
 	sc catalog.SchemaDescriptor,
 	name string,
 	avoidLeased, mutable, avoidSynthetic bool,
+	alwaysLookupLeasedPublicSchema bool, // passed through to getSchemaByName
 ) (found bool, desc catalog.Descriptor, err error) {
 	var parentID, parentSchemaID descpb.ID
 	if db != nil {
 		if sc == nil {
 			// Schema descriptors are handled in a special way, see getSchemaByName
 			// function declaration for details.
-			return getSchemaByName(ctx, tc, txn, db, name, avoidLeased, mutable, avoidSynthetic)
+			return getSchemaByName(
+				ctx, tc, txn, db, name, avoidLeased, mutable, avoidSynthetic,
+				alwaysLookupLeasedPublicSchema,
+			)
 		}
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
 	}
@@ -338,7 +361,7 @@ func (tc *Collection) getByName(
 	if err != nil {
 		return false, nil, err
 	}
-	return true, descs[0], err
+	return descs[0] != nil, descs[0], err
 }
 
 // withReadFromStore updates the state of the Collection, especially its
@@ -385,6 +408,16 @@ func (tc *Collection) deadlineHolder(txn *kv.Txn) deadlineHolder {
 //
 // TODO(ajwerner): Understand and rationalize the namespace lookup given the
 // schema lookup by ID path only returns descriptors owned by this session.
+//
+// The alwaysLookupLeasedPublicSchema parameter indicates that a missing public
+// schema entry in the database descriptor should not be interpreted to
+// mean that the public schema is the synthetic public schema, and, instead
+// the public schema should be looked up via the lease manager by name.
+// This is a workaround activated during the public schema migration to
+// avoid a situation where the database does not know about the new public
+// schema but the table in the lease manager does.
+//
+// TODO(ajwerner): Remove alwaysLookupLeasedPublicSchema in 22.2.
 func getSchemaByName(
 	ctx context.Context,
 	tc *Collection,
@@ -392,8 +425,17 @@ func getSchemaByName(
 	db catalog.DatabaseDescriptor,
 	name string,
 	avoidLeased, mutable, avoidSynthetic bool,
+	alwaysLookupLeasedPublicSchema bool,
 ) (bool, catalog.Descriptor, error) {
 	if !db.HasPublicSchemaWithDescriptor() && name == tree.PublicSchema {
+		// TODO(ajwerner): Remove alwaysLookupLeasedPublicSchema in 22.2.
+		if alwaysLookupLeasedPublicSchema {
+			desc, _, err := tc.leased.getByName(ctx, txn, db.GetID(), 0, catconstants.PublicSchemaName)
+			if err != nil {
+				return false, desc, err
+			}
+			return true, desc, nil
+		}
 		return true, schemadesc.GetPublicSchema(), nil
 	}
 	if sc := tc.virtual.getSchemaByName(name); sc != nil {

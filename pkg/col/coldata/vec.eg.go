@@ -544,7 +544,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 						if nulls.NullAt(selIdx) {
 							m.nulls.SetNull(i + args.DestIdx)
 						} else {
-							toCol.copy(fromCol, i+args.DestIdx, selIdx)
+							toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 						}
 					}
 					return
@@ -553,7 +553,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 				for i := 0; i < n; i++ {
 					//gcassert:bce
 					selIdx := sel[i]
-					toCol.copy(fromCol, i+args.DestIdx, selIdx)
+					toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 				}
 				return
 			}
@@ -850,7 +850,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 						if nulls.NullAt(selIdx) {
 							m.nulls.SetNull(i + args.DestIdx)
 						} else {
-							toCol.copy(fromCol, i+args.DestIdx, selIdx)
+							toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 						}
 					}
 					return
@@ -859,7 +859,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 				for i := 0; i < n; i++ {
 					//gcassert:bce
 					selIdx := sel[i]
-					toCol.copy(fromCol, i+args.DestIdx, selIdx)
+					toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 				}
 				return
 			}
@@ -966,8 +966,7 @@ func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
 					if nulls.NullAt(srcIdx) {
 						m.nulls.SetNull(destIdx)
 					} else {
-						v := fromCol.Get(srcIdx)
-						toCol.Set(destIdx, v)
+						toCol.Copy(fromCol, destIdx, srcIdx)
 					}
 				}
 			} else {
@@ -976,8 +975,7 @@ func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
 					destIdx := sel[i]
 					srcIdx := order[destIdx]
 					{
-						v := fromCol.Get(srcIdx)
-						toCol.Set(destIdx, v)
+						toCol.Copy(fromCol, destIdx, srcIdx)
 					}
 				}
 			}
@@ -1222,8 +1220,7 @@ func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
 					if nulls.NullAt(srcIdx) {
 						m.nulls.SetNull(destIdx)
 					} else {
-						v := fromCol.Get(srcIdx)
-						toCol.Set(destIdx, v)
+						toCol.Copy(fromCol, destIdx, srcIdx)
 					}
 				}
 			} else {
@@ -1232,8 +1229,7 @@ func (m *memColumn) CopyWithReorderedSource(src Vec, sel, order []int) {
 					destIdx := sel[i]
 					srcIdx := order[destIdx]
 					{
-						v := fromCol.Get(srcIdx)
-						toCol.Set(destIdx, v)
+						toCol.Copy(fromCol, destIdx, srcIdx)
 					}
 				}
 			}

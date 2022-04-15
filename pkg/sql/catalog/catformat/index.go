@@ -215,10 +215,8 @@ func FormatIndexElements(
 		} else {
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
-		if index.Type != descpb.IndexDescriptor_INVERTED {
-			f.WriteByte(' ')
-			f.WriteString(index.KeyColumnDirections[i].String())
-		}
+		f.WriteByte(' ')
+		f.WriteString(index.KeyColumnDirections[i].String())
 	}
 	return nil
 }

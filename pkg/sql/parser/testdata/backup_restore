@@ -167,20 +167,36 @@ SHOW BACKUP '_' IN '_' -- literals removed
 SHOW BACKUP 'foo' IN 'bar' -- identifiers removed
 
 parse
-SHOW BACKUP FILES 'foo' IN 'bar'
+SHOW BACKUP FROM $1 IN $2 WITH foo = 'bar'
 ----
-SHOW BACKUP FILES 'foo' IN 'bar'
-SHOW BACKUP FILES ('foo') IN ('bar') -- fully parenthesized
-SHOW BACKUP FILES '_' IN '_' -- literals removed
-SHOW BACKUP FILES 'foo' IN 'bar' -- identifiers removed
+SHOW BACKUP FROM $1 IN $2 WITH foo = 'bar'
+SHOW BACKUP FROM ($1) IN ($2) WITH foo = ('bar') -- fully parenthesized
+SHOW BACKUP FROM $1 IN $2 WITH foo = '_' -- literals removed
+SHOW BACKUP FROM $1 IN $2 WITH _ = 'bar' -- identifiers removed
 
 parse
-SHOW BACKUP RANGES 'foo' IN 'bar'
+SHOW BACKUP FILES FROM 'foo' IN 'bar'
 ----
-SHOW BACKUP RANGES 'foo' IN 'bar'
-SHOW BACKUP RANGES ('foo') IN ('bar') -- fully parenthesized
-SHOW BACKUP RANGES '_' IN '_' -- literals removed
-SHOW BACKUP RANGES 'foo' IN 'bar' -- identifiers removed
+SHOW BACKUP FILES FROM 'foo' IN 'bar'
+SHOW BACKUP FILES FROM ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP FILES FROM '_' IN '_' -- literals removed
+SHOW BACKUP FILES FROM 'foo' IN 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP RANGES FROM 'foo' IN 'bar'
+----
+SHOW BACKUP RANGES FROM 'foo' IN 'bar'
+SHOW BACKUP RANGES FROM ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP RANGES FROM '_' IN '_' -- literals removed
+SHOW BACKUP RANGES FROM 'foo' IN 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar'
+----
+SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar'
+SHOW BACKUP SCHEMAS FROM ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP SCHEMAS FROM '_' IN '_' -- literals removed
+SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar' -- identifiers removed
 
 parse
 SHOW BACKUP $1 IN $2 WITH foo = 'bar'
@@ -690,12 +706,12 @@ RESTORE TENANT _ FROM ($1, $2) WITH tenant = '_' -- literals removed
 RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5' -- identifiers removed
 
 parse
-RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar'
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar' AS TENANT 321
 ----
-RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar'
-RESTORE TENANT 123 FROM REPLICATION STREAM FROM ('bar') -- fully parenthesized
-RESTORE TENANT _ FROM REPLICATION STREAM FROM '_' -- literals removed
-RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar' -- identifiers removed
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar' AS TENANT 321
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM ('bar') AS TENANT 321 -- fully parenthesized
+RESTORE TENANT _ FROM REPLICATION STREAM FROM '_' AS TENANT _ -- literals removed
+RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar' AS TENANT 321 -- identifiers removed
 
 parse
 RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1

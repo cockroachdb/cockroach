@@ -37,6 +37,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO (msbutler): when refactoring these tests to data driven tests, keep the
+// original go test on 22.1 and only use new backup syntax in data driven test
+
 func TestShowBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -47,13 +50,14 @@ func TestShowBackup(t *testing.T) {
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
-	sqlDB.Exec(t, `
+	sqlDB.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
 USE data; CREATE SCHEMA sc;
 CREATE TABLE data.sc.t1 (a INT);
 CREATE TABLE data.sc.t2 (a data.welcome);
-`)
+`,
+		`;`)...)
 
 	const full, inc, inc2 = localFoo + "/full", localFoo + "/inc", localFoo + "/inc2"
 
@@ -492,7 +496,8 @@ func TestShowBackups(t *testing.T) {
 	// check that we can show the inc layers in the individual full backups.
 	b1 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP $1 IN $2] WHERE object_type='table'`, rows[0][0], full)
 	require.Equal(t, 4, len(b1))
-	b2 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
+	b2 := sqlDBRestore.QueryStr(t,
+		`SELECT * FROM [SHOW BACKUP FROM $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
 	require.Equal(t, 3, len(b2))
 
 	require.Equal(t,
@@ -526,7 +531,8 @@ func TestShowNonDefaultBackups(t *testing.T) {
 	// Get base number of files, schemas, and ranges in the backup
 	var oldCount [3]int
 	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES"} {
-		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s LATEST IN '%s']`, typ, fullNonDefault)
+		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s']`, typ,
+			fullNonDefault)
 		count, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])
 		require.NoError(t, err, "error converting original count to integer")
 		oldCount[i] = count
@@ -540,17 +546,61 @@ func TestShowNonDefaultBackups(t *testing.T) {
 	// Show backup should contain more rows as new files/schemas/ranges were
 	// added in the incremental backup
 	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES"} {
-		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s LATEST IN '%s']`, typ, fullNonDefault)
+		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s']`, typ,
+			fullNonDefault)
 		newCount, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])
 		require.NoError(t, err, "error converting new count to integer")
 		require.Greater(t, newCount, oldCount[i])
 
-		queryInc := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s LATEST IN '%s' WITH incremental_location='%s']`, typ,
+		queryInc := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s' WITH incremental_location='%s']`, typ,
 			fullNonDefault, incNonDefault)
 		newCountInc, err := strconv.Atoi(sqlDB.QueryStr(t, queryInc)[0][0])
 		require.NoError(t, err, "error converting new count to integer")
 		require.Greater(t, newCountInc, oldCount[i])
 	}
+}
+
+// TestShowBackupTenantView ensures that SHOW BACKUP on a tenant backup returns the same results
+// as a SHOW BACKUP on a cluster backup that contains the same data.
+// TODO(msbutler): convert to data driven test, and test cluster and database
+// level backups once tenants support nodelocal or once http external storage supports listing.
+func TestShowBackupTenantView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	tc, systemDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	srv := tc.Server(0)
+
+	_ = security.EmbeddedTenantIDs()
+
+	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	defer conn10.Close()
+
+	tenant10 := sqlutils.MakeSQLRunner(conn10)
+	dataQuery := `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`
+	backupQuery := `BACKUP TABLE foo.bar INTO $1`
+	showBackupQuery := "SELECT object_name, object_type, rows FROM [SHOW BACKUP FROM LATEST IN $1]"
+	tenant10.Exec(t, dataQuery)
+
+	// First, assert that SHOW BACKUPS on a tenant backup returns the same results if
+	// either the system tenant or tenant10 calls it.
+	tenantAddr, httpServerCleanup := makeInsecureHTTPServer(t)
+	defer httpServerCleanup()
+
+	tenant10.Exec(t, backupQuery, tenantAddr)
+	systemTenantShowRes := systemDB.QueryStr(t, showBackupQuery, tenantAddr)
+	require.Equal(t, systemTenantShowRes, tenant10.QueryStr(t, showBackupQuery, tenantAddr))
+
+	// If the system tenant created the same data, and conducted the same backup,
+	// the row counts should look the same.
+	systemAddr, httpServerCleanup2 := makeInsecureHTTPServer(t)
+	defer httpServerCleanup2()
+
+	systemDB.Exec(t, dataQuery)
+	systemDB.Exec(t, backupQuery, systemAddr)
+	require.Equal(t, systemTenantShowRes, systemDB.QueryStr(t, showBackupQuery, systemAddr))
 }
 func TestShowBackupTenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -719,13 +769,13 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 	defer cleanupFn()
 
 	// add 1 type, 1 schema, and 2 tables to the database
-	sqlDB.Exec(t, `
+	sqlDB.ExecMultiple(t, strings.Split(`
 		SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 		CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
 		USE data; CREATE SCHEMA sc;
 		CREATE TABLE data.sc.t1 (a INT);
-		CREATE TABLE data.sc.t2 (a data.welcome);
-  `)
+		CREATE TABLE data.sc.t2 (a data.welcome);`,
+		`;`)...)
 
 	const full = localFoo + "/full"
 

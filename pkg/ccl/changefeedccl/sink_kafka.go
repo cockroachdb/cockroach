@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -85,7 +84,7 @@ type kafkaSink struct {
 	kafkaCfg       *sarama.Config
 	client         kafkaClient
 	producer       sarama.AsyncProducer
-	topics         map[descpb.ID]string
+	topics         *TopicNamer
 
 	lastMetadataRefresh time.Time
 
@@ -217,9 +216,10 @@ func (s *kafkaSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	topic, isKnownTopic := s.topics[topicDescr.GetID()]
-	if !isKnownTopic {
-		return errors.Errorf(`cannot emit to undeclared topic: %s`, topicDescr.GetName())
+
+	topic, err := s.topics.Name(topicDescr)
+	if err != nil {
+		return err
 	}
 
 	msg := &sarama.ProducerMessage{
@@ -246,17 +246,13 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 	// actively working on stability. At the same time, revisit this tuning.
 	const metadataRefreshMinDuration = time.Minute
 	if timeutil.Since(s.lastMetadataRefresh) > metadataRefreshMinDuration {
-		topics := make([]string, 0, len(s.topics))
-		for _, topic := range s.topics {
-			topics = append(topics, topic)
-		}
-		if err := s.client.RefreshMetadata(topics...); err != nil {
+		if err := s.client.RefreshMetadata(s.topics.DisplayNamesSlice()...); err != nil {
 			return err
 		}
 		s.lastMetadataRefresh = timeutil.Now()
 	}
 
-	for _, topic := range s.topics {
+	return s.topics.Each(func(topic string) error {
 		payload, err := encoder.EncodeResolvedTimestamp(ctx, topic, resolved)
 		if err != nil {
 			return err
@@ -282,8 +278,8 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 				return err
 			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // Flush implements the Sink interface.
@@ -361,9 +357,14 @@ func (s *kafkaSink) workerLoop() {
 		case err := <-s.producer.Errors():
 			ackMsg, ackError = err.Msg, err.Err
 			if ackError != nil {
-				ackError = errors.Wrapf(ackError,
-					"while sending message with key=%s, size=%d",
-					err.Msg.Key, err.Msg.Key.Length()+err.Msg.Value.Length())
+				// Msg should never be nil but we're being defensive around a vendor library.
+				// Msg.Key is nil for sentinel errors (e.g. producer shutting down)
+				// and errors sending dummy messages used to prefetch metadata.
+				if err.Msg != nil && err.Msg.Key != nil && err.Msg.Value != nil {
+					ackError = errors.Wrapf(ackError,
+						"while sending message with key=%s, size=%d",
+						err.Msg.Key, err.Msg.Key.Length()+err.Msg.Value.Length())
+				}
 			}
 		}
 
@@ -388,12 +389,10 @@ func (s *kafkaSink) workerLoop() {
 	}
 }
 
+// Topics gives the names of all topics that have been initialized
+// and will receive resolved timestamps.
 func (s *kafkaSink) Topics() []string {
-	var topics []string
-	for _, topic := range s.topics {
-		topics = append(topics, topic)
-	}
-	return topics
+	return s.topics.DisplayNamesSlice()
 }
 
 type changefeedPartitioner struct {
@@ -417,24 +416,6 @@ func (p *changefeedPartitioner) Partition(
 		return message.Partition, nil
 	}
 	return p.hash.Partition(message, numPartitions)
-}
-
-func makeTopicsMap(
-	prefix string, name string, targets []jobspb.ChangefeedTargetSpecification,
-) map[descpb.ID]string {
-	topics := make(map[descpb.ID]string)
-	useSingleName := name != ""
-	if useSingleName {
-		name = prefix + SQLNameToKafkaName(name)
-	}
-	for _, t := range targets {
-		if useSingleName {
-			topics[t.TableID] = name
-		} else {
-			topics[t.TableID] = prefix + SQLNameToKafkaName(t.StatementTimeName)
-		}
-	}
-	return topics
 }
 
 type jsonDuration time.Duration
@@ -669,12 +650,20 @@ func makeKafkaSink(
 		return nil, err
 	}
 
+	topics, err := MakeTopicNamer(
+		targets,
+		WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(SQLNameToKafkaName))
+
+	if err != nil {
+		return nil, err
+	}
+
 	sink := &kafkaSink{
 		ctx:            ctx,
 		kafkaCfg:       config,
 		bootstrapAddrs: u.Host,
-		topics:         makeTopicsMap(kafkaTopicPrefix, kafkaTopicName, targets),
 		metrics:        m,
+		topics:         topics,
 	}
 
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {

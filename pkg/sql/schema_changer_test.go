@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -69,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -752,7 +754,11 @@ func TestDropWhileBackfill(t *testing.T) {
 	sqlDB := tc.ServerConn(0)
 
 	if _, err := sqlDB.Exec(`
-SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+	SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
@@ -2256,6 +2262,8 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -2276,7 +2284,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	}
 
 	// A schema change that fails.
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		// This query stays blocked until the end of the test.
 		_, _ = sqlDB.Exec(`ALTER TABLE t.test DROP column v`)
 	}()
@@ -8135,4 +8145,122 @@ CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
 			}
 		})
 	}
+}
+
+// TestConcurrentSchemaChangesDoNotDeadlock exercises the schema change retry
+// behavior in a case where concurrent old and new-style schema changes
+// interact with multiple descriptors concurrently. In this case the
+// descriptors in question are a table and a view which references that
+// table. The schema changes are to create the view if it does not exist
+// and to drop the view. The test is a regression against cases where locks
+// were not dropped when a schema change waits for concurrent schema changes
+// to conclude. If the locks were not dropped, a deadlock could occur.
+func TestConcurrentSchemaChangesDoNotDeadlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	tdb.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
+	tdb.Exec(t, "INSERT INTO t VALUES (1), (2)")
+
+	isUndefinedTableError := func(err error) bool {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			return pqErr.Code == pq.ErrorCode(pgcode.UndefinedTable.String())
+		}
+		return false
+	}
+
+	// These constants are pretty arbitrary. They are high enough that before
+	// the fix accompanying this test, the test would fail roughly every time,
+	// and low enough that it would not take too long.
+	const workers, runs = 8, 5
+	var wg sync.WaitGroup
+	runWorker := func(workerNum int) {
+		defer wg.Done()
+		conn, err := sqlDB.Conn(ctx)
+		if !assert.NoError(t, err) {
+			return
+		}
+		runStmt := func(stmt string) (ok bool) {
+			_, err := conn.ExecContext(ctx, stmt)
+			return assert.NoError(t, err)
+		}
+		for i := 0; i < runs; i++ {
+			// We don't really care whether we use the declarative schema changer or
+			// not here. It's not currently supported for CREATE VIEW, so set it to
+			// on and let the system decide
+			if !runStmt(`
+SET use_declarative_schema_changer = on;
+CREATE VIEW IF NOT EXISTS v AS SELECT i FROM t
+`) {
+				return
+			}
+			rows, err := conn.QueryContext(ctx, `SELECT * FROM v`)
+			switch {
+			case isUndefinedTableError(err):
+				continue
+			case !assert.NoError(t, err):
+				return
+			}
+			got, err := sqlutils.RowsToStrMatrix(rows)
+			switch {
+			case isUndefinedTableError(err):
+				continue
+			case !assert.NoError(t, err), !assert.Equal(
+				t, [][]string{{"1"}, {"2"}}, got,
+			):
+				return
+			}
+			// Note that this is primarily about testing the behavior of this drop
+			// with the declarative schema changer, so we make that explicit. It
+			// would be used anyway, but no reason to leave it to policy.
+			if !runStmt(`
+SET use_declarative_schema_changer = unsafe;
+DROP VIEW IF EXISTS v
+`) {
+				return
+			}
+		}
+	}
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go runWorker(i)
+	}
+	wg.Wait()
+}
+
+func TestVirtualColumnNotAllowedInPkeyBefore22_1(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: make(chan struct{}),
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V21_2),
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec(`CREATE TABLE t (a INT NOT NULL AS (1+1) VIRTUAL, PRIMARY KEY (a))`)
+	require.Error(t, err)
+	require.Equal(t, "pq: cannot use virtual column \"a\" in primary key", err.Error())
+
+	_, err = sqlDB.Exec(`CREATE TABLE t (a INT NOT NULL AS (1+1) VIRTUAL PRIMARY KEY)`)
+	require.Error(t, err)
+	require.Equal(t, "pq: cannot use virtual column \"a\" in primary key", err.Error())
+
+	_, err = sqlDB.Exec(`CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL AS (1+1) VIRTUAL)`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b)`)
+	require.Error(t, err)
+	require.Equal(t, "pq: cannot use virtual column \"b\" in primary key", err.Error())
 }

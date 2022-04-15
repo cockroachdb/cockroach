@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // encodeArray produces the value encoding for an array.
@@ -63,14 +64,18 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 }
 
 // decodeArray decodes the value encoding for an array.
-func decodeArray(a *tree.DatumAlloc, elementType *types.T, b []byte) (tree.Datum, []byte, error) {
+func decodeArray(a *tree.DatumAlloc, arrayType *types.T, b []byte) (tree.Datum, []byte, error) {
 	header, b, err := decodeArrayHeader(b)
 	if err != nil {
 		return nil, b, err
 	}
+	elementType := arrayType.ArrayContents()
 	result := tree.DArray{
 		Array:    make(tree.Datums, header.length),
 		ParamTyp: elementType,
+	}
+	if err = result.MaybeSetCustomOid(arrayType); err != nil {
+		return nil, b, err
 	}
 	var val tree.Datum
 	for i := uint64(0); i < header.length; i++ {
@@ -230,7 +235,9 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 	case types.TupleFamily:
 		return encoding.Tuple, nil
 	default:
-		return 0, errors.AssertionFailedf("no known encoding type for %s", t)
+		return 0, errors.AssertionFailedf(
+			"no known encoding type for %s", redact.Safe(t.Family().Name()),
+		)
 	}
 }
 func checkElementType(paramType *types.T, elemType *types.T) error {

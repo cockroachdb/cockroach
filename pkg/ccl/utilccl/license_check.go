@@ -110,6 +110,10 @@ func ApplyTenantLicense() error {
 // This should not be used in hot paths, since an unavailable feature will
 // result in a new error being instantiated for every call -- use
 // IsEnterpriseEnabled() instead.
+//
+// The ClusterID argument should be the tenant-specific logical
+// cluster ID. is not used for the check itself; it is merely embedded
+// in the URL displayed in the error message.
 func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, feature string) error {
 	return checkEnterpriseEnabledAt(st, timeutil.Now(), cluster, org, feature, true /* withDetails */)
 }
@@ -118,6 +122,10 @@ func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, featur
 // enabled. It is faster than CheckEnterpriseEnabled, since it does not return
 // details about why the feature is unavailable, and can therefore be used in
 // hot paths.
+//
+// The ClusterID argument should be the tenant-specific logical
+// cluster ID. is not used for the check itself; it is merely embedded
+// in the URL displayed in the error message.
 func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, feature string) bool {
 	return checkEnterpriseEnabledAt(
 		st, timeutil.Now(), cluster, org, feature, false /* withDetails */) == nil

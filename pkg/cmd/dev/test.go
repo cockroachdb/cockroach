@@ -12,7 +12,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -25,16 +28,17 @@ const (
 	stressTarget = "@com_github_cockroachdb_stress//:stress"
 
 	// General testing flags.
-	countFlag       = "count"
-	vFlag           = "verbose"
-	showLogsFlag    = "show-logs"
-	stressFlag      = "stress"
-	stressArgsFlag  = "stress-args"
-	raceFlag        = "race"
-	ignoreCacheFlag = "ignore-cache"
-	rewriteFlag     = "rewrite"
-	testArgsFlag    = "test-args"
-	vModuleFlag     = "vmodule"
+	countFlag        = "count"
+	vFlag            = "verbose"
+	showLogsFlag     = "show-logs"
+	stressFlag       = "stress"
+	stressArgsFlag   = "stress-args"
+	raceFlag         = "race"
+	ignoreCacheFlag  = "ignore-cache"
+	rewriteFlag      = "rewrite"
+	streamOutputFlag = "stream-output"
+	testArgsFlag     = "test-args"
+	vModuleFlag      = "vmodule"
 )
 
 func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -42,11 +46,17 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	testCmd := &cobra.Command{
 		Use:   "test [pkg..]",
 		Short: `Run the specified tests`,
-		Long:  `Run the specified tests.`,
+		Long: `Run the specified tests.
+
+This command takes a list of packages and tests all of them. It's also
+permissive enough to accept bazel build targets (like
+pkg/kv/kvserver:kvserver_test) instead.`,
 		Example: `
 	dev test
 	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
 	dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
+	dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
+	dev test pkg/... -v
 	dev test --stress --race ...`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
@@ -70,9 +80,9 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
-	testCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying test binary (only applicable to certain tests)")
+	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run (only applicable to certain tests)")
+	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
 	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
-	testCmd.Flags().Lookup(rewriteFlag).NoOptDefVal = "-rewrite"
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
 	return testCmd
 }
@@ -84,7 +94,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		filter        = mustGetFlagString(cmd, filterFlag)
 		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
 		race          = mustGetFlagBool(cmd, raceFlag)
-		rewrite       = mustGetFlagString(cmd, rewriteFlag)
+		rewrite       = mustGetFlagBool(cmd, rewriteFlag)
+		streamOutput  = mustGetFlagBool(cmd, streamOutputFlag)
 		testArgs      = mustGetFlagString(cmd, testArgsFlag)
 		short         = mustGetFlagBool(cmd, shortFlag)
 		stress        = mustGetFlagBool(cmd, stressFlag)
@@ -95,8 +106,11 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		count         = mustGetFlagInt(cmd, countFlag)
 		vModule       = mustGetFlagString(cmd, vModuleFlag)
 	)
-	if rewrite != "" {
+
+	var disableTestSharding bool
+	if rewrite {
 		ignoreCache = true
+		disableTestSharding = true
 	}
 
 	// Enumerate all tests to run.
@@ -113,11 +127,18 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if race {
 		args = append(args, "--config=race")
 	} else if stress {
-		args = append(args, "--test_sharding_strategy=disabled")
+		disableTestSharding = true
 	}
 
 	var testTargets []string
 	for _, pkg := range pkgs {
+		if pkg == "pkg/..." {
+			// Special-cased target to skip known broken-under-bazel and
+			// integration tests.
+			testTargets = append(testTargets, "//pkg:all_tests")
+			continue
+		}
+
 		pkg = strings.TrimPrefix(pkg, "//")
 		pkg = strings.TrimPrefix(pkg, "./")
 		pkg = strings.TrimRight(pkg, "/")
@@ -141,7 +162,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--nocache_test_results")
 	}
 	args = append(args, "--test_env=GOTRACEBACK=all")
-	if rewrite != "" {
+	if rewrite {
 		if stress {
 			return fmt.Errorf("cannot combine --%s and --%s", stressFlag, rewriteFlag)
 		}
@@ -150,7 +171,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			return err
 		}
 		args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
-		args = append(args, "--test_arg", rewrite)
+		args = append(args, "--test_arg", "-rewrite")
 		for _, testTarget := range testTargets {
 			dir := getDirectoryFromTarget(testTarget)
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
@@ -177,7 +198,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		// For sharded test packages, it doesn't make much sense to spawn multiple
 		// test processes that don't end up running anything. Default to running
 		// things in a single process if a filter is specified.
-		args = append(args, "--test_sharding_strategy=disabled")
+		disableTestSharding = true
 	}
 	if short {
 		args = append(args, "--test_arg", "-test.short")
@@ -201,12 +222,25 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		}
 		args = append(args, goTestArgs...)
 	}
+	if disableTestSharding {
+		args = append(args, "--test_sharding_strategy=disabled")
+	}
 
-	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs)...)
+	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 
 	logCommand("bazel", args...)
-	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	if err != nil {
+		var cmderr *exec.ExitError
+		if errors.As(err, &cmderr) && cmderr.ProcessState.ExitCode() == 4 {
+			// If the exit code is 4, the build was successful but no tests were found.
+			// ref: https://docs.bazel.build/versions/0.21.0/guide.html#what-exit-code-will-i-get
+			log.Printf("WARNING: the build succeeded but no tests were found.")
+			return nil
+		}
+	}
+	return err
 
 	// TODO(irfansharif): Both here and in `dev bench`, if the command is
 	// unsuccessful we could explicitly check for "missing package" errors. The
@@ -247,9 +281,9 @@ func (d *dev) getGoTestArgs(ctx context.Context, testArgs string) ([]string, err
 	return goTestArgs, nil
 }
 
-func (d *dev) getTestOutputArgs(stress, verbose, showLogs bool) []string {
+func (d *dev) getTestOutputArgs(stress, verbose, showLogs, streamOutput bool) []string {
 	testOutputArgs := []string{"--test_output", "errors"}
-	if stress {
+	if stress || streamOutput {
 		// Stream the output to continually observe the number of successful
 		// test iterations.
 		testOutputArgs = []string{"--test_output", "streamed"}

@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "json",
@@ -34,7 +35,6 @@ go_test(
     name = "json_test",
     size = "small",
     srcs = [
-        "dep_test.go",
         "encode_test.go",
         "json_test.go",
     ],
@@ -44,7 +44,6 @@ go_test(
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/testutils",
-        "//pkg/testutils/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
@@ -52,4 +51,9 @@ go_test(
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+disallowed_imports_test(
+    "json",
+    ["//pkg/roachpb"],
 )

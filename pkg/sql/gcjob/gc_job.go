@@ -173,6 +173,11 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 	p := execCtx.(sql.JobExecContext)
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
+
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint("gcjob.before_resume"); err != nil {
+		return err
+	}
+
 	if fn := execCfg.GCJobTestingKnobs.RunBeforeResume; fn != nil {
 		if err := fn(r.jobID); err != nil {
 			return err
@@ -218,7 +223,10 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 				ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress,
 			)
 		} else {
-			expired, earliestDeadline = refreshTenant(ctx, execCfg, details.Tenant.DropTime, details, progress)
+			expired, earliestDeadline, err = refreshTenant(ctx, execCfg, details.Tenant.DropTime, details, progress)
+			if err != nil {
+				return err
+			}
 		}
 		timerDuration := time.Until(earliestDeadline)
 

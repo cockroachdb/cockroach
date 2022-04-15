@@ -470,7 +470,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				ex.server.cfg,
 				ex.statsCollector,
 				&ex.extraTxnState.accumulatedStats,
-				ex.extraTxnState.shouldCollectTxnExecutionStats,
+				ih.collectExecStats,
 				p,
 				ast,
 				sql,
@@ -669,6 +669,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.cancelChecker.Reset(ctx)
 
 	p.autoCommit = canAutoCommit && !ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec
+	p.extendedEvalCtx.TxnIsSingleStmt = canAutoCommit && !ex.extraTxnState.firstStmtExecuted
+	ex.extraTxnState.firstStmtExecuted = true
 
 	var stmtThresholdSpan *tracing.Span
 	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()
@@ -822,11 +824,27 @@ func formatWithPlaceholders(ast tree.Statement, evalCtx *tree.EvalContext) strin
 	return fmtCtx.CloseAndGetString()
 }
 
+// checkDescriptorTwoVersionInvariant ensures that the two version invariant is
+// upheld. It calls descs.CheckTwoVersionInvariant, which will restart the
+// underlying transaction in the case that the invariant is not upheld, and
+// it will cleanup any intents due to that transaction. When this happens, the
+// transaction will be reset internally.
 func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) error {
 	var inRetryBackoff func()
 	if knobs := ex.server.cfg.SchemaChangerTestingKnobs; knobs != nil {
 		inRetryBackoff = knobs.TwoVersionLeaseViolation
 	}
+
+	if err := descs.CheckSpanCountLimit(
+		ctx,
+		&ex.extraTxnState.descCollection,
+		ex.server.cfg.SpanConfigSplitter,
+		ex.server.cfg.SpanConfigLimiter,
+		ex.state.mu.txn,
+	); err != nil {
+		return err
+	}
+
 	retryErr, err := descs.CheckTwoVersionInvariant(
 		ctx,
 		ex.server.cfg.Clock,
@@ -836,16 +854,24 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		inRetryBackoff,
 	)
 	if retryErr {
-		// Create a new transaction to retry with a higher timestamp than the
-		// timestamps used in the retry loop above.
-		userPriority := ex.state.mu.txn.UserPriority()
-		ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db,
-			ex.transitionCtx.nodeIDOrZero, ex.QualityOfService())
-		if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
-			return err
+		if newTransactionErr := ex.resetTransactionOnSchemaChangeRetry(ctx); newTransactionErr != nil {
+			return newTransactionErr
 		}
 	}
 	return err
+}
+
+// Create a new transaction to retry with a higher timestamp than the timestamps
+// used in any retry loop above. Additionally, make sure to copy out the
+// priority from the previous transaction to ensure that livelock does not
+// occur.
+func (ex *connExecutor) resetTransactionOnSchemaChangeRetry(ctx context.Context) error {
+	ex.state.mu.Lock()
+	defer ex.state.mu.Unlock()
+	userPriority := ex.state.mu.txn.UserPriority()
+	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db,
+		ex.transitionCtx.nodeIDOrZero, ex.QualityOfService())
+	return ex.state.mu.txn.SetUserPriority(userPriority)
 }
 
 // commitSQLTransaction executes a commit after the execution of a
@@ -2215,7 +2241,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RetryLatency:            txnRetryLat,
 		CommitLatency:           commitLat,
 		RowsAffected:            ex.extraTxnState.numRows,
-		CollectedExecStats:      ex.extraTxnState.shouldCollectTxnExecutionStats,
+		CollectedExecStats:      ex.planner.instrumentation.collectExecStats,
 		ExecStats:               ex.extraTxnState.accumulatedStats,
 		RowsRead:                ex.extraTxnState.rowsRead,
 		RowsWritten:             ex.extraTxnState.rowsWritten,

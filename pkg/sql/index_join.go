@@ -36,6 +36,8 @@ type indexJoinNode struct {
 	resultColumns colinfo.ResultColumns
 
 	reqOrdering ReqOrdering
+
+	limitHint int64
 }
 
 func (n *indexJoinNode) startExec(params runParams) error {

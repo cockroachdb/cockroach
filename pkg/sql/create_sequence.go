@@ -167,7 +167,11 @@ func doCreateSequence(
 	}
 
 	startVal = startVal - desc.SequenceOpts.Increment
+	if err := p.createdSequences.addCreatedSequence(id); err != nil {
+		return nil, err
+	}
 	b.Inc(seqValueKey, startVal)
+
 	if err := p.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}

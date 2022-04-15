@@ -109,7 +109,10 @@ SELECT x FROM test WHERE y = 1/z
 # Set a cluster setting to make it show up below. Which one is set
 # does not matter.
 statement ok
-SET CLUSTER SETTING debug.panic_on_failed_assertions = true; RESET CLUSTER SETTING debug.panic_on_failed_assertions
+SET CLUSTER SETTING debug.panic_on_failed_assertions = true;
+
+statement ok
+RESET CLUSTER SETTING debug.panic_on_failed_assertions
 
 statement ok
 SHOW application_name
@@ -293,7 +296,7 @@ SELECT * FROM app_stmts_view
 12989550133819508941  SELECT _, _                         1
 10964754960692259604  SELECT _, _, _                      1
 
-query TTI
+query TTI rowsort
 SELECT * FROM txn_fingerprint_view
 ----
 2090134368184080810  {11619138756491374338,12989550133819508941,10964754960692259604}  1
@@ -319,7 +322,7 @@ SELECT * FROM app_stmts_view
 12989550133819508941  SELECT _, _                         2
 10964754960692259604  SELECT _, _, _                      2
 
-query TTI
+query TTI rowsort
 SELECT * FROM txn_fingerprint_view
 ----
 2090134368184080810  {11619138756491374338,12989550133819508941,10964754960692259604}  2
@@ -355,7 +358,7 @@ SELECT * FROM app_stmts_view
 8880410704856970575   SET CLUSTER SETTING "sql.metrics.max_mem_stmt_fingerprints" = DEFAULT  1
 6650120188975168745   SET CLUSTER SETTING "sql.metrics.max_mem_txn_fingerprints" = DEFAULT   1
 
-query TTI
+query TTI rowsort
 SELECT * FROM txn_fingerprint_view
 ----
 2090134368184080810  {11619138756491374338,12989550133819508941,10964754960692259604}  2

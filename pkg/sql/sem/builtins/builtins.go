@@ -42,9 +42,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -2290,7 +2292,7 @@ var builtins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(dOid.DInt), int64(newVal), false /* isCalled */); err != nil {
+					evalCtx.Ctx(), uint32(dOid.DInt), int64(newVal), true /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2306,7 +2308,7 @@ var builtins = map[string]builtinDefinition{
 				oid := tree.MustBeDOid(args[0])
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(oid.DInt), int64(newVal), false /* isCalled */); err != nil {
+					evalCtx.Ctx(), uint32(oid.DInt), int64(newVal), true /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -4609,6 +4611,78 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"crdb_internal.cluster_setting_encoded_default": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"setting", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.AssertionFailedf("expected string value, got %T", args[0])
+				}
+				name := strings.ToLower(string(s))
+				rawSetting, ok := settings.Lookup(
+					name, settings.LookupForLocalAccess, ctx.Codec.ForSystemTenant(),
+				)
+				if !ok {
+					return nil, errors.Newf("unknown cluster setting '%s'", name)
+				}
+				setting, ok := rawSetting.(settings.NonMaskedSetting)
+				if !ok {
+					// If we arrive here, this means Lookup() did not properly
+					// ignore the masked setting, which is a bug in Lookup().
+					return nil, errors.AssertionFailedf("setting '%s' is masked", name)
+				}
+
+				return tree.NewDString(setting.EncodedDefault()), nil
+			},
+			Info:       "Returns the encoded default value of the given cluster setting.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"crdb_internal.decode_cluster_setting": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"setting", types.String},
+				{"value", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.AssertionFailedf("expected string value, got %T", args[0])
+				}
+				encoded, ok := tree.AsDString(args[1])
+				if !ok {
+					return nil, errors.AssertionFailedf("expected string value, got %T", args[1])
+				}
+				name := strings.ToLower(string(s))
+				rawSetting, ok := settings.Lookup(
+					name, settings.LookupForLocalAccess, ctx.Codec.ForSystemTenant(),
+				)
+				if !ok {
+					return nil, errors.Newf("unknown cluster setting '%s'", name)
+				}
+				setting, ok := rawSetting.(settings.NonMaskedSetting)
+				if !ok {
+					// If we arrive here, this means Lookup() did not properly
+					// ignore the masked setting, which is a bug in Lookup().
+					return nil, errors.AssertionFailedf("setting '%s' is masked", name)
+				}
+				repr, err := setting.DecodeToString(string(encoded))
+				if err != nil {
+					return nil, errors.Wrapf(err, "%v", name)
+				}
+				return tree.NewDString(repr), nil
+			},
+			Info:       "Decodes the given encoded value for a cluster setting.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"crdb_internal.node_executable_version": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
@@ -4694,7 +4768,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDUuid(tree.DUuid{UUID: ctx.ClusterID}), nil
 			},
-			Info:       "Returns the cluster ID.",
+			Info:       "Returns the logical cluster ID for this tenant.",
 			Volatility: tree.VolatilityStable,
 		},
 	),
@@ -5472,7 +5546,7 @@ value if you rely on the HLC for accuracy.`,
 				// TODO(postamar): give the tree.EvalContext a useful interface
 				// instead of cobbling a descs.Collection in this way.
 				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
-				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack))
+				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack), nil /* monitor */)
 				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
@@ -5510,7 +5584,7 @@ value if you rely on the HLC for accuracy.`,
 				// TODO(postamar): give the tree.EvalContext a useful interface
 				// instead of cobbling a descs.Collection in this way.
 				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
-				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack))
+				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack), nil /* monitor */)
 				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
@@ -6473,6 +6547,40 @@ table's zone configuration this will return NULL.`,
 		},
 	),
 
+	"crdb_internal.validate_ttl_scheduled_jobs": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DVoidDatum, evalCtx.Planner.ValidateTTLScheduledJobsInCurrentDB(evalCtx.Context)
+			},
+			Info:       `Validate all TTL tables have a valid scheduled job attached.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.repair_ttl_table_scheduled_job": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid := tree.MustBeDOid(args[0])
+				if err := evalCtx.Planner.RepairTTLScheduledJobForTable(evalCtx.Ctx(), int64(oid.DInt)); err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info:       `Repairs the scheduled job for a TTL table if it is missing.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.check_password_hash_format": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
@@ -6586,6 +6694,185 @@ table. Returns an error if validation fails.`,
 			},
 			Info: `This function is used to revalidate the given unique constraint in the given
 table. Returns an error if validation fails.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.kv_set_queue_active": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true, // applicable only on the gateway
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"queue_name", types.String},
+				{"active", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				queue := string(tree.MustBeDString(args[0]))
+				active := bool(tree.MustBeDBool(args[1]))
+
+				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					return store.SetQueueActive(active, queue)
+				}); err != nil {
+					return nil, err
+				}
+
+				return tree.DBoolTrue, nil
+			},
+			Info: `Used to enable/disable the named queue on all stores on the node it's run from.
+One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC', 'raftlog',
+'raftsnapshot', 'consistencyChecker', and 'timeSeriesMaintenance'.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"queue_name", types.String},
+				{"active", types.Bool},
+				{"store_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				queue := string(tree.MustBeDString(args[0]))
+				active := bool(tree.MustBeDBool(args[1]))
+				storeID := roachpb.StoreID(tree.MustBeDInt(args[2]))
+
+				var foundStore bool
+				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					if storeID == store.StoreID() {
+						foundStore = true
+						return store.SetQueueActive(active, queue)
+					}
+					return nil
+				}); err != nil {
+					return nil, err
+				}
+
+				if !foundStore {
+					return nil, errors.Errorf("store %s not found on this node", storeID)
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: `Used to enable/disable the named queue on the specified store on the node it's
+run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
+'raftlog', 'raftsnapshot', 'consistencyChecker', and 'timeSeriesMaintenance'.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.kv_enqueue_replica": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemRepair,
+			DistsqlBlocklist: true, // applicable only on the gateway
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"range_id", types.Int},
+				{"queue_name", types.String},
+				{"skip_should_queue", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
+				queue := string(tree.MustBeDString(args[1]))
+				skipShouldQueue := bool(tree.MustBeDBool(args[2]))
+
+				var foundRepl bool
+				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					err := store.Enqueue(ctx.Context, queue, rangeID, skipShouldQueue)
+					if err == nil {
+						foundRepl = true
+						return nil
+					}
+
+					if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
+						return nil
+					}
+					return err
+				}); err != nil {
+					return nil, err
+				}
+
+				if !foundRepl {
+					return nil, errors.Errorf("replica with range id %s not found on this node", rangeID)
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: `Enqueue the replica with the given range ID into the named queue, on the
+specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
+'replicate', 'replicaGC', 'raftlog', 'raftsnapshot', 'consistencyChecker', and
+'timeSeriesMaintenance'.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"range_id", types.Int},
+				{"queue_name", types.String},
+				{"skip_should_queue", types.Bool},
+				{"store_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
+				queue := string(tree.MustBeDString(args[1]))
+				skipShouldQueue := bool(tree.MustBeDBool(args[2]))
+				storeID := roachpb.StoreID(tree.MustBeDInt(args[3]))
+
+				var foundStore bool
+				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					if storeID == store.StoreID() {
+						foundStore = true
+						return store.Enqueue(ctx.Context, queue, rangeID, skipShouldQueue)
+					}
+					return nil
+				}); err != nil {
+					return nil, err
+				}
+
+				if !foundStore {
+					return nil, errors.Errorf("store %s not found on this node", storeID)
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: `Enqueue the replica with the given range ID into the named queue, on the
+specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
+'replicate', 'replicaGC', 'raftlog', 'raftsnapshot', 'consistencyChecker', and
+'timeSeriesMaintenance'.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -8987,7 +9274,7 @@ var errInsufficientPriv = pgerror.New(
 // to determine the appropriate offset from now which is likely to be safe for
 // follower reads. It is injected by followerreadsccl. An error may be returned
 // if an enterprise license is not installed.
-var EvalFollowerReadOffset func(clusterID uuid.UUID, _ *cluster.Settings) (time.Duration, error)
+var EvalFollowerReadOffset func(logicalClusterID uuid.UUID, _ *cluster.Settings) (time.Duration, error)
 
 func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 	if EvalFollowerReadOffset == nil {

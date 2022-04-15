@@ -926,6 +926,12 @@ CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING
 statement ok
 SET experimental_computed_column_rewrites = "(ts :: STRING) -> ((ts AT TIME ZONE 'utc')::STRING)";
 
+statement error timestamp::string: context-dependent operators are not allowed in computed column
+CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
+
+statement ok
+SET experimental_computed_column_rewrites = "(ts :: STRING) -> (to_char(ts AT TIME ZONE 'utc'))";
+
 statement ok
 CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
 
@@ -935,7 +941,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 CREATE TABLE public.trewrite (
    k INT8 NOT NULL,
    ts TIMESTAMPTZ NULL,
-   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
    CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
    FAMILY fam_0_k_ts_c (k, ts, c)
 )
@@ -955,7 +961,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 CREATE TABLE public.trewrite (
    k INT8 NOT NULL,
    ts TIMESTAMPTZ NULL,
-   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
    CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
    FAMILY fam_0_k_ts (k, ts, c)
 )
@@ -972,7 +978,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE trewrite_copy]
 CREATE TABLE public.trewrite_copy (
    k INT8 NOT NULL,
    ts TIMESTAMPTZ NULL,
-   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
    CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC)
 )
 
@@ -985,7 +991,7 @@ DROP TABLE trewrite_copy
 # Test multiple rewrites.
 statement ok
 SET experimental_computed_column_rewrites = "
-  (ts::STRING) -> ((ts AT TIME ZONE 'utc')::STRING),
+  (ts::STRING) -> (to_char(ts AT TIME ZONE 'utc')),
   (mod(fnv32(b::STRING), 4)) -> (mod(fnv32(b), 4)),
   (str::TIMESTAMP) -> (parse_timestamp(str))
 "
@@ -1010,7 +1016,7 @@ CREATE TABLE public.trewrite2 (
    ts TIMESTAMPTZ NULL,
    b BYTES NULL,
    str STRING NULL,
-   c1 STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   c1 STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
    c2 TIMESTAMP NULL AS (parse_timestamp(str)) STORED,
    c3 INT8 NULL AS (mod(fnv32(b), 4:::INT8)) STORED,
    CONSTRAINT trewrite2_pkey PRIMARY KEY (k ASC),

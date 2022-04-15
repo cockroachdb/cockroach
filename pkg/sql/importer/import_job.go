@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -78,6 +79,13 @@ func (r *importResumer) ForceRealSpan() bool {
 }
 
 var _ jobs.Resumer = &importResumer{}
+
+var processorsPerNode = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"bulkio.import.processors_per_node",
+	"number of input processors to run on each sql instance", 1,
+	settings.PositiveInt,
+)
 
 type preparedSchemaMetadata struct {
 	schemaPreparedDetails jobspb.ImportDetails
@@ -267,8 +275,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
+	procsPerNode := int(processorsPerNode.Get(&p.ExecCfg().Settings.SV))
+
 	res, err := ingestWithRetry(ctx, p, r.job, tables, typeDescs, files, format, details.Walltime,
-		r.testingKnobs.alwaysFlushJobProgress)
+		r.testingKnobs.alwaysFlushJobProgress, procsPerNode)
 	if err != nil {
 		return err
 	}
@@ -292,6 +302,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("import.after_ingest"); err != nil {
+		return err
+	}
+
+	if err := r.checkVirtualConstraints(ctx, p.ExecCfg(), r.job); err != nil {
 		return err
 	}
 
@@ -1087,6 +1101,35 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 	})
 }
 
+// checkVirtualConstraints checks constraints that are enforced via runtime
+// checks, such as uniqueness checks that are not directly backed by an index.
+func (*importResumer) checkVirtualConstraints(
+	ctx context.Context, execCfg *sql.ExecutorConfig, job *jobs.Job,
+) error {
+	for _, tbl := range job.Details().(jobspb.ImportDetails).Tables {
+		desc := tabledesc.NewBuilder(tbl.Desc).BuildExistingMutableTable()
+		desc.SetPublic()
+
+		if sql.HasVirtualUniqueConstraints(desc) {
+			if err := job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+				return jobs.RunningStatus(fmt.Sprintf("re-validating %s", desc.GetName())), nil
+			}); err != nil {
+				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(job.ID()))
+			}
+		}
+
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			ie := execCfg.InternalExecutorFactory(ctx, sql.NewFakeSessionData(execCfg.SV()))
+			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+				return sql.RevalidateUniqueConstraintsInTable(ctx, txn, ie, desc)
+			})
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // checkForUDTModification checks whether any of the types referenced by the
 // table being imported into have been modified incompatibly since they were
 // read during import planning. If they have, it may be unsafe to continue
@@ -1191,6 +1234,7 @@ func ingestWithRetry(
 	format roachpb.IOFileFormat,
 	walltime int64,
 	alwaysFlushProgress bool,
+	procsPerNode int,
 ) (roachpb.BulkOpSummary, error) {
 	resumerSpan := tracing.SpanFromContext(ctx)
 
@@ -1209,16 +1253,26 @@ func ingestWithRetry(
 	var err error
 	var retryCount int32
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		retryCount++
-		resumerSpan.RecordStructured(&roachpb.RetryTracingEvent{
-			Operation:     "importResumer.ingestWithRetry",
-			AttemptNumber: retryCount,
-			RetryError:    tracing.RedactAndTruncateError(err),
-		})
-		res, err = distImport(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
-			alwaysFlushProgress)
+		for {
+			retryCount++
+			resumerSpan.RecordStructured(&roachpb.RetryTracingEvent{
+				Operation:     "importResumer.ingestWithRetry",
+				AttemptNumber: retryCount,
+				RetryError:    tracing.RedactAndTruncateError(err),
+			})
+			res, err = distImport(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
+				alwaysFlushProgress, procsPerNode)
+			// Replanning errors should not count towards retry limits.
+			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
+				break
+			}
+		}
 		if err == nil {
 			break
+		}
+
+		if errors.HasType(err, &roachpb.InsufficientSpaceError{}) {
+			return res, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 
 		if joberror.IsPermanentBulkJobError(err) {
@@ -1461,6 +1515,7 @@ func (r *importResumer) dropTables(
 
 	b := txn.NewBatch()
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
+	toWrite := make([]*tabledesc.Mutable, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
 		newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
 		if err != nil {
@@ -1482,9 +1537,13 @@ func (r *importResumer) dropTables(
 			// IMPORT did not create this table, so we should not drop it.
 			newTableDesc.SetPublic()
 		}
-		if err := descsCol.WriteDescToBatch(
-			ctx, false /* kvTrace */, newTableDesc, b,
-		); err != nil {
+		// Accumulate the changes before adding them to the batch to avoid
+		// making any table invalid before having read it.
+		toWrite = append(toWrite, newTableDesc)
+	}
+	for _, d := range toWrite {
+		const kvTrace = false
+		if err := descsCol.WriteDescToBatch(ctx, kvTrace, d, b); err != nil {
 			return err
 		}
 	}

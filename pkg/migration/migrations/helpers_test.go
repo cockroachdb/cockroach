@@ -31,6 +31,8 @@ import (
 var (
 	HasColumn         = hasColumn
 	HasIndex          = hasIndex
+	DoesNotHaveIndex  = doesNotHaveIndex
+	HasColumnFamily   = hasColumnFamily
 	CreateSystemTable = createSystemTable
 )
 
@@ -82,7 +84,7 @@ func InjectLegacyTable(
 				return err
 			}
 			tab.TableDescriptor = builder.BuildCreatedMutableTable().TableDescriptor
-			tab.Version = tab.ClusterVersion.Version + 1
+			tab.Version = tab.ClusterVersion().Version + 1
 			return descriptors.WriteDesc(ctx, false /* kvTrace */, tab, txn)
 		})
 	require.NoError(t, err)

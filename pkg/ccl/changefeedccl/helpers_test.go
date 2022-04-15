@@ -13,9 +13,11 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
 	"net/url"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -359,8 +362,8 @@ func startTestFullServer(
 		}
 	}()
 
-	_, err = db.ExecContext(ctx, serverSetupStatements)
-	require.NoError(t, err)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
 
 	if region := serverArgsRegion(args); region != "" {
 		_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER DATABASE d PRIMARY REGION "%s"`, region))
@@ -399,8 +402,8 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 			require.NoError(t, err)
 		}
 	}()
-	_, err = db.ExecContext(ctx, serverSetupStatements)
-	require.NoError(t, err)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
 
 	_, err = db.ExecContext(ctx, `ALTER DATABASE d PRIMARY REGION "us-east1"`)
 	return cluster, db, cleanupAndReset
@@ -409,8 +412,6 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 func startTestTenant(
 	t testing.TB, options feedTestOptions,
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
-	ctx := context.Background()
-
 	kvServer, _, cleanupCluster := startTestFullServer(t, options)
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
@@ -432,8 +433,8 @@ func startTestTenant(
 
 	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
 	// Re-run setup on the tenant as well
-	_, err := tenantDB.ExecContext(ctx, serverSetupStatements)
-	require.NoError(t, err)
+	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
+	tenantRunner.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
 
 	server := &testServerShim{tenantServer, kvServer}
 	// Log so that it is clear if a failed test happened
@@ -683,4 +684,71 @@ func forceTableGC(
 	if err := tsi.ForceTableGC(context.Background(), database, table, tsi.Clock().Now()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// All structured logs should contain this property which stores the snake_cased
+// version of the name of the message struct
+type BaseEventStruct struct {
+	EventType string
+}
+
+var cmLogRe = regexp.MustCompile(`event_log\.go`)
+
+func checkStructuredLogs(t *testing.T, eventType string, startTime int64) []string {
+	var matchingEntries []string
+	testutils.SucceedsSoon(t, func() error {
+		log.Flush()
+		entries, err := log.FetchEntriesFromFiles(startTime,
+			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, e := range entries {
+			jsonPayload := []byte(e.Message)
+			var baseStruct BaseEventStruct
+			if err := gojson.Unmarshal(jsonPayload, &baseStruct); err != nil {
+				continue
+			}
+			if baseStruct.EventType != eventType {
+				continue
+			}
+
+			matchingEntries = append(matchingEntries, e.Message)
+		}
+
+		return nil
+	})
+
+	return matchingEntries
+}
+
+func checkCreateChangefeedLogs(t *testing.T, startTime int64) []eventpb.CreateChangefeed {
+	var matchingEntries []eventpb.CreateChangefeed
+
+	for _, m := range checkStructuredLogs(t, "create_changefeed", startTime) {
+		jsonPayload := []byte(m)
+		var event eventpb.CreateChangefeed
+		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
+			t.Errorf("unmarshalling %q: %v", m, err)
+		}
+		matchingEntries = append(matchingEntries, event)
+	}
+
+	return matchingEntries
+}
+
+func checkChangefeedFailedLogs(t *testing.T, startTime int64) []eventpb.ChangefeedFailed {
+	var matchingEntries []eventpb.ChangefeedFailed
+
+	for _, m := range checkStructuredLogs(t, "changefeed_failed", startTime) {
+		jsonPayload := []byte(m)
+		var event eventpb.ChangefeedFailed
+		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
+			t.Errorf("unmarshalling %q: %v", m, err)
+		}
+		matchingEntries = append(matchingEntries, event)
+	}
+
+	return matchingEntries
 }

@@ -136,6 +136,10 @@ type Table interface {
 
 	// Zone returns a table's zone.
 	Zone() Zone
+
+	// IsPartitionAllBy returns true if this is a PARTITION ALL BY table. This
+	// includes REGIONAL BY ROW tables.
+	IsPartitionAllBy() bool
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check

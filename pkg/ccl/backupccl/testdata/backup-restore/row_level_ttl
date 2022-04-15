@@ -8,11 +8,11 @@ CREATE TABLE t (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes')
 ----
 
 exec-sql
-BACKUP DATABASE d TO 'nodelocal://1/database_backup/'
+BACKUP DATABASE d INTO 'nodelocal://1/database_backup/'
 ----
 
 exec-sql
-BACKUP TO 'nodelocal://1/full_cluster_backup/'
+BACKUP INTO 'nodelocal://1/full_cluster_backup/'
 ----
 
 new-server name=s2 share-io-dir=s1 allow-implicit-access
@@ -25,7 +25,11 @@ WHERE label LIKE 'row-level-ttl-%'
 0
 
 exec-sql
-RESTORE FROM 'nodelocal://0/full_cluster_backup/'
+RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/'
+----
+
+exec-sql
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
 ----
 
 query-sql
@@ -54,7 +58,11 @@ WHERE label LIKE 'row-level-ttl-%'
 0
 
 exec-sql
-RESTORE DATABASE d FROM 'nodelocal://0/database_backup/'
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database_backup/'
+----
+
+exec-sql
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
 ----
 
 query-sql
@@ -87,7 +95,11 @@ CREATE DATABASE d
 ----
 
 exec-sql
-RESTORE TABLE d.public.t FROM 'nodelocal://0/database_backup/'
+RESTORE TABLE d.public.t FROM LATEST IN 'nodelocal://0/database_backup/'
+----
+
+exec-sql
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
 ----
 
 query-sql

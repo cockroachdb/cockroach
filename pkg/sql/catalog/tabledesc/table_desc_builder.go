@@ -11,12 +11,16 @@
 package tabledesc
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -95,9 +99,14 @@ func (tdb *tableDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
 func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() error {
+	var err error
+
 	prevChanges := tdb.changes
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
-	tdb.changes = maybeFillInDescriptor(tdb.maybeModified)
+	tdb.changes, err = maybeFillInDescriptor(tdb.maybeModified)
+	if err != nil {
+		return err
+	}
 	prevChanges.ForEach(func(change catalog.PostDeserializationChangeType) {
 		tdb.changes.Add(change)
 	})
@@ -152,7 +161,7 @@ func (tdb *tableDescriptorBuilder) BuildExistingMutableTable() *Mutable {
 			TableDescriptor: *tdb.maybeModified,
 			changes:         tdb.changes,
 		},
-		ClusterVersion: *tdb.original,
+		original: makeImmutable(tdb.original),
 	}
 }
 
@@ -196,7 +205,7 @@ func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 // (for example: additional default privileges).
 func maybeFillInDescriptor(
 	desc *descpb.TableDescriptor,
-) (changes catalog.PostDeserializationChanges) {
+) (changes catalog.PostDeserializationChanges, err error) {
 	set := func(change catalog.PostDeserializationChangeType, cond bool) {
 		if cond {
 			changes.Add(change)
@@ -236,7 +245,77 @@ func maybeFillInDescriptor(
 	set(catalog.UpgradedPrivileges, fixedPrivileges || addedGrantOptions)
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
-	return changes
+
+	rewrittenCast, err := maybeRewriteCast(desc)
+	if err != nil {
+		return changes, err
+	}
+	set(catalog.FixedDateStyleIntervalStyleCast, rewrittenCast)
+	return changes, nil
+}
+
+// maybeRewriteCast rewrites stable cast in computed columns, indexes and
+// partial indexes that cause issues with DateStyle/IntervalStyle
+func maybeRewriteCast(desc *descpb.TableDescriptor) (hasChanged bool, err error) {
+	// We skip the system tables due to type checking not working properly during
+	// init time.
+	if desc.ParentID == keys.SystemDatabaseID {
+		return false, nil
+	}
+
+	ctx := context.Background()
+	var semaCtx tree.SemaContext
+	semaCtx.IntervalStyleEnabled = true
+	semaCtx.DateStyleEnabled = true
+	hasChanged = false
+
+	for i, col := range desc.Columns {
+		if col.IsComputed() {
+			expr, err := parser.ParseExpr(*col.ComputeExpr)
+			if err != nil {
+				return hasChanged, err
+			}
+			newExpr, changed, err := ResolveCastForStyleUsingVisitor(
+				ctx,
+				&semaCtx,
+				desc,
+				expr,
+			)
+			if err != nil {
+				return hasChanged, err
+			}
+			if changed {
+				hasChanged = true
+				s := tree.Serialize(newExpr)
+				desc.Columns[i].ComputeExpr = &s
+			}
+		}
+	}
+
+	for i, idx := range desc.Indexes {
+		if idx.IsPartial() {
+			expr, err := parser.ParseExpr(idx.Predicate)
+
+			if err != nil {
+				return hasChanged, err
+			}
+			newExpr, changed, err := ResolveCastForStyleUsingVisitor(
+				ctx,
+				&semaCtx,
+				desc,
+				expr,
+			)
+			if err != nil {
+				return hasChanged, err
+			}
+			if changed {
+				hasChanged = true
+				s := tree.Serialize(newExpr)
+				desc.Indexes[i].Predicate = s
+			}
+		}
+	}
+	return hasChanged, nil
 }
 
 // maybeRemoveDefaultExprFromComputedColumns removes DEFAULT expressions on
@@ -571,7 +650,11 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 }
 
 // maybeUpgradeSecondaryIndexFormatVersion tries to promote a secondary index to
-// version PrimaryIndexWithStoredColumnsVersion whenever possible.
+// version LatestIndexDescriptorVersion whenever possible.
+//
+// TODO(postamar): upgrade all the way to LatestIndexDescriptorVersion in 22.2
+// This is not possible until then because of a limitation in 21.2 which affects
+// mixed-21.2-22.1-version clusters (issue #78426).
 func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
 	switch idx.Version {
 	case descpb.SecondaryIndexFamilyFormatVersion:
@@ -580,9 +663,6 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 		}
 	case descpb.EmptyArraysInInvertedIndexesVersion:
 		break
-	case descpb.StrictIndexColumnIDGuaranteesVersion:
-		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
-		return true
 	default:
 		return false
 	}
@@ -597,7 +677,7 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 	if set.Contains(0) {
 		return false
 	}
-	idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 	return true
 }
 

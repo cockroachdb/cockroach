@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -707,12 +709,12 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			// lease but not over the RHS lease.
 			tc, _ := setupTestClusterWithDummyRange(t, clusterArgs, "cttest" /* dbName */, "kv" /* tableName */, numNodes)
 			defer tc.Stopper().Stop(ctx)
-			_, err := tc.ServerConn(0).Exec(fmt.Sprintf(`
+			sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+			sqlDB.ExecMultiple(t, strings.Split(fmt.Sprintf(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
-`, 5*time.Second, 100*time.Millisecond))
-			require.NoError(t, err)
+`, 5*time.Second, 100*time.Millisecond), ";")...)
 			leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, "cttest", "kv", hlc.Timestamp{} /* splitExpirationTime */)
 
 			leftLeaseholder := getCurrentLeaseholder(t, tc, leftDesc)
@@ -772,7 +774,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 			require.NoError(t, err)
 			r, err := store.GetReplica(rightDesc.RangeID)
 			require.NoError(t, err)
-			maxClosed := r.GetClosedTimestamp(ctx)
+			maxClosed := r.GetCurrentClosedTimestamp(ctx)
 			// Note that maxClosed would not necessarily be below the freeze start if
 			// this was a LEAD_FOR_GLOBAL_READS range.
 			assert.True(t, maxClosed.LessEq(freezeStartTimestamp),
@@ -807,7 +809,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 				mergedLeaseholder, err := leftLeaseholderStore.GetReplica(leftDesc.RangeID)
 				require.NoError(t, err)
 				writeTime := rhsLeaseStart.Prev()
-				require.True(t, mergedLeaseholder.GetClosedTimestamp(ctx).Less(writeTime))
+				require.True(t, mergedLeaseholder.GetCurrentClosedTimestamp(ctx).Less(writeTime))
 				var baWrite roachpb.BatchRequest
 				baWrite.Header.RangeID = leftDesc.RangeID
 				baWrite.Header.Timestamp = writeTime
@@ -1184,12 +1186,13 @@ func setupClusterForClosedTSTesting(
 	dbName, tableName string,
 ) (tc serverutils.TestClusterInterface, db0 *gosql.DB, kvTableDesc roachpb.RangeDescriptor) {
 	tc, desc := setupTestClusterWithDummyRange(t, clusterArgs, dbName, tableName, numNodes)
-	_, err := tc.ServerConn(0).Exec(fmt.Sprintf(`
+	sqlRunner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlRunner.ExecMultiple(t, strings.Split(fmt.Sprintf(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
-`, targetDuration, targetDuration/4))
-	require.NoError(t, err)
+`, targetDuration, targetDuration/4),
+		";")...)
 
 	return tc, tc.ServerConn(0), desc
 }

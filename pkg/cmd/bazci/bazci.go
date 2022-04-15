@@ -229,6 +229,8 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 			// to replace (it's the output directory for the configuration).
 			componentsTestlogs[len(componentsTestlogs)-2] = componentsBinLocation[len(componentsTestlogs)-2]
 			ret.transitionTests[fullTarget] = strings.Join(componentsTestlogs, "/")
+		case "nodejs_test":
+			ret.tests = append(ret.tests, fullTarget)
 		case "test_suite":
 			// Expand the list of tests from the test suite with another query.
 			allTests, err := runBazelReturningStdout("query", "tests("+fullTarget+")")

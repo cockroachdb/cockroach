@@ -113,7 +113,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 	}
 
 	checkQuery := createIndexCheckQuery(
-		colNames(pkColumns), colNames(otherColumns), o.tableDesc.GetID(), o.index.GetID(), o.tableDesc.GetPrimaryIndexID(),
+		colNames(pkColumns), colNames(otherColumns), o.tableDesc.GetID(), o.index, o.tableDesc.GetPrimaryIndexID(),
 	)
 
 	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
@@ -281,19 +281,23 @@ func createIndexCheckQuery(
 	pkColumns []string,
 	otherColumns []string,
 	tableID descpb.ID,
-	indexID descpb.IndexID,
+	index catalog.Index,
 	primaryIndexID descpb.IndexID,
 ) string {
 	allColumns := append(pkColumns, otherColumns...)
+	predicate := ""
+	if index.IsPartial() {
+		predicate = fmt.Sprintf(" WHERE %s", index.GetPredicate())
+	}
 	// We need to make sure we can handle the non-public column `rowid`
 	// that is created for implicit primary keys. In order to do so, the
 	// rendered columns need to explicit in the inner selects.
 	const checkIndexQuery = `
     SELECT %[1]s, %[2]s
     FROM
-      (SELECT %[8]s FROM [%[3]d AS table_pri]@{FORCE_INDEX=[%[9]d]}) AS pri
+      (SELECT %[8]s FROM [%[3]d AS table_pri]@{FORCE_INDEX=[%[9]d]}%[10]s) AS pri
     FULL OUTER JOIN
-      (SELECT %[8]s FROM [%[3]d AS table_sec]@{FORCE_INDEX=[%[4]d]}) AS sec
+      (SELECT %[8]s FROM [%[3]d AS table_sec]@{FORCE_INDEX=[%[4]d]}%[10]s) AS sec
     ON %[5]s
     WHERE %[6]s IS NULL OR %[7]s IS NULL`
 	return fmt.Sprintf(
@@ -309,7 +313,7 @@ func createIndexCheckQuery(
 		tableID,
 
 		// 4
-		indexID,
+		index.GetID(),
 
 		// 5: pri.k = sec.k AND pri.l = sec.l AND
 		//    pri.a IS NOT DISTINCT FROM sec.a AND pri.b IS NOT DISTINCT FROM sec.b
@@ -333,5 +337,9 @@ func createIndexCheckQuery(
 
 		// 9
 		primaryIndexID,
+
+		// 10: WHERE <some predicate>
+		// Can be empty string for non-partial indexes
+		predicate,
 	)
 }

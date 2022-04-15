@@ -16,6 +16,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"math"
 	"net"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -179,8 +181,6 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 		grpc.MaxConcurrentStreams(math.MaxInt32),
 		grpc.KeepaliveParams(serverKeepalive),
 		grpc.KeepaliveEnforcementPolicy(serverEnforcement),
-		// A stats handler to measure server network stats.
-		grpc.StatsHandler(&rpcCtx.stats),
 	}
 	if !rpcCtx.Config.Insecure {
 		tlsConfig, err := rpcCtx.GetServerTLSConfig()
@@ -357,8 +357,6 @@ type Context struct {
 
 	conns syncmap.Map
 
-	stats StatsHandler
-
 	metrics Metrics
 
 	// For unittesting.
@@ -421,10 +419,16 @@ type ContextOptions struct {
 	// https://github.com/cockroachdb/cockroach/pull/73309
 	NodeID *base.NodeIDContainer
 
-	// ClusterID is the cluster ID shared with the remainder of the
-	// server. If unset in the options, the RPC context will instantiate
-	// its own separate container (this is useful in tests).
-	ClusterID *base.ClusterIDContainer
+	// StorageClusterID is the storage cluster's ID, shared with all
+	// tenants on the same storage cluster. If unset in the options, the
+	// RPC context will instantiate its own separate container (this is
+	// useful in tests).
+	StorageClusterID *base.ClusterIDContainer
+
+	// LogicalClusterID is this server's cluster ID, different for each
+	// tenant sharing the same storage cluster. If unset in the options,
+	// the RPC context will use a mix of StorageClusterID and TenantID.
+	LogicalClusterID *base.ClusterIDContainer
 
 	// ClientOnly indicates that this RPC context is run by a CLI
 	// utility, not a server, and thus misses server configuration, a
@@ -468,10 +472,46 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		opts.NodeID = &c
 	}
 
-	if opts.ClusterID == nil {
+	if opts.StorageClusterID == nil {
 		// Tests rely on NewContext to generate its own ID container.
 		var c base.ClusterIDContainer
-		opts.ClusterID = &c
+		opts.StorageClusterID = &c
+	}
+
+	if opts.LogicalClusterID == nil {
+		if opts.TenantID.IsSystem() {
+			// We currently expose the storage cluster ID as logical
+			// cluster ID in the system tenant so that someone with
+			// access to the system tenant can extract the storage cluster ID
+			// via e.g. crdb_internal.cluster_id().
+			//
+			// TODO(knz): Remove this special case. The system tenant ought
+			// to use a separate logical cluster ID too. We should use
+			// separate primitives in crdb_internal, etc. to retrieve
+			// the logical and storage cluster ID separately from each other.
+			opts.LogicalClusterID = opts.StorageClusterID
+		} else {
+			// Create a logical cluster ID derived from the storage cluster
+			// ID, but different for each tenant.
+			// TODO(knz): Move this logic out of RPCContext.
+			logicalClusterID := &base.ClusterIDContainer{}
+			hasher := fnv.New64a()
+			var b [8]byte
+			binary.BigEndian.PutUint64(b[:], opts.TenantID.ToUint64())
+			hasher.Write(b[:])
+			hashedTenantID := hasher.Sum64()
+
+			prevOnSet := opts.StorageClusterID.OnSet
+			opts.StorageClusterID.OnSet = func(id uuid.UUID) {
+				if prevOnSet != nil {
+					prevOnSet(id)
+				}
+				hiLo := id.ToUint128()
+				hiLo.Lo += hashedTenantID
+				logicalClusterID.Set(ctx, uuid.FromUint128(hiLo))
+			}
+			opts.LogicalClusterID = logicalClusterID
+		}
 	}
 
 	masterCtx, cancel := context.WithCancel(ctx)
@@ -489,8 +529,8 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		metrics:          makeMetrics(),
 		heartbeatTimeout: 2 * opts.Config.RPCHeartbeatInterval,
 	}
-	if id := opts.Knobs.ClusterID; id != nil {
-		rpcCtx.ClusterID.Set(masterCtx, *id)
+	if id := opts.Knobs.StorageClusterID; id != nil {
+		rpcCtx.StorageClusterID.Set(masterCtx, *id)
 	}
 
 	waitQuiesce := func(context.Context) {
@@ -524,13 +564,6 @@ func (rpcCtx *Context) ClusterName() string {
 		return "<MISSING RPC CONTEXT>"
 	}
 	return rpcCtx.Config.ClusterName
-}
-
-// GetStatsMap returns a map of network statistics maintained by the
-// internal stats handler. The map is from the remote network address
-// (in string form) to an rpc.Stats object.
-func (rpcCtx *Context) GetStatsMap() *syncmap.Map {
-	return &rpcCtx.stats.stats
 }
 
 // Metrics returns the Context's Metrics struct.
@@ -598,6 +631,13 @@ func (a internalClientAdapter) GetSpanConfigs(
 	ctx context.Context, req *roachpb.GetSpanConfigsRequest, _ ...grpc.CallOption,
 ) (*roachpb.GetSpanConfigsResponse, error) {
 	return a.server.GetSpanConfigs(ctx, req)
+}
+
+// GetAllSystemSpanConfigsThatApply is part of the roachpb.InternalClient interface.
+func (a internalClientAdapter) GetAllSystemSpanConfigsThatApply(
+	ctx context.Context, req *roachpb.GetAllSystemSpanConfigsThatApplyRequest, _ ...grpc.CallOption,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
+	return a.server.GetAllSystemSpanConfigsThatApply(ctx, req)
 }
 
 // UpdateSpanConfigs is part of the roachpb.InternalClient interface.
@@ -1182,9 +1222,6 @@ func (rpcCtx *Context) grpcDialRaw(
 		return nil, nil, err
 	}
 
-	// Add a stats handler to measure client network stats.
-	dialOpts = append(dialOpts, grpc.WithStatsHandler(rpcCtx.stats.newClient(target)))
-
 	// Lower the MaxBackoff (which defaults to ~minutes) to something in the
 	// ~second range.
 	backoffConfig := backoff.DefaultConfig
@@ -1408,7 +1445,7 @@ func (rpcCtx *Context) runHeartbeat(
 
 		if err := rpcCtx.Stopper.RunTaskWithErr(ctx, "rpc heartbeat", func(ctx context.Context) error {
 			// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
-			clusterID := rpcCtx.ClusterID.Get()
+			clusterID := rpcCtx.StorageClusterID.Get()
 			request := &PingRequest{
 				OriginNodeID:         rpcCtx.NodeID.Get(),
 				OriginAddr:           rpcCtx.Config.Addr,
@@ -1527,7 +1564,7 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 		remoteClockMonitor:                    rpcCtx.RemoteClocks,
 		clusterName:                           rpcCtx.ClusterName(),
 		disableClusterNameVerification:        rpcCtx.Config.DisableClusterNameVerification,
-		clusterID:                             rpcCtx.ClusterID,
+		clusterID:                             rpcCtx.StorageClusterID,
 		nodeID:                                rpcCtx.NodeID,
 		settings:                              rpcCtx.Settings,
 		onHandlePing:                          rpcCtx.OnIncomingPing,

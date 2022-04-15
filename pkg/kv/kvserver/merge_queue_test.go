@@ -36,7 +36,9 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 	testCtx := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	testCtx.Start(ctx, t, stopper)
+	tsc := TestStoreConfig(nil)
+	tsc.SpanConfigsDisabled = true
+	testCtx.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	mq := newMergeQueue(testCtx.store, testCtx.store.DB())
 	kvserverbase.MergeQueueEnabled.Override(ctx, &testCtx.store.ClusterSettings().SV, true)
@@ -45,8 +47,8 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 		return keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(offset))
 	}
 
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(bootstrap.TestingUserDescID(0)), *zonepb.NewZoneConfig())
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(bootstrap.TestingUserDescID(1)), *zonepb.NewZoneConfig())
+	config.TestingSetZoneConfig(config.ObjectID(bootstrap.TestingUserDescID(0)), *zonepb.NewZoneConfig())
+	config.TestingSetZoneConfig(config.ObjectID(bootstrap.TestingUserDescID(1)), *zonepb.NewZoneConfig())
 
 	type testCase struct {
 		startKey, endKey []byte

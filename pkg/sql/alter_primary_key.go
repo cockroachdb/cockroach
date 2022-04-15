@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -85,7 +86,7 @@ func (p *planner) AlterPrimaryKey(
 	// Ensure that other schema changes on this table are not currently
 	// executing, and that other schema changes have not been performed
 	// in the current transaction.
-	currentMutationID := tableDesc.ClusterVersion.NextMutationID
+	currentMutationID := tableDesc.ClusterVersion().NextMutationID
 	for i := range tableDesc.Mutations {
 		mut := &tableDesc.Mutations[i]
 		if mut.MutationID == currentMutationID {
@@ -134,6 +135,11 @@ func (p *planner) AlterPrimaryKey(
 		if col.IsNullable() {
 			return pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column %q in primary key", col.GetName())
 		}
+		if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Start22_1) {
+			if col.IsVirtual() {
+				return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use virtual column %q in primary key", col.GetName())
+			}
+		}
 	}
 
 	// Validate if the end result is the same as the current
@@ -171,9 +177,12 @@ func (p *planner) AlterPrimaryKey(
 		CreatedExplicitly: true,
 		EncodingType:      descpb.PrimaryIndexEncoding,
 		Type:              descpb.IndexDescriptor_FORWARD,
-		Version:           descpb.PrimaryIndexWithStoredColumnsVersion,
-		ConstraintID:      tableDesc.GetNextConstraintID(),
-		CreatedAtNanos:    p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
+		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
+		// This is not possible until then because of a limitation in 21.2 which
+		// affects mixed-21.2-22.1-version clusters (issue #78426).
+		Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+		ConstraintID:   tableDesc.GetNextConstraintID(),
+		CreatedAtNanos: p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 	}
 	tableDesc.NextConstraintID++
 
@@ -346,7 +355,11 @@ func (p *planner) AlterPrimaryKey(
 		newUniqueIdx.CompositeColumnIDs = nil
 		newUniqueIdx.KeyColumnIDs = nil
 		// Set correct version and encoding type.
-		newUniqueIdx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+		//
+		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
+		// This is not possible until then because of a limitation in 21.2 which
+		// affects mixed-21.2-22.1-version clusters (issue #78426).
+		newUniqueIdx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 		newUniqueIdx.EncodingType = descpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newUniqueIdx, newPrimaryIndexDesc, p.ExecCfg().Settings); err != nil {
 			return err
@@ -473,7 +486,10 @@ func (p *planner) AlterPrimaryKey(
 		}
 
 		newIndex.Name = tabledesc.GenerateUniqueName(basename, nameExists)
-		newIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
+		// This is not possible until then because of a limitation in 21.2 which
+		// affects mixed-21.2-22.1-version clusters (issue #78426).
+		newIndex.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 		newIndex.EncodingType = descpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc, p.ExecCfg().Settings); err != nil {
 			return err
@@ -628,6 +644,7 @@ func (p *planner) shouldCreateIndexes(
 // * The new primary key isn't the same set of columns and directions
 //   other than hash sharding.
 // * There is no partitioning change.
+// * There is no existing secondary index on the old primary key columns.
 func shouldCopyPrimaryKey(
 	desc *tabledesc.Mutable,
 	newPK *descpb.IndexDescriptor,
@@ -659,11 +676,44 @@ func shouldCopyPrimaryKey(
 		}
 		return true
 	}
+	alreadyHasSecondaryIndexOnPKColumns := func(desc catalog.TableDescriptor) bool {
+		// Return true if there exists a secondary index that is "identical" to desc's PK index. This function
+		// is used to avoid creating duplicate secondary index during `ALTER PRIMARY KEY`.
+
+		// Two indexes are considered "identical" if they have the same
+		// uniqueness AND partiallness AND same key columns in same order with same direction
+		isIdentical := func(idx1, idx2 catalog.Index) bool {
+			if idx1.IsUnique() != idx2.IsUnique() ||
+				idx1.IsPartial() != idx2.IsPartial() ||
+				idx1.NumKeyColumns() != idx2.NumKeyColumns() ||
+				(idx1.IsPartial() && idx1.GetPredicate() != idx2.GetPredicate()) {
+				return false
+			}
+
+			for i := 0; i < idx1.NumKeyColumns(); i++ {
+				if idx1.GetKeyColumnID(i) != idx2.GetKeyColumnID(i) ||
+					idx1.GetKeyColumnDirection(i) != idx2.GetKeyColumnDirection(i) {
+					return false
+				}
+			}
+
+			return true
+		}
+
+		pk := desc.GetPrimaryIndex()
+		for _, idx := range desc.PublicNonPrimaryIndexes() {
+			if isIdentical(pk, idx) {
+				return true
+			}
+		}
+		return false
+	}
 	oldPK := desc.GetPrimaryIndex().IndexDesc()
 	return alterPrimaryKeyLocalitySwap == nil &&
 		desc.HasPrimaryKey() &&
 		!desc.IsPrimaryIndexDefaultRowID() &&
-		!idsAndDirsMatch(oldPK, newPK)
+		!idsAndDirsMatch(oldPK, newPK) &&
+		!alreadyHasSecondaryIndexOnPKColumns(desc)
 }
 
 // addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given

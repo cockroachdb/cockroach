@@ -40,7 +40,7 @@ export function* notifificationsSaga() {
   yield all([
     takeEvery(terminateQueryActions.terminateSessionCompleted, function*() {
       yield put(
-        notificationAction(NotificationType.Success, "Session terminated."),
+        notificationAction(NotificationType.Success, "Session cancelled."),
       );
     }),
 
@@ -48,14 +48,14 @@ export function* notifificationsSaga() {
       yield put(
         notificationAction(
           NotificationType.Error,
-          "There was an error terminating the session",
+          "There was an error cancelling the session",
         ),
       );
     }),
 
     takeEvery(terminateQueryActions.terminateQueryCompleted, function*() {
       yield put(
-        notificationAction(NotificationType.Success, "Query terminated."),
+        notificationAction(NotificationType.Success, "Statement cancelled."),
       );
     }),
 
@@ -63,7 +63,7 @@ export function* notifificationsSaga() {
       yield put(
         notificationAction(
           NotificationType.Error,
-          "There was an error terminating the query.",
+          "There was an error cancelling the statement.",
         ),
       );
     }),

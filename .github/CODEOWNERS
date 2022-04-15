@@ -29,8 +29,25 @@
 
 /pkg/sql/                    @cockroachdb/sql-queries-noreview
 
-/pkg/sql/opt/                @cockroachdb/sql-opt-prs
-/pkg/sql/stats/              @cockroachdb/sql-opt-prs
+/pkg/sql/inverted/           @cockroachdb/sql-queries
+/pkg/sql/opt/                @cockroachdb/sql-queries
+/pkg/sql/opt_*.go            @cockroachdb/sql-queries
+/pkg/sql/opt/exec/execbuilder/testdata/ @cockroachdb/sql-queries-noreview
+/pkg/sql/plan_opt*.go        @cockroachdb/sql-queries
+/pkg/sql/querycache/         @cockroachdb/sql-queries
+/pkg/sql/span/               @cockroachdb/sql-queries
+/pkg/sql/stats/              @cockroachdb/sql-queries
+
+/pkg/sql/col*                @cockroachdb/sql-queries
+/pkg/sql/distsql*.go         @cockroachdb/sql-queries
+/pkg/sql/exec*               @cockroachdb/sql-queries
+/pkg/sql/exec_log*.go        @cockroachdb/sql-queries-noreview
+/pkg/sql/exec_util*.go       @cockroachdb/sql-queries-noreview
+/pkg/sql/flowinfra/          @cockroachdb/sql-queries
+/pkg/sql/physicalplan/       @cockroachdb/sql-queries
+/pkg/sql/row*                @cockroachdb/sql-queries
+
+/pkg/sql/execstats/          @cockroachdb/sql-observability
 
 /pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
 /pkg/sql/parser/             @cockroachdb/sql-syntax-prs
@@ -182,7 +199,7 @@
 /pkg/cmd/reduce/             @cockroachdb/sql-queries
 /pkg/cmd/release/            @cockroachdb/dev-inf
 /pkg/cmd/returncheck/        @cockroachdb/dev-inf
-/pkg/cmd/roachprod/          @cockroachdb/dev-inf
+/pkg/cmd/roachprod/          @cockroachdb/test-eng
 /pkg/cmd/roachprod-stress/   @cockroachdb/test-eng
 /pkg/cmd/roachtest/          @cockroachdb/test-eng
 /pkg/cmd/label-merged-pr/    @cockroachdb/dev-inf
@@ -252,7 +269,7 @@
 /pkg/roachpb/testdata/ambi*  @cockroachdb/kv-prs
 /pkg/roachpb/testdata/repl*  @cockroachdb/kv-prs
 /pkg/roachpb/version*        @cockroachdb/unowned
-/pkg/roachprod/              @cockroachdb/dev-inf
+/pkg/roachprod/              @cockroachdb/test-eng
 /pkg/rpc/                    @cockroachdb/server-prs
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
 /pkg/security/               @cockroachdb/server-prs @cockroachdb/prodsec

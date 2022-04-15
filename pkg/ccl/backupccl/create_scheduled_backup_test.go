@@ -12,9 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
 	"net/url"
-	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -26,15 +24,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -50,7 +49,7 @@ const allSchedules = 0
 // use jobstest.JobSchedulerTestEnv.
 // This helper also arranges for the manual override of scheduling logic
 // via executeSchedules callback.
-type execSchedulesFn = func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error
+type execSchedulesFn = func(ctx context.Context, maxSchedules int64) error
 type testHelper struct {
 	iodir            string
 	server           serverutils.TestServerInterface
@@ -76,12 +75,9 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 		TakeOverJobsScheduling: func(fn execSchedulesFn) {
 			th.executeSchedules = func() error {
 				defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-				return th.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-					return fn(ctx, allSchedules, txn)
-				})
+				return fn(context.Background(), allSchedules)
 			}
 		},
-
 		CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
 			th.cfg = config
 		},
@@ -801,7 +797,13 @@ INSERT INTO t1 values (-1), (10), (-100);
 				}
 
 				// Verify backup.
-				latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", testName, latestHistoryDirectory+"/"+latestFileName))
+				execCfg := th.server.ExecutorConfig().(sql.ExecutorConfig)
+				ctx := context.Background()
+				store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, destination, security.RootUserName())
+				require.NoError(t, err)
+				r, err := findLatestFile(ctx, store)
+				require.NoError(t, err)
+				latest, err := ioctx.ReadAll(ctx, r)
 				require.NoError(t, err)
 				backedUp := th.sqlDB.QueryStr(t,
 					`SELECT database_name, object_name FROM [SHOW BACKUP $1] WHERE object_type='table' ORDER BY database_name, object_name`,

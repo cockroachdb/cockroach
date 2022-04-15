@@ -179,7 +179,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                   type="secondary"
                   size="small"
                 >
-                  Cancel query
+                  Cancel statement
                 </Button>
                 <Button
                   onClick={() => {
@@ -327,7 +327,6 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                       <Link
                         to={StatementLinkTarget({
                           statementFingerprintID: stmt.id,
-                          statementNoConstants: stmt.sql_no_constants,
                           implicitTxn: session.active_txn?.implicit,
                         })}
                         onClick={() =>

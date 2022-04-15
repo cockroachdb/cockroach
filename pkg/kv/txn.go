@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -119,6 +118,19 @@ type Txn struct {
 //
 // See also db.NewTxn().
 func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+	return NewTxnWithAdmissionControl(
+		ctx, db, gatewayNodeID, roachpb.AdmissionHeader_OTHER, admission.NormalPri)
+}
+
+// NewTxnWithAdmissionControl creates a new transaction with the specified
+// admission control source and priority. See NewTxn() for details.
+func NewTxnWithAdmissionControl(
+	ctx context.Context,
+	db *DB,
+	gatewayNodeID roachpb.NodeID,
+	source roachpb.AdmissionHeader_Source,
+	priority admission.WorkPriority,
+) *Txn {
 	if db == nil {
 		panic(errors.WithContextTags(
 			errors.AssertionFailedf("attempting to create txn with nil db"), ctx))
@@ -133,8 +145,13 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 		db.clock.MaxOffset().Nanoseconds(),
 		int32(db.ctx.NodeID.SQLInstanceID()),
 	)
-
-	return NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
+	txn := NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
+	txn.admissionHeader = roachpb.AdmissionHeader{
+		CreateTime: db.clock.PhysicalNow(),
+		Priority:   int32(priority),
+		Source:     source,
+	}
+	return txn
 }
 
 // NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL. Note
@@ -148,12 +165,8 @@ func NewTxnWithSteppingEnabled(
 	gatewayNodeID roachpb.NodeID,
 	qualityOfService sessiondatapb.QoSLevel,
 ) *Txn {
-	txn := NewTxn(ctx, db, gatewayNodeID)
-	txn.admissionHeader = roachpb.AdmissionHeader{
-		Priority:   int32(qualityOfService),
-		CreateTime: timeutil.Now().UnixNano(),
-		Source:     roachpb.AdmissionHeader_FROM_SQL,
-	}
+	txn := NewTxnWithAdmissionControl(ctx, db, gatewayNodeID,
+		roachpb.AdmissionHeader_FROM_SQL, admission.WorkPriority(qualityOfService))
 	_ = txn.ConfigureStepping(ctx, SteppingEnabled)
 	return txn
 }
@@ -165,13 +178,8 @@ func NewTxnWithSteppingEnabled(
 // transaction to undergo admission control. See AdmissionHeader_Source for more
 // details.
 func NewTxnRootKV(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
-	txn := NewTxn(ctx, db, gatewayNodeID)
-	txn.admissionHeader = roachpb.AdmissionHeader{
-		Priority:   int32(admission.NormalPri),
-		CreateTime: timeutil.Now().UnixNano(),
-		Source:     roachpb.AdmissionHeader_ROOT_KV,
-	}
-	return txn
+	return NewTxnWithAdmissionControl(
+		ctx, db, gatewayNodeID, roachpb.AdmissionHeader_ROOT_KV, admission.NormalPri)
 }
 
 // NewTxnFromProto is like NewTxn but assumes the Transaction object is already initialized.
@@ -956,6 +964,11 @@ func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) *endTxnReq
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
 type AutoCommitError struct {
 	cause error
+}
+
+// Cause implements errors.Causer.
+func (e *AutoCommitError) Cause() error {
+	return e.cause
 }
 
 func (e *AutoCommitError) Error() string {

@@ -41,6 +41,9 @@ func (m *Restore) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 func (m *SetClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *SetTenantClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *AdminQuery) LoggingChannel() logpb.Channel { return logpb.Channel_SENSITIVE_ACCESS }
 
 // LoggingChannel implements the EventPayload interface.
@@ -264,10 +267,19 @@ func (m *CreateRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_
 func (m *DropRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *GrantRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *PasswordHashConverted) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *CapturedIndexUsageStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *ChangefeedFailed) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *CreateChangefeed) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *SampledQuery) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }

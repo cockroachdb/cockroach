@@ -109,7 +109,7 @@ function getSessionAppFilterOptions(sessions: SessionInfo[]): string[] {
     ),
   );
 
-  return Array.from(uniqueAppNames);
+  return Array.from(uniqueAppNames).sort();
 }
 
 export class SessionsPage extends React.Component<
@@ -328,7 +328,7 @@ export class SessionsPage extends React.Component<
 
     const isColumnSelected = (c: ColumnDescriptor<SessionInfo>) => {
       return (
-        (!userSelectedColumnsToShow && c.showByDefault) ||
+        (userSelectedColumnsToShow === null && c.showByDefault !== false) ||
         (userSelectedColumnsToShow &&
           userSelectedColumnsToShow.includes(c.name)) ||
         c.alwaysShow

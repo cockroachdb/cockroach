@@ -173,7 +173,7 @@ func run(svc s3I, flags runFlags, execFn release.ExecFn) {
 		o.VersionStr = versionStr
 		o.BucketName = bucketName
 		o.AbsolutePath = filepath.Join(flags.pkgDir, "cockroach"+release.SuffixFromPlatform(platform))
-
+		o.CockroachSQLAbsolutePath = filepath.Join(flags.pkgDir, "cockroach-sql"+release.SuffixFromPlatform(platform))
 		cockroachBuildOpts = append(cockroachBuildOpts, o)
 	}
 
@@ -224,9 +224,10 @@ type opts struct {
 
 	Platform release.Platform
 
-	AbsolutePath string
-	BucketName   string
-	PkgDir       string
+	AbsolutePath             string
+	CockroachSQLAbsolutePath string
+	BucketName               string
+	PkgDir                   string
 }
 
 func putNonRelease(svc s3I, o opts) {
@@ -236,7 +237,10 @@ func putNonRelease(svc s3I, o opts) {
 			Branch:     o.Branch,
 			BucketName: o.BucketName,
 			Files: append(
-				[]release.NonReleaseFile{release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr)},
+				[]release.NonReleaseFile{
+					release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr),
+					release.MakeCRDBBinaryNonReleaseFile(o.CockroachSQLAbsolutePath, o.VersionStr),
+				},
 				release.MakeCRDBLibraryNonReleaseFiles(o.PkgDir, o.Platform, o.VersionStr)...,
 			),
 		},
@@ -244,7 +248,7 @@ func putNonRelease(svc s3I, o opts) {
 }
 
 func s3KeyRelease(o opts) (string, string) {
-	return release.S3KeyRelease(o.Platform, o.VersionStr)
+	return release.S3KeyRelease(o.Platform, o.VersionStr, "cockroach")
 }
 
 func putRelease(svc s3I, o opts) {
@@ -254,14 +258,21 @@ func putRelease(svc s3I, o opts) {
 		Platform:   o.Platform,
 		VersionStr: o.VersionStr,
 		Files: append(
-			[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath)},
+			[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath, "cockroach")},
 			release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.Platform)...,
 		),
+		ExtraFiles: []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.CockroachSQLAbsolutePath, "cockroach-sql")},
 	})
 }
 
 func markLatestRelease(svc s3I, o opts) {
+	markLatestReleaseWithSuffix(svc, o, "")
+	markLatestReleaseWithSuffix(svc, o, release.ChecksumSuffix)
+}
+
+func markLatestReleaseWithSuffix(svc s3I, o opts, suffix string) {
 	_, keyRelease := s3KeyRelease(o)
+	keyRelease += suffix
 	log.Printf("Downloading from %s/%s", o.BucketName, keyRelease)
 	binary, err := svc.GetObject(&s3.GetObjectInput{
 		Bucket: &o.BucketName,
@@ -279,6 +290,7 @@ func markLatestRelease(svc s3I, o opts) {
 	oLatest := o
 	oLatest.VersionStr = latestStr
 	_, keyLatest := s3KeyRelease(oLatest)
+	keyLatest += suffix
 	log.Printf("Uploading to s3://%s/%s", o.BucketName, keyLatest)
 	putObjectInput := s3.PutObjectInput{
 		Bucket:       &o.BucketName,

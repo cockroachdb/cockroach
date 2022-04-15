@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -143,7 +142,7 @@ func newRangeOffsetHandler(
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -222,7 +221,7 @@ func newRangeOffsetHandler(
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -304,7 +303,7 @@ func newRangeOffsetHandler(
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -383,7 +382,7 @@ func newRangeOffsetHandler(
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -468,7 +467,7 @@ func newRangeOffsetHandler(
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -547,7 +546,7 @@ func newRangeOffsetHandler(
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -629,7 +628,7 @@ func newRangeOffsetHandler(
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -708,7 +707,7 @@ func newRangeOffsetHandler(
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -1865,7 +1864,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingStartAscDatum struct {
 	rangeOffsetHandlerBase
-	overloadHelper colexecbase.BinaryOverloadHelper
+	overloadHelper colexecutils.BinaryOverloadHelper
 	offset         tree.Datum
 }
 
@@ -2918,7 +2917,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingStartDescDatum struct {
 	rangeOffsetHandlerBase
-	overloadHelper colexecbase.BinaryOverloadHelper
+	overloadHelper colexecutils.BinaryOverloadHelper
 	offset         tree.Datum
 }
 
@@ -4296,7 +4295,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingEndAscDatum struct {
 	rangeOffsetHandlerBase
-	overloadHelper colexecbase.BinaryOverloadHelper
+	overloadHelper colexecutils.BinaryOverloadHelper
 	offset         tree.Datum
 }
 
@@ -5502,7 +5501,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingEndDescDatum struct {
 	rangeOffsetHandlerBase
-	overloadHelper colexecbase.BinaryOverloadHelper
+	overloadHelper colexecutils.BinaryOverloadHelper
 	offset         tree.Datum
 }
 
@@ -6761,7 +6760,7 @@ func (h *rangeHandlerOffsetFollowingStartAscTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingStartAscDatum struct {
 	rangeOffsetHandlerBase
-	overloadHelper colexecbase.BinaryOverloadHelper
+	overloadHelper colexecutils.BinaryOverloadHelper
 	offset         tree.Datum
 }
 
@@ -7814,7 +7813,7 @@ func (h *rangeHandlerOffsetFollowingStartDescTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingStartDescDatum struct {
 	rangeOffsetHandlerBase
-	overloadHelper colexecbase.BinaryOverloadHelper
+	overloadHelper colexecutils.BinaryOverloadHelper
 	offset         tree.Datum
 }
 
@@ -9192,7 +9191,7 @@ func (h *rangeHandlerOffsetFollowingEndAscTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingEndAscDatum struct {
 	rangeOffsetHandlerBase
-	overloadHelper colexecbase.BinaryOverloadHelper
+	overloadHelper colexecutils.BinaryOverloadHelper
 	offset         tree.Datum
 }
 
@@ -10398,7 +10397,7 @@ func (h *rangeHandlerOffsetFollowingEndDescTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingEndDescDatum struct {
 	rangeOffsetHandlerBase
-	overloadHelper colexecbase.BinaryOverloadHelper
+	overloadHelper colexecutils.BinaryOverloadHelper
 	offset         tree.Datum
 }
 

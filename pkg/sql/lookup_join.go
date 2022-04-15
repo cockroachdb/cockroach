@@ -70,6 +70,8 @@ type lookupJoinNode struct {
 	isSecondJoinInPairedJoiner bool
 
 	reqOrdering ReqOrdering
+
+	limitHint int64
 }
 
 func (lj *lookupJoinNode) startExec(params runParams) error {

@@ -152,6 +152,27 @@ import (
 // NOTE: metamorphic directive takes precedence over all other directives.
 //
 //
+// ###########################################################
+//           TENANT CLUSTER SETTING OVERRIDE OPTION DIRECTIVES
+// ###########################################################
+//
+// Test files can also contain tenant cluster setting override directives around
+// the beginning of the file. These directives can be used to configure tenant
+// cluster setting overrides during setup. This can be useful for altering
+// tenant read-only settings for configurations that run their tests as
+// secondary tenants (eg. 3node-tenant). While these directives apply to all
+// configurations under which the test will be run, it's only really meaningful
+// when the test runs as a secondary tenant; the configuration has no effect if
+// the test is run as the system tenant.
+//
+// The directives line looks like:
+// # tenant-cluster-setting-override-opt: opt1 opt2
+//
+// The options are:
+// - allow-zone-configs-for-secondary-tenants: If specified, secondary tenants
+// are allowed to alter their zone configurations.
+//
+//
 // ###########################################
 //           CLUSTER OPTION DIRECTIVES
 // ###########################################
@@ -198,6 +219,22 @@ import (
 //  - statement error <regexp>
 //    Runs the statement that follows and expects an
 //    error that matches the given regexp.
+//
+//  - statement async <name> <options>
+//    Runs a statement asynchronously, marking it as a pending
+//    statement with a unique name, to be completed and validated later with
+//    "awaitstatement". This is intended for use with statements that may block,
+//    such as those contending on locks. Other statement options described
+//    above are supported, though the statement may not be in a "repeat".
+//    Incomplete pending statements will result in an error on test completion.
+//    Note that as the statement will be run asynchronously, subsequent queries
+//    that depend on the state of the asynchronous statement should be run with
+//    the "retry" option to ensure deterministic testing and avoid racing with
+//    the asynchronous statement.
+//
+//  - awaitstatement <name>
+//    Completes a pending statement with the provided name, validating its
+//    results as expected per the given options to "statement async <name>...".
 //
 //  - query <typestring> <options> <label>
 //    Runs the query that follows and verifies the results (specified after the
@@ -484,8 +521,6 @@ type testClusterConfig struct {
 	overrideDistSQLMode string
 	// if non-empty, overrides the default vectorize mode.
 	overrideVectorize string
-	// if non-empty, overrides the default automatic statistics mode.
-	overrideAutoStats string
 	// if non-empty, overrides the default experimental DistSQL planning mode.
 	overrideExperimentalDistSQLPlanning string
 	// if set, queries using distSQL processors or vectorized operators that can
@@ -680,20 +715,17 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "local",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
 	},
 	{
 		name:                "local-vec-off",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
 		overrideVectorize:   "off",
 	},
 	{
 		name:                "local-v1.1@v1.0-noupgrade",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
 		bootstrapVersion:    roachpb.Version{Major: 1},
 		binaryVersion:       roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade:      true,
@@ -702,7 +734,6 @@ var logicTestConfigs = []testClusterConfig{
 		name:                                "local-spec-planning",
 		numNodes:                            1,
 		overrideDistSQLMode:                 "off",
-		overrideAutoStats:                   "false",
 		overrideExperimentalDistSQLPlanning: "on",
 	},
 	{
@@ -710,14 +741,12 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            3,
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
 	},
 	{
 		name:                "fakedist-vec-off",
 		numNodes:            3,
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
 		overrideVectorize:   "off",
 	},
 	{
@@ -725,7 +754,6 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:                   3,
 		useFakeSpanResolver:        true,
 		overrideDistSQLMode:        "on",
-		overrideAutoStats:          "false",
 		distSQLMetadataTestEnabled: true,
 		skipShort:                  true,
 	},
@@ -734,7 +762,6 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            3,
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
 	},
@@ -743,20 +770,17 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:                            3,
 		useFakeSpanResolver:                 true,
 		overrideDistSQLMode:                 "on",
-		overrideAutoStats:                   "false",
 		overrideExperimentalDistSQLPlanning: "on",
 	},
 	{
 		name:                "5node",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
 	},
 	{
 		name:                       "5node-metadata",
 		numNodes:                   5,
 		overrideDistSQLMode:        "on",
-		overrideAutoStats:          "false",
 		distSQLMetadataTestEnabled: true,
 		skipShort:                  true,
 	},
@@ -764,7 +788,6 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "5node-disk",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
 	},
@@ -772,7 +795,6 @@ var logicTestConfigs = []testClusterConfig{
 		name:                                "5node-spec-planning",
 		numNodes:                            5,
 		overrideDistSQLMode:                 "on",
-		overrideAutoStats:                   "false",
 		overrideExperimentalDistSQLPlanning: "on",
 	},
 	{
@@ -781,13 +803,10 @@ var logicTestConfigs = []testClusterConfig{
 		// logictest command.
 		// To run a logic test with this config as a directive, run:
 		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic//<test_name>
-		name:     threeNodeTenantConfigName,
-		numNodes: 3,
-		// overrideAutoStats will disable automatic stats on the cluster this tenant
-		// is connected to.
-		overrideAutoStats: "false",
-		useTenant:         true,
-		isCCLConfig:       true,
+		name:        threeNodeTenantConfigName,
+		numNodes:    3,
+		useTenant:   true,
+		isCCLConfig: true,
 	},
 	// Regions and zones below are named deliberately, and contain "-"'s to be reflective
 	// of the naming convention in public clouds.  "-"'s are handled differently in SQL
@@ -795,9 +814,8 @@ var logicTestConfigs = []testClusterConfig{
 	// the multi-region code handles them correctly.
 
 	{
-		name:              "multiregion-invalid-locality",
-		numNodes:          3,
-		overrideAutoStats: "false",
+		name:     "multiregion-invalid-locality",
+		numNodes: 3,
 		localities: map[int]roachpb.Locality{
 			1: {
 				Tiers: []roachpb.Tier{
@@ -817,9 +835,8 @@ var logicTestConfigs = []testClusterConfig{
 		},
 	},
 	{
-		name:              "multiregion-3node-3superlongregions",
-		numNodes:          3,
-		overrideAutoStats: "false",
+		name:     "multiregion-3node-3superlongregions",
+		numNodes: 3,
 		localities: map[int]roachpb.Locality{
 			1: {
 				Tiers: []roachpb.Tier{
@@ -839,36 +856,31 @@ var logicTestConfigs = []testClusterConfig{
 		},
 	},
 	{
-		name:              "multiregion-9node-3region-3azs",
-		numNodes:          9,
-		overrideAutoStats: "false",
-		localities:        multiregion9node3region3azsLocalities,
+		name:       "multiregion-9node-3region-3azs",
+		numNodes:   9,
+		localities: multiregion9node3region3azsLocalities,
 	},
 	{
-		name:              "multiregion-9node-3region-3azs-tenant",
-		numNodes:          9,
-		overrideAutoStats: "false",
-		localities:        multiregion9node3region3azsLocalities,
-		useTenant:         true,
+		name:       "multiregion-9node-3region-3azs-tenant",
+		numNodes:   9,
+		localities: multiregion9node3region3azsLocalities,
+		useTenant:  true,
 	},
 	{
 		name:              "multiregion-9node-3region-3azs-vec-off",
 		numNodes:          9,
-		overrideAutoStats: "false",
 		localities:        multiregion9node3region3azsLocalities,
 		overrideVectorize: "off",
 	},
 	{
-		name:              "multiregion-15node-5region-3azs",
-		numNodes:          15,
-		overrideAutoStats: "false",
-		localities:        multiregion15node5region3azsLocalities,
+		name:       "multiregion-15node-5region-3azs",
+		numNodes:   15,
+		localities: multiregion15node5region3azsLocalities,
 	},
 	{
 		name:                "local-mixed-21.2-22.1",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
 		bootstrapVersion:    roachpb.Version{Major: 21, Minor: 2},
 		binaryVersion:       roachpb.Version{Major: 22, Minor: 1},
 		disableUpgrade:      true,
@@ -1003,6 +1015,28 @@ type logicStatement struct {
 	expectErrCode string
 	// expected rows affected count. -1 to avoid testing this.
 	expectCount int64
+	// if this statement is to run asynchronously, and become a pendingStatement.
+	expectAsync bool
+	// the name key to use for the pendingStatement.
+	statementName string
+}
+
+// pendingExecResult represents a final SQL query string run and the resulting
+// output and error from running it against the DB.
+type pendingExecResult struct {
+	execSQL string
+	res     gosql.Result
+	err     error
+}
+
+// pendingStatement encapsulates a logicStatement that is expected to block and
+// as such is run in a separate goroutine, as well as the channel on which to
+// receive the results of the statement execution.
+type pendingStatement struct {
+	logicStatement
+
+	// the channel on which to receive the execution results, when completed.
+	resultChan chan pendingExecResult
 }
 
 // readSQL reads the lines of a SQL statement or query until the first blank
@@ -1319,6 +1353,11 @@ type logicTest struct {
 	// lifetime of the test and we should create all clusters with the same
 	// arguments.
 	clusterOpts []clusterOpt
+	// tenantClusterSettingOverrideOpts are the options used by the host cluster
+	// to configure tenant setting overrides  during setup. They're persisted here
+	// because a cluster can be recreated throughout the lifetime of a test, and
+	// we should override tenant settings each time this happens.
+	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt
 	// cluster is the test cluster against which we are testing. This cluster
 	// may be reset during the lifetime of the test.
 	cluster serverutils.TestClusterInterface
@@ -1375,6 +1414,9 @@ type logicTest struct {
 
 	// varMap remembers the variables set with "let".
 	varMap map[string]string
+
+	// pendingStatements tracks any async statements by name key.
+	pendingStatements map[string]pendingStatement
 
 	// noticeBuffer retains the notices from the past query.
 	noticeBuffer []string
@@ -1539,7 +1581,11 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 // server args are configured. That is, either during setup() when creating the
 // initial cluster to be used in a test, or when creating additional test
 // clusters, after logicTest.setup() has been called.
-func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
+func (t *logicTest) newCluster(
+	serverArgs TestServerArgs,
+	clusterOpts []clusterOpt,
+	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
+) {
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
@@ -1611,7 +1657,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 		}
 		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = make(chan struct{})
 	}
-	for _, opt := range opts {
+	for _, opt := range clusterOpts {
 		opt.apply(&params.ServerArgs)
 	}
 
@@ -1679,6 +1725,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
+	clusterSettingOverrideArgs := &tenantClusterSettingOverrideArgs{}
 	if cfg.useTenant {
 		t.tenantAddrs = make([]string, cfg.numNodes)
 		for i := 0; i < cfg.numNodes; i++ {
@@ -1726,6 +1773,44 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 		if _, err := conn.Exec("SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = 100000"); err != nil {
 			t.Fatal(err)
 		}
+
+		for _, opt := range tenantClusterSettingOverrideOpts {
+			opt.apply(clusterSettingOverrideArgs)
+		}
+
+		if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+			conn := t.cluster.ServerConn(0)
+
+			// We reduce the closed timestamp duration on the host tenant so that the
+			// setting override can propagate to the tenant faster.
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			// Allow secondary tenants to set zone configurations if the configuration
+			// indicates as such. As this is a tenant read-only cluster setting, only
+			// the operator is allowed to set it.
+			if _, err := conn.Exec(
+				"ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
+				serverutils.TestTenantID().ToUint64(),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	var randomWorkmem int
+	if t.rng.Float64() < 0.5 && !serverArgs.DisableWorkmemRandomization {
+		// Randomize sql.distsql.temp_storage.workmem cluster setting in
+		// [10KiB, 100KiB) range.
+		randomWorkmem = 10<<10 + t.rng.Intn(90<<10)
 	}
 
 	// Set cluster settings.
@@ -1752,32 +1837,28 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 			}
 		}
 
-		if cfg.overrideAutoStats != "" {
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
-			); err != nil {
-				t.Fatal(err)
-			}
-		} else {
-			// Background stats collection is enabled by default, but we've seen tests
-			// flake with it on. When the issue manifests, it seems to be around a
-			// schema change transaction getting pushed, which causes it to increment a
-			// table ID twice instead of once, causing non-determinism.
-			//
-			// In the short term, we disable auto stats by default to avoid the flakes.
-			//
-			// In the long run, these tests should be running with default settings as
-			// much as possible, so we likely want to address this. Two options are
-			// either making schema changes more resilient to being pushed or possibly
-			// making auto stats avoid pushing schema change transactions. There might
-			// be other better alternatives than these.
-			//
-			// See #37751 for details.
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-			); err != nil {
-				t.Fatal(err)
-			}
+		// We disable the automatic stats collection in order to have
+		// deterministic tests.
+		//
+		// We've also seen tests flake with it on. When the issue manifests, it
+		// seems to be around a schema change transaction getting pushed, which
+		// causes it to increment a table ID twice instead of once, causing
+		// non-determinism.
+		//
+		// In the short term, we disable auto stats by default to avoid the
+		// flakes.
+		//
+		// In the long run, these tests should be running with default settings
+		// as much as possible, so we likely want to address this. Two options
+		// are either making schema changes more resilient to being pushed or
+		// possibly making auto stats avoid pushing schema change transactions.
+		// There might be other better alternatives than these.
+		//
+		// See #37751 for details.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+		); err != nil {
+			t.Fatal(err)
 		}
 
 		if cfg.overrideExperimentalDistSQLPlanning != "" {
@@ -1794,6 +1875,14 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 			"SET CLUSTER SETTING sql.crdb_internal.table_row_statistics.as_of_time = '-1µs'",
 		); err != nil {
 			t.Fatal(err)
+		}
+
+		if randomWorkmem != 0 {
+			query := fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem = '%dB'", randomWorkmem)
+			if _, err := conn.Exec(query); err != nil {
+				t.Fatal(err)
+			}
+			t.outf("setting distsql_workmem='%dB';", randomWorkmem)
 		}
 	}
 
@@ -1815,6 +1904,38 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 				if m != cfg.overrideDistSQLMode {
 					return errors.Errorf("node %d is still waiting for update of DistSQLMode to %s (have %s)",
 						i, cfg.overrideDistSQLMode, m,
+					)
+				}
+			}
+			return nil
+		})
+	}
+
+	if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+		// Wait until all tenant servers are aware of the setting override.
+		testutils.SucceedsSoon(t.rootT, func() error {
+			for i := 0; i < len(t.tenantAddrs); i++ {
+				pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(security.RootUser))
+				defer cleanup()
+				if params.ServerArgs.Insecure {
+					pgURL.RawQuery = "sslmode=disable"
+				}
+				db, err := gosql.Open("postgres", pgURL.String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer db.Close()
+
+				var val string
+				err = db.QueryRow(
+					"SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled",
+				).Scan(&val)
+				if err != nil {
+					t.Fatal(errors.Wrapf(err, "%d", i))
+				}
+				if val == "false" {
+					return errors.Errorf("tenant server %d is still waiting zone config cluster setting update",
+						i,
 					)
 				}
 			}
@@ -1857,24 +1978,30 @@ func (t *logicTest) resetCluster() {
 		t.Fatal("resetting the cluster before server args were set")
 	}
 	serverArgs := *t.serverArgs
-	t.newCluster(serverArgs, t.clusterOpts)
+	t.newCluster(serverArgs, t.clusterOpts, t.tenantClusterSettingOverrideOpts)
 }
 
 // setup creates the initial cluster for the logic test and populates the
 // relevant fields on logicTest. It is expected to be called only once (per test
 // file), and before processing any test files - unless a mock logicTest is
 // created (see parallelTest.processTestFile).
-func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs, opts []clusterOpt) {
+func (t *logicTest) setup(
+	cfg testClusterConfig,
+	serverArgs TestServerArgs,
+	clusterOpts []clusterOpt,
+	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
+) {
 	t.cfg = cfg
 	t.serverArgs = &serverArgs
-	t.clusterOpts = opts[:]
+	t.clusterOpts = clusterOpts[:]
+	t.tenantClusterSettingOverrideOpts = tenantClusterSettingOverrideOpts[:]
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	tempExternalIODir, tempExternalIODirCleanup := testutils.TempDir(t.rootT)
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
-	t.newCluster(serverArgs, t.clusterOpts)
+	t.newCluster(serverArgs, t.clusterOpts, t.tenantClusterSettingOverrideOpts)
 
 	// Only create the test database on the initial cluster, since cluster restore
 	// expects an empty cluster.
@@ -1890,6 +2017,7 @@ CREATE DATABASE test; USE test;
 
 	t.labelMap = make(map[string]string)
 	t.varMap = make(map[string]string)
+	t.pendingStatements = make(map[string]pendingStatement)
 
 	t.progress = 0
 	t.failures = 0
@@ -2030,6 +2158,32 @@ func readTestFileConfigs(
 	return defaults, false
 }
 
+type tenantClusterSettingOverrideArgs struct {
+	// if set, the sql.zone_configs.allow_for_secondary_tenant.enabled defaults
+	// is set to true by the host. This is allows logic tests that run on
+	// secondary tenants to use zone configurations.
+	overrideMultiTenantZoneConfigsAllowed bool
+}
+
+// tenantClusterSettingOverrideOpt is implemented by options for configuring
+// tenant setting overrides during setup. For tests that run on the system
+// tenant, these options have no effect.
+type tenantClusterSettingOverrideOpt interface {
+	apply(*tenantClusterSettingOverrideArgs)
+}
+
+// tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed corresponds to
+// the allow-zone-configs-for-secondary-tenants directive.
+type tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed struct{}
+
+var _ tenantClusterSettingOverrideOpt = tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{}
+
+func (t tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed) apply(
+	args *tenantClusterSettingOverrideArgs,
+) {
+	args.overrideMultiTenantZoneConfigsAllowed = true
+}
+
 // clusterOpt is implemented by options for configuring the test cluster under
 // which a test will run.
 type clusterOpt interface {
@@ -2072,21 +2226,26 @@ func (c clusterOptIgnoreStrictGCForTenants) apply(args *base.TestServerArgs) {
 	args.Knobs.Store.(*kvserver.StoreTestingKnobs).IgnoreStrictGCEnforcement = true
 }
 
-// readClusterOptions looks around the beginning of the file for a line looking like:
-// # cluster-opt: opt1 opt2 ...
-// and parses that line into a set of clusterOpts that need to be applied to the
-// TestServerArgs before the cluster is started for the respective test file.
-func readClusterOptions(t *testing.T, path string) []clusterOpt {
+// parseDirectiveOptions looks around the beginning of the file for a line
+// looking like:
+// # <directiveName>: opt1 opt2 ...
+// and parses the options associated with the directive. The given callback is
+// invoked with each option.
+func parseDirectiveOptions(t *testing.T, path string, directiveName string, f func(opt string)) {
+	switch directiveName {
+	case "cluster-opt", "tenant-cluster-setting-override-opt":
+		// Fallthrough.
+	default:
+		t.Fatalf("cannot parse unknown directive %s", directiveName)
+	}
 	file, err := os.Open(path)
 	require.NoError(t, err)
 	defer file.Close()
 
-	var res []clusterOpt
-
 	beginningOfFile := true
 	directiveFound := false
-
 	s := newLineScanner(file)
+
 	for s.Scan() {
 		fields := strings.Fields(s.Text())
 		if len(fields) == 0 {
@@ -2099,27 +2258,73 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 		}
 		// Cluster config directive lines are of the form:
 		// # cluster-opt: opt1 opt2 ...
-		if len(fields) > 1 && cmd == "#" && fields[1] == "cluster-opt:" {
-			require.True(t, beginningOfFile, "cluster-opt directive needs to be at the beginning of file")
-			require.False(t, directiveFound, "only one cluster-opt directive allowed per file; second one found: %s", s.Text())
+		if len(fields) > 1 && cmd == "#" && fields[1] == fmt.Sprintf("%s:", directiveName) {
+			require.True(
+				t,
+				beginningOfFile,
+				"%s directive needs to be at the beginning of file",
+				directiveName,
+			)
+			require.False(
+				t,
+				directiveFound,
+				"only one %s directive allowed per file; second one found: %s",
+				directiveName,
+				s.Text(),
+			)
 			directiveFound = true
 			if len(fields) == 2 {
 				t.Fatalf("%s: empty LogicTest directive", path)
 			}
 			for _, opt := range fields[2:] {
-				switch opt {
-				case "disable-span-configs":
-					res = append(res, clusterOptDisableSpanConfigs{})
-				case "tracing-off":
-					res = append(res, clusterOptTracingOff{})
-				case "ignore-tenant-strict-gc-enforcement":
-					res = append(res, clusterOptIgnoreStrictGCForTenants{})
-				default:
-					t.Fatalf("unrecognized cluster option: %s", opt)
-				}
+				f(opt)
 			}
 		}
 	}
+}
+
+// readTenantClusterSettingOverrideArgs looks around the beginning of the file
+// for a line looking like:
+// # tenant-cluster-setting-override-opt: opt1 opt2 ...
+// and parses that line into a set of tenantClusterSettingOverrideArgs that need
+// to be overriden by the host cluster before the test begins.
+func readTenantClusterSettingOverrideArgs(
+	t *testing.T, path string,
+) []tenantClusterSettingOverrideOpt {
+	file, err := os.Open(path)
+	require.NoError(t, err)
+	defer file.Close()
+
+	var res []tenantClusterSettingOverrideOpt
+	parseDirectiveOptions(t, path, "tenant-cluster-setting-override-opt", func(opt string) {
+		switch opt {
+		case "allow-zone-configs-for-secondary-tenants":
+			res = append(res, tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{})
+		default:
+			t.Fatalf("unrecognized cluster option: %s", opt)
+		}
+	})
+	return res
+}
+
+// readClusterOptions looks around the beginning of the file for a line looking like:
+// # cluster-opt: opt1 opt2 ...
+// and parses that line into a set of clusterOpts that need to be applied to the
+// TestServerArgs before the cluster is started for the respective test file.
+func readClusterOptions(t *testing.T, path string) []clusterOpt {
+	var res []clusterOpt
+	parseDirectiveOptions(t, path, "cluster-opt", func(opt string) {
+		switch opt {
+		case "disable-span-configs":
+			res = append(res, clusterOptDisableSpanConfigs{})
+		case "tracing-off":
+			res = append(res, clusterOptTracingOff{})
+		case "ignore-tenant-strict-gc-enforcement":
+			res = append(res, clusterOptIgnoreStrictGCForTenants{})
+		default:
+			t.Fatalf("unrecognized cluster option: %s", opt)
+		}
+	})
 	return res
 }
 
@@ -2460,6 +2665,33 @@ func (t *logicTest) processSubtest(
 			}
 			time.Sleep(duration)
 
+		case "awaitstatement":
+			if len(fields) != 2 {
+				return errors.New("invalid line format")
+			}
+
+			name := fields[1]
+
+			var pending pendingStatement
+			var ok bool
+			if pending, ok = t.pendingStatements[name]; !ok {
+				return errors.Newf("pending statement with name %q unknown", name)
+			}
+
+			execRes := <-pending.resultChan
+			cont, err := t.finishExecStatement(pending.logicStatement, execRes.execSQL, execRes.res, execRes.err)
+
+			if err != nil {
+				if !cont {
+					return err
+				}
+				t.Error(err)
+			}
+
+			delete(t.pendingStatements, name)
+
+			t.success(path)
+
 		case "statement":
 			stmt := logicStatement{
 				pos:         fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
@@ -2471,6 +2703,12 @@ func (t *logicTest) processSubtest(
 			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErrCode = m[1]
 				stmt.expectErr = m[2]
+			}
+			if len(fields) >= 3 && fields[1] == "async" {
+				stmt.expectAsync = true
+				stmt.statementName = fields[2]
+				copy(fields[1:], fields[3:])
+				fields = fields[:len(fields)-2]
 			}
 			if len(fields) >= 3 && fields[1] == "count" {
 				n, err := strconv.ParseInt(fields[2], 10, 64)
@@ -2618,6 +2856,8 @@ func (t *logicTest) processSubtest(
 
 						case "round-in-strings":
 							query.roundFloatsInStrings = true
+
+						// TODO(sarkesian): support "async" options for queries as well as statements
 
 						default:
 							if strings.HasPrefix(opt, "nodeidx=") {
@@ -3073,6 +3313,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 }
 
 func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
+	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
@@ -3084,7 +3325,36 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 			t.outf("rewrote:\n%s\n", execSQL)
 		}
 	}
-	res, err := t.db.Exec(execSQL)
+
+	if stmt.expectAsync {
+		if _, ok := t.pendingStatements[stmt.statementName]; ok {
+			return false, errors.Newf("pending statement with name %q already exists", stmt.statementName)
+		}
+
+		pending := pendingStatement{
+			logicStatement: stmt,
+			resultChan:     make(chan pendingExecResult),
+		}
+		t.pendingStatements[stmt.statementName] = pending
+
+		startedChan := make(chan struct{})
+		go func() {
+			startedChan <- struct{}{}
+			res, err := db.Exec(execSQL)
+			pending.resultChan <- pendingExecResult{execSQL, res, err}
+		}()
+
+		<-startedChan
+		return true, nil
+	}
+
+	res, err := db.Exec(execSQL)
+	return t.finishExecStatement(stmt, execSQL, res, err)
+}
+
+func (t *logicTest) finishExecStatement(
+	stmt logicStatement, execSQL string, res gosql.Result, err error,
+) (bool, error) {
 	if err == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
 	}
@@ -3568,6 +3838,27 @@ func (t *logicTest) success(file string) {
 }
 
 func (t *logicTest) validateAfterTestCompletion() error {
+	// Check any remaining pending statements
+	if len(t.pendingStatements) > 0 {
+		log.Warningf(context.Background(), "%d remaining pending statements", len(t.pendingStatements))
+	}
+	for name, pending := range t.pendingStatements {
+		select {
+		case execRes := <-pending.resultChan:
+			// check if execRes shows that statement completed successfully
+			cont, err := t.finishExecStatement(pending.logicStatement, execRes.execSQL, execRes.res, execRes.err)
+
+			if err != nil {
+				if !cont {
+					return errors.Wrapf(execRes.err, "pending statement %q resulted in error", name)
+				}
+				t.Errorf("pending statement %q resulted in error: %v", name, execRes.err)
+			}
+		default:
+			t.Fatalf("pending statement %q did not finish", name)
+		}
+	}
+
 	// Close all clients other than "root"
 	for username, c := range t.clients {
 		if username == "root" {
@@ -3745,6 +4036,8 @@ type TestServerArgs struct {
 	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
 	// to use the non-test value.
 	forceProductionBatchSizes bool
+	// If set, then sql.distsql.temp_storage.workmem is not randomized.
+	DisableWorkmemRandomization bool
 }
 
 // RunLogicTest is the main entry point for the logic test. The globs parameter
@@ -3900,17 +4193,11 @@ func RunLogicTestWithDefaultConfig(
 						!util.RaceEnabled &&
 						!cfg.useTenant &&
 						cfg.numNodes <= 5 {
-						// Skip parallelizing tests that use the kv-batch-size directive since
-						// the batch size is a global variable.
-						//
 						// We also cannot parallelise tests that use tenant servers
 						// because they change shared state in the logging configuration
 						// and there is an assertion against conflicting changes.
 						//
-						// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.
-						if filepath.Base(path) != "select_index_span_ranges" {
-							t.Parallel() // SAFE FOR TESTING (this comments satisfies the linter)
-						}
+						t.Parallel() // SAFE FOR TESTING (this comments satisfies the linter)
 					}
 					rng, _ := randutil.NewTestRand()
 					lt := logicTest{
@@ -3925,7 +4212,9 @@ func RunLogicTestWithDefaultConfig(
 					// Each test needs a copy because of Parallel
 					serverArgsCopy := serverArgs
 					serverArgsCopy.forceProductionBatchSizes = onlyNonMetamorphic
-					lt.setup(cfg, serverArgsCopy, readClusterOptions(t, path))
+					lt.setup(
+						cfg, serverArgsCopy, readClusterOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
+					)
 					lt.runFile(path, cfg)
 
 					progress.Lock()

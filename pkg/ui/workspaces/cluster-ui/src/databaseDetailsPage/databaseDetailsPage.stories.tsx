@@ -20,6 +20,7 @@ import {
 } from "src/storybook/fixtures";
 import {
   DatabaseDetailsPage,
+  DatabaseDetailsPageDataTable,
   DatabaseDetailsPageProps,
   ViewMode,
 } from "./databaseDetailsPage";
@@ -86,41 +87,41 @@ const withoutData: DatabaseDetailsPageProps = {
   },
 };
 
+function createTable(): DatabaseDetailsPageDataTable {
+  const roles = _.uniq(new Array(_.random(1, 3)).map(() => randomRole()));
+  const grants = _.uniq(
+    new Array(_.random(1, 5)).map(() => randomTablePrivilege()),
+  );
+
+  return {
+    name: randomName(),
+    details: {
+      loading: false,
+      loaded: true,
+      columnCount: _.random(5, 42),
+      indexCount: _.random(1, 6),
+      userCount: roles.length,
+      roles: roles,
+      grants: grants,
+      statsLastUpdated: moment("0001-01-01T00:00:00Z"),
+      hasIndexRecommendations: false,
+    },
+    stats: {
+      loading: false,
+      loaded: true,
+      replicationSizeInBytes: _.random(1000.0) * 1024 ** _.random(1, 2),
+      rangeCount: _.random(50, 500),
+      nodesByRegionString:
+        "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
+    },
+  };
+}
+
 const withData: DatabaseDetailsPageProps = {
   loading: false,
   loaded: true,
   name: randomName(),
-  tables: _.map(Array(42), _item => {
-    const roles = _.uniq(
-      _.map(new Array(_.random(1, 3)), _item => randomRole()),
-    );
-    const grants = _.uniq(
-      _.map(new Array(_.random(1, 5)), _item => randomTablePrivilege()),
-    );
-
-    return {
-      name: randomName(),
-      details: {
-        loading: false,
-        loaded: true,
-        columnCount: _.random(5, 42),
-        indexCount: _.random(1, 6),
-        userCount: roles.length,
-        roles: roles,
-        grants: grants,
-        statsLastUpdated: moment("0001-01-01T00:00:00Z"),
-      },
-      showNodeRegionsColumn: true,
-      stats: {
-        loading: false,
-        loaded: true,
-        replicationSizeInBytes: _.random(1000.0) * 1024 ** _.random(1, 2),
-        rangeCount: _.random(50, 500),
-        nodesByRegionString:
-          "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
-      },
-    };
-  }),
+  tables: [createTable()],
   viewMode: ViewMode.Tables,
   sortSettingTables: {
     ascending: false,

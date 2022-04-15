@@ -12,12 +12,16 @@ package bulk
 
 import (
 	"bytes"
+	"context"
+	"math"
 	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 // kvPair is a bytes -> bytes kv pair.
@@ -51,19 +55,40 @@ func TestKvBuf(t *testing.T) {
 
 	src, totalSize := makeTestData(50000)
 
+	ctx := context.Background()
+	none := mon.NewMonitorWithLimit("none", mon.MemoryResource, 0, nil, nil, 0, 0, nil).MakeBoundAccount()
+	lots := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil).MakeBoundAccount()
+
 	// Write everything to our buf.
 	b := kvBuf{}
 	for i := range src {
+		size := sz(len(src[i].key) + len(src[i].value))
+		fits := len(b.entries) <= cap(b.entries) && len(b.slab)+int(size) <= cap(b.slab)
+
+		require.Equal(t, fits, b.fits(ctx, size, 0, &none))
+		if !fits {
+			// Ensure trying to grow with either, but not both, allowing fails.
+			require.False(t, b.fits(ctx, size, 0, &lots))
+			require.False(t, b.fits(ctx, size, math.MaxInt64, &none))
+			// Allow it to grow and then re-check a no-alloc fits call.
+			require.True(t, b.fits(ctx, size, math.MaxInt64, &lots))
+			require.True(t, b.fits(ctx, size, 0, &none))
+		}
+		before := b.MemSize()
 		if err := b.append(src[i].key, src[i].value); err != nil {
 			t.Fatal(err)
 		}
+		require.Equal(t, before, b.MemSize())
 	}
 
 	// Sanity check our buf has right size.
 	if expected, actual := len(src), b.Len(); expected != actual {
 		t.Fatalf("expected len %d got %d", expected, actual)
 	}
-	if expected, actual := totalSize+sz(len(src)*16), b.MemSize; expected != actual {
+	if expected, actual := totalSize, b.KVSize(); expected != actual {
+		t.Fatalf("expected len %d got %d", expected, actual)
+	}
+	if expected, actual := cap(b.entries)*16+cap(b.slab), int(b.MemSize()); expected != actual {
 		t.Fatalf("expected len %d got %d", expected, actual)
 	}
 

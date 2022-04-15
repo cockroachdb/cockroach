@@ -116,15 +116,13 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
       >
         <Text>
           Diagnostics will be collected for the next execution that matches this{" "}
-          <Anchor href={statementsSql}>statement fingerprint</Anchor>, or
-          according to the latency threshold set below. The request is cancelled
-          when a single bundle is captured.{" "}
+          <Anchor href={statementsSql}>statement fingerprint</Anchor>, or when
+          the execution of the statement fingerprint exceeds a specified
+          latency. The request is cancelled when a single bundle is captured.{" "}
           <Anchor href={statementDiagnostics}>Learn more</Anchor>
         </Text>
         <div className={cx("diagnostic__options-container")}>
-          <Text className={cx("diagnostic__heading")}>
-            Collect Diagnostics:
-          </Text>
+          <Text className={cx("diagnostic__heading")}>Collect diagnostics</Text>
           <Radio.Group value={conditional}>
             <Button.Group className={cx("diagnostic__btn-group")}>
               <Radio
@@ -132,14 +130,14 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                 className={cx("diagnostic__radio-btn")}
                 onChange={() => setConditional(false)}
               >
-                On the next instance of the statement
+                On the next execution
               </Radio>
               <Radio
                 value={true}
                 className={cx("diagnostic__radio-btn")}
                 onChange={() => setConditional(true)}
               >
-                On the next instance of the statement that runs longer than:
+                On the next execution where the latency exceeds
                 <div className={cx("diagnostic__conditional-container")}>
                   <div className={cx("diagnostic__min-latency-container")}>
                     <Input

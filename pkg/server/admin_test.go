@@ -44,7 +44,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -62,6 +64,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -1085,7 +1088,7 @@ func TestAdminAPISettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	// Any bool that defaults to true will work here.
@@ -1119,6 +1122,20 @@ func TestAdminAPISettings(t *testing.T) {
 		}
 		if typ != v.Type {
 			t.Errorf("%s: expected type %s, got %s", k, typ, v.Type)
+		}
+		if v.LastUpdated != nil {
+			db := sqlutils.MakeSQLRunner(conn)
+			q := makeSQLQuery()
+			q.Append(`SELECT name, "lastUpdated" FROM system.settings WHERE name=$`, k)
+			rows := db.Query(
+				t,
+				q.String(),
+				q.QueryArguments()...,
+			)
+			defer rows.Close()
+			if rows.Next() == false {
+				t.Errorf("missing sql row for %s", k)
+			}
 		}
 	}
 
@@ -1363,7 +1380,7 @@ func TestClusterAPI(t *testing.T) {
 				if err := getAdminJSONProto(s, "cluster", &resp); err != nil {
 					return err
 				}
-				if a, e := resp.ClusterID, s.RPCContext().ClusterID.String(); a != e {
+				if a, e := resp.ClusterID, s.RPCContext().StorageClusterID.String(); a != e {
 					return errors.Errorf("cluster ID %s != expected %s", a, e)
 				}
 				if a, e := resp.ReportingEnabled, reportingOn; a != e {
@@ -2522,4 +2539,233 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			}, 10*time.Second, 100*time.Millisecond, "timed out waiting for gRPC error, got %s", err)
 		})
 	}
+}
+
+func TestAdminPrivilegeChecker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "CREATE USER withadmin")
+	sqlDB.Exec(t, "GRANT admin TO withadmin")
+	sqlDB.Exec(t, "CREATE USER withva")
+	sqlDB.Exec(t, "ALTER ROLE withva WITH VIEWACTIVITY")
+	sqlDB.Exec(t, "CREATE USER withvaredacted")
+	sqlDB.Exec(t, "ALTER ROLE withvaredacted WITH VIEWACTIVITYREDACTED")
+	sqlDB.Exec(t, "CREATE USER withvaandredacted")
+	sqlDB.Exec(t, "ALTER ROLE withvaandredacted WITH VIEWACTIVITY")
+	sqlDB.Exec(t, "ALTER ROLE withvaandredacted WITH VIEWACTIVITYREDACTED")
+	sqlDB.Exec(t, "CREATE USER withoutprivs")
+
+	underTest := &adminPrivilegeChecker{
+		ie: s.InternalExecutor().(*sql.InternalExecutor),
+	}
+
+	withAdmin, err := security.MakeSQLUsernameFromPreNormalizedStringChecked("withadmin")
+	require.NoError(t, err)
+	withVa, err := security.MakeSQLUsernameFromPreNormalizedStringChecked("withva")
+	require.NoError(t, err)
+	withVaRedacted, err := security.MakeSQLUsernameFromPreNormalizedStringChecked("withvaredacted")
+	require.NoError(t, err)
+	withVaAndRedacted, err := security.MakeSQLUsernameFromPreNormalizedStringChecked("withvaandredacted")
+	require.NoError(t, err)
+	withoutPrivs, err := security.MakeSQLUsernameFromPreNormalizedStringChecked("withoutprivs")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name            string
+		checkerFun      func(context.Context) error
+		usernameWantErr map[security.SQLUsername]bool
+	}{
+		{
+			"requireViewActivityPermission",
+			underTest.requireViewActivityPermission,
+			map[security.SQLUsername]bool{
+				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: false, withoutPrivs: true,
+			},
+		},
+		{
+			"requireViewActivityOrViewActivityRedactedPermission",
+			underTest.requireViewActivityOrViewActivityRedactedPermission,
+			map[security.SQLUsername]bool{
+				withAdmin: false, withVa: false, withVaRedacted: false, withVaAndRedacted: false, withoutPrivs: true,
+			},
+		},
+		{
+			"requireViewActivityAndNoViewActivityRedactedPermission",
+			underTest.requireViewActivityAndNoViewActivityRedactedPermission,
+			map[security.SQLUsername]bool{
+				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: true, withoutPrivs: true,
+			},
+		},
+	}
+	for _, tt := range tests {
+		for userName, wantErr := range tt.usernameWantErr {
+			t.Run(fmt.Sprintf("%s-%s", tt.name, userName), func(t *testing.T) {
+				ctx := metadata.NewIncomingContext(ctx, metadata.New(map[string]string{"websessionuser": userName.SQLIdentifier()}))
+				err := tt.checkerFun(ctx)
+				if wantErr {
+					require.Error(t, err)
+					return
+				}
+				require.NoError(t, err)
+			})
+		}
+	}
+}
+
+func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stubTime := stubUnusedIndexTime{}
+	stubDropUnusedDuration := time.Hour
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			UnusedIndexRecommendKnobs: &idxusage.UnusedIndexRecommendationTestingKnobs{
+				GetCreatedAt:   stubTime.getCreatedAt,
+				GetLastRead:    stubTime.getLastRead,
+				GetCurrentTime: stubTime.getCurrent,
+			},
+		},
+	})
+	idxusage.DropUnusedIndexDuration.Override(context.Background(), &s.ClusterSettings().SV, stubDropUnusedDuration)
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "CREATE DATABASE test")
+	db.Exec(t, "USE test")
+	// Create a table, the statistics on its primary index will be fetched.
+	db.Exec(t, "CREATE TABLE test.test_table (num INT PRIMARY KEY, letter char)")
+
+	// Test when last read does not exist and there is no creation time. Expect
+	// an index recommendation (index never used).
+	stubTime.setLastRead(time.Time{})
+	stubTime.setCreatedAt(nil)
+
+	// Test database details endpoint.
+	var dbDetails serverpb.DatabaseDetailsResponse
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	var tableDetails serverpb.TableDetailsResponse
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, true, tableDetails.HasIndexRecommendations)
+
+	// Test when last read does not exist and there is a creation time, and the
+	// unused index duration has been exceeded. Expect an index recommendation.
+	currentTime := timeutil.Now()
+	createdTime := currentTime.Add(-stubDropUnusedDuration)
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(time.Time{})
+	stubTime.setCreatedAt(&createdTime)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, true, tableDetails.HasIndexRecommendations)
+
+	// Test when last read does not exist and there is a creation time, and the
+	// unused index duration has not been exceeded. Expect no index
+	// recommendation.
+	currentTime = timeutil.Now()
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(time.Time{})
+	stubTime.setCreatedAt(&currentTime)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(0), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, false, tableDetails.HasIndexRecommendations)
+
+	// Test when last read exists and the unused index duration has been
+	// exceeded. Expect an index recommendation.
+	currentTime = timeutil.Now()
+	lastRead := currentTime.Add(-stubDropUnusedDuration)
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(lastRead)
+	stubTime.setCreatedAt(nil)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, true, tableDetails.HasIndexRecommendations)
+
+	// Test when last read exists and the unused index duration has not been
+	// exceeded. Expect no index recommendation.
+	currentTime = timeutil.Now()
+	stubTime.setCurrent(currentTime)
+	stubTime.setLastRead(currentTime)
+	stubTime.setCreatedAt(nil)
+
+	// Test database details endpoint.
+	dbDetails = serverpb.DatabaseDetailsResponse{}
+	if err := getAdminJSONProto(
+		s,
+		"databases/test?include_stats=true",
+		&dbDetails,
+	); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(0), dbDetails.Stats.NumIndexRecommendations)
+
+	// Test table details endpoint.
+	tableDetails = serverpb.TableDetailsResponse{}
+	if err := getAdminJSONProto(s, "databases/test/tables/test_table", &tableDetails); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, false, tableDetails.HasIndexRecommendations)
 }

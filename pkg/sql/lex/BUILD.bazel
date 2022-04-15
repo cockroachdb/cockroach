@@ -1,6 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "lex",
@@ -18,12 +19,8 @@ go_library(
 
 go_test(
     name = "lex_test",
-    srcs = [
-        "dep_test.go",
-        "encode_test.go",
-    ],
-    embed = [":lex"],
-    deps = ["//pkg/testutils/buildutil"],
+    srcs = ["encode_test.go"],
+    deps = [":lex"],
 )
 
 proto_library(
@@ -41,4 +38,9 @@ go_proto_library(
     proto = ":lex_proto",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto"],
+)
+
+disallowed_imports_test(
+    "lex",
+    ["//pkg/sql/sessiondatapb"],
 )

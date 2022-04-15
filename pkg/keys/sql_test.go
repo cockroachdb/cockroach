@@ -37,7 +37,7 @@ func TestRewriteKeyToTenantPrefix(t *testing.T) {
 		t.Run(fmt.Sprintf("%d to %d %s", tc.oldTenant, tc.newTenant, tc.suffix), func(t *testing.T) {
 			old := append(MakeSQLCodec(roachpb.MakeTenantID(tc.oldTenant)).TablePrefix(5), tc.suffix...)
 			new := MakeTenantPrefix(roachpb.MakeTenantID(tc.newTenant))
-			got, err := rewriteKeyToTenantPrefix(old, new)
+			got, err := RewriteKeyToTenantPrefix(old, new)
 			require.NoError(t, err)
 
 			expect := append(MakeSQLCodec(roachpb.MakeTenantID(tc.newTenant)).TablePrefix(5), tc.suffix...)

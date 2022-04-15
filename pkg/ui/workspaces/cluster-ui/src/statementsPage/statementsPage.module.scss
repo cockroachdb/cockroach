@@ -48,7 +48,13 @@
 
 .table-area {
   position: relative;
-  width: fit-content;
+  overflow-x: scroll;
+}
+
+.reset-btn-area {
+  height: $line-height--larger;
+  display: flex;
+  align-items: center;
 }
 
 .app-filter-dropdown {

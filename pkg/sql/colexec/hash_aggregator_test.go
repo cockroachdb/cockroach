@@ -467,48 +467,40 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 		groupSizes = []int{1, coldata.BatchSize()}
 	}
 	var memAccounts []*mon.BoundAccount
-	for _, aggFn := range []execinfrapb.AggregatorSpec_Func{
-		// We choose any_not_null aggregate function because it is the simplest
-		// possible and, thus, its Compute function call will have the least
-		// impact when benchmarking the aggregator logic.
-		execinfrapb.AnyNotNull,
-		// min aggregate function has been used before transitioning to
-		// any_not_null in 22.1 cycle. It is kept so that we could use it for
-		// comparison of 22.1 against 21.2.
-		// TODO(yuzefovich): use only any_not_null in 22.2 (#75106).
-		execinfrapb.Min,
-	} {
-		for _, numInputRows := range numRows {
-			for _, groupSize := range groupSizes {
-				for _, agg := range []aggType{
-					{
-						new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-							return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
-						},
-						name:  "tracking=false",
-						order: unordered,
+	// We choose any_not_null aggregate function because it is the simplest
+	// possible and, thus, its Compute function call will have the least
+	// impact when benchmarking the aggregator logic.
+	aggFn := execinfrapb.AnyNotNull
+	for _, numInputRows := range numRows {
+		for _, groupSize := range groupSizes {
+			for _, agg := range []aggType{
+				{
+					new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
+						return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, math.MaxInt64)
 					},
-					{
-						new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-							spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
-							memAccounts = append(memAccounts, &spillingQueueMemAcc)
-							return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
-								UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
-								Types:              args.InputTypes,
-								MemoryLimit:        execinfra.DefaultMemoryLimit,
-								DiskQueueCfg:       queueCfg,
-								FDSemaphore:        &colexecop.TestingSemaphore{},
-								DiskAcc:            testDiskAcc,
-							}, testAllocator, math.MaxInt64)
-						},
-						name:  "tracking=true",
-						order: unordered,
+					name:  "tracking=false",
+					order: unordered,
+				},
+				{
+					new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
+						spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
+						memAccounts = append(memAccounts, &spillingQueueMemAcc)
+						return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
+							UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
+							Types:              args.InputTypes,
+							MemoryLimit:        execinfra.DefaultMemoryLimit,
+							DiskQueueCfg:       queueCfg,
+							FDSemaphore:        &colexecop.TestingSemaphore{},
+							DiskAcc:            testDiskAcc,
+						}, testAllocator, math.MaxInt64)
 					},
-				} {
-					benchmarkAggregateFunction(
-						b, agg, aggFn, []*types.T{types.Int}, 1 /* numGroupCol */, groupSize,
-						0 /* distinctProb */, numInputRows, 0 /* chunkSize */, 0 /* limit */)
-				}
+					name:  "tracking=true",
+					order: unordered,
+				},
+			} {
+				benchmarkAggregateFunction(
+					b, agg, aggFn, []*types.T{types.Int}, 1 /* numGroupCol */, groupSize,
+					0 /* distinctProb */, numInputRows, 0 /* chunkSize */, 0 /* limit */)
 			}
 		}
 	}
@@ -556,46 +548,38 @@ func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
 			DiskAcc:            testDiskAcc,
 		}, testAllocator, math.MaxInt64)
 	}
-	for _, aggFn := range []execinfrapb.AggregatorSpec_Func{
-		// We choose any_not_null aggregate function because it is the simplest
-		// possible and, thus, its Compute function call will have the least
-		// impact when benchmarking the aggregator logic.
-		execinfrapb.AnyNotNull,
-		// min aggregate function has been used before transitioning to
-		// any_not_null in 22.1 cycle. It is kept so that we could use it for
-		// comparison of 22.1 against 21.2.
-		// TODO(yuzefovich): use only any_not_null in 22.2 (#75106).
-		execinfrapb.Min,
-	} {
-		for _, numInputRows := range numRows {
-			for _, limit := range limits {
-				if limit > numInputRows {
-					continue
-				}
-				for _, groupSize := range groupSizes {
-					for _, chunkSize := range chunkSizes {
-						if groupSize > chunkSize || chunkSize > numInputRows {
+	// We choose any_not_null aggregate function because it is the simplest
+	// possible and, thus, its Compute function call will have the least impact
+	// when benchmarking the aggregator logic.
+	aggFn := execinfrapb.AnyNotNull
+	for _, numInputRows := range numRows {
+		for _, limit := range limits {
+			if limit > numInputRows {
+				continue
+			}
+			for _, groupSize := range groupSizes {
+				for _, chunkSize := range chunkSizes {
+					if groupSize > chunkSize || chunkSize > numInputRows {
+						continue
+					}
+					for _, agg := range []aggType{
+						{
+							new:   f,
+							name:  fmt.Sprintf("hash-unordered/limit=%d/chunkSize=%d", limit, chunkSize),
+							order: unordered,
+						},
+						{
+							new:   f,
+							name:  fmt.Sprintf("hash-partial-order/limit=%d/chunkSize=%d", limit, chunkSize),
+							order: partial,
+						},
+					} {
+						if agg.order == unordered && chunkSize != chunkSizes[0] {
+							// Chunk size isn't a factor for the unordered hash aggregator,
+							// so we can skip all but one case.
 							continue
 						}
-						for _, agg := range []aggType{
-							{
-								new:   f,
-								name:  fmt.Sprintf("hash-unordered/limit=%d/chunkSize=%d", limit, chunkSize),
-								order: unordered,
-							},
-							{
-								new:   f,
-								name:  fmt.Sprintf("hash-partial-order/limit=%d/chunkSize=%d", limit, chunkSize),
-								order: partial,
-							},
-						} {
-							if agg.order == unordered && chunkSize != chunkSizes[0] {
-								// Chunk size isn't a factor for the unordered hash aggregator,
-								// so we can skip all but one case.
-								continue
-							}
-							benchmarkAggregateFunction(b, agg, aggFn, []*types.T{types.Int}, 2, groupSize, 0, numInputRows, chunkSize, limit)
-						}
+						benchmarkAggregateFunction(b, agg, aggFn, []*types.T{types.Int}, 2, groupSize, 0, numInputRows, chunkSize, limit)
 					}
 				}
 			}

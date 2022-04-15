@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
@@ -69,6 +70,9 @@ const (
 	// PlatformWindows is the Windows (mingw) x86_64 target.
 	PlatformWindows
 )
+
+// ChecksumSuffix is a suffix of release tarball checksums
+const ChecksumSuffix = ".sha256sum"
 
 // ExecFn is a mockable wrapper for executing commands. The zero value
 // ExecFn executes the command normally, but a mock function can be substituted
@@ -172,29 +176,33 @@ func SharedLibraryExtensionFromPlatform(platform Platform) string {
 	}
 }
 
-// MakeWorkload makes the bin/workload binary.
-func MakeWorkload(pkgDir string) error {
+// MakeWorkload makes the bin/workload binary. It is only ever built in the
+// crosslinux configuration.
+func MakeWorkload(opts BuildOptions, pkgDir string) error {
+	if opts.Release {
+		return errors.Newf("cannot build workload in Release mode")
+	}
 	// NB: workload doesn't need anything stamped so we can use `crosslinux`
 	// rather than `crosslinuxbase`.
-	cmd := exec.Command("bazel", "build", "//pkg/cmd/workload", "--config=crosslinux", "--config=ci")
+	cmd := exec.Command("bazel", "build", "//pkg/cmd/workload", "-c", "opt", "--config=crosslinux", "--config=ci")
 	cmd.Dir = pkgDir
-	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	log.Printf("%s", cmd.Args)
-	err := cmd.Run()
+	stdoutBytes, err := opts.ExecFn.Run(cmd)
+	if err != nil {
+		return errors.Wrapf(err, "failed to run %s: %s", cmd.Args, string(stdoutBytes))
+	}
+
+	bazelBin, err := getPathToBazelBin(opts.ExecFn, pkgDir, []string{"-c", "opt", "--config=crosslinux", "--config=ci"})
 	if err != nil {
 		return err
 	}
-	bazelBin, err := getPathToBazelBin(ExecFn{}, pkgDir, []string{"--config=crosslinux", "--config=ci"})
-	if err != nil {
-		return err
-	}
-	return stageBinary("//pkg/cmd/workload", PlatformLinux, bazelBin, filepath.Join(pkgDir, "bin"))
+	return stageBinary("//pkg/cmd/workload", PlatformLinux, bazelBin, filepath.Join(pkgDir, "bin"), false)
 }
 
 // MakeRelease makes the release binary and associated files.
 func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
-	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//c-deps:libgeos"}
+	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//c-deps:libgeos", "//pkg/cmd/cockroach-sql"}
 	targetTriple := TargetTripleFromPlatform(platform)
 	if opts.Release {
 		if opts.BuildTag == "" {
@@ -223,7 +231,11 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 	if err != nil {
 		return err
 	}
-	if err := stageBinary("//pkg/cmd/cockroach", platform, bazelBin, pkgDir); err != nil {
+	if err := stageBinary("//pkg/cmd/cockroach", platform, bazelBin, pkgDir, true); err != nil {
+		return err
+	}
+	// TODO: strip the bianry
+	if err := stageBinary("//pkg/cmd/cockroach-sql", platform, bazelBin, pkgDir, true); err != nil {
 		return err
 	}
 	if err := stageLibraries(platform, bazelBin, filepath.Join(pkgDir, "lib")); err != nil {
@@ -279,7 +291,7 @@ type S3Putter interface {
 
 // S3KeyRelease extracts the target archive base and archive
 // name for the given parameters.
-func S3KeyRelease(platform Platform, versionStr string) (string, string) {
+func S3KeyRelease(platform Platform, versionStr string, binaryPrefix string) (string, string) {
 	suffix := SuffixFromPlatform(platform)
 	targetSuffix, hasExe := TrimDotExe(suffix)
 	// TODO(tamird): remove this weirdness. Requires updating
@@ -289,7 +301,7 @@ func S3KeyRelease(platform Platform, versionStr string) (string, string) {
 		targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
 	}
 
-	archiveBase := fmt.Sprintf("cockroach-%s", versionStr)
+	archiveBase := fmt.Sprintf("%s-%s", binaryPrefix, versionStr)
 	targetArchiveBase := archiveBase + targetSuffix
 	if hasExe {
 		return targetArchiveBase, targetArchiveBase + ".zip"
@@ -431,10 +443,9 @@ type ArchiveFile struct {
 }
 
 // MakeCRDBBinaryArchiveFile generates the ArchiveFile object for a CRDB binary.
-func MakeCRDBBinaryArchiveFile(localAbsolutePath string) ArchiveFile {
+func MakeCRDBBinaryArchiveFile(localAbsolutePath string, path string) ArchiveFile {
 	base := filepath.Base(localAbsolutePath)
 	_, hasExe := TrimDotExe(base)
-	path := "cockroach"
 	if hasExe {
 		path += ".exe"
 	}
@@ -473,13 +484,14 @@ type PutReleaseOptions struct {
 	VersionStr string
 
 	// Files are all the files to be included in the archive.
-	Files []ArchiveFile
+	Files      []ArchiveFile
+	ExtraFiles []ArchiveFile
 }
 
 // PutRelease uploads a compressed archive containing the release
-// files to S3.
+// files and a checksum file of the archive to S3.
 func PutRelease(svc S3Putter, o PutReleaseOptions) {
-	targetArchiveBase, targetArchive := S3KeyRelease(o.Platform, o.VersionStr)
+	targetArchiveBase, targetArchive := S3KeyRelease(o.Platform, o.VersionStr, "cockroach")
 	var body bytes.Buffer
 
 	if strings.HasSuffix(targetArchive, ".zip") {
@@ -553,6 +565,7 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 		}
 	}
 
+	log.Printf("Uploading to s3://%s/%s", o.BucketName, targetArchive)
 	putObjectInput := s3.PutObjectInput{
 		Bucket: &o.BucketName,
 		Key:    &targetArchive,
@@ -563,6 +576,45 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 	}
 	if _, err := svc.PutObject(&putObjectInput); err != nil {
 		log.Fatalf("s3 upload %s: %s", targetArchive, err)
+	}
+	// Generate a SHA256 checksum file with a single entry.
+	checksumContents := fmt.Sprintf("%x %s\n", sha256.Sum256(body.Bytes()),
+		filepath.Base(targetArchive))
+	targetChecksum := targetArchive + ChecksumSuffix
+	log.Printf("Uploading to s3://%s/%s", o.BucketName, targetChecksum)
+	putObjectInputChecksum := s3.PutObjectInput{
+		Bucket: &o.BucketName,
+		Key:    &targetChecksum,
+		Body:   strings.NewReader(checksumContents),
+	}
+	if o.NoCache {
+		putObjectInputChecksum.CacheControl = &NoCache
+	}
+	if _, err := svc.PutObject(&putObjectInputChecksum); err != nil {
+		log.Fatalf("s3 upload %s: %s", targetChecksum, err)
+	}
+	for _, f := range o.ExtraFiles {
+		keyBase, hasExe := TrimDotExe(f.ArchiveFilePath)
+		targetKey, _ := S3KeyRelease(o.Platform, o.VersionStr, keyBase)
+		if hasExe {
+			targetKey += ".exe"
+		}
+		log.Printf("Uploading to s3://%s/%s", o.BucketName, targetKey)
+		handle, err := os.Open(f.LocalAbsolutePath)
+		if err != nil {
+			log.Fatalf("failed to open %s: %s", f.LocalAbsolutePath, err)
+		}
+		putObjectInput := s3.PutObjectInput{
+			Bucket: &o.BucketName,
+			Key:    &targetKey,
+			Body:   handle,
+		}
+		if o.NoCache {
+			putObjectInput.CacheControl = &NoCache
+		}
+		if _, err := svc.PutObject(&putObjectInput); err != nil {
+			log.Fatalf("s3 upload %s: %s", targetKey, err)
+		}
 	}
 }
 
@@ -579,14 +631,19 @@ func getPathToBazelBin(execFn ExecFn, pkgDir string, configArgs []string) (strin
 	return strings.TrimSpace(string(stdoutBytes)), nil
 }
 
-func stageBinary(target string, platform Platform, bazelBin string, dir string) error {
+func stageBinary(
+	target string, platform Platform, bazelBin string, dir string, includePlatformSuffix bool,
+) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 	rel := bazelutil.OutputOfBinaryRule(target, platform == PlatformWindows)
 	src := filepath.Join(bazelBin, rel)
 	dstBase, _ := TrimDotExe(filepath.Base(rel))
-	suffix := SuffixFromPlatform(platform)
+	suffix := ""
+	if includePlatformSuffix {
+		suffix = SuffixFromPlatform(platform)
+	}
 	dstBase = dstBase + suffix
 	dst := filepath.Join(dir, dstBase)
 	srcF, err := os.Open(src)

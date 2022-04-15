@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -90,6 +91,8 @@ type forwarder struct {
 	}
 }
 
+var _ balancer.ConnectionHandle = &forwarder{}
+
 // forward returns a new instance of forwarder, and starts forwarding messages
 // from clientConn to serverConn (and vice-versa). When this is called, it is
 // expected that the caller passes ownership of both clientConn and serverConn
@@ -125,7 +128,16 @@ func forward(
 	return f, nil
 }
 
+// Context returns the context associated with the forwarder.
+//
+// Context implements the balancer.ConnectionHandle interface.
+func (f *forwarder) Context() context.Context {
+	return f.ctx
+}
+
 // Close closes the forwarder and all connections. This is idempotent.
+//
+// Close implements the balancer.ConnectionHandle interface.
 func (f *forwarder) Close() {
 	f.ctxCancel()
 
@@ -148,13 +160,14 @@ func (f *forwarder) Close() {
 	serverConn.Close()
 }
 
-// RequestTransfer requests that the forwarder performs a best-effort connection
-// migration whenever it can. It is best-effort because this will be a no-op if
-// the forwarder is not in a state that is eligible for a connection migration.
-// If a transfer is already in progress, or has been requested, this is a no-op.
-func (f *forwarder) RequestTransfer() {
-	// Ignore the error here. These errors will be logged accordingly.
-	go func() { _ = f.runTransfer() }()
+// ServerRemoteAddr returns the remote address associated with serverConn, i.e.
+// the address of the SQL pod.
+//
+// ServerRemoteAddr implements the balancer.ConnectionHandle interface.
+func (f *forwarder) ServerRemoteAddr() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mu.serverConn.RemoteAddr().String()
 }
 
 // resumeProcessors starts both the request and response processors

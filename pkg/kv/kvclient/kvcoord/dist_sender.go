@@ -313,10 +313,10 @@ type DistSender struct {
 	nodeDialer      *nodedialer.Dialer
 	rpcRetryOptions retry.Options
 	asyncSenderSem  *quotapool.IntPool
-	// clusterID is used to verify access to enterprise features.
+	// clusterID is the logical cluster ID used to verify access to enterprise features.
 	// It is copied out of the rpcContext at construction time and used in
 	// testing.
-	clusterID *base.ClusterIDContainer
+	logicalClusterID *base.ClusterIDContainer
 
 	// batchInterceptor is set for tenants; when set, information about all
 	// BatchRequests and BatchResponses are passed through this interceptor, which
@@ -452,7 +452,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	if ds.rpcRetryOptions.Closer == nil {
 		ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 	}
-	ds.clusterID = cfg.RPCContext.ClusterID
+	ds.logicalClusterID = cfg.RPCContext.LogicalClusterID
 	ds.asyncSenderSem = quotapool.NewIntPool("DistSender async concurrency",
 		uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
 	senderConcurrencyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
@@ -1925,7 +1925,7 @@ func (ds *DistSender) sendToReplicas(
 	// If this request can be sent to a follower to perform a consistent follower
 	// read under the closed timestamp, promote its routing policy to NEAREST.
 	if ba.RoutingPolicy == roachpb.RoutingPolicy_LEASEHOLDER &&
-		CanSendToFollower(ds.clusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba) {
+		CanSendToFollower(ds.logicalClusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba) {
 		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
 	}
 
@@ -2056,6 +2056,8 @@ func (ds *DistSender) sendToReplicas(
 			// doesn't have info. Like above, this asks the server to return an
 			// update.
 			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(),
+
+			ExplicitlyRequested: ba.ClientRangeInfo.ExplicitlyRequested,
 		}
 		br, err = transport.SendNext(ctx, ba)
 		ds.maybeIncrementErrCounters(br, err)
@@ -2152,9 +2154,11 @@ func (ds *DistSender) sendToReplicas(
 				if len(br.RangeInfos) > 0 {
 					log.VEventf(ctx, 2, "received updated range info: %s", br.RangeInfos)
 					routing.EvictAndReplace(ctx, br.RangeInfos...)
-					// The field is cleared by the DistSender because it refers
-					// routing information not exposed by the KV API.
-					br.RangeInfos = nil
+					if !ba.Header.ClientRangeInfo.ExplicitlyRequested {
+						// The field is cleared by the DistSender because it refers
+						// routing information not exposed by the KV API.
+						br.RangeInfos = nil
+					}
 				}
 				return br, nil
 			}

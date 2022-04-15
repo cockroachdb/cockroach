@@ -4,12 +4,32 @@ config secure
 sql
 -- prevent auto-converting passwords, so that each sub-test exercises its own hash method.
 SET CLUSTER SETTING server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled = false;
+----
+ok
+
+sql
 -- Explicit hash.
 CREATE USER abc WITH PASSWORD 'SCRAM-SHA-256$4096:pAlYy62NTdETKb291V/Wow==$OXMAj9oD53QucEYVMBcdhRnjg2/S/iZY/88ShZnputA=:r8l4c1pk9bmDi+8an059l/nt9Bg1zb1ikkg+DeRv4UQ=';
+----
+ok
+
+sql
 -- Automatic hashes.
 SET CLUSTER SETTING server.user_login.password_encryption = 'crdb-bcrypt';
+----
+ok
+
+sql
 CREATE USER foo WITH PASSWORD 'abc';
+----
+ok
+
+sql
 SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';
+----
+ok
+
+sql
 CREATE USER abc2 WITH PASSWORD 'abc'
 ----
 ok
@@ -40,7 +60,7 @@ host   all      abc2 all     password
 # Expect authn error.
 connect user=abc password=mistake
 ----
-ERROR: password authentication failed for user abc (SQLSTATE 28000)
+ERROR: password authentication failed for user abc (SQLSTATE 28P01)
 
 authlog 5
 .*client_connection_end
@@ -105,7 +125,7 @@ subtest only_scram/conn_scram
 # For now (testing), foo does not have SCRAM credentials.
 connect user=foo password=abc
 ----
-ERROR: password authentication failed for user foo (SQLSTATE 28000)
+ERROR: password authentication failed for user foo (SQLSTATE 28P01)
 
 authlog 7
 .*client_connection_end
@@ -122,7 +142,7 @@ authlog 7
 # Expect authn error.
 connect user=abc password=mistake
 ----
-ERROR: password authentication failed for user abc (SQLSTATE 28000)
+ERROR: password authentication failed for user abc (SQLSTATE 28P01)
 
 authlog 6
 .*client_connection_end
@@ -195,7 +215,7 @@ subtest scram_cert/scram
 
 connect user=foo password=abc
 ----
-ERROR: password authentication failed for user foo (SQLSTATE 28000)
+ERROR: password authentication failed for user foo (SQLSTATE 28P01)
 
 
 connect user=abc password=abc

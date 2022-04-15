@@ -641,7 +641,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 	}
 
-	indexDesc.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+	// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
+	// This is not possible until then because of a limitation in 21.2 which
+	// affects mixed-21.2-22.1-version clusters (issue #78426).
+	indexDesc.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 
 	if n.n.PartitionByIndex != nil && n.tableDesc.GetLocalityConfig() != nil {
 		return pgerror.New(
@@ -686,7 +689,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	index := n.tableDesc.Mutations[mutationIdx].GetIndex()
 	indexName := index.Name
 
-	mutationID := n.tableDesc.ClusterVersion.NextMutationID
+	mutationID := n.tableDesc.ClusterVersion().NextMutationID
 	if err := params.p.writeSchemaChange(
 		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {

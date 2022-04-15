@@ -62,6 +62,10 @@ type ColIndexJoin struct {
 	// and may not correspond to batch boundaries.
 	startIdx int
 
+	// limitHintHelper is used in limiting batches of input rows in the presence
+	// of hard and soft limits.
+	limitHintHelper execinfra.LimitHintHelper
+
 	mem struct {
 		// inputBatchSize tracks the size of the rows that have been used to
 		// generate spans so far. This is used to prevent memory usage from growing
@@ -176,7 +180,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 	for {
 		switch s.state {
 		case indexJoinConstructingSpans:
-			var rowCount int
+			var rowCount int64
 			var spans roachpb.Spans
 			s.mem.inputBatchSize = 0
 			for s.next() {
@@ -184,13 +188,26 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				// reference to input tuples after span generation. So, we can discard
 				// the input batch reference on each iteration.
 				endIdx := s.findEndIndex(rowCount > 0)
-				rowCount += endIdx - s.startIdx
+				// If we have a limit hint, make sure we don't include more rows
+				// than needed.
+				if l := s.limitHintHelper.LimitHint(); l != 0 && rowCount+int64(endIdx-s.startIdx) > l {
+					endIdx = s.startIdx + int(l-rowCount)
+				}
+				rowCount += int64(endIdx - s.startIdx)
 				s.spanAssembler.ConsumeBatch(s.batch, s.startIdx, endIdx)
 				s.startIdx = endIdx
+				if l := s.limitHintHelper.LimitHint(); l != 0 && rowCount == l {
+					// Reached the limit hint. Note that rowCount cannot be
+					// larger than l because we chopped the former off above.
+					break
+				}
 				if endIdx < s.batch.Length() {
 					// Reached the memory limit.
 					break
 				}
+			}
+			if err := s.limitHintHelper.ReadSomeRows(rowCount); err != nil {
+				colexecerror.InternalError(err)
 			}
 			spans = s.spanAssembler.GetSpans()
 			if len(spans) == 0 {
@@ -423,10 +440,19 @@ func (s *ColIndexJoin) GetCumulativeContentionTime() time.Duration {
 // we can remove this limit.
 var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
 	"ColIndexJoin-batch-size",
-	4<<20, /* 4 MB */
-	1,     /* min */
-	4<<20, /* max */
+	productionIndexJoinBatchSize, /* defaultValue */
+	1,                            /* min */
+	productionIndexJoinBatchSize, /* max */
 ))
+
+const productionIndexJoinBatchSize = 4 << 20 /* 4MiB */
+
+func getIndexJoinBatchSize(forceProductionValue bool) int64 {
+	if forceProductionValue {
+		return productionIndexJoinBatchSize
+	}
+	return inputBatchSizeLimit
+}
 
 // NewColIndexJoin creates a new ColIndexJoin operator.
 //
@@ -441,6 +467,7 @@ func NewColIndexJoin(
 	flowCtx *execinfra.FlowCtx,
 	input colexecop.Operator,
 	spec *execinfrapb.JoinReaderSpec,
+	post *execinfrapb.PostProcessSpec,
 	inputTypes []*types.T,
 	diskMonitor *mon.BytesMonitor,
 ) (*ColIndexJoin, error) {
@@ -508,8 +535,9 @@ func NewColIndexJoin(
 		ResultTypes:      tableArgs.typs,
 		maintainOrdering: spec.MaintainOrdering,
 		usesStreamer:     useStreamer,
+		limitHintHelper:  execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
-	op.mem.inputBatchSizeLimit = inputBatchSizeLimit
+	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes)
 	op.prepareMemLimit(inputTypes)
 	if useStreamer {
 		op.streamerInfo.budgetLimit = 3 * memoryLimit
@@ -518,7 +546,7 @@ func NewColIndexJoin(
 			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
 		}
 		op.streamerInfo.diskMonitor = diskMonitor
-		if memoryLimit < inputBatchSizeLimit {
+		if memoryLimit < op.mem.inputBatchSizeLimit {
 			// If we have a low workmem limit, then we want to reduce the input
 			// batch size limit.
 			//

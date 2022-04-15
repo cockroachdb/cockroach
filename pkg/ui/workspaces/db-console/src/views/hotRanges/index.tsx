@@ -8,10 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment";
 import { cockroach } from "src/js/protos";
 import { useDispatch, useSelector } from "react-redux";
-import React, { useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { refreshHotRanges } from "../../redux/apiReducers";
 import HotRangesTable from "./hotRangesTable";
@@ -26,12 +25,14 @@ import {
   lastErrorSelector,
   lastSetAtSelector,
 } from "src/redux/hotRanges";
-import { InlineAlert } from "src/components";
-import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { selectNodeLocalities } from "src/redux/localities";
+import { DATE_FORMAT_24_UTC } from "src/util/format";
+import { performanceBestPracticesHotSpots } from "src/util/docs";
+import { HotRangesFilter } from "src/views/hotRanges/hotRangesFilter";
 
 const cx = classNames.bind(styles);
 const HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;
+type HotRange = cockroach.server.serverpb.HotRangesResponseV2.IHotRange;
 
 const HotRangesPage = () => {
   const dispatch = useDispatch();
@@ -58,32 +59,31 @@ const HotRangesPage = () => {
     );
   }, [dispatch]);
 
-  const formatCurrentDateTime = (datetime: moment.Moment) => {
-    return (
-      datetime.format("MMM DD, YYYY") +
-      " at " +
-      datetime.format("h:mm A") +
-      " (UTC)"
-    );
-  };
-  // TODO(santamaura): add url to anchor once it's available
+  const [filteredHotRanges, setFilteredHotRanges] = useState<HotRange[]>(
+    hotRanges,
+  );
+
+  const clearButtonRef = useRef<HTMLSpanElement>();
+
   return (
-    <div className="section">
+    <React.Fragment>
       <Helmet title="Hot Ranges" />
-      <h1 className="base-heading">Hot Ranges</h1>
-      <InlineAlert
-        title=""
-        message={
-          <Text className={cx("hotranges-description")}>
-            The Hot Ranges table shows ranges receiving a high number of reads
-            or writes. By default, the table is sorted by ranges with the
-            highest QPS (queries per second). <br /> Use this information to{" "}
-            <Anchor href={performanceBestPracticesHotSpots}>
-              find and reduce hot spots.
-            </Anchor>
-          </Text>
-        }
-        fullWidth
+      <h3 className="base-heading">Hot Ranges</h3>
+      <Text className={cx("hotranges-description")}>
+        The Hot Ranges table shows ranges receiving a high number of reads or
+        writes. By default, the table is sorted by ranges with the highest QPS
+        (queries per second). <br />
+        Use this information to
+        <Anchor href={performanceBestPracticesHotSpots} target="_blank">
+          {" "}
+          find and reduce hot spots.
+        </Anchor>
+      </Text>
+      <HotRangesFilter
+        hotRanges={hotRanges}
+        onChange={setFilteredHotRanges}
+        nodeIdToLocalityMap={nodeIdToLocalityMap}
+        clearButtonContainer={clearButtonRef.current}
       />
       <ErrorBoundary>
         <Loading
@@ -91,15 +91,18 @@ const HotRangesPage = () => {
           error={lastError}
           render={() => (
             <HotRangesTable
-              hotRangesList={hotRanges}
-              lastUpdate={lastSetAt && formatCurrentDateTime(lastSetAt?.utc())}
+              hotRangesList={filteredHotRanges}
+              lastUpdate={
+                lastSetAt && lastSetAt?.utc().format(DATE_FORMAT_24_UTC)
+              }
               nodeIdToLocalityMap={nodeIdToLocalityMap}
+              clearFilterContainer={<span ref={clearButtonRef} />}
             />
           )}
           page={undefined}
         />
       </ErrorBoundary>
-    </div>
+    </React.Fragment>
   );
 };
 

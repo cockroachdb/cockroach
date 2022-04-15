@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -96,6 +98,17 @@ func registerDecommission(r registry.Registry) {
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, *t.BuildVersion())
+			},
+		})
+	}
+	{
+		numNodes := 6
+		r.Add(registry.TestSpec{
+			Name:    "decommission/slow",
+			Owner:   registry.OwnerServer,
+			Cluster: r.MakeClusterSpec(numNodes),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runDecommissionSlow(ctx, t, c)
 			},
 		})
 	}
@@ -1089,6 +1102,84 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 	o, err := h.decommission(ctx, decommNode, pinnedNodeID, "--format=csv")
 	require.NoError(t, err)
 	require.NoError(t, cli.MatchCSV(o, expDecommissioned))
+}
+
+// runDecommissionSlow decommissions 5 nodes in a test cluster of 6
+// (with a replication factor of 5), which will guarantee a replica transfer
+// stall. This test is meant to ensure that decommissioning replicas are
+// reported when replica transfers stall.
+func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
+	const (
+		numNodes          = 6
+		pinnedNodeID      = 1
+		replicationFactor = 5
+	)
+
+	var verboseStoreLogRe = regexp.MustCompile("possible decommission stall detected")
+
+	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
+	require.NoError(t, err)
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+
+	run := func(db *gosql.DB, query string) {
+		_, err = db.ExecContext(ctx, query)
+		require.NoError(t, err)
+		t.L().Printf("run: %s\n", query)
+	}
+
+	{
+		db := c.Conn(ctx, t.L(), pinnedNodeID)
+		defer db.Close()
+
+		// Set the replication factor to 5.
+		run(db, fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+		run(db, fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+
+		// Increase the speed of decommissioning.
+		run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
+		run(db, `SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
+
+		// Wait for initial up-replication.
+		err := WaitForReplication(ctx, t, db, replicationFactor)
+		require.NoError(t, err)
+	}
+
+	// Decommission 5 nodes from the cluster, resulting in immovable replicas.
+	// Be prepared to cancel the context for the processes running decommissions
+	// since the decommissions will stall.
+	decomCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	m := c.NewMonitor(decomCtx)
+	for nodeID := 2; nodeID <= numNodes; nodeID++ {
+		id := nodeID
+		m.Go(func(ctx context.Context) error {
+			decom := func(id int) error {
+				t.Status(fmt.Sprintf("decommissioning node %d", id))
+				return c.RunE(ctx,
+					c.Node(id),
+					fmt.Sprintf("./cockroach node decommission %d --insecure", id),
+				)
+			}
+			return decom(id)
+		})
+	}
+
+	// Check for reported decommissioning replicas.
+	t.Status("checking for decommissioning replicas report...")
+	testutils.SucceedsWithin(t, func() error {
+		for nodeID := 1; nodeID <= numNodes; nodeID++ {
+			if err = c.RunE(ctx,
+				c.Node(nodeID),
+				fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe),
+			); err == nil {
+				return nil
+			}
+		}
+		return errors.New("still waiting for decommissioning replicas report")
+	},
+		3*time.Minute,
+	)
 }
 
 // Header from the output of `cockroach node decommission`.

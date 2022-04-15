@@ -80,6 +80,7 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
       - 105
       - 106
       JobID: 1
+      RunningStatus: PostCommitPhase stage 1 of 4 with 2 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN j defaultdb.footyp
         redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
@@ -103,7 +104,7 @@ PostCommitPhase stage 1 of 4 with 6 MutationType ops
       DescriptorID: 106
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+PostCommitPhase stage 2 of 4 with 1 BackfillType op
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
@@ -111,7 +112,7 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       IndexID: 2
       SourceIndexID: 1
       TableID: 104
-PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+PostCommitPhase stage 3 of 4 with 1 ValidationType op
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
   ops:
@@ -155,6 +156,7 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 106
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:
@@ -178,6 +180,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j defaultdb.footyp
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -259,6 +263,7 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
+      RunningStatus: PostCommitPhase stage 1 of 4 with 2 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
         redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT
@@ -279,7 +284,7 @@ PostCommitPhase stage 1 of 4 with 4 MutationType ops
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+PostCommitPhase stage 2 of 4 with 1 BackfillType op
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
@@ -287,7 +292,7 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       IndexID: 2
       SourceIndexID: 1
       TableID: 104
-PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+PostCommitPhase stage 3 of 4 with 1 ValidationType op
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
   ops:
@@ -327,6 +332,7 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
@@ -346,6 +352,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -460,6 +468,7 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
+      RunningStatus: PostCommitPhase stage 1 of 4 with 3 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
         redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT
@@ -488,7 +497,7 @@ PostCommitPhase stage 1 of 4 with 5 MutationType ops
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+PostCommitPhase stage 2 of 4 with 1 BackfillType op
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
@@ -496,7 +505,7 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       IndexID: 2
       SourceIndexID: 1
       TableID: 104
-PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+PostCommitPhase stage 3 of 4 with 1 ValidationType op
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
   ops:
@@ -545,6 +554,7 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
@@ -564,6 +574,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -635,6 +647,7 @@ PreCommitPhase stage 1 of 1 with 6 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
+      RunningStatus: PostCommitPhase stage 1 of 4 with 2 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
         redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i›
@@ -655,7 +668,7 @@ PostCommitPhase stage 1 of 4 with 4 MutationType ops
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+PostCommitPhase stage 2 of 4 with 1 BackfillType op
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
@@ -663,7 +676,7 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       IndexID: 2
       SourceIndexID: 1
       TableID: 104
-PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+PostCommitPhase stage 3 of 4 with 1 ValidationType op
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
   ops:
@@ -703,6 +716,7 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
@@ -722,6 +736,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN a INT8 AS (i + 1) STORED
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -844,6 +860,7 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
       - 104
       - 107
       JobID: 1
+      RunningStatus: PostCommitPhase stage 1 of 4 with 4 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
         redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
@@ -962,6 +979,7 @@ PostCommitPhase stage 4 of 4 with 15 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 107
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:
@@ -988,12 +1006,17 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN a INT8
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 104
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.bar ADD COLUMN b INT8
+        StatementID: 1
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 1

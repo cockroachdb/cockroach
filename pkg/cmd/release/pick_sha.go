@@ -139,7 +139,7 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 	}
 	opts := sendOpts{
 		templatesDir: pickSHAFlags.templatesDir,
-		from:         fmt.Sprintf("Justin Beaver <%s>", pickSHAFlags.smtpUser),
+		from:         fmt.Sprintf(fromEmailFormat, pickSHAFlags.smtpUser),
 		host:         pickSHAFlags.smtpHost,
 		port:         pickSHAFlags.smtpPort,
 		user:         pickSHAFlags.smtpUser,
@@ -149,6 +149,10 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 	fmt.Println("Sending email")
 	if err := sendMailPickSHA(args, opts); err != nil {
 		return fmt.Errorf("cannot send email: %w", err)
+	}
+	fmt.Println("Generating panic")
+	if err := generatePanic(nextRelease.buildInfo.Tag); err != nil {
+		return fmt.Errorf("cannot generate panic: %w", err)
 	}
 	return nil
 }

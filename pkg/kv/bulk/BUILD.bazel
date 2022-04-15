@@ -8,6 +8,7 @@ go_library(
         "kv_buf.go",
         "setting.go",
         "sst_batcher.go",
+        "stats.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/bulk",
     visibility = ["//visibility:public"],
@@ -22,6 +23,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/util/admission",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
@@ -29,6 +31,7 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -57,7 +60,9 @@ go_test(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/tracing",
+        "@com_github_stretchr_testify//require",
     ],
 )

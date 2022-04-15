@@ -153,7 +153,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 
 		sinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
 	} else if args.whichSink == pubsubSink {
-		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest"
+		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
 	} else {
 		t.Status("installing kafka")
 		kafka.install(ctx)
@@ -813,7 +813,9 @@ func registerCDC(r registry.Registry) {
 			})
 		},
 	})
-	r.Add(registry.TestSpec{
+	// TODO(zinger): uncomment once manual acceptance testing passes
+	// and whatever connectivity/provisioning issue happening here is fixed.
+	/* r.Add(registry.TestSpec{
 		Name:            "cdc/pubsub-sink",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
@@ -829,8 +831,8 @@ func registerCDC(r registry.Registry) {
 				targetSteadyLatency:      time.Minute,
 			})
 		},
-	})
-	// TODO(ryan min): uncomment once connectivity issue is fixed,
+	}) */
+	// TODO(zinger): uncomment once connectivity issue is fixed,
 	// currently fails with "initial scan did not complete" because sink
 	// URI is set as localhost, need to expose it to the other nodes via IP
 	/*

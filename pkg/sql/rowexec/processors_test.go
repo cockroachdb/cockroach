@@ -11,6 +11,7 @@
 package rowexec
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
@@ -72,16 +73,14 @@ func TestPostProcess(t *testing.T) {
 	}
 
 	testCases := []struct {
-		post          execinfrapb.PostProcessSpec
-		outputTypes   []*types.T
-		expNeededCols []int
-		expected      string
+		post        execinfrapb.PostProcessSpec
+		outputTypes []*types.T
+		expected    string
 	}{
 		{
-			post:          execinfrapb.PostProcessSpec{},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 
 		// Projection.
@@ -90,9 +89,8 @@ func TestPostProcess(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
-			outputTypes:   types.TwoIntCols,
-			expNeededCols: []int{0, 2},
-			expected:      "[[0 2] [0 3] [0 4] [0 3] [0 4] [0 4] [1 3] [1 4] [1 4] [2 4]]",
+			outputTypes: types.TwoIntCols,
+			expected:    "[[0 2] [0 3] [0 4] [0 3] [0 4] [0 4] [1 3] [1 4] [1 4] [2 4]]",
 		},
 
 		// Rendering.
@@ -100,9 +98,8 @@ func TestPostProcess(t *testing.T) {
 			post: execinfrapb.PostProcessSpec{
 				RenderExprs: []execinfrapb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1},
-			expected:      "[[0 1 1] [0 1 1] [0 1 1] [0 2 2] [0 2 2] [0 3 3] [1 2 3] [1 2 3] [1 3 4] [2 3 5]]",
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 1] [0 1 1] [0 1 1] [0 2 2] [0 2 2] [0 3 3] [1 2 3] [1 2 3] [1 3 4] [2 3 5]]",
 		},
 
 		// More complex rendering expressions.
@@ -117,8 +114,7 @@ func TestPostProcess(t *testing.T) {
 					{Expr: "@1 = @2 - 1 AND @1 = @3 - 2"},
 				},
 			},
-			outputTypes:   []*types.T{types.Int, types.Int, types.Bool, types.Bool, types.Bool, types.Bool},
-			expNeededCols: []int{0, 1, 2},
+			outputTypes: []*types.T{types.Int, types.Int, types.Bool, types.Bool, types.Bool, types.Bool},
 			expected: "[" + strings.Join([]string{
 				/* 0 1 2 */ "[-1 2 false true true true]",
 				/* 0 1 3 */ "[-1 3 false true true false]",
@@ -135,62 +131,53 @@ func TestPostProcess(t *testing.T) {
 
 		// Offset.
 		{
-			post:          execinfrapb.PostProcessSpec{Offset: 3},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Offset: 3},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 
 		// Limit.
 		{
-			post:          execinfrapb.PostProcessSpec{Limit: 3},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 2] [0 1 3] [0 1 4]]",
+			post:        execinfrapb.PostProcessSpec{Limit: 3},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 2] [0 1 3] [0 1 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Limit: 9},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Limit: 9},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Limit: 10},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Limit: 10},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Limit: 11},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Limit: 11},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 
 		// Offset + limit.
 		{
-			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 2},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 2 3] [0 2 4]]",
+			post:        execinfrapb.PostProcessSpec{Offset: 3, Limit: 2},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 2 3] [0 2 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 6},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Offset: 3, Limit: 6},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 7},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Offset: 3, Limit: 7},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 8},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Offset: 3, Limit: 8},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 	}
 
@@ -207,20 +194,6 @@ func TestPostProcess(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Verify NeededColumns().
-			count := 0
-			neededCols := out.NeededColumns()
-			neededCols.ForEach(func(_ int) {
-				count++
-			})
-			if count != len(tc.expNeededCols) {
-				t.Fatalf("invalid neededCols length %d, expected %d", count, len(tc.expNeededCols))
-			}
-			for _, col := range tc.expNeededCols {
-				if !neededCols.Contains(col) {
-					t.Errorf("column %d not found in neededCols", col)
-				}
-			}
 			// Run the rows through the helper.
 			for i := range input {
 				status, err := out.EmitRow(context.Background(), input[i], outBuf)
@@ -646,8 +619,8 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 
 	filters := make([]struct {
 		syncutil.Mutex
-		enabled          bool
-		tableIDsToFilter []int
+		enabled   bool
+		keyPrefix roachpb.Key
 	}, numNodes)
 
 	var allNodeIdxs []int
@@ -665,27 +638,19 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 							}
 							filters[node].Lock()
 							enabled := filters[node].enabled
-							tableIDsToFilter := filters[node].tableIDsToFilter
+							keyPrefix := filters[node].keyPrefix
 							filters[node].Unlock()
 							if !enabled {
 								return nil
 							}
 
-							if req, ok := ba.GetArg(roachpb.Scan); !ok {
+							req, ok := ba.GetArg(roachpb.Scan)
+							if !ok {
 								return nil
-							} else if tableIDsToFilter != nil {
-								shouldReturnUncertaintyError := false
-								for _, tableID := range tableIDsToFilter {
-									if strings.Contains(req.(*roachpb.ScanRequest).Key.String(), fmt.Sprintf("/Table/%d", tableID)) {
-										shouldReturnUncertaintyError = true
-										break
-									}
-								}
-								if !shouldReturnUncertaintyError {
-									return nil
-								}
 							}
-
+							if !bytes.HasPrefix(req.(*roachpb.ScanRequest).Key, keyPrefix) {
+								return nil
+							}
 							return roachpb.NewError(
 								roachpb.NewReadWithinUncertaintyIntervalError(
 									ba.Timestamp,
@@ -709,6 +674,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	// Create a 30-row table, split and scatter evenly across the numNodes nodes.
 	dbConn := tc.ServerConn(0)
 	sqlutils.CreateTable(t, dbConn, "t", "x INT, y INT, INDEX (y)", 30, sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowIdxFn))
+	tableID := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t").GetID()
 	// onerow is a table created to test #51458. The value of the only row in this
 	// table is explicitly set to 2 so that it is routed by hash to a desired
 	// destination.
@@ -726,21 +692,14 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
 	defer cleanup()
 
-	// errorOriginSpec is a way for test cases to enable a request filter on the
-	// node index provided for the given tableNames.
-	type errorOriginSpec struct {
-		nodeIdx    int
-		tableNames []string
-	}
-
 	testCases := []struct {
 		query           string
 		expectedPlanURL string
 		// overrideErrorOrigin if non-nil, defines special request filtering
 		// behavior.
 		// The default behavior is to enable uncertainty errors for a single random
-		// node and for all scan requests.
-		overrideErrorOrigin []errorOriginSpec
+		// node.
+		overrideErrorOrigin []int
 		// if non-empty, this test will be skipped.
 		skip string
 	}{
@@ -755,14 +714,9 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		{
 			// This test reproduces 51458 and should be enabled once that issue is
 			// fixed.
-			query:           "SELECT * FROM t JOIN onerow ON t.x = onerow.x",
-			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lPFr2kAUx3_fX3E8GG3H2eSirSNQyGgzms5pp8IGJYyredWwmMvuLswi_u8jiWDjbDSk8yd93n3efb_f590S1O8IbBi5Pfd6TML4SZDPw8FX8uD-uO998vrk9MYbjUffemdkvedDsUGTu4HXJyJGKf6QQZ_o8wW5WtfnC598v3WHbtGx531xyclNyKeSz-33J0AhFgH2-RwV2A_AgIIFFNrgU0ikmKBSQmZLy3yjFyzANimEcZLq7GefwkRIBHsJOtQRgg1j_hjhEHmA0jCBQoCah1HeXjv6Z_ILn4HCtYjSeaxssqAkq0cJz6qWwUzwVxREqtdHbDo_PpMZV7NyT4eBv_IpKM2nCDZb0VekbvqksZABSgxKnfyM3Ldlh99brmZ3IoxRGp2ytAif9KnDzq5kOJ3l34DCINU2cRh1LOq0t6xubLQb2NihsS9aIjG62353Ht0pHc0OHzarO2yDmS3Dest5s-PO--I_zds6PHSrduiW2XrDxGtIbZfbFg-UU3z8K_rFm9BIrvWq3CP8QS6P8CDsUDBElYhY4UH33cw8YDDFIhMlUjnBeykm-TFFOci5_H4FqHSxui68uFjKBB4Od5rA3WqYbcPmS9iqhq1K-GMJNrfhdpPAquE9gVXDewLrNAnsoonnaniP52p4j-fLGrKtenCnCdythru1RuWv3v0NAAD__2MQZAI=",
-			overrideErrorOrigin: []errorOriginSpec{
-				{
-					nodeIdx:    0,
-					tableNames: []string{"t"},
-				},
-			},
+			query:               "SELECT * FROM t JOIN onerow ON t.x = onerow.x",
+			expectedPlanURL:     "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lPFr2kAUx3_fX3E8GG3H2eSirSNQyGgzms5pp8IGJYyredWwmMvuLswi_u8jiWDjbDSk8yd93n3efb_f590S1O8IbBi5Pfd6TML4SZDPw8FX8uD-uO998vrk9MYbjUffemdkvedDsUGTu4HXJyJGKf6QQZ_o8wW5WtfnC598v3WHbtGx531xyclNyKeSz-33J0AhFgH2-RwV2A_AgIIFFNrgU0ikmKBSQmZLy3yjFyzANimEcZLq7GefwkRIBHsJOtQRgg1j_hjhEHmA0jCBQoCah1HeXjv6Z_ILn4HCtYjSeaxssqAkq0cJz6qWwUzwVxREqtdHbDo_PpMZV7NyT4eBv_IpKM2nCDZb0VekbvqksZABSgxKnfyM3Ldlh99brmZ3IoxRGp2ytAif9KnDzq5kOJ3l34DCINU2cRh1LOq0t6xubLQb2NihsS9aIjG62353Ht0pHc0OHzarO2yDmS3Dest5s-PO--I_zds6PHSrduiW2XrDxGtIbZfbFg-UU3z8K_rFm9BIrvWq3CP8QS6P8CDsUDBElYhY4UH33cw8YDDFIhMlUjnBeykm-TFFOci5_H4FqHSxui68uFjKBB4Od5rA3WqYbcPmS9iqhq1K-GMJNrfhdpPAquE9gVXDewLrNAnsoonnaniP52p4j-fLGrKtenCnCdythru1RuWv3v0NAAD__2MQZAI=",
+			overrideErrorOrigin: []int{0},
 		},
 	}
 
@@ -806,20 +760,14 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 						require.Equal(t, testCase.expectedPlanURL, actualPlanURL)
 					}()
 
-					errorOrigin := []errorOriginSpec{{nodeIdx: allNodeIdxs[rng.Intn(len(allNodeIdxs))]}}
+					errorOrigin := []int{allNodeIdxs[rng.Intn(len(allNodeIdxs))]}
 					if testCase.overrideErrorOrigin != nil {
 						errorOrigin = testCase.overrideErrorOrigin
 					}
-					for _, errorOriginSpec := range errorOrigin {
-						nodeIdx := errorOriginSpec.nodeIdx
+					for _, nodeIdx := range errorOrigin {
 						filters[nodeIdx].Lock()
 						filters[nodeIdx].enabled = true
-						for _, tableName := range errorOriginSpec.tableNames {
-							filters[nodeIdx].tableIDsToFilter = append(
-								filters[nodeIdx].tableIDsToFilter,
-								int(desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", tableName).GetID()),
-							)
-						}
+						filters[nodeIdx].keyPrefix = keys.SystemSQLCodec.TablePrefix(uint32(tableID))
 						filters[nodeIdx].Unlock()
 					}
 					// Reset all filters for the next test case.
@@ -827,7 +775,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 						for i := range filters {
 							filters[i].Lock()
 							filters[i].enabled = false
-							filters[i].tableIDsToFilter = nil
+							filters[i].keyPrefix = nil
 							filters[i].Unlock()
 						}
 					}()

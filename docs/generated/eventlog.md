@@ -327,12 +327,37 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
+### `set_tenant_cluster_setting`
+
+An event of type `set_tenant_cluster_setting` is recorded when a cluster setting override
+is changed, either for another tenant or for all tenants.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `SettingName` | The name of the affected cluster setting. | no |
+| `Value` | The new value of the cluster setting. | yes |
+| `TenantId` | The target Tenant ID. Empty if targeting all tenants. | no |
+| `AllTenants` | Whether the override applies to all tenants. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
 ## SQL Access Audit Events
 
 Events in this category are generated when a table has been
 marked as audited via `ALTER TABLE ... EXPERIMENTAL_AUDIT SET`.
-
-{% include {{ page.version.version }}/misc/experimental-warning.md %}
 
 Note: These events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
@@ -2217,6 +2242,7 @@ An event of type `alter_role` is recorded when a role is altered.
 |--|--|--|
 | `RoleName` | The name of the affected user/role. | yes |
 | `Options` | The options set on the user/role. | no |
+| `SetInfo` | Information corresponding to an ALTER ROLE SET statement. | no |
 
 
 #### Common fields
@@ -2263,6 +2289,30 @@ An event of type `drop_role` is recorded when a role is dropped.
 | Field | Description | Sensitive |
 |--|--|--|
 | `RoleName` | The name of the affected user/role. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
+### `grant_role`
+
+An event of type `grant_role` is recorded when a role is granted.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `GranteeRoles` | The roles being granted to. | yes |
+| `Members` | The roles being granted. | yes |
 
 
 #### Common fields
@@ -2330,6 +2380,48 @@ An event of type `captured_index_usage_stats`
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
+
+### `changefeed_failed`
+
+An event of type `changefeed_failed` is an event for any Changefeed failure since the plan hook
+was triggered.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `FailureType` | The reason / environment with which the changefeed failed (ex: connection_closed, changefeed_behind) | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Description` | The description of that would show up in the job's description field, redacted | no |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
+| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
+
+### `create_changefeed`
+
+An event of type `create_changefeed` is an event for any CREATE CHANGEFEED query that
+successfully starts running.  Failed CREATE statements will show up as
+ChangefeedFailed events.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Description` | The description of that would show up in the job's description field, redacted | no |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
+| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
 
 ### `sampled_query`
 

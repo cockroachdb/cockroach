@@ -86,7 +86,7 @@ type ColumnBackfiller struct {
 	// mon is a memory monitor linked with the ColumnBackfiller on creation.
 	mon *mon.BytesMonitor
 
-	rowMetrics *row.Metrics
+	rowMetrics *rowinfra.Metrics
 }
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
@@ -111,7 +111,7 @@ func (cb *ColumnBackfiller) init(
 	computedExprs []tree.TypedExpr,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
-	rowMetrics *row.Metrics,
+	rowMetrics *rowinfra.Metrics,
 ) error {
 	cb.evalCtx = evalCtx
 	cb.updateCols = append(cb.added, cb.dropped...)
@@ -171,7 +171,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
-	rowMetrics *row.Metrics,
+	rowMetrics *rowinfra.Metrics,
 ) error {
 	cb.initCols(desc)
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(

@@ -260,7 +260,13 @@ func (s *ParallelUnorderedSynchronizer) init() {
 							continue
 						}
 						sendErr(err)
-						return
+						// After we encounter an error, we proceed to draining.
+						// If this is a context cancellation, we'll realize that
+						// in the select below, so the drained meta will be
+						// ignored, for all other errors the drained meta will
+						// be sent to the coordinator goroutine.
+						s.setState(parallelUnorderedSynchronizerStateDraining)
+						continue
 					}
 					msg.b = s.batches[inputIdx]
 					if s.batches[inputIdx].Length() != 0 {
@@ -341,6 +347,9 @@ func (s *ParallelUnorderedSynchronizer) Next() coldata.Batch {
 			// is safe to retrieve the next batch. Since Next has been called, we can
 			// reuse memory instead of making safe copies of batches returned.
 			s.notifyInputToReadNextBatch(s.lastReadInputIdx)
+		case parallelUnorderedSynchronizerStateDraining:
+			// One of the inputs has just encountered an error. We do nothing
+			// here and will read that error from the errCh below.
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled state in ParallelUnorderedSynchronizer Next goroutine: %d", state))
 		}

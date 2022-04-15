@@ -14,9 +14,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -88,7 +90,15 @@ func RunSchemaChangesInJob(
 	descriptorIDs []descpb.ID,
 	rollback bool,
 ) error {
-	state, err := makeState(ctx, deps, descriptorIDs, rollback)
+	state, err := makeState(ctx, jobID, descriptorIDs, rollback, func(
+		ctx context.Context, f catalogFunc,
+	) error {
+		return deps.WithTxnInJob(ctx, func(
+			ctx context.Context, txnDeps scexec.Dependencies,
+		) error {
+			return f(ctx, txnDeps.Catalog())
+		})
+	})
 	if err != nil {
 		return errors.Wrapf(err, "failed to construct state for job %d", jobID)
 	}
@@ -141,14 +151,12 @@ func executeStage(
 		}
 	}
 
-	log.Infof(ctx, "executing stage %d/%d in %v, %d ops of type %s (rollback=%v)",
-		stage.Ordinal, stage.StagesInPhase, stage.Phase, len(stage.Ops()), stage.Ops()[0].Type(), p.InRollback)
+	log.Infof(ctx, "executing %s (rollback=%v)", stage, p.InRollback)
 	start := timeutil.Now()
 	defer func() {
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "executed stage %d/%d in %v, %d ops of type %s (rollback=%v) took %v: err = %v",
-				stage.Ordinal, stage.StagesInPhase, stage.Phase, len(stage.Ops()), stage.Ops()[0].Type(), p.InRollback,
-				timeutil.Since(start), err)
+			log.Infof(ctx, "executing %s (rollback=%v) took %v: err = %v",
+				stage, p.InRollback, timeutil.Since(start), err)
 		}
 	}()
 	if err := scexec.ExecuteStage(ctx, deps, stage.Ops()); err != nil {
@@ -158,7 +166,7 @@ func executeStage(
 			!errors.Is(err, context.Canceled) {
 			err = p.DecorateErrorWithPlanDetails(err)
 		}
-		return errors.Wrapf(err, "error executing %s", stage.String())
+		return errors.Wrapf(err, "error executing %s", stage)
 	}
 	if knobs != nil && knobs.AfterStage != nil {
 		if err := knobs.AfterStage(p, stageIdx); err != nil {
@@ -169,14 +177,65 @@ func executeStage(
 	return nil
 }
 
+type (
+	catalogFunc     = func(context.Context, scexec.Catalog) error
+	withCatalogFunc = func(context.Context, catalogFunc) error
+)
+
 func makeState(
-	ctx context.Context, deps JobRunDependencies, descriptorIDs []descpb.ID, rollback bool,
+	ctx context.Context,
+	jobID jobspb.JobID,
+	descriptorIDs []descpb.ID,
+	rollback bool,
+	withCatalog withCatalogFunc,
 ) (scpb.CurrentState, error) {
+	descError := func(desc catalog.Descriptor, err error) error {
+		return errors.Wrapf(err, "descriptor %q (%d)", desc.GetName(), desc.GetID())
+	}
+	validateJobID := func(fromDesc jobspb.JobID) error {
+		switch {
+		case fromDesc == jobspb.InvalidJobID:
+			return errors.New("missing job ID in schema changer state")
+		case fromDesc != jobID:
+			return errors.Errorf("job ID mismatch: expected %d, got %d",
+				jobID, fromDesc)
+		default:
+			return nil
+		}
+	}
+	var authorization scpb.Authorization
+	validateAuthorization := func(fromDesc scpb.Authorization) error {
+		switch {
+		case fromDesc == (scpb.Authorization{}):
+			return errors.New("missing authorization in schema changer state")
+		case authorization == (scpb.Authorization{}):
+			authorization = fromDesc
+		case authorization != fromDesc:
+			return errors.Errorf("authorization mismatch: expected %v, got %v",
+				authorization, fromDesc)
+		}
+		return nil
+	}
 	var descriptorStates []*scpb.DescriptorState
-	if err := deps.WithTxnInJob(ctx, func(ctx context.Context, txnDeps scexec.Dependencies) error {
-		descriptorStates = nil
-		// Reset for restarts.
-		descs, err := txnDeps.Catalog().MustReadImmutableDescriptors(ctx, descriptorIDs...)
+	addDescriptorState := func(desc catalog.Descriptor) error {
+		cs := desc.GetDeclarativeSchemaChangerState()
+		if cs == nil {
+			return errors.New("missing schema changer state")
+		}
+		if err := validateJobID(cs.JobID); err != nil {
+			return err
+		}
+		if err := validateAuthorization(cs.Authorization); err != nil {
+			return err
+		}
+		descriptorStates = append(descriptorStates, cs)
+		return nil
+	}
+	if err := withCatalog(ctx, func(
+		ctx context.Context, cat scexec.Catalog,
+	) error {
+		descriptorStates = nil // reset for restarts
+		descs, err := cat.MustReadImmutableDescriptors(ctx, descriptorIDs...)
 		if err != nil {
 			// TODO(ajwerner): It seems possible that a descriptor could be deleted
 			// and the schema change is in a happy place. Ideally we'd enforce that
@@ -185,15 +244,9 @@ func makeState(
 			return err
 		}
 		for _, desc := range descs {
-			// TODO(ajwerner): Verify that the job ID matches on all of the
-			// descriptors. Also verify that the Authorization matches.
-			cs := desc.GetDeclarativeSchemaChangerState()
-			if cs == nil {
-				return errors.Errorf(
-					"descriptor %q (%d) does not contain schema changer state", desc.GetName(), desc.GetID(),
-				)
+			if err := addDescriptorState(desc); err != nil {
+				return descError(desc, err)
 			}
-			descriptorStates = append(descriptorStates, cs)
 		}
 		return nil
 	}); err != nil {
@@ -204,9 +257,11 @@ func makeState(
 		return scpb.CurrentState{}, err
 	}
 	if !rollback && state.InRollback {
-		return scpb.CurrentState{}, errors.Errorf(
+		// If we do not mark the error as permanent, but we've configured the job to
+		// be non-cancelable, we'll never make it to the reverting state.
+		return scpb.CurrentState{}, jobs.MarkAsPermanentJobError(errors.Errorf(
 			"job in running state but schema change in rollback, " +
-				"returning an error to restart in the reverting state")
+				"returning an error to restart in the reverting state"))
 	}
 	if rollback && !state.InRollback {
 		state.Rollback()

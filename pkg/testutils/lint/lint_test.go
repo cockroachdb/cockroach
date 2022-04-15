@@ -864,6 +864,7 @@ func TestLint(t *testing.T) {
 			":!server/testserver.go",
 			":!util/tracing/*_test.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
+			":!ccl/sqlproxyccl/tenantdirsvr/test_simple_directory_svr.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1995,6 +1996,7 @@ func TestLint(t *testing.T) {
 			"../../sql/colfetcher",
 			"../../sql/row",
 			"../../kv/kvclient/rangecache",
+			"../../storage",
 		); err != nil {
 			t.Fatal(err)
 		}

@@ -82,8 +82,15 @@ func (s *Tenant) updateTimestampAfterLastSQLChange() {
 // the execution timestamp for subsequent use.
 func (s *Tenant) Exec(query string, args ...interface{}) {
 	s.db.Exec(s.t, query, args...)
-
 	s.updateTimestampAfterLastSQLChange()
+}
+
+// ExecWithErr is like Exec but returns the error, if any. It records the
+// execution timestamp for subsequent use.
+func (s *Tenant) ExecWithErr(query string, args ...interface{}) error {
+	_, err := s.db.DB.ExecContext(context.Background(), query, args...)
+	s.updateTimestampAfterLastSQLChange()
+	return err
 }
 
 // TimestampAfterLastSQLChange returns a timestamp after the last time Exec was
@@ -114,6 +121,11 @@ func (s *Tenant) LastCheckpoint() hlc.Timestamp {
 // Query is a wrapper around gosql.Query that kills the test on error.
 func (s *Tenant) Query(query string, args ...interface{}) *gosql.Rows {
 	return s.db.Query(s.t, query, args...)
+}
+
+// QueryRow is a wrapper around gosql.QueryRow that kills the test on error.
+func (s *Tenant) QueryRow(query string, args ...interface{}) *sqlutils.Row {
+	return s.db.QueryRow(s.t, query, args...)
 }
 
 // Reconciler returns the reconciler associated with the given tenant.
