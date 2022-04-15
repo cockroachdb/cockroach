@@ -78,3 +78,34 @@ SELECT similarity(a, b) FROM (VALUES
 0.375
 0.166666666666667
 0
+
+query T
+SHOW pg_trgm.similarity_threshold
+----
+0.3
+
+# Test the text % text similarity threshold operator. This operator runs
+# the same algorithm as similarity(), and checks if the result is greater than
+# the value in pg_trgm.similarity_threshold, which defaults to .3.
+query BBBB
+SELECT 'FOO' % 'foo', 'foobar' % 'foo', 'foobar' % 'barfoo', 'blorp' % 'z'
+----
+true  true  false  false
+
+# Change similarity threshold and try again.
+statement ok
+SET pg_trgm.similarity_threshold=.1
+
+query BBBB
+SELECT 'FOO' % 'foo', 'foobar' % 'foo', 'foobar' % 'barfoo', 'blorp' % 'z'
+----
+true  true  true  false
+
+# Change similarity threshold and try again.
+statement ok
+SET pg_trgm.similarity_threshold=1
+
+query BBBB
+SELECT 'FOO' % 'foo', 'foobar' % 'foo', 'foobar' % 'barfoo', 'blorp' % 'z'
+----
+true  false  false  false
