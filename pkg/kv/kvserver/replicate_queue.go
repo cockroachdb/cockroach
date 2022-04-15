@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -430,7 +431,7 @@ func (rq *replicateQueue) shouldQueue(
 			voterReplicas,
 			nonVoterReplicas,
 			rangeUsageInfo,
-			storeFilterThrottled,
+			storepool.StoreFilterThrottled,
 			rq.allocator.scorerOptions(ctx),
 		)
 		if ok {
@@ -444,7 +445,7 @@ func (rq *replicateQueue) shouldQueue(
 			voterReplicas,
 			nonVoterReplicas,
 			rangeUsageInfo,
-			storeFilterThrottled,
+			storepool.StoreFilterThrottled,
 			rq.allocator.scorerOptions(ctx),
 		)
 		if ok {
@@ -544,10 +545,10 @@ func (rq *replicateQueue) processOneChange(
 
 	voterReplicas := desc.Replicas().VoterDescriptors()
 	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
-	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
+	liveVoterReplicas, deadVoterReplicas := rq.store.cfg.StorePool.LiveAndDeadReplicas(
 		voterReplicas, true, /* includeSuspectAndDrainingStores */
 	)
-	liveNonVoterReplicas, deadNonVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
+	liveNonVoterReplicas, deadNonVoterReplicas := rq.store.cfg.StorePool.LiveAndDeadReplicas(
 		nonVoterReplicas, true, /* includeSuspectAndDrainingStores */
 	)
 
@@ -618,7 +619,7 @@ func (rq *replicateQueue) processOneChange(
 
 	// Replace decommissioning replicas.
 	case AllocatorReplaceDecommissioningVoter:
-		decommissioningVoterReplicas := rq.allocator.storePool.decommissioningReplicas(voterReplicas)
+		decommissioningVoterReplicas := rq.store.cfg.StorePool.DecommissioningReplicas(voterReplicas)
 		if len(decommissioningVoterReplicas) == 0 {
 			// Nothing to do.
 			return false, nil
@@ -632,7 +633,7 @@ func (rq *replicateQueue) processOneChange(
 		return rq.addOrReplaceVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, decommissioning, dryRun)
 	case AllocatorReplaceDecommissioningNonVoter:
-		decommissioningNonVoterReplicas := rq.allocator.storePool.decommissioningReplicas(nonVoterReplicas)
+		decommissioningNonVoterReplicas := rq.store.cfg.StorePool.DecommissioningReplicas(nonVoterReplicas)
 		if len(decommissioningNonVoterReplicas) == 0 {
 			return false, nil
 		}
@@ -769,7 +770,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		return false, errors.AssertionFailedf("allocator suggested to replace replica on s%d with itself", newVoter.StoreID)
 	}
 
-	clusterNodes := rq.allocator.storePool.ClusterNodeCount()
+	clusterNodes := rq.store.cfg.StorePool.ClusterNodeCount()
 	neededVoters := GetNeededVoters(conf.GetNumVoters(), clusterNodes)
 
 	// Only up-replicate if there are suitable allocation targets such that,
@@ -1156,11 +1157,11 @@ func (rq *replicateQueue) removeDecommissioning(
 	var decommissioningReplicas []roachpb.ReplicaDescriptor
 	switch targetType {
 	case voterTarget:
-		decommissioningReplicas = rq.allocator.storePool.decommissioningReplicas(
+		decommissioningReplicas = rq.store.cfg.StorePool.DecommissioningReplicas(
 			desc.Replicas().VoterDescriptors(),
 		)
 	case nonVoterTarget:
-		decommissioningReplicas = rq.allocator.storePool.decommissioningReplicas(
+		decommissioningReplicas = rq.store.cfg.StorePool.DecommissioningReplicas(
 			desc.Replicas().NonVoterDescriptors(),
 		)
 	default:
@@ -1314,7 +1315,7 @@ func (rq *replicateQueue) considerRebalance(
 			existingVoters,
 			existingNonVoters,
 			rangeUsageInfo,
-			storeFilterThrottled,
+			storepool.StoreFilterThrottled,
 			scorerOpts,
 		)
 		if !ok {
@@ -1328,7 +1329,7 @@ func (rq *replicateQueue) considerRebalance(
 				existingVoters,
 				existingNonVoters,
 				rangeUsageInfo,
-				storeFilterThrottled,
+				storepool.StoreFilterThrottled,
 				scorerOpts,
 			)
 			rebalanceTargetType = nonVoterTarget
@@ -1614,7 +1615,7 @@ func (rq *replicateQueue) transferLease(
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
 	}
 	rq.lastLeaseTransfer.Store(timeutil.Now())
-	rq.allocator.storePool.updateLocalStoresAfterLeaseTransfer(
+	rq.store.cfg.StorePool.UpdateLocalStoresAfterLeaseTransfer(
 		repl.store.StoreID(), target.StoreID, rangeQPS)
 	return nil
 }
@@ -1640,7 +1641,7 @@ func (rq *replicateQueue) changeReplicas(
 	}
 	rangeUsageInfo := rangeUsageInfoForRepl(repl)
 	for _, chg := range chgs {
-		rq.allocator.storePool.updateLocalStoreAfterRebalance(
+		rq.store.cfg.StorePool.UpdateLocalStoreAfterRebalance(
 			chg.Target.StoreID, rangeUsageInfo, chg.ChangeType)
 	}
 	return nil

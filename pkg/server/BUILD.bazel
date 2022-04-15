@@ -95,6 +95,7 @@ go_library(
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvprober",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/kvserverbase",

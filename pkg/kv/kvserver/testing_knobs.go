@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
@@ -409,7 +410,7 @@ type NodeLivenessTestingKnobs struct {
 	RenewalDuration time.Duration
 	// StorePoolNodeLivenessFn is the function used by the StorePool to determine
 	// whether a node is live or not.
-	StorePoolNodeLivenessFn NodeLivenessFunc
+	StorePoolNodeLivenessFn storepool.NodeLivenessFunc
 }
 
 var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}
