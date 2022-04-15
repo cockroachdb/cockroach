@@ -38,13 +38,26 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 ) {
 	var constantVal opt.ScalarExpr
 	var left, right opt.ScalarExpr
+	var allTrigramsMustMatch bool
 	switch e := expr.(type) {
 	// Both ILIKE and LIKE are supported because the index entries are always
 	// downcased. We re-check the condition no matter what later.
 	case *memo.ILikeExpr:
 		left, right = e.Left, e.Right
+		// If we're doing a LIKE (or ILIKE) expression, we need to construct an AND out of all
+		// of the spans: we need to find results that match every single one of the
+		// trigrams in the constant datum.
+		allTrigramsMustMatch = true
 	case *memo.LikeExpr:
 		left, right = e.Left, e.Right
+		allTrigramsMustMatch = true
+	case *memo.ModExpr:
+		// If we're doing a % expression (similarity threshold), we need to construct
+		// an OR out of the spans: we need to find results that match any of the
+		// trigrams in the constant datum, and we'll filter the results further
+		// afterwards.
+		left, right = e.Left, e.Right
+		allTrigramsMustMatch = false
 	default:
 		// Only the above types are supported.
 		return inverted.NonInvertedColExpression{}, expr, nil
@@ -53,6 +66,9 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		constantVal = right
 	} else if isIndexColumn(t.tabID, t.index, right, t.computedColumns) && memo.CanExtractConstDatum(left) {
 		constantVal = left
+	} else {
+		// Can only accelerate with a single constant value.
+		return inverted.NonInvertedColExpression{}, expr, nil
 	}
 	d := memo.ExtractConstDatum(constantVal)
 	if d.ResolvedType() != types.String {
@@ -61,7 +77,7 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		))
 	}
 	var err error
-	invertedExpr, err = rowenc.EncodeLikeTrigramSpans(d.(*tree.DString))
+	invertedExpr, err = rowenc.EncodeTrigramSpans(d.(*tree.DString), allTrigramsMustMatch)
 	if err != nil {
 		// An inverted expression could not be extracted.
 		return inverted.NonInvertedColExpression{}, expr, nil

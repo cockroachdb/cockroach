@@ -47,3 +47,28 @@ SELECT * FROM a@a_t_idx WHERE t LIKE 'blahf'
 query IT
 SELECT * FROM a@a_t_idx WHERE t LIKE 'fblah'
 ----
+
+# Test the acceleration of the % similarity operator.
+# By default, the threshold for searching is .3.
+query FIT
+SELECT similarity(t, 'blar'), * FROM a@a_t_idx WHERE t % 'blar'
+----
+0.428571432828903  3  blah
+
+query FIT
+SELECT similarity(t, 'byar'), * FROM a@a_t_idx WHERE t % 'byar'
+----
+
+query FIT
+SELECT similarity(t, 'fooz'), * FROM a@a_t_idx WHERE t % 'fooz' ORDER BY a
+----
+0.400000005960464  1  foozoopa
+0.5                2  Foo
+
+statement ok
+SET pg_trgm.similarity_threshold=.45
+
+query FIT
+SELECT similarity(t, 'fooz'), * FROM a@a_t_idx WHERE t % 'fooz'
+----
+0.5  2  Foo

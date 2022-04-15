@@ -840,9 +840,11 @@ func encodeOverlapsArrayInvertedIndexSpans(
 	return invertedExpr, nil
 }
 
-// EncodeLikeTrigramSpans returns the spans that must be scanned to look up all
-// trigrams present in the input string.
-func EncodeLikeTrigramSpans(val *tree.DString) (inverted.Expression, error) {
+// EncodeTrigramSpans returns the spans that must be scanned to look up trigrams
+// present in the input string. If allMustMatch is true, the resultant inverted
+// expression must match every trigram in the input. Otherwise, it will match
+// any trigram in the input.
+func EncodeTrigramSpans(val *tree.DString, allMustMatch bool) (inverted.Expression, error) {
 	chunks := strings.Split(string(*val), "%")
 	// Each chunk will have at minimum 2 trigrams, so start at that default size.
 	keys := make([][]byte, 0, len(chunks)*2)
@@ -876,7 +878,11 @@ func EncodeLikeTrigramSpans(val *tree.DString) (inverted.Expression, error) {
 		if ret == nil {
 			ret = spanExpr
 		} else {
-			ret = inverted.And(ret, spanExpr)
+			if allMustMatch {
+				ret = inverted.And(ret, spanExpr)
+			} else {
+				ret = inverted.Or(ret, spanExpr)
+			}
 		}
 	}
 	// The result is never tight. We always need to re-check the condition once
