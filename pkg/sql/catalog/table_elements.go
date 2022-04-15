@@ -332,7 +332,7 @@ type Column interface {
 	// GetPGAttributeNum returns the PGAttributeNum of the column descriptor
 	// if the PGAttributeNum is set (non-zero). Returns the ID of the
 	// column descriptor if the PGAttributeNum is not set.
-	GetPGAttributeNum() uint32
+	GetPGAttributeNum() descpb.PGAttributeNum
 
 	// IsSystemColumn returns true iff the column is a system column.
 	IsSystemColumn() bool

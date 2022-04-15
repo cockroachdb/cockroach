@@ -32,7 +32,7 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 		Hidden:                  op.Column.IsHidden,
 		Inaccessible:            op.Column.IsInaccessible,
 		GeneratedAsIdentityType: op.Column.GeneratedAsIdentityType,
-		PGAttributeNum:          op.Column.PgAttributeNum,
+		PGAttributeNum:          descpb.PGAttributeNum(op.Column.PgAttributeNum),
 	}
 	if o := op.Column.GeneratedAsIdentitySequenceOption; o != "" {
 		col.GeneratedAsIdentitySequenceOption = &o
