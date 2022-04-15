@@ -454,7 +454,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		// Columns for table.
 		for _, column := range table.AccessibleColumns() {
 			tableID := tableOid(table.GetID())
-			if err := addColumn(column, tableID, column.GetPGAttributeNum()); err != nil {
+			if err := addColumn(column, tableID, uint32(column.GetPGAttributeNum())); err != nil {
 				return err
 			}
 		}
@@ -466,7 +466,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				colID := index.GetKeyColumnID(i)
 				idxID := h.IndexOid(table.GetID(), index.GetID())
 				column := table.PublicColumns()[columnIdxMap.GetDefault(colID)]
-				if err := addColumn(column, idxID, column.GetPGAttributeNum()); err != nil {
+				if err := addColumn(column, idxID, uint32(column.GetPGAttributeNum())); err != nil {
 					return err
 				}
 			}

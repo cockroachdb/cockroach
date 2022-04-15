@@ -119,6 +119,9 @@ const (
 	LatestIndexDescriptorVersion = PrimaryIndexWithStoredColumnsVersion
 )
 
+// PGAttributeNum is a custom type for ColumnDescriptor's PGAttributeNum field.
+type PGAttributeNum = catid.PGAttributeNum
+
 // ColumnID is a custom type for ColumnDescriptor IDs.
 type ColumnID = catid.ColumnID
 

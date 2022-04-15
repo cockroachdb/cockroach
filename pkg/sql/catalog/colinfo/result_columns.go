@@ -60,7 +60,7 @@ func ResultColumnsFromColDescs(
 			Typ:            typ,
 			Hidden:         colDesc.Hidden,
 			TableID:        tableID,
-			PGAttributeNum: colDesc.GetPGAttributeNum(),
+			PGAttributeNum: uint32(colDesc.GetPGAttributeNum()),
 		}
 	}
 	return cols
