@@ -123,6 +123,7 @@ type Server struct {
 	admin           *adminServer
 	status          *statusServer
 	drain           *drainServer
+	services        *serviceMgr
 	authentication  *authenticationServer
 	migrationServer *migrationServer
 	tsDB            *ts.DB
@@ -838,6 +839,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		externalStorageBuilder: externalStorageBuilder,
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
+		services:               newServiceMgr(ctx, stopper, cfg.BaseConfig, internalExecutor, sqlServer),
 	}
 
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
@@ -977,6 +979,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// web UI.
 	if err := s.http.start(ctx, workersCtx, connManager, uiTLSConfig, s.stopper); err != nil {
 		return err
+	}
+
+	// Start the services server.
+	if s.services != nil {
+		if err := s.services.start(ctx, workersCtx, uiTLSConfig); err != nil {
+			return err
+		}
 	}
 
 	// Initialize the external storage builders configuration params now that the
