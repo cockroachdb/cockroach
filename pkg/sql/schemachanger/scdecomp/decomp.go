@@ -310,7 +310,7 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 		IsInaccessible:                    col.IsInaccessible(),
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOption(),
-		PgAttributeNum:                    col.ColumnDesc().PGAttributeNum,
+		PgAttributeNum:                    col.GetPGAttributeNum(),
 	}
 	w.ev(maybeMutationStatus(col), column)
 	w.ev(scpb.Status_PUBLIC, &scpb.ColumnName{

@@ -526,6 +526,12 @@ type TableDescriptor interface {
 	// provided target ID, in the canonical order.
 	// If no column is found then an error is also returned.
 	FindColumnWithID(id descpb.ColumnID) (Column, error)
+
+	// FindColumnWithPGAttributeNum returns the first column found whose
+	// PGAttributeNum (if set, otherwise ID) matches the provider id.
+	// Error is returned if no column is found.
+	FindColumnWithPGAttributeNum(id descpb.PGAttributeNum) (Column, error)
+
 	// FindColumnWithName returns the first column found whose name matches the
 	// provided target name, in the canonical order.
 	// If no column is found then an error is also returned.
