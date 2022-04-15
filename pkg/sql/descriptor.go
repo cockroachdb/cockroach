@@ -361,6 +361,25 @@ var DefaultPrimaryRegion = settings.RegisterStringSetting(
 	"",
 ).WithPublic()
 
+// SecondaryTenantsMultiRegionAbstractionsEnabledSettingName is the name of the
+// cluster setting that governs secondary tenant multi-region abstraction usage.
+const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
+
+// SecondaryTenantsMultiRegionAbstractionsEnabled controls if secondary tenants
+// are allowed to use multi-region abstractions. In particular, it controls if
+// secondary tenants are allowed to add a region to their database. It has no
+// effect on the system tenant.
+//
+// This setting has no effect for existing multi-region databases that have
+// already been configured. It only affects regions being added to new
+// databases.
+var SecondaryTenantsMultiRegionAbstractionsEnabled = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+	"allow secondary tenants to use multi-region abstractions",
+	false,
+)
+
 // maybeInitializeMultiRegionMetadata initializes multi-region metadata if a
 // primary region is supplied and works as a pass-through otherwise. It creates
 // a new region config from the given parameters and reserves an ID for the
@@ -372,6 +391,21 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 	regions []tree.Name,
 	placement tree.DataPlacement,
 ) (*multiregion.RegionConfig, error) {
+	if !p.execCfg.Codec.ForSystemTenant() &&
+		!SecondaryTenantsMultiRegionAbstractionsEnabled.Get(&p.execCfg.Settings.SV) {
+		// There was no primary region provided, let the thing pass through.
+		if primaryRegion == "" && len(regions) == 0 {
+			return nil, nil
+		}
+
+		return nil, errors.WithHint(pgerror.Newf(
+			pgcode.InvalidDatabaseDefinition,
+			"setting %s disallows use of multi-region abstractions",
+			SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+		),
+			"consider omitting the primary region")
+	}
+
 	if primaryRegion == "" && len(regions) == 0 {
 		defaultPrimaryRegion := DefaultPrimaryRegion.Get(&p.execCfg.Settings.SV)
 		if defaultPrimaryRegion == "" {
