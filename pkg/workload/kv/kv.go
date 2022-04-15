@@ -36,27 +36,27 @@ import (
 
 const (
 	kvSchema = `(
-		k BIGINT NOT NULL PRIMARY KEY,
+		id BIGINT NOT NULL PRIMARY KEY,
 		v BYTES NOT NULL
 	)`
 	kvSchemaWithIndex = `(
-		k BIGINT NOT NULL PRIMARY KEY,
+		id BIGINT NOT NULL PRIMARY KEY,
 		v BYTES NOT NULL,
 		INDEX (v)
 	)`
 	// TODO(ajwerner): Change this to use the "easier" hash sharded index syntax once that
 	// is in.
 	shardedKvSchema = `(
-		k BIGINT NOT NULL,
+		id BIGINT NOT NULL,
 		v BYTES NOT NULL,
-		shard INT4 AS (mod(k, %d)) STORED CHECK (%s),
-		PRIMARY KEY (shard, k)
+		shard INT4 AS (mod(id, %d)) STORED CHECK (%s),
+		PRIMARY KEY (shard, id)
 	)`
 	shardedKvSchemaWithIndex = `(
-		k BIGINT NOT NULL,
+		id BIGINT NOT NULL,
 		v BYTES NOT NULL,
-		shard INT4 AS (mod(k, %d)) STORED CHECK (%s),
-		PRIMARY KEY (shard, k),
+		shard INT4 AS (mod(id, %d)) STORED CHECK (%s),
+		PRIMARY KEY (shard, id),
 		INDEX (v)
 	)`
 )
@@ -93,7 +93,7 @@ var kvMeta = workload.Meta{
 	Details: `
 	By default, keys are picked uniformly at random across the cluster.
 	--concurrency workers alternate between doing selects and upserts (according
-	to a --read-percent ratio). Each select/upsert reads/writes a batch of --batch
+	to a --git ratio). Each select/upsert reads/writes a batch of --batch
 	rows. The write keys are randomly generated in a deterministic fashion (or
 	sequentially if --sequential is specified). Reads select a random batch of ids
 	out of the ones previously written.
@@ -267,7 +267,7 @@ func (w *kv) Ops(
 	// Read statement
 	var buf strings.Builder
 	if w.shards == 0 {
-		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
+		buf.WriteString(`SELECT id, v FROM kv WHERE id IN (`)
 		for i := 0; i < w.batchSize; i++ {
 			if i > 0 {
 				buf.WriteString(", ")
@@ -275,7 +275,7 @@ func (w *kv) Ops(
 			fmt.Fprintf(&buf, `$%d`, i+1)
 		}
 	} else if w.enum {
-		buf.WriteString(`SELECT k, v, e FROM kv WHERE k IN (`)
+		buf.WriteString(`SELECT id, v, e FROM kv WHERE id IN (`)
 		for i := 0; i < w.batchSize; i++ {
 			if i > 0 {
 				buf.WriteString(", ")
@@ -288,7 +288,7 @@ func (w *kv) Ops(
 		// when all the columns they reference are available. See
 		// https://github.com/cockroachdb/cockroach/issues/39340#issuecomment-535338071
 		// for details. Remove this once that functionality is added.
-		buf.WriteString(`SELECT k, v FROM kv WHERE (shard, k) in (`)
+		buf.WriteString(`SELECT id, v FROM kv WHERE (shard, id) in (`)
 		for i := 0; i < w.batchSize; i++ {
 			if i > 0 {
 				buf.WriteString(", ")
@@ -301,7 +301,7 @@ func (w *kv) Ops(
 
 	// Write statement
 	buf.Reset()
-	buf.WriteString(`UPSERT INTO kv (k, v) VALUES`)
+	buf.WriteString(`UPSERT INTO kv (id, v) VALUES`)
 	for i := 0; i < w.batchSize; i++ {
 		j := i * 2
 		if i > 0 {
@@ -318,7 +318,7 @@ func (w *kv) Ops(
 			return workload.QueryLoad{}, fmt.Errorf("select for update in kv requires shard=0")
 		}
 		buf.Reset()
-		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
+		buf.WriteString(`SELECT id, v FROM kv WHERE id IN (`)
 		for i := 0; i < w.batchSize; i++ {
 			if i > 0 {
 				buf.WriteString(", ")
@@ -333,7 +333,7 @@ func (w *kv) Ops(
 	buf.Reset()
 	buf.WriteString(`SELECT count(v) FROM [SELECT v FROM kv`)
 	if w.spanLimit > 0 {
-		fmt.Fprintf(&buf, ` ORDER BY k LIMIT %d`, w.spanLimit)
+		fmt.Fprintf(&buf, ` ORDER BY id LIMIT %d`, w.spanLimit)
 	}
 	buf.WriteString(`]`)
 	spanStmtStr := buf.String()
