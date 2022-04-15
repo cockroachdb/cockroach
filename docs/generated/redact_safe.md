@@ -42,6 +42,7 @@ pkg/sql/sem/catid/ids.go | `ConstraintID`
 pkg/sql/sem/catid/ids.go | `DescID`
 pkg/sql/sem/catid/ids.go | `FamilyID`
 pkg/sql/sem/catid/ids.go | `IndexID`
+pkg/sql/sem/catid/ids.go | `PGAttributeNum`
 pkg/sql/sqlliveness/sqlliveness.go | `SessionID`
 pkg/storage/enginepb/mvcc.go | `TxnEpoch`
 pkg/storage/enginepb/mvcc.go | `TxnSeq`

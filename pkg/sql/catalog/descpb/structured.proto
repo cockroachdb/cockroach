@@ -198,7 +198,9 @@ message ColumnDescriptor {
   // This only differs from ID when the Column order is swapped or
   // the ColumnDescriptor must be remade while remaining visual ordering.
   // This does not exist in TableDescriptors pre 20.2.
-  optional uint32 pg_attribute_num = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "PGAttributeNum"];
+  optional uint32 pg_attribute_num = 13 [(gogoproto.nullable) = false,
+                                         (gogoproto.customname) = "PGAttributeNum",
+                                         (gogoproto.casttype) = "PGAttributeNum"];
   // Used to indicate column is used and dropped for ALTER COLUMN TYPE mutation.
   optional bool alter_column_type_in_progress = 14 [(gogoproto.nullable) = false];
 
