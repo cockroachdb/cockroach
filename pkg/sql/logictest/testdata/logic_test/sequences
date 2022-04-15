@@ -2214,3 +2214,19 @@ SELECT lastval()
 
 statement ok
 END
+
+statement ok
+CREATE SEQUENCE restart_seqas START WITH 5 RESTART 1
+
+query I
+select nextval('restart_seqas')
+----
+1
+
+statement ok
+ALTER SEQUENCE restart_seqas RESTART
+
+query I
+select nextval('restart_seqas')
+----
+5

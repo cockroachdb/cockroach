@@ -141,8 +141,10 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 		}
 	}
 	if opts.Restart != nil {
-		err := params.p.SetSequenceValueByID(params.ctx, uint32(desc.ID), *opts.Restart, false)
-		if err != nil {
+		if err := params.p.createdSequences.addCreatedSequence(desc.ID); err != nil {
+			return err
+		}
+		if err := params.p.SetSequenceValueByID(params.ctx, uint32(desc.ID), *opts.Restart, false); err != nil {
 			return err
 		}
 	}
