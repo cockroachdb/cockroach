@@ -2946,12 +2946,12 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		// starts? We can't easily have a countdown as its value changes like for
 		// leases/replicas.
 		var qps float64
-		if avgQPS, dur := r.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+		if avgQPS, dur := r.leaseholderStats.averageRatePerSecond(); dur >= MinStatsDuration {
 			qps = avgQPS
 			totalQueriesPerSecond += avgQPS
 			// TODO(a-robinson): Calculate percentiles for qps? Get rid of other percentiles?
 		}
-		if wps, dur := r.writeStats.avgQPS(); dur >= MinStatsDuration {
+		if wps, dur := r.writeStats.averageRatePerSecond(); dur >= MinStatsDuration {
 			totalWritesPerSecond += wps
 			writesPerReplica = append(writesPerReplica, wps)
 		}
@@ -3075,6 +3075,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		quiescentCount                int64
 		uninitializedCount            int64
 		averageQueriesPerSecond       float64
+		averageRequestsPerSecond      float64
+		averageReadsPerSecond         float64
 		averageWritesPerSecond        float64
 
 		rangeCount                int64
@@ -3140,11 +3142,17 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		behindCount += metrics.BehindCount
-		if qps, dur := rep.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+		if qps, dur := rep.leaseholderStats.averageRatePerSecond(); dur >= MinStatsDuration {
 			averageQueriesPerSecond += qps
 		}
-		if wps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
+		if rqps, dur := rep.loadStats.requests.averageRatePerSecond(); dur >= MinStatsDuration {
+			averageRequestsPerSecond += rqps
+		}
+		if wps, dur := rep.writeStats.averageRatePerSecond(); dur >= MinStatsDuration {
 			averageWritesPerSecond += wps
+		}
+		if rps, dur := rep.loadStats.readKeys.averageRatePerSecond(); dur >= MinStatsDuration {
+			averageReadsPerSecond += rps
 		}
 		locks += metrics.LockTableMetrics.Locks
 		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos
@@ -3175,7 +3183,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.QuiescentCount.Update(quiescentCount)
 	s.metrics.UninitializedCount.Update(uninitializedCount)
 	s.metrics.AverageQueriesPerSecond.Update(averageQueriesPerSecond)
+	s.metrics.AverageRequestsPerSecond.Update(averageRequestsPerSecond)
 	s.metrics.AverageWritesPerSecond.Update(averageWritesPerSecond)
+	s.metrics.AverageReadsPerSecond.Update(averageReadsPerSecond)
 	s.recordNewPerSecondStats(averageQueriesPerSecond, averageWritesPerSecond)
 
 	s.metrics.RangeCount.Update(rangeCount)
@@ -3277,8 +3287,13 @@ func (s *Store) ClusterNodeCount() int {
 
 // HotReplicaInfo contains a range descriptor and its QPS.
 type HotReplicaInfo struct {
-	Desc *roachpb.RangeDescriptor
-	QPS  float64
+	Desc                *roachpb.RangeDescriptor
+	QPS                 float64
+	RequestsPerSecond   float64
+	ReadKeysPerSecond   float64
+	WriteKeysPerSecond  float64
+	WriteBytesPerSecond float64
+	ReadBytesPerSecond  float64
 }
 
 // HottestReplicas returns the hottest replicas on a store, sorted by their
@@ -3292,6 +3307,11 @@ func (s *Store) HottestReplicas() []HotReplicaInfo {
 	for i := range topQPS {
 		hotRepls[i].Desc = topQPS[i].repl.Desc()
 		hotRepls[i].QPS = topQPS[i].qps
+		hotRepls[i].RequestsPerSecond = topQPS[i].repl.RequestsPerSecond()
+		hotRepls[i].WriteKeysPerSecond = topQPS[i].repl.WritesPerSecond()
+		hotRepls[i].ReadKeysPerSecond = topQPS[i].repl.ReadsPerSecond()
+		hotRepls[i].WriteBytesPerSecond = topQPS[i].repl.WriteBytesPerSecond()
+		hotRepls[i].ReadBytesPerSecond = topQPS[i].repl.ReadBytesPerSecond()
 	}
 	return hotRepls
 }
