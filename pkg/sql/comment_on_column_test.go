@@ -18,9 +18,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCommentOnColumn(t *testing.T) {
@@ -193,34 +195,28 @@ func TestCommentOnAlteredColumn(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	expectedComment := "expected comment"
+	tdb := sqlutils.MakeSQLRunner(db)
 
-	if _, err := db.Exec(`
+	tdb.Exec(t, `
 		CREATE DATABASE d;
 		SET DATABASE = d;
 		SET enable_experimental_alter_column_type_general = true;
 		CREATE TABLE t (c INT);
-	`); err != nil {
-		t.Fatal(err)
-	}
+	`)
 
-	if _, err := db.Exec(`COMMENT ON COLUMN t.c IS 'first comment'`); err != nil {
-		t.Fatal(err)
-	}
+	tdb.Exec(t, `COMMENT ON COLUMN t.c IS 'first comment'`)
 
-	if _, err := db.Exec(`ALTER TABLE t ALTER COLUMN c TYPE character varying;`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		fmt.Sprintf(`COMMENT ON COLUMN t.c IS '%s'`, expectedComment)); err != nil {
-		t.Fatal(err)
-	}
-	row := db.QueryRow(`SELECT comment FROM system.comments LIMIT 1`)
-	var comment string
-	if err := row.Scan(&comment); err != nil {
-		t.Fatal(err)
-	}
+	tdb.Exec(t, `ALTER TABLE t ALTER COLUMN c TYPE character varying;`)
+	tdb.Exec(t, fmt.Sprintf(`COMMENT ON COLUMN t.c IS '%s'`, expectedComment))
+	rows := tdb.QueryStr(t, `SELECT comment FROM system.comments LIMIT 1`)
+	require.Equal(t, expectedComment, rows[0][0])
 
-	if expectedComment != comment {
-		t.Fatalf("expected comment %v, got %v", expectedComment, comment)
-	}
+	rows = tdb.QueryStr(t, `SELECT @2 FROM [SHOW CREATE TABLE t]`)
+	require.Equal(t,
+		`CREATE TABLE public.t (
+	c VARCHAR NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+);
+COMMENT ON COLUMN public.t.c IS 'expected comment'`, rows[0][0])
 }
