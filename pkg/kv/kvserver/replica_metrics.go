@@ -252,7 +252,14 @@ func calcBehindCount(
 // practically none). See Replica.getBatchRequestQPS() for how this is
 // accounted for.
 func (r *Replica) QueriesPerSecond() (float64, time.Duration) {
-	return r.leaseholderStats.avgQPS()
+	return r.leaseholderStats.averageRatePerSecond()
+}
+
+// RequestsPerSecond returns the range's average requests received per second.
+// A batch request may have one to many requests.
+func (r *Replica) RequestsPerSecond() float64 {
+	rps, _ := r.loadStats.requests.averageRatePerSecond()
+	return rps
 }
 
 // WritesPerSecond returns the range's average keys written per second. A
@@ -262,8 +269,30 @@ func (r *Replica) QueriesPerSecond() (float64, time.Duration) {
 // writes (12 for the metadata, 12 for the versions). A DeleteRange that
 // ultimately only removes one key counts as one (or two if it's transactional).
 func (r *Replica) WritesPerSecond() float64 {
-	wps, _ := r.writeStats.avgQPS()
+	wps, _ := r.writeStats.averageRatePerSecond()
 	return wps
+}
+
+// ReadsPerSecond returns the range's average keys read per second. A "Read" is
+// a key access during evaluation of a batch request. This includes both
+// follower and leaseholder reads.
+func (r *Replica) ReadsPerSecond() float64 {
+	rps, _ := r.loadStats.readKeys.averageRatePerSecond()
+	return rps
+}
+
+// WriteBytesPerSecond returns the range's average bytes written per second. A "Write" is
+// as described in WritesPerSecond.
+func (r *Replica) WriteBytesPerSecond() float64 {
+	wbps, _ := r.loadStats.writeBytes.averageRatePerSecond()
+	return wbps
+}
+
+// ReadBytesPerSecond returns the range's average bytes read per second. A "Read" is
+// as described in ReadsPerSecond.
+func (r *Replica) ReadBytesPerSecond() float64 {
+	rbps, _ := r.loadStats.readBytes.averageRatePerSecond()
+	return rbps
 }
 
 func (r *Replica) needsSplitBySizeRLocked() bool {

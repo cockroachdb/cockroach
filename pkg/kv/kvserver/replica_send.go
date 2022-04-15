@@ -129,6 +129,10 @@ func (r *Replica) sendWithoutRangeID(
 		r.leaseholderStats.recordCount(r.getBatchRequestQPS(ctx, ba), ba.Header.GatewayNodeID)
 	}
 
+	if r.loadStats != nil {
+		r.loadStats.requests.recordCount(float64(len(ba.Requests)), 0)
+		r.loadStats.writeBytes.recordCount(getBatchRequestWriteBytes(ba), 0)
+	}
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
 
@@ -1012,6 +1016,20 @@ func (r *Replica) getBatchRequestQPS(ctx context.Context, ba *roachpb.BatchReque
 
 	count += addSSTSize / float64(requestFact)
 	return count
+}
+
+func getBatchRequestWriteBytes(ba *roachpb.BatchRequest) float64 {
+	if !ba.IsWrite() {
+		return 0
+	}
+
+	var writeBytes int64
+	for i := range ba.Requests {
+		if swr, isSizedWrite := ba.Requests[i].GetInner().(roachpb.SizedWriteRequest); isSizedWrite {
+			writeBytes += swr.WriteBytes()
+		}
+	}
+	return float64(writeBytes)
 }
 
 // checkBatchRequest verifies BatchRequest validity requirements. In particular,

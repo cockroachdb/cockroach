@@ -179,6 +179,9 @@ func (r *Replica) executeReadOnlyBatch(
 	if pErr != nil {
 		log.VErrEventf(ctx, 3, "%v", pErr.String())
 	} else {
+		keysRead, bytesRead := getBatchResponseReadStats(br)
+		r.loadStats.readKeys.recordCount(keysRead, 0)
+		r.loadStats.readBytes.recordCount(bytesRead, 0)
 		log.Event(ctx, "read completed")
 	}
 	return br, nil, pErr
@@ -399,4 +402,16 @@ func (r *Replica) collectSpansRead(
 	var err error
 	latchSpans, lockSpans, _, err = r.collectSpans(&baCopy)
 	return latchSpans, lockSpans, err
+}
+
+func getBatchResponseReadStats(br *roachpb.BatchResponse) (float64, float64) {
+	var keys, bytes float64
+	for _, reply := range br.Responses {
+		h := reply.GetInner().Header()
+		if keysRead := h.NumKeys; keysRead > 0 {
+			keys += float64(keysRead)
+			bytes += float64(h.NumBytes)
+		}
+	}
+	return keys, bytes
 }

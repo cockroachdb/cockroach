@@ -242,6 +242,9 @@ type Replica struct {
 	// [1]: https://github.com/cockroachdb/cockroach/pull/16664
 	writeStats *replicaStats
 
+	// loadStats tracks a sliding window of throughput on this replica.
+	loadStats *ReplicaLoad
+
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
 	creatingReplica *roachpb.ReplicaDescriptor

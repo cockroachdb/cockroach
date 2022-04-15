@@ -327,6 +327,7 @@ func (s *Store) SplitRange(
 	} else {
 		rightRepl := rightReplOrNil
 		leftRepl.writeStats.splitRequestCounts(rightRepl.writeStats)
+		leftRepl.loadStats.split(rightRepl.loadStats)
 		if err := s.addReplicaInternalLocked(rightRepl); err != nil {
 			return errors.Wrapf(err, "unable to add replica %v", rightRepl)
 		}

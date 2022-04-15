@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sstutil"
@@ -170,7 +171,7 @@ func TestAddSSTQPSStat(t *testing.T) {
 		require.Nil(t, pErr)
 
 		repl.leaseholderStats.mu.Lock()
-		queriesAfter, _ := repl.leaseholderStats.sumQueriesLocked()
+		queriesAfter, _ := repl.leaseholderStats.sumLocked()
 		repl.leaseholderStats.mu.Unlock()
 
 		// If queries are correctly recorded, we should see increase in query
@@ -182,5 +183,304 @@ func TestAddSSTQPSStat(t *testing.T) {
 		// interleaving with measurements.
 		require.GreaterOrEqual(t, queriesAfter, testCase.expectedQPS)
 		require.InDelta(t, queriesAfter, testCase.expectedQPS, 4)
+	}
+}
+
+// genVariableRead returns a batch request containing, start-end sequential key reads.
+func genVariableRead(ctx context.Context, start, end roachpb.Key) roachpb.BatchRequest {
+	scan := roachpb.NewScan(start, end, false)
+	readBa := roachpb.BatchRequest{}
+	readBa.Add(scan)
+	return readBa
+}
+
+func assertGreaterThanInDelta(t *testing.T, expected float64, actual float64, delta float64) {
+	require.GreaterOrEqual(t, actual, expected)
+	require.InDelta(t, expected, actual, delta)
+}
+
+func headVal(f func() (float64, int)) float64 {
+	ret, _ := f()
+	return ret
+}
+
+func TestWriteLoadStatsAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+
+	const epsilonAllowed = 4
+
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Server(0)
+	db := ts.DB()
+	conn := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	writeSize := float64(9)
+
+	scratchKey := tc.ScratchRange(t)
+	testCases := []struct {
+		writes       int
+		expectedRQPS float64
+		expectedWPS  float64
+		expectedRPS  float64
+		expectedWBPS float64
+		expectedRBPS float64
+	}{
+		{1, 1, 1, 0, writeSize, 0},
+		{4, 4, 4, 0, 4 * writeSize, 0},
+		{64, 64, 64, 0, 64 * writeSize, 0},
+	}
+
+	store, err := ts.GetStores().(*Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+
+	repl := store.LookupReplica(roachpb.RKey(scratchKey))
+	require.NotNil(t, repl)
+
+	// Disable the consistency checker, to avoid interleaving requests
+	// artificially inflating measurement due to consistency checking.
+	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`)
+
+	for _, testCase := range testCases {
+		// This test can flake, where an errant request - not sent here
+		// (commonly intent resolution) will artifically inflate the collected
+		// metrics. This results in unexpected read/write statistics and a
+		// flakey test every few hundred runs. Here we assert that the run
+		// should succeed soon, if it fails on the first.
+		testutils.SucceedsSoon(t, func() error {
+			// Reset the request counts to 0 before sending to clear previous requests.
+			repl.loadStats.reset()
+
+			repl.loadStats.requests.mu.Lock()
+			repl.loadStats.writeKeys.mu.Lock()
+			repl.loadStats.readKeys.mu.Lock()
+			repl.loadStats.writeBytes.mu.Lock()
+			repl.loadStats.readBytes.mu.Lock()
+			repl.loadStats.batchRequests.mu.Lock()
+
+			requestsBefore := headVal(repl.loadStats.requests.sumLocked)
+			writesBefore := headVal(repl.loadStats.writeKeys.sumLocked)
+			readsBefore := headVal(repl.loadStats.readKeys.sumLocked)
+			readBytesBefore := headVal(repl.loadStats.readBytes.sumLocked)
+			writeBytesBefore := headVal(repl.loadStats.writeBytes.sumLocked)
+
+			repl.loadStats.requests.mu.Unlock()
+			repl.loadStats.writeKeys.mu.Unlock()
+			repl.loadStats.readKeys.mu.Unlock()
+			repl.loadStats.writeBytes.mu.Unlock()
+			repl.loadStats.readBytes.mu.Unlock()
+			repl.loadStats.batchRequests.mu.Unlock()
+
+			for i := 0; i < testCase.writes; i++ {
+				_, pErr := db.Inc(ctx, scratchKey, 1)
+				require.Nil(t, pErr)
+			}
+			require.Equal(t, 0.0, requestsBefore)
+			require.Equal(t, 0.0, writesBefore)
+			require.Equal(t, 0.0, readsBefore)
+			require.Equal(t, 0.0, writeBytesBefore)
+			require.Equal(t, 0.0, readBytesBefore)
+
+			repl.loadStats.requests.mu.Lock()
+			repl.loadStats.writeKeys.mu.Lock()
+			repl.loadStats.readKeys.mu.Lock()
+			repl.loadStats.writeBytes.mu.Lock()
+			repl.loadStats.readBytes.mu.Lock()
+			repl.loadStats.batchRequests.mu.Lock()
+
+			requestsAfter := headVal(repl.loadStats.requests.sumLocked)
+			writesAfter := headVal(repl.loadStats.writeKeys.sumLocked)
+			readsAfter := headVal(repl.loadStats.readKeys.sumLocked)
+			readBytesAfter := headVal(repl.loadStats.readBytes.sumLocked)
+			writeBytesAfter := headVal(repl.loadStats.writeBytes.sumLocked)
+
+			repl.loadStats.requests.mu.Unlock()
+			repl.loadStats.writeKeys.mu.Unlock()
+			repl.loadStats.readKeys.mu.Unlock()
+			repl.loadStats.writeBytes.mu.Unlock()
+			repl.loadStats.readBytes.mu.Unlock()
+			repl.loadStats.batchRequests.mu.Unlock()
+
+			assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
+			assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
+			assertGreaterThanInDelta(t, testCase.expectedRPS, readsAfter, epsilonAllowed)
+			assertGreaterThanInDelta(t, testCase.expectedWBPS, writeBytesAfter, epsilonAllowed)
+			assertGreaterThanInDelta(t, testCase.expectedRBPS, readBytesAfter, epsilonAllowed)
+
+			return nil
+		})
+	}
+}
+
+func TestReadLoadMetricAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Server(0)
+	db := ts.DB()
+	conn := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	const epsilonAllowed = 4
+
+	scratchKey := tc.ScratchRange(t)
+	nextKey := scratchKey.Next()
+
+	scratchKeys := make([]roachpb.Key, 300)
+	sstKeys := make([]sstutil.KV, 300)
+	for i := range sstKeys {
+		scratchKeys[i] = nextKey
+		sstKeys[i] = sstutil.KV{
+			KeyString:     nextKey.String(),
+			WallTimestamp: 1,
+			ValueString:   "value",
+		}
+		nextKey = nextKey.Next()
+	}
+	sst, start, end := sstutil.MakeSST(t, ts.ClusterSettings(), sstKeys)
+	sstReq := &roachpb.AddSSTableRequest{
+		RequestHeader: roachpb.RequestHeader{Key: start, EndKey: end},
+		Data:          sst,
+		MVCCStats:     sstutil.ComputeStats(t, sst),
+	}
+
+	addSSTBA := roachpb.BatchRequest{}
+	addSSTBA.Add(sstReq)
+
+	// Send an AddSSTRequest once to create the key range.
+	_, pErr := db.NonTransactionalSender().Send(ctx, addSSTBA)
+	require.Nil(t, pErr)
+
+	get := &roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{Key: start},
+	}
+
+	getReadBA := roachpb.BatchRequest{}
+	getReadBA.Add(get)
+
+	scan := &roachpb.ScanRequest{
+		RequestHeader: roachpb.RequestHeader{Key: start, EndKey: end},
+	}
+
+	scanReadBA := roachpb.BatchRequest{}
+	scanReadBA.Add(scan)
+
+	testCases := []struct {
+		ba           roachpb.BatchRequest
+		expectedRQPS float64
+		expectedWPS  float64
+		expectedRPS  float64
+		expectedWBPS float64
+		expectedRBPS float64
+	}{
+		{getReadBA, 1, 0, 1, 0, 10},
+		{genVariableRead(ctx, start, sstKeys[1].Key()), 1, 0, 1, 0, 38},
+		{genVariableRead(ctx, start, sstKeys[4].Key()), 1, 0, 4, 0, 176},
+		{genVariableRead(ctx, start, sstKeys[64].Key()), 1, 0, 64, 0, 10496},
+	}
+
+	store, err := ts.GetStores().(*Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+
+	repl := store.LookupReplica(roachpb.RKey(start))
+	require.NotNil(t, repl)
+
+	replEnd := store.LookupReplica(roachpb.RKey(end))
+	require.NotNil(t, repl)
+
+	require.EqualValues(t, repl, replEnd)
+
+	// Disable the consistency checker, to avoid interleaving requests
+	// artificially inflating measurement due to consistency checking.
+	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`)
+
+	for _, testCase := range testCases {
+		// This test can flake, where an errant request - not sent here
+		// (commonly intent resolution) will artifically inflate the collected
+		// metrics. This results in unexpected read/write statistics and a
+		// flakey test every few hundred runs. Here we assert that the run
+		// should succeed soon, if it fails on the first.
+		testutils.SucceedsSoon(t, func() error {
+			// Reset the request counts to 0 before sending to clear previous requests.
+			// Reset the request counts to 0 before sending to clear previous requests.
+			repl.loadStats.reset()
+
+			repl.loadStats.requests.mu.Lock()
+			repl.loadStats.writeKeys.mu.Lock()
+			repl.loadStats.readKeys.mu.Lock()
+			repl.loadStats.writeBytes.mu.Lock()
+			repl.loadStats.readBytes.mu.Lock()
+			repl.loadStats.batchRequests.mu.Lock()
+
+			requestsBefore := headVal(repl.loadStats.requests.sumLocked)
+			writesBefore := headVal(repl.loadStats.writeKeys.sumLocked)
+			readsBefore := headVal(repl.loadStats.readKeys.sumLocked)
+			readBytesBefore := headVal(repl.loadStats.readBytes.sumLocked)
+			writeBytesBefore := headVal(repl.loadStats.writeBytes.sumLocked)
+
+			repl.loadStats.requests.mu.Unlock()
+			repl.loadStats.writeKeys.mu.Unlock()
+			repl.loadStats.readKeys.mu.Unlock()
+			repl.loadStats.writeBytes.mu.Unlock()
+			repl.loadStats.readBytes.mu.Unlock()
+			repl.loadStats.batchRequests.mu.Unlock()
+
+			_, pErr = db.NonTransactionalSender().Send(ctx, testCase.ba)
+			require.Nil(t, pErr)
+
+			require.Equal(t, 0.0, requestsBefore)
+			require.Equal(t, 0.0, writesBefore)
+			require.Equal(t, 0.0, readsBefore)
+			require.Equal(t, 0.0, writeBytesBefore)
+			require.Equal(t, 0.0, readBytesBefore)
+
+			repl.loadStats.requests.mu.Lock()
+			repl.loadStats.writeKeys.mu.Lock()
+			repl.loadStats.readKeys.mu.Lock()
+			repl.loadStats.writeBytes.mu.Lock()
+			repl.loadStats.readBytes.mu.Lock()
+			repl.loadStats.batchRequests.mu.Lock()
+
+			requestsAfter := headVal(repl.loadStats.requests.sumLocked)
+			writesAfter := headVal(repl.loadStats.writeKeys.sumLocked)
+			readsAfter := headVal(repl.loadStats.readKeys.sumLocked)
+			readBytesAfter := headVal(repl.loadStats.readBytes.sumLocked)
+			writeBytesAfter := headVal(repl.loadStats.writeBytes.sumLocked)
+
+			repl.loadStats.requests.mu.Unlock()
+			repl.loadStats.writeKeys.mu.Unlock()
+			repl.loadStats.readKeys.mu.Unlock()
+			repl.loadStats.writeBytes.mu.Unlock()
+			repl.loadStats.readBytes.mu.Unlock()
+			repl.loadStats.batchRequests.mu.Unlock()
+
+			assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
+			assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
+			assertGreaterThanInDelta(t, testCase.expectedRPS, readsAfter, epsilonAllowed)
+			// Increase the allowance for write bytes, as although this should
+			// be zero - there exists some cases where a write will interleave
+			// with our testing. This causes the test to flake if it occurs repeatedly.
+			// TODO(kvoli): This can be determinsitic, with an general
+			// interface that records the type of request or otherwise filters
+			// out unwanted types.
+			assertGreaterThanInDelta(t, testCase.expectedWBPS, writeBytesAfter, epsilonAllowed*15)
+			assertGreaterThanInDelta(t, testCase.expectedRBPS, readBytesAfter, epsilonAllowed)
+
+			return nil
+		})
 	}
 }
