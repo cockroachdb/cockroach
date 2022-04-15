@@ -139,7 +139,7 @@ message Column {
   bool is_inaccessible = 4;
   uint32 generated_as_identity_type = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
   string generated_as_identity_sequence_option = 6;
-  uint32 pg_attribute_num = 7 [(gogoproto.customname) = "PgAttributeNum"];
+  uint32 pg_attribute_num = 7 [(gogoproto.customname) = "PgAttributeNum", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PGAttributeNum"];
 }
 
 // ColumnType needs to be an element distinct from Column although they have a
