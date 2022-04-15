@@ -101,6 +101,7 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 		},
 	}
 
+	// TODO(knz): https://github.com/cockroachdb/cockroach/issues/79996
 	ctx := context.TODO()
 
 	// net/http.(*Server).Serve/http2.ConfigureServer are not thread safe with

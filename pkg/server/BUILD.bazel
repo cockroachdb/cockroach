@@ -51,6 +51,7 @@ go_library(
         "server_http.go",
         "server_sql.go",
         "server_systemlog_gc.go",
+        "services.go",
         "settings_cache.go",
         "sql_stats.go",
         "start_listen.go",
