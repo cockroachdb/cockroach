@@ -24,6 +24,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -205,9 +206,9 @@ func (s *Store) RaftSchedulerPriorityID() roachpb.RangeID {
 	return s.scheduler.PriorityID()
 }
 
-func NewTestStorePool(cfg StoreConfig) *StorePool {
-	TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, TestTimeUntilStoreDeadOff)
-	return NewStorePool(
+func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
+	storepool.TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, storepool.TestTimeUntilStoreDeadOff)
+	return storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,
 		cfg.Gossip,
@@ -355,20 +356,6 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.internalRaftGroup != nil
-}
-
-// GetStoreList exposes getStoreList for testing only, but with a hardcoded
-// storeFilter of storeFilterNone.
-func (sp *StorePool) GetStoreList() (StoreList, int, int) {
-	list, available, throttled := sp.getStoreList(storeFilterNone)
-	return list, available, len(throttled)
-}
-
-// Stores returns a copy of sl.stores.
-func (sl *StoreList) Stores() []roachpb.StoreDescriptor {
-	stores := make([]roachpb.StoreDescriptor, len(sl.stores))
-	copy(stores, sl.stores)
-	return stores
 }
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call

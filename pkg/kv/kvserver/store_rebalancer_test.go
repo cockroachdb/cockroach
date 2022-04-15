@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
@@ -493,7 +494,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
-	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+	storeList, _, _ := a.storePool.GetStoreList(storepool.StoreFilterThrottled)
 	storeMap := storeListToMap(storeList)
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
@@ -766,7 +767,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 
 			// Test setup boilerplate.
 			gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
-			storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+			storeList, _, _ := a.storePool.GetStoreList(storepool.StoreFilterThrottled)
 			localDesc := *stores[0]
 			cfg := TestStoreConfig(nil)
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -791,7 +792,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 				}
 				return status
 			}
-			a.storePool.isStoreReadyForRoutineReplicaTransfer = func(_ context.Context, this roachpb.StoreID) bool {
+			a.storePool.IsStoreReadyForRoutineReplicaTransfer = func(_ context.Context, this roachpb.StoreID) bool {
 				for _, deadStore := range deadStores {
 					// NodeID match StoreIDs here, so this comparison is valid.
 					if deadStore.StoreID == this {
@@ -1036,7 +1037,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			stopper, g, _, a, _ := createTestAllocator(ctx, 10, false /* deterministic */)
 			defer stopper.Stop(context.Background())
 			gossiputil.NewStoreGossiper(g).GossipStores(multiRegionStores, t)
-			storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+			storeList, _, _ := a.storePool.GetStoreList(storepool.StoreFilterThrottled)
 
 			var localDesc roachpb.StoreDescriptor
 			for _, store := range multiRegionStores {
@@ -1140,7 +1141,7 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 		&AllocatorTestingKnobs{AllowLeaseTransfersToReplicasNeedingSnapshots: true},
 	)
 	defer stopper.Stop(context.Background())
-	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+	storeList, _, _ := a.storePool.GetStoreList(storepool.StoreFilterThrottled)
 
 	localDesc := *noLocalityStores[len(noLocalityStores)-1]
 	cfg := TestStoreConfig(nil)
@@ -1283,7 +1284,7 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			stopper, g, _, a, _ := createTestAllocator(ctx, 10, false /* deterministic */)
 			defer stopper.Stop(context.Background())
 			gossiputil.NewStoreGossiper(g).GossipStores(imbalancedStores, t)
-			storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+			storeList, _, _ := a.storePool.GetStoreList(storepool.StoreFilterThrottled)
 
 			var localDesc roachpb.StoreDescriptor
 			for _, store := range imbalancedStores {
@@ -1363,7 +1364,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		&AllocatorTestingKnobs{AllowLeaseTransfersToReplicasNeedingSnapshots: true},
 	)
 	defer stopper.Stop(context.Background())
-	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+	storeList, _, _ := a.storePool.GetStoreList(storepool.StoreFilterThrottled)
 	storeMap := storeListToMap(storeList)
 
 	localDesc := *noLocalityStores[0]
@@ -1568,7 +1569,7 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 		t.Run(fmt.Sprintf("%d_%s", i+1, test.name), func(t *testing.T) {
 			stopper, g, _, a, _ := createTestAllocator(ctx, 10, false /* deterministic */)
 			defer stopper.Stop(ctx)
-			storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+			storeList, _, _ := a.storePool.GetStoreList(storepool.StoreFilterThrottled)
 
 			localDesc := *noLocalityStores[0]
 			cfg := TestStoreConfig(nil)

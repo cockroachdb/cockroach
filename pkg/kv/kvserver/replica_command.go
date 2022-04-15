@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1048,7 +1049,7 @@ func (r *Replica) changeReplicasImpl(
 	if len(swaps) > 0 {
 		desc, err = execChangeReplicasTxn(ctx, desc, reason, details, swaps, changeReplicasTxnArgs{
 			db:                                   r.store.DB(),
-			liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+			liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 			logChange:                            r.store.logChange,
 			testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 			testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1129,7 +1130,7 @@ func (r *Replica) changeReplicasImpl(
 			desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs,
 				changeReplicasTxnArgs{
 					db:                                   r.store.DB(),
-					liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+					liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 					logChange:                            r.store.logChange,
 					testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 					testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1271,7 +1272,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 		ctx, desc, kvserverpb.ReasonUnknown /* unused */, "", nil, /* iChgs */
 		changeReplicasTxnArgs{
 			db:                                   s.DB(),
-			liveAndDeadReplicas:                  s.allocator.storePool.liveAndDeadReplicas,
+			liveAndDeadReplicas:                  s.cfg.StorePool.LiveAndDeadReplicas,
 			logChange:                            s.logChange,
 			testForceJointConfig:                 s.TestingKnobs().ReplicationAlwaysUseJointConfig,
 			testAllowDangerousReplicationChanges: s.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1287,7 +1288,7 @@ func (r *Replica) TestingRemoveLearner(
 		[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
 		changeReplicasTxnArgs{
 			db:                                   r.store.DB(),
-			liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+			liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 			logChange:                            r.store.logChange,
 			testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 			testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1337,7 +1338,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 			ctx, desc, kvserverpb.ReasonAbandonedLearner, "",
 			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
 			changeReplicasTxnArgs{db: store.DB(),
-				liveAndDeadReplicas:                  store.allocator.storePool.liveAndDeadReplicas,
+				liveAndDeadReplicas:                  store.cfg.StorePool.LiveAndDeadReplicas,
 				logChange:                            store.logChange,
 				testForceJointConfig:                 store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 				testAllowDangerousReplicationChanges: store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1710,7 +1711,7 @@ func (r *Replica) initializeRaftLearners(
 		desc, err = execChangeReplicasTxn(
 			ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
 				db:                                   r.store.DB(),
-				liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+				liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 				logChange:                            r.store.logChange,
 				testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 				testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1864,7 +1865,7 @@ func (r *Replica) execReplicationChangesForVoters(
 
 	desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
 		db:                                   r.store.DB(),
-		liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+		liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 		logChange:                            r.store.logChange,
 		testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 		testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1922,7 +1923,7 @@ func (r *Replica) tryRollbackRaftLearner(
 			[]internalReplicationChange{{target: target, typ: removeChgType}},
 			changeReplicasTxnArgs{
 				db:                                   r.store.DB(),
-				liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+				liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 				logChange:                            r.store.logChange,
 				testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 				testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -2643,7 +2644,7 @@ func (r *Replica) sendSnapshot(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			return r.store.cfg.Transport.SendSnapshot(
 				ctx,
-				r.store.allocator.storePool,
+				r.store.cfg.StorePool,
 				req,
 				snap,
 				newBatchFn,
@@ -3013,7 +3014,7 @@ func (r *Replica) relocateOne(
 		return nil, nil, err
 	}
 
-	storeList, _, _ := r.store.allocator.storePool.getStoreList(storeFilterNone)
+	storeList, _, _ := r.store.cfg.StorePool.GetStoreList(storepool.StoreFilterNone)
 	storeMap := storeListToMap(storeList)
 
 	// Compute which replica to add and/or remove, respectively. We then ask the
@@ -3052,7 +3053,7 @@ func (r *Replica) relocateOne(
 			}
 			candidateDescs = append(candidateDescs, *store)
 		}
-		candidateStoreList := makeStoreList(candidateDescs)
+		candidateStoreList := storepool.MakeStoreList(candidateDescs)
 
 		additionTarget, _ = r.store.allocator.allocateTargetFromList(
 			ctx,

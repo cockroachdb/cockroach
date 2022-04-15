@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -238,7 +239,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				continue
 			}
 
-			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(storeFilterSuspect)
+			storeList, _, _ := sr.rq.store.cfg.StorePool.GetStoreList(storepool.StoreFilterSuspect)
 			sr.rebalanceStore(ctx, mode, storeList)
 		}
 	})
@@ -252,7 +253,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 func (sr *StoreRebalancer) scorerOptions(ctx context.Context) *qpsScorerOptions {
 	return &qpsScorerOptions{
 		storeHealthOptions:    sr.rq.allocator.storeHealthOptions(ctx),
-		deterministic:         sr.rq.allocator.storePool.deterministic,
+		deterministic:         sr.rq.store.cfg.StorePool.Deterministic,
 		qpsRebalanceThreshold: qpsRebalanceThreshold.Get(&sr.st.SV),
 		minRequiredQPSDiff:    minQPSDifferenceForTransfers.Get(&sr.st.SV),
 	}
@@ -269,13 +270,13 @@ func (sr *StoreRebalancer) scorerOptions(ctx context.Context) *qpsScorerOptions 
 // of all the stores in the cluster. Is this desirable? Should we be more
 // aggressive?
 func (sr *StoreRebalancer) rebalanceStore(
-	ctx context.Context, mode LBRebalancingMode, allStoresList StoreList,
+	ctx context.Context, mode LBRebalancingMode, allStoresList storepool.StoreList,
 ) {
 	options := sr.scorerOptions(ctx)
 	var localDesc *roachpb.StoreDescriptor
-	for i := range allStoresList.stores {
-		if allStoresList.stores[i].StoreID == sr.rq.store.StoreID() {
-			localDesc = &allStoresList.stores[i]
+	for i := range allStoresList.Stores {
+		if allStoresList.Stores[i].StoreID == sr.rq.store.StoreID() {
+			localDesc = &allStoresList.Stores[i]
 			break
 		}
 	}
@@ -286,10 +287,10 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 	// We only bother rebalancing stores that are fielding more than the
 	// cluster-level overfull threshold of QPS.
-	qpsMaxThreshold := overfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
+	qpsMaxThreshold := overfullQPSThreshold(options, allStoresList.CandidateQueriesPerSecond.Mean)
 	if !(localDesc.Capacity.QueriesPerSecond > qpsMaxThreshold) {
 		log.Infof(ctx, "local QPS %.2f is below max threshold %.2f (mean=%.2f); no rebalancing needed",
-			localDesc.Capacity.QueriesPerSecond, qpsMaxThreshold, allStoresList.candidateQueriesPerSecond.mean)
+			localDesc.Capacity.QueriesPerSecond, qpsMaxThreshold, allStoresList.CandidateQueriesPerSecond.Mean)
 		return
 	}
 
@@ -299,7 +300,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 	// First check if we should transfer leases away to better balance QPS.
 	log.Infof(ctx,
 		"considering load-based lease transfers for s%d with %.2f qps (mean=%.2f, upperThreshold=%.2f)",
-		localDesc.StoreID, localDesc.Capacity.QueriesPerSecond, allStoresList.candidateQueriesPerSecond.mean, qpsMaxThreshold)
+		localDesc.StoreID, localDesc.Capacity.QueriesPerSecond, allStoresList.CandidateQueriesPerSecond.Mean, qpsMaxThreshold)
 	hottestRanges := sr.replRankings.topQPS()
 	for localDesc.Capacity.QueriesPerSecond > qpsMaxThreshold {
 		replWithStats, target, considerForRebalance := sr.chooseLeaseToTransfer(
@@ -337,7 +338,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 	if !(localDesc.Capacity.QueriesPerSecond > qpsMaxThreshold) {
 		log.Infof(ctx,
 			"load-based lease transfers successfully brought s%d down to %.2f qps (mean=%.2f, upperThreshold=%.2f)",
-			localDesc.StoreID, localDesc.Capacity.QueriesPerSecond, allStoresList.candidateQueriesPerSecond.mean, qpsMaxThreshold)
+			localDesc.StoreID, localDesc.Capacity.QueriesPerSecond, allStoresList.CandidateQueriesPerSecond.Mean, qpsMaxThreshold)
 		return
 	}
 
@@ -426,14 +427,14 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 	log.Infof(ctx,
 		"load-based replica transfers successfully brought s%d down to %.2f qps (mean=%.2f, upperThreshold=%.2f)",
-		localDesc.StoreID, localDesc.Capacity.QueriesPerSecond, allStoresList.candidateQueriesPerSecond.mean, qpsMaxThreshold)
+		localDesc.StoreID, localDesc.Capacity.QueriesPerSecond, allStoresList.CandidateQueriesPerSecond.Mean, qpsMaxThreshold)
 }
 
 func (sr *StoreRebalancer) chooseLeaseToTransfer(
 	ctx context.Context,
 	hottestRanges *[]replicaWithStats,
 	localDesc *roachpb.StoreDescriptor,
-	storeList StoreList,
+	storeList storepool.StoreList,
 	storeMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
 ) (replicaWithStats, roachpb.ReplicaDescriptor, []replicaWithStats) {
 	var considerForRebalance []replicaWithStats
@@ -503,8 +504,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			continue
 		}
 
-		filteredStoreList := storeList.excludeInvalid(conf.Constraints)
-		filteredStoreList = storeList.excludeInvalid(conf.VoterConstraints)
+		filteredStoreList := storeList.ExcludeInvalid(conf.Constraints)
+		filteredStoreList = storeList.ExcludeInvalid(conf.VoterConstraints)
 		if sr.rq.allocator.followTheWorkloadPrefersLocal(
 			ctx,
 			filteredStoreList,
@@ -550,7 +551,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 	ctx context.Context,
 	hottestRanges *[]replicaWithStats,
 	localDesc *roachpb.StoreDescriptor,
-	allStoresList StoreList,
+	allStoresList storepool.StoreList,
 	options *qpsScorerOptions,
 ) (replWithStats replicaWithStats, voterTargets, nonVoterTargets []roachpb.ReplicationTarget) {
 	now := sr.rq.store.Clock().NowAsClockTimestamp()
@@ -713,7 +714,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 			finalVoterTargets,
 			finalNonVoterTargets,
 			rangeUsageInfoForRepl(rbCtx.replWithStats.repl),
-			storeFilterSuspect,
+			storepool.StoreFilterSuspect,
 			voterTarget,
 			options,
 		)
@@ -777,7 +778,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 			finalVoterTargets,
 			finalNonVoterTargets,
 			rangeUsageInfoForRepl(rbCtx.replWithStats.repl),
-			storeFilterSuspect,
+			storepool.StoreFilterSuspect,
 			nonVoterTarget,
 			options,
 		)
@@ -820,10 +821,10 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 	return finalVoterTargets, finalNonVoterTargets, foundRebalance
 }
 
-func storeListToMap(sl StoreList) map[roachpb.StoreID]*roachpb.StoreDescriptor {
+func storeListToMap(sl storepool.StoreList) map[roachpb.StoreID]*roachpb.StoreDescriptor {
 	storeMap := make(map[roachpb.StoreID]*roachpb.StoreDescriptor)
-	for i := range sl.stores {
-		storeMap[sl.stores[i].StoreID] = &sl.stores[i]
+	for i := range sl.Stores {
+		storeMap[sl.Stores[i].StoreID] = &sl.Stores[i]
 	}
 	return storeMap
 }

@@ -18,6 +18,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -46,16 +48,11 @@ const (
 	// https://www.eecs.harvard.edu/~michaelm/postscripts/mythesis.pdf.
 	allocatorRandomCount = 2
 
-	// maxFractionUsedThreshold: if the fraction used of a store descriptor
-	// capacity is greater than this value, it will never be used as a rebalance
-	// or allocate target and we will actively try to move replicas off of it.
-	maxFractionUsedThreshold = 0.95
-
 	// rebalanceToMaxFractionUsedThreshold: if the fraction used of a store
 	// descriptor capacity is greater than this value, it will never be used as a
 	// rebalance target. This is important for providing a buffer between fully
 	// healthy stores and full stores (as determined by
-	// maxFractionUsedThreshold).  Without such a buffer, replicas could
+	// allocator.MaxFractionUsedThreshold).  Without such a buffer, replicas could
 	// hypothetically ping pong back and forth between two nodes, making one full
 	// and then the other.
 	rebalanceToMaxFractionUsedThreshold = 0.925
@@ -190,7 +187,7 @@ type scorerOptions interface {
 	//
 	// This is to ensure that, when scattering via `AdminScatterRequest`, we will
 	// be more likely to find a rebalance opportunity.
-	maybeJitterStoreStats(sl StoreList, allocRand allocatorRand) StoreList
+	maybeJitterStoreStats(sl storepool.StoreList, allocRand allocatorRand) storepool.StoreList
 	// deterministic is set by tests to have the allocator methods sort their
 	// results by constraints score as well as by store IDs, as opposed to just
 	// the score.
@@ -212,7 +209,7 @@ type scorerOptions interface {
 	// balanceScore returns a discrete score (`balanceStatus`) based on whether
 	// the store represented by `sc` classifies as underfull, aroundTheMean, or
 	// overfull relative to all the stores in `sl`.
-	balanceScore(sl StoreList, sc roachpb.StoreCapacity) balanceStatus
+	balanceScore(sl storepool.StoreList, sc roachpb.StoreCapacity) balanceStatus
 	// rebalanceFromConvergenceScore assigns a convergence score to the store
 	// referred to by `eqClass.existing` based on whether moving a replica away
 	// from this store would converge its stats towards the mean (relative to the
@@ -233,7 +230,7 @@ type scorerOptions interface {
 	// score to the existing store (or multiple replicas, if there are multiple
 	// with the same QPS) that would converge the range's existing stores' QPS the
 	// most.
-	removalMaximallyConvergesScore(removalCandStoreList StoreList, existing roachpb.StoreDescriptor) int
+	removalMaximallyConvergesScore(removalCandStoreList storepool.StoreList, existing roachpb.StoreDescriptor) int
 	// getStoreHealthOptions returns the scorer options for store health. It is
 	// used to inform scoring based on the health of a store.
 	getStoreHealthOptions() storeHealthOptions
@@ -260,17 +257,17 @@ type scatterScorerOptions struct {
 }
 
 func (o *scatterScorerOptions) maybeJitterStoreStats(
-	sl StoreList, allocRand allocatorRand,
-) (perturbedSL StoreList) {
-	perturbedStoreDescs := make([]roachpb.StoreDescriptor, 0, len(sl.stores))
-	for _, store := range sl.stores {
+	sl storepool.StoreList, allocRand allocatorRand,
+) (perturbedSL storepool.StoreList) {
+	perturbedStoreDescs := make([]roachpb.StoreDescriptor, 0, len(sl.Stores))
+	for _, store := range sl.Stores {
 		store.Capacity.RangeCount += int32(jittered(
 			float64(store.Capacity.RangeCount), o.jitter, allocRand,
 		))
 		perturbedStoreDescs = append(perturbedStoreDescs, store)
 	}
 
-	return makeStoreList(perturbedStoreDescs)
+	return storepool.MakeStoreList(perturbedStoreDescs)
 }
 
 // rangeCountScorerOptions is used by the replicateQueue to tell the Allocator's
@@ -284,8 +281,8 @@ type rangeCountScorerOptions struct {
 }
 
 func (o *rangeCountScorerOptions) maybeJitterStoreStats(
-	sl StoreList, _ allocatorRand,
-) (perturbedSL StoreList) {
+	sl storepool.StoreList, _ allocatorRand,
+) (perturbedSL storepool.StoreList) {
 	return sl
 }
 
@@ -298,31 +295,31 @@ func (o rangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 ) bool {
 	store := eqClass.existing
 	sl := eqClass.candidateSL
-	if len(sl.stores) == 0 {
+	if len(sl.Stores) == 0 {
 		return false
 	}
 
-	overfullThreshold := int32(math.Ceil(overfullRangeThreshold(&o, sl.candidateRanges.mean)))
+	overfullThreshold := int32(math.Ceil(overfullRangeThreshold(&o, sl.CandidateRanges.Mean)))
 	// 1. We rebalance if `store` is too far above the mean (i.e. stores
 	// that are overfull).
 	if store.Capacity.RangeCount > overfullThreshold {
 		log.VEventf(ctx, 2,
 			"s%d: should-rebalance(ranges-overfull): rangeCount=%d, mean=%.2f, overfull-threshold=%d",
-			store.StoreID, store.Capacity.RangeCount, sl.candidateRanges.mean, overfullThreshold)
+			store.StoreID, store.Capacity.RangeCount, sl.CandidateRanges.Mean, overfullThreshold)
 		return true
 	}
 	// 2. We rebalance if `store` isn't overfull, but it is above the mean and
 	// there is at least one other store that is "underfull" (i.e. too far below
 	// the mean).
-	if float64(store.Capacity.RangeCount) > sl.candidateRanges.mean {
-		underfullThreshold := int32(math.Floor(underfullRangeThreshold(&o, sl.candidateRanges.mean)))
-		for _, desc := range sl.stores {
+	if float64(store.Capacity.RangeCount) > sl.CandidateRanges.Mean {
+		underfullThreshold := int32(math.Floor(underfullRangeThreshold(&o, sl.CandidateRanges.Mean)))
+		for _, desc := range sl.Stores {
 			if desc.Capacity.RangeCount < underfullThreshold {
 				log.VEventf(ctx, 2,
 					"s%d: should-rebalance(better-fit-ranges=s%d): rangeCount=%d, otherRangeCount=%d, "+
 						"mean=%.2f, underfull-threshold=%d",
 					store.StoreID, desc.StoreID, store.Capacity.RangeCount, desc.Capacity.RangeCount,
-					sl.candidateRanges.mean, underfullThreshold)
+					sl.CandidateRanges.Mean, underfullThreshold)
 				return true
 			}
 		}
@@ -332,10 +329,10 @@ func (o rangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 }
 
 func (o *rangeCountScorerOptions) balanceScore(
-	sl StoreList, sc roachpb.StoreCapacity,
+	sl storepool.StoreList, sc roachpb.StoreCapacity,
 ) balanceStatus {
-	maxRangeCount := overfullRangeThreshold(o, sl.candidateRanges.mean)
-	minRangeCount := underfullRangeThreshold(o, sl.candidateRanges.mean)
+	maxRangeCount := overfullRangeThreshold(o, sl.CandidateRanges.Mean)
+	minRangeCount := underfullRangeThreshold(o, sl.CandidateRanges.Mean)
 	curRangeCount := float64(sc.RangeCount)
 	if curRangeCount < minRangeCount {
 		return underfull
@@ -378,7 +375,7 @@ func (o *rangeCountScorerOptions) rebalanceToConvergesScore(
 // Otherwise, a high convergesScore is assigned (which would make this store
 // less likely to be picked for removal).
 func (o *rangeCountScorerOptions) removalMaximallyConvergesScore(
-	removalCandStoreList StoreList, existing roachpb.StoreDescriptor,
+	removalCandStoreList storepool.StoreList, existing roachpb.StoreDescriptor,
 ) int {
 	if !rebalanceConvergesRangeCountOnMean(
 		removalCandStoreList, existing.Capacity, existing.Capacity.RangeCount-1,
@@ -414,7 +411,9 @@ type qpsScorerOptions struct {
 	qpsPerReplica float64
 }
 
-func (o *qpsScorerOptions) maybeJitterStoreStats(sl StoreList, _ allocatorRand) StoreList {
+func (o *qpsScorerOptions) maybeJitterStoreStats(
+	sl storepool.StoreList, _ allocatorRand,
+) storepool.StoreList {
 	return sl
 }
 
@@ -429,7 +428,7 @@ func (o *qpsScorerOptions) deterministicForTesting() bool {
 func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 	ctx context.Context, eqClass equivalenceClass, metrics AllocatorMetrics,
 ) bool {
-	if len(eqClass.candidateSL.stores) == 0 {
+	if len(eqClass.candidateSL.Stores) == 0 {
 		return false
 	}
 
@@ -463,7 +462,7 @@ func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 	case shouldRebalance:
 		metrics.loadBasedReplicaRebalanceMetrics.ShouldRebalance.Inc(1)
 		var bestStoreQPS float64
-		for _, store := range eqClass.candidateSL.stores {
+		for _, store := range eqClass.candidateSL.Stores {
 			if bestStore == store.StoreID {
 				bestStoreQPS = store.Capacity.QueriesPerSecond
 			}
@@ -482,9 +481,11 @@ func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 	return declineReason == shouldRebalance
 }
 
-func (o *qpsScorerOptions) balanceScore(sl StoreList, sc roachpb.StoreCapacity) balanceStatus {
-	maxQPS := overfullQPSThreshold(o, sl.candidateQueriesPerSecond.mean)
-	minQPS := underfullQPSThreshold(o, sl.candidateQueriesPerSecond.mean)
+func (o *qpsScorerOptions) balanceScore(
+	sl storepool.StoreList, sc roachpb.StoreCapacity,
+) balanceStatus {
+	maxQPS := overfullQPSThreshold(o, sl.CandidateQueriesPerSecond.Mean)
+	minQPS := underfullQPSThreshold(o, sl.CandidateQueriesPerSecond.Mean)
 	curQPS := sc.QueriesPerSecond
 	if curQPS < minQPS {
 		return underfull
@@ -525,10 +526,10 @@ func (o *qpsScorerOptions) rebalanceToConvergesScore(
 // hottest store (based on QPS) among the stores inside
 // `removalCandidateStores`.
 func (o *qpsScorerOptions) removalMaximallyConvergesScore(
-	removalCandStoreList StoreList, existing roachpb.StoreDescriptor,
+	removalCandStoreList storepool.StoreList, existing roachpb.StoreDescriptor,
 ) int {
 	maxQPS := float64(-1)
-	for _, store := range removalCandStoreList.stores {
+	for _, store := range removalCandStoreList.Stores {
 		if store.Capacity.QueriesPerSecond > maxQPS {
 			maxQPS = store.Capacity.QueriesPerSecond
 		}
@@ -870,7 +871,7 @@ func (cl candidateList) removeCandidate(c candidate) candidateList {
 // by callers performing lateral relocation of replicas within the same node.
 func rankedCandidateListForAllocation(
 	ctx context.Context,
-	candidateStores StoreList,
+	candidateStores storepool.StoreList,
 	constraintsCheck constraintsCheckFn,
 	existingReplicas []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
@@ -880,7 +881,7 @@ func rankedCandidateListForAllocation(
 ) candidateList {
 	var candidates candidateList
 	existingReplTargets := roachpb.MakeReplicaSet(existingReplicas).ReplicationTargets()
-	for _, s := range candidateStores.stores {
+	for _, s := range candidateStores.Stores {
 		// Disregard all the stores that already have replicas.
 		if storeHasReplica(s.StoreID, existingReplTargets) {
 			continue
@@ -905,10 +906,10 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		if !maxCapacityCheck(s) || !options.storeHealthOptions.readAmpIsHealthy(
+		if !allocator.MaxCapacityCheck(s) || !options.storeHealthOptions.readAmpIsHealthy(
 			ctx,
 			s,
-			candidateStores.candidateL0Sublevels.mean,
+			candidateStores.CandidateL0Sublevels.Mean,
 		) {
 			continue
 		}
@@ -944,13 +945,13 @@ func rankedCandidateListForAllocation(
 // Stores that are marked as not valid, are in violation of a required criteria.
 func candidateListForRemoval(
 	ctx context.Context,
-	existingReplsStoreList StoreList,
+	existingReplsStoreList storepool.StoreList,
 	constraintsCheck constraintsCheckFn,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
-	for _, s := range existingReplsStoreList.stores {
+	for _, s := range existingReplsStoreList.Stores {
 		constraintsOK, necessary := constraintsCheck(s)
 		if !constraintsOK {
 			candidates = append(candidates, candidate{
@@ -966,7 +967,7 @@ func candidateListForRemoval(
 			store:     s,
 			valid:     constraintsOK,
 			necessary: necessary,
-			fullDisk:  !maxCapacityCheck(s),
+			fullDisk:  !allocator.MaxCapacityCheck(s),
 			// When removing a replica from a store, we do not want to include
 			// high amplification in ranking stores. This would submit already
 			// high read amplification stores to additional load of moving a
@@ -1015,7 +1016,7 @@ func candidateListForRemoval(
 	for _, cand := range candidates {
 		removalCandidateStores = append(removalCandidateStores, cand.store)
 	}
-	removalCandidateStoreList := makeStoreList(removalCandidateStores)
+	removalCandidateStoreList := storepool.MakeStoreList(removalCandidateStores)
 	for i := range candidates {
 		// If removing this candidate replica does not converge the store
 		// stats to their mean, we make it less attractive for removal by
@@ -1069,7 +1070,7 @@ type equivalenceClass struct {
 	// `candidateSl` is the `StoreList` representation of `candidates` (maintained
 	// separately to avoid converting the latter into the former for all the
 	// `scorerOptions` methods).
-	candidateSL StoreList
+	candidateSL storepool.StoreList
 	candidates  candidateList
 }
 
@@ -1146,7 +1147,7 @@ func bestStoreToMinimizeQPSDelta(
 	for _, desc := range storeDescMap {
 		storeDescs = append(storeDescs, *desc)
 	}
-	domainStoreList := makeStoreList(storeDescs)
+	domainStoreList := storepool.MakeStoreList(storeDescs)
 
 	bestCandidate = getCandidateWithMinQPS(storeQPSMap, candidates)
 	if bestCandidate == 0 {
@@ -1175,7 +1176,7 @@ func bestStoreToMinimizeQPSDelta(
 
 	// Only proceed with rebalancing iff `existingStore` is overfull relative to
 	// the equivalence class.
-	mean := domainStoreList.candidateQueriesPerSecond.mean
+	mean := domainStoreList.CandidateQueriesPerSecond.Mean
 	overfullThreshold := overfullQPSThreshold(
 		options,
 		mean,
@@ -1228,9 +1229,9 @@ func bestStoreToMinimizeQPSDelta(
 func (o *qpsScorerOptions) getRebalanceTargetToMinimizeDelta(
 	eqClass equivalenceClass,
 ) (bestStore roachpb.StoreID, declineReason declineReason) {
-	domainStoreList := makeStoreList(append(eqClass.candidateSL.stores, eqClass.existing))
-	candidates := make([]roachpb.StoreID, 0, len(eqClass.candidateSL.stores))
-	for _, store := range eqClass.candidateSL.stores {
+	domainStoreList := storepool.MakeStoreList(append(eqClass.candidateSL.Stores, eqClass.existing))
+	candidates := make([]roachpb.StoreID, 0, len(eqClass.candidateSL.Stores))
+	for _, store := range eqClass.candidateSL.Stores {
 		candidates = append(candidates, store.StoreID)
 	}
 	return bestStoreToMinimizeQPSDelta(
@@ -1248,7 +1249,7 @@ func (o *qpsScorerOptions) getRebalanceTargetToMinimizeDelta(
 // details.
 func rankedCandidateListForRebalancing(
 	ctx context.Context,
-	allStores StoreList,
+	allStores storepool.StoreList,
 	removalConstraintsChecker constraintsCheckFn,
 	rebalanceConstraintsChecker rebalanceConstraintsCheckFn,
 	existingReplicasForType, replicasOnExemptedStores []roachpb.ReplicaDescriptor,
@@ -1261,13 +1262,13 @@ func rankedCandidateListForRebalancing(
 	existingStores := make(map[roachpb.StoreID]candidate)
 	var needRebalanceFrom bool
 	curDiversityScore := rangeDiversityScore(existingStoreLocalities)
-	for _, store := range allStores.stores {
+	for _, store := range allStores.Stores {
 		for _, repl := range existingReplicasForType {
 			if store.StoreID != repl.StoreID {
 				continue
 			}
 			valid, necessary := removalConstraintsChecker(store)
-			fullDisk := !maxCapacityCheck(store)
+			fullDisk := !allocator.MaxCapacityCheck(store)
 
 			if !valid {
 				if !needRebalanceFrom {
@@ -1321,7 +1322,7 @@ func rankedCandidateListForRebalancing(
 	var needRebalanceTo bool
 	for _, existing := range existingStores {
 		var comparableCands candidateList
-		for _, store := range allStores.stores {
+		for _, store := range allStores.Stores {
 			// Only process replacement candidates, not existing stores.
 			if store.StoreID == existing.store.StoreID {
 				continue
@@ -1374,7 +1375,7 @@ func rankedCandidateListForRebalancing(
 				store:          store,
 				valid:          constraintsOK,
 				necessary:      necessary,
-				fullDisk:       !maxCapacityCheck(store),
+				fullDisk:       !allocator.MaxCapacityCheck(store),
 				diversityScore: diversityScore,
 			}
 			if !cand.less(existing) {
@@ -1408,7 +1409,7 @@ func rankedCandidateListForRebalancing(
 		}
 		eqClass := equivalenceClass{
 			existing:    existing.store,
-			candidateSL: makeStoreList(bestStores),
+			candidateSL: storepool.MakeStoreList(bestStores),
 			candidates:  bestCands,
 		}
 		equivalenceClasses = append(equivalenceClasses, eqClass)
@@ -1479,7 +1480,7 @@ func rankedCandidateListForRebalancing(
 				s,
 				// We only wish to compare the read amplification to the
 				// comparable stores average and not the cluster.
-				comparable.candidateSL.candidateL0Sublevels.mean,
+				comparable.candidateSL.CandidateL0Sublevels.Mean,
 			)
 			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
 			cand.convergesScore = options.rebalanceToConvergesScore(comparable, s)
@@ -1826,25 +1827,6 @@ func containsStore(stores []roachpb.StoreID, target roachpb.StoreID) bool {
 	return false
 }
 
-// isStoreValid returns true iff the provided store would be a valid in a
-// range with the provided constraints.
-func isStoreValid(
-	store roachpb.StoreDescriptor, constraints []roachpb.ConstraintsConjunction,
-) bool {
-	if len(constraints) == 0 {
-		return true
-	}
-
-	for _, subConstraints := range constraints {
-		if constraintsOK := constraint.ConjunctionsCheck(
-			store, subConstraints.Constraints,
-		); constraintsOK {
-			return true
-		}
-	}
-	return false
-}
-
 // rangeDiversityScore returns a value between 0 and 1 based on how diverse the
 // given range is. A higher score means the range is more diverse.
 // All below diversity-scoring methods should in theory be implemented by
@@ -2006,9 +1988,9 @@ func underfullQPSThreshold(options *qpsScorerOptions, mean float64) float64 {
 }
 
 func rebalanceConvergesRangeCountOnMean(
-	sl StoreList, sc roachpb.StoreCapacity, newRangeCount int32,
+	sl storepool.StoreList, sc roachpb.StoreCapacity, newRangeCount int32,
 ) bool {
-	return convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean)
+	return convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.CandidateRanges.Mean)
 }
 
 func convergesOnMean(oldVal, newVal, mean float64) bool {
@@ -2080,11 +2062,6 @@ func (o storeHealthOptions) rebalanceToReadAmpIsHealthy(
 	// The store is only considered unhealthy when the enforcement level is
 	// storeHealthBlockRebalanceTo or storeHealthBlockAll.
 	return o.enforcementLevel < storeHealthBlockRebalanceTo
-}
-
-// maxCapacityCheck returns true if the store has room for a new replica.
-func maxCapacityCheck(store roachpb.StoreDescriptor) bool {
-	return store.Capacity.FractionUsed() < maxFractionUsedThreshold
 }
 
 // rebalanceToMaxCapacityCheck returns true if the store has enough room to

@@ -20,6 +20,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -675,7 +677,7 @@ func TestConstraintsCheck(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, s := range testStores {
-				valid := isStoreValid(s, tc.constraints)
+				valid := allocator.IsStoreValid(s, tc.constraints)
 				ok := tc.expected[s.StoreID]
 				if valid != ok {
 					t.Errorf("expected store %d to be %t, but got %t", s.StoreID, ok, valid)
@@ -1071,8 +1073,8 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			},
 		}
 	}
-	localityForStoreID := func(sl StoreList, id roachpb.StoreID) roachpb.Locality {
-		for _, store := range sl.stores {
+	localityForStoreID := func(sl storepool.StoreList, id roachpb.StoreID) roachpb.Locality {
+		for _, store := range sl.Stores {
 			if store.StoreID == id {
 				return store.Locality()
 			}
@@ -1092,15 +1094,15 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 	locAU := roachpb.Locality{
 		Tiers: testStoreTierSetup("au", "", "", ""),
 	}
-	sl3by3 := StoreList{
-		stores: []roachpb.StoreDescriptor{
+	sl3by3 := storepool.StoreList{
+		Stores: []roachpb.StoreDescriptor{
 			newStore(1, locUS), newStore(2, locUS), newStore(3, locUS),
 			newStore(4, locEU), newStore(5, locEU), newStore(6, locEU),
 			newStore(7, locAS), newStore(8, locAS), newStore(9, locAS),
 		},
 	}
-	sl4by3 := StoreList{
-		stores: []roachpb.StoreDescriptor{
+	sl4by3 := storepool.StoreList{
+		Stores: []roachpb.StoreDescriptor{
 			newStore(1, locUS), newStore(2, locUS), newStore(3, locUS),
 			newStore(4, locEU), newStore(5, locEU), newStore(6, locEU),
 			newStore(7, locAS), newStore(8, locAS), newStore(9, locAS),
@@ -1110,7 +1112,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 
 	testCases := []struct {
 		s               roachpb.StoreDescriptor
-		sl              StoreList
+		sl              storepool.StoreList
 		existingNodeIDs []roachpb.NodeID
 		expected        bool
 	}{
@@ -1170,16 +1172,16 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		removeStore := func(sl StoreList, nodeID roachpb.NodeID) StoreList {
-			for i, s := range sl.stores {
+		removeStore := func(sl storepool.StoreList, nodeID roachpb.NodeID) storepool.StoreList {
+			for i, s := range sl.Stores {
 				if s.Node.NodeID == nodeID {
-					return makeStoreList(append(sl.stores[:i], sl.stores[i+1:]...))
+					return storepool.MakeStoreList(append(sl.Stores[:i], sl.Stores[i+1:]...))
 				}
 			}
 			return sl
 		}
 		filteredSL := tc.sl
-		filteredSL.stores = append([]roachpb.StoreDescriptor(nil), filteredSL.stores...)
+		filteredSL.Stores = append([]roachpb.StoreDescriptor(nil), filteredSL.Stores...)
 		existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality)
 		var replicas []roachpb.ReplicaDescriptor
 		for _, nodeID := range tc.existingNodeIDs {
@@ -1495,8 +1497,8 @@ func TestBalanceScoreByRangeCount(t *testing.T) {
 	options := rangeCountScorerOptions{
 		rangeRebalanceThreshold: 0.1,
 	}
-	storeList := StoreList{
-		candidateRanges: stat{mean: 1000},
+	storeList := storepool.StoreList{
+		CandidateRanges: storepool.Stat{Mean: 1000},
 	}
 
 	testCases := []struct {
@@ -1524,8 +1526,8 @@ func TestRebalanceBalanceScoreOnQPS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	storeList := StoreList{
-		candidateQueriesPerSecond: stat{mean: 1000},
+	storeList := storepool.StoreList{
+		CandidateQueriesPerSecond: storepool.Stat{Mean: 1000},
 	}
 	options := qpsScorerOptions{
 		qpsRebalanceThreshold: 0.1,
@@ -1562,8 +1564,8 @@ func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	storeList := StoreList{
-		candidateRanges: stat{mean: 1000},
+	storeList := storepool.StoreList{
+		CandidateRanges: storepool.Stat{Mean: 1000},
 	}
 
 	testCases := []struct {
@@ -1614,7 +1616,7 @@ func TestMaxCapacity(t *testing.T) {
 	}
 
 	for _, s := range testStores {
-		if e, a := expectedCheck[s.StoreID], maxCapacityCheck(s); e != a {
+		if e, a := expectedCheck[s.StoreID], allocator.MaxCapacityCheck(s); e != a {
 			t.Errorf("store %d expected max capacity check: %t, actual %t", s.StoreID, e, a)
 		}
 	}

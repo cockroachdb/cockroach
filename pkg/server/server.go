@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -103,7 +104,7 @@ type Server struct {
 	gossip           *gossip.Gossip
 	nodeDialer       *nodedialer.Dialer
 	nodeLiveness     *liveness.NodeLiveness
-	storePool        *kvserver.StorePool
+	storePool        *storepool.StorePool
 	tcsFactory       *kvcoord.TxnCoordSenderFactory
 	distSender       *kvcoord.DistSender
 	db               *kv.DB
@@ -416,12 +417,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
-	nodeLivenessFn := kvserver.MakeStorePoolNodeLivenessFunc(nodeLiveness)
+	nodeLivenessFn := storepool.MakeStorePoolNodeLivenessFunc(nodeLiveness)
 	if nodeLivenessKnobs, ok := cfg.TestingKnobs.NodeLiveness.(kvserver.NodeLivenessTestingKnobs); ok &&
 		nodeLivenessKnobs.StorePoolNodeLivenessFn != nil {
 		nodeLivenessFn = nodeLivenessKnobs.StorePoolNodeLivenessFn
 	}
-	storePool := kvserver.NewStorePool(
+	storePool := storepool.NewStorePool(
 		cfg.AmbientCtx,
 		st,
 		g,

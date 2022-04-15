@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -751,7 +752,7 @@ func sendSnapshotError(stream incomingSnapshotStream, err error) error {
 
 // SnapshotStorePool narrows StorePool to make sendSnapshot easier to test.
 type SnapshotStorePool interface {
-	throttle(reason throttleReason, why string, toStoreID roachpb.StoreID)
+	Throttle(reason storepool.ThrottleReason, why string, toStoreID roachpb.StoreID)
 }
 
 // minSnapshotRate defines the minimum value that the rate limit for rebalance
@@ -1099,7 +1100,7 @@ func SendEmptySnapshot(
 // noopStorePool is a hollowed out StorePool that does not throttle. It's used in recovery scenarios.
 type noopStorePool struct{}
 
-func (n noopStorePool) throttle(throttleReason, string, roachpb.StoreID) {}
+func (n noopStorePool) Throttle(storepool.ThrottleReason, string, roachpb.StoreID) {}
 
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
@@ -1130,12 +1131,12 @@ func sendSnapshot(
 	// the actual snapshot (if not rejected).
 	resp, err := stream.Recv()
 	if err != nil {
-		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
+		storePool.Throttle(storepool.ThrottleFailed, err.Error(), to.StoreID)
 		return err
 	}
 	switch resp.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
-		storePool.throttle(throttleFailed, resp.Message, to.StoreID)
+		storePool.Throttle(storepool.ThrottleFailed, resp.Message, to.StoreID)
 		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
 			to, snap, resp.Message)
 	case kvserverpb.SnapshotResponse_ACCEPTED:
@@ -1143,7 +1144,7 @@ func sendSnapshot(
 	default:
 		err := errors.Errorf("%s: server sent an invalid status while negotiating %s: %s",
 			to, snap, resp.Status)
-		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
+		storePool.Throttle(storepool.ThrottleFailed, err.Error(), to.StoreID)
 		return err
 	}
 
