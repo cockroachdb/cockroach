@@ -142,40 +142,15 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		panic("min timestamp hint set without max timestamp hint")
 	}
 
-	// Omit setting the options if there's nothing to change, since calling
-	// pebble.Iterator.SetOptions() can make the next seek more expensive.
-	optsChanged := p.options.OnlyReadGuaranteedDurable != (durability == GuaranteedDurability) ||
-		// NB: Don't be tempted to omit SetOptions() if only the prefix option
-		// changes. This check has the side-effect of ensuring newly cloned
-		// iterators (with unknown existing options) always has SetOptions() called
-		// on them: we require either Prefix, UpperBound, or LowerBound to be set,
-		// so one of these won't match the zero value of a new iterator.
-		opts.Prefix != p.prefix ||
-		(opts.UpperBound == nil) != (p.options.UpperBound == nil) ||
-		(opts.LowerBound == nil) != (p.options.LowerBound == nil) ||
-		// If p.options.UpperBound or LowerBound is set, they are encoded with a
-		// trailing 0x00 byte which must be omitted in comparisons.
-		(p.options.UpperBound != nil &&
-			!bytes.Equal(opts.UpperBound, p.options.UpperBound[:len(p.options.UpperBound)-1])) ||
-		(p.options.LowerBound != nil &&
-			!bytes.Equal(opts.LowerBound, p.options.LowerBound[:len(p.options.LowerBound)-1])) ||
-		// We can't compare these filters, so if any existing or new filters are set
-		// we consider them changed.
-		p.options.TableFilter != nil ||
-		p.options.PointKeyFilters != nil ||
-		opts.MaxTimestampHint.IsSet() ||
-		opts.MinTimestampHint.IsSet()
-	if !optsChanged {
-		return
-	}
-
-	// Reset the existing options.
-	p.options = pebble.IterOptions{
+	// Generate new Pebble iterator options.
+	//
+	// NB: Make sure new options are accounted for in the optsChanged check below.
+	// Otherwise, the option may not take effect.
+	newOptions := pebble.IterOptions{
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 	}
-	p.prefix = opts.Prefix
 
-	p.curBuf = 1 - p.curBuf
+	newBuf := 1 - p.curBuf
 	if opts.LowerBound != nil {
 		// This is the same as
 		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[0][:0], MVCCKey{Key: opts.LowerBound})
@@ -183,21 +158,21 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		// Since we are encoding keys with an empty version anyway, we can just
 		// append the NUL byte instead of calling the above encode functions which
 		// will do the same thing.
-		p.lowerBoundBuf[p.curBuf] = append(p.lowerBoundBuf[p.curBuf][:0], opts.LowerBound...)
-		p.lowerBoundBuf[p.curBuf] = append(p.lowerBoundBuf[p.curBuf], 0x00)
-		p.options.LowerBound = p.lowerBoundBuf[p.curBuf]
+		p.lowerBoundBuf[newBuf] = append(p.lowerBoundBuf[newBuf][:0], opts.LowerBound...)
+		p.lowerBoundBuf[newBuf] = append(p.lowerBoundBuf[newBuf], 0x00)
+		newOptions.LowerBound = p.lowerBoundBuf[newBuf]
 	}
 	if opts.UpperBound != nil {
 		// Same as above.
-		p.upperBoundBuf[p.curBuf] = append(p.upperBoundBuf[p.curBuf][:0], opts.UpperBound...)
-		p.upperBoundBuf[p.curBuf] = append(p.upperBoundBuf[p.curBuf], 0x00)
-		p.options.UpperBound = p.upperBoundBuf[p.curBuf]
+		p.upperBoundBuf[newBuf] = append(p.upperBoundBuf[newBuf][:0], opts.UpperBound...)
+		p.upperBoundBuf[newBuf] = append(p.upperBoundBuf[newBuf], 0x00)
+		newOptions.UpperBound = p.upperBoundBuf[newBuf]
 	}
 
 	if opts.MaxTimestampHint.IsSet() {
 		encodedMinTS := string(encodeMVCCTimestamp(opts.MinTimestampHint))
 		encodedMaxTS := string(encodeMVCCTimestamp(opts.MaxTimestampHint))
-		p.options.TableFilter = func(userProps map[string]string) bool {
+		newOptions.TableFilter = func(userProps map[string]string) bool {
 			tableMinTS := userProps["crdb.ts.min"]
 			if len(tableMinTS) == 0 {
 				if opts.WithStats {
@@ -221,12 +196,37 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		// We are given an inclusive [MinTimestampHint, MaxTimestampHint]. The
 		// MVCCWAllTimeIntervalCollector has collected the WallTimes and we need
 		// [min, max), i.e., exclusive on the upper bound.
-		p.options.PointKeyFilters = []pebble.BlockPropertyFilter{
+		newOptions.PointKeyFilters = []pebble.BlockPropertyFilter{
 			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
 				uint64(opts.MinTimestampHint.WallTime),
 				uint64(opts.MaxTimestampHint.WallTime)+1),
 		}
 	}
+
+	// Omit setting the options if there's nothing to change, since calling
+	// pebble.Iterator.SetOptions() can make the next seek more expensive.
+	//
+	// NB: Don't be tempted to omit SetOptions() if only the prefix option
+	// changes. This check has the side-effect of ensuring newly cloned iterators
+	// (with unknown existing options) always has SetOptions() called on them: we
+	// require either Prefix, UpperBound, or LowerBound to be set, so one of these
+	// won't match the zero value of a new iterator.
+	optsChanged := opts.Prefix != p.prefix ||
+		newOptions.OnlyReadGuaranteedDurable != p.options.OnlyReadGuaranteedDurable ||
+		!bytes.Equal(newOptions.UpperBound, p.options.UpperBound) ||
+		!bytes.Equal(newOptions.LowerBound, p.options.LowerBound) ||
+		// We can't compare these filters, so if any existing or new filters are set
+		// we consider them changed.
+		newOptions.TableFilter != nil || p.options.TableFilter != nil ||
+		newOptions.PointKeyFilters != nil || p.options.PointKeyFilters != nil
+	if !optsChanged {
+		return
+	}
+
+	// Set the new iterator options.
+	p.options = newOptions
+	p.prefix = opts.Prefix
+	p.curBuf = newBuf
 
 	if p.iter != nil {
 		p.iter.SetOptions(&p.options)
