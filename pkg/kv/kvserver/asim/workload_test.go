@@ -41,7 +41,7 @@ func summary(ops []LoadEvent, cycleLength int) summaryStats {
 	distribution := make([]int, len(ops))
 	for i, op := range ops {
 		sizeSum += int(op.size)
-		distribution[i] = int(op.key)
+		distribution[i] = int(op.Key)
 		if op.isWrite {
 			writes++
 		} else {

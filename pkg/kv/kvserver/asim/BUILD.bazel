@@ -26,6 +26,7 @@ go_test(
     ],
     embed = [":asim"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
