@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
@@ -227,7 +228,7 @@ type Replica struct {
 
 	// leaseholderStats tracks all incoming BatchRequests to the replica and which
 	// localities they come from in order to aid in lease rebalancing decisions.
-	leaseholderStats *replicaStats
+	leaseholderStats *replicastats.ReplicaStats
 	// writeStats tracks the number of mutations (as counted by the pebble batch
 	// to be applied to the state machine), and additionally, the number of keys
 	// added to MVCCStats, which notably may be approximate in the case of an
@@ -240,7 +241,7 @@ type Replica struct {
 	// purpose.
 	//
 	// [1]: https://github.com/cockroachdb/cockroach/pull/16664
-	writeStats *replicaStats
+	writeStats *replicastats.ReplicaStats
 
 	// loadStats tracks a sliding window of throughput on this replica.
 	loadStats *ReplicaLoad

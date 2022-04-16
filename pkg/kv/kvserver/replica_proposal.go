@@ -314,7 +314,7 @@ func (r *Replica) leasePostApplyLocked(
 		// Reset the request counts used to make lease placement decisions and
 		// load-based splitting/merging decisions whenever starting a new lease.
 		if r.leaseholderStats != nil {
-			r.leaseholderStats.resetRequestCounts()
+			r.leaseholderStats.ResetRequestCounts()
 		}
 		if r.loadStats != nil {
 			r.loadStats.reset()
@@ -376,7 +376,7 @@ func (r *Replica) leasePostApplyLocked(
 			r.store.maybeGossipOnCapacityChange(ctx, leaseRemoveEvent)
 		}
 		if r.leaseholderStats != nil {
-			r.leaseholderStats.resetRequestCounts()
+			r.leaseholderStats.ResetRequestCounts()
 		}
 		if r.loadStats != nil {
 			r.loadStats.reset()

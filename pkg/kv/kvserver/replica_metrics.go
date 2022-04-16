@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -179,8 +180,8 @@ func calcRangeCounter(
 	// We also compute an estimated per-range count of under-replicated and
 	// unavailable ranges for each range based on the liveness table.
 	if rangeCounter {
-		neededVoters := GetNeededVoters(numVoters, clusterNodes)
-		neededNonVoters := GetNeededNonVoters(int(numVoters), int(numReplicas-numVoters), clusterNodes)
+		neededVoters := allocatorimpl.GetNeededVoters(numVoters, clusterNodes)
+		neededNonVoters := allocatorimpl.GetNeededNonVoters(int(numVoters), int(numReplicas-numVoters), clusterNodes)
 		status := desc.Replicas().ReplicationStatus(func(rDesc roachpb.ReplicaDescriptor) bool {
 			return livenessMap[rDesc.NodeID].IsLive
 		},
@@ -252,13 +253,13 @@ func calcBehindCount(
 // practically none). See Replica.getBatchRequestQPS() for how this is
 // accounted for.
 func (r *Replica) QueriesPerSecond() (float64, time.Duration) {
-	return r.leaseholderStats.averageRatePerSecond()
+	return r.leaseholderStats.AverageRatePerSecond()
 }
 
 // RequestsPerSecond returns the range's average requests received per second.
 // A batch request may have one to many requests.
 func (r *Replica) RequestsPerSecond() float64 {
-	rps, _ := r.loadStats.requests.averageRatePerSecond()
+	rps, _ := r.loadStats.requests.AverageRatePerSecond()
 	return rps
 }
 
@@ -269,7 +270,7 @@ func (r *Replica) RequestsPerSecond() float64 {
 // writes (12 for the metadata, 12 for the versions). A DeleteRange that
 // ultimately only removes one key counts as one (or two if it's transactional).
 func (r *Replica) WritesPerSecond() float64 {
-	wps, _ := r.writeStats.averageRatePerSecond()
+	wps, _ := r.writeStats.AverageRatePerSecond()
 	return wps
 }
 
@@ -277,21 +278,21 @@ func (r *Replica) WritesPerSecond() float64 {
 // a key access during evaluation of a batch request. This includes both
 // follower and leaseholder reads.
 func (r *Replica) ReadsPerSecond() float64 {
-	rps, _ := r.loadStats.readKeys.averageRatePerSecond()
+	rps, _ := r.loadStats.readKeys.AverageRatePerSecond()
 	return rps
 }
 
 // WriteBytesPerSecond returns the range's average bytes written per second. A "Write" is
 // as described in WritesPerSecond.
 func (r *Replica) WriteBytesPerSecond() float64 {
-	wbps, _ := r.loadStats.writeBytes.averageRatePerSecond()
+	wbps, _ := r.loadStats.writeBytes.AverageRatePerSecond()
 	return wbps
 }
 
 // ReadBytesPerSecond returns the range's average bytes read per second. A "Read" is
 // as described in ReadsPerSecond.
 func (r *Replica) ReadBytesPerSecond() float64 {
-	rbps, _ := r.loadStats.readBytes.averageRatePerSecond()
+	rbps, _ := r.loadStats.readBytes.AverageRatePerSecond()
 	return rbps
 }
 

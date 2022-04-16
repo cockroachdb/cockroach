@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver
+package allocatorimpl
 
 import (
 	"bytes"
@@ -443,7 +443,7 @@ func TestStoreHasReplica(t *testing.T) {
 	}
 	for i := 1; i < 10; i++ {
 		if e, a := i%2 == 0,
-			storeHasReplica(roachpb.StoreID(i), roachpb.MakeReplicaSet(existing).ReplicationTargets()); e != a {
+			StoreHasReplica(roachpb.StoreID(i), roachpb.MakeReplicaSet(existing).ReplicationTargets()); e != a {
 			t.Errorf("StoreID %d expected to be %t, got %t", i, e, a)
 		}
 	}
@@ -1063,7 +1063,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	options := &rangeCountScorerOptions{storeHealthOptions: storeHealthOptions{enforcementLevel: storeHealthNoAction}}
+	options := &RangeCountScorerOptions{StoreHealthOptions: StoreHealthOptions{EnforcementLevel: StoreHealthNoAction}}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
 		return roachpb.StoreDescriptor{
 			StoreID: roachpb.StoreID(id),
@@ -1494,7 +1494,7 @@ func TestBalanceScoreByRangeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	options := rangeCountScorerOptions{
+	options := RangeCountScorerOptions{
 		rangeRebalanceThreshold: 0.1,
 	}
 	storeList := storepool.StoreList{
@@ -1529,8 +1529,8 @@ func TestRebalanceBalanceScoreOnQPS(t *testing.T) {
 	storeList := storepool.StoreList{
 		CandidateQueriesPerSecond: storepool.Stat{Mean: 1000},
 	}
-	options := qpsScorerOptions{
-		qpsRebalanceThreshold: 0.1,
+	options := QPSScorerOptions{
+		QPSRebalanceThreshold: 0.1,
 	}
 
 	testCases := []struct {
@@ -1581,7 +1581,7 @@ func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
 		{2000, false, true},
 	}
 
-	options := rangeCountScorerOptions{}
+	options := RangeCountScorerOptions{}
 	eqClass := equivalenceClass{
 		candidateSL: storeList,
 	}

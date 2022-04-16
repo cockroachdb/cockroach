@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver
+package allocatorimpl
 
 import (
 	"bytes"
@@ -69,49 +69,49 @@ const (
 	// away from the mean.
 	minRangeRebalanceThreshold = 2
 
-	// maxL0SublevelThreshold is the number of L0 sub-levels of a store
+	// MaxL0SublevelThreshold is the number of L0 sub-levels of a store
 	// descriptor, that when greater than this value and in excees of the
 	// average L0 sub-levels in the cluster - will have the action defined by
 	// l0SublevelsThresholdEnforce taken. This value does not affect the
 	// allocator in deciding to remove replicas from it's store, only
 	// potentially block adding or moving replicas to other stores.
-	maxL0SublevelThreshold = 20
+	MaxL0SublevelThreshold = 20
 
-	// l0SublevelInterval is the period over which to accumulate statistics on
+	// L0SublevelInterval is the period over which to accumulate statistics on
 	// the number of L0 sublevels within a store.
-	l0SublevelInterval = time.Minute * 5
+	L0SublevelInterval = time.Minute * 5
 
-	// l0SublevelMaxSampled is maximum number of L0 sub-levels that may exist
+	// L0SublevelMaxSampled is maximum number of L0 sub-levels that may exist
 	// in a sample. This setting limits the extreme skew that could occur by
 	// capping the highest possible value considered.
-	l0SublevelMaxSampled = 500
+	L0SublevelMaxSampled = 500
 
 	// l0SubLevelWaterMark is the percentage above the mean after which a store
 	// could be conisdered unhealthy if also exceeding the threshold.
 	l0SubLevelWaterMark = 1.10
 )
 
-// storeHealthEnforcement represents the level of action that may be taken or
+// StoreHealthEnforcement represents the level of action that may be taken or
 // excluded when a candidate disk is considered unhealthy.
-type storeHealthEnforcement int64
+type StoreHealthEnforcement int64
 
 const (
-	// storeHealthNoAction will take no action upon candidate stores when they
+	// StoreHealthNoAction will take no action upon candidate stores when they
 	// exceed l0SublevelThreshold.
-	storeHealthNoAction storeHealthEnforcement = iota
-	// storeHealthLogOnly will take no action upon candidate stores when they
+	StoreHealthNoAction StoreHealthEnforcement = iota
+	// StoreHealthLogOnly will take no action upon candidate stores when they
 	// exceed l0SublevelThreshold except log an event.
-	storeHealthLogOnly
-	// storeHealthBlockRebalanceTo will take action to exclude candidate stores
+	StoreHealthLogOnly
+	// StoreHealthBlockRebalanceTo will take action to exclude candidate stores
 	// when they exceed l0SublevelThreshold and mean from being considered
 	// targets for rebalance actions only. Allocation actions such as adding
 	// upreplicaing an range will not be affected.
-	storeHealthBlockRebalanceTo
-	// storeHealthBlockAll will take action to exclude candidate stores when
+	StoreHealthBlockRebalanceTo
+	// StoreHealthBlockAll will take action to exclude candidate stores when
 	// they exceed l0SublevelThreshold and mean from being candidates for all
 	// replica allocation and rebalancing. When enabled and stores exceed the
 	// threshold, they will not receive any new replicas.
-	storeHealthBlockAll
+	StoreHealthBlockAll
 )
 
 // rangeRebalanceThreshold is the minimum ratio of a store's range count to
@@ -146,7 +146,7 @@ var l0SublevelsThreshold = settings.RegisterIntSetting(
 		"before the action defined in "+
 		"`kv.allocator.l0_sublevels_threshold_enforce` will be taken "+
 		"if also exceeding the cluster average",
-	maxL0SublevelThreshold,
+	MaxL0SublevelThreshold,
 )
 
 // l0SublevelsThresholdEnforce is the level of enforcement taken upon candidate
@@ -171,17 +171,16 @@ var l0SublevelsThresholdEnforce = settings.RegisterEnumSetting(
 		"from being targets of both allocation and rebalancing",
 	"block_rebalance_to",
 	map[int64]string{
-		int64(storeHealthNoAction):         "block_none",
-		int64(storeHealthLogOnly):          "block_none_log",
-		int64(storeHealthBlockRebalanceTo): "block_rebalance_to",
-		int64(storeHealthBlockAll):         "block_all",
+		int64(StoreHealthNoAction):         "block_none",
+		int64(StoreHealthLogOnly):          "block_none_log",
+		int64(StoreHealthBlockRebalanceTo): "block_rebalance_to",
+		int64(StoreHealthBlockAll):         "block_all",
 	},
 )
 
-// CockroachDB has two heuristics that trigger replica rebalancing: range count
-// convergence and QPS convergence. scorerOptions defines the interface that
-// both of these heuristics must implement.
-type scorerOptions interface {
+// ScorerOptions defines the interface for the two heuristics that trigger
+// replica rebalancing: range count convergence and QPS convergence.
+type ScorerOptions interface {
 	// maybeJitterStoreStats returns a `StoreList` that's identical to the
 	// parameter `sl`, but may have jittered stats on the stores.
 	//
@@ -233,7 +232,7 @@ type scorerOptions interface {
 	removalMaximallyConvergesScore(removalCandStoreList storepool.StoreList, existing roachpb.StoreDescriptor) int
 	// getStoreHealthOptions returns the scorer options for store health. It is
 	// used to inform scoring based on the health of a store.
-	getStoreHealthOptions() storeHealthOptions
+	getStoreHealthOptions() StoreHealthOptions
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -246,17 +245,23 @@ func jittered(val float64, jitter float64, rand allocatorRand) float64 {
 	return result
 }
 
-// scatterScorerOptions is used by the replicateQueue when called via the
-// `AdminScatterRequest`. It is like `rangeCountScorerOptions` but with the
+// ScatterScorerOptions is used by the replicateQueue when called via the
+// `AdminScatterRequest`. It is like `RangeCountScorerOptions` but with the
 // rangeRebalanceThreshold set to zero (i.e. with all padding disabled). It also
 // perturbs the stats on existing stores to add a bit of random jitter.
-type scatterScorerOptions struct {
-	rangeCountScorerOptions
+type ScatterScorerOptions struct {
+	RangeCountScorerOptions
 	// jitter specifies the degree to which we will perturb existing store stats.
 	jitter float64
 }
 
-func (o *scatterScorerOptions) maybeJitterStoreStats(
+var _ ScorerOptions = &ScatterScorerOptions{}
+
+func (o *ScatterScorerOptions) getStoreHealthOptions() StoreHealthOptions {
+	return o.RangeCountScorerOptions.StoreHealthOptions
+}
+
+func (o *ScatterScorerOptions) maybeJitterStoreStats(
 	sl storepool.StoreList, allocRand allocatorRand,
 ) (perturbedSL storepool.StoreList) {
 	perturbedStoreDescs := make([]roachpb.StoreDescriptor, 0, len(sl.Stores))
@@ -270,27 +275,33 @@ func (o *scatterScorerOptions) maybeJitterStoreStats(
 	return storepool.MakeStoreList(perturbedStoreDescs)
 }
 
-// rangeCountScorerOptions is used by the replicateQueue to tell the Allocator's
+// RangeCountScorerOptions is used by the replicateQueue to tell the Allocator's
 // rebalancing machinery to base its balance/convergence scores on range counts.
 // This means that the resulting rebalancing decisions will further the goal of
 // converging range counts across stores in the cluster.
-type rangeCountScorerOptions struct {
-	storeHealthOptions
+type RangeCountScorerOptions struct {
+	StoreHealthOptions
 	deterministic           bool
 	rangeRebalanceThreshold float64
 }
 
-func (o *rangeCountScorerOptions) maybeJitterStoreStats(
+var _ ScorerOptions = &RangeCountScorerOptions{}
+
+func (o *RangeCountScorerOptions) getStoreHealthOptions() StoreHealthOptions {
+	return o.StoreHealthOptions
+}
+
+func (o *RangeCountScorerOptions) maybeJitterStoreStats(
 	sl storepool.StoreList, _ allocatorRand,
 ) (perturbedSL storepool.StoreList) {
 	return sl
 }
 
-func (o *rangeCountScorerOptions) deterministicForTesting() bool {
+func (o *RangeCountScorerOptions) deterministicForTesting() bool {
 	return o.deterministic
 }
 
-func (o rangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
+func (o RangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 	ctx context.Context, eqClass equivalenceClass, metrics AllocatorMetrics,
 ) bool {
 	store := eqClass.existing
@@ -328,7 +339,7 @@ func (o rangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 	return false
 }
 
-func (o *rangeCountScorerOptions) balanceScore(
+func (o *RangeCountScorerOptions) balanceScore(
 	sl storepool.StoreList, sc roachpb.StoreCapacity,
 ) balanceStatus {
 	maxRangeCount := overfullRangeThreshold(o, sl.CandidateRanges.Mean)
@@ -348,7 +359,7 @@ func (o *rangeCountScorerOptions) balanceScore(
 // rebalance a replica away from a store or not, we want to give it a "boost"
 // (i.e. make it a less likely candidate for removal) if it doesn't further our
 // goal to converge range count towards the mean.
-func (o *rangeCountScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass) int {
+func (o *RangeCountScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass) int {
 	if !rebalanceConvergesRangeCountOnMean(
 		eqClass.candidateSL, eqClass.existing.Capacity, eqClass.existing.Capacity.RangeCount-1,
 	) {
@@ -360,7 +371,7 @@ func (o *rangeCountScorerOptions) rebalanceFromConvergesScore(eqClass equivalenc
 // rebalanceToConvergesScore returns 1 if rebalancing a replica to `sd` will
 // converge its range count towards the mean of the candidate stores inside
 // `eqClass`.
-func (o *rangeCountScorerOptions) rebalanceToConvergesScore(
+func (o *RangeCountScorerOptions) rebalanceToConvergesScore(
 	eqClass equivalenceClass, candidate roachpb.StoreDescriptor,
 ) int {
 	if rebalanceConvergesRangeCountOnMean(eqClass.candidateSL, candidate.Capacity, candidate.Capacity.RangeCount+1) {
@@ -374,7 +385,7 @@ func (o *rangeCountScorerOptions) rebalanceToConvergesScore(
 // the mean (this low score makes it more likely to be picked for removal).
 // Otherwise, a high convergesScore is assigned (which would make this store
 // less likely to be picked for removal).
-func (o *rangeCountScorerOptions) removalMaximallyConvergesScore(
+func (o *RangeCountScorerOptions) removalMaximallyConvergesScore(
 	removalCandStoreList storepool.StoreList, existing roachpb.StoreDescriptor,
 ) int {
 	if !rebalanceConvergesRangeCountOnMean(
@@ -385,14 +396,14 @@ func (o *rangeCountScorerOptions) removalMaximallyConvergesScore(
 	return 0
 }
 
-// qpsScorerOptions is used by the StoreRebalancer to tell the Allocator's
+// QPSScorerOptions is used by the StoreRebalancer to tell the Allocator's
 // rebalancing machinery to base its balance/convergence scores on
 // queries-per-second. This means that the resulting rebalancing decisions will
 // further the goal of converging QPS across stores in the cluster.
-type qpsScorerOptions struct {
-	storeHealthOptions
-	deterministic                             bool
-	qpsRebalanceThreshold, minRequiredQPSDiff float64
+type QPSScorerOptions struct {
+	StoreHealthOptions                        StoreHealthOptions
+	Deterministic                             bool
+	QPSRebalanceThreshold, MinRequiredQPSDiff float64
 
 	// QPS-based rebalancing assumes that:
 	// 1. Every replica of a range currently receives the same level of traffic.
@@ -406,26 +417,30 @@ type qpsScorerOptions struct {
 	// track it separately yet. See
 	// https://github.com/cockroachdb/cockroach/issues/75630.
 
-	// qpsPerReplica states the level of traffic being served by each replica in a
+	// QPSPerReplica states the level of traffic being served by each replica in a
 	// range.
-	qpsPerReplica float64
+	QPSPerReplica float64
 }
 
-func (o *qpsScorerOptions) maybeJitterStoreStats(
+func (o *QPSScorerOptions) getStoreHealthOptions() StoreHealthOptions {
+	return o.StoreHealthOptions
+}
+
+func (o *QPSScorerOptions) maybeJitterStoreStats(
 	sl storepool.StoreList, _ allocatorRand,
 ) storepool.StoreList {
 	return sl
 }
 
-func (o *qpsScorerOptions) deterministicForTesting() bool {
-	return o.deterministic
+func (o *QPSScorerOptions) deterministicForTesting() bool {
+	return o.Deterministic
 }
 
 // shouldRebalanceBasedOnThresholds tries to determine if, within the given
 // equivalenceClass `eqClass`, rebalancing a replica from one of the existing
 // stores to one of the candidate stores will lead to QPS convergence among the
 // stores in the equivalence class.
-func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
+func (o QPSScorerOptions) shouldRebalanceBasedOnThresholds(
 	ctx context.Context, eqClass equivalenceClass, metrics AllocatorMetrics,
 ) bool {
 	if len(eqClass.candidateSL.Stores) == 0 {
@@ -435,32 +450,32 @@ func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 	bestStore, declineReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
 	switch declineReason {
 	case noBetterCandidate:
-		metrics.loadBasedReplicaRebalanceMetrics.CannotFindBetterCandidate.Inc(1)
+		metrics.LoadBasedReplicaRebalanceMetrics.CannotFindBetterCandidate.Inc(1)
 		log.VEventf(
 			ctx, 4, "could not find a better candidate to replace s%d", eqClass.existing.StoreID,
 		)
 	case existingNotOverfull:
-		metrics.loadBasedReplicaRebalanceMetrics.ExistingNotOverfull.Inc(1)
+		metrics.LoadBasedReplicaRebalanceMetrics.ExistingNotOverfull.Inc(1)
 		log.VEventf(ctx, 4, "existing store s%d is not overfull", eqClass.existing.StoreID)
 	case deltaNotSignificant:
-		metrics.loadBasedReplicaRebalanceMetrics.DeltaNotSignificant.Inc(1)
+		metrics.LoadBasedReplicaRebalanceMetrics.DeltaNotSignificant.Inc(1)
 		log.VEventf(
 			ctx, 4,
 			"delta between s%d and the next best candidate is not significant enough",
 			eqClass.existing.StoreID,
 		)
 	case significantlySwitchesRelativeDisposition:
-		metrics.loadBasedReplicaRebalanceMetrics.SignificantlySwitchesRelativeDisposition.Inc(1)
+		metrics.LoadBasedReplicaRebalanceMetrics.SignificantlySwitchesRelativeDisposition.Inc(1)
 		log.VEventf(
 			ctx, 4,
 			"rebalancing from s%[1]d to the next best candidate could make it significantly hotter than s%[1]d",
 			eqClass.existing.StoreID,
 		)
 	case missingStatsForExistingStore:
-		metrics.loadBasedReplicaRebalanceMetrics.MissingStatsForExistingStore.Inc(1)
+		metrics.LoadBasedReplicaRebalanceMetrics.MissingStatsForExistingStore.Inc(1)
 		log.VEventf(ctx, 4, "missing QPS stats for s%d", eqClass.existing.StoreID)
 	case shouldRebalance:
-		metrics.loadBasedReplicaRebalanceMetrics.ShouldRebalance.Inc(1)
+		metrics.LoadBasedReplicaRebalanceMetrics.ShouldRebalance.Inc(1)
 		var bestStoreQPS float64
 		for _, store := range eqClass.candidateSL.Stores {
 			if bestStore == store.StoreID {
@@ -470,7 +485,7 @@ func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 		log.VEventf(
 			ctx, 4,
 			"should rebalance replica with %0.2f qps from s%d (qps=%0.2f) to s%d (qps=%0.2f)",
-			o.qpsPerReplica, eqClass.existing.StoreID,
+			o.QPSPerReplica, eqClass.existing.StoreID,
 			eqClass.existing.Capacity.QueriesPerSecond,
 			bestStore, bestStoreQPS,
 		)
@@ -481,10 +496,10 @@ func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 	return declineReason == shouldRebalance
 }
 
-func (o *qpsScorerOptions) balanceScore(
+func (o *QPSScorerOptions) balanceScore(
 	sl storepool.StoreList, sc roachpb.StoreCapacity,
 ) balanceStatus {
-	maxQPS := overfullQPSThreshold(o, sl.CandidateQueriesPerSecond.Mean)
+	maxQPS := OverfullQPSThreshold(o, sl.CandidateQueriesPerSecond.Mean)
 	minQPS := underfullQPSThreshold(o, sl.CandidateQueriesPerSecond.Mean)
 	curQPS := sc.QueriesPerSecond
 	if curQPS < minQPS {
@@ -498,7 +513,7 @@ func (o *qpsScorerOptions) balanceScore(
 // rebalanceFromConvergesScore returns a score of -1 if the existing store in
 // eqClass needs to be rebalanced away in order to minimize the QPS delta
 // between the stores in the equivalence class `eqClass`.
-func (o *qpsScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass) int {
+func (o *QPSScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass) int {
 	_, declineReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
 	// If there are any rebalance opportunities that minimize the QPS delta in
 	// this equivalence class, we return a score of -1 to make the existing store
@@ -512,7 +527,7 @@ func (o *qpsScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass)
 // rebalanceToConvergesScore returns a score of 1 if `candidate` needs to be
 // rebalanced to in order to minimize the QPS delta between the stores in the
 // equivalence class `eqClass`
-func (o *qpsScorerOptions) rebalanceToConvergesScore(
+func (o *QPSScorerOptions) rebalanceToConvergesScore(
 	eqClass equivalenceClass, candidate roachpb.StoreDescriptor,
 ) int {
 	bestTarget, declineReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
@@ -525,7 +540,7 @@ func (o *qpsScorerOptions) rebalanceToConvergesScore(
 // removalMaximallyConvergesScore returns a score of -1 `existing` is the
 // hottest store (based on QPS) among the stores inside
 // `removalCandidateStores`.
-func (o *qpsScorerOptions) removalMaximallyConvergesScore(
+func (o *QPSScorerOptions) removalMaximallyConvergesScore(
 	removalCandStoreList storepool.StoreList, existing roachpb.StoreDescriptor,
 ) int {
 	maxQPS := float64(-1)
@@ -877,13 +892,13 @@ func rankedCandidateListForAllocation(
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	allowMultipleReplsPerNode bool,
-	options *rangeCountScorerOptions,
+	options *RangeCountScorerOptions,
 ) candidateList {
 	var candidates candidateList
 	existingReplTargets := roachpb.MakeReplicaSet(existingReplicas).ReplicationTargets()
 	for _, s := range candidateStores.Stores {
 		// Disregard all the stores that already have replicas.
-		if storeHasReplica(s.StoreID, existingReplTargets) {
+		if StoreHasReplica(s.StoreID, existingReplTargets) {
 			continue
 		}
 		// Unless the caller specifically allows us to allocate multiple replicas on
@@ -906,7 +921,7 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		if !allocator.MaxCapacityCheck(s) || !options.storeHealthOptions.readAmpIsHealthy(
+		if !allocator.MaxCapacityCheck(s) || !options.StoreHealthOptions.readAmpIsHealthy(
 			ctx,
 			s,
 			candidateStores.CandidateL0Sublevels.Mean,
@@ -948,7 +963,7 @@ func candidateListForRemoval(
 	existingReplsStoreList storepool.StoreList,
 	constraintsCheck constraintsCheckFn,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
-	options scorerOptions,
+	options ScorerOptions,
 ) candidateList {
 	var candidates candidateList
 	for _, s := range existingReplsStoreList.Stores {
@@ -1126,7 +1141,7 @@ func bestStoreToMinimizeQPSDelta(
 	existing roachpb.StoreID,
 	candidates []roachpb.StoreID,
 	storeDescMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
-	options *qpsScorerOptions,
+	options *QPSScorerOptions,
 ) (bestCandidate roachpb.StoreID, reason declineReason) {
 	storeQPSMap := make(map[roachpb.StoreID]float64, len(candidates)+1)
 	for _, store := range candidates {
@@ -1170,14 +1185,14 @@ func bestStoreToMinimizeQPSDelta(
 	// `bestCandidate` (not accounting for the replica under consideration) is
 	// higher than `minQPSDifferenceForTransfers`.
 	diffIgnoringRepl := existingQPSIgnoringRepl - bestCandQPS
-	if diffIgnoringRepl < options.minRequiredQPSDiff {
+	if diffIgnoringRepl < options.MinRequiredQPSDiff {
 		return 0, deltaNotSignificant
 	}
 
 	// Only proceed with rebalancing iff `existingStore` is overfull relative to
 	// the equivalence class.
 	mean := domainStoreList.CandidateQueriesPerSecond.Mean
-	overfullThreshold := overfullQPSThreshold(
+	overfullThreshold := OverfullQPSThreshold(
 		options,
 		mean,
 	)
@@ -1226,7 +1241,7 @@ func bestStoreToMinimizeQPSDelta(
 // candidates in the equivalence class) such that rebalancing to this store
 // would minimize the delta between the existing store and the coldest store in
 // the equivalence class.
-func (o *qpsScorerOptions) getRebalanceTargetToMinimizeDelta(
+func (o *QPSScorerOptions) getRebalanceTargetToMinimizeDelta(
 	eqClass equivalenceClass,
 ) (bestStore roachpb.StoreID, declineReason declineReason) {
 	domainStoreList := storepool.MakeStoreList(append(eqClass.candidateSL.Stores, eqClass.existing))
@@ -1235,10 +1250,10 @@ func (o *qpsScorerOptions) getRebalanceTargetToMinimizeDelta(
 		candidates = append(candidates, store.StoreID)
 	}
 	return bestStoreToMinimizeQPSDelta(
-		o.qpsPerReplica,
+		o.QPSPerReplica,
 		eqClass.existing.StoreID,
 		candidates,
-		storeListToMap(domainStoreList),
+		domainStoreList.ToMap(),
 		o,
 	)
 }
@@ -1255,7 +1270,7 @@ func rankedCandidateListForRebalancing(
 	existingReplicasForType, replicasOnExemptedStores []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
-	options scorerOptions,
+	options ScorerOptions,
 	metrics AllocatorMetrics,
 ) []rebalanceOptions {
 	// 1. Determine whether existing replicas are valid and/or necessary.
@@ -1588,9 +1603,9 @@ func nodeHasReplica(nodeID roachpb.NodeID, existing []roachpb.ReplicationTarget)
 	return false
 }
 
-// storeHasReplica returns true if the provided StoreID contains an entry in
+// StoreHasReplica returns true if the provided StoreID contains an entry in
 // the provided list of existing replicas.
-func storeHasReplica(storeID roachpb.StoreID, existing []roachpb.ReplicationTarget) bool {
+func StoreHasReplica(storeID roachpb.StoreID, existing []roachpb.ReplicationTarget) bool {
 	for _, r := range existing {
 		if r.StoreID == storeID {
 			return true
@@ -1971,20 +1986,21 @@ const (
 	underfull     balanceStatus = 1
 )
 
-func overfullRangeThreshold(options *rangeCountScorerOptions, mean float64) float64 {
+func overfullRangeThreshold(options *RangeCountScorerOptions, mean float64) float64 {
 	return mean + math.Max(mean*options.rangeRebalanceThreshold, minRangeRebalanceThreshold)
 }
 
-func underfullRangeThreshold(options *rangeCountScorerOptions, mean float64) float64 {
+func underfullRangeThreshold(options *RangeCountScorerOptions, mean float64) float64 {
 	return mean - math.Max(mean*options.rangeRebalanceThreshold, minRangeRebalanceThreshold)
 }
 
-func overfullQPSThreshold(options *qpsScorerOptions, mean float64) float64 {
-	return mean + math.Max(mean*options.qpsRebalanceThreshold, minQPSThresholdDifference)
+// OverfullQPSThreshold computes the overfull QPS threshold.
+func OverfullQPSThreshold(options *QPSScorerOptions, mean float64) float64 {
+	return mean + math.Max(mean*options.QPSRebalanceThreshold, allocator.MinQPSThresholdDifference)
 }
 
-func underfullQPSThreshold(options *qpsScorerOptions, mean float64) float64 {
-	return mean - math.Max(mean*options.qpsRebalanceThreshold, minQPSThresholdDifference)
+func underfullQPSThreshold(options *QPSScorerOptions, mean float64) float64 {
+	return mean - math.Max(mean*options.QPSRebalanceThreshold, allocator.MinQPSThresholdDifference)
 }
 
 func rebalanceConvergesRangeCountOnMean(
@@ -1997,23 +2013,21 @@ func convergesOnMean(oldVal, newVal, mean float64) bool {
 	return math.Abs(newVal-mean) < math.Abs(oldVal-mean)
 }
 
-type storeHealthOptions struct {
-	enforcementLevel    storeHealthEnforcement
-	l0SublevelThreshold int64
-}
-
-func (o storeHealthOptions) getStoreHealthOptions() storeHealthOptions {
-	return o
+// StoreHealthOptions is the scorer options for store health. It is
+// used to inform scoring based on the health of a store.
+type StoreHealthOptions struct {
+	EnforcementLevel    StoreHealthEnforcement
+	L0SublevelThreshold int64
 }
 
 // readAmpIsHealthy returns true if the store read amplification does not exceed
 // the cluster threshold and mean, or the enforcement level does not include
 // excluding candidates from being allocation targets.
-func (o storeHealthOptions) readAmpIsHealthy(
+func (o StoreHealthOptions) readAmpIsHealthy(
 	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
 ) bool {
-	if o.enforcementLevel == storeHealthNoAction ||
-		store.Capacity.L0Sublevels < o.l0SublevelThreshold {
+	if o.EnforcementLevel == StoreHealthNoAction ||
+		store.Capacity.L0Sublevels < o.L0SublevelThreshold {
 		return true
 	}
 
@@ -2024,44 +2038,44 @@ func (o storeHealthOptions) readAmpIsHealthy(
 	if float64(store.Capacity.L0Sublevels) < avg*l0SubLevelWaterMark {
 		log.Eventf(ctx, "s%d, allocate check l0 sublevels %d exceeds threshold %d, but below average: %f, action enabled %d",
 			store.StoreID, store.Capacity.L0Sublevels,
-			o.l0SublevelThreshold, avg, o.enforcementLevel)
+			o.L0SublevelThreshold, avg, o.EnforcementLevel)
 		return true
 	}
 
 	log.Eventf(ctx, "s%d, allocate check l0 sublevels %d exceeds threshold %d, above average: %f, action enabled %d",
 		store.StoreID, store.Capacity.L0Sublevels,
-		o.l0SublevelThreshold, avg, o.enforcementLevel)
+		o.L0SublevelThreshold, avg, o.EnforcementLevel)
 
 	// The store is only considered unhealthy when the enforcement level is
 	// storeHealthBlockAll.
-	return o.enforcementLevel < storeHealthBlockAll
+	return o.EnforcementLevel < StoreHealthBlockAll
 }
 
 // rebalanceToReadAmpIsHealthy returns true if the store read amplification does
 // not exceed the cluster threshold and mean, or the enforcement level does not
 // include excluding candidates from being rebalancing targets.
-func (o storeHealthOptions) rebalanceToReadAmpIsHealthy(
+func (o StoreHealthOptions) rebalanceToReadAmpIsHealthy(
 	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
 ) bool {
-	if o.enforcementLevel == storeHealthNoAction ||
-		store.Capacity.L0Sublevels < o.l0SublevelThreshold {
+	if o.EnforcementLevel == StoreHealthNoAction ||
+		store.Capacity.L0Sublevels < o.L0SublevelThreshold {
 		return true
 	}
 
 	if float64(store.Capacity.L0Sublevels) < avg*l0SubLevelWaterMark {
 		log.Eventf(ctx, "s%d, allocate check l0 sublevels %d exceeds threshold %d, but below average watermark: %f, action enabled %d",
 			store.StoreID, store.Capacity.L0Sublevels,
-			o.l0SublevelThreshold, avg*l0SubLevelWaterMark, o.enforcementLevel)
+			o.L0SublevelThreshold, avg*l0SubLevelWaterMark, o.EnforcementLevel)
 		return true
 	}
 
 	log.Eventf(ctx, "s%d, allocate check l0 sublevels %d exceeds threshold %d, above average watermark: %f, action enabled %d",
 		store.StoreID, store.Capacity.L0Sublevels,
-		o.l0SublevelThreshold, avg*l0SubLevelWaterMark, o.enforcementLevel)
+		o.L0SublevelThreshold, avg*l0SubLevelWaterMark, o.EnforcementLevel)
 
 	// The store is only considered unhealthy when the enforcement level is
 	// storeHealthBlockRebalanceTo or storeHealthBlockAll.
-	return o.enforcementLevel < storeHealthBlockRebalanceTo
+	return o.EnforcementLevel < StoreHealthBlockRebalanceTo
 }
 
 // rebalanceToMaxCapacityCheck returns true if the store has enough room to

@@ -11,5 +11,7 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/constraint",
         "//pkg/roachpb",
+        "//pkg/settings",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

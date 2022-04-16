@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -126,12 +127,12 @@ func (r *Replica) sendWithoutRangeID(
 	var br *roachpb.BatchResponse
 
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
-		r.leaseholderStats.recordCount(r.getBatchRequestQPS(ctx, ba), ba.Header.GatewayNodeID)
+		r.leaseholderStats.RecordCount(r.getBatchRequestQPS(ctx, ba), ba.Header.GatewayNodeID)
 	}
 
 	if r.loadStats != nil {
-		r.loadStats.requests.recordCount(float64(len(ba.Requests)), 0)
-		r.loadStats.writeBytes.recordCount(getBatchRequestWriteBytes(ba), 0)
+		r.loadStats.requests.RecordCount(float64(len(ba.Requests)), 0)
+		r.loadStats.writeBytes.RecordCount(getBatchRequestWriteBytes(ba), 0)
 	}
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
@@ -999,7 +1000,7 @@ func (r *Replica) getBatchRequestQPS(ctx context.Context, ba *roachpb.BatchReque
 	var count float64 = 1
 
 	// For divisors less than 1, use the default treatment of QPS.
-	requestFact := AddSSTableRequestSizeFactor.Get(&r.store.cfg.Settings.SV)
+	requestFact := replicastats.AddSSTableRequestSizeFactor.Get(&r.store.cfg.Settings.SV)
 	if requestFact < 1 {
 		return count
 	}

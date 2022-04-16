@@ -176,7 +176,7 @@ func (mq *mergeQueue) shouldQueue(
 // indicate that the error should send the range to purgatory.
 type rangeMergePurgatoryError struct{ error }
 
-func (rangeMergePurgatoryError) purgatoryErrorMarker() {}
+func (rangeMergePurgatoryError) PurgatoryErrorMarker() {}
 
 var _ purgatoryError = rangeMergePurgatoryError{}
 
