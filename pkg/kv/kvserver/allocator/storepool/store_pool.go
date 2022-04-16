@@ -835,6 +835,16 @@ func (sl StoreList) ExcludeInvalid(constraints []roachpb.ConstraintsConjunction)
 	return MakeStoreList(filteredDescs)
 }
 
+// ToMap returns the set of known stores as a map keyed by the store ID, with
+// the value being the store descriptor.
+func (sl StoreList) ToMap() map[roachpb.StoreID]*roachpb.StoreDescriptor {
+	storeMap := make(map[roachpb.StoreID]*roachpb.StoreDescriptor)
+	for i := range sl.Stores {
+		storeMap[sl.Stores[i].StoreID] = &sl.Stores[i]
+	}
+	return storeMap
+}
+
 // StoreFilter is one of StoreFilter{None,Throttled,Suspect}, controlling what
 // stores are excluded from the storeList.
 type StoreFilter int

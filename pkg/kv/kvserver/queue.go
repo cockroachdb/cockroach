@@ -105,7 +105,7 @@ const permittedRangeScanSlowdown = 10
 // failure condition changes.
 type purgatoryError interface {
 	error
-	purgatoryErrorMarker() // dummy method for unique interface
+	PurgatoryErrorMarker() // dummy method for unique interface
 }
 
 // processCallback is a hook that is called when a replica finishes processing.
