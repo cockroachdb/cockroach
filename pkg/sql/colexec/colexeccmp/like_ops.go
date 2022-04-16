@@ -10,62 +10,75 @@
 
 package colexeccmp
 
-import "strings"
+import (
+	"bytes"
+	"strings"
+)
 
 // LikeOpType is an enum that describes all of the different variants of LIKE
 // that we support.
 type LikeOpType int
 
 const (
+	// LikeAlwaysMatch matches everything.
+	LikeAlwaysMatch LikeOpType = iota + 1
 	// LikeConstant is used when comparing against a constant string with no
 	// wildcards.
-	LikeConstant LikeOpType = iota + 1
+	LikeConstant
 	// LikeConstantNegate is used when comparing against a constant string with
 	// no wildcards, and the result is negated.
 	LikeConstantNegate
-	// LikeNeverMatch doesn't match anything.
-	LikeNeverMatch
-	// LikeAlwaysMatch matches everything.
-	LikeAlwaysMatch
-	// LikeSuffix is used when comparing against a constant suffix.
-	LikeSuffix
-	// LikeSuffixNegate is used when comparing against a constant suffix, and
-	// the result is negated.
-	LikeSuffixNegate
-	// LikePrefix is used when comparing against a constant prefix.
-	LikePrefix
-	// LikePrefixNegate is used when comparing against a constant prefix, and
-	// the result is negated.
-	LikePrefixNegate
 	// LikeContains is used when comparing against a constant substring.
 	LikeContains
 	// LikeContainsNegate is used when comparing against a constant substring,
 	// and the result is negated.
 	LikeContainsNegate
+	// LikeNeverMatch doesn't match anything.
+	LikeNeverMatch
+	// LikePrefix is used when comparing against a constant prefix.
+	LikePrefix
+	// LikePrefixNegate is used when comparing against a constant prefix, and
+	// the result is negated.
+	LikePrefixNegate
 	// LikeRegexp is the default slow case when we need to fallback to RegExp
 	// matching.
 	LikeRegexp
 	// LikeRegexpNegate is the default slow case when we need to fallback to
 	// RegExp matching, but the result is negated.
 	LikeRegexpNegate
+	// LikeSkeleton is used when comparing against a "skeleton" string (of the
+	// form '%foo%bar%' with any number of "skeleton words").
+	LikeSkeleton
+	// LikeSkeletonNegate is used when comparing against a "skeleton" string (of
+	// the form '%foo%bar%' with any number of "skeleton words"), and the result
+	// is negated.
+	LikeSkeletonNegate
+	// LikeSuffix is used when comparing against a constant suffix.
+	LikeSuffix
+	// LikeSuffixNegate is used when comparing against a constant suffix, and
+	// the result is negated.
+	LikeSuffixNegate
 )
 
 // GetLikeOperatorType returns LikeOpType corresponding to the inputs.
-func GetLikeOperatorType(pattern string, negate bool) (LikeOpType, string, error) {
+//
+// The second return parameter always contains a single []byte, unless
+// "skeleton" LikeOpType is returned.
+func GetLikeOperatorType(pattern string, negate bool) (LikeOpType, [][]byte, error) {
 	if pattern == "" {
 		if negate {
-			return LikeConstantNegate, "", nil
+			return LikeConstantNegate, [][]byte{{}}, nil
 		}
-		return LikeConstant, "", nil
+		return LikeConstant, [][]byte{{}}, nil
 	}
 	if pattern == "%" {
 		if negate {
-			return LikeNeverMatch, "", nil
+			return LikeNeverMatch, [][]byte{{}}, nil
 		}
-		return LikeAlwaysMatch, "", nil
+		return LikeAlwaysMatch, [][]byte{{}}, nil
 	}
 	hasEscape := strings.Contains(pattern, `\`)
-	if len(pattern) > 1 && !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") && !hasEscape {
+	if !hasEscape && len(pattern) > 1 && !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
 		// There are no wildcards in the middle of the string as well as no
 		// escape characters in the whole string, so we only need to use a
 		// regular expression if both the first and last characters are
@@ -82,37 +95,57 @@ func GetLikeOperatorType(pattern string, negate bool) (LikeOpType, string, error
 		if !isWildcard(firstChar) && !isWildcard(lastChar) {
 			// No wildcards, so this is just an exact string match.
 			if negate {
-				return LikeConstantNegate, pattern, nil
+				return LikeConstantNegate, [][]byte{[]byte(pattern)}, nil
 			}
-			return LikeConstant, pattern, nil
+			return LikeConstant, [][]byte{[]byte(pattern)}, nil
 		}
 		if firstChar == '%' && !isWildcard(lastChar) {
 			suffix := pattern[1:]
 			if negate {
-				return LikeSuffixNegate, suffix, nil
+				return LikeSuffixNegate, [][]byte{[]byte(suffix)}, nil
 			}
-			return LikeSuffix, suffix, nil
+			return LikeSuffix, [][]byte{[]byte(suffix)}, nil
 		}
 		if lastChar == '%' && !isWildcard(firstChar) {
 			prefix := pattern[:len(pattern)-1]
 			if negate {
-				return LikePrefixNegate, prefix, nil
+				return LikePrefixNegate, [][]byte{[]byte(prefix)}, nil
 			}
-			return LikePrefix, prefix, nil
+			return LikePrefix, [][]byte{[]byte(prefix)}, nil
 		}
 		if firstChar == '%' && lastChar == '%' {
 			contains := pattern[1 : len(pattern)-1]
 			if negate {
-				return LikeContainsNegate, contains, nil
+				return LikeContainsNegate, [][]byte{[]byte(contains)}, nil
 			}
-			return LikeContains, contains, nil
+			return LikeContains, [][]byte{[]byte(contains)}, nil
 		}
+	}
+	// Optimized handling of "skeleton" patterns like '%foo%bar%' with any
+	// number of "skeleton" words. The conditions are such that the pattern
+	// starts and ends with '%' character as well as at least one '%' character
+	// is present in the middle of the pattern while escape and '_' characters
+	// are not present at all.
+	if !hasEscape && len(pattern) >= 5 && pattern[0] == '%' && pattern[len(pattern)-1] == '%' &&
+		!strings.Contains(pattern, "_") && strings.Contains(pattern[1:len(pattern)-1], "%") {
+		var skeleton [][]byte
+		pat := []byte(pattern)
+		pat = pat[1:]
+		for len(pat) > 0 {
+			idx := bytes.Index(pat, []byte{'%'})
+			skeleton = append(skeleton, pat[:idx])
+			pat = pat[idx+1:]
+		}
+		if negate {
+			return LikeSkeletonNegate, skeleton, nil
+		}
+		return LikeSkeleton, skeleton, nil
 	}
 	// Default (slow) case: execute as a regular expression match.
 	if negate {
-		return LikeRegexpNegate, pattern, nil
+		return LikeRegexpNegate, [][]byte{[]byte(pattern)}, nil
 	}
-	return LikeRegexp, pattern, nil
+	return LikeRegexp, [][]byte{[]byte(pattern)}, nil
 }
 
 func isWildcard(c byte) bool {
