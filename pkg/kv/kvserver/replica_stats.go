@@ -96,15 +96,36 @@ func newReplicaStatsRecord() *replicaStatsRecord {
 	}
 }
 
-func (rsr *replicaStatsRecord) merge(other *replicaStatsRecord) {
-	rsr.max = math.Max(rsr.max, other.max)
-	rsr.min = math.Min(rsr.min, other.min)
-	rsr.sum += other.sum
-	rsr.count += other.count
-
-	for locality, count := range other.localityCounts {
-		rsr.localityCounts[locality] += count
+// mergeReplicaStatsRecords combines two records and returns a new record with
+// the merged data. When this is called with nil records, a nil record is
+// returned; otherwise a new record instead.
+func mergeReplicaStatsRecords(left, right *replicaStatsRecord) *replicaStatsRecord {
+	if left == nil && right == nil {
+		return nil
 	}
+	if left == nil {
+		left = newReplicaStatsRecord()
+	}
+	if right == nil {
+		right = newReplicaStatsRecord()
+	}
+
+	mergedStats := newReplicaStatsRecord()
+
+	mergedStats.max = math.Max(left.max, right.max)
+	mergedStats.min = math.Min(left.min, right.min)
+	mergedStats.sum = left.sum + right.sum
+	mergedStats.count = left.count + right.count
+
+	for locality, count := range left.localityCounts {
+		mergedStats.localityCounts[locality] += count
+	}
+
+	for locality, count := range right.localityCounts {
+		mergedStats.localityCounts[locality] += count
+	}
+
+	return mergedStats
 }
 
 func (rsr *replicaStatsRecord) split(other *replicaStatsRecord) {
@@ -158,11 +179,7 @@ func (rs *replicaStats) mergeRequestCounts(other *replicaStats) {
 		rsIdx := (rs.mu.idx + n - i) % n
 		otherIdx := (other.mu.idx + n - i) % n
 
-		if other.mu.records[otherIdx] == nil {
-			continue
-		}
-
-		rs.mu.records[rsIdx].merge(other.mu.records[otherIdx])
+		rs.mu.records[rsIdx] = mergeReplicaStatsRecords(rs.mu.records[rsIdx], other.mu.records[otherIdx])
 
 		// Reset the stats on other.
 		other.mu.records[otherIdx] = newReplicaStatsRecord()
