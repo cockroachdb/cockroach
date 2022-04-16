@@ -5,7 +5,12 @@ load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "lex",
-    srcs = ["encode.go"],
+    srcs = [
+        "encode.go",
+        "keywords.go",
+        "reserved_keywords.go",
+        "tokens.go",
+    ],
     embed = [":lex_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/lex",
     visibility = ["//visibility:public"],

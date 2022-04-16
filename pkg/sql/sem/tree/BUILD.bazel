@@ -181,6 +181,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_google_go_cmp//cmp",
         "@com_github_lib_pq//oid",
+        "@com_github_pkg_errors//:errors",
         "@org_golang_x_text//collate",
         "@org_golang_x_text//language",
     ],

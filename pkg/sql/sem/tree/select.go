@@ -180,6 +180,8 @@ func StarSelectExpr() SelectExpr {
 
 // Format implements the NodeFormatter interface.
 func (node *SelectExpr) Format(ctx *FmtCtx) {
+	if node.Expr == nil {
+	}
 	ctx.FormatNode(node.Expr)
 	if node.As != "" {
 		ctx.WriteString(" AS ")

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -1627,72 +1628,103 @@ func (node *ColumnAccessExpr) Format(ctx *FmtCtx) {
 	}
 }
 
-func (node *AliasedTableExpr) String() string { return AsString(node) }
-func (node *ParenTableExpr) String() string   { return AsString(node) }
-func (node *JoinTableExpr) String() string    { return AsString(node) }
-func (node *AndExpr) String() string          { return AsString(node) }
-func (node *Array) String() string            { return AsString(node) }
-func (node *BinaryExpr) String() string       { return AsString(node) }
-func (node *CaseExpr) String() string         { return AsString(node) }
-func (node *CastExpr) String() string         { return AsString(node) }
-func (node *CoalesceExpr) String() string     { return AsString(node) }
-func (node *ColumnAccessExpr) String() string { return AsString(node) }
-func (node *CollateExpr) String() string      { return AsString(node) }
-func (node *ComparisonExpr) String() string   { return AsString(node) }
-func (node *Datums) String() string           { return AsString(node) }
-func (node *DBitArray) String() string        { return AsString(node) }
-func (node *DBool) String() string            { return AsString(node) }
-func (node *DBytes) String() string           { return AsString(node) }
-func (node *DEncodedKey) String() string      { return AsString(node) }
-func (node *DDate) String() string            { return AsString(node) }
-func (node *DTime) String() string            { return AsString(node) }
-func (node *DTimeTZ) String() string          { return AsString(node) }
-func (node *DDecimal) String() string         { return AsString(node) }
-func (node *DFloat) String() string           { return AsString(node) }
-func (node *DBox2D) String() string           { return AsString(node) }
-func (node *DGeography) String() string       { return AsString(node) }
-func (node *DGeometry) String() string        { return AsString(node) }
-func (node *DInt) String() string             { return AsString(node) }
-func (node *DInterval) String() string        { return AsString(node) }
-func (node *DJSON) String() string            { return AsString(node) }
-func (node *DUuid) String() string            { return AsString(node) }
-func (node *DIPAddr) String() string          { return AsString(node) }
-func (node *DString) String() string          { return AsString(node) }
-func (node *DCollatedString) String() string  { return AsString(node) }
-func (node *DTimestamp) String() string       { return AsString(node) }
-func (node *DTimestampTZ) String() string     { return AsString(node) }
-func (node *DTuple) String() string           { return AsString(node) }
-func (node *DArray) String() string           { return AsString(node) }
-func (node *DOid) String() string             { return AsString(node) }
-func (node *DOidWrapper) String() string      { return AsString(node) }
-func (node *DVoid) String() string            { return AsString(node) }
-func (node *Exprs) String() string            { return AsString(node) }
-func (node *ArrayFlatten) String() string     { return AsString(node) }
-func (node *FuncExpr) String() string         { return AsString(node) }
-func (node *IfExpr) String() string           { return AsString(node) }
-func (node *IfErrExpr) String() string        { return AsString(node) }
-func (node *IndexedVar) String() string       { return AsString(node) }
-func (node *IndirectionExpr) String() string  { return AsString(node) }
-func (node *IsOfTypeExpr) String() string     { return AsString(node) }
-func (node *Name) String() string             { return AsString(node) }
-func (node *UnrestrictedName) String() string { return AsString(node) }
-func (node *NotExpr) String() string          { return AsString(node) }
-func (node *IsNullExpr) String() string       { return AsString(node) }
-func (node *IsNotNullExpr) String() string    { return AsString(node) }
-func (node *NullIfExpr) String() string       { return AsString(node) }
-func (node *NumVal) String() string           { return AsString(node) }
-func (node *OrExpr) String() string           { return AsString(node) }
-func (node *ParenExpr) String() string        { return AsString(node) }
-func (node *RangeCond) String() string        { return AsString(node) }
-func (node *StrVal) String() string           { return AsString(node) }
-func (node *Subquery) String() string         { return AsString(node) }
-func (node *Tuple) String() string            { return AsString(node) }
-func (node *TupleStar) String() string        { return AsString(node) }
-func (node *AnnotateTypeExpr) String() string { return AsString(node) }
-func (node *UnaryExpr) String() string        { return AsString(node) }
-func (node DefaultVal) String() string        { return AsString(node) }
-func (node PartitionMaxVal) String() string   { return AsString(node) }
-func (node PartitionMinVal) String() string   { return AsString(node) }
-func (node *Placeholder) String() string      { return AsString(node) }
-func (node dNull) String() string             { return AsString(node) }
-func (list *NameList) String() string         { return AsString(list) }
+type FirstClassFunctionExpr struct {
+	Func ResolvableFunctionReference
+}
+
+// Format implements the NodeFormatter interface.
+func (node *FirstClassFunctionExpr) Format(ctx *FmtCtx) {
+	ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtMarkRedactionNode|FmtBareIdentifiers, func() {
+		ctx.FormatNode(&node.Func)
+	})
+	ctx.WriteString("(@)")
+}
+
+// Walk implements the Expr interface.
+func (node *FirstClassFunctionExpr) Walk(Visitor) Expr { return node }
+
+// TypeCheck implements the Expr interface.
+func (node *FirstClassFunctionExpr) TypeCheck(
+	ctx context.Context, semaCtx *SemaContext, desired *types.T) (TypedExpr, error) {
+	var searchPath sessiondata.SearchPath
+	if semaCtx != nil {
+		searchPath = semaCtx.SearchPath
+	}
+	def, err := node.Func.Resolve(searchPath)
+	if err != nil {
+		return nil, err
+	}
+	return NewDFunction(*def), nil
+}
+
+func (node *AliasedTableExpr) String() string       { return AsString(node) }
+func (node *ParenTableExpr) String() string         { return AsString(node) }
+func (node *JoinTableExpr) String() string          { return AsString(node) }
+func (node *AndExpr) String() string                { return AsString(node) }
+func (node *Array) String() string                  { return AsString(node) }
+func (node *BinaryExpr) String() string             { return AsString(node) }
+func (node *CaseExpr) String() string               { return AsString(node) }
+func (node *CastExpr) String() string               { return AsString(node) }
+func (node *CoalesceExpr) String() string           { return AsString(node) }
+func (node *ColumnAccessExpr) String() string       { return AsString(node) }
+func (node *CollateExpr) String() string            { return AsString(node) }
+func (node *FirstClassFunctionExpr) String() string { return AsString(node) }
+func (node *ComparisonExpr) String() string         { return AsString(node) }
+func (node *Datums) String() string                 { return AsString(node) }
+func (node *DBitArray) String() string              { return AsString(node) }
+func (node *DBool) String() string                  { return AsString(node) }
+func (node *DBytes) String() string                 { return AsString(node) }
+func (node *DEncodedKey) String() string            { return AsString(node) }
+func (node *DDate) String() string                  { return AsString(node) }
+func (node *DTime) String() string                  { return AsString(node) }
+func (node *DTimeTZ) String() string                { return AsString(node) }
+func (node *DDecimal) String() string               { return AsString(node) }
+func (node *DFloat) String() string                 { return AsString(node) }
+func (node *DBox2D) String() string                 { return AsString(node) }
+func (node *DGeography) String() string             { return AsString(node) }
+func (node *DGeometry) String() string              { return AsString(node) }
+func (node *DInt) String() string                   { return AsString(node) }
+func (node *DInterval) String() string              { return AsString(node) }
+func (node *DJSON) String() string                  { return AsString(node) }
+func (node *DUuid) String() string                  { return AsString(node) }
+func (node *DFunction) String() string              { return AsString(node) }
+func (node *DIPAddr) String() string                { return AsString(node) }
+func (node *DString) String() string                { return AsString(node) }
+func (node *DCollatedString) String() string        { return AsString(node) }
+func (node *DTimestamp) String() string             { return AsString(node) }
+func (node *DTimestampTZ) String() string           { return AsString(node) }
+func (node *DTuple) String() string                 { return AsString(node) }
+func (node *DArray) String() string                 { return AsString(node) }
+func (node *DOid) String() string                   { return AsString(node) }
+func (node *DOidWrapper) String() string            { return AsString(node) }
+func (node *DVoid) String() string                  { return AsString(node) }
+func (node *Exprs) String() string                  { return AsString(node) }
+func (node *ArrayFlatten) String() string           { return AsString(node) }
+func (node *FuncExpr) String() string               { return AsString(node) }
+func (node *IfExpr) String() string                 { return AsString(node) }
+func (node *IfErrExpr) String() string              { return AsString(node) }
+func (node *IndexedVar) String() string             { return AsString(node) }
+func (node *IndirectionExpr) String() string        { return AsString(node) }
+func (node *IsOfTypeExpr) String() string           { return AsString(node) }
+func (node *Name) String() string                   { return AsString(node) }
+func (node *UnrestrictedName) String() string       { return AsString(node) }
+func (node *NotExpr) String() string                { return AsString(node) }
+func (node *IsNullExpr) String() string             { return AsString(node) }
+func (node *IsNotNullExpr) String() string          { return AsString(node) }
+func (node *NullIfExpr) String() string             { return AsString(node) }
+func (node *NumVal) String() string                 { return AsString(node) }
+func (node *OrExpr) String() string                 { return AsString(node) }
+func (node *ParenExpr) String() string              { return AsString(node) }
+func (node *RangeCond) String() string              { return AsString(node) }
+func (node *StrVal) String() string                 { return AsString(node) }
+func (node *Subquery) String() string               { return AsString(node) }
+func (node *Tuple) String() string                  { return AsString(node) }
+func (node *TupleStar) String() string              { return AsString(node) }
+func (node *AnnotateTypeExpr) String() string       { return AsString(node) }
+func (node *UnaryExpr) String() string              { return AsString(node) }
+func (node DefaultVal) String() string              { return AsString(node) }
+func (node PartitionMaxVal) String() string         { return AsString(node) }
+func (node PartitionMinVal) String() string         { return AsString(node) }
+func (node *Placeholder) String() string            { return AsString(node) }
+func (node dNull) String() string                   { return AsString(node) }
+func (list *NameList) String() string               { return AsString(list) }

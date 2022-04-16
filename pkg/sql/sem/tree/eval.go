@@ -4714,6 +4714,11 @@ func (t *DBytes) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
+func (t *DFunction) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
 func (t *DEncodedKey) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }

@@ -11,8 +11,11 @@
 package tree
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 // FunctionDefinition implements a reference to the (possibly several)
@@ -163,7 +166,9 @@ func NewFunctionDefinition(
 			props.AmbiguousReturnType = true
 		}
 		// Produce separate telemetry for each overload.
-		def[i].counter = sqltelemetry.BuiltinCounter(name, def[i].Signature(false))
+		if def[i].counter == nil {
+			def[i].counter = sqltelemetry.BuiltinCounter(name, def[i].Signature(false))
+		}
 
 		overloads[i] = &def[i]
 	}
@@ -188,3 +193,46 @@ func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 	ctx.WriteString(fd.Name)
 }
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
+
+// MakeCurriedFunction returns the partial application of fd to d at arg position n.
+func MakeCurriedFunction(fd FunctionDefinition, n int, d Datum) (*FunctionDefinition, error) {
+	name := fmt.Sprintf("%s(%d -> %s)", fd.Name, n, d)
+	def := []Overload{}
+	typ := d.ResolvedType()
+	for _, impl := range fd.Definition {
+		if impl.params().MatchAt(typ, n) {
+			o, ok := impl.(*Overload)
+			if !ok || o.Fn == nil {
+				continue
+			}
+			overload := Overload{
+				Types:             impl.params().Delete(n),
+				ReturnType:        ReturnTypeAfterPartialApplication(impl.returnType(), n, d),
+				Volatility:        o.Volatility,
+				PreferredOverload: o.PreferredOverload,
+				Fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+					if n == len(args) {
+						args = append(Datums{}, args...)
+						return o.Fn(ctx, append(args, d))
+					}
+					if n == 0 {
+						return o.Fn(ctx, append(Datums{d}, args...))
+					}
+					newArgs := append(Datums{}, args[:n]...)
+					newArgs = append(newArgs, d)
+					newArgs = append(newArgs, args[n:]...)
+					return o.Fn(ctx, newArgs)
+				},
+				// Inherit the same counter to avoid increasing telemetry cardinality
+				counter: o.counter,
+			}
+			def = append(def, overload)
+		}
+	}
+
+	if len(def) == 0 {
+		return nil, errors.Errorf("No overload for %s has a scalar function with signature %s at %d", fd.Name, typ, n)
+	}
+
+	return NewFunctionDefinition(name, &fd.FunctionProperties, def), nil
+}

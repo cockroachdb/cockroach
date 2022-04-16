@@ -1561,6 +1561,97 @@ func (d *DBytes) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
 }
 
+// DFunction is the function datum. It exists only as an expression.
+type DFunction FunctionDefinition
+
+// NewDFunction is a helper routine to create a *DFunction initialized from its
+// argument.
+func NewDFunction(fd FunctionDefinition) *DFunction {
+	df := DFunction(fd)
+	return &df
+}
+
+// MustBeDBytes attempts to convert an Expr into a DFunction, panicking if unsuccessful.
+func MustBeDFunction(e Expr) DFunction {
+	i, ok := AsDFunction(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DFunction, found %T", e))
+	}
+	return i
+}
+
+// AsDFunction attempts to convert an Expr into a DFunction, returning a flag indicating
+// whether it was successful.
+func AsDFunction(e Expr) (DFunction, bool) {
+	switch t := e.(type) {
+	case *DFunction:
+		return *t, true
+	}
+	return DFunction{}, false
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DFunction) ResolvedType() *types.T {
+	return types.Function
+}
+
+// Compare implements the Datum interface.
+func (d *DFunction) Compare(ctx *EvalContext, other Datum) int {
+	res, err := d.CompareError(ctx, other)
+	if err != nil {
+		panic(err)
+	}
+	return res
+}
+
+// CompareError implements the Datum interface.
+func (d *DFunction) CompareError(ctx *EvalContext, other Datum) (int, error) {
+	return 0, makeUnsupportedComparisonMessage(d, other)
+}
+
+// Prev implements the Datum interface.
+func (d *DFunction) Prev(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DFunction) Next(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (*DFunction) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DFunction) IsMin(_ *EvalContext) bool {
+	return false
+}
+
+// Min implements the Datum interface.
+func (d *DFunction) Min(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Max implements the Datum interface.
+func (d *DFunction) Max(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DFunction) AmbiguousFormat() bool { return false }
+
+// Format implements the NodeFormatter interface.
+func (d *DFunction) Format(ctx *FmtCtx) {
+	ctx.WriteString(d.Name)
+}
+
+// Size implements the Datum interface.
+func (d *DFunction) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
 // DEncodedKey is a special Datum of types.EncodedKey type, used to pass through
 // encoded key data. It is similar to DBytes, except when it comes to
 // encoding/decoding. It is currently used to pass around inverted index keys,

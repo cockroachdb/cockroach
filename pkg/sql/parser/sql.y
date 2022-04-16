@@ -803,7 +803,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %token <str> ASENSITIVE ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
 %token <str> BACKUP BACKUPS BACKWARD BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
-%token <str> BUCKET_COUNT
+%token <str> BUCKET_COUNT BUILTIN
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
 %token <str> CACHE CANCEL CANCELQUERY CASCADE CASE CAST CBRT CHANGEFEED CHAR
@@ -12298,6 +12298,11 @@ c_expr:
 | EXISTS select_with_parens
   {
     $$.val = &tree.Subquery{Select: $2.selectStmt(), Exists: true}
+  }
+|
+func_name '(' '@' ')'
+  {   
+    $$.val = &tree.FirstClassFunctionExpr{Func: $1.resolvableFuncRefFromName()}
   }
 
 // Productions that can be followed by a postfix operator.

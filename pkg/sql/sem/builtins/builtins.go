@@ -125,6 +125,7 @@ const (
 	categoryFuzzyStringMatching = "Fuzzy String Matching"
 	categoryIDGeneration        = "ID generation"
 	categoryJSON                = "JSONB"
+	categoryMeta                = "Meta"
 	categoryMultiRegion         = "Multi-region"
 	categoryMultiTenancy        = "Multi-tenancy"
 	categorySequences           = "Sequence"
@@ -3681,10 +3682,202 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return result, nil
 			},
-			Info:       "Returns and array of indexes of all occurrences of `elem` in `array`.",
+			Info:       "Return an array of indexes of all occurrences of `elem` in `array`.",
 			Volatility: tree.VolatilityImmutable,
 		}
 	})),
+
+	"array_apply": setProps(arrayProps(), arrayBuiltinForAnyArray(func() tree.Overload {
+		findAnyOverloadForArrayContents := func(f tree.DFunction, inputType *types.T) (
+			*types.T, func(*tree.EvalContext, tree.Datums) (tree.Datum, error), error) {
+			fnArg := tree.FunctionDefinition(f)
+			var returnType *types.T
+			var iterFn func(*tree.EvalContext, tree.Datums) (tree.Datum, error)
+			var anyWrongFnType bool
+			var overload *tree.Overload
+			for _, impl := range fnArg.Definition {
+				overload = impl.(*tree.Overload)
+				if overload.Fn == nil {
+					anyWrongFnType = true
+					continue
+				}
+				tl, rt := tree.GetParamsAndReturnType(impl)
+				if tl.Match([]*types.T{inputType}) {
+					returnType = rt([]tree.TypedExpr{&tree.TypedDummy{inputType}})
+					iterFn = overload.Fn
+					// TODO: Register an overload for each volatility level
+					if overload.Volatility == tree.VolatilityVolatile {
+						return nil, nil,
+							pgerror.Newf(pgcode.WrongObjectType, "array_apply cannot use volatile function %s", fnArg.Name)
+					}
+					return returnType, iterFn, nil
+				}
+			}
+			if anyWrongFnType {
+				return nil, nil, pgerror.Newf(pgcode.UndefinedFunction,
+					"%s not implemented as scalar function(%s)", fnArg.Name, inputType.SQLString())
+			}
+			return nil, nil, pgerror.Newf(pgcode.UndefinedFunction,
+				"unknown signature: %s(%s)", fnArg.Name, inputType.SQLString())
+		}
+		return tree.Overload{
+			Types: tree.ArgTypes{{"array", types.AnyArray}, {"function", types.Function}},
+			// Infer type if fn arg and array item type are already resolved,
+			// otherwise return types.AnyArray.
+			ReturnType: func(args []tree.TypedExpr) *types.T {
+				if len(args) < 2 {
+					return types.AnyArray
+				}
+				if args[1].ResolvedType() != types.Function {
+					return types.AnyArray
+				}
+				fn, ok := args[1].(*tree.DFunction)
+				if !ok {
+					return types.AnyArray
+				}
+				typ := args[0].ResolvedType().ArrayContents()
+				if typ == nil {
+					return types.AnyArray
+				}
+				t, _, err := findAnyOverloadForArrayContents(*fn, typ)
+				if err != nil {
+					return types.AnyArray
+				}
+				return types.MakeArray(t)
+			},
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dArray := tree.MustBeDArray(args[0])
+				fnArg := tree.MustBeDFunction(args[1])
+
+				typ := dArray.ResolvedType().ArrayContents()
+
+				returnType, iterFn, err := findAnyOverloadForArrayContents(fnArg, typ)
+
+				if err != nil {
+					return nil, err
+				}
+
+				result := tree.NewDArray(returnType)
+				for _, d := range dArray.Array {
+					if d == tree.DNull && !fnArg.FunctionProperties.NullableArgs {
+						result.Array = append(result.Array, d)
+					} else {
+						val, err := iterFn(ctx, tree.Datums{d})
+						if err != nil {
+							return nil, err
+						}
+						// Bypass the homogeneity check in .Append because jagged arrays are useful in function chaining
+						result.Array = append(result.Array, val)
+					}
+				}
+				return result, nil
+			},
+			Info:       "Return an array of the results of applying function to each element in an array, in order.",
+			Volatility: tree.VolatilityStable,
+		}
+	})),
+
+	"array_reduce": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
+		return tree.Overload{
+			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"function", types.Function}, {"memo", types.Any}},
+			ReturnType: tree.IdentityReturnType(2),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dArray := tree.MustBeDArray(args[0])
+				fnArg := tree.FunctionDefinition(tree.MustBeDFunction(args[1]))
+				memo := args[2]
+
+				itemType := typ
+				memoType := memo.ResolvedType()
+				desiredArgTypes := []*types.T{memoType, itemType}
+				desiredArgTypeSample := []tree.TypedExpr{&tree.TypedDummy{memoType}, &tree.TypedDummy{itemType}}
+				var iterFn func(*tree.EvalContext, tree.Datums) (tree.Datum, error)
+				var anyWrongFnType bool
+				var overload *tree.Overload
+				for _, impl := range fnArg.Definition {
+					overload = impl.(*tree.Overload)
+					if overload.Fn == nil {
+						anyWrongFnType = true
+						continue
+					}
+					tl, rt := tree.GetParamsAndReturnType(impl)
+					if tl.Match(desiredArgTypes) && rt(desiredArgTypeSample) == memoType {
+						iterFn = overload.Fn
+						break
+					}
+				}
+
+				if iterFn == nil {
+					if anyWrongFnType {
+						return nil, pgerror.Newf(pgcode.UndefinedFunction,
+							"%s not implemented as scalar function%s(%s,%s)->%s",
+							fnArg.Name, memoType.SQLString(), itemType.SQLString(), memoType.SQLString())
+					}
+					return nil, pgerror.Newf(pgcode.UndefinedFunction,
+						"unknown signature: %s(%s,%s)->%s", fnArg.Name, memoType.SQLString(), itemType.SQLString(), memoType.SQLString())
+				}
+				// TODO: Register an overload for each volatility level
+				if overload.Volatility == tree.VolatilityVolatile {
+					return nil, pgerror.Newf(pgcode.WrongObjectType, "array_reduce cannot use volatile function %s", fnArg.Name)
+				}
+				for _, d := range dArray.Array {
+					if d == tree.DNull && !fnArg.FunctionProperties.NullableArgs {
+						return d, nil
+					} else {
+						val, err := iterFn(ctx, tree.Datums{memo, d})
+						if err != nil {
+							return nil, err
+						}
+						memo = val
+					}
+				}
+				return memo, nil
+			},
+			Info:       "Take an array of type T, a starting value of type U, and a function fn(U,T)->U, and reduces the array to a single U.",
+			Volatility: tree.VolatilityStable,
+		}
+	})),
+
+	// Higher-order functions.
+
+	"builtin": makeBuiltin(tree.FunctionProperties{Category: categoryMeta},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.String}},
+			ReturnType: tree.FixedReturnType(types.Function),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				n := string(tree.MustBeDString(args[0]))
+				fd, ok := tree.FunDefs[n]
+				if !ok {
+					return nil, errors.Errorf("no builtin named %s", n)
+				}
+				return tree.NewDFunction(*fd), nil
+			},
+			Info:       "Convert a built-in function to a first-class object.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"curry": makeBuiltin(tree.FunctionProperties{Category: categoryMeta},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"function", types.Function}, {"n", types.Int}, {"arg", types.Any}},
+			ReturnType: tree.FixedReturnType(types.Function),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fnArg := tree.FunctionDefinition(tree.MustBeDFunction(args[0]))
+				n := int(tree.MustBeDInt(args[1]))
+				arg := args[2]
+				if n < 0 {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue, "n must be >= 0, not %d", n)
+				}
+				fd, err := tree.MakeCurriedFunction(fnArg, n, arg)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFunction(*fd), nil
+			},
+			Info:       "Convert a function to a smaller-arity function by replacing its nth argument with the constant arg.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	// Full text search functions.
 	"ts_match_qv":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
@@ -7846,6 +8039,13 @@ func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
 	return builtinDefinition{
 		props:     tree.FunctionProperties{Category: categoryArray},
 		overloads: overloads,
+	}
+}
+
+func arrayBuiltinForAnyArray(impl func() tree.Overload) builtinDefinition {
+	return builtinDefinition{
+		props:     tree.FunctionProperties{Category: categoryArray},
+		overloads: []tree.Overload{impl()},
 	}
 }
 

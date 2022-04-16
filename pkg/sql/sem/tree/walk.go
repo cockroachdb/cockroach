@@ -768,6 +768,9 @@ func (expr *DJSON) Walk(_ Visitor) Expr { return expr }
 func (expr *DUuid) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DFunction) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DIPAddr) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.

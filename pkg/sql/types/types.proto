@@ -378,6 +378,14 @@ enum Family {
     // index keys, which do not fully encode an object.
     EncodedKeyFamily = 27;
 
+    // FunctionFamily is a special type family used in function function
+    // signatures within expressions.
+    //   Oid      : T_regproc
+    //
+    // Examples:
+    //   Function
+    FunctionFamily = 28;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an

@@ -475,6 +475,15 @@ var (
 		},
 	}
 
+	// Function is a special type used only in expressions.
+	Function = &T{
+		InternalType: InternalType{
+			Family: FunctionFamily,
+			Oid:    oid.T_regproc,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -1405,6 +1414,7 @@ var familyNames = map[Family]string{
 	UuidFamily:           "uuid",
 	VoidFamily:           "void",
 	EncodedKeyFamily:     "encodedkey",
+	FunctionFamily:       "function",
 }
 
 // Name returns a user-friendly word indicating the family type.

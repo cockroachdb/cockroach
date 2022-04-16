@@ -96,6 +96,8 @@ func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.PhysicalRep), nil
 	case *tree.DVoid:
 		return encoding.EncodeVoidValue(appendTo, uint32(colID)), nil
+	case *tree.DFunction:
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Name)), nil
 	default:
 		return nil, errors.Errorf("unable to encode table value: %T", t)
 	}

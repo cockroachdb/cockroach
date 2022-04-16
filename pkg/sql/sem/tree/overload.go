@@ -216,6 +216,10 @@ type TypeList interface {
 	Types() []*types.T
 	// String returns a human readable signature
 	String() string
+
+	// Delete returns a new TypeList in which the ith element is removed.
+	// May panic if MatchAt would be false for i.
+	Delete(i int) TypeList
 }
 
 var _ TypeList = ArgTypes{}
@@ -281,6 +285,13 @@ func (a ArgTypes) Types() []*types.T {
 	return ret
 }
 
+// Delete is part of the TypeList interface.
+func (a ArgTypes) Delete(i int) TypeList {
+	anew := ArgTypes{}
+	anew = append(anew, a[:i]...)
+	return append(anew, a[i+1:]...)
+}
+
 func (a ArgTypes) String() string {
 	var s strings.Builder
 	for i, arg := range a {
@@ -327,6 +338,11 @@ func (HomogeneousType) Length() int {
 // Types is part of the TypeList interface.
 func (HomogeneousType) Types() []*types.T {
 	return []*types.T{types.Any}
+}
+
+// Delete is part of the TypeList interface.
+func (h HomogeneousType) Delete(i int) TypeList {
+	return h
 }
 
 func (HomogeneousType) String() string {
@@ -385,6 +401,26 @@ func (v VariadicType) Types() []*types.T {
 	}
 	result[len(result)-1] = v.VarType
 	return result
+}
+
+// Delete is part of the TypeList interface.
+func (v VariadicType) Delete(i int) TypeList {
+	if i == len(v.FixedTypes) {
+		return v
+	}
+	if i < len(v.FixedTypes) {
+		newFixed := []*types.T{}
+		newFixed = append(newFixed, v.FixedTypes[:i]...)
+		newFixed = append(newFixed, v.FixedTypes[i+1:]...)
+		return VariadicType{newFixed, v.VarType}
+	}
+	// If i > len(FixedTypes), the variadic list now has a minimum length
+	newFixed := make([]*types.T, i)
+	l := copy(newFixed, v.FixedTypes)
+	for ; l < i; l++ {
+		newFixed[l] = v.VarType
+	}
+	return VariadicType{newFixed, v.VarType}
 }
 
 func (v VariadicType) String() string {
@@ -463,6 +499,22 @@ func FirstNonNullReturnType() ReturnTyper {
 			}
 		}
 		return types.Unknown
+	}
+}
+
+// ReturnTypeAfterPartialApplication creates a modified ReturnTyper that expects
+// args to omit the value at position i.
+func ReturnTypeAfterPartialApplication(oldFn ReturnTyper, i int, expr TypedExpr) ReturnTyper {
+	return func(args []TypedExpr) *types.T {
+		if i >= len(args) {
+			return oldFn(append(args, expr))
+		}
+		if i == 0 {
+			return oldFn(append([]TypedExpr{expr}, args...))
+		}
+		newArgs := append(args[:i], expr)
+		newArgs = append(newArgs, args[:i]...)
+		return oldFn(newArgs)
 	}
 }
 
