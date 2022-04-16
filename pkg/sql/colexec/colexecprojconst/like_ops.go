@@ -32,11 +32,11 @@ func GetLikeProjectionOperator(
 	pattern string,
 	negate bool,
 ) (colexecop.Operator, error) {
-	likeOpType, pattern, err := colexeccmp.GetLikeOperatorType(pattern, negate)
+	likeOpType, patterns, err := colexeccmp.GetLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err
 	}
-	pat := []byte(pattern)
+	pat := patterns[0]
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
 	base := projConstOpBase{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
@@ -97,8 +97,18 @@ func GetLikeProjectionOperator(
 			projConstOpBase: base,
 			constArg:        pat,
 		}, nil
+	case colexeccmp.LikeSkeleton:
+		return &projSkeletonBytesBytesConstOp{
+			projConstOpBase: base,
+			constArg:        patterns,
+		}, nil
+	case colexeccmp.LikeSkeletonNegate:
+		return &projNotSkeletonBytesBytesConstOp{
+			projConstOpBase: base,
+			constArg:        patterns,
+		}, nil
 	case colexeccmp.LikeRegexp:
-		re, err := tree.ConvertLikeToRegexp(ctx, pattern, false, '\\')
+		re, err := tree.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
 		if err != nil {
 			return nil, err
 		}
@@ -107,7 +117,7 @@ func GetLikeProjectionOperator(
 			constArg:        re,
 		}, nil
 	case colexeccmp.LikeRegexpNegate:
-		re, err := tree.ConvertLikeToRegexp(ctx, pattern, false, '\\')
+		re, err := tree.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
 		if err != nil {
 			return nil, err
 		}
