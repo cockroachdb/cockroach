@@ -257,7 +257,12 @@ func newProxyHandler(
 	// Create the connection tracker and balancer components.
 	balancerMetrics := balancer.NewMetrics()
 	registry.AddMetricStruct(balancerMetrics)
-	handler.connTracker = balancer.NewConnTracker()
+
+	handler.connTracker, err = balancer.NewConnTracker(ctx, stopper, nil /* timeSource */)
+	if err != nil {
+		return nil, err
+	}
+
 	handler.balancer, err = balancer.NewBalancer(
 		ctx, stopper, balancerMetrics, handler.directoryCache, handler.connTracker,
 	)
@@ -399,7 +404,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}()
 
 	// Pass ownership of conn and crdbConn to the forwarder.
-	f, err := forward(ctx, connector, handler.metrics, fe.conn, crdbConn)
+	f, err := forward(ctx, connector, handler.metrics, fe.conn, crdbConn, nil /* timeSource */)
 	if err != nil {
 		// Don't send to the client here for the same reason below.
 		handler.metrics.updateForError(err)
