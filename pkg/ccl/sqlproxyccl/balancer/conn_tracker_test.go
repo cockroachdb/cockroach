@@ -13,13 +13,17 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,11 +31,19 @@ func TestConnTracker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tracker := NewConnTracker()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	tracker, err := NewConnTracker(ctx, stopper, nil /* timeSource */)
+	require.NoError(t, err)
 
 	tenantID, handle := makeConn(20, "127.0.0.10:8090")
 	require.True(t, tracker.OnConnect(tenantID, handle))
 	require.False(t, tracker.OnConnect(tenantID, handle))
+
+	cache := tracker.GetTenantCache(tenantID)
+	require.Equal(t, 1, cache.ActiveCountByAddr(handle.remoteAddr))
 
 	connsMap := tracker.GetConnsMap(tenantID)
 	require.Len(t, connsMap, 1)
@@ -44,11 +56,14 @@ func TestConnTracker(t *testing.T) {
 	require.Equal(t, tenantID, tenantIDs[0])
 
 	// Non-existent.
-	connsMap = tracker.GetConnsMap(roachpb.MakeTenantID(10))
+	connsMap = tracker.GetConnsMap(roachpb.MakeTenantID(42))
 	require.Empty(t, connsMap)
+	nilCache := tracker.GetTenantCache(roachpb.MakeTenantID(42))
+	require.Nil(t, nilCache)
 
 	require.True(t, tracker.OnDisconnect(tenantID, handle))
 	require.False(t, tracker.OnDisconnect(tenantID, handle))
+	require.Equal(t, 0, cache.ActiveCountByAddr(handle.remoteAddr))
 
 	// Once the handle gets disconnected, we shouldn't return that tenant since
 	// there are no active connections.
@@ -64,6 +79,8 @@ func TestConnTracker(t *testing.T) {
 			defer wg.Done()
 			tenantID, handle := makeConn(1+rand.Intn(5), fmt.Sprintf("127.0.0.10:%d", rand.Intn(5)))
 			require.True(t, tracker.OnConnect(tenantID, handle))
+			cache := tracker.GetTenantCache(tenantID)
+			require.True(t, cache.ActiveCountByAddr(handle.remoteAddr) >= 1)
 			time.Sleep(250 * time.Millisecond)
 			require.True(t, tracker.OnDisconnect(tenantID, handle))
 		}()
@@ -82,7 +99,12 @@ func TestConnTracker_GetConnsMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tracker := NewConnTracker()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	tracker, err := NewConnTracker(ctx, stopper, nil /* timeSource */)
+	require.NoError(t, err)
 
 	tenant10, handle1 := makeConn(10, "127.0.0.10:1010")
 	_, handle2 := makeConn(10, "127.0.0.10:1020")
@@ -130,34 +152,138 @@ func TestConnTracker_GetConnsMap(t *testing.T) {
 	require.Empty(t, connsMap)
 }
 
+func TestConnTrackerCacheRefresh(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Use a custom time source for testing.
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := timeutil.NewManualTime(t0)
+
+	tracker, err := NewConnTracker(ctx, stopper, timeSource)
+	require.NoError(t, err)
+
+	// Create three handles: two for tenant-10, and one for tenant-20. Use a
+	// dummy address for all of them.
+	const addr = "127.0.0.10:1020"
+	tenant10, h1 := makeConn(10, addr)
+	_, h2 := makeConn(10, addr)
+	tenant20, h3 := makeConn(20, addr)
+
+	require.Nil(t, tracker.GetTenantCache(tenant10))
+	require.Nil(t, tracker.GetTenantCache(tenant20))
+
+	// Connect all the handles.
+	require.True(t, tracker.OnConnect(tenant10, h1))
+	require.True(t, tracker.OnConnect(tenant10, h2))
+	require.True(t, tracker.OnConnect(tenant20, h3))
+
+	cache10 := tracker.GetTenantCache(tenant10)
+	cache20 := tracker.GetTenantCache(tenant20)
+	require.Equal(t, 2, cache10.ActiveCountByAddr(addr))
+	require.Equal(t, 1, cache20.ActiveCountByAddr(addr))
+	require.Equal(t, 0, cache10.IdleCountByAddr(addr))
+	require.Equal(t, 0, cache20.IdleCountByAddr(addr))
+
+	// Update idle state, and cache stays the same.
+	h1.setIdle(true)
+	h3.setIdle(true)
+	require.Equal(t, 2, cache10.ActiveCountByAddr(addr))
+	require.Equal(t, 1, cache20.ActiveCountByAddr(addr))
+	require.Equal(t, 0, cache10.IdleCountByAddr(addr))
+	require.Equal(t, 0, cache20.IdleCountByAddr(addr))
+
+	// Now advance the time, and cache should update after the timer fires.
+	// The manual time is a little flaky, so we'll continuously advance until
+	// the update fires. Without this loop, we may advance, but the timer does
+	// not get fired.
+	testutils.SucceedsSoon(t, func() error {
+		timeSource.Advance(cacheRefreshInterval)
+		if cache10.IdleCountByAddr(addr) == 1 && cache20.IdleCountByAddr(addr) == 1 {
+			return nil
+		}
+		return errors.New("idle count has not been updated yet")
+	})
+	require.Equal(t, 1, cache10.ActiveCountByAddr(addr))
+	require.Equal(t, 0, cache20.ActiveCountByAddr(addr))
+	require.Equal(t, 1, cache10.IdleCountByAddr(addr))
+	require.Equal(t, 1, cache20.IdleCountByAddr(addr))
+}
+
 func TestTenantEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	entry := newTenantEntry()
+	cache := entry.getCache()
 
-	h1 := newTestTrackerConnHandle("10.0.0.1:12345")
+	const addr = "10.0.0.1:12345"
+	h1 := newTestTrackerConnHandle(addr)
+
+	// Add a new handle.
 	require.True(t, entry.addHandle(h1))
 	require.False(t, entry.addHandle(h1))
 	require.Equal(t, 1, entry.getConnsCount())
-
+	require.Equal(t, 1, cache.ActiveCountByAddr(addr))
+	require.Equal(t, 0, cache.IdleCountByAddr(addr))
 	connsMap := entry.getConnsMap()
 	require.Len(t, connsMap, 1)
 
+	// Cache would still be a snapshot until refreshed.
+	h1.setIdle(true)
+	require.Equal(t, 1, cache.ActiveCountByAddr(addr))
+	require.Equal(t, 0, cache.IdleCountByAddr(addr))
+	entry.refreshCache()
+	require.Equal(t, 0, cache.ActiveCountByAddr(addr))
+	require.Equal(t, 1, cache.IdleCountByAddr(addr))
+
+	// Remove the handle.
 	require.True(t, entry.removeHandle(h1))
 	require.False(t, entry.removeHandle(h1))
 	require.Equal(t, 0, entry.getConnsCount())
-
 	require.Empty(t, entry.getConnsMap())
 	require.Len(t, connsMap, 1)
+
+	// The update should be made in the right partition.
+	require.Equal(t, 0, cache.ActiveCountByAddr(addr))
+	require.Equal(t, 0, cache.IdleCountByAddr(addr))
+
+	// Add two handles, one active (h2), and one idle (h1). New connections are
+	// always regarded as active until refreshed.
+	h2 := newTestTrackerConnHandle(addr)
+	require.True(t, entry.addHandle(h1))
+	require.True(t, entry.addHandle(h2))
+	require.Equal(t, 2, cache.ActiveCountByAddr(addr))
+	require.Equal(t, 0, cache.IdleCountByAddr(addr))
+	entry.refreshCache()
+	require.Equal(t, 1, cache.ActiveCountByAddr(addr))
+	require.Equal(t, 1, cache.IdleCountByAddr(addr))
+
+	// Reset h1's state back to active, and disconnect that handle. The cache
+	// should be stale.
+	h1.setIdle(false)
+	require.True(t, entry.removeHandle(h1))
+	require.Equal(t, 0, cache.ActiveCountByAddr(addr))
+	require.Equal(t, 1, cache.IdleCountByAddr(addr))
+	entry.refreshCache()
+	require.Equal(t, 1, cache.ActiveCountByAddr(addr))
+	require.Equal(t, 0, cache.IdleCountByAddr(addr))
 }
 
 // testTrackerConnHandle is a test connection handle that only implements a
 // small subset of methods used for testing.
 type testTrackerConnHandle struct {
 	ConnectionHandle
-	ctx               context.Context
-	remoteAddr        string
-	transferConnCount int32
+	ctx        context.Context
+	remoteAddr string
+
+	mu struct {
+		syncutil.Mutex
+		transferConnCount int
+		idle              bool
+	}
 }
 
 var _ ConnectionHandle = &testTrackerConnHandle{}
@@ -190,12 +316,29 @@ func (h *testTrackerConnHandle) TransferConnection() error {
 	if h.ctx != nil && h.ctx.Err() != nil {
 		return h.ctx.Err()
 	}
-	atomic.AddInt32(&h.transferConnCount, 1)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.mu.transferConnCount++
 	return nil
 }
 
 func (h *testTrackerConnHandle) transferConnectionCount() int {
-	return int(atomic.LoadInt32(&h.transferConnCount))
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.mu.transferConnCount
+}
+
+// IsIdle implements the ConnectionHandle interface.
+func (h *testTrackerConnHandle) IsIdle() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.mu.idle
+}
+
+func (h *testTrackerConnHandle) setIdle(idle bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.mu.idle = idle
 }
 
 func makeConn(tenantID int, podAddr string) (roachpb.TenantID, *testTrackerConnHandle) {
