@@ -1073,6 +1073,9 @@ message TableDescriptor {
     // AS option value for CREATE SEQUENCE, which specifies the default
     // min and max values a sequence can take on.
     optional string as_integer_type = 8 [(gogoproto.nullable) = false];
+    // Restart value of the sequence.
+    optional int64 restart = 9 [(gogoproto.nullable) = true];
+
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.

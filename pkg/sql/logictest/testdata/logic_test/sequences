@@ -2214,3 +2214,27 @@ SELECT lastval()
 
 statement ok
 END
+
+# create sequence restart should work
+statement ok
+CREATE SEQUENCE restart_seq RESTART 100
+
+query I
+SELECT nextval('restart_seq')
+----
+100
+
+# create a sequence with restart and the value can be selected
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE restart_txn_seq RESTART 100
+
+query I
+SELECT nextval('restart_seq')
+----
+100
+
+statement ok
+END

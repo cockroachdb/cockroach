@@ -1703,6 +1703,19 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			} else {
 				ctx.Printf("%d", *option.IntVal)
 			}
+		case SeqOptRestart:
+			ctx.WriteString(option.Name)
+			if option.IntVal != nil {
+				ctx.WriteByte(' ')
+				if option.OptionalWord {
+					ctx.WriteString("WITH ")
+				}
+				if ctx.flags.HasFlags(FmtHideConstants) {
+					ctx.WriteByte('0')
+				} else {
+					ctx.Printf("%d", *option.IntVal)
+				}
+			}
 		case SeqOptIncrement:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
@@ -1758,6 +1771,7 @@ const (
 	SeqOptMinValue  = "MINVALUE"
 	SeqOptMaxValue  = "MAXVALUE"
 	SeqOptStart     = "START"
+	SeqOptRestart   = "RESTART"
 	SeqOptVirtual   = "VIRTUAL"
 
 	// Avoid unused warning for constants.

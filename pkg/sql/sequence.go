@@ -307,8 +307,7 @@ func (p *planner) SetSequenceValueByID(
 		return err
 	}
 
-	createdInCurrentTxn := p.createdSequences.isCreatedSequence(descriptor.GetID())
-	if createdInCurrentTxn {
+	if p.txn.IsOpen() {
 		if err := p.txn.Put(ctx, seqValueKey, newVal); err != nil {
 			return err
 		}
@@ -460,7 +459,6 @@ func assignSequenceOptions(
 	sequenceParentID descpb.ID,
 	existingType *types.T,
 ) error {
-
 	wasAscending := opts.Increment > 0
 
 	// Set the default integer type of a sequence.
@@ -568,6 +566,12 @@ func assignSequenceOptions(
 			}
 		case tree.SeqOptStart:
 			opts.Start = *option.IntVal
+		case tree.SeqOptRestart:
+			if option.IntVal == nil {
+				opts.Restart = &opts.Start
+			} else {
+				opts.Restart = option.IntVal
+			}
 		case tree.SeqOptVirtual:
 			opts.Virtual = true
 		case tree.SeqOptOwnedBy:
@@ -679,7 +683,24 @@ func assignSequenceOptions(
 			opts.MinValue,
 		)
 	}
-
+	if opts.Restart != nil {
+		if *opts.Restart > opts.MaxValue {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"RESTART value (%d) cannot be greater than MAXVALUE (%d)",
+				*opts.Restart,
+				opts.MaxValue,
+			)
+		}
+		if *opts.Restart < opts.MinValue {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"RESTART value (%d) cannot be less than MINVALUE (%d)",
+				*opts.Restart,
+				opts.MinValue,
+			)
+		}
+	}
 	return nil
 }
 
