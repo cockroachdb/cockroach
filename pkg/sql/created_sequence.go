@@ -16,9 +16,11 @@ import (
 )
 
 type createdSequences interface {
-	// addCreatedSequence adds a sequence to the set of sequences created in the current transaction.
+	// addCreatedSequence adds a sequence to the set of sequences created or
+	// restarted in the current transaction.
 	addCreatedSequence(id descpb.ID) error
-	// isCreatedSequence checks if a sequence was created in the current transaction.
+	// isCreatedSequence checks if a sequence was created or restarted in the
+	// current transaction.
 	isCreatedSequence(id descpb.ID) bool
 }
 

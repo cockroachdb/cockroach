@@ -231,3 +231,59 @@ query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE reverse_direction_seqas]
 ----
 CREATE SEQUENCE public.reverse_direction_seqas AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+
+statement ok
+CREATE SEQUENCE restart_seq START WITH 5
+
+query I
+select nextval('restart_seq')
+----
+5
+
+statement ok
+ALTER SEQUENCE restart_seq RESTART 1
+
+query I
+select nextval('restart_seq')
+----
+1
+
+statement ok
+ALTER SEQUENCE restart_seq RESTART
+
+query I
+select nextval('restart_seq')
+----
+5
+
+# If we alter the sequence using both START WITH and RESTART, the nextval should
+# be the RESTART value. Restarting again without specifying a value should change it to the START value.
+
+statement ok
+ALTER SEQUENCE restart_seq START WITH 3 RESTART 11
+
+query I
+select nextval('restart_seq')
+----
+11
+
+statement ok
+ALTER SEQUENCE restart_seq RESTART
+
+query I
+select nextval('restart_seq')
+----
+3
+
+statement ok
+CREATE SEQUENCE restart_min_err_seqas MINVALUE 1
+
+statement error RESTART value \(0\) cannot be less than MINVALUE \(1\)
+ALTER SEQUENCE restart_min_err_seqas RESTART 0
+
+statement ok
+CREATE SEQUENCE restart_max_err_seqas MAXVALUE 100
+
+statement error RESTART value \(1000\) cannot be greater than MAXVALUE \(100\)
+ALTER SEQUENCE restart_max_err_seqas RESTART 1000
+
