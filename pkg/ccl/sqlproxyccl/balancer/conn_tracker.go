@@ -39,6 +39,11 @@ type ConnTracker struct {
 		// tenants refer to a list of tenant entries.
 		tenants map[roachpb.TenantID]*tenantEntry
 	}
+
+	// TestingKnobs are knobs used for testing.
+	TestingKnobs struct {
+		GetTenantCache func(tenantID roachpb.TenantID) TenantCache
+	}
 }
 
 // NewConnTracker returns a new instance of the connection tracker. All exposed
@@ -110,10 +115,13 @@ func (t *ConnTracker) GetConnsMap(tenantID roachpb.TenantID) map[string][]Connec
 // GetConnsMap into the tenant cache for a cleaner API. We'll revisit this
 // decision once we add the rebalancing logic to the balancer.
 func (t *ConnTracker) GetTenantCache(tenantID roachpb.TenantID) TenantCache {
-	e := t.getEntry(tenantID, false /* allowCreate */)
-	if e == nil {
-		return nil
+	if t.TestingKnobs.GetTenantCache != nil {
+		return t.TestingKnobs.GetTenantCache(tenantID)
 	}
+	// Create a new entry if one does not exist. Since the cache is used by the
+	// routing logic, this scenario would occur for the first connection for the
+	// tenant.
+	e := t.getEntry(tenantID, true /* allowCreate */)
 	return e.getCache()
 }
 

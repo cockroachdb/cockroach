@@ -484,12 +484,15 @@ func TestConnector_lookupAddr(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	balancer, err := balancer.NewBalancer(
+	connTracker, err := balancer.NewConnTracker(ctx, stopper, nil /* timeSource */)
+	require.NoError(t, err)
+
+	b, err := balancer.NewBalancer(
 		ctx,
 		stopper,
 		nil, /* metrics */
 		nil, /* directoryCache */
-		nil, /* connTracker */
+		connTracker,
 		balancer.NoRebalanceLoop(),
 	)
 	require.NoError(t, err)
@@ -500,7 +503,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer,
+			Balancer:    b,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -511,8 +514,8 @@ func TestConnector_lookupAddr(t *testing.T) {
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
 				return []*tenant.Pod{
-					{Addr: "127.0.0.10:70", State: tenant.DRAINING},
-					{Addr: "127.0.0.10:80", State: tenant.RUNNING},
+					{TenantID: 42, Addr: "127.0.0.10:70", State: tenant.DRAINING},
+					{TenantID: 42, Addr: "127.0.0.10:80", State: tenant.RUNNING},
 				}, nil
 			},
 		}
@@ -526,13 +529,13 @@ func TestConnector_lookupAddr(t *testing.T) {
 	t.Run("load balancing", func(t *testing.T) {
 		var mu struct {
 			syncutil.Mutex
-			pods map[string]float32
+			pods map[string]struct{}
 		}
-		mu.pods = make(map[string]float32)
-		addPod := func(addr string, load float32) {
+		mu.pods = make(map[string]struct{})
+		addPod := func(addr string) {
 			mu.Lock()
 			defer mu.Unlock()
-			mu.pods[addr] = load
+			mu.pods[addr] = struct{}{}
 		}
 		removePod := func(addr string) {
 			mu.Lock()
@@ -542,7 +545,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer,
+			Balancer:    b,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -552,11 +555,11 @@ func TestConnector_lookupAddr(t *testing.T) {
 				defer mu.Unlock()
 
 				pods := make([]*tenant.Pod, 0, len(mu.pods))
-				for addr, load := range mu.pods {
+				for addr := range mu.pods {
 					pods = append(pods, &tenant.Pod{
-						Addr:  addr,
-						Load:  load,
-						State: tenant.RUNNING,
+						TenantID: 42,
+						Addr:     addr,
+						State:    tenant.RUNNING,
 					})
 				}
 				return pods, nil
@@ -568,8 +571,8 @@ func TestConnector_lookupAddr(t *testing.T) {
 			addr1 = "127.0.0.10:80"
 			addr2 = "127.0.0.20:90"
 		)
-		addPod(addr1, 0)
-		addPod(addr2, 0)
+		addPod(addr1)
+		addPod(addr2)
 
 		// lookupAddr should evenly distribute the load.
 		responses := map[string]int{}
@@ -578,12 +581,15 @@ func TestConnector_lookupAddr(t *testing.T) {
 			require.NoError(t, err)
 			responses[addr]++
 		}
-		require.InDelta(t, responses[addr1], 50, 25)
-		require.InDelta(t, responses[addr2], 50, 25)
+		require.InDelta(t, responses[addr1], 50, 15)
+		require.InDelta(t, responses[addr2], 50, 15)
 
-		// Adjust load such that the distribution will be a 1/9 split.
-		addPod(addr1, 0.1)
-		addPod(addr2, 0.9)
+		// Adjust number of connections such that the distribution will be a 1/9
+		// split.
+		connTracker.TestingKnobs.GetTenantCache = func(tenantID roachpb.TenantID) balancer.TenantCache {
+			require.Equal(t, roachpb.MakeTenantID(42), tenantID)
+			return &testTenantCache{activeMap: map[string]int{addr1: 1, addr2: 9}}
+		}
 
 		// We should see that the distribution is skewed towards addr1.
 		responses = map[string]int{}
@@ -592,8 +598,8 @@ func TestConnector_lookupAddr(t *testing.T) {
 			require.NoError(t, err)
 			responses[addr]++
 		}
-		require.InDelta(t, responses[addr1], 90, 25)
-		require.InDelta(t, responses[addr2], 10, 25)
+		require.InDelta(t, responses[addr1], 90, 15)
+		require.InDelta(t, responses[addr2], 10, 15)
 
 		// Delete the first pod.
 		removePod(addr1)
@@ -609,7 +615,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer,
+			Balancer:    b,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -634,7 +640,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer,
+			Balancer:    b,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -659,7 +665,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer,
+			Balancer:    b,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -811,4 +817,17 @@ func (r *testTenantDirectoryCache) ReportFailure(
 	ctx context.Context, tenantID roachpb.TenantID, addr string,
 ) error {
 	return r.reportFailureFn(ctx, tenantID, addr)
+}
+
+var _ balancer.TenantCache = &testTenantCache{}
+
+// testTenantCache is a test implementation for the tenant cache.
+type testTenantCache struct {
+	balancer.TenantCache
+	activeMap map[string]int
+}
+
+// ActiveCountByAddr implements the balancer.TenantCache interface.
+func (c *testTenantCache) ActiveCountByAddr(podAddr string) int {
+	return c.activeMap[podAddr]
 }

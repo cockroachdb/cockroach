@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -189,7 +190,26 @@ func NewBalancer(
 // CPU load algorithm. It is expected that all pods within the list belongs to
 // the same tenant. If no pods are available, this returns ErrNoAvailablePods.
 func (b *Balancer) SelectTenantPod(pods []*tenant.Pod) (*tenant.Pod, error) {
-	pod := selectTenantPod(b.randFloat32(), pods)
+	// The second case should not happen if the directory is returning the
+	// right data. Check it regardless or else roachpb.MakeTenantID will panic
+	// on a zero TenantID.
+	if len(pods) == 0 || pods[0].TenantID == 0 {
+		return nil, ErrNoAvailablePods
+	}
+	tenantID := roachpb.MakeTenantID(pods[0].TenantID)
+
+	// Retrieve a snapshot of counts.
+	//
+	// TODO(jaylim-crl): Consider making the tenant cache return a snapshot
+	// instead of a per-pod basis since often when making routing decisions, we
+	// will need the counts of all connections, which means making a snapshot.
+	cache := b.connTracker.GetTenantCache(tenantID)
+	counts := make(map[string]int)
+	for _, pod := range pods {
+		counts[pod.Addr] = cache.ActiveCountByAddr(pod.Addr)
+	}
+
+	pod := selectTenantPod(b.randFloat32(), pods, counts)
 	if pod == nil {
 		return nil, ErrNoAvailablePods
 	}

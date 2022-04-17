@@ -35,12 +35,15 @@ func TestBalancer_SelectTenantPod(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
+	connTracker, err := NewConnTracker(ctx, stopper, nil /* timeSource */)
+	require.NoError(t, err)
+
 	b, err := NewBalancer(
 		ctx,
 		stopper,
 		nil, /* metrics */
 		nil, /* directoryCache */
-		nil, /* connTracker */
+		connTracker,
 		NoRebalanceLoop(),
 	)
 	require.NoError(t, err)
@@ -52,7 +55,10 @@ func TestBalancer_SelectTenantPod(t *testing.T) {
 	})
 
 	t.Run("few pods", func(t *testing.T) {
-		pod, err := b.SelectTenantPod([]*tenant.Pod{{Addr: "1"}, {Addr: "2"}})
+		pod, err := b.SelectTenantPod([]*tenant.Pod{
+			{TenantID: 10, Addr: "1"},
+			{TenantID: 10, Addr: "2"}},
+		)
 		require.NoError(t, err)
 		require.Contains(t, []string{"1", "2"}, pod.Addr)
 	})

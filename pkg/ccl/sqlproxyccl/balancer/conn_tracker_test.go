@@ -39,10 +39,13 @@ func TestConnTracker(t *testing.T) {
 	require.NoError(t, err)
 
 	tenantID, handle := makeConn(20, "127.0.0.10:8090")
+
+	// We should be able to use the cache without having a connection.
+	cache := tracker.GetTenantCache(tenantID)
+	require.NotNil(t, cache)
+
 	require.True(t, tracker.OnConnect(tenantID, handle))
 	require.False(t, tracker.OnConnect(tenantID, handle))
-
-	cache := tracker.GetTenantCache(tenantID)
 	require.Equal(t, 1, cache.ActiveCountByAddr(handle.remoteAddr))
 
 	connsMap := tracker.GetConnsMap(tenantID)
@@ -58,8 +61,6 @@ func TestConnTracker(t *testing.T) {
 	// Non-existent.
 	connsMap = tracker.GetConnsMap(roachpb.MakeTenantID(42))
 	require.Empty(t, connsMap)
-	nilCache := tracker.GetTenantCache(roachpb.MakeTenantID(42))
-	require.Nil(t, nilCache)
 
 	require.True(t, tracker.OnDisconnect(tenantID, handle))
 	require.False(t, tracker.OnDisconnect(tenantID, handle))
@@ -173,16 +174,16 @@ func TestConnTrackerCacheRefresh(t *testing.T) {
 	_, h2 := makeConn(10, addr)
 	tenant20, h3 := makeConn(20, addr)
 
-	require.Nil(t, tracker.GetTenantCache(tenant10))
-	require.Nil(t, tracker.GetTenantCache(tenant20))
+	cache10 := tracker.GetTenantCache(tenant10)
+	cache20 := tracker.GetTenantCache(tenant20)
+	require.NotNil(t, cache10)
+	require.NotNil(t, cache20)
 
 	// Connect all the handles.
 	require.True(t, tracker.OnConnect(tenant10, h1))
 	require.True(t, tracker.OnConnect(tenant10, h2))
 	require.True(t, tracker.OnConnect(tenant20, h3))
 
-	cache10 := tracker.GetTenantCache(tenant10)
-	cache20 := tracker.GetTenantCache(tenant20)
 	require.Equal(t, 2, cache10.ActiveCountByAddr(addr))
 	require.Equal(t, 1, cache20.ActiveCountByAddr(addr))
 	require.Equal(t, 0, cache10.IdleCountByAddr(addr))
