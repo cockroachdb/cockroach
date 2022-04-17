@@ -2214,3 +2214,42 @@ SELECT lastval()
 
 statement ok
 END
+
+# Create sequence restart should work, and the RESTART value takes precedence
+# over START WITH
+statement ok
+CREATE SEQUENCE restart_seq START WITH 50 RESTART 100
+
+query I
+SELECT nextval('restart_seq')
+----
+100
+
+query I
+SELECT nextval('restart_seq')
+----
+101
+
+# If the sequence is restarted now, then it goes back to the START WITH value.
+statement ok
+ALTER SEQUENCE restart_seq RESTART
+
+query I
+SELECT nextval('restart_seq')
+----
+50
+
+# Create a sequence with restart and check that the value can be selected
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE restart_txn_seq RESTART 100
+
+query I
+SELECT nextval('restart_txn_seq')
+----
+100
+
+statement ok
+END
