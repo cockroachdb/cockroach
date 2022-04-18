@@ -1405,6 +1405,7 @@ system         public              tenant_usage                           BASE T
 system         public              sql_instances                          BASE TABLE   YES                 1
 system         public              span_configurations                    BASE TABLE   YES                 1
 system         public              tenant_settings                        BASE TABLE   YES                 1
+system         public              hot_ranges                             BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -1480,6 +1481,10 @@ system              public             630200280_12_3_not_null                  
 system              public             630200280_12_4_not_null                                                                                         system         public        eventlog                         CHECK            NO             NO
 system              public             630200280_12_6_not_null                                                                                         system         public        eventlog                         CHECK            NO             NO
 system              public             primary                                                                                                         system         public        eventlog                         PRIMARY KEY      NO             NO
+system              public             630200280_51_1_not_null                                                                                         system         public        hot_ranges                       CHECK            NO             NO
+system              public             630200280_51_2_not_null                                                                                         system         public        hot_ranges                       CHECK            NO             NO
+system              public             630200280_51_3_not_null                                                                                         system         public        hot_ranges                       CHECK            NO             NO
+system              public             primary                                                                                                         system         public        hot_ranges                       PRIMARY KEY      NO             NO
 system              public             630200280_15_1_not_null                                                                                         system         public        jobs                             CHECK            NO             NO
 system              public             630200280_15_2_not_null                                                                                         system         public        jobs                             CHECK            NO             NO
 system              public             630200280_15_3_not_null                                                                                         system         public        jobs                             CHECK            NO             NO
@@ -1816,6 +1821,9 @@ system              public             630200280_50_2_not_null                  
 system              public             630200280_50_3_not_null                                                                                         value IS NOT NULL
 system              public             630200280_50_4_not_null                                                                                         last_updated IS NOT NULL
 system              public             630200280_50_5_not_null                                                                                         value_type IS NOT NULL
+system              public             630200280_51_1_not_null                                                                                         sample_ts IS NOT NULL
+system              public             630200280_51_2_not_null                                                                                         tenant_id IS NOT NULL
+system              public             630200280_51_3_not_null                                                                                         info IS NOT NULL
 system              public             630200280_5_1_not_null                                                                                          id IS NOT NULL
 system              public             630200280_6_1_not_null                                                                                          name IS NOT NULL
 system              public             630200280_6_2_not_null                                                                                          value IS NOT NULL
@@ -1841,6 +1849,8 @@ system         public        database_role_settings           role_name         
 system         public        descriptor                       id                                                                                                        system              public             primary
 system         public        eventlog                         timestamp                                                                                                 system              public             primary
 system         public        eventlog                         uniqueID                                                                                                  system              public             primary
+system         public        hot_ranges                       sample_ts                                                                                                 system              public             primary
+system         public        hot_ranges                       tenant_id                                                                                                 system              public             primary
 system         public        jobs                             id                                                                                                        system              public             primary
 system         public        join_tokens                      id                                                                                                        system              public             primary
 system         public        lease                            descID                                                                                                    system              public             primary
@@ -2023,6 +2033,9 @@ system         pg_extension  geometry_columns                 f_table_name      
 system         pg_extension  geometry_columns                 f_table_schema                                                                                            2
 system         pg_extension  geometry_columns                 srid                                                                                                      6
 system         pg_extension  geometry_columns                 type                                                                                                      7
+system         public        hot_ranges                       info                                                                                                      3
+system         public        hot_ranges                       sample_ts                                                                                                 1
+system         public        hot_ranges                       tenant_id                                                                                                 2
 system         public        jobs                             claim_instance_id                                                                                         9
 system         public        jobs                             claim_session_id                                                                                          8
 system         public        jobs                             created                                                                                                   3
@@ -2998,6 +3011,16 @@ NULL     root     system         public              eventlog                   
 NULL     root     system         public              eventlog                               INSERT          YES           NO
 NULL     root     system         public              eventlog                               SELECT          YES           YES
 NULL     root     system         public              eventlog                               UPDATE          YES           NO
+NULL     admin    system         public              hot_ranges                             DELETE          YES           NO
+NULL     admin    system         public              hot_ranges                             GRANT           YES           NO
+NULL     admin    system         public              hot_ranges                             INSERT          YES           NO
+NULL     admin    system         public              hot_ranges                             SELECT          YES           YES
+NULL     admin    system         public              hot_ranges                             UPDATE          YES           NO
+NULL     root     system         public              hot_ranges                             DELETE          YES           NO
+NULL     root     system         public              hot_ranges                             GRANT           YES           NO
+NULL     root     system         public              hot_ranges                             INSERT          YES           NO
+NULL     root     system         public              hot_ranges                             SELECT          YES           YES
+NULL     root     system         public              hot_ranges                             UPDATE          YES           NO
 NULL     admin    system         public              jobs                                   DELETE          YES           NO
 NULL     admin    system         public              jobs                                   GRANT           YES           NO
 NULL     admin    system         public              jobs                                   INSERT          YES           NO
@@ -3913,6 +3936,16 @@ NULL     root     system         public              tenant_settings            
 NULL     root     system         public              tenant_settings                        INSERT          YES           NO
 NULL     root     system         public              tenant_settings                        SELECT          YES           YES
 NULL     root     system         public              tenant_settings                        UPDATE          YES           NO
+NULL     admin    system         public              hot_ranges                             DELETE          YES           NO
+NULL     admin    system         public              hot_ranges                             GRANT           YES           NO
+NULL     admin    system         public              hot_ranges                             INSERT          YES           NO
+NULL     admin    system         public              hot_ranges                             SELECT          YES           YES
+NULL     admin    system         public              hot_ranges                             UPDATE          YES           NO
+NULL     root     system         public              hot_ranges                             DELETE          YES           NO
+NULL     root     system         public              hot_ranges                             GRANT           YES           NO
+NULL     root     system         public              hot_ranges                             INSERT          YES           NO
+NULL     root     system         public              hot_ranges                             SELECT          YES           YES
+NULL     root     system         public              hot_ranges                             UPDATE          YES           NO
 
 statement ok
 USE other_db;

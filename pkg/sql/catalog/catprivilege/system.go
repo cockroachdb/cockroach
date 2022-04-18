@@ -64,6 +64,7 @@ var (
 		catconstants.SpanConfigurationsTableName,
 		catconstants.TenantSettingsTableName,
 		catconstants.SpanCountTableName,
+		catconstants.HotRangesTableName,
 	}
 
 	systemSuperuserPrivileges = func() map[descpb.NameInfo]privilege.List {

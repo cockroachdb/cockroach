@@ -143,6 +143,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		seedSpanCountTableMigration,
 	),
+	migration.NewTenantMigration(
+		"add the system.hot_ranges table",
+		toCV(clusterversion.HotRangesTable),
+		NoPrecondition,
+		hotRangesTableMigration,
+	),
 }
 
 func init() {

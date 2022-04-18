@@ -11,6 +11,7 @@ go_library(
         "ensure_no_draining_names.go",
         "fix_cast_for_style_migration.go",
         "grant_option_migration.go",
+        "hot_ranges_table.go",
         "insert_missing_public_schema_namespace_entry.go",
         "migrate_span_configs.go",
         "migrations.go",
