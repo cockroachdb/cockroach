@@ -82,6 +82,7 @@ func WithBuilderDependenciesFromTestServer(
 		execCfg.Settings,
 		nil, /* statements */
 		execCfg.InternalExecutor,
+		nil, /* clientNoticeSender */
 	))
 }
 

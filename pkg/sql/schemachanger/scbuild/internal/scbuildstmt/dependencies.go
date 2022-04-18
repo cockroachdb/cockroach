@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -261,6 +262,16 @@ type NameResolver interface {
 	// ResolveIndex retrieves an index by name and returns its elements.
 	ResolveIndex(relationID catid.DescID, indexName tree.Name, p ResolveParams) ElementResultSet
 
+	ResolveIndexByName(index *tree.TableIndexName, p ResolveParams) ElementResultSet
+
 	// ResolveColumn retrieves a column by name and returns its elements.
 	ResolveColumn(relationID catid.DescID, columnName tree.Name, p ResolveParams) ElementResultSet
+
+	ResolveColumnByID(relationID catid.DescID, columnID catid.ColumnID, p ResolveParams) ElementResultSet
+
+	// ResolveConstraint retrieves a constraint by name and returns its elements.
+	ResolveConstraint(relationID catid.DescID, constraintName tree.Name, p ResolveParams) ElementResultSet
+
+	// ResolveConstraintByID retrieves a constraint by name and returns its elements.
+	ResolveConstraintByID(relationID catid.DescID, constraintID descpb.ConstraintID, p ResolveParams) ElementResultSet
 }

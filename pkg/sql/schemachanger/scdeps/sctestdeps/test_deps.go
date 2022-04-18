@@ -25,8 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
@@ -227,6 +230,30 @@ func (s *TestState) MayResolveTable(
 		panic(err)
 	}
 	return prefix, table
+}
+
+// MayResolveIndex implements the scbuild.CatalogReader interface.
+func (s *TestState) MayResolveIndex(
+	ctx context.Context, indexName tree.Name, prefix tree.ObjectNamePrefix,
+) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor, catalog.Index) {
+
+	found, resolvedPrefix, err := resolver.ResolveObjectNamePrefix(
+		ctx, s.schemaResolver, s.CurrentDatabase(), s.sessionData.SearchPath, &prefix,
+	)
+	if err != nil {
+		panic(err)
+	}
+	if !found {
+		if !prefix.ExplicitCatalog && !prefix.ExplicitSchema {
+			panic(pgerror.Newf(pgcode.InvalidName, "no database or schema specified"))
+		}
+		panic(pgerror.Newf(pgcode.UndefinedSchema,
+			"schema %q in database %q not found", prefix.Schema(), prefix.Catalog()))
+	}
+
+	dsNames, dsIDs := s.CatalogReader().ReadObjectNamesAndIDs(ctx, resolvedPrefix.Database, resolvedPrefix.Schema)
+	tableDesc, idxDesc := scdeps.FindTableContainsIndex(ctx, s.CatalogReader(), indexName, dsNames, dsIDs, false /* requireTable */)
+	return resolvedPrefix, tableDesc, idxDesc
 }
 
 // MayResolveType implements the scbuild.CatalogReader interface.

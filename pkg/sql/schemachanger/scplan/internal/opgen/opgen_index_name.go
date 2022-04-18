@@ -11,7 +11,6 @@
 package opgen
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -40,7 +39,7 @@ func init() {
 					return &scop.SetIndexName{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
-						Name:    tabledesc.IndexNamePlaceholder(this.IndexID),
+						Name:    this.Name,
 					}
 				}),
 			),

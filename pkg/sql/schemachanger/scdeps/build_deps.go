@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -50,36 +52,39 @@ func NewBuilderDependencies(
 	settings *cluster.Settings,
 	statements []string,
 	internalExecutor sqlutil.InternalExecutor,
+	clientNoticeSender tree.ClientNoticeSender,
 ) scbuild.Dependencies {
 	return &buildDeps{
-		clusterID:        clusterID,
-		codec:            codec,
-		txn:              txn,
-		descsCollection:  descsCollection,
-		schemaResolver:   schemaResolver,
-		authAccessor:     authAccessor,
-		sessionData:      sessionData,
-		settings:         settings,
-		statements:       statements,
-		astFormatter:     astFormatter,
-		featureChecker:   featureChecker,
-		internalExecutor: internalExecutor,
+		clusterID:          clusterID,
+		codec:              codec,
+		txn:                txn,
+		descsCollection:    descsCollection,
+		schemaResolver:     schemaResolver,
+		authAccessor:       authAccessor,
+		sessionData:        sessionData,
+		settings:           settings,
+		statements:         statements,
+		astFormatter:       astFormatter,
+		featureChecker:     featureChecker,
+		internalExecutor:   internalExecutor,
+		clientNoticeSender: clientNoticeSender,
 	}
 }
 
 type buildDeps struct {
-	clusterID        uuid.UUID
-	codec            keys.SQLCodec
-	txn              *kv.Txn
-	descsCollection  *descs.Collection
-	schemaResolver   resolver.SchemaResolver
-	authAccessor     scbuild.AuthorizationAccessor
-	sessionData      *sessiondata.SessionData
-	settings         *cluster.Settings
-	statements       []string
-	astFormatter     scbuild.AstFormatter
-	featureChecker   scbuild.FeatureChecker
-	internalExecutor sqlutil.InternalExecutor
+	clusterID          uuid.UUID
+	codec              keys.SQLCodec
+	txn                *kv.Txn
+	descsCollection    *descs.Collection
+	schemaResolver     resolver.SchemaResolver
+	authAccessor       scbuild.AuthorizationAccessor
+	sessionData        *sessiondata.SessionData
+	settings           *cluster.Settings
+	statements         []string
+	astFormatter       scbuild.AstFormatter
+	featureChecker     scbuild.FeatureChecker
+	internalExecutor   sqlutil.InternalExecutor
+	clientNoticeSender tree.ClientNoticeSender
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -131,6 +136,28 @@ func (d *buildDeps) MayResolveTable(
 		return prefix, nil
 	}
 	return prefix, desc.(catalog.TableDescriptor)
+}
+
+func (d *buildDeps) MayResolveIndex(
+	ctx context.Context, indexName tree.Name, prefix tree.ObjectNamePrefix,
+) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor, catalog.Index) {
+	found, resolvedPrefix, err := resolver.ResolveObjectNamePrefix(
+		ctx, d.schemaResolver, d.CurrentDatabase(), d.sessionData.SearchPath, &prefix,
+	)
+	if err != nil {
+		panic(err)
+	}
+	if !found {
+		if !prefix.ExplicitCatalog && !prefix.ExplicitSchema {
+			panic(pgerror.Newf(pgcode.InvalidName, "no database or schema specified"))
+		}
+		panic(pgerror.Newf(pgcode.UndefinedSchema,
+			"schema %q in database %q not found", prefix.Schema(), prefix.Catalog()))
+	}
+
+	dsNames, dsIDs := d.CatalogReader().ReadObjectNamesAndIDs(ctx, resolvedPrefix.Database, resolvedPrefix.Schema)
+	tableDesc, idxDesc := FindTableContainsIndex(ctx, d.CatalogReader(), indexName, dsNames, dsIDs, false /* requireTable */)
+	return resolvedPrefix, tableDesc, idxDesc
 }
 
 // MayResolveType implements the scbuild.CatalogReader interface.
@@ -326,4 +353,9 @@ func (d *buildDeps) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryT
 
 func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
 	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
+}
+
+// ClientNoticeSender implements the scbuild.Dependencies interface.
+func (d *buildDeps) ClientNoticeSender() tree.ClientNoticeSender {
+	return d.clientNoticeSender
 }

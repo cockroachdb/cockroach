@@ -214,7 +214,13 @@ statement error cannot drop UNIQUE constraint \"foo\" using ALTER TABLE DROP CON
 ALTER TABLE t DROP CONSTRAINT foo
 
 statement ok
+SET USE_DECLARATIVE_SCHEMA_CHANGER = 'OFF'
+
+statement ok
 DROP INDEX foo CASCADE
+
+statement ok
+SET USE_DECLARATIVE_SCHEMA_CHANGER = 'ON'
 
 query TTTTTRT
 SELECT job_type, description, user_name, status, running_status, fraction_completed, error
@@ -299,7 +305,13 @@ statement ok
 INSERT INTO t (a, d, x, y, z) VALUES (33, 34, DECIMAL '2.0', DECIMAL '2.1', DECIMAL '2.2')
 
 statement ok
+SET USE_DECLARATIVE_SCHEMA_CHANGER = 'OFF'
+
+statement ok
 DROP INDEX t@t_f_idx
+
+statement ok
+SET USE_DECLARATIVE_SCHEMA_CHANGER = 'ON'
 
 query TTTTTRT
 SELECT job_type, description, user_name, status, running_status, fraction_completed, error
