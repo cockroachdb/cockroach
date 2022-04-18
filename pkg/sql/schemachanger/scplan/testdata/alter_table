@@ -136,7 +136,7 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
       TableID: 104
     *scop.SetIndexName
       IndexID: 1
-      Name: crdb_internal_index_1_name_placeholder
+      Name: foo_pkey
       TableID: 104
     *scop.SetIndexName
       IndexID: 2
@@ -319,7 +319,7 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
       TableID: 104
     *scop.SetIndexName
       IndexID: 1
-      Name: crdb_internal_index_1_name_placeholder
+      Name: foo_pkey
       TableID: 104
     *scop.SetIndexName
       IndexID: 2
@@ -539,7 +539,7 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
       TableID: 104
     *scop.SetIndexName
       IndexID: 1
-      Name: crdb_internal_index_1_name_placeholder
+      Name: foo_pkey
       TableID: 104
     *scop.SetIndexName
       IndexID: 2
@@ -711,7 +711,7 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
       TableID: 104
     *scop.SetIndexName
       IndexID: 1
-      Name: crdb_internal_index_1_name_placeholder
+      Name: foo_pkey
       TableID: 104
     *scop.SetIndexName
       IndexID: 2
@@ -957,7 +957,7 @@ PostCommitPhase stage 4 of 4 with 15 MutationType ops
       TableID: 104
     *scop.SetIndexName
       IndexID: 1
-      Name: crdb_internal_index_1_name_placeholder
+      Name: foo_pkey
       TableID: 104
     *scop.SetIndexName
       IndexID: 2
@@ -968,7 +968,7 @@ PostCommitPhase stage 4 of 4 with 15 MutationType ops
       TableID: 107
     *scop.SetIndexName
       IndexID: 1
-      Name: crdb_internal_index_1_name_placeholder
+      Name: bar_pkey
       TableID: 107
     *scop.SetIndexName
       IndexID: 2

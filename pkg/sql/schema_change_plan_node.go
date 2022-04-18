@@ -74,6 +74,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p.ExecCfg().Settings,
 		scs.stmts,
 		p.execCfg.InternalExecutor,
+		p,
 	)
 	state, err := scbuild.Build(ctx, deps, scs.state, stmt)
 	if scerrors.HasNotImplemented(err) &&

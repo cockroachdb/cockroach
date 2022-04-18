@@ -470,12 +470,12 @@ func (ep *DummySessionAccessor) HasRoleOption(
 	return false, errors.WithStack(errEvalSessionVar)
 }
 
-// DummyClientNoticeSender implements the tree.ClientNoticeSender interface.
+// DummyClientNoticeSender implements the eval.ClientNoticeSender interface.
 type DummyClientNoticeSender struct{}
 
 var _ eval.ClientNoticeSender = &DummyClientNoticeSender{}
 
-// BufferClientNotice is part of the tree.ClientNoticeSender interface.
+// BufferClientNotice is part of the eval.ClientNoticeSender interface.
 func (c *DummyClientNoticeSender) BufferClientNotice(context.Context, pgnotice.Notice) {}
 
 // DummyTenantOperator implements the tree.TenantOperator interface.
