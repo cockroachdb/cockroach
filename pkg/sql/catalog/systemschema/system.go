@@ -676,6 +676,15 @@ CREATE TABLE system.span_count (
 	CONSTRAINT single_row CHECK (singleton),
 	FAMILY "primary" (singleton, span_count)
 );`
+
+	HotRangesTableSchema = `
+CREATE TABLE system.hot_ranges (
+	sample_ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+	tenant_id INT NOT NULL,
+	info BYTES NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (sample_ts, tenant_id),
+	FAMILY "primary" (sample_ts, tenant_id)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -2395,6 +2404,39 @@ var (
 				ColumnIDs: []descpb.ColumnID{1},
 			}}
 		},
+	)
+
+	HotRangesTable = registerSystemTable(
+		HotRangesTableSchema,
+		systemTable(
+			catconstants.HotRangesTableName,
+			keys.HotRangesTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "sample_ts", ID: 1, Type: types.TimestampTZ, DefaultExpr: &nowTZString, Nullable: false},
+				{Name: "tenant_id", ID: 2, Type: types.Int, Nullable: false},
+				{Name: "info", ID: 3, Type: types.Bytes, Nullable: false},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"sample_ts", "tenant_id", "info"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"sample_ts", "tenant_id"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		),
 	)
 )
 
