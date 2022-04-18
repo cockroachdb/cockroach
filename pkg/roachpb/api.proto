@@ -1588,8 +1588,25 @@ message AdminScatterResponse {
     reserved 2;
   }
   reserved 2;
+  // RangeInfos describes the ranges in the AdminScatterRequest's scatter key
+  // span. Every RangeInfo contains the range descriptor, lease information, and
+  // closed timestamp policy at the time of execution.
   repeated RangeInfo range_infos = 3 [(gogoproto.nullable) = false];
+
+  // MVCCStats tracks the MVCCStats of the ranges in the AdminScatterRequest's
+  // scatter key span.
   storage.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
+}
+
+//  AdminScatterStats is a message that will be recorded on the tracing span
+//  that sent the AdminScatter request. It contains information about the
+//  scatter operation.
+message AdminScatterStats {
+  // DataInScatteredRangesBytes is the amount of data in the ranges that were
+  // part of the AdminScatter requests key span. Note, this does not necessarily
+  // mean we scattered ranges with these many bytes, since the scatter request
+  // for a range is best effort.
+  int64 data_in_scattered_ranges_bytes = 1;
 }
 
 // AdminVerifyProtectedTimestampRequest is the argument to the
@@ -1794,6 +1811,23 @@ message AddSSTableResponse {
   // picked using cheaper, inconsistentent reads so it should be used only for
   // estimations of how ingested data and spans may overlap.
   bytes following_likely_non_empty_span_start = 4 [(gogoproto.casttype) = "Key"];
+}
+
+//  AddSSTableStats is a message that will be recorded on the tracing span that
+//  sent the AddSSTable request. It contains information about the AddSSTable
+//  operation.
+message AddSSTableStats {
+  // DataSizeBytes is the byte size of the SST ingested by virtue of the
+  // AddSSTable request.
+  int64 data_size_bytes = 1;
+
+  // Stores contains the IDs of the stores that the AddSSTable request was
+  // routed to. There may be more than one store if the request was re-routed.
+  repeated int32 stores = 2 [(gogoproto.casttype) = "StoreID"];
+
+  // IngestAsWrite is true if the SST will be ingested in a regular WriteBatch,
+  // instead of directly adding it to the storage engine.
+  bool ingest_as_write = 3;
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no

@@ -441,7 +441,8 @@ func (f NonTransactionalFactoryFunc) NonTransactionalSender() Sender {
 func SendWrappedWith(
 	ctx context.Context, sender Sender, h roachpb.Header, args roachpb.Request,
 ) (roachpb.Response, *roachpb.Error) {
-	return SendWrappedWithAdmission(ctx, sender, h, roachpb.AdmissionHeader{}, args)
+	resp, pErr := SendWrappedWithAdmission(ctx, sender, h, roachpb.AdmissionHeader{}, args)
+	return resp, pErr
 }
 
 // SendWrappedWithAdmission is a convenience function which wraps the request
