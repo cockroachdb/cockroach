@@ -509,10 +509,20 @@ func (sc *SchemaChanger) dropConstraints(
 			return err
 		}
 		for id := range fksByBackrefTable {
-			if tableDescs[id], err = descsCol.GetImmutableTableByID(
-				ctx, txn, id, tree.ObjectLookupFlags{},
-			); err != nil {
+			desc, err := descsCol.GetImmutableTableByID(
+				ctx, txn, id, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						IncludeDropped: true,
+					},
+				},
+			)
+			if err != nil {
 				return err
+			}
+			// If the backreference table has been dropped, we don't need to do
+			// anything there.
+			if !desc.Dropped() {
+				tableDescs[id] = desc
 			}
 		}
 		return nil
@@ -596,6 +606,11 @@ func (sc *SchemaChanger) addConstraints(
 					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, constraint.ForeignKey().ReferencedTableID, txn)
 					if err != nil {
 						return err
+					}
+					// If the backref table is being dropped, then we should treat this as
+					// the constraint addition failing and rollback.
+					if backrefTable.Dropped() {
+						return pgerror.Newf(pgcode.UndefinedTable, "referenced relation %q does not exist", backrefTable.GetName())
 					}
 					// Check that a unique constraint for the FK still exists on the
 					// referenced table. It's possible for the unique index found during

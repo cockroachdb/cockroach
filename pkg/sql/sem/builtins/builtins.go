@@ -6746,7 +6746,7 @@ table. Returns an error if validation fails.`,
 					return nil, err
 				}
 				active, err := evalCtx.Planner.IsConstraintActive(
-					evalCtx.Ctx(), int(dOid.DInt), string(constraintName),
+					evalCtx.Ctx(), int(dOid.Oid), string(constraintName),
 				)
 				if err != nil {
 					return nil, err
