@@ -51,6 +51,27 @@ const typeOptions = [
     value: JobType.AUTO_CREATE_STATS.toString(),
     label: "Auto-Statistics Creation",
   },
+  { value: JobType.SCHEMA_CHANGE_GC.toString(), label: "Schema Change GC" },
+  {
+    value: JobType.TYPEDESC_SCHEMA_CHANGE.toString(),
+    label: "Type Descriptor Schema Changes",
+  },
+  { value: JobType.STREAM_INGESTION.toString(), label: "Stream Ingestion" },
+  { value: JobType.NEW_SCHEMA_CHANGE.toString(), label: "New Schema Changes" },
+  { value: JobType.MIGRATION.toString(), label: "Migrations" },
+  {
+    value: JobType.AUTO_SPAN_CONFIG_RECONCILIATION.toString(),
+    label: "Span Config Reconciliation",
+  },
+  {
+    value: JobType.AUTO_SQL_STATS_COMPACTION.toString(),
+    label: "SQL Stats Compactions",
+  },
+  { value: JobType.STREAM_REPLICATION.toString(), label: "Stream Replication" },
+  {
+    value: JobType.ROW_LEVEL_TTL.toString(),
+    label: "Time-to-live Deletions",
+  },
 ];
 
 export const typeSetting = new LocalSetting<AdminUIState, number>(
