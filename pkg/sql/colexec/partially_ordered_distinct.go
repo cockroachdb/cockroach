@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -82,7 +82,7 @@ func (p *partiallyOrderedDistinct) ChildCount(bool) int {
 	return 1
 }
 
-func (p *partiallyOrderedDistinct) Child(nth int, _ bool) execinfra.OpNode {
+func (p *partiallyOrderedDistinct) Child(nth int, _ bool) execopnode.OpNode {
 	if nth == 0 {
 		return p.input
 	}
@@ -164,7 +164,7 @@ func (c *chunkerOperator) ChildCount(bool) int {
 	return 1
 }
 
-func (c *chunkerOperator) Child(nth int, _ bool) execinfra.OpNode {
+func (c *chunkerOperator) Child(nth int, _ bool) execopnode.OpNode {
 	if nth == 0 {
 		return c.input
 	}

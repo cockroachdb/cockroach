@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -72,7 +72,7 @@ var spanAssemblerPool = sync.Pool{
 // ColSpanAssembler is a utility operator that generates a series of spans from
 // input batches which can be used to perform an index join.
 type ColSpanAssembler interface {
-	execinfra.Releasable
+	execreleasable.Releasable
 
 	// ConsumeBatch generates lookup spans from input batches and stores them to
 	// later be returned by GetSpans. Spans are generated only for rows in the

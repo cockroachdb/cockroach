@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -129,7 +131,7 @@ type ColIndexJoin struct {
 }
 
 var _ colexecop.KVReader = &ColIndexJoin{}
-var _ execinfra.Releasable = &ColIndexJoin{}
+var _ execreleasable.Releasable = &ColIndexJoin{}
 var _ colexecop.ClosableOperator = &ColIndexJoin{}
 
 // Init initializes a ColIndexJoin.
@@ -407,7 +409,7 @@ func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
-	if trace := execinfra.GetTraceData(s.Ctx); trace != nil {
+	if trace := tracing.SpanFromContext(s.Ctx).GetConfiguredRecording(); trace != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 	}
 	return trailingMeta
@@ -429,7 +431,7 @@ func (s *ColIndexJoin) GetRowsRead() int64 {
 
 // GetCumulativeContentionTime is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetCumulativeContentionTime() time.Duration {
-	return execinfra.GetCumulativeContentionTime(s.Ctx)
+	return execstats.GetCumulativeContentionTime(s.Ctx)
 }
 
 // inputBatchSizeLimit is a batch size limit for the number of input rows that
@@ -614,8 +616,8 @@ func adjustMemEstimate(estimate int64) int64 {
 }
 
 // GetScanStats is part of the colexecop.KVReader interface.
-func (s *ColIndexJoin) GetScanStats() execinfra.ScanStats {
-	return execinfra.GetScanStats(s.Ctx)
+func (s *ColIndexJoin) GetScanStats() execstats.ScanStats {
+	return execstats.GetScanStats(s.Ctx)
 }
 
 // Release implements the execinfra.Releasable interface.

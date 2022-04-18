@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -277,7 +278,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	localState distsql.LocalState,
 	collectStats bool,
 	statementSQL string,
-) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
+) (context.Context, flowinfra.Flow, execopnode.OpChains, error) {
 	thisNodeID := dsp.gatewaySQLInstanceID
 	_, ok := flows[thisNodeID]
 	if !ok {

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -37,7 +38,7 @@ type unorderedSynchronizerMsg struct {
 }
 
 var _ colexecop.Operator = &ParallelUnorderedSynchronizer{}
-var _ execinfra.OpNode = &ParallelUnorderedSynchronizer{}
+var _ execopnode.OpNode = &ParallelUnorderedSynchronizer{}
 
 type parallelUnorderedSynchronizerState int
 
@@ -113,13 +114,13 @@ type ParallelUnorderedSynchronizer struct {
 var _ colexecop.DrainableOperator = &ParallelUnorderedSynchronizer{}
 var _ colexecop.ClosableOperator = &ParallelUnorderedSynchronizer{}
 
-// ChildCount implements the execinfra.OpNode interface.
+// ChildCount implements the execopnode.OpNode interface.
 func (s *ParallelUnorderedSynchronizer) ChildCount(verbose bool) int {
 	return len(s.inputs)
 }
 
-// Child implements the execinfra.OpNode interface.
-func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
+// Child implements the execopnode.OpNode interface.
+func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.OpNode {
 	return s.inputs[nth].Root
 }
 

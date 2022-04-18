@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -666,6 +667,6 @@ func (op *hashBasedPartitioner) ChildCount(_ bool) int {
 	return len(op.inputs)
 }
 
-func (op *hashBasedPartitioner) Child(nth int, _ bool) execinfra.OpNode {
+func (op *hashBasedPartitioner) Child(nth int, _ bool) execopnode.OpNode {
 	return op.inputs[nth]
 }

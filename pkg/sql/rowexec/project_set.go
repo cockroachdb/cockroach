@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -62,7 +63,7 @@ type projectSetProcessor struct {
 
 var _ execinfra.Processor = &projectSetProcessor{}
 var _ execinfra.RowSource = &projectSetProcessor{}
-var _ execinfra.OpNode = &projectSetProcessor{}
+var _ execopnode.OpNode = &projectSetProcessor{}
 
 const projectSetProcName = "projectSet"
 
@@ -310,21 +311,21 @@ func (ps *projectSetProcessor) ConsumerClosed() {
 	ps.close()
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (ps *projectSetProcessor) ChildCount(verbose bool) int {
-	if _, ok := ps.input.(execinfra.OpNode); ok {
+	if _, ok := ps.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (ps *projectSetProcessor) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (ps *projectSetProcessor) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := ps.input.(execinfra.OpNode); ok {
+		if n, ok := ps.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to projectSetProcessor is not an execinfra.OpNode")
+		panic("input to projectSetProcessor is not an execopnode.OpNode")
 
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))

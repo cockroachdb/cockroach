@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -35,7 +36,7 @@ type inputStatCollector struct {
 }
 
 var _ execinfra.RowSource = &inputStatCollector{}
-var _ execinfra.OpNode = &inputStatCollector{}
+var _ execopnode.OpNode = &inputStatCollector{}
 
 // newInputStatCollector creates a new inputStatCollector that wraps the given
 // input.
@@ -47,16 +48,16 @@ func newInputStatCollector(input execinfra.RowSource) *inputStatCollector {
 
 // ChildCount is part of the OpNode interface.
 func (isc *inputStatCollector) ChildCount(verbose bool) int {
-	if _, ok := isc.RowSource.(execinfra.OpNode); ok {
+	if _, ok := isc.RowSource.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
 // Child is part of the OpNode interface.
-func (isc *inputStatCollector) Child(nth int, verbose bool) execinfra.OpNode {
+func (isc *inputStatCollector) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		return isc.RowSource.(execinfra.OpNode)
+		return isc.RowSource.(execopnode.OpNode)
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

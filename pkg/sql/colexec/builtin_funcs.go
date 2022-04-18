@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -39,7 +39,7 @@ type defaultBuiltinFuncOperator struct {
 }
 
 var _ colexecop.Operator = &defaultBuiltinFuncOperator{}
-var _ execinfra.Releasable = &defaultBuiltinFuncOperator{}
+var _ execreleasable.Releasable = &defaultBuiltinFuncOperator{}
 
 func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 	batch := b.Input.Next()

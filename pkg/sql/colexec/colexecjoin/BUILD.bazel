@@ -26,7 +26,7 @@ go_library(
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
-        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
@@ -108,5 +108,6 @@ disallowed_imports_test(
         "//pkg/sql/colexec/colexecprojconst",
         "//pkg/sql/colexec/colexecsel",
         "//pkg/sql/colexec/colexecwindow",
+        "//pkg/sql/execinfra",
     ],
 )

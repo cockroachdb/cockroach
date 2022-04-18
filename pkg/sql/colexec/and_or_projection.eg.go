@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -153,7 +153,7 @@ func (o *andProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *andProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *andProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -586,7 +586,7 @@ func (o *andRightNullProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *andRightNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *andRightNullProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -986,7 +986,7 @@ func (o *andLeftNullProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *andLeftNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *andLeftNullProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -1367,7 +1367,7 @@ func (o *orProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *orProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *orProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -1801,7 +1801,7 @@ func (o *orRightNullProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *orRightNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *orRightNullProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
@@ -2202,7 +2202,7 @@ func (o *orLeftNullProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *orLeftNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *orLeftNullProjOp) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return o.input
