@@ -972,7 +972,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			codec,
 			cfg.Settings,
 			cfg.rangeFeedFactory,
-			50<<20, /* 50 MB */ // XXX: Make this dynamic, and bump defaults higher.
+			50<<20, /* 50 MB */
 			cfg.stopper,
 			// TODO(irfansharif): What should this no-op cadence be?
 			30*time.Second, /* checkpointNoopsEvery */

@@ -13,6 +13,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -223,6 +224,9 @@ func (sc *TableStatisticsCache) GetTableStats(
 // hasStatistics returns true if the table can have statistics collected for it.
 func hasStatistics(table catalog.TableDescriptor) bool {
 	if catalog.IsSystemDescriptor(table) {
+		if strings.Contains(table.GetName(), "span_configurations") {
+			return true // XXX:
+		}
 		// Don't try to get statistics for system tables (most importantly,
 		// for table_statistics itself).
 		return false

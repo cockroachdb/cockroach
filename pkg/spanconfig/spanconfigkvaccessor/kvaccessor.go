@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -258,8 +259,11 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 
 	if len(toDelete) > 0 {
 		if err := k.paginate(len(toDelete), func(startIdx, endIdx int) error {
+			start := timeutil.Now()
+
 			toDeleteBatch := toDelete[startIdx:endIdx]
 			deleteStmt, deleteQueryArgs := k.constructDeleteStmtAndArgs(toDeleteBatch)
+
 			n, err := k.ie.ExecEx(ctx, "delete-span-cfgs", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				deleteStmt, deleteQueryArgs...,
@@ -270,6 +274,8 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			if n != len(toDeleteBatch) {
 				return errors.AssertionFailedf("expected to delete %d row(s), deleted %d", len(toDeleteBatch), n)
 			}
+
+			log.Infof(ctx, "kvaccessor delete batch for %d entries took %s", endIdx-startIdx, timeutil.Since(start))
 			return nil
 		}); err != nil {
 			return err
@@ -281,6 +287,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 	}
 
 	return k.paginate(len(toUpsert), func(startIdx, endIdx int) error {
+		start := timeutil.Now()
 		toUpsertBatch := toUpsert[startIdx:endIdx]
 		upsertStmt, upsertQueryArgs, err := k.constructUpsertStmtAndArgs(toUpsertBatch)
 		if err != nil {
@@ -304,6 +311,8 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 		} else if valid := bool(tree.MustBeDBool(datums[0])); !valid {
 			return errors.AssertionFailedf("expected to find single row containing upserted spans")
 		}
+
+		log.Infof(ctx, "kvaccessor upsert batch for %d entries took %s", endIdx-startIdx, timeutil.Since(start))
 		return nil
 	})
 }
