@@ -2626,6 +2626,11 @@ upsert descriptor #119
   +      targetStatus: ABSENT
   +    - elementProto:
   +        view:
+  +          forwardReferences:
+  +          - columnIds:
+  +            - 2
+  +            fromId: 119
+  +            toId: 116
   +          usesRelationIds:
   +          - 116
   +          viewId: 119
@@ -2763,6 +2768,11 @@ upsert descriptor #120
   +      targetStatus: ABSENT
   +    - elementProto:
   +        view:
+  +          forwardReferences:
+  +          - columnIds:
+  +            - 1
+  +            fromId: 120
+  +            toId: 119
   +          usesRelationIds:
   +          - 119
   +          viewId: 120
@@ -2934,6 +2944,16 @@ upsert descriptor #121
   +      targetStatus: ABSENT
   +    - elementProto:
   +        view:
+  +          forwardReferences:
+  +          - columnIds:
+  +            - 1
+  +            fromId: 121
+  +            toId: 119
+  +          - columnIds:
+  +            - 1
+  +            - 2
+  +            fromId: 121
+  +            toId: 120
   +          usesRelationIds:
   +          - 119
   +          - 120
@@ -3106,6 +3126,12 @@ upsert descriptor #122
   +      targetStatus: ABSENT
   +    - elementProto:
   +        view:
+  +          forwardReferences:
+  +          - columnIds:
+  +            - 1
+  +            - 2
+  +            fromId: 122
+  +            toId: 120
   +          usesRelationIds:
   +          - 120
   +          viewId: 122
@@ -3492,6 +3518,12 @@ upsert descriptor #125
   +      targetStatus: ABSENT
   +    - elementProto:
   +        view:
+  +          forwardReferences:
+  +          - columnIds:
+  +            - 1
+  +            - 2
+  +            fromId: 125
+  +            toId: 122
   +          usesRelationIds:
   +          - 122
   +          usesTypeIds:

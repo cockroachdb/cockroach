@@ -395,6 +395,12 @@ DROP TABLE defaultdb.shipments CASCADE;
     userName: root
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 2
+      - 4
+      fromId: 111
+      toId: 109
     usesRelationIds:
     - 109
     viewId: 111

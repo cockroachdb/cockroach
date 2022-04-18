@@ -21,12 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/redact"
@@ -48,6 +51,7 @@ type TestState struct {
 	jobCounter              int
 	txnCounter              int
 	sideEffectLogBuffer     strings.Builder
+	schemaResolver          resolver.SchemaResolver
 
 	// The below portions fo the Dependencies are stored as interfaces because
 	// we permit users of this package to override the default implementations.
@@ -214,4 +218,9 @@ func (s *TestState) GetConstraintComment(
 // DescriptorCommentCache implements scbuild.Dependencies interface.
 func (s *TestState) DescriptorCommentCache() scbuild.CommentCache {
 	return s
+}
+
+// ClientNoticeSender implements scbuild.Dependencies.
+func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
+	return &faketreeeval.DummyClientNoticeSender{}
 }

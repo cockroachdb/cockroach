@@ -184,6 +184,12 @@ BackReferencedIDs:
   - 113
 ElementState:
 - View:
+    forwardReferences:
+    - columnIds:
+      - 1
+      fromId: 112
+      indexId: 0
+      toId: 109
     isMaterialized: false
     isTemporary: false
     usesRelationIds:
@@ -197,6 +203,7 @@ ElementState:
     generatedAsIdentityType: 0
     isHidden: false
     isInaccessible: false
+    isVirtual: false
     pgAttributeNum: 1
     tableId: 112
   Status: PUBLIC
@@ -263,6 +270,12 @@ v2
 BackReferencedIDs:
 ElementState:
 - View:
+    forwardReferences:
+    - columnIds:
+      - 1
+      fromId: 113
+      indexId: 0
+      toId: 112
     isMaterialized: false
     isTemporary: false
     usesRelationIds:
@@ -278,6 +291,7 @@ ElementState:
     generatedAsIdentityType: 0
     isHidden: false
     isInaccessible: false
+    isVirtual: false
     pgAttributeNum: 1
     tableId: 113
   Status: PUBLIC
@@ -287,6 +301,7 @@ ElementState:
     generatedAsIdentityType: 0
     isHidden: false
     isInaccessible: false
+    isVirtual: false
     pgAttributeNum: 2
     tableId: 113
   Status: PUBLIC

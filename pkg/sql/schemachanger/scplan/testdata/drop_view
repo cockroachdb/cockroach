@@ -73,6 +73,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 2
+            fromId: 105
+            toId: 104
           usesRelationIds:
           - 104
           viewId: 105
@@ -422,6 +427,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 29 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 2
+            fromId: 105
+            toId: 104
           usesRelationIds:
           - 104
           viewId: 105
@@ -441,6 +451,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 29 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            fromId: 106
+            toId: 105
           usesRelationIds:
           - 105
           viewId: 106
@@ -463,6 +478,16 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 29 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            fromId: 107
+            toId: 105
+          - columnIds:
+            - 1
+            - 2
+            fromId: 107
+            toId: 106
           usesRelationIds:
           - 105
           - 106
@@ -486,6 +511,12 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 29 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            - 2
+            fromId: 108
+            toId: 106
           usesRelationIds:
           - 106
           viewId: 108
@@ -508,6 +539,12 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 29 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            - 2
+            fromId: 111
+            toId: 108
           usesRelationIds:
           - 108
           usesTypeIds:

@@ -51,6 +51,7 @@ func NewBuilderDependencies(
 	settings *cluster.Settings,
 	statements []string,
 	internalExecutor sqlutil.InternalExecutor,
+	clientNoticeSender eval.ClientNoticeSender,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:        clusterID,
@@ -67,22 +68,24 @@ func NewBuilderDependencies(
 		schemaResolver: schemaResolverFactory(
 			descsCollection, sessiondata.NewStack(sessionData), txn, authAccessor,
 		),
+		clientNoticeSender: clientNoticeSender,
 	}
 }
 
 type buildDeps struct {
-	clusterID        uuid.UUID
-	codec            keys.SQLCodec
-	txn              *kv.Txn
-	descsCollection  *descs.Collection
-	schemaResolver   resolver.SchemaResolver
-	authAccessor     scbuild.AuthorizationAccessor
-	sessionData      *sessiondata.SessionData
-	settings         *cluster.Settings
-	statements       []string
-	astFormatter     scbuild.AstFormatter
-	featureChecker   scbuild.FeatureChecker
-	internalExecutor sqlutil.InternalExecutor
+	clusterID          uuid.UUID
+	codec              keys.SQLCodec
+	txn                *kv.Txn
+	descsCollection    *descs.Collection
+	schemaResolver     resolver.SchemaResolver
+	authAccessor       scbuild.AuthorizationAccessor
+	sessionData        *sessiondata.SessionData
+	settings           *cluster.Settings
+	statements         []string
+	astFormatter       scbuild.AstFormatter
+	featureChecker     scbuild.FeatureChecker
+	internalExecutor   sqlutil.InternalExecutor
+	clientNoticeSender eval.ClientNoticeSender
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -347,4 +350,9 @@ func (d *buildDeps) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryT
 
 func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
 	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
+}
+
+// ClientNoticeSender implements the scbuild.Dependencies interface.
+func (d *buildDeps) ClientNoticeSender() eval.ClientNoticeSender {
+	return d.clientNoticeSender
 }
