@@ -1280,7 +1280,6 @@ https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 						return err
 					}
 				}
-
 				// Unlike with pg_catalog.pg_constraint, Postgres also includes NOT
 				// NULL column constraints in information_schema.check_constraints.
 				// Cockroach doesn't track these constraints as check constraints,

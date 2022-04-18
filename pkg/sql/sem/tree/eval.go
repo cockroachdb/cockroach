@@ -3311,6 +3311,10 @@ type EvalPlanner interface {
 	// constraint on the table.
 	RevalidateUniqueConstraint(ctx context.Context, tableID int, constraintName string) error
 
+	// IsConstraintActive returns if a given constraint is currently active,
+	// for the current transaction.
+	IsConstraintActive(ctx context.Context, tableID int, constraintName string) (bool, error)
+
 	// ValidateTTLScheduledJobsInCurrentDB checks scheduled jobs for each table
 	// in the database maps to a scheduled job.
 	ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error
