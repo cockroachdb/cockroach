@@ -6,3 +6,4 @@
 //pkg/roachpb:gen-batch-generated|batch_generated-gen.go|batch_generated.go
 //pkg/sql/opt/optgen/lang:gen-expr|expr-gen.og.go|expr.og.go
 //pkg/sql/opt/optgen/lang:gen-operator|operator-gen.og.go|operator.og.go
+//pkg/sql/schemachanger/scpb:gen-elements-uml|uml/table.puml|uml/table.puml
