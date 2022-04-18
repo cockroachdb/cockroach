@@ -1209,7 +1209,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			for i := range stores {
 				stores[i].rangeCount = mean
 			}
-			surplus := int32(math.Ceil(float64(mean)*rangeRebalanceThreshold.Get(&st.SV) + 1))
+			surplus := int32(math.Ceil(float64(mean)*RangeRebalanceThreshold.Get(&st.SV) + 1))
 			stores[0].rangeCount += surplus
 			stores[0].shouldRebalanceFrom = true
 			for i := 1; i < len(stores); i++ {
@@ -1230,7 +1230,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			// Subtract enough ranges from the first store to make it a suitable
 			// rebalance target. To maintain the specified mean, we then add that delta
 			// back to the rest of the replicas.
-			deficit := int32(math.Ceil(float64(mean)*rangeRebalanceThreshold.Get(&st.SV) + 1))
+			deficit := int32(math.Ceil(float64(mean)*RangeRebalanceThreshold.Get(&st.SV) + 1))
 			stores[0].rangeCount -= deficit
 			for i := 1; i < len(stores); i++ {
 				stores[i].rangeCount += int32(math.Ceil(float64(deficit) / float64(len(stores)-1)))
