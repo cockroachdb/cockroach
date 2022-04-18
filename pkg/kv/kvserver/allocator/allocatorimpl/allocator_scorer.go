@@ -114,10 +114,10 @@ const (
 	StoreHealthBlockAll
 )
 
-// rangeRebalanceThreshold is the minimum ratio of a store's range count to
+// RangeRebalanceThreshold is the minimum ratio of a store's range count to
 // the mean range count at which that store is considered overfull or underfull
 // of ranges.
-var rangeRebalanceThreshold = func() *settings.FloatSetting {
+var RangeRebalanceThreshold = func() *settings.FloatSetting {
 	s := settings.RegisterFloatSetting(
 		settings.SystemOnly,
 		"kv.allocator.range_rebalance_threshold",
@@ -233,6 +233,9 @@ type ScorerOptions interface {
 	// getStoreHealthOptions returns the scorer options for store health. It is
 	// used to inform scoring based on the health of a store.
 	getStoreHealthOptions() StoreHealthOptions
+	// getRangeRebalanceThreshold returns the current range count based rebalance
+	// threshold.
+	getRangeRebalanceThreshold() float64
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -259,6 +262,10 @@ var _ ScorerOptions = &ScatterScorerOptions{}
 
 func (o *ScatterScorerOptions) getStoreHealthOptions() StoreHealthOptions {
 	return o.RangeCountScorerOptions.StoreHealthOptions
+}
+
+func (o *ScatterScorerOptions) getRangeRebalanceThreshold() float64 {
+	return o.RangeCountScorerOptions.rangeRebalanceThreshold
 }
 
 func (o *ScatterScorerOptions) maybeJitterStoreStats(
@@ -289,6 +296,10 @@ var _ ScorerOptions = &RangeCountScorerOptions{}
 
 func (o *RangeCountScorerOptions) getStoreHealthOptions() StoreHealthOptions {
 	return o.StoreHealthOptions
+}
+
+func (o *RangeCountScorerOptions) getRangeRebalanceThreshold() float64 {
+	return o.rangeRebalanceThreshold
 }
 
 func (o *RangeCountScorerOptions) maybeJitterStoreStats(
@@ -401,8 +412,15 @@ func (o *RangeCountScorerOptions) removalMaximallyConvergesScore(
 // queries-per-second. This means that the resulting rebalancing decisions will
 // further the goal of converging QPS across stores in the cluster.
 type QPSScorerOptions struct {
-	StoreHealthOptions                        StoreHealthOptions
-	Deterministic                             bool
+	StoreHealthOptions StoreHealthOptions
+	Deterministic      bool
+
+	// NB: For mixed version compatibility with 21.2, we need to include the range
+	// count based rebalance threshold here. This is because in 21.2, the store
+	// rebalancer took range count into account when trying to rank candidate
+	// stores.
+	DeprecatedRangeRebalanceThreshold float64
+
 	QPSRebalanceThreshold, MinRequiredQPSDiff float64
 
 	// QPS-based rebalancing assumes that:
@@ -424,6 +442,10 @@ type QPSScorerOptions struct {
 
 func (o *QPSScorerOptions) getStoreHealthOptions() StoreHealthOptions {
 	return o.StoreHealthOptions
+}
+
+func (o *QPSScorerOptions) getRangeRebalanceThreshold() float64 {
+	return o.DeprecatedRangeRebalanceThreshold
 }
 
 func (o *QPSScorerOptions) maybeJitterStoreStats(
@@ -500,7 +522,7 @@ func (o *QPSScorerOptions) balanceScore(
 	sl storepool.StoreList, sc roachpb.StoreCapacity,
 ) balanceStatus {
 	maxQPS := OverfullQPSThreshold(o, sl.CandidateQueriesPerSecond.Mean)
-	minQPS := underfullQPSThreshold(o, sl.CandidateQueriesPerSecond.Mean)
+	minQPS := UnderfullQPSThreshold(o, sl.CandidateQueriesPerSecond.Mean)
 	curQPS := sc.QueriesPerSecond
 	if curQPS < minQPS {
 		return underfull
@@ -892,7 +914,7 @@ func rankedCandidateListForAllocation(
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	allowMultipleReplsPerNode bool,
-	options *RangeCountScorerOptions,
+	options ScorerOptions,
 ) candidateList {
 	var candidates candidateList
 	existingReplTargets := roachpb.MakeReplicaSet(existingReplicas).ReplicationTargets()
@@ -921,7 +943,7 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		if !allocator.MaxCapacityCheck(s) || !options.StoreHealthOptions.readAmpIsHealthy(
+		if !allocator.MaxCapacityCheck(s) || !options.getStoreHealthOptions().readAmpIsHealthy(
 			ctx,
 			s,
 			candidateStores.CandidateL0Sublevels.Mean,
@@ -930,11 +952,42 @@ func rankedCandidateListForAllocation(
 		}
 		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
 		balanceScore := options.balanceScore(candidateStores, s.Capacity)
+		// NB: This is only applicable in mixed version (21.2 along with 22.1)
+		// clusters. `rankedCandidateListForAllocation` will never be called in 22.1
+		// with a `qpsScorerOptions`.
+		//
+		// TODO(aayush): Remove this some time in the 22.2 cycle.
+		var convergesScore int
+		if qpsOpts, ok := options.(*QPSScorerOptions); ok {
+			if qpsOpts.QPSRebalanceThreshold > 0 {
+				if s.Capacity.QueriesPerSecond < UnderfullQPSThreshold(
+					qpsOpts, candidateStores.CandidateQueriesPerSecond.Mean,
+				) {
+					convergesScore = 1
+				} else if s.Capacity.QueriesPerSecond < candidateStores.CandidateQueriesPerSecond.Mean {
+					convergesScore = 0
+				} else if s.Capacity.QueriesPerSecond < OverfullQPSThreshold(
+					qpsOpts, candidateStores.CandidateQueriesPerSecond.Mean,
+				) {
+					convergesScore = -1
+				} else {
+					convergesScore = -2
+				}
+
+				// NB: Maintain parity with the 21.2 implementation, which computed the
+				// `balanceScore` using range-counts instead of QPS even during
+				// load-based rebalancing.
+				balanceScore = (&RangeCountScorerOptions{
+					rangeRebalanceThreshold: options.getRangeRebalanceThreshold(),
+				}).balanceScore(candidateStores, s.Capacity)
+			}
+		}
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          constraintsOK,
 			necessary:      necessary,
 			diversityScore: diversityScore,
+			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
 			rangeCount:     int(s.Capacity.RangeCount),
 		})
@@ -1276,7 +1329,7 @@ func rankedCandidateListForRebalancing(
 	// 1. Determine whether existing replicas are valid and/or necessary.
 	existingStores := make(map[roachpb.StoreID]candidate)
 	var needRebalanceFrom bool
-	curDiversityScore := rangeDiversityScore(existingStoreLocalities)
+	curDiversityScore := RangeDiversityScore(existingStoreLocalities)
 	for _, store := range allStores.Stores {
 		for _, repl := range existingReplicasForType {
 			if store.StoreID != repl.StoreID {
@@ -1842,11 +1895,11 @@ func containsStore(stores []roachpb.StoreID, target roachpb.StoreID) bool {
 	return false
 }
 
-// rangeDiversityScore returns a value between 0 and 1 based on how diverse the
+// RangeDiversityScore returns a value between 0 and 1 based on how diverse the
 // given range is. A higher score means the range is more diverse.
 // All below diversity-scoring methods should in theory be implemented by
 // calling into this one, but they aren't to avoid allocations.
-func rangeDiversityScore(existingStoreLocalities map[roachpb.StoreID]roachpb.Locality) float64 {
+func RangeDiversityScore(existingStoreLocalities map[roachpb.StoreID]roachpb.Locality) float64 {
 	var sumScore float64
 	var numSamples int
 	for s1, l1 := range existingStoreLocalities {
@@ -1999,7 +2052,8 @@ func OverfullQPSThreshold(options *QPSScorerOptions, mean float64) float64 {
 	return mean + math.Max(mean*options.QPSRebalanceThreshold, allocator.MinQPSThresholdDifference)
 }
 
-func underfullQPSThreshold(options *QPSScorerOptions, mean float64) float64 {
+// UnderfullQPSThreshold computes the underfull QPS threshold.
+func UnderfullQPSThreshold(options *QPSScorerOptions, mean float64) float64 {
 	return mean - math.Max(mean*options.QPSRebalanceThreshold, allocator.MinQPSThresholdDifference)
 }
 

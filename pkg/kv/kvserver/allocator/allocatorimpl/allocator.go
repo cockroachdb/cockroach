@@ -943,7 +943,7 @@ func (a *Allocator) AllocateTargetFromList(
 	candidateStores storepool.StoreList,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
-	options *RangeCountScorerOptions,
+	options ScorerOptions,
 	allowMultipleReplsPerNode bool,
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string) {
@@ -1449,7 +1449,7 @@ func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions 
 	return &RangeCountScorerOptions{
 		StoreHealthOptions:      a.StoreHealthOptions(ctx),
 		deterministic:           a.StorePool.Deterministic,
-		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.StorePool.St.SV),
+		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.StorePool.St.SV),
 	}
 }
 
@@ -1467,7 +1467,7 @@ func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerO
 		// made by the replicateQueue during normal course of operations. In other
 		// words, we don't want stores that are too far away from the mean to be
 		// affected by the jitter.
-		jitter: rangeRebalanceThreshold.Get(&a.StorePool.St.SV),
+		jitter: RangeRebalanceThreshold.Get(&a.StorePool.St.SV),
 	}
 }
 
@@ -1532,7 +1532,7 @@ func (a *Allocator) ValidLeaseTargets(
 
 	// Determine which store(s) is preferred based on user-specified preferences.
 	// If any stores match, only consider those stores as candidates.
-	preferred := a.preferredLeaseholders(conf, candidates)
+	preferred := a.PreferredLeaseholders(conf, candidates)
 	if len(preferred) > 0 {
 		candidates = preferred
 	}
@@ -1573,7 +1573,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	)
 	// If there are any replicas that do match lease preferences, then we check if
 	// the existing leaseholder is one of them.
-	preferred := a.preferredLeaseholders(conf, candidates)
+	preferred := a.PreferredLeaseholders(conf, candidates)
 	if len(preferred) == 0 {
 		return false
 	}
@@ -1754,9 +1754,10 @@ func (a *Allocator) TransferLeaseTarget(
 			candidates,
 			storeDescMap,
 			&QPSScorerOptions{
-				StoreHealthOptions:    a.StoreHealthOptions(ctx),
-				QPSRebalanceThreshold: allocator.QPSRebalanceThreshold.Get(&a.StorePool.St.SV),
-				MinRequiredQPSDiff:    allocator.MinQPSDifferenceForTransfers.Get(&a.StorePool.St.SV),
+				StoreHealthOptions:                a.StoreHealthOptions(ctx),
+				DeprecatedRangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.StorePool.St.SV),
+				QPSRebalanceThreshold:             allocator.QPSRebalanceThreshold.Get(&a.StorePool.St.SV),
+				MinRequiredQPSDiff:                allocator.MinQPSDifferenceForTransfers.Get(&a.StorePool.St.SV),
 			},
 		)
 
@@ -2171,7 +2172,9 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	return false
 }
 
-func (a Allocator) preferredLeaseholders(
+// PreferredLeaseholders returns a slice of replica descriptors corresponding to
+// replicas that meet lease preferences (among the `existing` replicas).
+func (a Allocator) PreferredLeaseholders(
 	conf roachpb.SpanConfig, existing []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	// Go one preference at a time. As soon as we've found replicas that match a
