@@ -562,7 +562,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				clock,
 				rangeFeedFactory,
 				keys.SpanConfigurationsTableID,
-				50<<20, /* 50 MB */ // XXX: Make this dynamic, and bump defaults higher.
+				25<<20, /* 25 MB */
 				fallbackConf,
 				spanConfigKnobs,
 			)
