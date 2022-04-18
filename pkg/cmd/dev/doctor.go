@@ -135,6 +135,10 @@ func (d *dev) doctor(cmd *cobra.Command, _ []string) error {
 		noCache = true
 	}
 
+	log.Println("=============================")
+	log.Println("=== RUNNING DOCTOR CHECKS ===")
+	log.Println("=============================")
+
 	// If we're running on macOS, we need to check whether XCode is installed.
 	d.log.Println("doctor: running xcode check")
 	if runtime.GOOS == "darwin" {
@@ -202,11 +206,10 @@ Please perform the following steps:
 	// Check whether the build is properly configured to use stamping.
 	d.log.Println("doctor: running stamp test")
 	failedStampTestMsg := ""
-	stdout, err := d.exec.CommandContextSilent(ctx, "bazel", "build", "//build/bazelutil:test_stamping")
+	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", "//build/bazelutil:test_stamping")
 	if err != nil {
 		failedStampTestMsg = "Failed to run `bazel build //build/bazelutil:test_stamping`"
 		log.Println(failedStampTestMsg)
-		printStdoutAndErr(string(stdout), err)
 	} else {
 		bazelBin, err := d.getBazelBin(ctx)
 		if err != nil {
@@ -240,7 +243,7 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 
 	// Check whether linting during builds (nogo) is explicitly configured
 	// before we get started.
-	stdout, err = d.exec.CommandContextSilent(ctx, "bazel", "build", "//build/bazelutil:test_nogo_configured")
+	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", "//build/bazelutil:test_nogo_configured")
 	if err != nil {
 		failedNogoTestMsg := "Failed to run `bazel build //build/bazelutil:test_nogo_configured. " + `
 This may be because you haven't configured whether to run lints during builds.
@@ -252,7 +255,6 @@ The former will run lint checks while you build. This will make incremental buil
 slightly slower and introduce a noticeable delay in first-time build setup.`
 		failures = append(failures, failedNogoTestMsg)
 		log.Println(failedNogoTestMsg)
-		printStdoutAndErr(string(stdout), err)
 	}
 
 	// We want to make sure there are no other failures before trying to
@@ -273,6 +275,10 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 	} else if !noCache {
 		log.Println("doctor: skipping cache set up due to previous failures")
 	}
+
+	log.Println("======================================")
+	log.Println("=== FINISHED RUNNING DOCTOR CHECKS ===")
+	log.Println("======================================")
 
 	if len(failures) > 0 {
 		log.Printf("doctor: encountered %d errors", len(failures))
