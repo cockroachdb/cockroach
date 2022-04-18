@@ -253,10 +253,11 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 				es := err.Error()
 				if strings.Contains(es, "internal error") {
 					// TODO(yuzefovich): we temporarily ignore internal errors
-					// that are because of #40929.
+					// that are because of #40929 and #79886.
 					var expectedError bool
 					for _, exp := range []string{
 						"could not parse \"0E-2019\" as type decimal",
+						"Constraint needs a valid start or end key",
 					} {
 						expectedError = expectedError || strings.Contains(es, exp)
 					}
