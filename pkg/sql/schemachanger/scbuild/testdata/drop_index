@@ -1,0 +1,311 @@
+# A "vanilla" index.
+setup
+CREATE TABLE t(i INT PRIMARY KEY, j INT NOT NULL);
+CREATE INDEX idx ON t(j)
+----
+
+build
+DROP INDEX idx CASCADE
+----
+- [[IndexName:{DescID: 104, Name: idx, IndexID: 2}, ABSENT], PUBLIC]
+  details:
+    indexId: 2
+    name: idx
+    tableId: 104
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isCreatedExplicitly: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      keySuffixColumnIds:
+      - 1
+      tableId: 104
+
+
+# A index with a dependent view and a dependent FK constraint.
+setup
+DROP TABLE IF EXISTS t CASCADE;
+DROP INDEX IF EXISTS idx CASCADE;
+DROP VIEW IF EXISTS v CASCADE;
+DROP TABLE IF EXISTS another_t CASCADE;
+CREATE TABLE t(i INT PRIMARY KEY, j INT NOT NULL);
+CREATE UNIQUE INDEX idx ON t(j);
+CREATE VIEW v AS (SELECT j FROM t@idx);
+CREATE TABLE another_t(i INT PRIMARY KEY, j INT NOT NULL REFERENCES t(j))
+----
+
+build
+DROP INDEX idx CASCADE
+----
+- [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    pgAttributeNum: 1
+    tableId: 106
+- [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 106
+- [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
+    tableId: 106
+- [[ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
+    tableId: 106
+- [[ColumnName:{DescID: 106, Name: j, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: j
+    tableId: 106
+- [[ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    name: tableoid
+    tableId: 106
+- [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 106
+- [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    embeddedTypeT:
+      type:
+        family: OidFamily
+        oid: 26
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 106
+- [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    embeddedTypeT:
+      type:
+        family: DecimalFamily
+        oid: 1700
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 106
+- [[ConstraintName:{DescID: 107, Name: another_t_j_fkey, ConstraintID: 2}, ABSENT], PUBLIC]
+  details:
+    constraintId: 2
+    name: another_t_j_fkey
+    tableId: 107
+- [[ForeignKeyConstraint:{DescID: 107, ConstraintID: 2, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  details:
+    columnIds:
+    - 2
+    constraintId: 2
+    referencedColumnIds:
+    - 2
+    referencedTableId: 105
+    tableId: 107
+- [[IndexName:{DescID: 105, Name: idx, IndexID: 2}, ABSENT], PUBLIC]
+  details:
+    indexId: 2
+    name: idx
+    tableId: 105
+- [[Namespace:{DescID: 106, Name: v, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  details:
+    databaseId: 100
+    descriptorId: 106
+    name: v
+    schemaId: 101
+- [[ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  details:
+    objectId: 106
+    parentSchemaId: 101
+- [[Owner:{DescID: 106}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 106
+    owner: root
+- [[SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      constraintId: 2
+      indexId: 2
+      isCreatedExplicitly: true
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      keySuffixColumnIds:
+      - 1
+      tableId: 105
+- [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 106
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 106
+    privileges: 2
+    userName: root
+- [[View:{DescID: 106}, ABSENT], PUBLIC]
+  details:
+    forwardReferences:
+    - columnIds:
+      - 2
+      indexId: 2
+      toId: 105
+    usesRelationIds:
+    - 105
+    viewId: 106
+
+# A hash-sharded index
+setup
+DROP TABLE IF EXISTS t CASCADE;
+DROP INDEX IF EXISTS idx CASCADE;
+CREATE TABLE t(i INT PRIMARY KEY, j INT NOT NULL);
+CREATE INDEX idx ON t(j) USING HASH;
+----
+
+build
+DROP INDEX idx CASCADE
+----
+- [[CheckConstraint:{DescID: 108, ConstraintID: 4}, ABSENT], PUBLIC]
+  details:
+    columnIds:
+    - 3
+    constraintId: 4
+    embeddedExpr:
+      expr: crdb_internal_j_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8,
+        5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8,
+        13:::INT8, 14:::INT8, 15:::INT8)
+    tableId: 108
+- [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    isHidden: true
+    isVirtual: true
+    pgAttributeNum: 3
+    tableId: 108
+- [[ColumnName:{DescID: 108, Name: crdb_internal_j_shard_16, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    name: crdb_internal_j_shard_16
+    tableId: 108
+- [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    computeExpr:
+      expr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 16:::INT8)
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isVirtual: true
+    tableId: 108
+- [[ConstraintName:{DescID: 108, Name: check_crdb_internal_j_shard_16, ConstraintID: 4}, ABSENT], PUBLIC]
+  details:
+    constraintId: 4
+    name: check_crdb_internal_j_shard_16
+    tableId: 108
+- [[IndexName:{DescID: 108, Name: idx, IndexID: 2}, ABSENT], PUBLIC]
+  details:
+    indexId: 2
+    name: idx
+    tableId: 108
+- [[SecondaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isCreatedExplicitly: true
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 3
+      - 2
+      keySuffixColumnIds:
+      - 1
+      sharding:
+        columnNames:
+        - j
+        isSharded: true
+        name: crdb_internal_j_shard_16
+        shardBuckets: 16
+      tableId: 108
+
+# A partial, expression index
+setup
+DROP TABLE IF EXISTS t;
+DROP INDEX IF EXISTS idx;
+CREATE TABLE t(i INT PRIMARY KEY, j STRING);
+CREATE INDEX idx ON t(lower(j)) WHERE i > 0;
+----
+
+build
+DROP INDEX idx CASCADE
+----
+- [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    isInaccessible: true
+    isVirtual: true
+    pgAttributeNum: 3
+    tableId: 109
+- [[ColumnName:{DescID: 109, Name: crdb_internal_idx_expr, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    name: crdb_internal_idx_expr
+    tableId: 109
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    computeExpr:
+      expr: lower(j)
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 25
+    isNullable: true
+    isVirtual: true
+    tableId: 109
+- [[IndexName:{DescID: 109, Name: idx, IndexID: 2}, ABSENT], PUBLIC]
+  details:
+    indexId: 2
+    name: idx
+    tableId: 109
+- [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isCreatedExplicitly: true
+      isPartial: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 3
+      keySuffixColumnIds:
+      - 1
+      tableId: 109
+- [[SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT], PUBLIC]
+  details:
+    embeddedExpr:
+      expr: i > 0:::INT8
+    indexId: 2
+    tableId: 109

@@ -217,7 +217,6 @@ ORDER BY "timestamp", info
 
 # Drop the index
 #################
-
 statement ok
 DROP INDEX a@a_foo
 

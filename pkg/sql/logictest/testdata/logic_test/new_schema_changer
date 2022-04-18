@@ -296,7 +296,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           │
 │           ├── • SetIndexName
 │           │     IndexID: 1
-│           │     Name: crdb_internal_index_1_name_placeholder
+│           │     Name: foo_pkey
 │           │     TableID: 106
 │           │
 │           ├── • SetIndexName

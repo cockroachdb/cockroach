@@ -737,12 +737,12 @@ func (b *builderState) ResolveIndex(
 }
 
 // ResolveTableIndexBestEffort implements the scbuildstmt.NameResolver interface.
-func (b *builderState) ResolveTableIndexBestEffort(
-	tableIndexName *tree.TableIndexName, p scbuildstmt.ResolveParams, required bool,
+func (b *builderState) ResolveIndexByName(
+	tableIndexName *tree.TableIndexName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
 	found, prefix, tbl, idx := b.cr.MayResolveIndex(b.ctx, *tableIndexName)
 	if !found {
-		if required {
+		if !p.IsExistenceOptional {
 			panic(pgerror.Newf(pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index))
 		}
 		return nil
@@ -823,6 +823,47 @@ func (b *builderState) ResolveConstraint(
 			"constraint %q of relation %q does not exist", constraintName, rel.GetName()))
 	}
 
+	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		return idI != nil && idI.(catid.ConstraintID) == constraintID
+	})
+}
+
+// ResolveColumnByID implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolveColumnByID(
+	relationID catid.DescID, columnID catid.ColumnID, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	b.ensureDescriptor(relationID)
+	c := b.descCache[relationID]
+	rel := c.desc.(catalog.TableDescriptor)
+	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
+	if columnID == 0 {
+		if p.IsExistenceOptional {
+			return nil
+		}
+		panic(pgerror.Newf(pgcode.UndefinedColumn,
+			"columnID %q not found in relation %q", columnID, rel.GetName()))
+	}
+	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
+		return idI != nil && idI.(catid.ColumnID) == columnID
+	})
+}
+
+func (b *builderState) ResolveConstraintByID(
+	relationID catid.DescID, constraintID descpb.ConstraintID, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	b.ensureDescriptor(relationID)
+	c := b.descCache[relationID]
+	rel := c.desc.(catalog.TableDescriptor)
+	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
+	if constraintID == 0 {
+		if p.IsExistenceOptional {
+			return nil
+		}
+		panic(pgerror.Newf(pgcode.UndefinedColumn,
+			"constraintID %q not found in relation %q", constraintID, rel.GetName()))
+	}
 	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
 		return idI != nil && idI.(catid.ConstraintID) == constraintID

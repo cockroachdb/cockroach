@@ -202,6 +202,31 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			UsesRelationIDs: catalog.MakeDescriptorIDSet(tbl.GetDependsOn()...).Ordered(),
 			IsTemporary:     tbl.IsTemporary(),
 			IsMaterialized:  tbl.MaterializedView(),
+			ForwardReferences: func(tbl catalog.TableDescriptor) []*scpb.View_Reference {
+				result := make([]*scpb.View_Reference, 0)
+
+				// For each `to` relation, find the back reference to `tbl`.
+				for _, toID := range tbl.GetDependsOn() {
+					to := w.lookupFn(toID)
+					toDesc, err := catalog.AsTableDescriptor(to)
+					if err != nil {
+						panic(err)
+					}
+					if err = toDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+						if dep.ID == tbl.GetID() {
+							result = append(result, &scpb.View_Reference{
+								ToID:      toID,
+								IndexID:   dep.IndexID,
+								ColumnIDs: dep.ColumnIDs,
+							})
+						}
+						return nil
+					}); err != nil {
+						panic(err)
+					}
+				}
+				return result
+			}(tbl),
 		})
 	default:
 		w.ev(descriptorStatus(tbl), &scpb.Table{
@@ -325,6 +350,7 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOption(),
 		PgAttributeNum:                    col.GetPGAttributeNum(),
 		IsSystemColumn:                    col.IsSystemColumn(),
+		IsVirtual:                         col.IsVirtual(),
 	}
 	w.ev(maybeMutationStatus(col), column)
 	w.ev(scpb.Status_PUBLIC, &scpb.ColumnName{
@@ -417,6 +443,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			IsInverted:          idx.GetType() == descpb.IndexDescriptor_INVERTED,
 			IsCreatedExplicitly: idx.IsCreatedExplicitly(),
 			ConstraintID:        idx.GetConstraintID(),
+			IsPartial:           idx.IsPartial(),
 		}
 		index.KeyColumnDirections = make([]scpb.Index_Direction, len(index.KeyColumnIDs))
 		for i := 0; i < idx.NumKeyColumns(); i++ {
