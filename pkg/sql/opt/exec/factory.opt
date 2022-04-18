@@ -245,7 +245,7 @@ define IndexJoin {
     KeyCols []exec.NodeColumnOrdinal
     TableCols exec.TableColumnOrdinalSet
     ReqOrdering exec.OutputOrdering
-    LimitHint int
+    LimitHint int64
 }
 
 # LookupJoin performs a lookup join.
@@ -280,7 +280,7 @@ define LookupJoin {
     IsSecondJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
     Locking *tree.LockingItem
-    LimitHint int
+    LimitHint int64
 }
 
 # InvertedJoin performs a lookup join into an inverted index.

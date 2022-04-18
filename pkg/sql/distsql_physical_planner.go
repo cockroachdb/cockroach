@@ -2231,7 +2231,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
 		HasSystemColumns:  n.table.containsSystemColumns,
-		LimitHint:         int64(n.limitHint),
+		LimitHint:         n.limitHint,
 	}
 
 	post := execinfrapb.PostProcessSpec{
@@ -2290,7 +2290,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		HasSystemColumns:         n.table.containsSystemColumns,
 		LeftJoinWithPairedJoiner: n.isSecondJoinInPairedJoiner,
 		LookupBatchBytesLimit:    dsp.distSQLSrv.TestingKnobs.JoinReaderBatchBytesLimit,
-		LimitHint:                int64(n.limitHint),
+		LimitHint:                n.limitHint,
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
 	if err != nil {
