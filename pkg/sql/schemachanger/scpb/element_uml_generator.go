@@ -83,6 +83,5 @@ func run(out string) error {
 	// the end.
 	buf.Write(parentRelations.Bytes())
 	buf.WriteString("@enduml\n")
-	ioutil.WriteFile(out, buf.Bytes(), 0777)
-	return nil
+	return ioutil.WriteFile(out, buf.Bytes(), 0777)
 }
