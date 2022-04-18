@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -308,6 +309,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 			localDesc,
 			allStoresList,
 			storeMap,
+			sr.scorerOptions(ctx),
 		)
 		replicasToMaybeRebalance = append(replicasToMaybeRebalance, considerForRebalance...)
 		if replWithStats.repl == nil {
@@ -433,9 +435,28 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 	ctx context.Context,
 	hottestRanges *[]replicaWithStats,
 	localDesc *roachpb.StoreDescriptor,
-	storeList StoreList,
+	allStoresList StoreList,
 	storeMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
+	options *qpsScorerOptions,
 ) (replicaWithStats, roachpb.ReplicaDescriptor, []replicaWithStats) {
+	// NB: Don't switch over to the new locality-aware lease transfer scheme until
+	// the cluster version is finalized.
+	if !sr.st.Version.IsActive(ctx, clusterversion.EnableNewStoreRebalancer) {
+		log.Infof(
+			ctx, "cluster version has not been finalized; using pre-22.1 load-based lease transfer scheme",
+		)
+
+		// We manually compute the cluster level under/over-fullness thresholds
+		// since the deprecated rebalance logic doesn't care about equivalence
+		// classes.
+		qpsMinThreshold := underfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
+		qpsMaxThreshold := overfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
+		return sr.deprecatedChooseLeaseToTransfer(
+			ctx, hottestRanges, localDesc, allStoresList,
+			storeMap, qpsMinThreshold, qpsMaxThreshold,
+		)
+	}
+
 	var considerForRebalance []replicaWithStats
 	now := sr.rq.store.Clock().NowAsClockTimestamp()
 	for {
@@ -503,8 +524,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			continue
 		}
 
-		filteredStoreList := storeList.excludeInvalid(conf.Constraints)
-		filteredStoreList = storeList.excludeInvalid(conf.VoterConstraints)
+		filteredStoreList := allStoresList.excludeInvalid(conf.Constraints)
+		filteredStoreList = allStoresList.excludeInvalid(conf.VoterConstraints)
 		if sr.rq.allocator.followTheWorkloadPrefersLocal(
 			ctx,
 			filteredStoreList,
@@ -553,6 +574,24 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 	allStoresList StoreList,
 	options *qpsScorerOptions,
 ) (replWithStats replicaWithStats, voterTargets, nonVoterTargets []roachpb.ReplicationTarget) {
+	// NB: Don't switch over to the locality aware rebalancer until the cluster
+	// version is finalized.
+	if !sr.st.Version.IsActive(ctx, clusterversion.EnableNewStoreRebalancer) {
+		log.Infof(
+			ctx, "cluster version has not been finalized; using pre-22.1 load-based rebalancing scheme",
+		)
+
+		// We manually compute the cluster level under/over-fullness thresholds
+		// since the deprecated rebalance logic doesn't care about equivalence
+		// classes.
+		qpsMinThreshold := underfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
+		qpsMaxThreshold := overfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
+		return sr.deprecatedChooseRangeToRebalance(
+			ctx, hottestRanges, localDesc, allStoresList,
+			storeListToMap(allStoresList), qpsMinThreshold, qpsMaxThreshold,
+		)
+	}
+
 	now := sr.rq.store.Clock().NowAsClockTimestamp()
 	for {
 		if len(*hottestRanges) == 0 {
@@ -642,7 +681,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			replWithStats.qps,
 		)
 
-		targetVoterRepls, targetNonVoterRepls, foundRebalance := sr.getRebalanceTargetsBasedOnQPS(
+		targetVoterRepls, targetNonVoterRepls, foundRebalance := sr.getLocalityAwareRebalanceTargetsBasedOnQPS(
 			ctx,
 			rebalanceCtx,
 			options,
@@ -691,11 +730,11 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 	}
 }
 
-// getRebalanceTargetsBasedOnQPS returns a list of rebalance targets for
-// voting and non-voting replicas on the range that match the relevant
+// getLocalityAwareRebalanceTargetsBasedOnQPS returns a list of rebalance targets
+// for voting and non-voting replicas on the range that match the relevant
 // constraints on the range and would further the goal of balancing the QPS on
-// the stores in this cluster.
-func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
+// the "equivalent" stores in this cluster.
+func (sr *StoreRebalancer) getLocalityAwareRebalanceTargetsBasedOnQPS(
 	ctx context.Context, rbCtx rangeRebalanceContext, options scorerOptions,
 ) (finalVoterTargets, finalNonVoterTargets []roachpb.ReplicaDescriptor, foundRebalance bool) {
 	finalVoterTargets = rbCtx.rangeDesc.Replicas().VoterDescriptors()

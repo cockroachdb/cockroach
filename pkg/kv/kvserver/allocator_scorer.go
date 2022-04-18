@@ -876,7 +876,7 @@ func rankedCandidateListForAllocation(
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	allowMultipleReplsPerNode bool,
-	options *rangeCountScorerOptions,
+	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
 	existingReplTargets := roachpb.MakeReplicaSet(existingReplicas).ReplicationTargets()
@@ -905,7 +905,7 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		if !maxCapacityCheck(s) || !options.storeHealthOptions.readAmpIsHealthy(
+		if !maxCapacityCheck(s) || !options.getStoreHealthOptions().readAmpIsHealthy(
 			ctx,
 			s,
 			candidateStores.candidateL0Sublevels.mean,
@@ -914,11 +914,34 @@ func rankedCandidateListForAllocation(
 		}
 		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
 		balanceScore := options.balanceScore(candidateStores, s.Capacity)
+		// NB: This is only applicable in mixed version (21.2 along with 22.1 nodes)
+		// clusters. `rankedCandidateListForAllocation` will never be called in 22.1
+		// with a `qpsScorerOptions`.
+		// TODO(aayush): Remove this in 22.2.
+		var convergesScore int
+		if qpsOpts, ok := options.(*qpsScorerOptions); ok {
+			if qpsOpts.qpsRebalanceThreshold > 0 {
+				if s.Capacity.QueriesPerSecond < underfullQPSThreshold(
+					qpsOpts, candidateStores.candidateQueriesPerSecond.mean,
+				) {
+					convergesScore = 1
+				} else if s.Capacity.QueriesPerSecond < candidateStores.candidateQueriesPerSecond.mean {
+					convergesScore = 0
+				} else if s.Capacity.QueriesPerSecond < overfullQPSThreshold(
+					qpsOpts, candidateStores.candidateQueriesPerSecond.mean,
+				) {
+					convergesScore = -1
+				} else {
+					convergesScore = -2
+				}
+			}
+		}
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          constraintsOK,
 			necessary:      necessary,
 			diversityScore: diversityScore,
+			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
 			rangeCount:     int(s.Capacity.RangeCount),
 		})

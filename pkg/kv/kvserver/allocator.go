@@ -958,7 +958,7 @@ func (a *Allocator) allocateTargetFromList(
 	candidateStores StoreList,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
-	options *rangeCountScorerOptions,
+	options scorerOptions,
 	allowMultipleReplsPerNode bool,
 	targetType targetReplicaType,
 ) (roachpb.ReplicationTarget, string) {
