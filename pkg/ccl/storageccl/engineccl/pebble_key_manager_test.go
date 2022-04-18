@@ -209,7 +209,10 @@ func setActiveStoreKeyInProto(dkr *enginepbccl.DataKeysRegistry, id string) {
 func setActiveDataKeyInProto(dkr *enginepbccl.DataKeysRegistry, id string) {
 	dkr.DataKeys[id] = &enginepbccl.SecretKey{
 		Info: &enginepbccl.KeyInfo{
-			EncryptionType: enginepbccl.EncryptionType_AES192_CTR, KeyId: id},
+			EncryptionType: enginepbccl.EncryptionType_AES192_CTR,
+			KeyId:          id,
+			CreationTime:   kmTimeNow().Unix(),
+		},
 		Key: []byte("some key"),
 	}
 	dkr.ActiveDataKeyId = id
