@@ -12,6 +12,7 @@ DROP VIEW defaultdb.v1
 - [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 105
 - [[ColumnComment:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -95,42 +96,52 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 105
 - [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 106
 - [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
+    pgAttributeNum: 2
     tableId: 106
 - [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 107
 - [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
+    pgAttributeNum: 2
     tableId: 107
 - [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 108
 - [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
+    pgAttributeNum: 2
     tableId: 108
 - [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 111
 - [[Column:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
+    pgAttributeNum: 2
     tableId: 111
 - [[Column:{DescID: 111, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
+    pgAttributeNum: 3
     tableId: 111
 - [[ColumnComment:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   details:

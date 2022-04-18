@@ -182,6 +182,7 @@ ElementState:
   Status: PUBLIC
 - Column:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 112
   Status: PUBLIC
 - TableComment:
@@ -248,10 +249,12 @@ ElementState:
   Status: PUBLIC
 - Column:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 113
   Status: PUBLIC
 - Column:
     columnId: 2
+    pgAttributeNum: 2
     tableId: 113
   Status: PUBLIC
 - TableComment:

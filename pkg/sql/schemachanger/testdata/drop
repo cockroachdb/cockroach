@@ -316,6 +316,7 @@ upsert descriptor #108
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -357,6 +358,7 @@ upsert descriptor #108
   +    - elementProto:
   +        column:
   +          columnId: 2
+  +          pgAttributeNum: 2
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -398,6 +400,7 @@ upsert descriptor #108
   +        column:
   +          columnId: 3
   +          isHidden: true
+  +          pgAttributeNum: 3
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -635,6 +638,7 @@ upsert descriptor #108
   -    - elementProto:
   -        column:
   -          columnId: 1
+  -          pgAttributeNum: 1
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -676,6 +680,7 @@ upsert descriptor #108
   -    - elementProto:
   -        column:
   -          columnId: 2
+  -          pgAttributeNum: 2
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -717,6 +722,7 @@ upsert descriptor #108
   -        column:
   -          columnId: 3
   -          isHidden: true
+  -          pgAttributeNum: 3
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -2115,6 +2121,7 @@ upsert descriptor #116
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2155,6 +2162,7 @@ upsert descriptor #116
   +    - elementProto:
   +        column:
   +          columnId: 2
+  +          pgAttributeNum: 2
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2197,6 +2205,7 @@ upsert descriptor #116
   +    - elementProto:
   +        column:
   +          columnId: 3
+  +          pgAttributeNum: 3
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2430,6 +2439,7 @@ upsert descriptor #117
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -2470,6 +2480,7 @@ upsert descriptor #117
   +    - elementProto:
   +        column:
   +          columnId: 2
+  +          pgAttributeNum: 2
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -2512,6 +2523,7 @@ upsert descriptor #117
   +    - elementProto:
   +        column:
   +          columnId: 3
+  +          pgAttributeNum: 3
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -2737,6 +2749,7 @@ upsert descriptor #118
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 118
   +      metadata:
   +        sourceElementId: 3
@@ -2778,6 +2791,7 @@ upsert descriptor #118
   +        column:
   +          columnId: 2
   +          isHidden: true
+  +          pgAttributeNum: 2
   +          tableId: 118
   +      metadata:
   +        sourceElementId: 3
@@ -2990,6 +3004,7 @@ upsert descriptor #119
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 119
   +      metadata:
   +        sourceElementId: 9
@@ -3149,6 +3164,7 @@ upsert descriptor #120
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 120
   +      metadata:
   +        sourceElementId: 10
@@ -3191,6 +3207,7 @@ upsert descriptor #120
   +    - elementProto:
   +        column:
   +          columnId: 2
+  +          pgAttributeNum: 2
   +          tableId: 120
   +      metadata:
   +        sourceElementId: 10
@@ -3351,6 +3368,7 @@ upsert descriptor #121
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 121
   +      metadata:
   +        sourceElementId: 11
@@ -3393,6 +3411,7 @@ upsert descriptor #121
   +    - elementProto:
   +        column:
   +          columnId: 2
+  +          pgAttributeNum: 2
   +          tableId: 121
   +      metadata:
   +        sourceElementId: 11
@@ -3552,6 +3571,7 @@ upsert descriptor #122
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 122
   +      metadata:
   +        sourceElementId: 11
@@ -3594,6 +3614,7 @@ upsert descriptor #122
   +    - elementProto:
   +        column:
   +          columnId: 2
+  +          pgAttributeNum: 2
   +          tableId: 122
   +      metadata:
   +        sourceElementId: 11
@@ -3973,6 +3994,7 @@ upsert descriptor #125
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -4013,6 +4035,7 @@ upsert descriptor #125
   +    - elementProto:
   +        column:
   +          columnId: 2
+  +          pgAttributeNum: 2
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -4055,6 +4078,7 @@ upsert descriptor #125
   +    - elementProto:
   +        column:
   +          columnId: 3
+  +          pgAttributeNum: 3
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -4445,6 +4469,7 @@ upsert descriptor #116
   -    - elementProto:
   -        column:
   -          columnId: 1
+  -          pgAttributeNum: 1
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -4485,6 +4510,7 @@ upsert descriptor #116
   -    - elementProto:
   -        column:
   -          columnId: 2
+  -          pgAttributeNum: 2
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -4527,6 +4553,7 @@ upsert descriptor #116
   -    - elementProto:
   -        column:
   -          columnId: 3
+  -          pgAttributeNum: 3
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -4753,6 +4780,7 @@ upsert descriptor #117
   -    - elementProto:
   -        column:
   -          columnId: 1
+  -          pgAttributeNum: 1
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -4793,6 +4821,7 @@ upsert descriptor #117
   -    - elementProto:
   -        column:
   -          columnId: 2
+  -          pgAttributeNum: 2
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -4835,6 +4864,7 @@ upsert descriptor #117
   -    - elementProto:
   -        column:
   -          columnId: 3
+  -          pgAttributeNum: 3
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -5057,6 +5087,7 @@ upsert descriptor #118
   -    - elementProto:
   -        column:
   -          columnId: 1
+  -          pgAttributeNum: 1
   -          tableId: 118
   -      metadata:
   -        sourceElementId: 3
@@ -5098,6 +5129,7 @@ upsert descriptor #118
   -        column:
   -          columnId: 2
   -          isHidden: true
+  -          pgAttributeNum: 2
   -          tableId: 118
   -      metadata:
   -        sourceElementId: 3
