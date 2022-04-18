@@ -13,9 +13,11 @@ package spanconfigkvaccessor
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -256,10 +259,30 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 		return err
 	}
 
+	every := util.Every(50 * time.Second)
 	if len(toDelete) > 0 {
+		sort.Sort(spanconfig.Targets(toDelete))
+		// XXX: Would sorting delete entries help? Would using smaller batch sizes
+		// here help? Reduce the likelihood of full table scans.
 		if err := k.paginate(len(toDelete), func(startIdx, endIdx int) error {
+			start := timeutil.Now()
+
 			toDeleteBatch := toDelete[startIdx:endIdx]
 			deleteStmt, deleteQueryArgs := k.constructDeleteStmtAndArgs(toDeleteBatch)
+
+			if every.ShouldProcess(timeutil.Now()) {
+				rows, err := k.ie.QueryBufferedEx(ctx, "delete-span-cfgs", txn,
+					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+					fmt.Sprintf("EXPLAIN %s", deleteStmt), deleteQueryArgs...,
+				)
+				if err != nil {
+					return err
+				}
+				for _, r := range rows {
+					log.Infof(ctx, "explain: %s", r)
+				}
+			}
+
 			n, err := k.ie.ExecEx(ctx, "delete-span-cfgs", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				deleteStmt, deleteQueryArgs...,
@@ -270,6 +293,8 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			if n != len(toDeleteBatch) {
 				return errors.AssertionFailedf("expected to delete %d row(s), deleted %d", len(toDeleteBatch), n)
 			}
+
+			log.Infof(ctx, "kvaccessor delete batch for %d entries took %s", endIdx-startIdx, timeutil.Since(start))
 			return nil
 		}); err != nil {
 			return err
@@ -281,6 +306,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 	}
 
 	return k.paginate(len(toUpsert), func(startIdx, endIdx int) error {
+		start := timeutil.Now()
 		toUpsertBatch := toUpsert[startIdx:endIdx]
 		upsertStmt, upsertQueryArgs, err := k.constructUpsertStmtAndArgs(toUpsertBatch)
 		if err != nil {
@@ -304,6 +330,8 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 		} else if valid := bool(tree.MustBeDBool(datums[0])); !valid {
 			return errors.AssertionFailedf("expected to find single row containing upserted spans")
 		}
+
+		log.Infof(ctx, "kvaccessor upsert batch for %d entries took %s", endIdx-startIdx, timeutil.Since(start))
 		return nil
 	})
 }
