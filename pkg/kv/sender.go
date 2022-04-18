@@ -441,7 +441,8 @@ func (f NonTransactionalFactoryFunc) NonTransactionalSender() Sender {
 func SendWrappedWith(
 	ctx context.Context, sender Sender, h roachpb.Header, args roachpb.Request,
 ) (roachpb.Response, *roachpb.Error) {
-	return SendWrappedWithAdmission(ctx, sender, h, roachpb.AdmissionHeader{}, args)
+	_, resp, pErr := SendWrappedWithAdmission(ctx, sender, h, roachpb.AdmissionHeader{}, args)
+	return resp, pErr
 }
 
 // SendWrappedWithAdmission is a convenience function which wraps the request
@@ -454,7 +455,7 @@ func SendWrappedWithAdmission(
 	h roachpb.Header,
 	ah roachpb.AdmissionHeader,
 	args roachpb.Request,
-) (roachpb.Response, *roachpb.Error) {
+) (*roachpb.BatchResponse, roachpb.Response, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.Header = h
 	ba.AdmissionHeader = ah
@@ -462,13 +463,13 @@ func SendWrappedWithAdmission(
 
 	br, pErr := sender.Send(ctx, ba)
 	if pErr != nil {
-		return nil, pErr
+		return nil, nil, pErr
 	}
 	unwrappedReply := br.Responses[0].GetInner()
 	header := unwrappedReply.Header()
 	header.Txn = br.Txn
 	unwrappedReply.SetHeader(header)
-	return unwrappedReply, nil
+	return br, unwrappedReply, nil
 }
 
 // SendWrapped is identical to SendWrappedWith with a zero header.
