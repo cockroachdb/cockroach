@@ -546,9 +546,17 @@ func (sg *kvGranter) setAvailableIOTokensLocked(tokens int64) {
 	} else {
 		sg.availableIOTokens = tokens
 	}
-	if wasExhausted && sg.availableIOTokens > 0 && sg.ioTokensExhaustedDurationMetric != nil {
-		exhaustedMicros := timeutil.Since(sg.exhaustedStart).Microseconds()
+	if wasExhausted && sg.ioTokensExhaustedDurationMetric != nil {
+		// NB: sg.availableIOTokens may still be 0, i.e., tokens may continue to
+		// be exhausted. We do want to tick the metric so that it doesn't show a
+		// burst of activity after many minutes of exhaustion (which we had
+		// observed prior to this code).
+		now := timeutil.Now()
+		exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
 		sg.ioTokensExhaustedDurationMetric.Inc(exhaustedMicros)
+		if sg.availableIOTokens == 0 {
+			sg.exhaustedStart = now
+		}
 	}
 }
 
@@ -1525,15 +1533,14 @@ func (io *ioLoadListener) allocateTokensTick() {
 			toAllocate = io.totalTokens - io.tokensAllocated
 		}
 	}
-	if toAllocate > 0 {
-		io.mu.Lock()
-		defer io.mu.Unlock()
-		io.tokensAllocated += toAllocate
-		if io.tokensAllocated < 0 {
-			panic(errors.AssertionFailedf("tokens allocated is negative %d", io.tokensAllocated))
-		}
-		io.mu.kvGranter.setAvailableIOTokensLocked(toAllocate)
+	// INVARIANT: toAllocate >= 0.
+	io.mu.Lock()
+	defer io.mu.Unlock()
+	io.tokensAllocated += toAllocate
+	if io.tokensAllocated < 0 {
+		panic(errors.AssertionFailedf("tokens allocated is negative %d", io.tokensAllocated))
 	}
+	io.mu.kvGranter.setAvailableIOTokensLocked(toAllocate)
 }
 
 // adjustTokens computes a new value of totalTokens (and resets
