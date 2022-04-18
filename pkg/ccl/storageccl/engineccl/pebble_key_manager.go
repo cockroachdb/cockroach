@@ -304,6 +304,7 @@ func (m *DataKeyManager) SetActiveStoreKeyInfo(
 	if found && prevActiveStoreKey.KeyId == storeKeyInfo.KeyId && m.mu.activeKey != nil {
 		// The active store key has not changed and we already have an active data key,
 		// so no need to do anything.
+		m.mu.rotationEnabled = true
 		return nil
 	}
 	// For keys other than plaintext, make sure the user is not reusing inactive keys.

@@ -70,7 +70,7 @@ load
 
 get-active-data-key
 ----
-encryption_type:AES192_CTR
+encryption_type:AES192_CTR creation_time:6
 
 get-active-store-key
 ----
@@ -178,7 +178,7 @@ check-exposed val=false
 
 get-active-data-key
 ----
-encryption_type:AES192_CTR
+encryption_type:AES192_CTR creation_time:16
 
 set-active-store-key-plain id=bar
 ----
@@ -190,3 +190,58 @@ get-active-data-key
 ----
 creation_time:16 source:"data key manager" was_exposed:true parent_key_id:"bar"
 
+
+# Test that starts with one active data and store key. Checks that data key is
+# not immediately rotated after the call to SetActiveStoreKeyInfo with the same
+# store key, but after the rotation period elapses, it gets rotated.
+
+init
+dir2
+5
+active-store-key foo
+active-data-key data1
+----
+
+load
+----
+
+get-active-data-key
+----
+encryption_type:AES192_CTR creation_time:16
+
+get-active-store-key
+----
+foo
+
+record-active-data-key
+----
+
+compare-active-data-key
+----
+same
+
+get-active-data-key
+----
+encryption_type:AES192_CTR creation_time:16
+
+record-active-data-key
+----
+
+set-active-store-key id=foo
+----
+
+compare-active-data-key
+----
+same
+
+get-active-data-key
+----
+encryption_type:AES192_CTR creation_time:16
+
+wait
+10
+----
+
+compare-active-data-key
+----
+different
