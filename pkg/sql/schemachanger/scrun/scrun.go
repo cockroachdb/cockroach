@@ -126,6 +126,7 @@ func RunSchemaChangesInJob(
 			return err
 		}
 	}
+
 	return nil
 }
 

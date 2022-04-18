@@ -103,6 +103,7 @@ ElementState:
     generatedAsIdentityType: 0
     isHidden: false
     isInaccessible: false
+    isVirtual: false
     pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
@@ -112,6 +113,7 @@ ElementState:
     generatedAsIdentityType: 0
     isHidden: false
     isInaccessible: false
+    isVirtual: false
     pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
@@ -123,6 +125,7 @@ ElementState:
       isConcurrently: false
       isCreatedExplicitly: false
       isInverted: false
+      isPartial: false
       isUnique: true
       keyColumnDirections:
       - ASC
@@ -293,6 +296,7 @@ ElementState:
     generatedAsIdentityType: 0
     isHidden: false
     isInaccessible: false
+    isVirtual: false
     pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
@@ -302,6 +306,7 @@ ElementState:
     generatedAsIdentityType: 0
     isHidden: false
     isInaccessible: false
+    isVirtual: false
     pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
@@ -313,6 +318,7 @@ ElementState:
       isConcurrently: false
       isCreatedExplicitly: false
       isInverted: false
+      isPartial: false
       isUnique: true
       keyColumnDirections:
       - ASC

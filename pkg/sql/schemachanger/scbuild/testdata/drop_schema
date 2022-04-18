@@ -751,27 +751,53 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     userName: root
 - [[View:{DescID: 108}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 2
+      toId: 107
     usesRelationIds:
     - 107
     viewId: 108
 - [[View:{DescID: 109}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      toId: 108
     usesRelationIds:
     - 108
     viewId: 109
 - [[View:{DescID: 110}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      toId: 108
+    - columnIds:
+      - 1
+      - 2
+      toId: 109
     usesRelationIds:
     - 108
     - 109
     viewId: 110
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      - 2
+      toId: 109
     usesRelationIds:
     - 109
     viewId: 111
 - [[View:{DescID: 114}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      - 2
+      toId: 111
     usesRelationIds:
     - 111
     usesTypeIds:
@@ -780,6 +806,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     viewId: 114
 - [[View:{DescID: 115}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      - 2
+      toId: 111
     usesRelationIds:
     - 111
     usesTypeIds:
