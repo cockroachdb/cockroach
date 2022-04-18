@@ -12,17 +12,20 @@ package persistedsqlstats_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"net/url"
+	"regexp"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
@@ -113,34 +116,29 @@ func TestSQLStatsCompactor(t *testing.T) {
 		},
 	}
 
-	testCluster := serverutils.StartNewTestCluster(
-		t, 3 /* numNodes */, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					SQLStatsKnobs: &sqlstats.TestingKnobs{
-						AOSTClause: "AS OF SYSTEM TIME '-1us'",
-					},
+	kvInterceptor := kvScanInterceptor{}
+	cleanupInterceptor := cleanupInterceptor{}
+
+	server, conn, _ := serverutils.StartServer(
+		t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					AOSTClause: "AS OF SYSTEM TIME '-1us'",
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: kvInterceptor.intercept,
 				},
 			},
-		})
+		},
+	)
 
-	defer testCluster.Stopper().Stop(ctx)
+	defer server.Stopper().Stop(ctx)
 
-	firstServer := testCluster.Server(0 /* idx */)
-	firstPgURL, firstServerConnCleanup := sqlutils.PGUrl(
-		t, firstServer.ServingSQLAddr(), "CreateConnections", /* prefix */
-		url.User(security.RootUser))
-	defer firstServerConnCleanup()
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	internalExecutor := server.InternalExecutor().(sqlutil.InternalExecutor)
 
-	pgFirstSQLConn, err := gosql.Open("postgres", firstPgURL.String())
-	require.NoError(t, err)
-	firstSQLConn := sqlutils.MakeSQLRunner(pgFirstSQLConn)
-	internalExecutor := firstServer.InternalExecutor().(sqlutil.InternalExecutor)
-
-	defer func() {
-		err := pgFirstSQLConn.Close()
-		require.NoError(t, err)
-	}()
+	// Disable automatic flush since the test will handle the flush manually.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("stmtCount=%d/maxPersistedRowLimit=%d/rowsDeletePerTxn=%d",
@@ -168,53 +166,79 @@ func TestSQLStatsCompactor(t *testing.T) {
 				"TRUNCATE system.transaction_statistics",
 			)
 			require.NoError(t, err)
-			firstServerSQLStats :=
-				firstServer.
+			serverSQLStats :=
+				server.
 					SQLServer().(*sql.Server).
 					GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
-			firstSQLConn.Exec(t,
+			sqlConn.Exec(t,
 				"SET CLUSTER SETTING sql.stats.persisted_rows.max = $1",
 				tc.maxPersistedRowLimit)
 
 			if tc.rowsToDeletePerTxn > 0 {
-				firstSQLConn.Exec(t,
+				sqlConn.Exec(t,
 					"SET CLUSTER SETTING sql.stats.cleanup.rows_to_delete_per_txn = $1",
 					tc.rowsToDeletePerTxn)
 			} else {
-				firstSQLConn.Exec(t, "RESET CLUSTER SETTING sql.stats.cleanup.rows_to_delete_per_txn")
+				sqlConn.Exec(t, "RESET CLUSTER SETTING sql.stats.cleanup.rows_to_delete_per_txn")
 			}
 
 			stmt := "SELECT 1"
 			for i := 0; i < tc.stmtCount; i++ {
-				firstSQLConn.Exec(t, stmt)
+				sqlConn.Exec(t, stmt)
 				// Mutate the stmt to create different fingerprint.
 				stmt = fmt.Sprintf("%s, 1", stmt)
 			}
 
-			firstServerSQLStats.Flush(ctx)
+			serverSQLStats.Flush(ctx)
 
 			statsCompactor := persistedsqlstats.NewStatsCompactor(
-				firstServer.ClusterSettings(),
-				firstServer.InternalExecutor().(sqlutil.InternalExecutor),
-				firstServer.DB(),
+				server.ClusterSettings(),
+				server.InternalExecutor().(sqlutil.InternalExecutor),
+				server.DB(),
 				metric.NewCounter(metric.Metadata{}),
 				&sqlstats.TestingKnobs{
-					AOSTClause: "AS OF SYSTEM TIME '-1us'",
+					AOSTClause:             "AS OF SYSTEM TIME '-1us'",
+					OnCleanupStartForShard: cleanupInterceptor.intercept,
 				},
 			)
 
 			// Initial compaction should remove the all the oldest entries.
 			expectedDeletedStmtFingerprints, expectedDeletedTxnFingerprints :=
-				getTopSortedFingerprints(t, firstSQLConn, tc.maxPersistedRowLimit)
-			err = statsCompactor.DeleteOldestEntries(ctx)
-			require.NoError(t, err)
+				getTopSortedFingerprints(t, sqlConn, tc.maxPersistedRowLimit)
 
 			// Sanity check.
 			require.Equal(t, tc.maxPersistedRowLimit, len(expectedDeletedStmtFingerprints))
 			require.Equal(t, tc.maxPersistedRowLimit, len(expectedDeletedTxnFingerprints))
 
+			run := func() {
+				// The two interceptors (kvInterceptor and cleanupInterceptor) are
+				// injected into kvserver and StatsCompactor respectively.
+				// The cleanupInterceptor calculates the number of expected "wide scan"
+				// that should be issued by the StatsCompactor.
+				// The kvInterceptor counts the number of actual "wide scan" KV Request
+				// issued.
+				kvInterceptor.reset()
+				cleanupInterceptor.reset()
+				kvInterceptor.enable()
+				defer kvInterceptor.disable()
+
+				err := statsCompactor.DeleteOldestEntries(ctx)
+				require.NoError(t, err)
+
+				expectedNumberOfWideScans := cleanupInterceptor.getExpectedNumberOfWideScans()
+				actualNumberOfWideScans := kvInterceptor.getTotalWideScans()
+
+				require.Equal(t,
+					expectedNumberOfWideScans,
+					actualNumberOfWideScans,
+					"expected %d number of wide scans issued, but %d number of "+
+						"wide scan issued", expectedNumberOfWideScans, actualNumberOfWideScans,
+				)
+			}
+			run()
+
 			actualStmtFingerprints, actualTxnFingerprints :=
-				getTopSortedFingerprints(t, firstSQLConn, 0 /* limit */)
+				getTopSortedFingerprints(t, sqlConn, 0 /* limit */)
 
 			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, len(actualStmtFingerprints))
 			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, len(actualTxnFingerprints))
@@ -234,7 +258,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 			// Calling it again should be a noop.
 			err = statsCompactor.DeleteOldestEntries(ctx)
 			require.NoError(t, err)
-			stmtStatsCnt, txnStatsCnt := getPersistedStatsEntry(t, firstSQLConn)
+			stmtStatsCnt, txnStatsCnt := getPersistedStatsEntry(t, sqlConn)
 			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, stmtStatsCnt)
 			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, txnStatsCnt)
 		})
@@ -334,4 +358,72 @@ ORDER BY aggregated_ts`
 	require.NoError(t, rows.Close())
 
 	return stmtFingerprints, txnFingerprints
+}
+
+const (
+	stmtStatsTableID = 42
+	txnStatsTableID  = 43
+)
+
+var kvReqWideScanPattern = regexp.MustCompile("/Table/(42|43)/[0-9]{1,2}/[0-9]$")
+
+type kvScanInterceptor struct {
+	totalWideScan int64
+	enabled       int32
+}
+
+func (k *kvScanInterceptor) reset() {
+	atomic.StoreInt64(&k.totalWideScan, 0)
+}
+
+func (k *kvScanInterceptor) getTotalWideScans() int64 {
+	return atomic.LoadInt64(&k.totalWideScan)
+}
+
+func (k *kvScanInterceptor) enable() {
+	atomic.StoreInt32(&k.enabled, 1)
+}
+
+func (k *kvScanInterceptor) disable() {
+	atomic.StoreInt32(&k.enabled, 0)
+}
+
+func (k *kvScanInterceptor) intercept(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	if atomic.LoadInt32(&k.enabled) == 0 {
+		return nil
+	}
+	if req, ok := ba.GetArg(roachpb.Scan); ok {
+		_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
+		if tableID == stmtStatsTableID || tableID == txnStatsTableID {
+			prettyKey := roachpb.PrettyPrintKey([]encoding.Direction{}, req.(*roachpb.ScanRequest).Key)
+			prettyEndKey := roachpb.PrettyPrintKey([]encoding.Direction{}, req.(*roachpb.ScanRequest).EndKey)
+
+			keyMatchedWideScan := kvReqWideScanPattern.MatchString(prettyKey)
+			endKeyMatchedWideScan := kvReqWideScanPattern.MatchString(prettyEndKey)
+
+			if keyMatchedWideScan && endKeyMatchedWideScan {
+				atomic.AddInt64(&k.totalWideScan, 1)
+			}
+		}
+	}
+
+	return nil
+}
+
+type cleanupInterceptor struct {
+	expectedNumberOfWideScans int64
+}
+
+func (c *cleanupInterceptor) reset() {
+	atomic.StoreInt64(&c.expectedNumberOfWideScans, 0)
+}
+
+func (c *cleanupInterceptor) intercept(shardIdx int, existingCountInShard, shardLimit int64) {
+	if existingCountInShard > shardLimit {
+		atomic.AddInt64(&c.expectedNumberOfWideScans, 1)
+	}
+}
+
+func (c *cleanupInterceptor) getExpectedNumberOfWideScans() int64 {
+	return systemschema.SQLStatsHashShardBucketCount*2 + atomic.LoadInt64(&c.expectedNumberOfWideScans)
 }
