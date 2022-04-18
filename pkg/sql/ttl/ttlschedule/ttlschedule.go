@@ -73,15 +73,13 @@ func (s rowLevelTTLExecutor) OnDrop(
 		if err != nil {
 			return err
 		}
-		f := tree.NewFmtCtx(tree.FmtSimple)
-		tn.Format(f)
 		return errors.WithHintf(
 			pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"cannot drop a row level TTL schedule",
 			),
 			`use ALTER TABLE %s RESET (ttl) instead`,
-			f.CloseAndGetString(),
+			tn.FQString(),
 		)
 	}
 	return nil
@@ -204,13 +202,11 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return "", err
 	}
-	f := tree.NewFmtCtx(tree.FmtSimple)
 	tn, err := descs.GetTableNameByID(ctx, txn, descsCol, args.TableID)
 	if err != nil {
 		return "", err
 	}
-	f.FormatNode(tn)
-	return fmt.Sprintf(`ALTER TABLE %s WITH (ttl = 'on', ...)`, f.CloseAndGetString()), nil
+	return fmt.Sprintf(`ALTER TABLE %s WITH (ttl = 'on', ...)`, tn.FQString()), nil
 }
 
 func createRowLevelTTLJob(
@@ -221,14 +217,12 @@ func createRowLevelTTLJob(
 	jobRegistry *jobs.Registry,
 	ttlDetails catpb.ScheduledRowLevelTTLArgs,
 ) (jobspb.JobID, error) {
-	f := tree.NewFmtCtx(tree.FmtSimple)
 	tn, err := descs.GetTableNameByID(ctx, txn, descsCol, ttlDetails.TableID)
 	if err != nil {
 		return 0, err
 	}
-	f.FormatNode(tn)
 	record := jobs.Record{
-		Description: fmt.Sprintf("ttl for %s", f.CloseAndGetString()),
+		Description: fmt.Sprintf("ttl for %s", tn.FQString()),
 		Username:    security.NodeUserName(),
 		Details: jobspb.RowLevelTTLDetails{
 			TableID: ttlDetails.TableID,
