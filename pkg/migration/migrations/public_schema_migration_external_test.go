@@ -229,17 +229,16 @@ SELECT "parentSchemaID" FROM system.namespace WHERE name = $1
 	}
 }
 
-func TestPublicSchemaMigration500Tables(t *testing.T) {
-	skip.WithIssue(t, 78947)
+func TestPublicSchemaMigration250Tables(t *testing.T) {
 	skip.UnderRace(t, "takes >1min under race")
+	skip.UnderStress(t, "takes >1min under stress")
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	publicSchemaMigrationTest(t, ctx, 500)
+	publicSchemaMigrationTest(t, ctx, 250)
 }
 
 func TestPublicSchemaMigration10Tables(t *testing.T) {
-	skip.WithIssue(t, 78947)
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
