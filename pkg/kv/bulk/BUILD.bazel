@@ -5,7 +5,9 @@ go_library(
     srcs = [
         "buffering_adder.go",
         "bulk_metrics.go",
+        "ingestion_tracer.go",
         "kv_buf.go",
+        "sender.go",
         "setting.go",
         "sst_batcher.go",
         "stats.go",
@@ -29,9 +31,14 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/mon",
+        "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//types",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 

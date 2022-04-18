@@ -1592,6 +1592,10 @@ message AdminScatterResponse {
   storage.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
 }
 
+message AdminScatterStats {
+  int64 data_moved = 1;
+}
+
 // AdminVerifyProtectedTimestampRequest is the argument to the
 // AdminVerifyProtectedTimestamp method which ensures that the specified record
 // will be seen before data can be garbage collected at the timestamp.
@@ -1794,6 +1798,12 @@ message AddSSTableResponse {
   // picked using cheaper, inconsistentent reads so it should be used only for
   // estimations of how ingested data and spans may overlap.
   bytes following_likely_non_empty_span_start = 4 [(gogoproto.casttype) = "Key"];
+}
+
+message AddSSTableStats {
+  int64 data_size = 1;
+  repeated int32 store_ids = 2 [(gogoproto.casttype) = "StoreID"];
+  bool ingest_as_write = 3;
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no

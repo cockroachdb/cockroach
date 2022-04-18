@@ -432,7 +432,7 @@ func runBackupProcessor(
 								ReqSentTime: reqSentTime.String(),
 							})
 
-							rawRes, pErr = kv.SendWrappedWithAdmission(
+							_, rawRes, pErr = kv.SendWrappedWithAdmission(
 								ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, admissionHeader, req)
 							respReceivedTime = timeutil.Now()
 							if pErr != nil {
