@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -1500,7 +1501,10 @@ func getBackupDetailAndManifest(
 		// This is complex right now, but should be easier shortly.
 		// TODO(benbardin): Support verifying actual existence of localities for
 		// each layer after deprecating TO-syntax in 22.2
-		if !setsAreEqual(localityKVs, prevLocalityKVs) {
+		sort.Strings(localityKVs)
+		sort.Strings(prevLocalityKVs)
+		if !(len(localityKVs) == 0 && len(prevLocalityKVs) == 0) && !reflect.DeepEqual(localityKVs,
+			prevLocalityKVs) {
 			// Note that this won't verify the default locality. That's not
 			// necessary, because the default locality defines the backup manifest
 			// location. If that URI isn't right, the backup chain will fail to
@@ -1542,22 +1546,6 @@ func getBackupDetailAndManifest(
 	}
 
 	return updatedDetails, backupManifest, nil
-}
-
-func setsAreEqual(first []string, second []string) bool {
-	if len(first) != len(second) {
-		return false
-	}
-	sortedFirst := first
-	sortedSecond := second
-	sort.Strings(sortedFirst)
-	sort.Strings(sortedSecond)
-	for i := range sortedFirst {
-		if sortedFirst[i] != sortedSecond[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func getTenantInfo(
