@@ -300,6 +300,8 @@ func (m *DataKeyManager) SetActiveStoreKeyInfo(
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// Enable data key rotation regardless of what case we go into.
+	m.mu.rotationEnabled = true
 	prevActiveStoreKey, found := m.mu.keyRegistry.StoreKeys[m.mu.keyRegistry.ActiveStoreKeyId]
 	if found && prevActiveStoreKey.KeyId == storeKeyInfo.KeyId && m.mu.activeKey != nil {
 		// The active store key has not changed and we already have an active data key,
