@@ -44,7 +44,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
+				mgr, err := streaming.GetStreamIngestManager(evalCtx)
 				if err != nil {
 					return nil, err
 				}
