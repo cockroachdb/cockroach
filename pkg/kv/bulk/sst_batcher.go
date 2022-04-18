@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,6 +60,10 @@ var (
 // it to attempt to flush SSTs before they cross range boundaries to minimize
 // expensive on-split retries.
 type SSTBatcher struct {
+	// name of the SSTBatcher is largely used for logging purposes.
+	//
+	// name is also used to prefix the LazyTags created by the ingestionTracer
+	// associated with the returned SSTBatcher.
 	name     string
 	db       *kv.DB
 	rc       *rangecache.RangeCache
@@ -97,9 +101,10 @@ type SSTBatcher struct {
 	// The rest of the fields accumulated state as opposed to configuration. Some,
 	// like totalRows, are accumulated _across_ batches and are not reset between
 	// batches when Reset() is called.
-	totalRows     roachpb.BulkOpSummary
-	stats         ingestionPerformanceStats
-	disableSplits bool
+	totalRows       roachpb.BulkOpSummary
+	stats           ingestionPerformanceStats
+	disableSplits   bool
+	ingestionTracer *ingestionTracer
 
 	maxWriteTS hlc.Timestamp
 
@@ -135,6 +140,7 @@ func MakeSSTBatcher(
 	writeAtBatchTs bool,
 	splitFilledRanges bool,
 ) (*SSTBatcher, error) {
+	ingestionTracer := newIngestionTracer(name, tracing.SpanFromContext(ctx))
 	b := &SSTBatcher{
 		name:                   name,
 		db:                     db,
@@ -143,6 +149,7 @@ func MakeSSTBatcher(
 		writeAtBatchTS:         writeAtBatchTs,
 		disableSplits:          !splitFilledRanges,
 		stats:                  ingestionPerformanceStats{sendWaitByStore: make(map[roachpb.StoreID]time.Duration)},
+		ingestionTracer:        ingestionTracer,
 	}
 	err := b.Reset(ctx)
 	return b, err
@@ -153,7 +160,14 @@ func MakeSSTBatcher(
 func MakeStreamSSTBatcher(
 	ctx context.Context, db *kv.DB, settings *cluster.Settings,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, ingestAll: true, stats: ingestionPerformanceStats{sendWaitByStore: make(map[roachpb.StoreID]time.Duration)}}
+	ingestionTracer := newIngestionTracer("streaming-batcher", tracing.SpanFromContext(ctx))
+	b := &SSTBatcher{
+		db:              db,
+		settings:        settings,
+		ingestAll:       true,
+		stats:           ingestionPerformanceStats{sendWaitByStore: make(map[roachpb.StoreID]time.Duration)},
+		ingestionTracer: ingestionTracer,
+	}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -385,6 +399,11 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		}
 	}
 
+	recordingType := tracing.RecordingOff
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil {
+		recordingType = sp.RecordingType()
+	}
 	if shouldSplit {
 		expire := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Minute * 10).UnixNano()}
 
@@ -399,13 +418,13 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			if err != nil {
 				log.Warningf(ctx, "%s failed to generate split-above key: %v", b.name, err)
 			} else {
-				beforeSplit := timeutil.Now()
-				err := b.db.AdminSplit(ctx, splitAbove, expire)
-				b.stats.splitWait += timeutil.Since(beforeSplit)
+				duration, stats, err := adminSplitWithTracing(ctx, b.db, splitAbove, expire, recordingType)
+				b.stats.splitWait += duration
 				if err != nil {
 					log.Warningf(ctx, "%s failed to split-above: %v", b.name, err)
 				} else {
 					b.stats.splits++
+					b.ingestionTracer.notify(duration, stats)
 				}
 			}
 		}
@@ -414,30 +433,32 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		if err != nil {
 			log.Warningf(ctx, "%s failed to generate split key: %v", b.name, err)
 		} else {
-			beforeSplit := timeutil.Now()
-			err := b.db.AdminSplit(ctx, splitAt, expire)
-			b.stats.splitWait += timeutil.Since(beforeSplit)
+			duration, stats, err := adminSplitWithTracing(ctx, b.db, splitAt, expire, recordingType)
+			b.stats.splitWait += duration
 			if err != nil {
 				log.Warningf(ctx, "%s failed to split: %v", b.name, err)
 			} else {
+				b.ingestionTracer.notify(duration, stats)
 				b.stats.splits++
 
 				// Now scatter the RHS before we proceed to ingest into it. We know it
 				// should be empty since we split above if there was a nextExistingKey.
-				beforeScatter := timeutil.Now()
-				resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize)
-				b.stats.scatterWait += timeutil.Since(beforeScatter)
+				resp, duration, stats, err := adminScatterWithTracing(ctx, b.db, splitAt, maxScatterSize, recordingType)
+				b.stats.scatterWait += duration
 				if err != nil {
 					// err could be a max size violation, but this is unexpected since we
 					// split before, so a warning is probably ok.
 					log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
 				} else {
+					b.ingestionTracer.notify(duration, stats)
+					scatterResp := resp.(*roachpb.AdminScatterResponse)
 					b.stats.scatters++
-					if resp.MVCCStats != nil {
-						moved := sz(resp.MVCCStats.Total())
+					if scatterResp.MVCCStats != nil {
+						moved := sz(scatterResp.MVCCStats.Total())
 						b.stats.scatterMoved += moved
 						if moved > 0 {
-							log.VEventf(ctx, 1, "%s split scattered %s in non-empty range %s", b.name, moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
+							log.VEventf(ctx, 1, "%s split scattered %s in non-empty range %s",
+								b.name, moved, scatterResp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
 						}
 					}
 				}
@@ -532,46 +553,22 @@ func (b *SSTBatcher) addSSTable(
 					ingestAsWriteBatch = true
 				}
 
-				req := &roachpb.AddSSTableRequest{
-					RequestHeader:                          roachpb.RequestHeader{Key: item.start, EndKey: item.end},
-					Data:                                   item.sstBytes,
-					DisallowShadowing:                      !b.disallowShadowingBelow.IsEmpty(),
-					DisallowShadowingBelow:                 b.disallowShadowingBelow,
-					MVCCStats:                              &item.stats,
-					IngestAsWrites:                         ingestAsWriteBatch,
-					ReturnFollowingLikelyNonEmptySpanStart: true,
-				}
-				if b.writeAtBatchTS {
-					req.SSTTimestampToRequestTimestamp = b.batchTS
-				}
-
-				ba := roachpb.BatchRequest{
-					Header: roachpb.Header{Timestamp: b.batchTS, ClientRangeInfo: roachpb.ClientRangeInfo{ExplicitlyRequested: true}},
-					AdmissionHeader: roachpb.AdmissionHeader{
-						Priority:                 int32(admission.BulkNormalPri),
-						CreateTime:               timeutil.Now().UnixNano(),
-						Source:                   roachpb.AdmissionHeader_FROM_SQL,
-						NoMemoryReservedAtSource: true,
-					},
-				}
-				ba.Add(req)
-				beforeSend := timeutil.Now()
-				br, pErr := b.db.NonTransactionalSender().Send(ctx, ba)
-				sendTime := timeutil.Since(beforeSend)
-				b.stats.sendWait += sendTime
-
+				br, duration, stats, pErr := addSSTableWithTracing(ctx, item, b, ingestAsWriteBatch,
+					tracing.SpanFromContext(ctx).RecordingType())
 				if br != nil && len(br.BatchResponse_Header.RangeInfos) > 0 {
-					// Should only ever really be one iteration but if somehow it isn't,
-					// e.g. if a request was redirected, go ahead and count it against all
-					// involved stores; if it is small this edge case is immaterial, and
-					// if it is large, it's probably one big one but we don't know which
-					// so just blame them all (averaging it out could hide one big delay).
+					// If there is >1 RangeInfo we count the time taken to serve the
+					// request against all involved stores; if this value is small then
+					// edge case is immaterial, and if it is large,  we don't know which
+					// store incurred more/less of this time so just blame them all
+					// (averaging it out could hide one big delay).
 					for i := range br.BatchResponse_Header.RangeInfos {
-						b.stats.sendWaitByStore[br.BatchResponse_Header.RangeInfos[i].Lease.Replica.StoreID] += sendTime
+						b.stats.sendWaitByStore[br.BatchResponse_Header.RangeInfos[i].Lease.Replica.StoreID] += duration
 					}
 				}
+				b.stats.sendWait += duration
 
 				if pErr == nil {
+					b.ingestionTracer.notify(duration, stats)
 					resp := br.Responses[0].GetInner().(*roachpb.AddSSTableResponse)
 					if b.writeAtBatchTS {
 						b.maxWriteTS.Forward(br.Timestamp)
@@ -583,7 +580,8 @@ func (b *SSTBatcher) addSSTable(
 						b.lastRange.nextExistingKey = resp.FollowingLikelyNonEmptySpanStart
 					}
 					files++
-					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, sendTime)
+					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v",
+						sz(len(item.sstBytes)), item.start, item.end, duration)
 					return nil
 				}
 

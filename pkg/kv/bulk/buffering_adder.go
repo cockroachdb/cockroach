@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -85,6 +86,7 @@ func MakeBulkAdder(
 		opts.MaxBufferSize = func() int64 { return 128 << 20 }
 	}
 
+	ingestionTracer := newIngestionTracer(opts.Name, tracing.SpanFromContext(ctx))
 	b := &BufferingAdder{
 		name: opts.Name,
 		sink: SSTBatcher{
@@ -97,6 +99,7 @@ func MakeBulkAdder(
 			batchTS:                opts.BatchTimestamp,
 			writeAtBatchTS:         opts.WriteAtBatchTimestamp,
 			stats:                  ingestionPerformanceStats{sendWaitByStore: make(map[roachpb.StoreID]time.Duration)},
+			ingestionTracer:        ingestionTracer,
 		},
 		timestamp:      timestamp,
 		maxBufferLimit: opts.MaxBufferSize,
@@ -321,10 +324,10 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 
 	// First make all the splits, then go back and scatter them, so that those
 	// scatters only move the narrower, post-split spans.
-	beforeSplits := timeutil.Now()
-	hour := hlc.Timestamp{WallTime: beforeSplits.Add(time.Hour).UnixNano()}
+	hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
 	width := len(b.curBuf.entries) / b.initialSplits
 	var toScatter []roachpb.Key
+	var splitsWait time.Duration
 	for i := 0; i < b.initialSplits; i++ {
 		expire := hour
 		if i == 0 {
@@ -363,7 +366,10 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 		}
 		predicateKey := b.curBuf.Key(predicateAt)
 		log.VEventf(ctx, 1, "pre-splitting span %d of %d at %s", i, b.initialSplits, splitKey)
-		if err := b.sink.db.AdminSplit(ctx, splitKey, expire, predicateKey); err != nil {
+
+		duration, stats, err := adminSplitWithTracing(ctx, b.sink.db, splitKey, expire,
+			tracing.SpanFromContext(ctx).RecordingType(), predicateKey)
+		if err != nil {
 			// TODO(dt): a typed error would be nice here.
 			if strings.Contains(err.Error(), "predicate") {
 				log.VEventf(ctx, 1, "%s adder split at %s rejected, had previously split and no longer included %s",
@@ -372,33 +378,37 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 			}
 			return err
 		}
+		splitsWait += duration
+		b.sink.ingestionTracer.notify(duration, stats)
 		toScatter = append(toScatter, splitKey)
 	}
 
-	beforeScatters := timeutil.Now()
-	splitsWait := beforeScatters.Sub(beforeSplits)
 	log.Infof(ctx, "%s adder created %d initial splits in %v from %d keys in %s buffer",
 		b.name, len(toScatter), timing(splitsWait), b.curBuf.Len(), b.curBuf.MemSize())
 	b.sink.stats.splits += len(toScatter)
 	b.sink.stats.splitWait += splitsWait
 
+	var scattersWait time.Duration
 	for _, splitKey := range toScatter {
-		resp, err := b.sink.db.AdminScatter(ctx, splitKey, 0 /* maxSize */)
+		resp, duration, stats, err := adminScatterWithTracing(ctx, b.sink.db, splitKey, 0, /* maxSize */
+			tracing.SpanFromContext(ctx).RecordingType())
 		if err != nil {
 			log.Warningf(ctx, "failed to scatter: %v", err)
 			continue
 		}
+		scattersWait += duration
+		b.sink.ingestionTracer.notify(duration, stats)
 		b.sink.stats.scatters++
-		if resp.MVCCStats != nil {
-			moved := sz(resp.MVCCStats.Total())
+		scatterResp := resp.(*roachpb.AdminScatterResponse)
+		if scatterResp.MVCCStats != nil {
+			moved := sz(scatterResp.MVCCStats.Total())
 			b.sink.stats.scatterMoved += moved
 			if moved > 0 {
 				log.VEventf(ctx, 1, "pre-split scattered %s in non-empty range %s",
-					moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
+					moved, scatterResp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
 			}
 		}
 	}
-	scattersWait := timeutil.Since(beforeScatters)
 	b.sink.stats.scatterWait += scattersWait
 	log.Infof(ctx, "%s adder scattered %d initial split spans in %v",
 		b.name, len(toScatter), timing(scattersWait))
