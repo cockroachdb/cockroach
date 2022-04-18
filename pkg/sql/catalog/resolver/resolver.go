@@ -13,7 +13,6 @@ package resolver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -302,10 +301,9 @@ func ResolveSchemaNameByID(
 	codec keys.SQLCodec,
 	db catalog.DatabaseDescriptor,
 	schemaID descpb.ID,
-	version clusterversion.Handle,
 ) (string, error) {
 	// Fast-path for public schema and virtual schemas, to avoid hot lookups.
-	staticSchemaMap := catconstants.GetStaticSchemaIDMap(ctx, version)
+	staticSchemaMap := catconstants.GetStaticSchemaIDMap()
 	if schemaName, ok := staticSchemaMap[uint32(schemaID)]; ok {
 		return schemaName, nil
 	}

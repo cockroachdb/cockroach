@@ -1133,7 +1133,7 @@ func getQualifiedTableNameObj(
 		return tree.TableName{}, err
 	}
 	schemaID := desc.GetParentSchemaID()
-	schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, dbDesc, schemaID, execCfg.Settings.Version)
+	schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, dbDesc, schemaID)
 	if err != nil {
 		return tree.TableName{}, err
 	}

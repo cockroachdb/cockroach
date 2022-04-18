@@ -10,12 +10,7 @@
 
 package catconstants
 
-import (
-	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-)
+import "github.com/cockroachdb/cockroach/pkg/keys"
 
 // StaticSchemaIDMapVirtualPublicSchema is a map of statically known schema IDs
 // on versions prior to PublicSchemasWithDescriptors.
@@ -38,12 +33,8 @@ var StaticSchemaIDMap = map[uint32]string{
 
 // GetStaticSchemaIDMap returns a map of schema ids to schema names for the
 // static schemas.
-func GetStaticSchemaIDMap(ctx context.Context, version clusterversion.Handle) map[uint32]string {
-	if !version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
-		return StaticSchemaIDMapVirtualPublicSchema
-	}
-
-	return StaticSchemaIDMap
+func GetStaticSchemaIDMap() map[uint32]string {
+	return StaticSchemaIDMapVirtualPublicSchema
 }
 
 // PgCatalogName is the name of the pg_catalog system schema.
