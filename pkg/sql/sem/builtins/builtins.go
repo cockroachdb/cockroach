@@ -6731,6 +6731,36 @@ table. Returns an error if validation fails.`,
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.is_constraint_active": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"table_name", types.String}, {"constraint_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tableName := tree.MustBeDString(args[0])
+				constraintName := tree.MustBeDString(args[1])
+				dOid, err := eval.ParseDOid(evalCtx, string(tableName), types.RegClass)
+				if err != nil {
+					return nil, err
+				}
+				active, err := evalCtx.Planner.IsConstraintActive(
+					evalCtx.Ctx(), int(dOid.DInt), string(constraintName),
+				)
+				if err != nil {
+					return nil, err
+				}
+				if active {
+					return tree.DBoolTrue, nil
+				}
+				return tree.DBoolFalse, nil
+			},
+			Info: `This function is used to determine if a given constraint is currently.
+active for the current transaction.`,
+			Volatility: volatility.Volatile,
+		},
+	),
 
 	"crdb_internal.kv_set_queue_active": makeBuiltin(
 		tree.FunctionProperties{

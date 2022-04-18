@@ -465,6 +465,47 @@ func (p *planner) RevalidateUniqueConstraint(
 	return errors.Newf("unique constraint %s does not exist", constraintName)
 }
 
+// IsConstraintActive returns if a given constraint is currently active,
+// for the current transaction.
+func (p *planner) IsConstraintActive(
+	ctx context.Context, tableID int, constraintName string,
+) (bool, error) {
+	tableDesc, err := p.Descriptors().GetImmutableTableByID(
+		ctx,
+		p.Txn(),
+		descpb.ID(tableID),
+		tree.ObjectLookupFlagsWithRequired(),
+	)
+	if err != nil {
+		return false, err
+	}
+	constraints, err := tableDesc.GetConstraintInfo()
+	if err != nil {
+		return false, err
+	}
+	cnst := constraints[constraintName]
+	validated := !cnst.Unvalidated
+	// For foreign keys we only care what the outbound foreign key state,
+	// shows for the constraint. Since we need to know if this constraint
+	// will be active on inserts.
+	if cnst.Kind == descpb.ConstraintTypeFK {
+		validated = false
+		err := tableDesc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+			if fk.Name != constraintName {
+				return nil
+			}
+			validated = fk.Validity == descpb.ConstraintValidity_Validated ||
+				fk.Validity == descpb.ConstraintValidity_Validating ||
+				fk.Validity == descpb.ConstraintValidity_Unvalidated
+			return nil
+		})
+		if err != nil {
+			return false, err
+		}
+	}
+	return validated, nil
+}
+
 // HasVirtualUniqueConstraints returns true if the table has one or more
 // constraints that are validated by RevalidateUniqueConstraintsInTable.
 func HasVirtualUniqueConstraints(tableDesc catalog.TableDescriptor) bool {
