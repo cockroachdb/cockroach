@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -71,7 +73,7 @@ type ColBatchScan struct {
 // scans, such as ColBatchScan and ColIndexJoin.
 type ScanOperator interface {
 	colexecop.KVReader
-	execinfra.Releasable
+	execreleasable.Releasable
 	colexecop.ClosableOperator
 }
 
@@ -137,7 +139,7 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
-	if trace := execinfra.GetTraceData(s.Ctx); trace != nil {
+	if trace := tracing.SpanFromContext(s.Ctx).GetConfiguredRecording(); trace != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 	}
 	return trailingMeta
@@ -159,12 +161,12 @@ func (s *ColBatchScan) GetRowsRead() int64 {
 
 // GetCumulativeContentionTime is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
-	return execinfra.GetCumulativeContentionTime(s.Ctx)
+	return execstats.GetCumulativeContentionTime(s.Ctx)
 }
 
 // GetScanStats is part of the colexecop.KVReader interface.
-func (s *ColBatchScan) GetScanStats() execinfra.ScanStats {
-	return execinfra.GetScanStats(s.Ctx)
+func (s *ColBatchScan) GetScanStats() execstats.ScanStats {
+	return execstats.GetScanStats(s.Ctx)
 }
 
 var colBatchScanPool = sync.Pool{

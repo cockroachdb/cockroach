@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -43,7 +44,7 @@ func convertToVecTree(
 	flow *execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
 	isPlanLocal bool,
-) (opChains execinfra.OpChains, cleanup func(), err error) {
+) (opChains execopnode.OpChains, cleanup func(), err error) {
 	if !isPlanLocal && len(localProcessors) > 0 {
 		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
 	}
@@ -115,7 +116,7 @@ func ExplainVec(
 	flowCtx *execinfra.FlowCtx,
 	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
-	opChains execinfra.OpChains,
+	opChains execopnode.OpChains,
 	gatewaySQLInstanceID base.SQLInstanceID,
 	verbose bool,
 	distributed bool,
@@ -134,7 +135,7 @@ func ExplainVec(
 			}
 		}
 	}()
-	// It is possible that when iterating over execinfra.OpNodes we will hit a
+	// It is possible that when iterating over execopnode.OpNodes we will hit a
 	// panic (an input that doesn't implement OpNode interface), so we're
 	// catching such errors.
 	if err = colexecerror.CatchVectorizedRuntimeError(func() {
@@ -170,7 +171,7 @@ func ExplainVec(
 func formatChains(
 	root treeprinter.Node,
 	sqlInstanceID base.SQLInstanceID,
-	opChains execinfra.OpChains,
+	opChains execopnode.OpChains,
 	verbose bool,
 ) {
 	node := root.Childf("Node %d", sqlInstanceID)
@@ -179,12 +180,12 @@ func formatChains(
 	}
 }
 
-func shouldOutput(operator execinfra.OpNode, verbose bool) bool {
+func shouldOutput(operator execopnode.OpNode, verbose bool) bool {
 	_, nonExplainable := operator.(colexecop.NonExplainable)
 	return !nonExplainable || verbose
 }
 
-func formatOpChain(operator execinfra.OpNode, node treeprinter.Node, verbose bool) {
+func formatOpChain(operator execopnode.OpNode, node treeprinter.Node, verbose bool) {
 	seenOps := make(map[reflect.Value]struct{})
 	if shouldOutput(operator, verbose) {
 		doFormatOpChain(operator, node.Child(reflect.TypeOf(operator).String()), verbose, seenOps)
@@ -193,7 +194,7 @@ func formatOpChain(operator execinfra.OpNode, node treeprinter.Node, verbose boo
 	}
 }
 func doFormatOpChain(
-	operator execinfra.OpNode,
+	operator execopnode.OpNode,
 	node treeprinter.Node,
 	verbose bool,
 	seenOps map[reflect.Value]struct{},

@@ -16,7 +16,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -51,7 +54,7 @@ type tableReader struct {
 	fetcher rowFetcher
 	alloc   tree.DatumAlloc
 
-	scanStats execinfra.ScanStats
+	scanStats execstats.ScanStats
 
 	// rowsRead is the number of rows read and is tracked unconditionally.
 	rowsRead int64
@@ -59,8 +62,8 @@ type tableReader struct {
 
 var _ execinfra.Processor = &tableReader{}
 var _ execinfra.RowSource = &tableReader{}
-var _ execinfra.Releasable = &tableReader{}
-var _ execinfra.OpNode = &tableReader{}
+var _ execreleasable.Releasable = &tableReader{}
+var _ execopnode.OpNode = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
@@ -150,7 +153,7 @@ func newTableReader(
 		tr.MakeSpansCopy()
 	}
 
-	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
+	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
 		tr.fetcher = newRowFetcherStatCollector(&fetcher)
 		tr.ExecStatsForTrace = tr.execStatsForTrace
 	} else {
@@ -290,17 +293,17 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	tr.scanStats = execinfra.GetScanStats(tr.Ctx)
+	tr.scanStats = execstats.GetScanStats(tr.Ctx)
 	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(tr.fetcher.GetBytesRead())),
 			TuplesRead:     is.NumTuples,
 			KVTime:         is.WaitTime,
-			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(tr.Ctx)),
+			ContentionTime: optional.MakeTimeValue(execstats.GetCumulativeContentionTime(tr.Ctx)),
 		},
 		Output: tr.OutputHelper.Stats(),
 	}
-	execinfra.PopulateKVMVCCStats(&ret.KV, &tr.scanStats)
+	execstats.PopulateKVMVCCStats(&ret.KV, &tr.scanStats)
 	return ret
 }
 
@@ -326,12 +329,12 @@ func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 	return append(trailingMeta, *meta)
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (tr *tableReader) ChildCount(bool) int {
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (tr *tableReader) Child(nth int, _ bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (tr *tableReader) Child(nth int, _ bool) execopnode.OpNode {
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

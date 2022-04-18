@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
@@ -98,7 +98,7 @@ type cTableInfo struct {
 	da tree.DatumAlloc
 }
 
-var _ execinfra.Releasable = &cTableInfo{}
+var _ execreleasable.Releasable = &cTableInfo{}
 
 var cTableInfoPool = sync.Pool{
 	New: func() interface{} {

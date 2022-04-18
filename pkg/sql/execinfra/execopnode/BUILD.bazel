@@ -1,0 +1,8 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "execopnode",
+    srcs = ["op_node.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode",
+    visibility = ["//visibility:public"],
+)

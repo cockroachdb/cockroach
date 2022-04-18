@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -297,21 +298,21 @@ func (c *Columnarizer) Close(context.Context) error {
 	return nil
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (c *Columnarizer) ChildCount(verbose bool) int {
-	if _, ok := c.input.(execinfra.OpNode); ok {
+	if _, ok := c.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (c *Columnarizer) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (c *Columnarizer) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := c.input.(execinfra.OpNode); ok {
+		if n, ok := c.input.(execopnode.OpNode); ok {
 			return n
 		}
-		colexecerror.InternalError(errors.AssertionFailedf("input to Columnarizer is not an execinfra.OpNode"))
+		colexecerror.InternalError(errors.AssertionFailedf("input to Columnarizer is not an execopnode.OpNode"))
 	}
 	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.

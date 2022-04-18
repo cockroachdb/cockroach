@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -206,14 +205,6 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 	}
 }
 
-// Releasable is an interface for objects than can be Released back into a
-// memory pool when finished.
-type Releasable interface {
-	// Release allows this object to be returned to a memory pool. Objects must
-	// not be used after Release is called.
-	Release()
-}
-
 // DrainAndForwardMetadata calls src.ConsumerDone() (thus asking src for
 // draining metadata) and then forwards all the metadata to dst.
 //
@@ -250,11 +241,6 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 	}
 }
 
-// GetTraceData returns the trace data.
-func GetTraceData(ctx context.Context) []tracingpb.RecordedSpan {
-	return tracing.SpanFromContext(ctx).GetConfiguredRecording()
-}
-
 // GetTraceDataAsMetadata returns the trace data as execinfrapb.ProducerMetadata
 // object.
 func GetTraceDataAsMetadata(span *tracing.Span) *execinfrapb.ProducerMetadata {
@@ -272,7 +258,7 @@ func GetTraceDataAsMetadata(span *tracing.Span) *execinfrapb.ProducerMetadata {
 // Note that the tracing data is distinct between different processors, since
 // each one gets its own trace "recording group".
 func SendTraceData(ctx context.Context, dst RowReceiver) {
-	if rec := GetTraceData(ctx); rec != nil {
+	if rec := tracing.SpanFromContext(ctx).GetConfiguredRecording(); rec != nil {
 		dst.Push(nil /* row */, &execinfrapb.ProducerMetadata{TraceData: rec})
 	}
 }

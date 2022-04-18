@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -48,7 +48,7 @@ type defaultCmp_KINDProjOp struct {
 }
 
 var _ colexecop.Operator = &defaultCmp_KINDProjOp{}
-var _ execinfra.Releasable = &defaultCmp_KINDProjOp{}
+var _ execreleasable.Releasable = &defaultCmp_KINDProjOp{}
 
 func (d *defaultCmp_KINDProjOp) Next() coldata.Batch {
 	batch := d.Input.Next()

@@ -14,7 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -89,7 +91,7 @@ type windower struct {
 
 var _ execinfra.Processor = &windower{}
 var _ execinfra.RowSource = &windower{}
-var _ execinfra.OpNode = &windower{}
+var _ execopnode.OpNode = &windower{}
 
 const windowerProcName = "windower"
 
@@ -192,7 +194,7 @@ func newWindower(
 	// them to reuse the same shared memory account with the windower.
 	evalCtx.SingleDatumAggMemAccount = &w.acc
 
-	if execinfra.ShouldCollectStats(ctx, flowCtx) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		w.input = newInputStatCollector(w.input)
 		w.ExecStatsForTrace = w.execStatsForTrace
 	}
@@ -825,21 +827,21 @@ func (w *windower) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (w *windower) ChildCount(verbose bool) int {
-	if _, ok := w.input.(execinfra.OpNode); ok {
+	if _, ok := w.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (w *windower) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (w *windower) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := w.input.(execinfra.OpNode); ok {
+		if n, ok := w.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to windower is not an execinfra.OpNode")
+		panic("input to windower is not an execopnode.OpNode")
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

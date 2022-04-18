@@ -15,11 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/errors"
 )
 
-// newJoinHelper returns an execinfra.OpNode with two Operator inputs.
+// newJoinHelper returns a new joinHelper.
 func newJoinHelper(inputOne, inputTwo colexecop.Operator) *joinHelper {
 	return &joinHelper{inputOne: inputOne, inputTwo: inputTwo}
 }
@@ -45,7 +45,7 @@ func (h *joinHelper) ChildCount(verbose bool) int {
 	return 2
 }
 
-func (h *joinHelper) Child(nth int, verbose bool) execinfra.OpNode {
+func (h *joinHelper) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
 		return h.inputOne

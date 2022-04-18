@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -223,12 +225,12 @@ type joinReader struct {
 
 	// scanStats is collected from the trace after we finish doing work for this
 	// join.
-	scanStats execinfra.ScanStats
+	scanStats execstats.ScanStats
 }
 
 var _ execinfra.Processor = &joinReader{}
 var _ execinfra.RowSource = &joinReader{}
-var _ execinfra.OpNode = &joinReader{}
+var _ execopnode.OpNode = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -394,7 +396,7 @@ func newJoinReader(
 		return nil, err
 	}
 
-	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
+	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.ExecStatsForTrace = jr.execStatsForTrace
@@ -1072,14 +1074,14 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		return nil
 	}
 
-	jr.scanStats = execinfra.GetScanStats(jr.Ctx)
+	jr.scanStats = execstats.GetScanStats(jr.Ctx)
 	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
-			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(jr.Ctx)),
+			ContentionTime: optional.MakeTimeValue(execstats.GetCumulativeContentionTime(jr.Ctx)),
 		},
 		Output: jr.OutputHelper.Stats(),
 	}
@@ -1095,7 +1097,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ret.Exec.MaxAllocatedDisk.Add(jr.streamerInfo.diskMonitor.MaximumBytes())
 		}
 	}
-	execinfra.PopulateKVMVCCStats(&ret.KV, &jr.scanStats)
+	execstats.PopulateKVMVCCStats(&ret.KV, &jr.scanStats)
 	return ret
 }
 
@@ -1111,21 +1113,21 @@ func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
 	return trailingMeta
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (jr *joinReader) ChildCount(verbose bool) int {
-	if _, ok := jr.input.(execinfra.OpNode); ok {
+	if _, ok := jr.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (jr *joinReader) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (jr *joinReader) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := jr.input.(execinfra.OpNode); ok {
+		if n, ok := jr.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to joinReader is not an execinfra.OpNode")
+		panic("input to joinReader is not an execopnode.OpNode")
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

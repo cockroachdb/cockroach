@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/colexecop",  # keep
         "//pkg/sql/colmem",  # keep
         "//pkg/sql/execinfra",  # keep
+        "//pkg/sql/execinfra/execreleasable",  # keep
         "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/memsize",  # keep
         "//pkg/sql/rowenc",  # keep

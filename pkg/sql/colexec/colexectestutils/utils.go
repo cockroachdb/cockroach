@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -448,7 +448,7 @@ func closeIfCloser(t *testing.T, op colexecop.Operator) {
 
 // isOperatorChainResettable traverses the whole operator tree rooted at op and
 // returns true if all nodes are resetters.
-func isOperatorChainResettable(op execinfra.OpNode) bool {
+func isOperatorChainResettable(op execopnode.OpNode) bool {
 	if _, resettable := op.(colexecop.ResettableOperator); !resettable {
 		return false
 	}

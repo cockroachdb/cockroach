@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -258,7 +258,7 @@ func (d *diskSpillerBase) ChildCount(verbose bool) int {
 	return 1
 }
 
-func (d *diskSpillerBase) Child(nth int, verbose bool) execinfra.OpNode {
+func (d *diskSpillerBase) Child(nth int, verbose bool) execopnode.OpNode {
 	// Note: although the main chain is d.inputs -> diskSpiller -> output (and
 	// the main chain should be under nth == 0), in order to make the output of
 	// EXPLAIN (VEC) less confusing we return the in-memory operator as being on

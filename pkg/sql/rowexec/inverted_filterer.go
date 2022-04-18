@@ -14,7 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -62,7 +64,7 @@ type invertedFilterer struct {
 
 var _ execinfra.Processor = &invertedFilterer{}
 var _ execinfra.RowSource = &invertedFilterer{}
-var _ execinfra.OpNode = &invertedFilterer{}
+var _ execopnode.OpNode = &invertedFilterer{}
 
 const invertedFiltererProcName = "inverted filterer"
 
@@ -119,7 +121,7 @@ func newInvertedFilterer(
 		ifr.diskMonitor,
 	)
 
-	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
+	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
 		ifr.input = newInputStatCollector(ifr.input)
 		ifr.ExecStatsForTrace = ifr.execStatsForTrace
 	}
@@ -325,21 +327,21 @@ func (ifr *invertedFilterer) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (ifr *invertedFilterer) ChildCount(verbose bool) int {
-	if _, ok := ifr.input.(execinfra.OpNode); ok {
+	if _, ok := ifr.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (ifr *invertedFilterer) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (ifr *invertedFilterer) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := ifr.input.(execinfra.OpNode); ok {
+		if n, ok := ifr.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to invertedFilterer is not an execinfra.OpNode")
+		panic("input to invertedFilterer is not an execopnode.OpNode")
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }
