@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -151,6 +152,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 
 	if !recordExists {
 		// Queue a new job.
+		fmt.Printf("Xiang: old schema changer: jobDesc = %v\n", jobDesc)
 		newRecord := jobs.Record{
 			JobID:         p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID(),
 			Description:   jobDesc,

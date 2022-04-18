@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -128,6 +130,41 @@ func (d *buildDeps) MayResolveTable(
 	return prefix, desc.(catalog.TableDescriptor)
 }
 
+// MayResolveTableWithIndex implements the scbuild.Dependencies interface.
+func (d *buildDeps) MayResolveTableWithIndex(
+	ctx context.Context, tablePrefix catalog.ResolvedObjectPrefix, indexName tree.UnrestrictedName,
+) (catalog.TableDescriptor, catalog.Index) {
+	// Search all tables (or materialized views) in this prefix with that resultIndexDesc.
+	objNames, _ := d.ReadObjectNamesAndIDs(ctx, tablePrefix.Database, tablePrefix.Schema)
+
+	resultTableDesc := catalog.TableDescriptor(nil)
+	resultIndexDesc := catalog.Index(nil)
+	for i := range objNames {
+		objName := objNames[i]
+
+		_, tableDesc := d.MayResolveTable(ctx, *objName.ToUnresolvedObjectName())
+		if tableDesc == nil || !(tableDesc.IsTable() || tableDesc.MaterializedView()) {
+			// Skip non-table or non-materialized view objects.
+			continue
+		}
+
+		idx, err := tableDesc.FindIndexWithName(string(indexName))
+		if err != nil || idx.Dropped() {
+			continue
+		}
+
+		if resultTableDesc != nil {
+			// Found at least two tables with resultIndexDesc of that name!
+			panic(pgerror.Newf(pgcode.AmbiguousParameter, "index name %q is ambiguous", indexName))
+		}
+
+		resultTableDesc = tableDesc
+		resultIndexDesc = idx
+	}
+
+	return resultTableDesc, resultIndexDesc
+}
+
 // MayResolveType implements the scbuild.CatalogReader interface.
 func (d *buildDeps) MayResolveType(
 	ctx context.Context, name tree.UnresolvedObjectName,
@@ -145,6 +182,51 @@ func (d *buildDeps) MayResolveType(
 		return prefix, nil
 	}
 	return prefix, desc.(catalog.TypeDescriptor)
+}
+
+// MayResolveObjectNamePrefix implements the scbuild.Dependencies interface.
+func (d *buildDeps) MayResolveObjectNamePrefix(
+	ctx context.Context, prefix tree.ObjectNamePrefix,
+) *catalog.ResolvedObjectPrefix {
+	if !prefix.ExplicitSchema {
+		// naked prefix; use current db and current schema
+		prefix.ExplicitCatalog = true
+		prefix.ExplicitSchema = true
+		prefix.CatalogName = tree.Name(d.CurrentDatabase())
+		prefix.SchemaName = tree.Name(d.currentSchema(ctx))
+	} else {
+		if !prefix.ExplicitCatalog {
+			// Two parts. `a.tbl`
+			// First try `currentDB.a.tbl` to resolve this prefix;
+			tempPrefix := prefix
+			tempPrefix.ExplicitCatalog = true
+			tempPrefix.CatalogName = tree.Name(d.CurrentDatabase())
+			dbDesc, scDesc := d.MayResolveSchema(ctx, tempPrefix)
+			if dbDesc != nil && scDesc != nil {
+				return &catalog.ResolvedObjectPrefix{
+					ExplicitDatabase: true,
+					ExplicitSchema:   true,
+					Database:         dbDesc,
+					Schema:           scDesc,
+				}
+			}
+			// If failed, try `a.public.tbl`.
+			prefix.ExplicitCatalog = true
+			prefix.CatalogName = prefix.SchemaName
+			prefix.SchemaName = tree.PublicSchemaName
+		}
+	}
+
+	dbDesc, scDesc := d.MayResolveSchema(ctx, prefix)
+	if dbDesc == nil || scDesc == nil {
+		return nil
+	}
+	return &catalog.ResolvedObjectPrefix{
+		ExplicitDatabase: true,
+		ExplicitSchema:   true,
+		Database:         dbDesc,
+		Schema:           scDesc,
+	}
 }
 
 // ReadObjectNamesAndIDs implements the scbuild.CatalogReader interface.
@@ -317,4 +399,19 @@ func (d *buildDeps) IncrementUserDefinedSchemaCounter(
 // IncrementEnumCounter implements the scbuild.Dependencies interface.
 func (d *buildDeps) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryType) {
 	sqltelemetry.IncrementEnumCounter(counterType)
+}
+
+// currentSchema returns the first schema in the schema search path.
+func (d *buildDeps) currentSchema(ctx context.Context) string {
+	iter := d.schemaResolver.CurrentSearchPath().IterWithoutImplicitPGSchemas()
+	for schemaName, ok := iter.Next(); ok; schemaName, ok = iter.Next() {
+		found, scMeta, err := d.schemaResolver.LookupSchema(ctx, d.CurrentDatabase(), schemaName)
+		if err != nil {
+			panic(err)
+		}
+		if found {
+			return scMeta.Schema.GetName()
+		}
+	}
+	panic("There is not a single valid schema in search path.")
 }

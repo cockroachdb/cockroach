@@ -57,7 +57,9 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 	// don't exist and continue execution.
 	idxNames := make([]fullIndexName, 0, len(n.IndexList))
 	for _, index := range n.IndexList {
+		fmt.Printf("Xiang: before expandMutableIndexName, tableName.prefix = %v\n", index.Table.ObjectNamePrefix)
 		tn, tableDesc, err := expandMutableIndexName(ctx, p, index, !n.IfExists /* requireTable */)
+		fmt.Printf("Xiang: after expandMutableIndexName, tableName.prefix = %v\n", tn.ObjectNamePrefix)
 		if err != nil {
 			// Error or table did not exist.
 			return nil, err
@@ -159,6 +161,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 
 		// CAUTION: After dropIndexByName returns, idx will be a pointer to a
 		// different index than the one being dropped.
+		fmt.Printf("Xiang: within startExec, jobDesc = %v\n", tree.AsStringWithFQNames(n.n, params.Ann()))
 		if err := params.p.dropIndexByName(
 			ctx, index.tn, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkIdxConstraint,
 			tree.AsStringWithFQNames(n.n, params.Ann()),
@@ -551,6 +554,7 @@ func (p *planner) dropIndexByName(
 	}
 
 	mutationID := tableDesc.ClusterVersion().NextMutationID
+	fmt.Printf("Xiang: within DropIndexByName, jobDesc = %v\n", jobDesc)
 	if err := p.writeSchemaChange(ctx, tableDesc, mutationID, jobDesc); err != nil {
 		return err
 	}

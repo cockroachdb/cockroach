@@ -54,6 +54,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.DropTable)(nil)):    {DropTable, true},
 	reflect.TypeOf((*tree.DropType)(nil)):     {DropType, true},
 	reflect.TypeOf((*tree.DropView)(nil)):     {DropView, true},
+	reflect.TypeOf((*tree.DropIndex)(nil)):    {DropIndex, false},
 }
 
 func init() {
