@@ -1648,17 +1648,17 @@ func (t *logicTest) newCluster(
 		// we don't want those to take long on large machines).
 		serverArgs.maxSQLMemoryLimit = 192 * 1024 * 1024
 	}
-	var tempStorageConfig base.TempStorageConfig
-	if serverArgs.tempStorageDiskLimit == 0 {
-		tempStorageConfig = base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
-	} else {
-		tempStorageConfig = base.DefaultTestTempStorageConfigWithSize(cluster.MakeTestingClusterSettings(), serverArgs.tempStorageDiskLimit)
-	}
+	// We have some queries that bump into 100MB default temp storage limit
+	// when run with fakedist-disk config, so we'll use a larger limit here.
+	// There isn't really a downside to doing so.
+	tempStorageDiskLimit := int64(512 << 20) /* 512 MiB */
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			SQLMemoryPoolSize: serverArgs.maxSQLMemoryLimit,
-			TempStorageConfig: tempStorageConfig,
+			TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(
+				cluster.MakeTestingClusterSettings(), tempStorageDiskLimit,
+			),
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
@@ -4200,10 +4200,6 @@ type TestServerArgs struct {
 	// argument for the server. If unset, then the default limit of 192MiB will
 	// be used.
 	maxSQLMemoryLimit int64
-	// tempStorageDiskLimit determines the limit for the temp storage (that is
-	// actually in-memory). If it is unset, then the default limit of 100MB
-	// will be used.
-	tempStorageDiskLimit int64
 	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
 	// to use the non-test value.
 	forceProductionBatchSizes bool
@@ -4499,11 +4495,10 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 		prefixedGlobs[i] = logicTestPath + glob
 	}
 
-	// SQLLite logic tests can be very memory and disk intensive, so we give
-	// them larger limits than other logic tests get.
+	// SQLLite logic tests can be very memory intensive, so we give them larger
+	// limit than other logic tests get.
 	serverArgs := TestServerArgs{
-		maxSQLMemoryLimit:    512 << 20, // 512 MiB
-		tempStorageDiskLimit: 512 << 20, // 512 MiB
+		maxSQLMemoryLimit: 512 << 20, // 512 MiB
 	}
 	RunLogicTestWithDefaultConfig(t, serverArgs, configOverride, true /* runCCLConfigs */, prefixedGlobs...)
 }

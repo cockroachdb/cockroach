@@ -474,11 +474,10 @@ SELECT * FROM a WHERE (a1, a2) IN (SELECT c1, d1 FROM c, d WHERE c3 = d3 or c3 =
 ----
 0  0  0  0
 
-# TODO: Enable this test once issue #74554 is fixed.
-# query IIII rowsort
-# SELECT * FROM a WHERE (a1, a2) IN (SELECT c1, d1 FROM c, d WHERE c3 = d3 or c2 = d2 EXCEPT ALL
-#                                    SELECT c1, d1 FROM c, d WHERE c3 = d3 or c2 = d2)
-# ----
+query IIII rowsort
+SELECT * FROM a WHERE (a1, a2) IN (SELECT c1, d1 FROM c, d WHERE c3 = d3 or c2 = d2 EXCEPT ALL
+                                   SELECT c1, d1 FROM c, d WHERE c3 = d3 or c2 = d2)
+----
 
 query IIII rowsort
 SELECT * FROM a WHERE (a1, a2) IN (SELECT c1, d1 FROM c, d WHERE c1 IS NULL OR c1 = d1)
@@ -600,55 +599,52 @@ SELECT a1,a2,a3 FROM a WHERE EXISTS (SELECT * FROM b WHERE a1 = b1 OR a1 = b2)
 80  11   110
 
 # The left side of the join already produces key columns
-# TODO: Enable this test once issue #74554 is fixed.
-# query IIII rowsort
-# SELECT * FROM a WHERE EXISTS (SELECT * FROM b WHERE a1 = b1 OR a2 = b2 OR a3 = b3 OR a4 = b4)
-# ----
-# 0    0    0     0
-# 1    10   100   1000
-# 2    20   200   2000
-# 3    30   300   3000
-# 4    40   400   4000
-# 5    50   500   5000
-# 6    60   600   6000
-# 7    70   700   7000
-# 11   110  1100  11000
-# 12   120  1200  1
-# 12   120  1200  2
-# 80   11   110   11000
-# 15   50   555   5555
-# 103  7    8     70
-# 15   55   500   5555
+query IIII rowsort
+SELECT * FROM a WHERE EXISTS (SELECT * FROM b WHERE a1 = b1 OR a2 = b2 OR a3 = b3 OR a4 = b4)
+----
+0    0    0     0
+1    10   100   1000
+2    20   200   2000
+3    30   300   3000
+4    40   400   4000
+5    50   500   5000
+6    60   600   6000
+7    70   700   7000
+11   110  1100  11000
+12   120  1200  1
+12   120  1200  2
+80   11   110   11000
+15   50   555   5555
+103  7    8     70
+15   55   500   5555
 
 # More than one disjunction in the filter
-# TODO: Enable this test once issue #74554 is fixed.
-# query IIII rowsort
-# SELECT * FROM a WHERE EXISTS (SELECT * FROM c WHERE a1 = c1 OR a2 = c2 OR a3 = c3 OR a4 = c4)
-# ----
-# 0   0    0     0
-# 1   10   100   1000
-# 2   20   200   2000
-# 3   30   300   3000
-# 5   50   500   5000
-# 6   60   600   6000
-# 11  110  1100  11000
-# 4   40   400   4000
-# 80  11   110   11000
-# 15  50   555   5555
-# 15  55   500   5555
+query IIII rowsort
+SELECT * FROM a WHERE EXISTS (SELECT * FROM c WHERE a1 = c1 OR a2 = c2 OR a3 = c3 OR a4 = c4)
+----
+0   0    0     0
+1   10   100   1000
+2   20   200   2000
+3   30   300   3000
+5   50   500   5000
+6   60   600   6000
+11  110  1100  11000
+4   40   400   4000
+80  11   110   11000
+15  50   555   5555
+15  55   500   5555
 
 # More than one disjunction in the filter
-# TODO: Enable this test once issue #74554 is fixed.
-# query IIII rowsort
-# SELECT * FROM a WHERE EXISTS (SELECT * FROM c WHERE a1 = c2 OR a2 = c1 OR a3 = c4 OR a3 = c4)
-# ----
-# 0    0   0     0
-# 2    20  200   2000
-# 50   5   5000  500
-# 80   11  110   11000
-# 1    10  100   1000
-# 102  5   60    70
-# 104  5   5     5
+query IIII rowsort
+SELECT * FROM a WHERE EXISTS (SELECT * FROM c WHERE a1 = c2 OR a2 = c1 OR a3 = c4 OR a3 = c4)
+----
+0    0   0     0
+2    20  200   2000
+50   5   5000  500
+80   11  110   11000
+1    10  100   1000
+102  5   60    70
+104  5   5     5
 
 # IN subquery
 query I rowsort
@@ -754,21 +750,20 @@ SELECT a2,a4 FROM a WHERE EXISTS(SELECT * FROM b WHERE a1=b1 OR a1=b2) AND
 60   6000
 
 # Two EXISTS at same nesting level; only one disjuction chain can be optimized
-# TODO: Enable this test once issue #74554 is fixed.
-# query II rowsort
-# SELECT a2,a4 FROM a WHERE EXISTS(SELECT * FROM b WHERE a1=b1 OR a1=b2 OR a1=b3 OR a1=b4) AND
-#                           EXISTS(SELECT * FROM c WHERE a1=c1 OR a1=c2 OR a1=c3 OR a1=c4)
-# ----
-# 0    0
-# 10   1000
-# 110  11000
-# 20   2000
-# 50   5000
-# 5    500
-# 11   11000
-# 30   3000
-# 60   6000
-# 40   4000
+query II rowsort
+SELECT a2,a4 FROM a WHERE EXISTS(SELECT * FROM b WHERE a1=b1 OR a1=b2 OR a1=b3 OR a1=b4) AND
+                          EXISTS(SELECT * FROM c WHERE a1=c1 OR a1=c2 OR a1=c3 OR a1=c4)
+----
+0    0
+10   1000
+110  11000
+20   2000
+50   5000
+5    500
+11   11000
+30   3000
+60   6000
+40   4000
 
 # Outer Select is Join
 query IIIIIIII rowsort
