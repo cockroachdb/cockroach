@@ -40,7 +40,6 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/streaming",
