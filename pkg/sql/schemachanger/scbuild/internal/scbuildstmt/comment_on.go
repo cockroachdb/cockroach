@@ -124,7 +124,7 @@ func CommentOnColumn(b BuildCtx, n *tree.CommentOnColumn) {
 // CommentOnIndex implements COMMENT ON INDEX xxx iS xxx statement.
 func CommentOnIndex(b BuildCtx, n *tree.CommentOnIndex) {
 	var tableID catid.DescID
-	indexElements := b.ResolveTableIndexBestEffort(&n.Index, commentResolveParams, true)
+	indexElements := b.ResolveTableIndexBestEffort(&n.Index, commentResolveParams)
 	indexElements.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e.(type) {
 		case *scpb.PrimaryIndex, *scpb.SecondaryIndex:

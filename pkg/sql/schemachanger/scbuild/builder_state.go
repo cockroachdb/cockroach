@@ -689,11 +689,11 @@ func (b *builderState) ResolveIndex(
 
 // ResolveTableIndexBestEffort implements the scbuildstmt.NameResolver interface.
 func (b *builderState) ResolveTableIndexBestEffort(
-	tableIndexName *tree.TableIndexName, p scbuildstmt.ResolveParams, required bool,
+	tableIndexName *tree.TableIndexName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
 	found, prefix, tbl, idx := b.cr.MayResolveIndex(b.ctx, *tableIndexName)
 	if !found {
-		if required {
+		if !p.IsExistenceOptional {
 			panic(pgerror.Newf(pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index))
 		}
 		return nil
@@ -702,6 +702,51 @@ func (b *builderState) ResolveTableIndexBestEffort(
 	tableIndexName.Table.SchemaName = tree.Name(prefix.Schema.GetName())
 	return b.ResolveIndex(tbl.GetID(), tree.Name(idx.GetName()), p)
 }
+
+//func (b *builderState) ResolveIndexByName(
+//	index *tree.TableIndexName, p scbuildstmt.ResolveParams,
+//) scbuildstmt.ElementResultSet {
+//	if index.Table.Table() != "" {
+//		// Table name is known. Can directly go resolve the table.
+//		c := b.resolveRelation(index.Table.ToUnresolvedObjectName(), p)
+//		if c == nil {
+//			// relation does not exist.
+//			if !p.IsExistenceOptional {
+//				err := sqlerrors.NewUndefinedRelationError(index.Table.ToUnresolvedObjectName())
+//				panic(err)
+//			}
+//			return nil
+//		}
+//
+//		if rel := c.desc.(catalog.TableDescriptor); rel.IsView() && !rel.MaterializedView() {
+//			// cannot drop index on a non-materialized view.
+//			if !p.IsExistenceOptional {
+//				err := pgerror.Newf(pgcode.WrongObjectType, "%q is not a table or materialized view", index.Table.Table())
+//				panic(err)
+//			}
+//			return nil
+//		}
+//
+//		index.Table.ObjectNamePrefix = c.prefix
+//		return b.ResolveIndex(c.desc.GetID(), tree.Name(index.Index), p)
+//	}
+//
+//	// Otherwise, table is not specified (e.g. `DROP INDEX public.idx`). Will attempt to find one by searching
+//	// all tables in the table prefix.
+//	prefix, rel, _ := b.cr.MayResolveIndex(b.ctx, tree.Name(index.Index), index.Table.ObjectNamePrefix)
+//	if rel == nil {
+//		// No table with that index was found.
+//		if !p.IsExistenceOptional {
+//			err := pgerror.Newf(pgcode.UndefinedObject, "index %q does not exist", index.Index.String())
+//			panic(err)
+//		}
+//		return nil
+//	}
+//
+//	index.Table.ObjectNamePrefix = prefix.NamePrefix()
+//	index.Table.ObjectName = tree.Name(rel.GetName())
+//	return b.ResolveIndex(rel.GetID(), tree.Name(index.Index), p)
+//}
 
 // ResolveColumn implements the scbuildstmt.NameResolver interface.
 func (b *builderState) ResolveColumn(
@@ -773,6 +818,74 @@ func (b *builderState) ResolveConstraint(
 			"constraint %q of relation %q does not exist", constraintName, rel.GetName()))
 	}
 
+	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		return idI != nil && idI.(catid.ConstraintID) == constraintID
+	})
+}
+
+// ResolveColumnByID implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolveColumnByID(
+	relationID catid.DescID, columnID catid.ColumnID, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	b.ensureDescriptor(relationID)
+	c := b.descCache[relationID]
+	rel := c.desc.(catalog.TableDescriptor)
+	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
+	if columnID == 0 {
+		if p.IsExistenceOptional {
+			return nil
+		}
+		panic(pgerror.Newf(pgcode.UndefinedColumn,
+			"columnID %q not found in relation %q", columnID, rel.GetName()))
+	}
+	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
+		return idI != nil && idI.(catid.ColumnID) == columnID
+	})
+}
+
+//// ResolveConstraint implements the scbuildstmt.NameResolver interface.
+//func (b *builderState) ResolveConstraint(
+//	relationID catid.DescID, constraintName tree.Name, p scbuildstmt.ResolveParams,
+//) scbuildstmt.ElementResultSet {
+//	b.ensureDescriptor(relationID)
+//	c := b.descCache[relationID]
+//	rel := c.desc.(catalog.TableDescriptor)
+//	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
+//	var constraintID catid.ConstraintID
+//	scpb.ForEachConstraintName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintName) {
+//		if e.TableID == relationID && tree.Name(e.Name) == constraintName {
+//			constraintID = e.ConstraintID
+//		}
+//	})
+//	if constraintID == 0 {
+//		if p.IsExistenceOptional {
+//			return nil
+//		}
+//		panic(pgerror.Newf(pgcode.UndefinedColumn,
+//			"constraint %q not found in relation %q", constraintName, rel.GetName()))
+//	}
+//	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+//		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+//		return idI != nil && idI.(catid.ConstraintID) == constraintID
+//	})
+//}
+
+func (b *builderState) ResolveConstraintByID(
+	relationID catid.DescID, constraintID descpb.ConstraintID, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	b.ensureDescriptor(relationID)
+	c := b.descCache[relationID]
+	rel := c.desc.(catalog.TableDescriptor)
+	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
+	if constraintID == 0 {
+		if p.IsExistenceOptional {
+			return nil
+		}
+		panic(pgerror.Newf(pgcode.UndefinedColumn,
+			"constraintID %q not found in relation %q", constraintID, rel.GetName()))
+	}
 	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
 		return idI != nil && idI.(catid.ConstraintID) == constraintID

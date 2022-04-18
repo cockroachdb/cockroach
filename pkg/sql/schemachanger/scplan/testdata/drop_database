@@ -722,6 +722,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 2
+            fromID: 111
+            toID: 109
           usesRelationIds:
           - 109
           viewId: 111
@@ -741,6 +746,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            fromID: 112
+            toID: 111
           usesRelationIds:
           - 111
           viewId: 112
@@ -763,6 +773,16 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            fromID: 113
+            toID: 111
+          - columnIds:
+            - 1
+            - 2
+            fromID: 113
+            toID: 112
           usesRelationIds:
           - 111
           - 112
@@ -786,6 +806,12 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            - 2
+            fromID: 114
+            toID: 112
           usesRelationIds:
           - 112
           viewId: 114
@@ -808,6 +834,12 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            - 2
+            fromID: 117
+            toID: 114
           usesRelationIds:
           - 114
           usesTypeIds:

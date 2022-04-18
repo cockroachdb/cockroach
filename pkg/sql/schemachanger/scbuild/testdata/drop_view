@@ -57,6 +57,11 @@ DROP VIEW defaultdb.v1
     userName: root
 - [[View:{DescID: 105}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 2
+      fromID: 105
+      toID: 104
     usesRelationIds:
     - 104
     viewId: 105
@@ -424,27 +429,59 @@ DROP VIEW defaultdb.v1 CASCADE
     userName: root
 - [[View:{DescID: 105}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 2
+      fromID: 105
+      toID: 104
     usesRelationIds:
     - 104
     viewId: 105
 - [[View:{DescID: 106}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      fromID: 106
+      toID: 105
     usesRelationIds:
     - 105
     viewId: 106
 - [[View:{DescID: 107}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      fromID: 107
+      toID: 105
+    - columnIds:
+      - 1
+      - 2
+      fromID: 107
+      toID: 106
     usesRelationIds:
     - 105
     - 106
     viewId: 107
 - [[View:{DescID: 108}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      - 2
+      fromID: 108
+      toID: 106
     usesRelationIds:
     - 106
     viewId: 108
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      - 2
+      fromID: 111
+      toID: 108
     usesRelationIds:
     - 108
     usesTypeIds:

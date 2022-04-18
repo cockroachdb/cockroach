@@ -270,6 +270,12 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 20 MutationType ops
         UserName: root
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 2
+            - 4
+            fromID: 109
+            toID: 107
           usesRelationIds:
           - 107
           viewId: 109

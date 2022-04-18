@@ -882,27 +882,59 @@ DROP DATABASE db1 CASCADE
     userName: root
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 2
+      fromID: 111
+      toID: 109
     usesRelationIds:
     - 109
     viewId: 111
 - [[View:{DescID: 112}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      fromID: 112
+      toID: 111
     usesRelationIds:
     - 111
     viewId: 112
 - [[View:{DescID: 113}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      fromID: 113
+      toID: 111
+    - columnIds:
+      - 1
+      - 2
+      fromID: 113
+      toID: 112
     usesRelationIds:
     - 111
     - 112
     viewId: 113
 - [[View:{DescID: 114}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      - 2
+      fromID: 114
+      toID: 112
     usesRelationIds:
     - 112
     viewId: 114
 - [[View:{DescID: 117}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      - 2
+      fromID: 117
+      toID: 114
     usesRelationIds:
     - 114
     usesTypeIds:
