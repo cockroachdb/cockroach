@@ -59,44 +59,43 @@ func NewStatsCompactor(
 // that exceeded the limit defined by `sql.stats.persisted_rows.max`
 // (persistedsqlstats.SQLStatsMaxPersistedRows).
 func (c *StatsCompactor) DeleteOldestEntries(ctx context.Context) error {
-	if err := c.removeStaleRowsPerShard(ctx,
-		"system.statement_statistics",
-		systemschema.StmtStatsHashColumnName,
-		"aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id",
+	if err := c.removeStaleRowsPerShard(
+		ctx,
+		c.cleanupOpForTable("system.statement_statistics"),
 	); err != nil {
 		return err
 	}
 
-	return c.removeStaleRowsPerShard(ctx,
-		"system.transaction_statistics",
-		systemschema.TxnStatsHashColumnName,
-		"aggregated_ts, fingerprint_id, app_name, node_id",
+	return c.removeStaleRowsPerShard(
+		ctx,
+		c.cleanupOpForTable("system.transaction_statistics"),
 	)
 }
 
 func (c *StatsCompactor) removeStaleRowsPerShard(
-	ctx context.Context, tableName, hashColumnName, pkColumnNames string,
+	ctx context.Context, ops *cleanupOperations,
 ) error {
 	rowLimitPerShard := c.getRowLimitPerShard()
-
-	existingRowCountQuery := c.getQueryForCheckingTableRowCounts(tableName, hashColumnName)
-	deleteOldStatsStmt := c.getStatementForDeletingStaleRows(tableName, pkColumnNames, hashColumnName)
-
 	for shardIdx, rowLimit := range rowLimitPerShard {
 		var existingRowCount int64
+
 		if err := c.getRowCountForShard(
 			ctx,
-			existingRowCountQuery,
+			ops.initialScanStmt,
 			shardIdx,
 			&existingRowCount,
 		); err != nil {
 			return err
 		}
 
+		if c.knobs != nil && c.knobs.OnCleanupStartForShard != nil {
+			c.knobs.OnCleanupStartForShard(shardIdx, existingRowCount, rowLimit)
+		}
+
 		if err := c.removeStaleRowsForShard(
 			ctx,
-			deleteOldStatsStmt,
-			shardIdx,
+			ops,
+			int64(shardIdx),
 			existingRowCount,
 			rowLimit,
 		); err != nil {
@@ -154,30 +153,49 @@ func (c *StatsCompactor) getRowLimitPerShard() []int64 {
 // avoid having one large transaction.
 func (c *StatsCompactor) removeStaleRowsForShard(
 	ctx context.Context,
-	stmt string,
-	shardIdx int,
+	ops *cleanupOperations,
+	shardIdx int64,
 	existingRowCountPerShard, maxRowLimitPerShard int64,
 ) error {
+	var err error
+	lastDeletedRow := tree.Datums{}
+	stmt := ops.initialDeleteStmt
 	maxDeleteRowsPerTxn := CompactionJobRowsToDeletePerTxn.Get(&c.st.SV)
+
 	if rowsToRemove := existingRowCountPerShard - maxRowLimitPerShard; rowsToRemove > 0 {
 		for remainToBeRemoved := rowsToRemove; remainToBeRemoved > 0; {
+			if len(lastDeletedRow) > 0 {
+				stmt = ops.subsequentDeleteStmt
+			}
 			rowsToRemovePerTxn := remainToBeRemoved
 			if remainToBeRemoved > maxDeleteRowsPerTxn {
 				rowsToRemovePerTxn = maxDeleteRowsPerTxn
 			}
-			if _, err := c.ie.ExecEx(ctx,
-				"delete-old-sql-stats",
-				nil, /* txn */
-				sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+
+			qargs := getQargs(shardIdx, rowsToRemovePerTxn, lastDeletedRow)
+
+			var rowsRemoved int64
+
+			lastDeletedRow, rowsRemoved, err = c.executeDeleteStmt(
+				ctx,
 				stmt,
-				shardIdx,
-				rowsToRemovePerTxn,
-			); err != nil {
+				qargs,
+			)
+			if err != nil {
 				return err
 			}
-
 			c.rowsRemovedCounter.Inc(rowsToRemovePerTxn)
+
+			// If we removed less rows compared to what we intended, it means something
+			// else is interfering with the cleanup job, likely a human operator.
+			// This can happen when the operator forgot to cancel the job when manual
+			// intervention is happening.
+			if rowsRemoved < rowsToRemovePerTxn {
+				break
+			}
+
 			remainToBeRemoved -= rowsToRemovePerTxn
+
 		}
 	}
 
@@ -202,25 +220,15 @@ WHERE %[3]s = $1
 	return fmt.Sprintf(existingRowCountQuery, tableName, followerReadClause, hashColumnName)
 }
 
-func (c *StatsCompactor) getStatementForDeletingStaleRows(
-	tableName, pkColumnNames, hashColumnName string,
-) string {
-	// [1]: table name
-	// [2]: primary key
-	// [3]: hash column name
-	const stmt = `
-DELETE FROM %[1]s
-WHERE (%[2]s) IN (
-  SELECT %[2]s
-  FROM %[1]s
-  WHERE %[3]s = $1
-  ORDER BY aggregated_ts ASC
-  LIMIT $2
-)
-`
-	return fmt.Sprintf(stmt,
-		tableName,
-		pkColumnNames,
-		hashColumnName,
-	)
+func getQargs(shardIdx, limit int64, lastDeletedRow tree.Datums) []interface{} {
+	qargs := make([]interface{}, 0, len(lastDeletedRow)+2)
+
+	qargs = append(qargs, tree.NewDInt(tree.DInt(shardIdx)))
+	qargs = append(qargs, tree.NewDInt(tree.DInt(limit)))
+
+	for _, value := range lastDeletedRow {
+		qargs = append(qargs, value)
+	}
+
+	return qargs
 }

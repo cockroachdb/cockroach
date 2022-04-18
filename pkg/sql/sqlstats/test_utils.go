@@ -22,6 +22,10 @@ type TestingKnobs struct {
 	// finishes flushing.
 	OnTxnStatsFlushFinished func()
 
+	// OnCleanupStartForShard is a callback that is triggered when background
+	// cleanup job starts to delete data from a shard from the system table.
+	OnCleanupStartForShard func(shardIdx int, existingCountInShard, shardLimit int64)
+
 	// StubTimeNow allows tests to override the timeutil.Now() function used
 	// by the flush operation to calculate aggregated_ts timestamp.
 	StubTimeNow func() time.Time
