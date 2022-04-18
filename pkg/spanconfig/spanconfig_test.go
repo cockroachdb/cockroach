@@ -39,6 +39,7 @@ func TestScalability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// skip.IgnoreLint(t, "not run as part of CI suite")
 	skip.UnderShort(t)
 	skip.UnderStress(t)
 	skip.UnderRace(t)
@@ -87,7 +88,7 @@ func TestScalability(t *testing.T) {
 		numInitialRecords = len(records)
 	}
 
-	const numEpochs = 10
+	const numEpochs = 1
 	const numBatchesPerEpoch = 10
 	const numTablesPerBatch = 10000
 	tableCreationStart := timeutil.Now()
@@ -112,13 +113,6 @@ func TestScalability(t *testing.T) {
 		)
 	}
 
-	// XXX: Scalability test -- disable/block reconciler; create all the tables;
-	// unblock and expect records, and expect subscriber to update in-mem state
-	// with everything. Then incrementally update all configs.
-	// Change default zone config and see how long that takes.
-	// - Initial batch size: 250k.
-	// - Incremental batch size: 50k.
-
 	reconciliationStart := timeutil.Now()
 	expectedNumRecords := numInitialRecords + (numBatchesPerEpoch * numTablesPerBatch * numEpochs)
 	testutils.SucceedsWithin(t, func() error {
@@ -142,6 +136,43 @@ func TestScalability(t *testing.T) {
 		return nil
 	}, 10*time.Minute)
 
-	log.Infof(ctx, "end-to-end span config reconciliation (post-creation) for %d tables took %s",
+	log.Infof(ctx, "initial span config reconciliation for %d tables took %s",
 		expectedNumRecords, timeutil.Since(reconciliationStart))
+
+	const ttlSeconds = 10000
+	tdb.Exec(t, fmt.Sprintf(`ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = %d`, ttlSeconds))
+	{
+		incReconciliationStart := ts.Clock().Now()
+		testutils.SucceedsWithin(t, func() error {
+			if checkpoint := ts.SpanConfigReconciler().(spanconfig.Reconciler).Checkpoint(); checkpoint.Less(incReconciliationStart) {
+				return fmt.Errorf("expected reconciler checkpoint (%s) to be in advance of %s", checkpoint, incReconciliationStart)
+			}
+			return nil
+		}, 10*time.Minute)
+
+		testutils.SucceedsWithin(t, func() error {
+			records, err := scKVAccessor.GetSpanConfigRecords(
+				ctx,
+				spanconfig.TestingEntireSpanConfigurationStateTargets(),
+			)
+			if err != nil {
+				return err
+			}
+			lastRecord := records[len(records)-1]
+			if got := lastRecord.GetConfig().GCPolicy.TTLSeconds; got != ttlSeconds {
+				return fmt.Errorf("expected record with gcttlseconds %d; got %d", ttlSeconds, got)
+			}
+			return nil
+		}, 10*time.Minute)
+
+		testutils.SucceedsWithin(t, func() error {
+			if lastUpdated := scKVSubscriber.LastUpdated(); lastUpdated.Less(incReconciliationStart) {
+				return fmt.Errorf("expected kvsubscriber last updated ts (%s) to be in advance of %s", lastUpdated, incReconciliationStart)
+			}
+			return nil
+		}, 10*time.Minute)
+
+		log.Infof(ctx, "incremental config reconciliation for %d tables took %s",
+			expectedNumRecords, timeutil.Since(incReconciliationStart.GoTime()))
+	}
 }

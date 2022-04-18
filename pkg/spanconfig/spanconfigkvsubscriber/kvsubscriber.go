@@ -102,7 +102,7 @@ var _ spanconfig.KVSubscriber = &KVSubscriber{}
 // marshaled span config proto). The value used here was pulled out of thin air
 // -- it only serves to coarsely limit how large the KVSubscriber's underlying
 // rangefeed buffer can get.
-const spanConfigurationsTableRowSize = 5 << 10 // 5 KB // XXX: Grossly over-estimated.
+const spanConfigurationsTableRowSize = 5 << 10 // 5 KB
 
 // New instantiates a KVSubscriber.
 func New(
