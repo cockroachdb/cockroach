@@ -11,6 +11,7 @@
 package scbuild
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -395,6 +396,72 @@ func (b *builderState) ComputedColumnExpression(
 	return parsedExpr, newTypeT(typ)
 }
 
+// RetrieveTableWithIndex implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) RetrieveTableWithIndex(
+	ctx context.Context, index *tree.TableIndexName, ifExists bool,
+) (catalog.TableDescriptor, catalog.Index) {
+	// Attempt to resolve the table's prefix, regardless of whether the table name is provided or not.
+	tableName, indexName := index.Table, index.Index
+	resolvedTablePrefix := b.cr.MayResolveObjectNamePrefix(ctx, tableName.ObjectNamePrefix)
+	if resolvedTablePrefix == nil {
+		// schema or database not found.
+		if !ifExists {
+			err := pgerror.Newf(pgcode.UndefinedObject,
+				"schema or database was not found while searching index: %q", indexName.String())
+			err = errors.WithHint(err, "check the current database and search_path are valid")
+			panic(err)
+		}
+		return nil, nil
+	}
+	index.Table.ObjectNamePrefix = resolvedTablePrefix.NamePrefix()
+
+	// Attempt to retrieve the table descriptor that has the to-be-dropped index, and that index.
+	var tableDesc catalog.TableDescriptor
+	var idx catalog.Index
+	var err error
+	if tableName.Table() != "" {
+		// Table name is specified (e.g. `DROP INDEX tbl@idx`); Resolve the table.
+		_, tableDesc = b.cr.MayResolveTable(ctx, *(tableName.ToUnresolvedObjectName()))
+		if tableDesc == nil {
+			err = sqlerrors.NewUndefinedRelationError(tableName.ToUnresolvedObjectName())
+			panic(err)
+		}
+		if tableDesc != nil && tableDesc.IsView() && !tableDesc.MaterializedView() {
+			err = pgerror.Newf(pgcode.WrongObjectType, "%q is not a table or materialized view", tableName.Table())
+			panic(err)
+		}
+		// Retrieve the index from this table.
+		idx, err = tableDesc.FindIndexWithName(indexName.String())
+		if err != nil || idx.Dropped() {
+			// This table does not have that index.
+			if !ifExists {
+				err = pgerror.Newf(pgcode.UndefinedObject, "index %q does not exist", indexName.String())
+				panic(err)
+			}
+			return nil, nil
+		}
+	} else {
+		// Otherwise, table is not specified (e.g. `DROP INDEX public.idx`). Will attempt to find one by searching
+		// all tables in the table prefix.
+		tableDesc, idx = b.cr.MayResolveTableWithIndex(ctx, *resolvedTablePrefix, indexName)
+		if tableDesc == nil {
+			// No table with that index was found.
+			if !ifExists {
+				err = pgerror.Newf(pgcode.UndefinedObject, "index %q does not exist", indexName.String())
+				panic(err)
+			}
+			return nil, nil
+		}
+	}
+
+	return tableDesc, idx
+}
+
+// ReadDescriptorByID implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) ReadDescriptorByID(ctx context.Context, id descpb.ID) catalog.Descriptor {
+	return b.cr.MustReadDescriptor(ctx, id)
+}
+
 var _ scbuildstmt.ElementReferences = (*builderState)(nil)
 
 // ForwardReferences implements the scbuildstmt.ElementReferences interface.
@@ -699,6 +766,33 @@ func (b *builderState) ResolveColumn(
 	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
 		return idI != nil && idI.(catid.ColumnID) == columnID
+	})
+}
+
+// ResolveConstraint implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolveConstraint(
+	relationID catid.DescID, constraintName tree.Name, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	b.ensureDescriptor(relationID)
+	c := b.descCache[relationID]
+	rel := c.desc.(catalog.TableDescriptor)
+	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
+	var constraintID catid.ConstraintID
+	scpb.ForEachConstraintName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintName) {
+		if e.TableID == relationID && tree.Name(e.Name) == constraintName {
+			constraintID = e.ConstraintID
+		}
+	})
+	if constraintID == 0 {
+		if p.IsExistenceOptional {
+			return nil
+		}
+		panic(pgerror.Newf(pgcode.UndefinedColumn,
+			"constraint %q not found in relation %q", constraintName, rel.GetName()))
+	}
+	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		return idI != nil && idI.(catid.ConstraintID) == constraintID
 	})
 }
 

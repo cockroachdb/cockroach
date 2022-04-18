@@ -14,7 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -191,6 +193,15 @@ type TableHelpers interface {
 	// and its type.
 	// TODO(postamar): make this more low-level instead of consuming an AST
 	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) (tree.Expr, scpb.TypeT)
+
+	// RetrieveTableWithIndex retrieves the table with an index by that index's name.
+	// Panic if the table does not exist or index does not exist.
+	// If `ifExists` is set, swallow any panic and return nil's.
+	//
+	// Side Effect: index's table name part will be modified to a fully resolved prefix.
+	RetrieveTableWithIndex(ctx context.Context, index *tree.TableIndexName, ifExists bool) (catalog.TableDescriptor, catalog.Index)
+
+	ReadDescriptorByID(ctx context.Context, id descpb.ID) catalog.Descriptor
 }
 
 // ElementResultSet wraps the results of an element query.
@@ -263,4 +274,7 @@ type NameResolver interface {
 
 	// ResolveColumn retrieves a column by name and returns its elements.
 	ResolveColumn(relationID catid.DescID, columnName tree.Name, p ResolveParams) ElementResultSet
+
+	// ResolveConstraint retrieves a constraint by name and returns its elements.
+	ResolveConstraint(relationID catid.DescID, constraintName tree.Name, p ResolveParams) ElementResultSet
 }

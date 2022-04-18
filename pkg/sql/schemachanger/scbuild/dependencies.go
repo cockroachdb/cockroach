@@ -30,6 +30,7 @@ import (
 type Dependencies interface {
 	scbuildstmt.ClusterAndSessionInfo
 	scbuildstmt.Telemetry
+	CatalogReader
 
 	// CatalogReader returns a CatalogReader implementation.
 	CatalogReader() CatalogReader
@@ -96,8 +97,14 @@ type CatalogReader interface {
 	// MayResolveTable looks up a table by name.
 	MayResolveTable(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor)
 
+	// MayResolveTableWithIndex looks up a table, in a *resolved* prefix, with an index by that index's name.
+	MayResolveTableWithIndex(ctx context.Context, tablePrefix catalog.ResolvedObjectPrefix, indexName tree.UnrestrictedName) (catalog.TableDescriptor, catalog.Index)
+
 	// MayResolveType looks up a type by name.
 	MayResolveType(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TypeDescriptor)
+
+	// MayResolveObjectNamePrefix resolve an object's prefix.
+	MayResolveObjectNamePrefix(ctx context.Context, prefix tree.ObjectNamePrefix) *catalog.ResolvedObjectPrefix
 
 	// ReadObjectNamesAndIDs looks up the namespace entries for a schema.
 	ReadObjectNamesAndIDs(ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor) (tree.TableNames, descpb.IDs)
