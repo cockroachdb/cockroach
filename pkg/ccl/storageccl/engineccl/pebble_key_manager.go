@@ -304,13 +304,14 @@ func (m *DataKeyManager) SetActiveStoreKeyInfo(
 	if found && prevActiveStoreKey.KeyId == storeKeyInfo.KeyId && m.mu.activeKey != nil {
 		// The active store key has not changed and we already have an active data key,
 		// so no need to do anything.
+		m.mu.rotationEnabled = true
 		return nil
 	}
 	// For keys other than plaintext, make sure the user is not reusing inactive keys.
 	if storeKeyInfo.EncryptionType != enginepbccl.EncryptionType_Plaintext {
 		if _, found := m.mu.keyRegistry.StoreKeys[storeKeyInfo.KeyId]; found {
 			return fmt.Errorf("new active store key ID %s already exists as an inactive key -- this"+
-				"is really dangerous", storeKeyInfo.KeyId)
+				"is really dangerous. data key rotation has been disabled.", storeKeyInfo.KeyId)
 		}
 	}
 
