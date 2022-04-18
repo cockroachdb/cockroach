@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -3128,19 +3129,13 @@ func TestChangefeedRetryableError(t *testing.T) {
 	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
-type alwaysAliveSession string
-
-func (f alwaysAliveSession) ID() sqlliveness.SessionID                              { return sqlliveness.SessionID(f) }
-func (f alwaysAliveSession) Expiration() hlc.Timestamp                              { return hlc.MaxTimestamp }
-func (f alwaysAliveSession) RegisterCallbackForSessionExpiry(func(context.Context)) {}
-
 func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	// Set TestingKnobs to return a known session for easier
 	// comparison.
-	testSession := alwaysAliveSession("known-test-session")
+	testSession := sqllivenesstestutils.NewAlwaysAliveSession("known-test-session")
 	adoptionInterval := 20 * time.Minute
 	sessionOverride := withKnobsFn(func(knobs *base.TestingKnobs) {
 		knobs.SQLLivenessKnobs = &sqlliveness.TestingKnobs{
