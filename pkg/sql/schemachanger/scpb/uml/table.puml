@@ -15,6 +15,7 @@ object View
 View :  ViewID
 View : []UsesTypeIDs
 View : []UsesRelationIDs
+View : []ForwardReferences
 View :  IsTemporary
 View :  IsMaterialized
 
@@ -54,6 +55,7 @@ Column :  IsInaccessible
 Column :  GeneratedAsIdentityType
 Column :  GeneratedAsIdentitySequenceOption
 Column :  PgAttributeNum
+Column :  IsVirtual
 
 object PrimaryIndex
 
