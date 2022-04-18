@@ -22,33 +22,21 @@ import (
 
 type replicationStreamManagerImpl struct{}
 
-// CompleteStreamIngestion implements ReplicationStreamManager interface.
-func (r *replicationStreamManagerImpl) CompleteStreamIngestion(
-	evalCtx *tree.EvalContext,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
-	cutoverTimestamp hlc.Timestamp,
-) error {
-	return completeStreamIngestion(evalCtx, txn, streamID, cutoverTimestamp)
-}
-
-// StartReplicationStream implements ReplicationStreamManager interface.
+// StartReplicationStream implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) StartReplicationStream(
 	evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64,
 ) (streaming.StreamID, error) {
 	return startReplicationStreamJob(evalCtx, txn, tenantID)
 }
 
-// UpdateReplicationStreamProgress implements ReplicationStreamManager interface.
+// UpdateReplicationStreamProgress implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) UpdateReplicationStreamProgress(
 	evalCtx *tree.EvalContext, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
 ) (streampb.StreamReplicationStatus, error) {
 	return heartbeatReplicationStream(evalCtx, streamID, frontier, txn)
 }
 
-// StreamPartition returns a value generator which yields events for the specified partition.
-// opaqueSpec contains streampb.PartitionSpec protocol message.
-// streamID specifies the streaming job this partition belongs too.
+// StreamPartition implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) StreamPartition(
 	evalCtx *tree.EvalContext, streamID streaming.StreamID, opaqueSpec []byte,
 ) (tree.ValueGenerator, error) {
