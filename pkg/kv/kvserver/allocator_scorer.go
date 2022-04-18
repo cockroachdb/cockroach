@@ -72,10 +72,10 @@ const (
 	minRangeRebalanceThreshold = 2
 )
 
-// rangeRebalanceThreshold is the minimum ratio of a store's range count to
+// RangeRebalanceThreshold is the minimum ratio of a store's range count to
 // the mean range count at which that store is considered overfull or underfull
 // of ranges.
-var rangeRebalanceThreshold = func() *settings.FloatSetting {
+var RangeRebalanceThreshold = func() *settings.FloatSetting {
 	s := settings.RegisterFloatSetting(
 		settings.SystemOnly,
 		"kv.allocator.range_rebalance_threshold",
@@ -133,13 +133,15 @@ type scorerOptions interface {
 	// (relative to the equivalence class `eqClass`). This makes it more likely
 	// for us to pick this store as the rebalance target.
 	rebalanceToConvergesScore(eqClass equivalenceClass, candidate roachpb.StoreDescriptor) int
-	// removalConvergesScore is similar to  `rebalanceFromConvergesScore` (both
-	// deal with computing a converges score for existing stores that might
+	// removalMaximallyConvergesScore is similar to  `rebalanceFromConvergesScore`
+	// (both deal with computing a converges score for existing stores that might
 	// relinquish a replica). removalConvergesScore assigns a negative convergence
 	// score to the existing store (or multiple replicas, if there are multiple
 	// with the same QPS) that would converge the range's existing stores' QPS the
 	// most.
 	removalMaximallyConvergesScore(removalCandStoreList StoreList, existing roachpb.StoreDescriptor) int
+	// getRangeRebalanceThreshold returns the current range rebalance threshold.
+	getRangeRebalanceThreshold() float64
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -290,13 +292,22 @@ func (o *rangeCountScorerOptions) removalMaximallyConvergesScore(
 	return 0
 }
 
+func (o *rangeCountScorerOptions) getRangeRebalanceThreshold() float64 {
+	return o.rangeRebalanceThreshold
+}
+
 // qpsScorerOptions is used by the StoreRebalancer to tell the Allocator's
 // rebalancing machinery to base its balance/convergence scores on
-// queries-per-second. This means that the resulting rebalancing decisions will
-// further the goal of converging QPS across stores in the cluster.
+// queries-per-second. This means that the resulting rebalancing decisions will further the goal of
+// converging QPS across stores in the cluster.
 type qpsScorerOptions struct {
 	deterministic                             bool
 	qpsRebalanceThreshold, minRequiredQPSDiff float64
+	// NB: For mixed version compatibility with 21.2, we need to include the range
+	// count based rebalance threshold here. This is because in 21.2, the store
+	// rebalancer took range count into account when trying to rank candidate
+	// stores.
+	deprecatedRangeRebalanceThreshold float64
 
 	// QPS-based rebalancing assumes that:
 	// 1. Every replica of a range currently receives the same level of traffic.
@@ -313,6 +324,10 @@ type qpsScorerOptions struct {
 	// qpsPerReplica states the level of traffic being served by each replica in a
 	// range.
 	qpsPerReplica float64
+}
+
+func (o *qpsScorerOptions) getRangeRebalanceThreshold() float64 {
+	return o.deprecatedRangeRebalanceThreshold
 }
 
 func (o *qpsScorerOptions) maybeJitterStoreStats(sl StoreList, _ allocatorRand) StoreList {
@@ -745,7 +760,7 @@ func rankedCandidateListForAllocation(
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	allowMultipleReplsPerNode bool,
-	options *rangeCountScorerOptions,
+	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
 	existingReplTargets := roachpb.MakeReplicaSet(existingReplicas).ReplicationTargets()
@@ -779,11 +794,42 @@ func rankedCandidateListForAllocation(
 		}
 		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
 		balanceScore := options.balanceScore(candidateStores, s.Capacity)
+		// NB: This is only applicable in mixed version (21.2 along with 22.1)
+		// clusters. `rankedCandidateListForAllocation` will never be called in 22.1
+		// with a `qpsScorerOptions`.
+		//
+		// TODO(aayush): Remove this some time in the 22.2 cycle.
+		var convergesScore int
+		if qpsOpts, ok := options.(*qpsScorerOptions); ok {
+			if qpsOpts.qpsRebalanceThreshold > 0 {
+				if s.Capacity.QueriesPerSecond < underfullQPSThreshold(
+					qpsOpts, candidateStores.candidateQueriesPerSecond.mean,
+				) {
+					convergesScore = 1
+				} else if s.Capacity.QueriesPerSecond < candidateStores.candidateQueriesPerSecond.mean {
+					convergesScore = 0
+				} else if s.Capacity.QueriesPerSecond < overfullQPSThreshold(
+					qpsOpts, candidateStores.candidateQueriesPerSecond.mean,
+				) {
+					convergesScore = -1
+				} else {
+					convergesScore = -2
+				}
+
+				// NB: Maintain parity with the 21.2 implementation, which computed the
+				// `balanceScore` using range-counts instead of QPS even during
+				// load-based rebalancing.
+				balanceScore = (&rangeCountScorerOptions{
+					rangeRebalanceThreshold: options.getRangeRebalanceThreshold(),
+				}).balanceScore(candidateStores, s.Capacity)
+			}
+		}
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          constraintsOK,
 			necessary:      necessary,
 			diversityScore: diversityScore,
+			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
 			rangeCount:     int(s.Capacity.RangeCount),
 		})
