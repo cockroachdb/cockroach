@@ -81,6 +81,7 @@ func WithBuilderDependenciesFromTestServer(
 		planner.SessionData(),
 		execCfg.Settings,
 		nil, /* statements */
+		nil, /* clientNoticeSender */
 	))
 }
 

@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
@@ -229,6 +231,41 @@ func (s *TestState) MayResolveTable(
 	return prefix, table
 }
 
+// MayResolveTableWithIndex implements the scbuild.CatalogReader interface.
+func (s *TestState) MayResolveTableWithIndex(
+	ctx context.Context, tablePrefix catalog.ResolvedObjectPrefix, indexName tree.UnrestrictedName,
+) (catalog.TableDescriptor, catalog.Index) {
+	// Search all tables (or materialized views) in this prefix with that resultIndexDesc.
+	objNames, _ := s.ReadObjectNamesAndIDs(ctx, tablePrefix.Database, tablePrefix.Schema)
+
+	resultTableDesc := catalog.TableDescriptor(nil)
+	resultIndexDesc := catalog.Index(nil)
+	for i := range objNames {
+		objName := objNames[i]
+
+		_, tableDesc := s.MayResolveTable(ctx, *objName.ToUnresolvedObjectName())
+		if tableDesc == nil || !(tableDesc.IsTable() || tableDesc.MaterializedView()) {
+			// Skip non-table or non-materialized view objects.
+			continue
+		}
+
+		idx, err := tableDesc.FindIndexWithName(string(indexName))
+		if err != nil || idx.Dropped() {
+			continue
+		}
+
+		if resultTableDesc != nil {
+			// Found at least two tables with resultIndexDesc of that name!
+			panic(pgerror.Newf(pgcode.AmbiguousParameter, "index name %q is ambiguous", indexName))
+		}
+
+		resultTableDesc = tableDesc
+		resultIndexDesc = idx
+	}
+
+	return resultTableDesc, resultIndexDesc
+}
+
 // MayResolveType implements the scbuild.CatalogReader interface.
 func (s *TestState) MayResolveType(
 	ctx context.Context, name tree.UnresolvedObjectName,
@@ -350,6 +387,30 @@ func (s *TestState) mayGetByName(
 		return nil
 	}
 	return b.BuildImmutable()
+}
+
+// MayResolveObjectNamePrefix implements the scbuild.CatalogReader interface.
+func (s *TestState) MayResolveObjectNamePrefix(
+	ctx context.Context, prefix tree.ObjectNamePrefix,
+) *catalog.ResolvedObjectPrefix {
+	result := &catalog.ResolvedObjectPrefix{}
+	var err error
+
+	db, sc := s.mayResolvePrefix(prefix)
+	if db == nil || sc == nil {
+		return nil
+	}
+	result.Database, err = catalog.AsDatabaseDescriptor(db)
+	if err != nil {
+		return nil
+	}
+	result.Schema, err = catalog.AsSchemaDescriptor(sc)
+	if err != nil {
+		return nil
+	}
+	result.ExplicitDatabase = true
+	result.ExplicitSchema = true
+	return result
 }
 
 // ReadObjectNamesAndIDs implements the scbuild.CatalogReader interface.

@@ -454,7 +454,7 @@ func TestDropIndex(t *testing.T) {
 	// from the most recent job instead.
 	const migrationJobOffset = 0
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset, jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUserName(),
 		Description: `DROP INDEX t.public.kv@foo`,
 		DescriptorIDs: descpb.IDs{
@@ -484,7 +484,7 @@ func TestDropIndex(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		return jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset, jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
 			Username:    security.RootUserName(),
 			Description: `DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
@@ -505,7 +505,7 @@ func TestDropIndex(t *testing.T) {
 		}
 
 		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
-			Username:    security.RootUserName(),
+			Username:    security.NodeUserName(),
 			Description: `GC for DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),

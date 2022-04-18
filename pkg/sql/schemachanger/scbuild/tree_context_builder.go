@@ -58,7 +58,7 @@ func newEvalCtx(ctx context.Context, d Dependencies) *tree.EvalContext {
 		Planner:            &faketreeeval.DummyEvalPlanner{},
 		PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
 		SessionAccessor:    &faketreeeval.DummySessionAccessor{},
-		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
+		ClientNoticeSender: d.ClientNoticeSender(),
 		Sequence:           &faketreeeval.DummySequenceOperators{},
 		Tenant:             &faketreeeval.DummyTenantOperator{},
 		Regions:            &faketreeeval.DummyRegionOperator{},

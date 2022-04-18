@@ -215,7 +215,13 @@ ORDER BY "timestamp", info
 #################
 
 statement ok
+SET USE_DECLARATIVE_SCHEMA_CHANGER = 'OFF'
+
+statement ok
 DROP INDEX a@a_foo
+
+statement ok
+SET USE_DECLARATIVE_SCHEMA_CHANGER = 'OFF'
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
@@ -1067,7 +1073,13 @@ statement ok
 CREATE VIEW w AS (SELECT I FROM t@t_i_idx)
 
 statement ok
+SET USE_DECLARATIVE_SCHEMA_CHANGER = 'OFF'
+
+statement ok
 DROP INDEX t@t_i_idx CASCADE
+
+statement ok
+SET USE_DECLARATIVE_SCHEMA_CHANGER = 'OFF'
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
