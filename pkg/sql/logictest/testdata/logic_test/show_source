@@ -241,6 +241,7 @@ SELECT * FROM [SHOW TABLES FROM system]
 schema_name  table_name                       type   owner  estimated_row_count  locality
 public       descriptor                       table  NULL   0                    NULL
 public       tenant_settings                  table  NULL   0                    NULL
+public       hot_ranges                       table  NULL   0                    NULL
 public       span_configurations              table  NULL   0                    NULL
 public       sql_instances                    table  NULL   0                    NULL
 public       tenant_usage                     table  NULL   0                    NULL
@@ -283,6 +284,7 @@ SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 schema_name  table_name                       type   owner  estimated_row_count  locality  comment
 public       descriptor                       table  NULL   0                    NULL      ·
 public       tenant_settings                  table  NULL   0                    NULL      ·
+public       hot_ranges                       table  NULL   0                    NULL      ·
 public       span_configurations              table  NULL   0                    NULL      ·
 public       sql_instances                    table  NULL   0                    NULL      ·
 public       tenant_usage                     table  NULL   0                    NULL      ·

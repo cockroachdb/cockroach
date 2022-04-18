@@ -49,6 +49,7 @@ configs version=current offset=41
 /Table/46                                  database system (host)
 /Table/47                                  database system (host)
 /Table/50                                  database system (host)
+/Table/51                                  database system (host)
 /Table/106                                 num_replicas=7 num_voters=5
 /Table/107                                 num_replicas=7
 
@@ -58,6 +59,7 @@ configs version=legacy offset=41
 /Table/46                                  database system (host)
 /Table/47                                  database system (host)
 /Table/50                                  range system
+/Table/51                                  range system
 /Table/106                                 num_replicas=7 num_voters=5
 /Table/107                                 num_replicas=7
 
@@ -112,11 +114,13 @@ diff
 +/Table/38                                  range system
  /Table/39                                  database system (host)
  /Table/40                                  database system (host)
-@@ -42,5 +42,5 @@
+@@ -42,6 +42,6 @@
  /Table/46                                  database system (host)
  /Table/47                                  database system (host)
 -/Table/50                                  range system
+-/Table/51                                  range system
 +/Table/50                                  database system (host)
++/Table/51                                  database system (host)
  /Table/106                                 num_replicas=7 num_voters=5
  /Table/107                                 num_replicas=7
 

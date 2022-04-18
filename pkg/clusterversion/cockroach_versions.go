@@ -345,6 +345,8 @@ const (
 	// SeedSpanCountTable seeds system.span_count with the number of committed
 	// tenant spans.
 	SeedSpanCountTable
+	// HotRangesTable enables to store historical hot ranges.
+	HotRangesTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -595,6 +597,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SeedSpanCountTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 112},
+	},
+	{
+		Key:     HotRangesTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 114},
 	},
 
 	// *************************************************
