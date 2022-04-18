@@ -94,6 +94,18 @@ func TestRebalancer_processQueue(t *testing.T) {
 		dst: "foo",
 	}
 
+	// assertNoRunningRequests asserts that the rebalance loop isn't processing
+	// any request.
+	assertNoRunningRequests := func(t *testing.T) {
+		testutils.SucceedsSoon(t, func() error {
+			runningReq := b.metrics.rebalanceReqRunning.Value()
+			if runningReq != 0 {
+				return errors.Newf("expected no running requests, but got %d", runningReq)
+			}
+			return nil
+		})
+	}
+
 	t.Run("retries_up_to_maxTransferAttempts", func(t *testing.T) {
 		count := 0
 		req := &rebalanceRequest{
@@ -114,9 +126,10 @@ func TestRebalancer_processQueue(t *testing.T) {
 		b.queue.enqueue(syncReq)
 		<-syncCh
 
+		assertNoRunningRequests(t)
+
 		// Ensure that we only retried up to 3 times.
 		require.Equal(t, 3, count)
-		require.Equal(t, int64(0), b.metrics.rebalanceReqRunning.Value())
 	})
 
 	t.Run("conn_was_transferred_by_other", func(t *testing.T) {
@@ -141,9 +154,10 @@ func TestRebalancer_processQueue(t *testing.T) {
 		b.queue.enqueue(syncReq)
 		<-syncCh
 
+		assertNoRunningRequests(t)
+
 		// We should only retry once.
 		require.Equal(t, 1, count)
-		require.Equal(t, int64(0), b.metrics.rebalanceReqRunning.Value())
 	})
 
 	t.Run("conn_was_transferred", func(t *testing.T) {
@@ -167,9 +181,10 @@ func TestRebalancer_processQueue(t *testing.T) {
 		b.queue.enqueue(syncReq)
 		<-syncCh
 
+		assertNoRunningRequests(t)
+
 		// We should only retry once.
 		require.Equal(t, 1, count)
-		require.Equal(t, int64(0), b.metrics.rebalanceReqRunning.Value())
 	})
 
 	t.Run("conn_was_closed", func(t *testing.T) {
@@ -192,9 +207,10 @@ func TestRebalancer_processQueue(t *testing.T) {
 		b.queue.enqueue(syncReq)
 		<-syncCh
 
+		assertNoRunningRequests(t)
+
 		// We should only retry once.
 		require.Equal(t, 1, count)
-		require.Equal(t, int64(0), b.metrics.rebalanceReqRunning.Value())
 	})
 
 	t.Run("limit_concurrent_rebalances", func(t *testing.T) {
