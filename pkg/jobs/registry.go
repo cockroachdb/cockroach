@@ -46,8 +46,8 @@ import (
 // adoptedJobs represents a the epoch and cancelation of a job id being run
 // by the registry.
 type adoptedJob struct {
-	sid    sqlliveness.SessionID
-	isIdle bool
+	session sqlliveness.Session
+	isIdle  bool
 	// Calling the func will cancel the context the job was resumed with.
 	cancel context.CancelFunc
 }
@@ -450,7 +450,7 @@ func (r *Registry) CreateJobWithTxn(
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting live session")
 	}
-	j.sessionID = s.ID()
+	j.session = s
 	start := timeutil.Now()
 	if txn != nil {
 		start = txn.ReadTimestamp().GoTime()
@@ -579,7 +579,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		// Using a new context allows for independent lifetimes and cancellation.
 		resumerCtx, cancel = r.makeCtx()
 
-		if alreadyAdopted := r.addAdoptedJob(jobID, j.sessionID, cancel); alreadyAdopted {
+		if alreadyAdopted := r.addAdoptedJob(jobID, j.session, cancel); alreadyAdopted {
 			log.Fatalf(
 				ctx,
 				"job %d: was just created but found in registered adopted jobs",
@@ -879,7 +879,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, s sqlliveness.Session) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for id, aj := range r.mu.adoptedJobs {
-		if aj.sid != s.ID() {
+		if aj.session.ID() != s.ID() {
 			log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
 			aj.cancel()
 			delete(r.mu.adoptedJobs, id)
@@ -1396,9 +1396,9 @@ func (r *Registry) getClaimedJob(jobID jobspb.JobID) (*Job, error) {
 		return nil, &JobNotFoundError{jobID: jobID}
 	}
 	return &Job{
-		id:        jobID,
-		sessionID: aj.sid,
-		registry:  r,
+		id:       jobID,
+		session:  aj.session,
+		registry: r,
 	}, nil
 }
 

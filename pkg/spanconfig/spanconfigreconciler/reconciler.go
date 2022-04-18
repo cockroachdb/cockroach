@@ -12,11 +12,13 @@ package spanconfigreconciler
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -24,7 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -129,7 +134,10 @@ func New(
 // checkpoint. For changes to, say, RANGE DEFAULT, the RPC request proto is
 // proportional to the number of schema objects.
 func (r *Reconciler) Reconcile(
-	ctx context.Context, startTS hlc.Timestamp, onCheckpoint func() error,
+	ctx context.Context,
+	startTS hlc.Timestamp,
+	session sqlliveness.Session,
+	onCheckpoint func() error,
 ) error {
 	// TODO(irfansharif): Check system.{zones,descriptors} for last GC timestamp
 	// and avoid the full reconciliation pass if the startTS provided is
@@ -144,6 +152,7 @@ func (r *Reconciler) Reconcile(
 	full := fullReconciler{
 		sqlTranslatorFactory: r.sqlTranslatorFactory,
 		kvAccessor:           r.kvAccessor,
+		session:              session,
 		execCfg:              r.execCfg,
 		codec:                r.codec,
 		tenID:                r.tenID,
@@ -168,6 +177,7 @@ func (r *Reconciler) Reconcile(
 		sqlWatcher:           r.sqlWatcher,
 		kvAccessor:           r.kvAccessor,
 		storeWithKVContents:  latestStore,
+		session:              session,
 		execCfg:              r.execCfg,
 		codec:                r.codec,
 		knobs:                r.knobs,
@@ -194,6 +204,7 @@ func (r *Reconciler) Checkpoint() hlc.Timestamp {
 type fullReconciler struct {
 	sqlTranslatorFactory *spanconfigsqltranslator.Factory
 	kvAccessor           spanconfig.KVAccessor
+	session              sqlliveness.Session
 
 	execCfg *sql.ExecutorConfig
 	codec   keys.SQLCodec
@@ -233,7 +244,9 @@ func (f *fullReconciler) reconcile(
 
 	toDelete, toUpsert := storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, updates...)
 	if len(toDelete) != 0 || len(toUpsert) != 0 {
-		if err := f.kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
+		if err := updateSpanConfigRecords(
+			ctx, f.kvAccessor, toDelete, toUpsert, f.session,
+		); err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
 	}
@@ -363,11 +376,48 @@ func (f *fullReconciler) deleteExtraneousSpanConfigs(
 
 	// Delete the extraneous entries, if any.
 	if len(extraneousTargets) != 0 {
-		if err := f.kvAccessor.UpdateSpanConfigRecords(ctx, extraneousTargets, nil); err != nil {
+		if err := updateSpanConfigRecords(
+			ctx, f.kvAccessor, extraneousTargets, nil, f.session,
+		); err != nil {
 			return nil, err
 		}
 	}
 	return extraneousTargets, nil
+}
+
+// updateSpanConfigRecords calls the given KVAccessor's UpdateSpanConfigRecords
+// method with the provided upsert/delete args. The call is wrapped inside a
+// retry loop to account for any retryable errors that may occur.
+func updateSpanConfigRecords(
+	ctx context.Context,
+	kvAccessor spanconfig.KVAccessor,
+	toDelete []spanconfig.Target,
+	toUpsert []spanconfig.Record,
+	session sqlliveness.Session,
+) error {
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     5 * time.Second,
+		MaxRetries:     5,
+	}
+
+	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
+		err := kvAccessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, session.StartTimestamp(), session.Expiration(),
+		)
+		if err != nil {
+			if spanconfigkvaccessor.IsRetryableLeaseExpiredError(err) {
+				// We expect the underlying sqlliveness session's expiration to be
+				// extended automatically, which makes this retry loop effective in the
+				// face of these retryable lease expired errors from the RPC call.
+				log.Infof(ctx, "error updating span config records %v; retrying", err)
+				continue
+			}
+			return err // not a retryable error, bubble up
+		}
+		return nil // we performed the update; we're done here
+	}
+	return nil
 }
 
 // incrementalReconciler is a single orchestrator for the incremental
@@ -377,6 +427,7 @@ type incrementalReconciler struct {
 	sqlWatcher           spanconfig.SQLWatcher
 	kvAccessor           spanconfig.KVAccessor
 	storeWithKVContents  *spanconfigstore.Store
+	session              sqlliveness.Session
 
 	execCfg *sql.ExecutorConfig
 	codec   keys.SQLCodec
@@ -471,7 +522,9 @@ func (r *incrementalReconciler) reconcile(
 
 			toDelete, toUpsert := r.storeWithKVContents.Apply(ctx, false /* dryrun */, updates...)
 			if len(toDelete) != 0 || len(toUpsert) != 0 {
-				if err := r.kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
+				if err := updateSpanConfigRecords(
+					ctx, r.kvAccessor, toDelete, toUpsert, r.session,
+				); err != nil {
 					return err
 				}
 			}

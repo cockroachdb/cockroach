@@ -87,7 +87,9 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 	require.NoError(t, err)
 	rec, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSystemTarget(systemTarget), roachpb.SpanConfig{})
 	require.NoError(t, err)
-	err = tenantKVAccessor.UpdateSpanConfigRecords(ctx, nil /* toDelete */, []spanconfig.Record{rec})
+	err = tenantKVAccessor.UpdateSpanConfigRecords(
+		ctx, nil, []spanconfig.Record{rec}, hlc.MinTimestamp, hlc.MaxTimestamp,
+	)
 	require.NoError(t, err)
 
 	// Ensure there are 2 configs for the tenant -- one that spans its entire
@@ -357,7 +359,9 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 			)
 
 			require.NoError(t, err)
-			err = tsKVAccessor.UpdateSpanConfigRecords(ctx, nil /*toDelete */, []spanconfig.Record{r1, r2, r3})
+			err = tsKVAccessor.UpdateSpanConfigRecords(
+				ctx, nil, []spanconfig.Record{r1, r2, r3}, hlc.MinTimestamp, hlc.MaxTimestamp,
+			)
 			require.NoError(t, err)
 
 			// One more, this time set by the tenant itself on its entire keyspace.
@@ -369,7 +373,9 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 				makeSystemSpanConfig(2, 40),
 			)
 			require.NoError(t, err)
-			err = ttKVAccessor.UpdateSpanConfigRecords(ctx, nil /*toDelete */, []spanconfig.Record{r4})
+			err = ttKVAccessor.UpdateSpanConfigRecords(
+				ctx, nil, []spanconfig.Record{r4}, hlc.MinTimestamp, hlc.MaxTimestamp,
+			)
 			require.NoError(t, err)
 
 			// Create a GC-job for the table/index depending on which version of the
@@ -398,7 +404,9 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 				makeSystemSpanConfig(23, 30),
 			)
 			require.NoError(t, err)
-			err = tsKVAccessor.UpdateSpanConfigRecords(ctx, nil /*toDelete */, []spanconfig.Record{r1})
+			err = tsKVAccessor.UpdateSpanConfigRecords(
+				ctx, nil, []spanconfig.Record{r1}, hlc.MinTimestamp, hlc.MaxTimestamp,
+			)
 			require.NoError(t, err)
 
 			resetTestingKnob()
@@ -414,7 +422,9 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 
 			// Next, we'll remove the host set system span config on our secondary
 			// tenant.
-			err = tsKVAccessor.UpdateSpanConfigRecords(ctx, []spanconfig.Target{r2.GetTarget()}, nil /* ToUpdate */)
+			err = tsKVAccessor.UpdateSpanConfigRecords(
+				ctx, []spanconfig.Target{r2.GetTarget()}, nil, hlc.MinTimestamp, hlc.MaxTimestamp,
+			)
 			require.NoError(t, err)
 
 			resetTestingKnob()
@@ -422,7 +432,9 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 
 			// The only remaining PTS is from the system span config applied by
 			// the secondary tenant itself.
-			err = ttKVAccessor.UpdateSpanConfigRecords(ctx, []spanconfig.Target{r4.GetTarget()}, nil /* ToUpdate */)
+			err = ttKVAccessor.UpdateSpanConfigRecords(
+				ctx, []spanconfig.Target{r4.GetTarget()}, nil, hlc.MinTimestamp, hlc.MaxTimestamp,
+			)
 			require.NoError(t, err)
 
 			// At this point, GC should succeed.

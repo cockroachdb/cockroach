@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -79,6 +81,7 @@ func TestDataDriven(t *testing.T) {
 			tc.Server(0).DB(),
 			tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
 			tc.Server(0).ClusterSettings(),
+			tc.Server(0).Clock(),
 			dummySpanConfigurationsFQN,
 			nil, /* knobs */
 		)
@@ -101,7 +104,9 @@ func TestDataDriven(t *testing.T) {
 				return output.String()
 			case "kvaccessor-update":
 				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, d.Input)
-				if err := accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
+				if err := accessor.UpdateSpanConfigRecords(
+					ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+				); err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
 				return "ok"
@@ -152,6 +157,7 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 				tc.Server(0).DB(),
 				tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
 				tc.Server(0).ClusterSettings(),
+				tc.Server(0).Clock(),
 				dummySpanConfigurationsFQN,
 				nil, /* knobs */
 			)
@@ -159,7 +165,9 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 			start := timeutil.Now()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				require.NoError(b, accessor.UpdateSpanConfigRecords(ctx, nil, records))
+				require.NoError(b, accessor.UpdateSpanConfigRecords(
+					ctx, nil, records, hlc.MinTimestamp, hlc.MaxTimestamp,
+				))
 			}
 			duration := timeutil.Since(start)
 
@@ -186,6 +194,7 @@ func TestKVAccessorPagination(t *testing.T) {
 		tc.Server(0).DB(),
 		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
 		tc.Server(0).ClusterSettings(),
+		tc.Server(0).Clock(),
 		dummySpanConfigurationsFQN,
 		&spanconfig.TestingKnobs{
 			KVAccessorPaginationInterceptor: func() {
@@ -236,35 +245,45 @@ span [j,k)
 	{ // Seed the accessor with 10 entries.
 		batches, batchSize = 0, 100
 		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, upsert10Confs)
-		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.NoError(t, accessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+		))
 		require.Equal(t, 1, batches)
 	}
 
 	{ // Lower the batch size, we should observe more batches.
 		batches, batchSize = 0, 2
 		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, upsert10Confs)
-		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.NoError(t, accessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+		))
 		require.Equal(t, 5, batches)
 	}
 
 	{ // Try another multiple, and with deletions.
 		batches, batchSize = 0, 5
 		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, delete10Confs)
-		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.NoError(t, accessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+		))
 		require.Equal(t, 2, batches)
 	}
 
 	{ // Try a multiple that doesn't factor exactly (re-inserting original entries).
 		batches, batchSize = 0, 3
 		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, upsert10Confs)
-		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.NoError(t, accessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+		))
 		require.Equal(t, 4, batches)
 	}
 
 	{ // Try another multiple using both upserts and deletes.
 		batches, batchSize = 0, 4
 		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, delete10Confs+upsert10Confs)
-		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.NoError(t, accessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+		))
 		require.Equal(t, 6, batches) // 3 batches for the updates, 3 more for the deletions
 	}
 
@@ -275,4 +294,43 @@ span [j,k)
 		require.NoError(t, err)
 		require.Equal(t, 2, batches)
 	}
+}
+
+// TestKVAccessorUpdateLeastStartWaitRespondsToContextCancellation ensures that
+// KVAccessor update requests which are waiting for their lease start times to
+// be "valid" respond to context cancellations.
+func TestKVAccessorUpdateLeaseStartWaitRespondsToContextCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
+
+	ch := make(chan struct{})
+	accessor := spanconfigkvaccessor.New(
+		tc.Server(0).DB(),
+		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+		tc.Server(0).ClusterSettings(),
+		tc.Server(0).Clock(),
+		dummySpanConfigurationsFQN,
+		&spanconfig.TestingKnobs{
+			KVAccessorUpdateLeaseStartWaitInterceptor: func() {
+				close(ch)
+			},
+		},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	leaseStartTime := tc.Server(0).Clock().Now().Add(1*time.Second.Nanoseconds(), 0)
+	go func() {
+		<-ch
+		cancel()
+	}()
+	err := accessor.UpdateSpanConfigRecords(
+		ctx, nil /* toDelete */, nil /* toUpsert */, leaseStartTime, hlc.MaxTimestamp,
+	)
+	require.Error(t, err)
+	require.True(t, testutils.IsError(err, "waiting for lease start time to be valid"))
 }

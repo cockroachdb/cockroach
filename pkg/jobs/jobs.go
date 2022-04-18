@@ -78,7 +78,7 @@ type Job struct {
 
 	id        jobspb.JobID
 	createdBy *CreatedByInfo
-	sessionID sqlliveness.SessionID
+	session   sqlliveness.Session
 	mu        struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
@@ -244,6 +244,11 @@ func (s Status) Terminal() bool {
 // ID returns the ID of the job.
 func (j *Job) ID() jobspb.JobID {
 	return j.id
+}
+
+// Session returns the underlying sqlliveness.Session associated with the job.
+func (j *Job) Session() sqlliveness.Session {
+	return j.session
 }
 
 // CreatedBy returns name/id of this job creator.  This will be nil if this information
@@ -807,12 +812,12 @@ func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
 
 		var err error
 		var row tree.Datums
-		if j.sessionID == "" {
+		if j.session == nil {
 			row, err = j.registry.ex.QueryRowEx(ctx, "load-job-query", txn, sess,
 				queryNoSessionID, j.ID())
 		} else {
 			row, err = j.registry.ex.QueryRowEx(ctx, "load-job-query", txn, sess,
-				queryWithSessionID, j.ID(), j.sessionID.UnsafeBytes())
+				queryWithSessionID, j.ID(), j.session.ID().UnsafeBytes())
 		}
 		if err != nil {
 			return err
@@ -920,7 +925,7 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 			"StartableJob %d cannot be started more than once", sj.ID())
 	}
 
-	if sj.sessionID == "" {
+	if sj.session == nil {
 		return errors.AssertionFailedf(
 			"StartableJob %d cannot be started without sqlliveness session", sj.ID())
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -154,10 +155,14 @@ func TestDataDriven(t *testing.T) {
 			case "reconcile":
 				tsBeforeReconcilerStart := tenant.Clock().Now()
 				go func() {
-					err := tenant.Reconciler().Reconcile(ctx, hlc.Timestamp{} /* startTS */, func() error {
-						tenant.RecordCheckpoint()
-						return nil
-					})
+					err := tenant.Reconciler().Reconcile(
+						ctx,
+						hlc.Timestamp{},
+						sqllivenesstestutils.NewAlwaysAliveSession("known-testing-session"),
+						func() error {
+							tenant.RecordCheckpoint()
+							return nil
+						})
 					require.NoError(t, err)
 				}()
 

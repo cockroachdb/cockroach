@@ -60,7 +60,9 @@ type Writer interface {
 }
 
 type session struct {
-	id sqlliveness.SessionID
+	id    sqlliveness.SessionID
+	start hlc.Timestamp
+
 	mu struct {
 		syncutil.RWMutex
 		exp hlc.Timestamp
@@ -70,15 +72,18 @@ type session struct {
 	}
 }
 
-// ID implements the Session interface method ID.
+// ID implements the sqlliveness.Session interface.
 func (s *session) ID() sqlliveness.SessionID { return s.id }
 
-// Expiration implements the Session interface method Expiration.
+// Expiration implements the sqlliveness.Session interface.
 func (s *session) Expiration() hlc.Timestamp {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.mu.exp
 }
+
+// StartTimestamp implements the sqlliveness.Session interface.
+func (s *session) StartTimestamp() hlc.Timestamp { return hlc.MinTimestamp }
 
 // RegisterCallbackForSessionExpiry adds the given function to the list
 // of functions called after a session expires. The functions are
@@ -157,8 +162,12 @@ func (l *Instance) clearSession(ctx context.Context) {
 // only if the heart beat loop should exit.
 func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	id := sqlliveness.SessionID(uuid.MakeV4().GetBytes())
-	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
-	s := &session{id: id}
+	start := l.clock.Now()
+	exp := start.Add(l.ttl().Nanoseconds(), 0)
+	s := &session{
+		id:    id,
+		start: start,
+	}
 	s.mu.exp = exp
 
 	opts := retry.Options{
