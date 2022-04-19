@@ -10,6 +10,7 @@
 <tr><td><code>admission.kv.tenant_weights.enabled</code></td><td>boolean</td><td><code>false</code></td><td>when true, tenant weights are enabled for KV admission control</td></tr>
 <tr><td><code>admission.sql_kv_response.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when true, work performed by the SQL layer when receiving a KV response is subject to admission control</td></tr>
 <tr><td><code>admission.sql_sql_response.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control</td></tr>
+<tr><td><code>bulkio.backup.deprecated_full_backup_with_subdir.enabled</code></td><td>boolean</td><td><code>false</code></td><td>when true, a backup command with a user specified subdirectory will create a full backup at the subdirectory if no backup already exists at that subdirectory.</td></tr>
 <tr><td><code>bulkio.backup.file_size</code></td><td>byte size</td><td><code>128 MiB</code></td><td>target size for individual data files produced during BACKUP</td></tr>
 <tr><td><code>bulkio.backup.read_timeout</code></td><td>duration</td><td><code>5m0s</code></td><td>amount of time after which a read attempt is considered timed out, which causes the backup to fail</td></tr>
 <tr><td><code>bulkio.backup.read_with_priority_after</code></td><td>duration</td><td><code>1m0s</code></td><td>amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads</td></tr>

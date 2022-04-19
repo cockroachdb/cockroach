@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -107,6 +108,17 @@ type (
 		m map[hashedMasterKeyID][]byte
 	}
 )
+
+// featureFullBackupUserSubdir, when true, will create a full backup at a user
+// specified subdirectory if no backup already exists at that subdirectory. As
+// of 22.1, this feature is default disabled, and will be totally disabled by 22.2.
+var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"bulkio.backup.deprecated_full_backup_with_subdir.enabled",
+	"when true, a backup command with a user specified subdirectory will create a full backup at"+
+		" the subdirectory if no backup already exists at that subdirectory.",
+	false,
+).WithPublic()
 
 // getPublicIndexTableSpans returns all the public index spans of the
 // provided table.
@@ -699,16 +711,11 @@ func backupPlanHook(
 		if backupStmt.Nested {
 			if backupStmt.AppendToLatest {
 				initialDetails.Destination.Subdir = latestFileName
+				initialDetails.Destination.Exists = true
+
 			} else if subdir != "" {
 				initialDetails.Destination.Subdir = "/" + strings.TrimPrefix(subdir, "/")
-				// Deprecation notice for `BACKUP INTO` syntax with an explicit subdir.
-				// Remove this once the syntax is deleted in 22.2.
-				p.BufferClientNotice(ctx,
-					pgnotice.Newf("BACKUP commands with an explicitly specified"+
-						" subdirectory will be removed in a future release. Users can create a full backup via `BACKUP ... "+
-						"INTO <collectionURI>`, or an incremental backup on the latest full backup in their "+
-						"collection via `BACKUP ... INTO LATEST IN <collectionURI>`"))
-
+				initialDetails.Destination.Exists = true
 			} else {
 				initialDetails.Destination.Subdir = endTime.GoTime().Format(DateBasedIntoFolderName)
 			}
@@ -1461,6 +1468,13 @@ func getBackupDetailAndManifest(
 		if err := requireEnterprise(execCfg, "incremental"); err != nil {
 			return jobspb.BackupDetails{}, BackupManifest{}, err
 		}
+		lastEndTime := prevBackups[len(prevBackups)-1].EndTime
+		if lastEndTime.Compare(initialDetails.EndTime) > 0 {
+			return jobspb.BackupDetails{}, BackupManifest{},
+				errors.Newf("`AS OF SYSTEM TIME` %s must be greater than "+
+					"the previous backup's end time of %s.",
+					initialDetails.EndTime.GoTime(), lastEndTime.GoTime())
+		}
 	}
 
 	localityKVs := make([]string, len(urisByLocalityKV))
@@ -1487,7 +1501,10 @@ func getBackupDetailAndManifest(
 		// This is complex right now, but should be easier shortly.
 		// TODO(benbardin): Support verifying actual existence of localities for
 		// each layer after deprecating TO-syntax in 22.2
-		if !setsAreEqual(localityKVs, prevLocalityKVs) {
+		sort.Strings(localityKVs)
+		sort.Strings(prevLocalityKVs)
+		if !(len(localityKVs) == 0 && len(prevLocalityKVs) == 0) && !reflect.DeepEqual(localityKVs,
+			prevLocalityKVs) {
 			// Note that this won't verify the default locality. That's not
 			// necessary, because the default locality defines the backup manifest
 			// location. If that URI isn't right, the backup chain will fail to
@@ -1529,22 +1546,6 @@ func getBackupDetailAndManifest(
 	}
 
 	return updatedDetails, backupManifest, nil
-}
-
-func setsAreEqual(first []string, second []string) bool {
-	if len(first) != len(second) {
-		return false
-	}
-	sortedFirst := first
-	sortedSecond := second
-	sort.Strings(sortedFirst)
-	sort.Strings(sortedSecond)
-	for i := range sortedFirst {
-		if sortedFirst[i] != sortedSecond[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func getTenantInfo(

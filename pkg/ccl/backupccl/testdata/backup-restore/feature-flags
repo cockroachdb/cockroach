@@ -73,11 +73,6 @@ BACKUP TO 'nodelocal://1/deprecated/incfrom' INCREMENTAL FROM 'nodelocal://1/dep
 NOTICE: The `BACKUP TO` syntax will be removed in a future release, please switch over to using `BACKUP INTO` to create a backup collection: https://www.cockroachlabs.com/docs/stable/backup.html#considerations. Backups created using the `BACKUP TO` syntax may not be restoreable in the next major version release.
 
 exec-sql
-BACKUP INTO 'deprecatedExplicitSubdir' IN 'nodelocal://1/deprecated';
-----
-NOTICE: BACKUP commands with an explicitly specified subdirectory will be removed in a future release. Users can create a full backup via `BACKUP ... INTO <collectionURI>`, or an incremental backup on the latest full backup in their collection via `BACKUP ... INTO LATEST IN <collectionURI>`
-
-exec-sql
 DROP TABLE d.t;
 ----
 

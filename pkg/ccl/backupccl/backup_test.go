@@ -652,7 +652,6 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "BACKUP TO ($1, $2, $3)", backups...)
 	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", collections...)
-	sqlDB.Exec(t, "BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
 	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) WITH incremental_location = ($4, $5, $6)",
 		append(collections, incrementals...)...)
 
@@ -660,16 +659,24 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 		"BACKUP INTO LATEST IN $4 WITH incremental_location = ($1, $2, $3)",
 		append(incrementals, collections[0])...)
 
+	sqlDB.ExpectErr(t, "The full backup cannot get written to '/subdir', a user defined subdirectory. To take a full backup, remove the subdirectory from the backup command",
+		"BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
+
+	time.Sleep(time.Second + 2)
+	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3) AS OF SYSTEM TIME '-1s'", collections...)
+
 	// Find the subdirectory created by the full BACKUP INTO statement.
 	matches, err := filepath.Glob(path.Join(tmpDir, "full/*/*/*/"+backupManifestName))
 	require.NoError(t, err)
-	require.Equal(t, 1, len(matches))
+	require.Equal(t, 2, len(matches))
 	for i := range matches {
 		matches[i] = strings.TrimPrefix(filepath.Dir(matches[i]), tmpDir)
 	}
 	full1 := strings.TrimPrefix(matches[0], "/full")
+	asOf1 := strings.TrimPrefix(matches[1], "/full")
+
 	sqlDB.CheckQueryResults(
-		t, "SELECT description FROM [SHOW JOBS]",
+		t, "SELECT description FROM [SHOW JOBS] WHERE status != 'failed'",
 		[][]string{
 			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s')", backups[0].(string), backups[1].(string),
 				backups[2].(string))},
@@ -677,13 +684,16 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 				collections[1], collections[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", full1,
 				collections[0], collections[1], collections[2])},
-			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", "/subdir",
-				collections[0], collections[1], collections[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s') WITH incremental_location = ('%s', '%s', '%s')",
-				"/subdir", collections[0], collections[1], collections[2], incrementals[0],
+				full1, collections[0], collections[1], collections[2], incrementals[0],
 				incrementals[1], incrementals[2])},
+			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s') AS OF SYSTEM TIME '-1s'", asOf1, collections[0],
+				collections[1], collections[2])},
 		},
 	)
+	sqlDB.CheckQueryResults(t, "SELECT description FROM [SHOW JOBS] WHERE status = 'failed'",
+		[][]string{{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", "/subdir", collections[0],
+			collections[1], collections[2])}})
 
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
 	sqlDB.Exec(t, "RESTORE DATABASE data FROM ($1, $2, $3)", backups...)
@@ -692,15 +702,16 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3)", append(collections, full1)...)
 
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3)", append(collections, "subdir")...)
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM $7 IN ($1, $2, "+
+		"$3) WITH incremental_location = ($4, $5, $6)",
+		append(collections, incrementals[0], incrementals[1], incrementals[2], full1)...)
 
+	// Test restoring from the AOST backup
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
 	sqlDB.Exec(t, "RESTORE DATABASE data FROM LATEST IN ($1, $2, $3)", collections...)
 
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-	sqlDB.Exec(t, "RESTORE DATABASE data FROM LATEST IN ($1, $2, "+
-		"$3) WITH incremental_location = ($4, $5, $6)",
-		append(collections, incrementals[0], incrementals[1], incrementals[2])...)
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3)", append(collections, asOf1)...)
 
 	// The flavors of BACKUP and RESTORE which automatically resolve the right
 	// directory to read/write data to, have URIs with the resolved path written
@@ -718,8 +729,8 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	}
 
 	resolvedCollectionURIs := getResolvedCollectionURIs(collections, full1)
-	resolvedSubdirURIs := getResolvedCollectionURIs(collections, "subdir")
-	resolvedIncURIs := getResolvedCollectionURIs(incrementals, "subdir")
+	resolvedIncURIs := getResolvedCollectionURIs(incrementals, full1)
+	resolvedAsOfCollectionURIs := getResolvedCollectionURIs(collections, asOf1)
 
 	sqlDB.CheckQueryResults(
 		t, "SELECT description FROM [SHOW JOBS] WHERE job_type='RESTORE'",
@@ -729,16 +740,16 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				resolvedCollectionURIs[0], resolvedCollectionURIs[1],
 				resolvedCollectionURIs[2])},
+			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s') WITH incremental_location = ('%s', '%s', '%s')",
+				resolvedCollectionURIs[0], resolvedCollectionURIs[1], resolvedCollectionURIs[2],
+				resolvedIncURIs[0], resolvedIncURIs[1], resolvedIncURIs[2])},
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
-				resolvedSubdirURIs[0], resolvedSubdirURIs[1],
-				resolvedSubdirURIs[2])},
+				resolvedAsOfCollectionURIs[0], resolvedAsOfCollectionURIs[1],
+				resolvedAsOfCollectionURIs[2])},
 			// and again from LATEST IN...
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
-				resolvedSubdirURIs[0], resolvedSubdirURIs[1],
-				resolvedSubdirURIs[2])},
-			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s') WITH incremental_location = ('%s', '%s', '%s')",
-				resolvedSubdirURIs[0], resolvedSubdirURIs[1], resolvedSubdirURIs[2],
-				resolvedIncURIs[0], resolvedIncURIs[1], resolvedIncURIs[2])},
+				resolvedAsOfCollectionURIs[0], resolvedAsOfCollectionURIs[1],
+				resolvedAsOfCollectionURIs[2])},
 		},
 	)
 }
@@ -3524,8 +3535,23 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 	beforeDir := localFoo + `/beforeTs`
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, beforeDir, beforeTs))
+
 	equalDir := localFoo + `/equalTs`
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, equalDir, equalTs))
+	{
+		// testing UX guardrails for AS OF SYSTEM TIME backups in collections
+		sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO '%s' AS OF SYSTEM TIME %s`, equalDir, equalTs))
+
+		sqlDB.ExpectErr(t, "`AS OF SYSTEM TIME` .* must be greater than the previous backup's end time of",
+			fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN '%s' AS OF SYSTEM TIME %s`,
+				equalDir,
+				beforeTs))
+
+		sqlDB.ExpectErr(t, "A full backup already exists in .* Consider running an incremental backup"+
+			" to this full backup via `BACKUP INTO ",
+			fmt.Sprintf(`BACKUP DATABASE data INTO '%s' AS OF SYSTEM TIME %s`, equalDir,
+				equalTs))
+	}
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 	sqlDB.Exec(t, `RESTORE data.* FROM $1`, beforeDir)
