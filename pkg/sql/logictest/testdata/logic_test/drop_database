@@ -340,6 +340,14 @@ SELECT count(*) FROM system.namespace WHERE name LIKE 'seq50997'
 ----
 1
 
+subtest regression_73323
+
+statement ok
+CREATE DATABASE db_73323
+
+statement ok
+DROP DATABASE db_73323 RESTRICT
+
 subtest regression_51782
 
 statement ok
