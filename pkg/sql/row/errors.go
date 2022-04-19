@@ -33,15 +33,18 @@ type singleKVFetcher struct {
 	done bool
 }
 
+var _ KVBatchFetcher = &singleKVFetcher{}
+
 // nextBatch implements the KVBatchFetcher interface.
-func (f *singleKVFetcher) nextBatch(
-	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
+func (f *singleKVFetcher) nextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
 	if f.done {
-		return false, nil, nil, nil
+		return kvBatchFetcherResponse{moreKVs: false}, nil
 	}
 	f.done = true
-	return true, f.kvs[:], nil, nil
+	return kvBatchFetcherResponse{
+		moreKVs: true,
+		kvs:     f.kvs[:],
+	}, nil
 }
 
 // ConvertBatchError attempts to map a key-value error generated during a

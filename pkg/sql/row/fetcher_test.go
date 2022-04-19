@@ -153,6 +153,7 @@ func TestNextRowSingle(t *testing.T) {
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
+				nil, /* spanIDs */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
 				false, /*traceKV*/
@@ -257,6 +258,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
+				nil, /* spanIDs */
 				rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 				10,    /*limitHint*/
 				false, /*traceKV*/
@@ -351,6 +353,7 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 		context.Background(),
 		kv.NewTxn(ctx, kvDB, 0),
 		roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
+		nil, /* spanIDs */
 		rowinfra.NoBytesLimit,
 		rowinfra.NoRowLimit,
 		false, /*traceKV*/
@@ -428,6 +431,7 @@ INDEX(c)
 		roachpb.Spans{indexSpan,
 			roachpb.Span{Key: midKey, EndKey: endKey},
 		},
+		nil, /* spanIDs */
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 		// Set a limitHint of 1 to more quickly end the first batch, causing a
 		// batch that ends between rows.
@@ -586,6 +590,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PublicNonPrimaryIndexes()[0].GetID())},
+				nil, /* spanIDs */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
 				false, /*traceKV*/

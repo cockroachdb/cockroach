@@ -48,13 +48,27 @@ const DebugRowFetch = false
 // part of the output.
 const noOutputColumn = -1
 
+// kvBatchFetcherResponse contains a response from the KVBatchFetcher.
+type kvBatchFetcherResponse struct {
+	// moreKVs is true if there are more keys to fetch in the scan.
+	moreKVs bool
+	// Only one of kvs and batchResponse will be set. Which one is set depends on
+	// the server version. Both must be handled by calling code.
+	// kvs, if set, is a slice of roachpb.KeyValue, the deserialized kv pairs that
+	// were fetched.
+	kvs []roachpb.KeyValue
+	// batchResponse, if set, is a packed byte slice containing the keys and
+	// values.
+	batchResponse []byte
+	// spanID is the ID associated with the span that generated this response.
+	spanID int
+}
+
 // KVBatchFetcher abstracts the logic of fetching KVs in batches.
 type KVBatchFetcher interface {
-	// nextBatch returns the next batch of rows. Returns false in the first
-	// parameter if there are no more keys in the scan. May return either a slice
-	// of KeyValues or a batchResponse, numKvs pair, depending on the server
-	// version - both must be handled by calling code.
-	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error)
+	// nextBatch returns the next batch of rows. See kvBatchFetcherResponse for
+	// details on what is returned.
+	nextBatch(ctx context.Context) (kvBatchFetcherResponse, error)
 
 	close(ctx context.Context)
 }
@@ -349,6 +363,7 @@ func (rf *Fetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	rowLimitHint rowinfra.RowLimit,
 	traceKV bool,
@@ -363,6 +378,7 @@ func (rf *Fetcher) StartScan(
 		kvBatchFetcherArgs{
 			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
 			spans:                      spans,
+			spanIDs:                    spanIDs,
 			reverse:                    rf.reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
@@ -466,6 +482,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		kvBatchFetcherArgs{
 			sendFn:                     sendFn,
 			spans:                      spans,
+			spanIDs:                    nil,
 			reverse:                    rf.reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
@@ -540,7 +557,7 @@ func (rf *Fetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 // nextKey retrieves the next key/value and sets kv/kvEnd. Returns whether the
 // key indicates a new row (as opposed to another family for the current row).
 func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, _ error) {
-	ok, kv, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+	ok, kv, _, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 	if err != nil {
 		return false, ConvertFetchError(&rf.table.spec, err)
 	}
