@@ -123,6 +123,7 @@
 /pkg/cmd/compile-build/      @cockroachdb/dev-inf
 /pkg/cmd/cr2pg/              @cockroachdb/sql-experience
 /pkg/cmd/docgen/             @cockroachdb/docs
+/pkg/cmd/docs-issue-generation/ @cockroachdb/dev-inf
 /pkg/cmd/fuzz/               @cockroachdb/test-eng
 /pkg/cmd/generate-binary/    @cockroachdb/sql-experience
 /pkg/cmd/generate-postgres-metadata-tables/ @cockroachdb/sql-experience
