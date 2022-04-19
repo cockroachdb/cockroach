@@ -98,13 +98,10 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	}
 	if err := d.fetcher.Init(
 		params.ctx,
-		false, /* reverse */
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		0, /* lockTimeout */
-		params.p.alloc,
-		nil, /* memMonitor */
-		&spec,
+		row.FetcherInitArgs{
+			Alloc: params.p.alloc,
+			Spec:  &spec,
+		},
 	); err != nil {
 		return err
 	}

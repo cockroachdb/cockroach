@@ -278,13 +278,12 @@ func newInvertedJoiner(
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
-		false, /* reverse */
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		flowCtx.EvalCtx.SessionData().LockTimeout,
-		&ij.alloc,
-		flowCtx.EvalCtx.Mon,
-		&spec.FetchSpec,
+		row.FetcherInitArgs{
+			LockTimeout: flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:       &ij.alloc,
+			MemMonitor:  flowCtx.EvalCtx.Mon,
+			Spec:        &spec.FetchSpec,
+		},
 	); err != nil {
 		return nil, err
 	}

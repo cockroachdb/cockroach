@@ -385,13 +385,14 @@ func newJoinReader(
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
-		false, /* reverse */
-		spec.LockingStrength,
-		spec.LockingWaitPolicy,
-		flowCtx.EvalCtx.SessionData().LockTimeout,
-		&jr.alloc,
-		flowCtx.EvalCtx.Mon,
-		&spec.FetchSpec,
+		row.FetcherInitArgs{
+			LockStrength:   spec.LockingStrength,
+			LockWaitPolicy: spec.LockingWaitPolicy,
+			LockTimeout:    flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:          &jr.alloc,
+			MemMonitor:     flowCtx.EvalCtx.Mon,
+			Spec:           &spec.FetchSpec,
+		},
 	); err != nil {
 		return nil, err
 	}

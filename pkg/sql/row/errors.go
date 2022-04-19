@@ -268,13 +268,10 @@ func DecodeRowInfo(
 	rf.IgnoreUnexpectedNulls = true
 	if err := rf.Init(
 		ctx,
-		false, /* reverse */
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		0, /* lockTimeout */
-		&tree.DatumAlloc{},
-		nil, /* memMonitor */
-		&spec,
+		FetcherInitArgs{
+			Alloc: &tree.DatumAlloc{},
+			Spec:  &spec,
+		},
 	); err != nil {
 		return nil, nil, nil, err
 	}

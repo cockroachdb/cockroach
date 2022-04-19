@@ -203,40 +203,40 @@ func (rf *Fetcher) Close(ctx context.Context) {
 	}
 }
 
-// Init sets up a Fetcher for a given table and index. If we are using a
-// non-primary index, tables.ValNeededForCol can only refer to columns in the
-// index.
-func (rf *Fetcher) Init(
-	ctx context.Context,
-	reverse bool,
-	lockStrength descpb.ScanLockingStrength,
-	lockWaitPolicy descpb.ScanLockingWaitPolicy,
-	lockTimeout time.Duration,
-	alloc *tree.DatumAlloc,
-	memMonitor *mon.BytesMonitor,
-	spec *descpb.IndexFetchSpec,
-) error {
-	if spec.Version != descpb.IndexFetchSpecVersionInitial {
-		return errors.Newf("unsupported IndexFetchSpec version %d", spec.Version)
-	}
-	rf.reverse = reverse
-	rf.lockStrength = lockStrength
-	rf.lockWaitPolicy = lockWaitPolicy
-	rf.lockTimeout = lockTimeout
-	rf.alloc = alloc
+// FetcherInitArgs contains arguments for Fetcher.Init.
+type FetcherInitArgs struct {
+	Reverse        bool
+	LockStrength   descpb.ScanLockingStrength
+	LockWaitPolicy descpb.ScanLockingWaitPolicy
+	LockTimeout    time.Duration
+	Alloc          *tree.DatumAlloc
+	MemMonitor     *mon.BytesMonitor
+	Spec           *descpb.IndexFetchSpec
+}
 
-	if memMonitor != nil {
-		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, memMonitor)
-		rf.mon.Start(ctx, memMonitor, mon.BoundAccount{})
+// Init sets up a Fetcher for a given table and index.
+func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
+	if args.Spec.Version != descpb.IndexFetchSpecVersionInitial {
+		return errors.Newf("unsupported IndexFetchSpec version %d", args.Spec.Version)
+	}
+	rf.reverse = args.Reverse
+	rf.lockStrength = args.LockStrength
+	rf.lockWaitPolicy = args.LockWaitPolicy
+	rf.lockTimeout = args.LockTimeout
+	rf.alloc = args.Alloc
+
+	if args.MemMonitor != nil {
+		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, args.MemMonitor)
+		rf.mon.Start(ctx, args.MemMonitor, mon.BoundAccount{})
 		memAcc := rf.mon.MakeBoundAccount()
 		rf.kvFetcherMemAcc = &memAcc
 	}
 
 	table := &rf.table
 	*table = tableInfo{
-		spec:       *spec,
-		row:        make(rowenc.EncDatumRow, len(spec.FetchedColumns)),
-		decodedRow: make(tree.Datums, len(spec.FetchedColumns)),
+		spec:       *args.Spec,
+		row:        make(rowenc.EncDatumRow, len(args.Spec.FetchedColumns)),
+		decodedRow: make(tree.Datums, len(args.Spec.FetchedColumns)),
 
 		// These slice fields might get re-allocated below, so reslice them from
 		// the old table here in case they've got enough capacity already.
@@ -247,8 +247,8 @@ func (rf *Fetcher) Init(
 		oidOutputIdx:       noOutputColumn,
 	}
 
-	for idx := range spec.FetchedColumns {
-		colID := spec.FetchedColumns[idx].ColumnID
+	for idx := range args.Spec.FetchedColumns {
+		colID := args.Spec.FetchedColumns[idx].ColumnID
 		table.colIdxMap.Set(colID, idx)
 		if colinfo.IsColIDSystemColumn(colID) {
 			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
@@ -258,13 +258,13 @@ func (rf *Fetcher) Init(
 
 			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
-				table.tableOid = tree.NewDOid(tree.DInt(spec.TableID))
+				table.tableOid = tree.NewDOid(tree.DInt(args.Spec.TableID))
 			}
 		}
 	}
 
-	if len(spec.FetchedColumns) > 0 {
-		table.neededValueColsByIdx.AddRange(0, len(spec.FetchedColumns)-1)
+	if len(args.Spec.FetchedColumns) > 0 {
+		table.neededValueColsByIdx.AddRange(0, len(args.Spec.FetchedColumns)-1)
 	}
 
 	nExtraCols := 0
@@ -273,7 +273,7 @@ func (rf *Fetcher) Init(
 	if table.spec.IsSecondaryIndex && table.spec.IsUniqueIndex {
 		nExtraCols = int(table.spec.NumKeySuffixColumns)
 	}
-	nIndexCols := len(spec.KeyAndSuffixColumns) - nExtraCols
+	nIndexCols := len(args.Spec.KeyAndSuffixColumns) - nExtraCols
 
 	neededIndexCols := 0
 	compositeIndexCols := 0
@@ -283,7 +283,7 @@ func (rf *Fetcher) Init(
 		table.indexColIdx = make([]int, nIndexCols)
 	}
 	for i := 0; i < nIndexCols; i++ {
-		id := spec.KeyAndSuffixColumns[i].ColumnID
+		id := args.Spec.KeyAndSuffixColumns[i].ColumnID
 		colIdx, ok := table.colIdxMap.Get(id)
 		if ok {
 			table.indexColIdx[i] = colIdx
@@ -292,7 +292,7 @@ func (rf *Fetcher) Init(
 		} else {
 			table.indexColIdx[i] = -1
 		}
-		if spec.KeyAndSuffixColumns[i].IsComposite {
+		if args.Spec.KeyAndSuffixColumns[i].IsComposite {
 			compositeIndexCols++
 		}
 	}
@@ -304,7 +304,7 @@ func (rf *Fetcher) Init(
 	// The number of columns we need to read from the value part of the key.
 	// It's the total number of needed columns minus the ones we read from the
 	// index key, except for composite columns.
-	table.neededValueCols = len(spec.FetchedColumns) - neededIndexCols + compositeIndexCols
+	table.neededValueCols = len(args.Spec.FetchedColumns) - neededIndexCols + compositeIndexCols
 
 	if cap(table.keyVals) >= nIndexCols {
 		table.keyVals = table.keyVals[:nIndexCols]
@@ -360,18 +360,20 @@ func (rf *Fetcher) StartScan(
 
 	f, err := makeKVBatchFetcher(
 		ctx,
-		makeKVBatchFetcherDefaultSendFunc(txn),
-		spans,
-		rf.reverse,
-		batchBytesLimit,
-		rf.rowLimitToKeyLimit(rowLimitHint),
-		rf.lockStrength,
-		rf.lockWaitPolicy,
-		rf.lockTimeout,
-		rf.kvFetcherMemAcc,
-		forceProductionKVBatchSize,
-		txn.AdmissionHeader(),
-		txn.DB().SQLKVResponseAdmissionQ,
+		kvBatchFetcherArgs{
+			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
+			spans:                      spans,
+			reverse:                    rf.reverse,
+			batchBytesLimit:            batchBytesLimit,
+			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
+			lockStrength:               rf.lockStrength,
+			lockWaitPolicy:             rf.lockWaitPolicy,
+			lockTimeout:                rf.lockTimeout,
+			acc:                        rf.kvFetcherMemAcc,
+			forceProductionKVBatchSize: forceProductionKVBatchSize,
+			requestAdmissionHeader:     txn.AdmissionHeader(),
+			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+		},
 	)
 	if err != nil {
 		return err
@@ -461,18 +463,20 @@ func (rf *Fetcher) StartInconsistentScan(
 
 	f, err := makeKVBatchFetcher(
 		ctx,
-		sendFunc(sendFn),
-		spans,
-		rf.reverse,
-		batchBytesLimit,
-		rf.rowLimitToKeyLimit(rowLimitHint),
-		rf.lockStrength,
-		rf.lockWaitPolicy,
-		rf.lockTimeout,
-		rf.kvFetcherMemAcc,
-		forceProductionKVBatchSize,
-		txn.AdmissionHeader(),
-		txn.DB().SQLKVResponseAdmissionQ,
+		kvBatchFetcherArgs{
+			sendFn:                     sendFn,
+			spans:                      spans,
+			reverse:                    rf.reverse,
+			batchBytesLimit:            batchBytesLimit,
+			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
+			lockStrength:               rf.lockStrength,
+			lockWaitPolicy:             rf.lockWaitPolicy,
+			lockTimeout:                rf.lockTimeout,
+			acc:                        rf.kvFetcherMemAcc,
+			forceProductionKVBatchSize: forceProductionKVBatchSize,
+			requestAdmissionHeader:     txn.AdmissionHeader(),
+			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+		},
 	)
 	if err != nil {
 		return err

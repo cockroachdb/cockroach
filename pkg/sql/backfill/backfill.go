@@ -152,13 +152,11 @@ func (cb *ColumnBackfiller) init(
 
 	return cb.fetcher.Init(
 		evalCtx.Context,
-		false, /* reverse */
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		0, /* lockTimeout */
-		&cb.alloc,
-		cb.mon,
-		&spec,
+		row.FetcherInitArgs{
+			Alloc:      &cb.alloc,
+			MemMonitor: cb.mon,
+			Spec:       &spec,
+		},
 	)
 }
 
@@ -848,13 +846,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
 		ib.evalCtx.Context,
-		false, /* reverse */
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		0, /* lockTimeout */
-		&ib.alloc,
-		ib.mon,
-		&spec,
+		row.FetcherInitArgs{
+			Alloc:      &ib.alloc,
+			MemMonitor: ib.mon,
+			Spec:       &spec,
+		},
 	); err != nil {
 		return nil, nil, 0, err
 	}

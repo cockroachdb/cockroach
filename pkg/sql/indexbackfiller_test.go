@@ -390,7 +390,6 @@ INSERT INTO foo VALUES (1), (10), (100);
 
 		require.NoError(t, err)
 		spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, indexID)}
-		const reverse = false
 		var fetcherCols []descpb.ColumnID
 		for _, col := range table.PublicColumns() {
 			if colIDsNeeded.Contains(col.GetID()) {
@@ -409,13 +408,11 @@ INSERT INTO foo VALUES (1), (10), (100);
 		var fetcher row.Fetcher
 		require.NoError(t, fetcher.Init(
 			ctx,
-			reverse,
-			descpb.ScanLockingStrength_FOR_NONE,
-			descpb.ScanLockingWaitPolicy_BLOCK,
-			0,
-			&alloc,
-			mm.Monitor(),
-			&spec,
+			row.FetcherInitArgs{
+				Alloc:      &alloc,
+				MemMonitor: mm.Monitor(),
+				Spec:       &spec,
+			},
 		))
 
 		require.NoError(t, fetcher.StartScan(
