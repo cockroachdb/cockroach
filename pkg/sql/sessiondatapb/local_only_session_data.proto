@@ -246,6 +246,10 @@ message LocalOnlySessionData {
   // (with no column name specifiers) to expect and ignore not visible column
   // fields.
   bool expect_and_ignore_not_visible_columns_in_copy = 67;
+  // ShowPrimaryKeyConstraintOnNotVisibleColumns controls whether SHOW
+  // CONSTRAINTS and pg_catalog.pg_constraint will include primary key
+  // constraints that only include hidden columns.
+  bool show_primary_key_constraint_on_not_visible_columns = 68;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
