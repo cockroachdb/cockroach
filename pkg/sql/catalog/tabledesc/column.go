@@ -195,7 +195,7 @@ func (w column) CheckCanBeOutboundFKRef() error {
 // GetPGAttributeNum returns the PGAttributeNum of the column descriptor
 // if the PGAttributeNum is set (non-zero). Returns the ID of the
 // column descriptor if the PGAttributeNum is not set.
-func (w column) GetPGAttributeNum() uint32 {
+func (w column) GetPGAttributeNum() descpb.PGAttributeNum {
 	return w.desc.GetPGAttributeNum()
 }
 

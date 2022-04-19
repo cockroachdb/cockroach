@@ -197,6 +197,7 @@ upsert descriptor #108
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -238,6 +239,7 @@ upsert descriptor #108
   +        column:
   +          columnId: 2
   +          isHidden: true
+  +          pgAttributeNum: 2
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -537,6 +539,7 @@ upsert descriptor #108
   -    - elementProto:
   -        column:
   -          columnId: 1
+  -          pgAttributeNum: 1
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -578,6 +581,7 @@ upsert descriptor #108
   -        column:
   -          columnId: 2
   -          isHidden: true
+  -          pgAttributeNum: 2
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -873,6 +877,7 @@ upsert descriptor #109
   +    - elementProto:
   +        column:
   +          columnId: 1
+  +          pgAttributeNum: 1
   +          tableId: 109
   +      metadata:
   +        sourceElementId: 1
@@ -1106,6 +1111,7 @@ upsert descriptor #109
   -    - elementProto:
   -        column:
   -          columnId: 1
+  -          pgAttributeNum: 1
   -          tableId: 109
   -      metadata:
   -        sourceElementId: 1

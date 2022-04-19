@@ -443,7 +443,7 @@ func validateColumnForHasPrivilegeSpecifier(
 	}
 	if specifier.ColumnAttNum != nil {
 		for _, col := range table.PublicColumns() {
-			if col.GetPGAttributeNum() == *specifier.ColumnAttNum {
+			if uint32(col.GetPGAttributeNum()) == *specifier.ColumnAttNum {
 				return nil
 			}
 		}

@@ -917,7 +917,7 @@ func TestLogicalColumnID(t *testing.T) {
 		actual := tests[i].desc.Columns[0].GetPGAttributeNum()
 		expected := tests[i].expected
 
-		if expected != actual {
+		if expected != uint32(actual) {
 			t.Fatalf("Expected PGAttributeNum to be %d, got %d.", expected, actual)
 		}
 	}

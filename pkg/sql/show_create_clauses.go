@@ -268,7 +268,7 @@ func showComments(
 	}
 
 	for _, columnComment := range tc.columns {
-		col, err := table.FindColumnWithID(descpb.ColumnID(columnComment.subID))
+		col, err := table.FindColumnWithPGAttributeNum(descpb.PGAttributeNum(columnComment.subID))
 		if err != nil {
 			return err
 		}

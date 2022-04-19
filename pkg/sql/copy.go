@@ -214,7 +214,7 @@ func newCopyMachine(
 			Name:           col.GetName(),
 			Typ:            col.GetType(),
 			TableID:        tableDesc.GetID(),
-			PGAttributeNum: col.GetPGAttributeNum(),
+			PGAttributeNum: uint32(col.GetPGAttributeNum()),
 		}
 	}
 	// If there are no column specifiers and we expect non-visible columns

@@ -106,3 +106,37 @@ c  CREATE TABLE public.c (
 COMMENT ON TABLE public.c IS 'table';
 COMMENT ON COLUMN public.c.a IS 'column';
 COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
+
+subtest alter_column_type_not_break_show_create
+
+statement ok
+SET enable_experimental_alter_column_type_general = true;
+
+statement ok
+CREATE TABLE t (c INT);
+
+statement ok
+COMMENT ON COLUMN t.c IS 'first comment';
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  c INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+);
+COMMENT ON COLUMN public.t.c IS 'first comment'
+
+statement ok
+ALTER TABLE t ALTER COLUMN c TYPE character varying;
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  c VARCHAR NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+);
+COMMENT ON COLUMN public.t.c IS 'first comment'

@@ -499,7 +499,7 @@ func (e *virtualDefEntry) getPlanInfo(
 			Name:           col.GetName(),
 			Typ:            col.GetType(),
 			TableID:        table.GetID(),
-			PGAttributeNum: col.GetPGAttributeNum(),
+			PGAttributeNum: uint32(col.GetPGAttributeNum()),
 		})
 	}
 

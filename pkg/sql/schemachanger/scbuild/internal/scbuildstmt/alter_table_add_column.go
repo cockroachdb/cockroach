@@ -70,7 +70,7 @@ func alterTableAddColumn(
 			IsHidden:                desc.Hidden,
 			IsInaccessible:          desc.Inaccessible,
 			GeneratedAsIdentityType: desc.GeneratedAsIdentityType,
-			PgAttributeNum:          desc.PGAttributeNum,
+			PgAttributeNum:          desc.GetPGAttributeNum(),
 		},
 	}
 	if ptr := desc.GeneratedAsIdentitySequenceOption; ptr != nil {

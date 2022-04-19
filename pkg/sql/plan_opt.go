@@ -167,7 +167,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 				column = catTable.getCol(colOrdinal)
 			}
 			if column != nil {
-				resultCols[i].PGAttributeNum = column.GetPGAttributeNum()
+				resultCols[i].PGAttributeNum = uint32(column.GetPGAttributeNum())
 			} else {
 				resultCols[i].PGAttributeNum = uint32(tab.Column(colOrdinal).ColID())
 			}

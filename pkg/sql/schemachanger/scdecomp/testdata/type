@@ -66,22 +66,27 @@ ElementState:
   Status: PUBLIC
 - Column:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 108
   Status: PUBLIC
 - Column:
     columnId: 2
+    pgAttributeNum: 2
     tableId: 108
   Status: PUBLIC
 - Column:
     columnId: 3
+    pgAttributeNum: 3
     tableId: 108
   Status: PUBLIC
 - Column:
     columnId: 4
+    pgAttributeNum: 4
     tableId: 108
   Status: PUBLIC
 - Column:
     columnId: 5
+    pgAttributeNum: 5
     tableId: 108
   Status: PUBLIC
 - PrimaryIndex:
