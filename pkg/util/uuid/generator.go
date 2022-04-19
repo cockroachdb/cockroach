@@ -286,7 +286,7 @@ func defaultHWAddrFunc() (net.HardwareAddr, error) {
 	return []byte{}, fmt.Errorf("uuid: no HW address found")
 }
 
-// RandomHardwareAddrFunc rReturns a random hardware address, with the multicast
+// RandomHardwareAddrFunc returns a random hardware address, with the multicast
 // and local-admin bits set as per the IEEE802 spec.
 func RandomHardwareAddrFunc() (net.HardwareAddr, error) {
 	var err error
