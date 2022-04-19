@@ -901,10 +901,8 @@ SELECT * FROM
 (((VALUES (NULL, true), (2, true)) EXCEPT (VALUES (1, NULL), (1, NULL)))) AS t(a, b)
 WHERE a IS NULL and b
 ----
-except
+limit
  ├── columns: a:1(int) b:2(bool!null)
- ├── left columns: column1:1(int) column2:2(bool!null)
- ├── right columns: column1:3(int) column2:4(bool)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8]
  ├── key: ()
@@ -914,29 +912,18 @@ except
  │    ├── cardinality: [0 - 2]
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=1, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8]
  │    ├── fd: ()-->(1,2)
+ │    ├── limit hint: 1.00
  │    ├── values
  │    │    ├── columns: column1:1(int) column2:2(bool!null)
  │    │    ├── cardinality: [2 - 2]
  │    │    ├── stats: [rows=2, distinct(1)=2, null(1)=1, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(1,2)=2, null(1,2)=0, avgsize(1,2)=8]
+ │    │    ├── limit hint: 2.00
  │    │    ├── (NULL, true) [type=tuple{int, bool}]
  │    │    └── (2, true) [type=tuple{int, bool}]
  │    └── filters
  │         ├── column1:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
  │         └── column2:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
- └── select
-      ├── columns: column1:3(int!null) column2:4(bool!null)
-      ├── cardinality: [0 - 2]
-      ├── stats: [rows=4e-10, distinct(3)=4e-10, null(3)=0, avgsize(3)=4, distinct(4)=4e-10, null(4)=0, avgsize(4)=4, distinct(3,4)=4e-10, null(3,4)=0, avgsize(3,4)=8]
-      ├── fd: ()-->(3,4)
-      ├── values
-      │    ├── columns: column1:3(int!null) column2:4(bool)
-      │    ├── cardinality: [2 - 2]
-      │    ├── stats: [rows=2, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=1, null(4)=2, avgsize(4)=4, distinct(3,4)=1, null(3,4)=0, avgsize(3,4)=8]
-      │    ├── (1, NULL) [type=tuple{int, bool}]
-      │    └── (1, NULL) [type=tuple{int, bool}]
-      └── filters
-           ├── column1:3 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
-           └── column2:4 [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+ └── 1 [type=int]
 
 # Regression test for #36147 and #36157.
 opt
@@ -944,42 +931,30 @@ SELECT * FROM
 ((VALUES (NULL, NULL), (NULL, 1), (2, NULL)) EXCEPT (VALUES (1, 2), (2, 3), (3, 4)))
 WHERE column1 IS NULL
 ----
-except
+distinct-on
  ├── columns: column1:1(int) column2:2(int)
- ├── left columns: column1:1(int) column2:2(int)
- ├── right columns: column1:3(int) column2:4(int)
+ ├── grouping columns: column2:2(int)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=2, distinct(1,2)=2, null(1,2)=0.666667, avgsize(1,2)=8]
+ ├── stats: [rows=1.6151, distinct(2)=1.6151, null(2)=1, avgsize(2)=4]
  ├── key: (2)
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: column1:1(int) column2:2(int)
  │    ├── cardinality: [0 - 3]
- │    ├── stats: [rows=2, distinct(1)=1, null(1)=2, avgsize(1)=4, distinct(1,2)=2, null(1,2)=0.666667, avgsize(1,2)=8]
+ │    ├── stats: [rows=2, distinct(1)=1, null(1)=2, avgsize(1)=4, distinct(2)=1.6151, null(2)=1.33333, avgsize(2)=4]
  │    ├── fd: ()-->(1)
  │    ├── values
  │    │    ├── columns: column1:1(int) column2:2(int)
  │    │    ├── cardinality: [3 - 3]
- │    │    ├── stats: [rows=3, distinct(1)=2, null(1)=2, avgsize(1)=4, distinct(1,2)=3, null(1,2)=1, avgsize(1,2)=8]
+ │    │    ├── stats: [rows=3, distinct(1)=2, null(1)=2, avgsize(1)=4, distinct(2)=2, null(2)=2, avgsize(2)=4, distinct(1,2)=3, null(1,2)=1, avgsize(1,2)=8]
  │    │    ├── (NULL, NULL) [type=tuple{int, int}]
  │    │    ├── (NULL, 1) [type=tuple{int, int}]
  │    │    └── (2, NULL) [type=tuple{int, int}]
  │    └── filters
  │         └── column1:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
- └── select
-      ├── columns: column1:3(int!null) column2:4(int!null)
-      ├── cardinality: [0 - 3]
-      ├── stats: [rows=1, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(3,4)=1, null(3,4)=0, avgsize(3,4)=8]
-      ├── fd: ()-->(3)
-      ├── values
-      │    ├── columns: column1:3(int!null) column2:4(int!null)
-      │    ├── cardinality: [3 - 3]
-      │    ├── stats: [rows=3, distinct(3)=3, null(3)=0, avgsize(3)=4, distinct(4)=3, null(4)=0, avgsize(4)=4, distinct(3,4)=3, null(3,4)=0, avgsize(3,4)=8]
-      │    ├── (1, 2) [type=tuple{int, int}]
-      │    ├── (2, 3) [type=tuple{int, int}]
-      │    └── (3, 4) [type=tuple{int, int}]
-      └── filters
-           └── column1:3 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+ └── aggregations
+      └── const-agg [as=column1:1, type=int, outer=(1)]
+           └── column1:1 [type=int]
 
 # Make sure that we estimate at least 1 row for the intersect.
 opt disable=SimplifyIntersectRight

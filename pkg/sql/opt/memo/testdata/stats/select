@@ -127,7 +127,7 @@ select
       └── x:1 < 5 [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
 
 # Contradiction.
-norm
+norm disable=SimplifyIsNullCondition
 SELECT * FROM a WHERE x IS NULL
 ----
 select
