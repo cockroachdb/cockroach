@@ -7,6 +7,10 @@ CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
 
 exec-ddl
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
+----
+
+exec-ddl
 CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
 
@@ -1480,40 +1484,38 @@ select
 norm expect=RejectNullsProject
 SELECT * FROM
 (
-  SELECT x*2, (x IS NULL) FROM a
-  LEFT JOIN xy ON i = y
+  SELECT x*2, (z IS NULL) FROM a
+  LEFT JOIN xyz ON i = y
 ) f(p1, p2)
 WHERE p1 > 5 AND p2
 ----
 project
- ├── columns: p1:11!null p2:12!null
+ ├── columns: p1:12!null p2:13!null
  ├── immutable
- ├── fd: ()-->(11,12)
+ ├── fd: ()-->(13)
  ├── inner-join (hash)
- │    ├── columns: i:2!null x:7!null y:8!null
- │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    ├── columns: i:2!null x:7!null y:8!null z:9
  │    ├── immutable
- │    ├── fd: ()-->(2,7,8), (2)==(8), (8)==(2)
+ │    ├── fd: ()-->(9), (7)-->(8), (2)==(8), (8)==(2)
  │    ├── scan a
  │    │    └── columns: i:2
  │    ├── select
- │    │    ├── columns: x:7!null y:8
- │    │    ├── cardinality: [0 - 1]
+ │    │    ├── columns: x:7!null y:8 z:9
  │    │    ├── immutable
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(7,8)
- │    │    ├── scan xy
- │    │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    ├── fd: ()-->(9), (7)-->(8)
+ │    │    ├── scan xyz
+ │    │    │    ├── columns: x:7!null y:8 z:9
  │    │    │    ├── key: (7)
- │    │    │    └── fd: (7)-->(8)
+ │    │    │    └── fd: (7)-->(8,9)
  │    │    └── filters
  │    │         ├── (x:7 * 2) > 5 [outer=(7), immutable]
- │    │         └── x:7 IS NULL [outer=(7), constraints=(/7: [/NULL - /NULL]; tight), fd=()-->(7)]
+ │    │         └── z:9 IS NULL [outer=(9), constraints=(/9: [/NULL - /NULL]; tight), fd=()-->(9)]
  │    └── filters
  │         └── i:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
  └── projections
-      ├── x:7 * 2 [as="?column?":11, outer=(7), immutable]
-      └── x:7 IS NULL [as="?column?":12, outer=(7)]
+      ├── x:7 * 2 [as="?column?":12, outer=(7), immutable]
+      └── z:9 IS NULL [as="?column?":13, outer=(9)]
 
 # No-op case because null-rejection is not requested for column k.
 norm expect-not=RejectNullsProject

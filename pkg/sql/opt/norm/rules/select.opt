@@ -303,6 +303,25 @@ $input
 =>
 (Select $input (RemoveFiltersItem $filters $item))
 
+# SimplifyIsNullCondition replaces a filter with an IS NULL condition with
+# False when the given column has a NOT NULL constraint.
+[SimplifyIsNullCondition, Normalize]
+(Select
+    $input:*
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (Is
+                (Variable $col:* & (IsColNotNull $col $input))
+                (Null)
+            )
+        )
+        ...
+    ]
+)
+=>
+(Select $input [ (FiltersItem (False)) ])
+
 # PushSelectIntoProjectSet pushes filters into a ProjectSet. In particular,
 # the filters that are bound to the input columns of the ProjectSet are
 # pushed down into it, in hopes of being pushed down further into joins
