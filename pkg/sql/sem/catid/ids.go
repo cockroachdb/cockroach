@@ -43,3 +43,9 @@ type ConstraintID uint32
 
 // SafeValue implements the redact.SafeValue interface.
 func (ConstraintID) SafeValue() {}
+
+// PGAttributeNum is a custom type for Column's logical order.
+type PGAttributeNum uint32
+
+// SafeValue implements the redact.SafeValue interface.
+func (PGAttributeNum) SafeValue() {}

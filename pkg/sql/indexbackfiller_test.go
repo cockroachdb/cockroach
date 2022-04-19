@@ -298,7 +298,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 					Nullable:       false,
 					DefaultExpr:    proto.String("42"),
 					Hidden:         false,
-					PGAttributeNum: uint32(mut.NextColumnID),
+					PGAttributeNum: descpb.PGAttributeNum(mut.NextColumnID),
 				}
 				mut.NextColumnID++
 				mut.AddColumnMutation(&columnWithDefault, descpb.DescriptorMutation_ADD)
@@ -311,7 +311,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 					Nullable:       false,
 					ComputeExpr:    proto.String("i + def"),
 					Hidden:         false,
-					PGAttributeNum: uint32(mut.NextColumnID),
+					PGAttributeNum: descpb.PGAttributeNum(mut.NextColumnID),
 				}
 				mut.NextColumnID++
 				mut.AddColumnMutation(&computedColumnNotInPrimaryIndex, descpb.DescriptorMutation_ADD)

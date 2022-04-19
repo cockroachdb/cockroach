@@ -35,14 +35,17 @@ ElementState:
   Status: PUBLIC
 - Column:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 104
   Status: PUBLIC
 - Column:
     columnId: 2
+    pgAttributeNum: 2
     tableId: 104
   Status: PUBLIC
 - Column:
     columnId: 3
+    pgAttributeNum: 3
     tableId: 104
   Status: PUBLIC
 - PrimaryIndex:
@@ -217,10 +220,12 @@ ElementState:
   Status: PUBLIC
 - Column:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
 - Column:
     columnId: 2
+    pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
 - PrimaryIndex:
