@@ -91,6 +91,53 @@ func TestLikeOperators(t *testing.T) {
 			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
 			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
 		},
+		// These two cases are equivalent to the two previous ones, but the
+		// pattern is not normalized, so the slow regex matcher will be used.
+		{
+			pattern:  "%%e%",
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"def"}},
+		},
+		{
+			pattern:  "%%e%",
+			negate:   true,
+			tups:     colexectestutils.Tuples{{"abc"}, {"def"}, {"ghi"}},
+			expected: colexectestutils.Tuples{{"abc"}, {"ghi"}},
+		},
+		{
+			pattern:  "%a%e%",
+			tups:     colexectestutils.Tuples{{"abc"}, {"adef"}, {"gahie"}, {"beb"}, {"ae"}},
+			expected: colexectestutils.Tuples{{"adef"}, {"gahie"}, {"ae"}},
+		},
+		{
+			pattern:  "%a%e%",
+			negate:   true,
+			tups:     colexectestutils.Tuples{{"abc"}, {"adef"}, {"gahie"}, {"beb"}, {"ae"}},
+			expected: colexectestutils.Tuples{{"abc"}, {"beb"}},
+		},
+		{
+			pattern: "%1%22%333%",
+			tups: colexectestutils.Tuples{
+				{"a1bc22def333fghi"},
+				{"abc22def333fghi"}, // 1 is missing.
+				{"a1bc2def333fghi"}, // 2 is missing.
+				{"a1bc22def33fghi"}, // 3 is missing.
+				{"122333"},
+			},
+			expected: colexectestutils.Tuples{{"a1bc22def333fghi"}, {"122333"}},
+		},
+		{
+			pattern: "%1%22%333%",
+			negate:  true,
+			tups: colexectestutils.Tuples{
+				{"a1bc22def333fghi"},
+				{"abc22def333fghi"}, // 1 is missing.
+				{"a1bc2def333fghi"}, // 2 is missing.
+				{"a1bc22def33fghi"}, // 3 is missing.
+				{"122333"},
+			},
+			expected: colexectestutils.Tuples{{"abc22def333fghi"}, {"a1bc2def333fghi"}, {"a1bc22def33fghi"}},
+		},
 	} {
 		colexectestutils.RunTests(
 			t, testAllocator, []colexectestutils.Tuples{tc.tups}, tc.expected, colexectestutils.OrderedVerifier,
@@ -150,6 +197,17 @@ func BenchmarkLikeOps(b *testing.B) {
 		selConstOpBase: base,
 		constArg:       regexp.MustCompile(pattern),
 	}
+	skeletonOp := &selSkeletonBytesBytesConstOp{
+		selConstOpBase: base,
+		constArg:       [][]byte{[]byte(prefix), []byte(contains), []byte(suffix)},
+	}
+	// Use the same pattern as we do for the skeleton case above to see what the
+	// performance improvement of the optimized skeleton operator is.
+	patternSkeleton := fmt.Sprintf("^%s.*%s.*%s$", prefix, contains, suffix)
+	regexpSkeletonOp := &selRegexpBytesBytesConstOp{
+		selConstOpBase: base,
+		constArg:       regexp.MustCompile(patternSkeleton),
+	}
 
 	testCases := []struct {
 		name string
@@ -159,6 +217,8 @@ func BenchmarkLikeOps(b *testing.B) {
 		{name: "selSuffixBytesBytesConstOp", op: suffixOp},
 		{name: "selContainsBytesBytesConstOp", op: containsOp},
 		{name: "selRegexpBytesBytesConstOp", op: regexpOp},
+		{name: "selSkeletonBytesBytesConstOp", op: skeletonOp},
+		{name: "selRegexpSkeleton", op: regexpSkeletonOp},
 	}
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {

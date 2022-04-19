@@ -266,6 +266,137 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 	}
 }
 
+type selSkeletonBytesBytesConstOp struct {
+	selConstOpBase
+	constArg [][]byte
+}
+
+func (p *selSkeletonBytesBytesConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.Bytes()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var idx, skeletonIdx int
+						for skeletonIdx < len(p.constArg) {
+							idx = bytes.Index(arg, p.constArg[skeletonIdx])
+							if idx < 0 {
+								break
+							}
+							arg = arg[idx+len(p.constArg[skeletonIdx]):]
+							skeletonIdx++
+						}
+						cmp = skeletonIdx == len(p.constArg)
+					}
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var idx, skeletonIdx int
+						for skeletonIdx < len(p.constArg) {
+							idx = bytes.Index(arg, p.constArg[skeletonIdx])
+							if idx < 0 {
+								break
+							}
+							arg = arg[idx+len(p.constArg[skeletonIdx]):]
+							skeletonIdx++
+						}
+						cmp = skeletonIdx == len(p.constArg)
+					}
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var idx, skeletonIdx int
+						for skeletonIdx < len(p.constArg) {
+							idx = bytes.Index(arg, p.constArg[skeletonIdx])
+							if idx < 0 {
+								break
+							}
+							arg = arg[idx+len(p.constArg[skeletonIdx]):]
+							skeletonIdx++
+						}
+						cmp = skeletonIdx == len(p.constArg)
+					}
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var idx, skeletonIdx int
+						for skeletonIdx < len(p.constArg) {
+							idx = bytes.Index(arg, p.constArg[skeletonIdx])
+							if idx < 0 {
+								break
+							}
+							arg = arg[idx+len(p.constArg[skeletonIdx]):]
+							skeletonIdx++
+						}
+						cmp = skeletonIdx == len(p.constArg)
+					}
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
 type selRegexpBytesBytesConstOp struct {
 	selConstOpBase
 	constArg *regexp.Regexp
@@ -584,6 +715,137 @@ func (p *selNotContainsBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.Contains(arg, p.constArg)
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selNotSkeletonBytesBytesConstOp struct {
+	selConstOpBase
+	constArg [][]byte
+}
+
+func (p *selNotSkeletonBytesBytesConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.Bytes()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var idx, skeletonIdx int
+						for skeletonIdx < len(p.constArg) {
+							idx = bytes.Index(arg, p.constArg[skeletonIdx])
+							if idx < 0 {
+								break
+							}
+							arg = arg[idx+len(p.constArg[skeletonIdx]):]
+							skeletonIdx++
+						}
+						cmp = skeletonIdx != len(p.constArg)
+					}
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var idx, skeletonIdx int
+						for skeletonIdx < len(p.constArg) {
+							idx = bytes.Index(arg, p.constArg[skeletonIdx])
+							if idx < 0 {
+								break
+							}
+							arg = arg[idx+len(p.constArg[skeletonIdx]):]
+							skeletonIdx++
+						}
+						cmp = skeletonIdx != len(p.constArg)
+					}
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var idx, skeletonIdx int
+						for skeletonIdx < len(p.constArg) {
+							idx = bytes.Index(arg, p.constArg[skeletonIdx])
+							if idx < 0 {
+								break
+							}
+							arg = arg[idx+len(p.constArg[skeletonIdx]):]
+							skeletonIdx++
+						}
+						cmp = skeletonIdx != len(p.constArg)
+					}
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var idx, skeletonIdx int
+						for skeletonIdx < len(p.constArg) {
+							idx = bytes.Index(arg, p.constArg[skeletonIdx])
+							if idx < 0 {
+								break
+							}
+							arg = arg[idx+len(p.constArg[skeletonIdx]):]
+							skeletonIdx++
+						}
+						cmp = skeletonIdx != len(p.constArg)
+					}
 					if cmp {
 						sel[idx] = i
 						idx++

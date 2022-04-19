@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -41,8 +42,20 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	if !dropRestrictDescriptor(b, db.DatabaseID) {
 		return
 	}
-	backrefs := undroppedBackrefs(b, db.DatabaseID)
-	if backrefs.IsEmpty() {
+	// Implicitly DROP RESTRICT the public schema as well.
+	var publicSchemaID catid.DescID
+	b.BackReferences(db.DatabaseID).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		switch t := e.(type) {
+		case *scpb.Schema:
+			if t.IsPublic {
+				publicSchemaID = t.SchemaID
+			}
+		}
+	})
+	dropRestrictDescriptor(b, publicSchemaID)
+	dbBackrefs := undroppedBackrefs(b, db.DatabaseID)
+	publicSchemaBackrefs := undroppedBackrefs(b, publicSchemaID)
+	if dbBackrefs.IsEmpty() && publicSchemaBackrefs.IsEmpty() {
 		return
 	}
 	// Block DROP if cascade is not set.
