@@ -246,7 +246,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			DB: kvDB,
 			ExternalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
 				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil)
+					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil, nil)
 			},
 			Settings: s.ClusterSettings(),
 			Codec:    keys.SystemSQLCodec,

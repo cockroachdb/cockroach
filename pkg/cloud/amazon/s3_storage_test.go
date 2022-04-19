@@ -46,7 +46,7 @@ func makeS3Storage(
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		clientFactory, nil, nil)
+		clientFactory, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func TestPutS3(t *testing.T) {
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
 		_, err := cloud.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
 			"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
-			blobs.TestEmptyBlobClientFactory, user, nil, nil)
+			blobs.TestEmptyBlobClientFactory, user, nil, nil, nil)
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
 			cloud.AuthParam,
@@ -285,7 +285,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		clientFactory, nil, nil)
+		clientFactory, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

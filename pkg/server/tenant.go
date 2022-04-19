@@ -511,6 +511,7 @@ func makeTenantSQLServerArgs(
 	externalStorageFromURI := esb.makeExternalStorageFromURI
 
 	esb.init(
+		startupCtx,
 		sqlCfg.ExternalIODirConfig,
 		baseCfg.Settings,
 		baseCfg.IDContainer,

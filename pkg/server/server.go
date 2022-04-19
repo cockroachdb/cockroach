@@ -976,6 +976,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// objects hereafter.
 	fileTableInternalExecutor := sql.MakeInternalExecutor(ctx, s.PGServer().SQLServer, sql.MemoryMetrics{}, s.st)
 	s.externalStorageBuilder.init(
+		ctx,
 		s.cfg.ExternalIODirConfig,
 		s.st,
 		s.nodeIDContainer,
