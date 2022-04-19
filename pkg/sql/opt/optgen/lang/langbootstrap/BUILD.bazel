@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+# Langgen is a bootstrapping compiler. We symlink the bootstrap sources into
+# this directory in order to regenerate the sources inside the bazel sandbox.
+# This package exists to store the dependencies for langgen in the
+# bootstrapping process.
+
+go_library(
+    name = "langbootstrap",
+    srcs = [
+        "compiler.go",
+        "data_type.go",
+        "expr.go",
+        "expr.og.go",  # keep
+        "operator.og.go",  # keep
+        "operator_string.go",  # keep
+        "parser.go",
+        "scanner.go",
+        "token_string.go",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",  # keep
+    visibility = ["//pkg/sql/opt/optgen/cmd/langgen:__pkg__"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
