@@ -17,6 +17,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -92,6 +93,8 @@ type kafkaSink struct {
 	worker       sync.WaitGroup
 	scratch      bufalloc.ByteAllocator
 	metrics      *sliMetrics
+
+	stats kafkaStats
 
 	// Only synchronized between the client goroutine and the worker goroutine.
 	mu struct {
@@ -228,6 +231,7 @@ func (s *kafkaSink) EmitRow(
 		Value:    sarama.ByteEncoder(value),
 		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordOneMessage()},
 	}
+	s.stats.startMessage(int64(msg.Key.Length() + msg.Value.Length()))
 	return s.emitMessage(ctx, msg)
 }
 
@@ -362,15 +366,17 @@ func (s *kafkaSink) workerLoop() {
 				// and errors sending dummy messages used to prefetch metadata.
 				if err.Msg != nil && err.Msg.Key != nil && err.Msg.Value != nil {
 					ackError = errors.Wrapf(ackError,
-						"while sending message with key=%s, size=%d",
-						err.Msg.Key, err.Msg.Key.Length()+err.Msg.Value.Length())
+						"while sending message with key=%s, size=%d, stats=%s",
+						err.Msg.Key, err.Msg.Key.Length()+err.Msg.Value.Length(), s.stats.String())
 				}
 			}
 		}
 
 		if m, ok := ackMsg.Metadata.(messageMetadata); ok {
 			if ackError == nil {
-				m.updateMetrics(m.mvcc, ackMsg.Key.Length()+ackMsg.Value.Length(), sinkDoesNotCompress)
+				sz := ackMsg.Key.Length() + ackMsg.Value.Length()
+				s.stats.finishMessage(int64(sz))
+				m.updateMetrics(m.mvcc, sz, sinkDoesNotCompress)
 			}
 			m.alloc.Release(s.ctx)
 		}
@@ -672,4 +678,31 @@ func makeKafkaSink(
 	}
 
 	return sink, nil
+}
+
+type kafkaStats struct {
+	outstandingBytes    int64
+	outstandingMessages int64
+	largestMessageSize  int64
+}
+
+func (s *kafkaStats) startMessage(sz int64) {
+	atomic.AddInt64(&s.outstandingBytes, sz)
+	atomic.AddInt64(&s.outstandingMessages, 1)
+	if atomic.LoadInt64(&s.largestMessageSize) < sz {
+		atomic.AddInt64(&s.largestMessageSize, sz)
+	}
+}
+
+func (s *kafkaStats) finishMessage(sz int64) {
+	atomic.AddInt64(&s.outstandingBytes, -sz)
+	atomic.AddInt64(&s.outstandingMessages, -1)
+}
+
+func (s *kafkaStats) String() string {
+	return fmt.Sprintf("m=%d/b=%d/largest=%d",
+		atomic.LoadInt64(&s.outstandingMessages),
+		atomic.LoadInt64(&s.outstandingBytes),
+		atomic.LoadInt64(&s.largestMessageSize),
+	)
 }
