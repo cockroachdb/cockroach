@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -122,6 +123,10 @@ type OptTester struct {
 // Flags are control knobs for tests. Note that specific testcases can
 // override these defaults.
 type Flags struct {
+	ctx context.Context
+
+	evalCtx tree.EvalContext
+
 	// ExprFormat controls the output detail of build / opt/ optsteps command
 	// directives.
 	ExprFormat memo.ExprFmtFlags
@@ -232,6 +237,12 @@ type Flags struct {
 	// more than MemoGroupLimit memo groups are constructed during optimization.
 	MemoGroupLimit int64
 
+	// SuppressSizeCheckReport is used by the check-size command to disable
+	// printing of the number of rules applied or memo groups constructed so that
+	// it can be used as an upper-bound sanity check and not a requirement for an
+	// exact number of rules or memo groups.
+	SuppressSizeCheckReport bool
+
 	// QueryArgs are values for placeholders, used for assign-placeholders-*.
 	QueryArgs []string
 }
@@ -248,6 +259,10 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 		semaCtx: tree.MakeSemaContext(),
 		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+
+	ot.Flags.ctx = ot.ctx
+	ot.Flags.evalCtx = ot.evalCtx
+
 	// To allow opttester tests to use now(), we hardcode a preset transaction
 	// time. May 10, 2017 is a historic day: the release date of CockroachDB 1.0.
 	ot.evalCtx.TxnTimestamp = time.Date(2017, 05, 10, 13, 0, 0, 0, time.UTC)
@@ -376,12 +391,14 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //    Injects table statistics from a json file.
 //
-//  - check-size [rule-limit=...] [group-limit=...]
+//  - check-size [rule-limit=...] [group-limit=...] [suppress-report]
 //
 //    Fully optimizes the given query and outputs the number of rules applied
 //    and memo groups created. If the rule-limit or group-limit flags are set,
 //    check-size will result in a test error if the rule application or memo
-//    group count exceeds the corresponding limit.
+//    group count exceeds the corresponding limit. If either the rule-limit or
+//    group-limit options are used the suppress-report option suppresses
+//    printing of the number of rules and groups explored.
 //
 // Supported flags:
 //
@@ -468,6 +485,16 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //  - group-limit: used with check-size to set a max limit on the number of
 //    groups that can be added to the memo before a testing error is returned.
+//
+//  - memo-cycles: used with memo to search the memo for cycles and output a
+//    path with a cycle if one is found.
+//
+//  - skip-race: skips the test if the race detector is enabled.
+//
+//  - set: sets the session setting for the given SQL statement, for example:
+//         build set=prefer_lookup_joins_for_fks=true
+//         DELETE FROM parent WHERE p = 3
+//         ----
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -783,6 +810,18 @@ func ruleNamesToRuleSet(args []string) (RuleSet, error) {
 // See OptTester.RunCommand for supported flags.
 func (f *Flags) Set(arg datadriven.CmdArg) error {
 	switch arg.Key {
+	case "set":
+		for _, val := range arg.Vals {
+			s := strings.Split(val, "=")
+			if len(s) != 2 {
+				return errors.Errorf("Expected both session variable name and value for set flag")
+			}
+			err := sql.SetSessionVariable(f.ctx, f.evalCtx, s[0], s[1])
+			if err != nil {
+				return err
+			}
+		}
+
 	case "format":
 		if len(arg.Vals) == 0 {
 			return fmt.Errorf("format flag requires value(s)")
@@ -970,6 +1009,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "split-diff":
 		f.OptStepsSplitDiff = true
+
+	case "suppress-report":
+		f.SuppressSizeCheckReport = true
 
 	case "rule-limit":
 		if len(arg.Vals) != 1 {
@@ -1943,7 +1985,11 @@ func (ot *OptTester) CheckSize() (string, error) {
 	if ot.Flags.MemoGroupLimit > 0 && groups > ot.Flags.MemoGroupLimit {
 		return "", fmt.Errorf("memo groups exceeded limit: %d groups", groups)
 	}
-	return fmt.Sprintf("Rules Applied: %d\nGroups Added: %d\n", ruleApplications, groups), nil
+	var message string
+	if !ot.Flags.SuppressSizeCheckReport {
+		message = fmt.Sprintf("Rules Applied: %d\nGroups Added: %d\n", ruleApplications, groups)
+	}
+	return message, nil
 }
 
 func (ot *OptTester) buildExpr(factory *norm.Factory) error {

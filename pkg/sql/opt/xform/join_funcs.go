@@ -1611,3 +1611,40 @@ func (c *CustomFuncs) splitValues(
 	}
 	return localVals, remoteVals
 }
+
+// getfilteredCanonicalScan looks at a *ScanExpr or *SelectExpr "relation" and
+// returns the input *ScanExpr and FiltersExpr, along with ok=true, if the Scan
+// is a canonical scan. If "relation" is a different type, or if it's a
+// *SelectExpr with an Input other than a *ScanExpr, ok=false is returned. Scans
+// or Selects with no filters may return filters as nil.
+func (c *CustomFuncs) getfilteredCanonicalScan(
+	relation memo.RelExpr,
+) (scanExpr *memo.ScanExpr, filters memo.FiltersExpr, ok bool) {
+	var selectExpr *memo.SelectExpr
+	if selectExpr, ok = relation.(*memo.SelectExpr); ok {
+		if scanExpr, ok = selectExpr.Input.(*memo.ScanExpr); !ok {
+			return nil, nil, false
+		}
+		filters = selectExpr.Filters
+	} else if scanExpr, ok = relation.(*memo.ScanExpr); !ok {
+		return nil, nil, false
+	}
+	scanPrivate := &scanExpr.ScanPrivate
+	if !c.IsCanonicalScan(scanPrivate) {
+		return nil, nil, false
+	}
+	return scanExpr, filters, true
+}
+
+// CanHoistProjectInput returns true if a projection of an expression on
+// `relation` is allowed to be hoisted above a parent Join. The preconditions
+// for this are if `relation` is a canonical scan or a select from a canonical
+// scan, or the disable_hoist_projection_in_join_limitation session flag is
+// true.
+func (c *CustomFuncs) CanHoistProjectInput(relation memo.RelExpr) (ok bool) {
+	if c.e.evalCtx.SessionData().DisableHoistProjectionInJoinLimitation {
+		return true
+	}
+	_, _, ok = c.getfilteredCanonicalScan(relation)
+	return ok
+}
