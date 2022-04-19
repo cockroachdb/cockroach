@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -101,7 +102,7 @@ func alterTableAddColumn(
 	}
 	if desc.IsComputed() {
 		expr, typ := b.ComputedColumnExpression(tbl, d)
-		spec.colType.ComputeExpr = b.WrapExpression(expr)
+		spec.colType.ComputeExpr = b.WrapExpression(tbl.TableID, expr)
 		spec.colType.TypeT = typ
 		if desc.Virtual {
 			b.IncrementSchemaChangeAddColumnQualificationCounter("virtual")
@@ -111,6 +112,22 @@ func alterTableAddColumn(
 
 	} else {
 		spec.colType.TypeT = b.ResolveTypeRef(d.Type)
+		// FIMXE:
+		if spec.colType.TypeT.Type.UserDefined() {
+			typeID, err := typedesc.UserDefinedTypeOIDToID(spec.colType.TypeT.Type.Oid())
+			if err != nil {
+				panic(err)
+			}
+			_, _, tableNamespace := scpb.FindNamespace(b.QueryByID(tbl.TableID))
+			_, _, typeNamespace := scpb.FindNamespace(b.QueryByID(typeID))
+			if typeNamespace.DatabaseID != tableNamespace.DatabaseID {
+				typeName := tree.MakeTypeNameWithPrefix(b.NamePrefix(typeNamespace), typeNamespace.Name)
+				panic(pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cross database type references are not supported: %s",
+					typeName.String()))
+			}
+		}
 		// Block unsupported types.
 		switch spec.colType.Type.Oid() {
 		case oid.T_int2vector, oid.T_oidvector:
@@ -144,7 +161,7 @@ func alterTableAddColumn(
 		}
 	}
 	if desc.HasDefault() {
-		expression := b.WrapExpression(cdd.DefaultExpr)
+		expression := b.WrapExpression(tbl.TableID, cdd.DefaultExpr)
 		// Sequence references inside expressions are unsupported, since these will
 		// hit errors during backfill.
 		if len(expression.UsesSequenceIDs) > 0 {
@@ -166,7 +183,7 @@ func alterTableAddColumn(
 		spec.onUpdate = &scpb.ColumnOnUpdateExpression{
 			TableID:    tbl.TableID,
 			ColumnID:   spec.col.ColumnID,
-			Expression: *b.WrapExpression(cdd.OnUpdateExpr),
+			Expression: *b.WrapExpression(tbl.TableID, cdd.OnUpdateExpr),
 		}
 		b.IncrementSchemaChangeAddColumnQualificationCounter("on_update")
 	}

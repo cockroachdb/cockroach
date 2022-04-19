@@ -195,7 +195,7 @@ type TableHelpers interface {
 	ResolveTypeRef(typeref tree.ResolvableTypeReference) scpb.TypeT
 
 	// WrapExpression constructs an expression wrapper given an AST.
-	WrapExpression(expr tree.Expr) *scpb.Expression
+	WrapExpression(parentID catid.DescID, expr tree.Expr) *scpb.Expression
 
 	// ComputedColumnExpression returns a validated computed column expression
 	// and its type.
