@@ -508,7 +508,7 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 	// Read the entire set of rows that are part of the scan.
 	for {
 		// Fetch the next row and copy it into the row container.
-		fetchedRow, err := ij.fetcher.NextRow(ij.Ctx)
+		fetchedRow, _, err := ij.fetcher.NextRow(ij.Ctx)
 		if err != nil {
 			ij.MoveToDraining(scrub.UnwrapScrubError(err))
 			return ijStateUnknown, ij.DrainHelper()

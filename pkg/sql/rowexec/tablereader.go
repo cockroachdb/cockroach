@@ -270,7 +270,7 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 			return nil, meta
 		}
 
-		row, err := tr.fetcher.NextRow(tr.Ctx)
+		row, _, err := tr.fetcher.NextRow(tr.Ctx)
 		if row == nil || err != nil {
 			tr.MoveToDraining(err)
 			break
