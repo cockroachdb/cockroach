@@ -91,6 +91,10 @@ func (t testWrapper) WorkerProgress(f float64) {
 	panic("implement me")
 }
 
+func (t testWrapper) IsDebug() bool {
+	return false
+}
+
 var _ test2.Test = testWrapper{}
 
 // ArtifactsDir is part of the test.Test interface.

@@ -354,110 +354,150 @@ def go_deps():
         name = "com_github_aws_aws_sdk_go_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2",
-        sha256 = "546b4f58c58aedf988945dc4709cf3af67a639ed94e0cf4df58389e9f9b345d8",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2@v1.9.1",
+        sha256 = "a2dd07909b2bc4595984a5fb9c4d69afe69ef0ecc034926ec17819655120cd29",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2@v1.16.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/com_github_aws_aws_sdk_go_v2-v1.9.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/com_github_aws_aws_sdk_go_v2-v1.16.2.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_config",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/config",
-        sha256 = "7a9129c2cf9cdd5f2e74cae969c23a4212f040f08a73b03880c2d34faad0f887",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/config@v1.8.2",
+        sha256 = "9a3c9618ee70f5981194af7436a9054b35102d4f1bfa0fce78d60667d648b6f6",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/config@v1.15.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/config/com_github_aws_aws_sdk_go_v2_config-v1.8.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/config/com_github_aws_aws_sdk_go_v2_config-v1.15.3.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_credentials",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/credentials",
-        sha256 = "b8d47052b7527e524589fcaf2e25e7cd8bbb4ebc176262704555d8fa9270a695",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/credentials@v1.4.2",
+        sha256 = "88fc13b9995c5f862299280d9a0dbca54661149500c04ab8e14f543353974a25",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/credentials@v1.11.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/credentials/com_github_aws_aws_sdk_go_v2_credentials-v1.4.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/credentials/com_github_aws_aws_sdk_go_v2_credentials-v1.11.2.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_feature_ec2_imds",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/feature/ec2/imds",
-        sha256 = "74cd015671e1446d67633aca7eab28f28a77d0cb103d96f167eef40beeeda3e1",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/feature/ec2/imds@v1.5.1",
+        sha256 = "5561425aaec7bca20634d8055bddd2894975d043bcc4f159f1862b14ea3dd8d5",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/feature/ec2/imds@v1.12.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/feature/ec2/imds/com_github_aws_aws_sdk_go_v2_feature_ec2_imds-v1.5.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/feature/ec2/imds/com_github_aws_aws_sdk_go_v2_feature_ec2_imds-v1.12.3.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_internal_configsources",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/internal/configsources",
+        sha256 = "948f7cdd0e4adc5fc3743a688ebc2a685053086a27c402868f013eceea6a866e",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/internal/configsources@v1.1.9",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/internal/configsources/com_github_aws_aws_sdk_go_v2_internal_configsources-v1.1.9.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_internal_endpoints_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/internal/endpoints/v2",
+        sha256 = "6dec0e8afc8efe4ef43c3bec089318ae48afbea583461a2e583a3864f2d2d1dc",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/internal/endpoints/v2@v2.4.3",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/internal/endpoints/v2/com_github_aws_aws_sdk_go_v2_internal_endpoints_v2-v2.4.3.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_internal_ini",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/internal/ini",
-        sha256 = "e5ae7a3f32399258561cab83199c1ec9d30d32e771ce7a877c64c208a6cea27f",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/internal/ini@v1.2.3",
+        sha256 = "353a01da6df6ec898baeed901980429745decb28aff68ef8b85eefe5ae515ec9",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/internal/ini@v1.3.10",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/internal/ini/com_github_aws_aws_sdk_go_v2_internal_ini-v1.2.3.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/internal/ini/com_github_aws_aws_sdk_go_v2_internal_ini-v1.3.10.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_service_databasemigrationservice",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/service/databasemigrationservice",
+        sha256 = "c69b0b562c314708e5d1542bed72e0ba068f910d3cae4909a0d80219e6b497de",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/databasemigrationservice@v1.18.3",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/databasemigrationservice/com_github_aws_aws_sdk_go_v2_service_databasemigrationservice-v1.18.3.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_service_ec2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/service/ec2",
-        sha256 = "384c3420c234109162eb46a07ea406323a0d4368828d1263012aa843816bd198",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/ec2@v1.18.0",
+        sha256 = "b24b82535334bd7716000ba1af24acc03fcbbcb8817b8e229e9368c1fbbe6c3e",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/ec2@v1.34.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/ec2/com_github_aws_aws_sdk_go_v2_service_ec2-v1.18.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/ec2/com_github_aws_aws_sdk_go_v2_service_ec2-v1.34.0.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_service_iam",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/service/iam",
-        sha256 = "4181fee25ea8b9b9375fea74bc2e6abc2e7116e2db528c12986c14d2ecc675b0",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/iam@v1.10.0",
+        sha256 = "efb7b199ce0ae1dbea275fa3f8d131e874cc27d92c55ba7a007ad89762a88ed8",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/iam@v1.18.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/iam/com_github_aws_aws_sdk_go_v2_service_iam-v1.10.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/iam/com_github_aws_aws_sdk_go_v2_service_iam-v1.18.3.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_service_internal_presigned_url",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/service/internal/presigned-url",
-        sha256 = "1705ae1c40d49cbed56d416850c84eeca9338dfbb014bc7b8021658153e1f6f6",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/internal/presigned-url@v1.3.1",
+        sha256 = "a4748c20c2dd79d2a7503439778d2a52e6fdd657be31324b27caf18288968d92",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/internal/presigned-url@v1.9.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/internal/presigned-url/com_github_aws_aws_sdk_go_v2_service_internal_presigned_url-v1.3.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/internal/presigned-url/com_github_aws_aws_sdk_go_v2_service_internal_presigned_url-v1.9.3.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_service_rds",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/service/rds",
+        sha256 = "f5de5a435c3c31b14e853e9a4348ce80646db030c9a99a178e2a12fc00585f7e",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/rds@v1.18.4",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/rds/com_github_aws_aws_sdk_go_v2_service_rds-v1.18.4.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_service_sso",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/service/sso",
-        sha256 = "0f9fbe0b009919a72907e198a72ad72fd406ad9272395b4f2bf50ae9d6478b2d",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/sso@v1.4.1",
+        sha256 = "49f04cbd2199e505307269240d3fd3e587ca3e4ba2cbd7f8d62262475a4992c1",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/sso@v1.11.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/sso/com_github_aws_aws_sdk_go_v2_service_sso-v1.4.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/sso/com_github_aws_aws_sdk_go_v2_service_sso-v1.11.3.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_service_sts",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/service/sts",
-        sha256 = "046ae61b43524dd22bf8ce8d2bbf51e337cf91889db47b83121b88658c58a0fd",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/sts@v1.7.1",
+        sha256 = "a17741c144807b854a48db54b08d5929a65ff8bc1728ac3cbbff12266d8bcb27",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/sts@v1.16.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/sts/com_github_aws_aws_sdk_go_v2_service_sts-v1.7.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/sts/com_github_aws_aws_sdk_go_v2_service_sts-v1.16.3.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_smithy_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/smithy-go",
-        sha256 = "32b0e7b2c239ee27904c46ac4910725ad45737c118601c161ab7d2a9948197b5",
-        strip_prefix = "github.com/aws/smithy-go@v1.8.0",
+        sha256 = "62b6645d90fd3a5e55646ae1c361923491b95e7c008a6c1ff1e347232b0e55f6",
+        strip_prefix = "github.com/aws/smithy-go@v1.11.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/smithy-go/com_github_aws_smithy_go-v1.8.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/smithy-go/com_github_aws_smithy_go-v1.11.2.zip",
         ],
     )
     go_repository(
@@ -3416,10 +3456,10 @@ def go_deps():
         name = "com_github_google_go_cmp",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/go-cmp",
-        sha256 = "32c6bb53a2f214fecd43ca0a436758488d088a9ac23e391ef4b502eda0591147",
-        strip_prefix = "github.com/google/go-cmp@v0.5.6",
+        sha256 = "6c739327d027b2e6573ae5fe3de501ad1e3691af6a9e7f34541944010f142f27",
+        strip_prefix = "github.com/google/go-cmp@v0.5.7",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-cmp/com_github_google_go_cmp-v0.5.6.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-cmp/com_github_google_go_cmp-v0.5.7.zip",
         ],
     )
     go_repository(
