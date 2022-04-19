@@ -40,6 +40,7 @@ default_transaction_isolation                          serializable
 default_transaction_priority                           normal
 default_transaction_read_only                          off
 default_transaction_use_follower_reads                 off
+disable_hoist_projection_in_join_limitation            off
 disable_partially_distributed_plans                    off
 disallow_full_table_scans                              off
 distsql                                                off
