@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -935,11 +934,6 @@ func (i *intentInterleavingIter) UnsafeRawMVCCKey() []byte {
 		return i.intentKeyAsNoTimestampMVCCKey
 	}
 	return i.iter.UnsafeRawKey()
-}
-
-func (i *intentInterleavingIter) ValueProto(msg protoutil.Message) error {
-	value := i.UnsafeValue()
-	return protoutil.Unmarshal(value, msg)
 }
 
 func (i *intentInterleavingIter) ComputeStats(

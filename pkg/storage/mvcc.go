@@ -865,11 +865,11 @@ func mvccGetMetadata(
 	}
 
 	if !unsafeKey.IsValue() {
-		if err := iter.ValueProto(meta); err != nil {
+		unsafeVal := iter.UnsafeValue()
+		if err := protoutil.Unmarshal(unsafeVal, meta); err != nil {
 			return false, 0, 0, err
 		}
-		return true, int64(unsafeKey.EncodedSize()),
-			int64(len(iter.UnsafeValue())), nil
+		return true, int64(unsafeKey.EncodedSize()), int64(len(unsafeVal)), nil
 	}
 
 	meta.Reset()
@@ -2658,7 +2658,6 @@ type iterForKeyVersions interface {
 	Next()
 	UnsafeKey() MVCCKey
 	UnsafeValue() []byte
-	ValueProto(msg protoutil.Message) error
 }
 
 // separatedIntentAndVersionIter is an implementation of iterForKeyVersions
@@ -2679,8 +2678,6 @@ type separatedIntentAndVersionIter struct {
 	engineIter EngineIterator
 	mvccIter   MVCCIterator
 
-	// Already parsed meta, when the starting position is at an intent.
-	meta            *enginepb.MVCCMetadata
 	atMVCCIter      bool
 	engineIterValid bool
 	engineIterErr   error
@@ -2691,14 +2688,12 @@ var _ iterForKeyVersions = &separatedIntentAndVersionIter{}
 
 func (s *separatedIntentAndVersionIter) seekEngineKeyGE(key EngineKey) {
 	s.atMVCCIter = false
-	s.meta = nil
 	s.engineIterValid, s.engineIterErr = s.engineIter.SeekEngineKeyGE(key)
 	s.initIntentKey()
 }
 
 func (s *separatedIntentAndVersionIter) nextEngineKey() {
 	s.atMVCCIter = false
-	s.meta = nil
 	s.engineIterValid, s.engineIterErr = s.engineIter.NextEngineKey()
 	s.initIntentKey()
 }
@@ -2755,19 +2750,6 @@ func (s *separatedIntentAndVersionIter) UnsafeValue() []byte {
 	return s.engineIter.UnsafeValue()
 }
 
-func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error {
-	if s.atMVCCIter {
-		return s.mvccIter.ValueProto(msg)
-	}
-	meta, ok := msg.(*enginepb.MVCCMetadata)
-	if ok && meta == s.meta {
-		// Already parsed.
-		return nil
-	}
-	v := s.engineIter.UnsafeValue()
-	return protoutil.Unmarshal(v, msg)
-}
-
 // mvccGetIntent uses an iterForKeyVersions that has been seeked to
 // metaKey.Key for a potential intent, and tries to retrieve an intent if it
 // is present. ok returns true iff an intent for that key is found. In that
@@ -2786,11 +2768,11 @@ func mvccGetIntent(
 	if unsafeKey.IsValue() {
 		return false, 0, 0, nil
 	}
-	if err := iter.ValueProto(meta); err != nil {
+	unsafeVal := iter.UnsafeValue()
+	if err := protoutil.Unmarshal(unsafeVal, meta); err != nil {
 		return false, 0, 0, err
 	}
-	return true, int64(unsafeKey.EncodedSize()),
-		int64(len(iter.UnsafeValue())), nil
+	return true, int64(unsafeKey.EncodedSize()), int64(len(unsafeVal)), nil
 }
 
 // With the separated lock table, we are employing a performance optimization:
@@ -3353,6 +3335,7 @@ func MVCCResolveWriteIntentRange(
 	intent.EndKey = nil
 
 	var keyBuf []byte
+	var cachedMeta *enginepb.MVCCMetadata
 	num := int64(0)
 	for {
 		if max > 0 && num == max {
@@ -3370,24 +3353,28 @@ func MVCCResolveWriteIntentRange(
 				break
 			}
 			// Parse the MVCCMetadata to see if it is a relevant intent.
-			meta := &putBuf.meta
-			if err := sepIter.ValueProto(meta); err != nil {
-				return 0, nil, err
-			}
-			if meta.Txn == nil {
-				return 0, nil, errors.Errorf("intent with no txn")
+			meta := cachedMeta
+			if meta == nil {
+				meta = &putBuf.meta
+				if err := protoutil.Unmarshal(sepIter.UnsafeValue(), meta); err != nil {
+					return 0, nil, err
+				}
+				if meta.Txn == nil {
+					return 0, nil, errors.Errorf("intent with no txn")
+				}
 			}
 			if intent.Txn.ID == meta.Txn.ID {
 				// Stash the parsed meta so don't need to parse it again in
 				// mvccResolveWriteIntent. This parsing can be ~10% of the
 				// resolution cost in some benchmarks.
-				sepIter.meta = meta
+				cachedMeta = meta
 				// Manually copy the underlying bytes of the unsafe key. This
 				// construction reuses keyBuf across iterations.
 				key = sepIter.UnsafeKey()
 				keyBuf = append(keyBuf[:0], key.Key...)
 				key.Key = keyBuf
 			} else {
+				cachedMeta = nil
 				sepIter.nextEngineKey()
 				continue
 			}
@@ -3421,6 +3408,7 @@ func MVCCResolveWriteIntentRange(
 		}
 
 		if sepIter != nil {
+			cachedMeta = nil
 			sepIter.nextEngineKey()
 			// We could also compute a tighter nextKey here if we wanted to.
 		}

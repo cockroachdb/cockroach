@@ -149,9 +149,6 @@ type MVCCIterator interface {
 	UnsafeRawMVCCKey() []byte
 	// Value returns the current value as a byte slice.
 	Value() []byte
-	// ValueProto unmarshals the value the iterator is currently
-	// pointing to using a protobuf decoder.
-	ValueProto(msg protoutil.Message) error
 	// ComputeStats scans the underlying engine from start to end keys and
 	// computes stats counters based on the values. This method is used after a
 	// range is split to recompute stats for each subrange. The start key is
@@ -447,7 +444,7 @@ type Reader interface {
 	// key and the value. Semantically, it behaves as if an iterator with
 	// MVCCKeyAndIntentsIterKind was used.
 	//
-	// Deprecated: use MVCCIterator.ValueProto instead.
+	// Deprecated: use storage.MVCCGetProto instead.
 	MVCCGetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// MVCCIterate scans from the start key to the end key (exclusive), invoking the
 	// function f on each key value pair. If f returns an error or if the scan

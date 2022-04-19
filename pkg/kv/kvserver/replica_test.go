@@ -2978,7 +2978,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 				var keyMeta enginepb.MVCCMetadata
 				if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
 					t.Fatalf("missing mvcc metadata for %q: %+v", mvccKey, err)
-				} else if err := iter.ValueProto(&keyMeta); err != nil {
+				} else if err := protoutil.Unmarshal(iter.UnsafeValue(), &keyMeta); err != nil {
 					t.Fatalf("failed to unmarshal metadata for %q", mvccKey)
 				}
 				if tsNext := tsNew.Next(); keyMeta.Timestamp.ToTimestamp() != tsNext {

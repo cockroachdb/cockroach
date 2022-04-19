@@ -151,11 +151,6 @@ func (i *MVCCIterator) Value() []byte {
 	return i.i.Value()
 }
 
-// ValueProto is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) ValueProto(msg protoutil.Message) error {
-	return i.i.ValueProto(msg)
-}
-
 // UnsafeKey is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) UnsafeKey() storage.MVCCKey {
 	return i.i.UnsafeKey()

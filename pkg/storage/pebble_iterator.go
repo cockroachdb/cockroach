@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -590,13 +589,6 @@ func (p *pebbleIterator) Value() []byte {
 	valueCopy := make([]byte, len(value))
 	copy(valueCopy, value)
 	return valueCopy
-}
-
-// ValueProto implements the MVCCIterator interface.
-func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
-	value := p.UnsafeValue()
-
-	return protoutil.Unmarshal(value, msg)
 }
 
 // ComputeStats implements the MVCCIterator interface.

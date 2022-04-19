@@ -93,7 +93,7 @@ func RegisterOfflineRecoveryEvents(
 		}
 
 		record := loqrecoverypb.ReplicaRecoveryRecord{}
-		if err := iter.ValueProto(&record); err != nil {
+		if err := protoutil.Unmarshal(iter.UnsafeValue(), &record); err != nil {
 			processingErrors = errors.CombineErrors(processingErrors, errors.Wrapf(err,
 				"failed to deserialize replica recovery event at key %s", iter.Key()))
 			continue

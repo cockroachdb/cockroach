@@ -325,7 +325,7 @@ func TestEngineBatch(t *testing.T) {
 					t.Errorf("%d: batch seek expected key %s, but got %s", i, key, iter.Key())
 				} else {
 					var m enginepb.MVCCMetadata
-					if err := iter.ValueProto(&m); err != nil {
+					if err := protoutil.Unmarshal(iter.UnsafeValue(), &m); err != nil {
 						t.Fatal(err)
 					}
 					valueBytes, err := MakeValue(m).GetBytes()

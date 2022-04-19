@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 )
@@ -99,7 +100,7 @@ func CheckSSTConflicts(
 		}
 		if !extKey.IsValue() {
 			var mvccMeta enginepb.MVCCMetadata
-			if err = extIter.ValueProto(&mvccMeta); err != nil {
+			if err = protoutil.Unmarshal(extIter.UnsafeValue(), &mvccMeta); err != nil {
 				return enginepb.MVCCStats{}, err
 			}
 			if len(mvccMeta.RawBytes) > 0 {
