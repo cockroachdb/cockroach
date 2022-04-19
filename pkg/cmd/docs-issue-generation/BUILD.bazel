@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "docs-issue-generation_lib",
+    srcs = [
+        "docs_issue_generation.go",
+        "main.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/docs-issue-generation",
+    visibility = ["//visibility:private"],
+    deps = ["@com_github_spf13_cobra//:cobra"],
+)
+
+go_binary(
+    name = "docs-issue-generation",
+    embed = [":docs-issue-generation_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "docs-issue-generation_test",
+    srcs = ["docs_issue_generation_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":docs-issue-generation_lib"],
+    deps = ["@com_github_stretchr_testify//assert"],
+)

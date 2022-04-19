@@ -65,6 +65,7 @@ var buildTargetMapping = map[string]string{
 	"cockroach-short":  "//pkg/cmd/cockroach-short",
 	"dev":              "//pkg/cmd/dev",
 	"docgen":           "//pkg/cmd/docgen",
+	"docs-issue-gen":   "//pkg/cmd/docs-issue-generation:docs-issue-generation",
 	"execgen":          "//pkg/sql/colexec/execgen/cmd/execgen",
 	"optgen":           "//pkg/sql/opt/optgen/cmd/optgen",
 	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt",
