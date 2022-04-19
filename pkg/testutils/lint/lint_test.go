@@ -1170,7 +1170,7 @@ func TestLint(t *testing.T) {
 			":!*.pb.go",
 			":!*.pb.gw.go",
 			":!kv/kvclient/kvcoord/lock_spans_over_budget_error.go",
-			":!spanconfig/spanconfigkvaccessor/error.go",
+			":!spanconfig/errors.go",
 			":!roachpb/replica_unavailable_error.go",
 			":!roachpb/ambiguous_result_error.go",
 			":!sql/pgwire/pgerror/constraint_name.go",

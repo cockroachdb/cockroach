@@ -33,8 +33,8 @@ func (f alwaysAliveSession) ID() sqlliveness.SessionID {
 // Expiration implements the sqlliveness.Session interface.
 func (f alwaysAliveSession) Expiration() hlc.Timestamp { return hlc.MaxTimestamp }
 
-// StartTimestamp implements the sqlliveness.Session interface.
-func (f alwaysAliveSession) StartTimestamp() hlc.Timestamp { return hlc.MinTimestamp }
+// Start implements the sqlliveness.Session interface.
+func (f alwaysAliveSession) Start() hlc.Timestamp { return hlc.MinTimestamp }
 
 // RegisterCallbackForSessionExpiry implements the sqlliveness.Session interface.
 func (f alwaysAliveSession) RegisterCallbackForSessionExpiry(func(context.Context)) {}

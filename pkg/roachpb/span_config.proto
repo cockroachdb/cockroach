@@ -302,27 +302,23 @@ message GetSpanConfigsResponse {
 };
 
 // UpdateSpanConfigsRequest is used to update the span configurations and system
-// span configurations over the given targets.
-//
-// This is a "targeted" API: the targets being deleted are expected to have been
-// present exactly as specified. The same is true for targets being upserted with
-// new configs. If targets aren't present, an error is returned.
+// span configurations over the given targets. This is a "targeted" API: the
+// targets being deleted are expected to have been present exactly as specified.
 //
 // Adding configurations that target a span are expected to not overlap with any
 // existing spans. When divvying up an existing span into multiple others,
 // callers are expected to delete the old and upsert the new ones. This can
 // happen as part of the same request, as we delete targets marked for deletion
-// before upserting what was requested.
-//
-// Targets are not allowed to overlap with other targets in the same list. They
-// are, however, allowed to overlap across lists. This is necessary to support
-// the delete+upsert semantics described above.
+// before upserting what was requested. Targets are not allowed to overlap with
+// other targets in the same list. They are, however, allowed to overlap across
+// lists. This is necessary to support the delete+upsert semantics described
+// above.
 //
 // All delete/upsert updates are performed atomically at a timestamp within the
-// [LeaseStartTime, LeaseExpirationTime) supplied. Typically, this corresponds
+// [MinCommitTimestamp, MaxCommitTimestamp) supplied. Typically, this corresponds
 // to the lease interval of the auto span config reconciliation job issuing the
-// request. If the updates can't be performed within the specified lease
-// interval, an encoded retryableLeaseExpiredError is returned in the response.
+// request. If the updates can't be committed within the specified time
+// interval, an encoded RetryableLeaseExpiredError is returned.
 message UpdateSpanConfigsRequest {
   reserved 1, 2;
 
@@ -333,15 +329,13 @@ message UpdateSpanConfigsRequest {
   // to upsert with.
   repeated SpanConfigEntry to_upsert = 4 [(gogoproto.nullable) = false];
 
-  // LeaseStartTime is the lease start timestamp of the request issuer.
-  // Typically, this is the lease start time of the auto span config
-  // reconciliation job.
-  util.hlc.Timestamp lease_start_time = 6 [(gogoproto.nullable) = false];
+  // MinCommitTimestamp is the minimum timestamp at which the updates are to be
+  // performed.
+  util.hlc.Timestamp min_commit_timestamp = 6 [(gogoproto.nullable) = false];
 
-  // LeaseExpirationTime is the lease expiration timestamp of the request
-  // issuer. Typically, this is the lease expiration time of the auto span
-  // config reconciliation job.
-  util.hlc.Timestamp lease_expiration_time = 5 [(gogoproto.nullable) = false];
+  // MaxCommitTimestamp is the maximum timestamp (think commit deadline) at
+  // which the updates are to be performed.
+  util.hlc.Timestamp max_commit_timestamp = 5 [(gogoproto.nullable) = false];
 };
 
 message UpdateSpanConfigsResponse {

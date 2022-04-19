@@ -296,10 +296,10 @@ span [j,k)
 	}
 }
 
-// TestKVAccessorUpdateLeastStartWaitRespondsToContextCancellation ensures that
-// KVAccessor update requests which are waiting for their lease start times to
-// be "valid" respond to context cancellations.
-func TestKVAccessorUpdateLeaseStartWaitRespondsToContextCancellation(t *testing.T) {
+// TestKVAccessorCommitMinTSWaitRespondsToCtxCancellation ensures that
+// KVAccessor updates which are waiting for their local clocks to be in advance
+// of the minimum commit timestamp respond to context cancellations.
+func TestKVAccessorCommitMinTSWaitRespondsToCtxCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -308,7 +308,7 @@ func TestKVAccessorUpdateLeaseStartWaitRespondsToContextCancellation(t *testing.
 
 	const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
 
-	ch := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
 	accessor := spanconfigkvaccessor.New(
 		tc.Server(0).DB(),
 		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
@@ -316,21 +316,16 @@ func TestKVAccessorUpdateLeaseStartWaitRespondsToContextCancellation(t *testing.
 		tc.Server(0).Clock(),
 		dummySpanConfigurationsFQN,
 		&spanconfig.TestingKnobs{
-			KVAccessorUpdateLeaseStartWaitInterceptor: func() {
-				close(ch)
+			KVAccessorPreCommitMinTSWaitInterceptor: func() {
+				cancel()
 			},
 		},
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	leaseStartTime := tc.Server(0).Clock().Now().Add(1*time.Second.Nanoseconds(), 0)
-	go func() {
-		<-ch
-		cancel()
-	}()
+	commitMinTS := tc.Server(0).Clock().Now().Add(time.Second.Nanoseconds(), 0)
 	err := accessor.UpdateSpanConfigRecords(
-		ctx, nil /* toDelete */, nil /* toUpsert */, leaseStartTime, hlc.MaxTimestamp,
+		ctx, nil /* toDelete */, nil /* toUpsert */, commitMinTS, hlc.MaxTimestamp,
 	)
 	require.Error(t, err)
-	require.True(t, testutils.IsError(err, "waiting for lease start time to be valid"))
+	require.True(t, testutils.IsError(err, "waiting for clock to be in advance of minimum commit timestamp"))
 }

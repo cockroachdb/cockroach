@@ -514,15 +514,14 @@ func (c *Connector) UpdateSpanConfigRecords(
 	ctx context.Context,
 	toDelete []spanconfig.Target,
 	toUpsert []spanconfig.Record,
-	leaseStartTime hlc.Timestamp,
-	leaseExpirationTime hlc.Timestamp,
+	minCommitTS, maxCommitTS hlc.Timestamp,
 ) error {
 	return c.withClient(ctx, func(ctx context.Context, c *client) error {
 		resp, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
-			ToDelete:            spanconfig.TargetsToProtos(toDelete),
-			ToUpsert:            spanconfig.RecordsToEntries(toUpsert),
-			LeaseStartTime:      leaseStartTime,
-			LeaseExpirationTime: leaseExpirationTime,
+			ToDelete:           spanconfig.TargetsToProtos(toDelete),
+			ToUpsert:           spanconfig.RecordsToEntries(toUpsert),
+			MinCommitTimestamp: minCommitTS,
+			MaxCommitTimestamp: maxCommitTS,
 		})
 		if err != nil {
 			return err
