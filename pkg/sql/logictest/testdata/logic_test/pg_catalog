@@ -4039,6 +4039,7 @@ default_transaction_isolation                          serializable        NULL 
 default_transaction_priority                           normal              NULL      NULL        NULL        string
 default_transaction_read_only                          off                 NULL      NULL        NULL        string
 default_transaction_use_follower_reads                 off                 NULL      NULL        NULL        string
+disable_hoist_projection_in_join_limitation            off                 NULL      NULL        NULL        string
 disable_partially_distributed_plans                    off                 NULL      NULL        NULL        string
 disallow_full_table_scans                              off                 NULL      NULL        NULL        string
 distsql                                                off                 NULL      NULL        NULL        string
@@ -4143,6 +4144,7 @@ default_transaction_isolation                          serializable        NULL 
 default_transaction_priority                           normal              NULL  user     NULL      normal              normal
 default_transaction_read_only                          off                 NULL  user     NULL      off                 off
 default_transaction_use_follower_reads                 off                 NULL  user     NULL      off                 off
+disable_hoist_projection_in_join_limitation            off                 NULL  user     NULL      off                 off
 disable_partially_distributed_plans                    off                 NULL  user     NULL      off                 off
 disallow_full_table_scans                              off                 NULL  user     NULL      off                 off
 distsql                                                off                 NULL  user     NULL      off                 off
@@ -4243,6 +4245,7 @@ default_transaction_isolation                          NULL    NULL     NULL    
 default_transaction_priority                           NULL    NULL     NULL     NULL        NULL
 default_transaction_read_only                          NULL    NULL     NULL     NULL        NULL
 default_transaction_use_follower_reads                 NULL    NULL     NULL     NULL        NULL
+disable_hoist_projection_in_join_limitation            NULL    NULL     NULL     NULL        NULL
 disable_partially_distributed_plans                    NULL    NULL     NULL     NULL        NULL
 disallow_full_table_scans                              NULL    NULL     NULL     NULL        NULL
 distsql                                                NULL    NULL     NULL     NULL        NULL
@@ -4323,7 +4326,7 @@ transaction_rows_read_log                              NULL    NULL     NULL    
 transaction_rows_written_err                           NULL    NULL     NULL     NULL        NULL
 transaction_rows_written_log                           NULL    NULL     NULL     NULL        NULL
 transaction_status                                     NULL    NULL     NULL     NULL        NULL
-troubleshooting_mode                                  NULL    NULL     NULL     NULL        NULL
+troubleshooting_mode                                   NULL    NULL     NULL     NULL        NULL
 vectorize                                              NULL    NULL     NULL     NULL        NULL
 
 # pg_catalog.pg_sequence
