@@ -776,13 +776,12 @@ func fetchIndex(
 	const reverse = false
 	require.NoError(t, fetcher.Init(
 		ctx,
-		reverse,
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,
-		&alloc,
-		mm.Monitor(),
-		&spec,
+		row.FetcherInitArgs{
+			Reverse:    reverse,
+			Alloc:      &alloc,
+			MemMonitor: mm.Monitor(),
+			Spec:       &spec,
+		},
 	))
 
 	require.NoError(t, fetcher.StartScan(
