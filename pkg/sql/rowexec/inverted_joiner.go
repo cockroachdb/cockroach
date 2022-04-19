@@ -492,7 +492,8 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 
 	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(ij.indexSpans))
 	if err = ij.fetcher.StartScan(
-		ij.Ctx, ij.FlowCtx.Txn, ij.indexSpans, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
+		ij.Ctx, ij.FlowCtx.Txn, ij.indexSpans, nil, /* spanIDs */
+		rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
 		ij.FlowCtx.TraceKV, ij.EvalCtx.TestingKnobs.ForceProductionValues,
 	); err != nil {
 		ij.MoveToDraining(err)
