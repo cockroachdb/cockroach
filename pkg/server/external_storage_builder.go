@@ -37,9 +37,11 @@ type externalStorageBuilder struct {
 	initCalled        bool
 	ie                *sql.InternalExecutor
 	db                *kv.DB
+	limiters          cloud.Limiters
 }
 
 func (e *externalStorageBuilder) init(
+	ctx context.Context,
 	conf base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	nodeIDContainer *base.NodeIDContainer,
@@ -61,6 +63,8 @@ func (e *externalStorageBuilder) init(
 	e.initCalled = true
 	e.ie = ie
 	e.db = db
+	e.limiters = cloud.MakeLimiters(ctx, &settings.SV)
+
 }
 
 func (e *externalStorageBuilder) makeExternalStorage(
@@ -70,7 +74,7 @@ func (e *externalStorageBuilder) makeExternalStorage(
 		return nil, errors.New("cannot create external storage before init")
 	}
 	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie,
-		e.db)
+		e.db, e.limiters)
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
@@ -79,5 +83,5 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
-	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db)
+	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db, e.limiters)
 }
