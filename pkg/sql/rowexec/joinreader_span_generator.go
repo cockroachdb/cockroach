@@ -13,8 +13,6 @@ package rowexec
 import (
 	"context"
 	"fmt"
-	"sort"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,17 +40,12 @@ type joinReaderSpanGenerator interface {
 	// The returned spans are not accounted for, so it is the caller's
 	// responsibility to register the spans memory usage with our memory
 	// accounting system.
-	generateSpans(ctx context.Context, rows []rowenc.EncDatumRow) (roachpb.Spans, error)
+	generateSpans(ctx context.Context, rows []rowenc.EncDatumRow) (roachpb.Spans, []int, error)
 
-	// getMatchingRowIndices returns the indices of the input rows that desire
-	// the given key (i.e., the indices of the rows passed to generateSpans that
-	// generated spans containing the given key). An error is returned if no
-	// span among returned by generateSpans() contains the given key.
-	getMatchingRowIndices(key roachpb.Key) ([]int, error)
-
-	// maxLookupCols returns the maximum number of index columns used as the key
-	// for each lookup.
-	maxLookupCols() int
+	// getMatchingRowIndices returns the indices of the input rows that are
+	// associated with the given span ID (i.e., the indices of the rows passed
+	// to generateSpans that resulted in the spanID'th generated span).
+	getMatchingRowIndices(spanID int) []int
 
 	// close releases any resources associated with the joinReaderSpanGenerator.
 	close(context.Context)
@@ -62,19 +55,100 @@ var _ joinReaderSpanGenerator = &defaultSpanGenerator{}
 var _ joinReaderSpanGenerator = &multiSpanGenerator{}
 var _ joinReaderSpanGenerator = &localityOptimizedSpanGenerator{}
 
+// spanIDHelper helps joinReaderSpanGenerators in maintaining a mapping between
+// spans returned by generateSpans() and input rows that need the result of each
+// span. This is needed in order to join the looked up rows with the input rows
+// later.
+type spanIDHelper struct {
+	// spanKeyToSpanID maps a lookup span key to the span ID. This is used for
+	// de-duping spans for lookup joins.
+	//
+	// Index joins already have unique rows that generate unique spans to fetch,
+	// so they don't need this map.
+	spanKeyToSpanID map[string]int
+	// spanIDToInputRowIndices maps a span ID to the input row indices that
+	// desire the lookup of the span corresponding to that span ID.
+	//
+	// Index joins simply output the fetched rows, so they don't need this
+	// mapping.
+	spanIDToInputRowIndices [][]int
+
+	scratchSpanIDs []int
+}
+
+// reset sets up the helper for reuse.
+func (h *spanIDHelper) reset() {
+	// This loop gets optimized to a runtime.mapclear call.
+	for k := range h.spanKeyToSpanID {
+		delete(h.spanKeyToSpanID, k)
+	}
+	h.spanIDToInputRowIndices = h.spanIDToInputRowIndices[:0]
+	h.scratchSpanIDs = h.scratchSpanIDs[:0]
+}
+
+// addInputRowIdxForSpan adds the given input row index to the list of indices
+// corresponding to the given span (identified by the span key). Span ID of the
+// span as well as a boolean indicating whether this span key is seen for the
+// first time are returned.
+func (h *spanIDHelper) addInputRowIdxForSpan(
+	spanKey string, inputRowIdx int,
+) (spanID int, newSpanKey bool) {
+	spanID, ok := h.spanKeyToSpanID[spanKey]
+	if !ok {
+		spanID = len(h.spanKeyToSpanID)
+		h.spanKeyToSpanID[spanKey] = spanID
+		if cap(h.spanIDToInputRowIndices) > spanID {
+			h.spanIDToInputRowIndices = h.spanIDToInputRowIndices[:spanID+1]
+			h.spanIDToInputRowIndices[spanID] = h.spanIDToInputRowIndices[spanID][:0]
+		} else {
+			h.spanIDToInputRowIndices = append(h.spanIDToInputRowIndices, nil)
+		}
+	}
+	h.spanIDToInputRowIndices[spanID] = append(h.spanIDToInputRowIndices[spanID], inputRowIdx)
+	return spanID, !ok
+}
+
+// addedSpans notifies the helper that 'count' number of spans were created that
+// correspond to the given spanID.
+func (h *spanIDHelper) addedSpans(spanID int, count int) {
+	for i := 0; i < count; i++ {
+		h.scratchSpanIDs = append(h.scratchSpanIDs, spanID)
+	}
+}
+
+func (h *spanIDHelper) getMatchingRowIndices(spanID int) []int {
+	return h.spanIDToInputRowIndices[spanID]
+}
+
+// memUsage returns the size of the data structures in the spanIDHelper for
+// memory accounting purposes.
+func (h *spanIDHelper) memUsage() int64 {
+	var size int64
+	// Account for spanKeyToSpanID map.
+	size += int64(len(h.spanKeyToSpanID)) * (memsize.MapEntryOverhead + memsize.Int)
+	// Account for each key in the map since it can be arbitrarily large.
+	for k := range h.spanKeyToSpanID {
+		size += memsize.String + int64(len(k))
+	}
+	// Account for the two-dimensional spanIDToInputRowIndices.
+	size += int64(cap(h.spanIDToInputRowIndices)) * memsize.IntSliceOverhead
+	// Account for each one-dimensional int slice in spanIDToInputRowIndices.
+	for _, slice := range h.spanIDToInputRowIndices[:cap(h.spanIDToInputRowIndices)] {
+		size += int64(cap(slice)) * memsize.Int64
+	}
+	// Account for scratchSpanIDs.
+	size += int64(cap(h.scratchSpanIDs)) * memsize.Int64
+	return size
+}
+
 type defaultSpanGenerator struct {
 	spanBuilder  span.Builder
 	spanSplitter span.Splitter
 	lookupCols   []uint32
 
 	indexKeyRow rowenc.EncDatumRow
-	// keyToInputRowIndices maps a lookup span key to the input row indices that
-	// desire that span. This is used for joins other than index joins, for
-	// de-duping spans, and to map the fetched rows to the input rows that need
-	// to join with them. Index joins already have unique rows in the input that
-	// generate unique spans for fetch, and simply output the fetched rows, do
-	// do not use this map.
-	keyToInputRowIndices map[string][]int
+
+	spanIDHelper
 
 	scratchSpans roachpb.Spans
 
@@ -88,7 +162,7 @@ func (g *defaultSpanGenerator) init(
 	codec keys.SQLCodec,
 	fetchSpec *descpb.IndexFetchSpec,
 	splitFamilyIDs []descpb.FamilyID,
-	keyToInputRowIndices map[string][]int,
+	uniqueRows bool,
 	lookupCols []uint32,
 	memAcc *mon.BoundAccount,
 ) error {
@@ -101,8 +175,9 @@ func (g *defaultSpanGenerator) init(
 		)
 	}
 	g.indexKeyRow = nil
-	g.keyToInputRowIndices = keyToInputRowIndices
-	g.scratchSpans = nil
+	if !uniqueRows {
+		g.spanIDHelper.spanKeyToSpanID = make(map[string]int)
+	}
 	g.memAcc = memAcc
 	return nil
 }
@@ -135,14 +210,11 @@ func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool 
 // generateSpans is part of the joinReaderSpanGenerator interface.
 func (g *defaultSpanGenerator) generateSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
-) (roachpb.Spans, error) {
-	// This loop gets optimized to a runtime.mapclear call.
-	for k := range g.keyToInputRowIndices {
-		delete(g.keyToInputRowIndices, k)
+) (roachpb.Spans, []int, error) {
+	isIndexJoin := g.spanKeyToSpanID == nil
+	if !isIndexJoin {
+		g.spanIDHelper.reset()
 	}
-
-	// We maintain a map from index key to the corresponding input rows so we can
-	// join the index results to the inputs.
 	g.scratchSpans = g.scratchSpans[:0]
 	for i, inputRow := range rows {
 		if g.hasNullLookupColumn(inputRow) {
@@ -150,85 +222,39 @@ func (g *defaultSpanGenerator) generateSpans(
 		}
 		generatedSpan, containsNull, err := g.generateSpan(inputRow)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if g.keyToInputRowIndices == nil {
-			// Index join.
+		if isIndexJoin {
 			g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
-				g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
+				g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull,
+			)
 		} else {
-			inputRowIndices := g.keyToInputRowIndices[string(generatedSpan.Key)]
-			if inputRowIndices == nil {
+			spanID, newSpanKey := g.addInputRowIdxForSpan(string(generatedSpan.Key), i)
+			if newSpanKey {
+				numOldSpans := len(g.scratchSpans)
 				g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
-					g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
+					g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull,
+				)
+				g.addedSpans(spanID, len(g.scratchSpans)-numOldSpans)
 			}
-			g.keyToInputRowIndices[string(generatedSpan.Key)] = append(inputRowIndices, i)
 		}
 	}
 
 	// Memory accounting.
+	//
+	// NOTE: this does not account for scratchSpans because the joinReader
+	// passes the ownership of spans to the fetcher which will account for it
+	// accordingly.
 	if err := g.memAcc.ResizeTo(ctx, g.memUsage()); err != nil {
-		return nil, addWorkmemHint(err)
+		return nil, nil, addWorkmemHint(err)
 	}
 
-	return g.scratchSpans, nil
-}
-
-// getMatchingRowIndices is part of the joinReaderSpanGenerator interface.
-func (g *defaultSpanGenerator) getMatchingRowIndices(key roachpb.Key) ([]int, error) {
-	return g.keyToInputRowIndices[string(key)], nil
-}
-
-// maxLookupCols is part of the joinReaderSpanGenerator interface.
-func (g *defaultSpanGenerator) maxLookupCols() int {
-	return len(g.lookupCols)
-}
-
-// memUsage returns the size of the data structures in the defaultSpanGenerator
-// for memory accounting purposes.
-// NOTE: this does not account for scratchSpans because the joinReader passes
-// the ownership of spans to the fetcher which will account for it accordingly.
-func (g *defaultSpanGenerator) memUsage() int64 {
-	// Account for keyToInputRowIndices.
-	var size int64
-	for k, v := range g.keyToInputRowIndices {
-		size += memsize.MapEntryOverhead
-		size += memsize.String + int64(len(k))
-		size += memsize.IntSliceOverhead + memsize.Int*int64(cap(v))
-	}
-	return size
+	return g.scratchSpans, g.scratchSpanIDs, nil
 }
 
 func (g *defaultSpanGenerator) close(ctx context.Context) {
 	g.memAcc.Close(ctx)
 	*g = defaultSpanGenerator{}
-}
-
-type spanRowIndex struct {
-	span       roachpb.Span
-	rowIndices []int
-}
-
-type spanRowIndices []spanRowIndex
-
-func (s spanRowIndices) Len() int           { return len(s) }
-func (s spanRowIndices) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s spanRowIndices) Less(i, j int) bool { return s[i].span.Key.Compare(s[j].span.Key) < 0 }
-
-var _ sort.Interface = &spanRowIndices{}
-
-// memUsage returns the size of the spanRowIndices for memory accounting
-// purposes.
-func (s spanRowIndices) memUsage() int64 {
-	// Slice the full capacity of s so we can account for the memory
-	// used past the length of s.
-	sCap := s[:cap(s)]
-	size := int64(unsafe.Sizeof(spanRowIndices{}))
-	for i := range sCap {
-		size += sCap[i].span.MemUsage()
-		size += memsize.IntSliceOverhead + memsize.Int*int64(cap(sCap[i].rowIndices))
-	}
-	return size
 }
 
 // multiSpanGenerator is the joinReaderSpanGenerator used when each lookup will
@@ -255,19 +281,7 @@ type multiSpanGenerator struct {
 	indexKeyRows  []rowenc.EncDatumRow
 	indexKeySpans roachpb.Spans
 
-	// keyToInputRowIndices maps a lookup span key to the input row indices that
-	// desire that span. This is used for de-duping spans, and to map the fetched
-	// rows to the input rows that need to join with them. If we have inequality
-	// exprs we can't use this from getMatchingRowIndices because the spans are
-	// ranges and not point spans so we build this map using the start keys and
-	// then convert it into a spanToInputRowIndices.
-	keyToInputRowIndices map[string][]int
-
-	// spanToInputRowIndices maps a lookup span to the input row indices that
-	// desire that span. This is a range based equivalent of the
-	// keyToInputRowIndices that is only used when there are range based, i.e.
-	// inequality conditions. This is a sorted set we do binary searches on.
-	spanToInputRowIndices spanRowIndices
+	spanIDHelper
 
 	// spansCount is the number of spans generated for each input row.
 	spansCount int
@@ -356,11 +370,6 @@ var _ multiSpanGeneratorColInfo = &multiSpanGeneratorValuesColInfo{}
 var _ multiSpanGeneratorColInfo = &multiSpanGeneratorIndexVarColInfo{}
 var _ multiSpanGeneratorColInfo = &multiSpanGeneratorInequalityColInfo{}
 
-// maxLookupCols is part of the joinReaderSpanGenerator interface.
-func (g *multiSpanGenerator) maxLookupCols() int {
-	return len(g.indexColInfos)
-}
-
 // init must be called before the multiSpanGenerator can be used to generate
 // spans.
 func (g *multiSpanGenerator) init(
@@ -376,7 +385,7 @@ func (g *multiSpanGenerator) init(
 	g.spanBuilder.InitWithFetchSpec(evalCtx, codec, fetchSpec)
 	g.spanSplitter = span.MakeSplitterWithFamilyIDs(len(fetchSpec.KeyFullColumns()), splitFamilyIDs)
 	g.numInputCols = numInputCols
-	g.keyToInputRowIndices = make(map[string][]int)
+	g.spanKeyToSpanID = make(map[string]int)
 	g.fetchedOrdToIndexKeyOrd = fetchedOrdToIndexKeyOrd
 	g.inequalityColIdx = -1
 	g.memAcc = memAcc
@@ -647,48 +656,22 @@ func (g *multiSpanGenerator) generateNonNullSpans(row rowenc.EncDatumRow) (roach
 	return g.indexKeySpans, nil
 }
 
-// findInputRowIndicesByKey does a binary search to find the span that contains
-// the given key.
-func (s *spanRowIndices) findInputRowIndicesByKey(key roachpb.Key) ([]int, error) {
-	i, j := 0, s.Len()
-	for i < j {
-		h := (i + j) >> 1
-		sp := (*s)[h]
-		switch sp.span.CompareKey(key) {
-		case 0:
-			return sp.rowIndices, nil
-		case -1:
-			j = h
-		case 1:
-			i = h + 1
-		}
-	}
-
-	return nil, errors.AssertionFailedf("didn't find a span containing the key %s", key)
-}
-
 // generateSpans is part of the joinReaderSpanGenerator interface.
 func (g *multiSpanGenerator) generateSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
-) (roachpb.Spans, error) {
-	// This loop gets optimized to a runtime.mapclear call.
-	for k := range g.keyToInputRowIndices {
-		delete(g.keyToInputRowIndices, k)
-	}
-	g.spanToInputRowIndices = g.spanToInputRowIndices[:0]
-
-	// We maintain a map from index key to the corresponding input rows so we can
-	// join the index results to the inputs.
+) (roachpb.Spans, []int, error) {
+	g.spanIDHelper.reset()
 	g.scratchSpans = g.scratchSpans[:0]
 	for i, inputRow := range rows {
 		generatedSpans, err := g.generateNonNullSpans(inputRow)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for j := range generatedSpans {
 			generatedSpan := &generatedSpans[j]
-			inputRowIndices := g.keyToInputRowIndices[string(generatedSpan.Key)]
-			if inputRowIndices == nil {
+			spanID, newSpanKey := g.spanIDHelper.addInputRowIdxForSpan(string(generatedSpan.Key), i)
+			if newSpanKey {
+				numOldSpans := len(g.scratchSpans)
 				// MaybeSplitSpanIntoSeparateFamilies is an optimization for doing more
 				// efficient point lookups when the span hits multiple column families.
 				// It doesn't work with inequality ranges because they aren't point lookups.
@@ -696,59 +679,24 @@ func (g *multiSpanGenerator) generateSpans(
 					g.scratchSpans = append(g.scratchSpans, *generatedSpan)
 				} else {
 					g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
-						g.scratchSpans, *generatedSpan, len(g.indexColInfos), false /* containsNull */)
+						g.scratchSpans, *generatedSpan, len(g.indexColInfos), false, /* containsNull */
+					)
 				}
+				g.addedSpans(spanID, len(g.scratchSpans)-numOldSpans)
 			}
-
-			g.keyToInputRowIndices[string(generatedSpan.Key)] = append(inputRowIndices, i)
-		}
-	}
-
-	// If we need to map against range spans instead of point spans convert the
-	// map into a sorted set of spans we can binary search against.
-	if g.inequalityColIdx != -1 {
-		for _, s := range g.scratchSpans {
-			g.spanToInputRowIndices = append(g.spanToInputRowIndices, spanRowIndex{span: s, rowIndices: g.keyToInputRowIndices[string(s.Key)]})
-		}
-		sort.Sort(g.spanToInputRowIndices)
-		// We don't need this anymore.
-		for k := range g.keyToInputRowIndices {
-			delete(g.keyToInputRowIndices, k)
 		}
 	}
 
 	// Memory accounting.
+	//
+	// NOTE: this does not account for scratchSpans because the joinReader
+	// passes the ownership of spans to the fetcher which will account for it
+	// accordingly.
 	if err := g.memAcc.ResizeTo(ctx, g.memUsage()); err != nil {
-		return nil, addWorkmemHint(err)
+		return nil, nil, addWorkmemHint(err)
 	}
 
-	return g.scratchSpans, nil
-}
-
-// getMatchingRowIndices is part of the joinReaderSpanGenerator interface.
-func (g *multiSpanGenerator) getMatchingRowIndices(key roachpb.Key) ([]int, error) {
-	if g.inequalityColIdx != -1 {
-		return g.spanToInputRowIndices.findInputRowIndicesByKey(key)
-	}
-	return g.keyToInputRowIndices[string(key)], nil
-}
-
-// memUsage returns the size of the data structures in the multiSpanGenerator
-// for memory accounting purposes.
-// NOTE: this does not account for scratchSpans because the joinReader passes
-// the ownership of spans to the fetcher which will account for it accordingly.
-func (g *multiSpanGenerator) memUsage() int64 {
-	// Account for keyToInputRowIndices.
-	var size int64
-	for k, v := range g.keyToInputRowIndices {
-		size += memsize.MapEntryOverhead
-		size += memsize.String + int64(len(k))
-		size += memsize.IntSliceOverhead + memsize.Int*int64(cap(v))
-	}
-
-	// Account for spanToInputRowIndices.
-	size += g.spanToInputRowIndices.memUsage()
-	return size
+	return g.scratchSpans, g.scratchSpanIDs, nil
 }
 
 func (g *multiSpanGenerator) close(ctx context.Context) {
@@ -797,8 +745,8 @@ func (g *localityOptimizedSpanGenerator) init(
 		return err
 	}
 	// Check that the resulting span generators have the same lookup columns.
-	localLookupCols := g.localSpanGen.maxLookupCols()
-	remoteLookupCols := g.remoteSpanGen.maxLookupCols()
+	localLookupCols := len(g.localSpanGen.indexColInfos)
+	remoteLookupCols := len(g.remoteSpanGen.indexColInfos)
 	if localLookupCols != remoteLookupCols {
 		return errors.AssertionFailedf(
 			"local lookup cols (%d) != remote lookup cols (%d)", localLookupCols, remoteLookupCols,
@@ -807,17 +755,10 @@ func (g *localityOptimizedSpanGenerator) init(
 	return nil
 }
 
-// maxLookupCols is part of the joinReaderSpanGenerator interface.
-func (g *localityOptimizedSpanGenerator) maxLookupCols() int {
-	// We already asserted in init that maxLookupCols is the same for both the
-	// local and remote span generators.
-	return g.localSpanGen.maxLookupCols()
-}
-
 // generateSpans is part of the joinReaderSpanGenerator interface.
 func (g *localityOptimizedSpanGenerator) generateSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
-) (roachpb.Spans, error) {
+) (roachpb.Spans, []int, error) {
 	g.localSpanGenUsedLast = true
 	return g.localSpanGen.generateSpans(ctx, rows)
 }
@@ -826,17 +767,17 @@ func (g *localityOptimizedSpanGenerator) generateSpans(
 // batch of input rows.
 func (g *localityOptimizedSpanGenerator) generateRemoteSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
-) (roachpb.Spans, error) {
+) (roachpb.Spans, []int, error) {
 	g.localSpanGenUsedLast = false
 	return g.remoteSpanGen.generateSpans(ctx, rows)
 }
 
 // getMatchingRowIndices is part of the joinReaderSpanGenerator interface.
-func (g *localityOptimizedSpanGenerator) getMatchingRowIndices(key roachpb.Key) ([]int, error) {
+func (g *localityOptimizedSpanGenerator) getMatchingRowIndices(spanID int) []int {
 	if g.localSpanGenUsedLast {
-		return g.localSpanGen.getMatchingRowIndices(key)
+		return g.localSpanGen.getMatchingRowIndices(spanID)
 	}
-	return g.remoteSpanGen.getMatchingRowIndices(key)
+	return g.remoteSpanGen.getMatchingRowIndices(spanID)
 }
 
 func (g *localityOptimizedSpanGenerator) close(ctx context.Context) {
