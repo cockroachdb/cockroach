@@ -2299,12 +2299,13 @@ SELECT pg_catalog.pg_get_constraintdef(oid)
 FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
+FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
 FOREIGN KEY (c) REFERENCES pg_indexdef_test(a) NOT VALID
 CHECK ((c > a))
 CHECK ((c > 0)) NOT VALID
+PRIMARY KEY (rowid ASC)
 UNIQUE (b ASC)
 UNIQUE (a ASC) WHERE (d = 'foo'::STRING)
-FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
 
 # These functions always return NULL since we don't support comments on vtable columns and databases.
 query TT
