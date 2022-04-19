@@ -495,7 +495,8 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 		}
 		if strings.Contains(def.Name, "crdb_internal.force_") ||
 			strings.Contains(def.Name, "crdb_internal.unsafe_") ||
-			strings.Contains(def.Name, "crdb_internal.create_join_token") {
+			strings.Contains(def.Name, "crdb_internal.create_join_token") ||
+			strings.Contains(def.Name, "crdb_internal.reset_multi_region_zone_configs_for_database") {
 			continue
 		}
 		if _, ok := m[def.Class]; !ok {
