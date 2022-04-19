@@ -481,6 +481,11 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 		switch def.Name {
 		case "pg_sleep":
 			continue
+		case "st_frechetdistance", "st_buffer":
+			// Some spatial functions can be very computationally expensive and
+			// run for a long time or never finish, so we avoid generating them.
+			// See #69213.
+			continue
 		}
 		if strings.Contains(def.Name, "stream_ingestion") {
 			// crdb_internal.complete_stream_ingestion_job is a stateful function that
