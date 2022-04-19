@@ -127,6 +127,7 @@ func TestDataDriven(t *testing.T) {
 			tc.Server(0).DB(),
 			tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
 			tc.Server(0).ClusterSettings(),
+			tc.Server(0).Clock(),
 			fmt.Sprintf("defaultdb.public.%s", dummyTableName),
 			nil, /* knobs */
 		)
@@ -189,7 +190,9 @@ func TestDataDriven(t *testing.T) {
 
 			case "update":
 				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, d.Input)
-				require.NoError(t, kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+				require.NoError(t, kvAccessor.UpdateSpanConfigRecords(
+					ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+				))
 				lastUpdateTS = ts.Clock().Now()
 
 			case "start":

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,7 +46,7 @@ func (k dummyKVAccessor) GetSpanConfigRecords(
 
 // UpdateSpanConfigRecords is part of the KVAccessor interface.
 func (k dummyKVAccessor) UpdateSpanConfigRecords(
-	context.Context, []spanconfig.Target, []spanconfig.Record,
+	context.Context, []spanconfig.Target, []spanconfig.Record, hlc.Timestamp, hlc.Timestamp,
 ) error {
 	return k.error
 }
