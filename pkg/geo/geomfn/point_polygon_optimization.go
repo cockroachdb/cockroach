@@ -161,6 +161,10 @@ func PointKindWithinPolygonKind(pointKind geo.Geometry, polygonKind geo.Geometry
 func pointKindRelatesToPolygonKind(
 	pointKind geo.Geometry, polygonKind geo.Geometry, eventListener PointInPolygonEventListener,
 ) (bool, error) {
+	// Nothing can relate to a NaN coordinate.
+	if BoundingBoxHasNaNCoordinates(pointKind) || BoundingBoxHasNaNCoordinates(polygonKind) {
+		return false, nil
+	}
 	pointKindBaseT, err := pointKind.AsGeomT()
 	if err != nil {
 		return false, err

@@ -3181,7 +3181,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 		defProps(),
 		geometryOverload1(
 			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				if geomfn.CheckBoundingBoxInfiniteCoordinates(g.Geometry) {
+				if geomfn.BoundingBoxHasInfiniteCoordinates(g.Geometry) {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "value out of range: overflow")
 				}
 				line, err := geomfn.LineMerge(g.Geometry)
@@ -6471,7 +6471,7 @@ The parent_only boolean is always ignored.`,
 	"st_minimumboundingcircle": makeBuiltin(defProps(),
 		geometryOverload1(
 			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				if geomfn.CheckBoundingBoxInfiniteCoordinates(g.Geometry) {
+				if geomfn.BoundingBoxHasInfiniteCoordinates(g.Geometry) {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "value out of range: overflow")
 				}
 				polygon, _, _, err := geomfn.MinimumBoundingCircle(g.Geometry)
