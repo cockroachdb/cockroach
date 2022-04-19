@@ -3208,6 +3208,10 @@ func (m *sessionDataMutator) SetMultipleModificationsOfTable(val bool) {
 	m.data.MultipleModificationsOfTable = val
 }
 
+func (m *sessionDataMutator) SetShowPrimaryKeyConstraintOnHiddenColumns(val bool) {
+	m.data.ShowPrimaryKeyConstraintOnHiddenColumns = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
