@@ -444,7 +444,7 @@
 (InnerJoin
     $left:*
     $proj:(Project
-        $right:*
+        $right:* & (isCanonicalScanOrSelect $right)
         $projections:* & ^(HasVolatileProjection $projections)
         $passthrough:*
     )
@@ -486,7 +486,7 @@
 (LeftJoin
     $left:*
     (Project
-        $right:*
+        $right:* & (isCanonicalScanOrSelect $right)
         $projections:* & ^(HasVolatileProjection $projections)
         $passthrough:*
     )
