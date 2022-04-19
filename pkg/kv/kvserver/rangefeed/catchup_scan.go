@@ -29,10 +29,10 @@ type CatchUpIterator struct {
 }
 
 // NewCatchUpIterator returns a CatchUpIterator for the given Reader.
-// If useTBI is true, a time-bound iterator will be used if possible,
-// configured with a start time taken from the RangeFeedRequest.
+// A time-bound iterator will be used if possible, configured with a start time
+// taken from the RangeFeedRequest.
 func NewCatchUpIterator(
-	reader storage.Reader, args *roachpb.RangeFeedRequest, useTBI bool, closer func(),
+	reader storage.Reader, args *roachpb.RangeFeedRequest, closer func(),
 ) *CatchUpIterator {
 	ret := &CatchUpIterator{
 		close: closer,
@@ -42,7 +42,7 @@ func NewCatchUpIterator(
 	// previous value of a key. This is possible since the
 	// IncrementalIterator has a non-timebound iterator
 	// internally, but it is not yet implemented.
-	if useTBI && !args.WithDiff {
+	if !args.WithDiff {
 		ret.SimpleMVCCIterator = storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
 			EnableTimeBoundIteratorOptimization: true,
 			EndKey:                              args.Span.EndKey,
