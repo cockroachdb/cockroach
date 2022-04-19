@@ -69,7 +69,7 @@ exports_files([
 # gazelle:resolve proto go roachpb/io-formats.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/metadata.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/span_config.proto //pkg/roachpb
-# gazelle:exclude pkg/roachpb/batch_generated-gen.go
+# gazelle:exclude pkg/roachpb/batch_generated.go
 
 # See pkg/sql/opt/optgen/cmd/langgen/BUILD.bazel for more details.
 #
