@@ -92,7 +92,7 @@ func TestNewGenWithRandomHWAF(t *testing.T) {
 		node := uuid[10:]
 		leadingBits := node[0] & 0x03
 
-		if 0x03 != leadingBits {
+		if leadingBits != 0x03 {
 			t.Fatalf("node leading bits = %b, want %b", leadingBits, 0x03)
 		}
 	}
