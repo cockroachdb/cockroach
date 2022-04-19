@@ -645,6 +645,7 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 			ctx,
 			txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
+			nil, /* spanIDs */
 			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
@@ -787,6 +788,7 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 			z.Ctx,
 			z.FlowCtx.Txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
+			nil, /* spanIDs */
 			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,

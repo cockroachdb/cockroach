@@ -308,7 +308,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	if err := cb.fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp},
+		ctx, txn, []roachpb.Span{sp}, nil, /* spanIDs */
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 		chunkSize, traceKV, false, /* forceProductionKVBatchSize */
 	); err != nil {
@@ -857,7 +857,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	}
 	defer fetcher.Close(ctx)
 	if err := fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp},
+		ctx, txn, []roachpb.Span{sp}, nil, /* spanIDs */
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 		initBufferSize, traceKV, false, /* forceProductionKVBatchSize */
 	); err != nil {
