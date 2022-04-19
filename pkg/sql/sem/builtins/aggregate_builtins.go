@@ -36,7 +36,7 @@ import (
 )
 
 func initAggregateBuiltins() {
-	// Add all aggregates to the Builtins map after a few sanity checks.
+	// Add all aggregates to the builtins map after a few sanity checks.
 	for k, v := range aggregates {
 		if _, exists := builtins[k]; exists {
 			panic("duplicate builtin: " + k)

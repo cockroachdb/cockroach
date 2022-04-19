@@ -44,7 +44,7 @@ var _ tree.ValueGenerator = &seriesValueGenerator{}
 var _ tree.ValueGenerator = &arrayValueGenerator{}
 
 func initGeneratorBuiltins() {
-	// Add all windows to the Builtins map after a few sanity checks.
+	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range generators {
 		if _, exists := builtins[k]; exists {
 			panic("duplicate builtin: " + k)

@@ -12,6 +12,7 @@ go_library(
         "notice.go",
         "overlaps_builtins.go",
         "pg_builtins.go",
+        "pgcrypto_builtins.go",
         "replication_builtins.go",
         "show_create_all_schemas_builtin.go",
         "show_create_all_tables_builtin.go",

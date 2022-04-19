@@ -19,7 +19,7 @@ import (
 )
 
 func initReplicationBuiltins() {
-	// Add all replicationBuiltins to the Builtins map after a sanity check.
+	// Add all replicationBuiltins to the builtins map after a sanity check.
 	for k, v := range replicationBuiltins {
 		if _, exists := builtins[k]; exists {
 			panic("duplicate builtin: " + k)
