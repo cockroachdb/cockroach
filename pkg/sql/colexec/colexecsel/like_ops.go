@@ -23,11 +23,11 @@ import (
 func GetLikeOperator(
 	ctx *tree.EvalContext, input colexecop.Operator, colIdx int, pattern string, negate bool,
 ) (colexecop.Operator, error) {
-	likeOpType, pattern, err := colexeccmp.GetLikeOperatorType(pattern, negate)
+	likeOpType, patterns, err := colexeccmp.GetLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err
 	}
-	pat := []byte(pattern)
+	pat := patterns[0]
 	base := selConstOpBase{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		colIdx:         colIdx,
@@ -85,8 +85,18 @@ func GetLikeOperator(
 			selConstOpBase: base,
 			constArg:       pat,
 		}, nil
+	case colexeccmp.LikeSkeleton:
+		return &selSkeletonBytesBytesConstOp{
+			selConstOpBase: base,
+			constArg:       patterns,
+		}, nil
+	case colexeccmp.LikeSkeletonNegate:
+		return &selNotSkeletonBytesBytesConstOp{
+			selConstOpBase: base,
+			constArg:       patterns,
+		}, nil
 	case colexeccmp.LikeRegexp:
-		re, err := tree.ConvertLikeToRegexp(ctx, pattern, false, '\\')
+		re, err := tree.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +105,7 @@ func GetLikeOperator(
 			constArg:       re,
 		}, nil
 	case colexeccmp.LikeRegexpNegate:
-		re, err := tree.ConvertLikeToRegexp(ctx, pattern, false, '\\')
+		re, err := tree.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
 		if err != nil {
 			return nil, err
 		}
