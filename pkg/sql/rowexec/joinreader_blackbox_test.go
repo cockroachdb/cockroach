@@ -56,6 +56,13 @@ func TestJoinReaderUsesBatchLimit(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
+	// Disable the usage of the streamer since this test is designed for the old
+	// non-streamer code path.
+	// TODO(yuzefovich): remove the test altogether when the corresponding
+	// cluster setting is removed (i.e. only the streamer code path remains).
+	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.distsql.use_streamer.enabled = false;")
+	require.NoError(t, err)
+
 	// We're going to create a table with enough rows to exceed a batch's memory
 	// limit. This table will represent the lookup side of a lookup join.
 	const numRows = 50

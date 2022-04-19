@@ -462,8 +462,9 @@ func (dsp *DistSQLPlanner) Run(
 	if row.CanUseStreamer(ctx, dsp.st) {
 		for _, proc := range plan.Processors {
 			if jr := proc.Spec.Core.JoinReader; jr != nil {
-				if jr.IsIndexJoin() {
-					// Index joins are executed via the Streamer API that has
+				if jr.IsIndexJoin() || !jr.MaintainOrdering {
+					// Index joins w/ and w/o order as well as lookup joins w/o
+					// ordering are executed via the Streamer API that has
 					// concurrency.
 					localState.HasConcurrency = true
 					break
