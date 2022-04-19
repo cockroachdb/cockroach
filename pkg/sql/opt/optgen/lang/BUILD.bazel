@@ -8,36 +8,13 @@ go_library(
         "data_type.go",
         "doc.go",
         "expr.go",
+        "gen.go",
         "parser.go",
         "scanner.go",
         ":gen-expr",  # keep
         ":gen-operator",  # keep
         ":gen-operator-stringer",  # keep
         ":gen-token-stringer",  # keep
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
-    visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
-)
-
-# Langgen is a bootstrapping compiler. We need to partition the dependencies
-# here to avoid cyclical structures. See the BUILD.bazel file for langgen for
-# more details.
-#
-# keep
-go_library(
-    name = "bootstrap",
-    srcs = [
-        "compiler.go",
-        "data_type.go",
-        "doc.go",
-        "expr.go",
-        "expr.og.go",
-        "operator.og.go",
-        "operator_string.go",
-        "parser.go",
-        "scanner.go",
-        "token_string.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
     visibility = ["//visibility:public"],
@@ -65,21 +42,29 @@ go_test(
 genrule(
     name = "gen-expr",
     srcs = ["lang.opt"],
-    outs = ["expr-gen.og.go"],
+    outs = ["expr.og.go"],
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/langgen) -out $@ exprs $(location lang.opt)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 genrule(
     name = "gen-operator",
     srcs = ["lang.opt"],
-    outs = ["operator-gen.og.go"],
+    outs = ["operator.og.go"],
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/langgen) -out $@ ops $(location lang.opt)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 stringer(

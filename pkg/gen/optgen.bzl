@@ -6,6 +6,8 @@ OPTGEN_SRCS = [
   "//pkg/sql/opt/exec:factory.og.go",
   "//pkg/sql/opt/memo:expr.og.go",
   "//pkg/sql/opt/norm:factory.og.go",
+  "//pkg/sql/opt/optgen/lang:expr.og.go",
+  "//pkg/sql/opt/optgen/lang:operator.og.go",
   "//pkg/sql/opt/xform:explorer.og.go",
   "//pkg/sql/opt:operator.og.go",
   "//pkg/sql/opt:rule_name.og.go",
