@@ -318,7 +318,7 @@ func newTypeT(t *types.T) scpb.TypeT {
 }
 
 // WrapExpression implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) WrapExpression(expr tree.Expr) *scpb.Expression {
+func (b *builderState) WrapExpression(parentID catid.DescID, expr tree.Expr) *scpb.Expression {
 	// Implicit table record references cannot be detected properly unless,
 	// we reparse the expression after serializing.
 	expr, err := parser.ParseExpr(tree.Serialize(expr))
@@ -348,6 +348,17 @@ func (b *builderState) WrapExpression(expr tree.Expr) *scpb.Expression {
 			if desc.DescriptorType() == catalog.Table {
 				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 					"cannot modify table record type %q", desc.GetName()))
+			}
+			// Validate that no cross DB type references will exist here.
+			// Determine the parent database ID, since cross database references are
+			// disallowed.
+			_, _, parentNamespace := scpb.FindNamespace(b.QueryByID(parentID))
+			if desc.GetParentID() != parentNamespace.DatabaseID {
+				typeName := tree.MakeTypeNameWithPrefix(b.descCache[id].prefix, desc.GetName())
+				panic(pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cross database type references are not supported: %s",
+					typeName.String()))
 			}
 			typ, err := catalog.AsTypeDescriptor(desc)
 			if err != nil {
