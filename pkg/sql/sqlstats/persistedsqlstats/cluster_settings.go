@@ -117,3 +117,14 @@ var SQLStatsAggregationInterval = settings.RegisterDurationSetting(
 	time.Hour,
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 )
+
+// CompactionJobRowsToDeletePerTxn is the cluster setting that controls
+// how many rows in the statement/transaction_statistics tables gets deleted
+// per transaction in the Automatic SQL Stats Compaction Job.
+var CompactionJobRowsToDeletePerTxn = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.stats.cleanup.rows_to_delete_per_txn",
+	"number of rows the compaction job deletes from system table per iteration",
+	1024,
+	settings.NonNegativeInt,
+)
