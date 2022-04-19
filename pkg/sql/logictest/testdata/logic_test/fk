@@ -557,6 +557,7 @@ query TTTTB
 SHOW CONSTRAINTS FROM delivery
 ----
 delivery  delivery_order_shipment_fkey  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
+delivery  delivery_pkey                 PRIMARY KEY  PRIMARY KEY (rowid ASC)                                          true
 
 statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
@@ -569,6 +570,7 @@ SHOW CONSTRAINTS FROM delivery
 ----
 delivery  delivery_item_fkey            FOREIGN KEY  FOREIGN KEY (item) REFERENCES products(upc)                      true
 delivery  delivery_order_shipment_fkey  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
+delivery  delivery_pkey                 PRIMARY KEY  PRIMARY KEY (rowid ASC)                                          true
 
 statement ok
 ALTER TABLE "user content"."customer reviews"

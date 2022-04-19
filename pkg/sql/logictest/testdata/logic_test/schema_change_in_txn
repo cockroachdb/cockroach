@@ -1131,9 +1131,10 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  ck_a  CHECK  CHECK ((a = 0))  true
-check_table  ck_b  CHECK  CHECK ((b > 0))  true
-check_table  ck_c  CHECK  CHECK ((c > b))  true
+check_table  check_table_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+check_table  ck_a              CHECK        CHECK ((a = 0))          true
+check_table  ck_b              CHECK        CHECK ((b > 0))          true
+check_table  ck_c              CHECK        CHECK ((c > b))          true
 
 # Also test insert/update to ensure constraint was added in a valid state (with correct column IDs, etc.)
 
@@ -1850,7 +1851,8 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM t_52501_valid
 ----
-t_52501_valid  a_auto_not_null  CHECK  CHECK ((a IS NOT NULL))  true
+t_52501_valid  a_auto_not_null     CHECK        CHECK ((a IS NOT NULL))  true
+t_52501_valid  t_52501_valid_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
 
 statement ok
 DROP TABLE t_52501_valid
@@ -1893,6 +1895,7 @@ query TTTTB
 SHOW CONSTRAINTS FROM child_54265
 ----
 child_54265  child_54265_a_fkey  FOREIGN KEY  FOREIGN KEY (a) REFERENCES parent_54265(a) NOT VALID  false
+child_54265  child_54265_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)                               true
 
 # Test that dropping a unique index used by a foreign key reference causes the
 # foreign key addition to fail.

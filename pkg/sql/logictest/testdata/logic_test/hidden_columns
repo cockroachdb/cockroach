@@ -124,4 +124,5 @@ ALTER TABLE t4 ALTER PRIMARY KEY USING COLUMNS(e);
 query TTTTB
 SHOW CONSTRAINTS FROM t4
 ----
-t4 t4_d_key UNIQUE UNIQUE (d ASC) true
+t4  t4_d_key  UNIQUE       UNIQUE (d ASC)       true
+t4  t4_pkey   PRIMARY KEY  PRIMARY KEY (e ASC)  true
