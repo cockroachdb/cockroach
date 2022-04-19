@@ -666,6 +666,10 @@ type nodeDialer interface {
 	Dial(ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass) (_ *grpc.ClientConn, err error)
 }
 
+// On sending errors, we sleep a bit as to not spin on a tripped
+// circuit-breaker in the Dialer.
+const sleepOnErr = time.Second
+
 // rpcConn is an implementation of conn that is implemented using a gRPC stream.
 //
 // The connection will read messages from producer.buf. If the buffer overflows
@@ -773,11 +777,12 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 			defer r.cleanupStream(nil /* err */)
 			everyN := log.Every(10 * time.Second)
 
-			// On sending errors, we sleep a bit as to not spin on a tripped
-			// circuit-breaker in the Dialer.
-			const sleepOnErr = time.Second
 			for {
 				if ctx.Err() != nil {
+					return
+				}
+				closed := atomic.LoadInt32(&r.closed) > 0
+				if closed {
 					return
 				}
 				if err := r.maybeConnect(ctx, stopper); err != nil {
@@ -795,10 +800,6 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 				// which case all connections must exit), or this connection was closed
 				// via close(). In either case, we quit.
 				if !ok {
-					return
-				}
-				closed := atomic.LoadInt32(&r.closed) > 0
-				if closed {
 					return
 				}
 

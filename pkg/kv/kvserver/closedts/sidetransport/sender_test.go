@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -140,8 +142,14 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 		)
 	}
 	return []ctpb.Update_GroupUpdate{
-		{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(roachpb.LAG_BY_CLUSTER_SETTING)},
-		{Policy: roachpb.LEAD_FOR_GLOBAL_READS, ClosedTimestamp: targetForPolicy(roachpb.LEAD_FOR_GLOBAL_READS)},
+		{
+			Policy:          roachpb.LAG_BY_CLUSTER_SETTING,
+			ClosedTimestamp: targetForPolicy(roachpb.LAG_BY_CLUSTER_SETTING),
+		},
+		{
+			Policy:          roachpb.LEAD_FOR_GLOBAL_READS,
+			ClosedTimestamp: targetForPolicy(roachpb.LEAD_FOR_GLOBAL_READS),
+		},
 	}
 }
 
@@ -430,10 +438,12 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 
 	ch := make(chan struct{})
 	s, stopper := newMockSender(newRPCConnFactory(dialer,
-		connTestingKnobs{beforeSend: func(_ roachpb.NodeID, msg *ctpb.Update) {
-			// Try to send an update to ch, if anyone is still listening.
-			ch <- struct{}{}
-		}}))
+		connTestingKnobs{
+			beforeSend: func(_ roachpb.NodeID, msg *ctpb.Update) {
+				// Try to send an update to ch, if anyone is still listening.
+				ch <- struct{}{}
+			},
+		}))
 	defer stopper.Stop(ctx)
 
 	// Add leaseholders that can close, in order to establish a connection to n2.
@@ -554,4 +564,47 @@ func TestSenderReceiverIntegration(t *testing.T) {
 	<-incomingStreamOnN2FromN1Terminated
 	// Check that the other Receiver is still receiving updates.
 	<-receivers[2].testingKnobs[1].onMsg
+}
+
+type failingDealer struct {
+	dialCount int32
+}
+
+func (f *failingDealer) Dial(
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) (_ *grpc.ClientConn, err error) {
+	atomic.AddInt32(&f.dialCount, 1)
+	return nil, errors.New("no reachable nodes")
+}
+
+var _ nodeDialer = &failingDealer{}
+
+// TestRPCConnStopOnClose verifies that connections that are closed would stop
+// their work loops eagerly even when nodes they are talking to are unreachable.
+func TestRPCConnStopOnClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	dialer := &failingDealer{}
+	factory := newRPCConnFactory(dialer, connTestingKnobs{})
+	connection := factory.new(nil, roachpb.NodeID(1))
+	connection.run(ctx, stopper)
+
+	// Wait for first dial attempt for sanity reasons.
+	testutils.SucceedsSoon(t, func() error {
+		if atomic.LoadInt32(&dialer.dialCount) == 0 {
+			return errors.New("connection doesn't dial")
+		}
+		return nil
+	})
+	connection.close()
+	dialedBefore := atomic.LoadInt32(&dialer.dialCount)
+	// Ensure that dialing stops once connection is stopped.
+	<-time.After(2 * sleepOnErr)
+	require.Equal(t, dialedBefore, atomic.LoadInt32(&dialer.dialCount),
+		"connection attempts should stop after close")
 }
