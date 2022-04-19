@@ -11,12 +11,17 @@
 package kvserver
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
@@ -56,4 +61,47 @@ func TestLastUpdateTimesMap(t *testing.T) {
 		4: t3,
 		6: t4,
 	}, m)
+}
+
+func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(s int) time.Time {
+		return timeutil.Now().Add(time.Duration(s) * time.Second)
+	}
+
+	stats := handleRaftReadyStats{
+		tBegin:            ts(1),
+		tEnd:              ts(6),
+		tApplicationBegin: ts(1),
+		tApplicationEnd:   ts(2),
+		apply: applyCommittedEntriesStats{
+			batchesProcessed:      9,
+			entriesProcessed:      2,
+			entriesProcessedBytes: 3,
+			stateAssertions:       4,
+			numEmptyEntries:       5,
+			numConfChangeEntries:  6,
+		},
+		tAppendBegin:            ts(2),
+		tAppendEnd:              ts(3),
+		appendedRegularCount:    7,
+		appendedSideloadedCount: 3,
+		appendedSideloadedBytes: 5 * (1 << 20),
+		appendedRegularBytes:    1024,
+		tPebbleCommitBegin:      ts(3),
+		pebbleBatchBytes:        1024 * 5,
+		tPebbleCommitEnd:        ts(4),
+		tSnapBegin:              ts(4),
+		tSnapEnd:                ts(5),
+		snap: handleSnapshotStats{
+			offered: true,
+			applied: true,
+		},
+		sync: true,
+	}
+
+	echotest.Require(t, string(redact.Sprint(stats)),
+		filepath.Join(testutils.TestDataPath(t, "handle_raft_ready_stats.txt")))
 }
