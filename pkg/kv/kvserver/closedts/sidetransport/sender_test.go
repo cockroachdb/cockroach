@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -554,4 +555,76 @@ func TestSenderReceiverIntegration(t *testing.T) {
 	<-incomingStreamOnN2FromN1Terminated
 	// Check that the other Receiver is still receiving updates.
 	<-receivers[2].testingKnobs[1].onMsg
+}
+
+type failingDialer struct {
+	syncutil.Mutex
+	dialCount int32
+	c         conn
+	closedC   chan interface{}
+}
+
+var _ nodeDialer = &failingDialer{}
+
+func (f *failingDialer) Dial(
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) (_ *grpc.ClientConn, err error) {
+	f.Lock()
+	f.dialCount++
+	if f.c != nil {
+		f.c.close()
+		f.c = nil
+		defer close(f.closedC)
+	}
+	f.Unlock()
+	return nil, errors.New("no reachable nodes")
+}
+
+// close will close provided connection on the next Dial call.
+// we provide connection here to break cyclic dependency between dialer and
+// connection itself.
+func (f *failingDialer) close(c conn) int32 {
+	f.Lock()
+	f.c = c
+	count := f.dialCount
+	f.Unlock()
+	<-f.closedC
+	return count
+}
+
+func (f *failingDialer) callCount() int32 {
+	f.Lock()
+	defer f.Unlock()
+	return f.dialCount
+}
+
+// TestRPCConnStopOnClose verifies that connections that are closed would stop
+// their work loops eagerly even when nodes they are talking to are unreachable.
+func TestRPCConnStopOnClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	sleepTime := time.Millisecond
+
+	dialer := &failingDialer{closedC: make(chan interface{})}
+	factory := newRPCConnFactory(dialer, connTestingKnobs{sleepOnErrOverride: sleepTime})
+	connection := factory.new(nil, roachpb.NodeID(1))
+	connection.run(ctx, stopper)
+
+	// Wait for first dial attempt for sanity reasons.
+	testutils.SucceedsSoon(t, func() error {
+		if dialer.callCount() == 0 {
+			return errors.New("connection doesn't dial")
+		}
+		return nil
+	})
+	dialedBeforeStop := dialer.close(connection)
+	// Ensure that dialing stops once connection is stopped.
+	<-time.After(5 * sleepTime)
+	require.Equal(t, dialedBeforeStop+1, dialer.callCount(),
+		"connection attempts should stop after close")
 }
