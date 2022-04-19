@@ -975,7 +975,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 		return r, err
 	}
 
-	r.datums, err = rf.NextRow(ctx)
+	r.datums, _, err = rf.NextRow(ctx)
 	if err != nil {
 		return r, err
 	}
@@ -992,7 +992,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 	nextRow := encodeRow{
 		tableDesc: desc,
 	}
-	nextRow.datums, err = rf.NextRow(ctx)
+	nextRow.datums, _, err = rf.NextRow(ctx)
 	if err != nil {
 		return r, err
 	}
@@ -1032,7 +1032,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 		if err := prevRF.StartScanFrom(ctx, &c.kvFetcher, false /* traceKV */); err != nil {
 			return r, err
 		}
-		r.prevDatums, err = prevRF.NextRow(ctx)
+		r.prevDatums, _, err = prevRF.NextRow(ctx)
 		if err != nil {
 			return r, err
 		}
@@ -1047,7 +1047,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 		nextRow := encodeRow{
 			prevTableDesc: r.prevTableDesc,
 		}
-		nextRow.prevDatums, err = prevRF.NextRow(ctx)
+		nextRow.prevDatums, _, err = prevRF.NextRow(ctx)
 		if err != nil {
 			return r, err
 		}
