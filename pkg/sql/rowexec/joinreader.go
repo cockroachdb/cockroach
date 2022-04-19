@@ -307,7 +307,7 @@ func newJoinReader(
 		shouldLimitBatches = false
 	}
 	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
-		readerType == indexJoinReaderType &&
+		(readerType == indexJoinReaderType || !spec.MaintainOrdering) &&
 		row.CanUseStreamer(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Settings)
 
 	jr := &joinReader{
@@ -452,16 +452,39 @@ func newJoinReader(
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint(flowCtx.EvalCtx.SessionData())
 
 	if jr.usesStreamer {
-		// When using the Streamer API, we want to limit the batch size hint to
-		// at most a quarter of the workmem limit. Note that it is ok if it is
-		// set to zero since the joinReader will always include at least one row
-		// into the lookup batch.
-		if jr.batchSizeBytes > memoryLimit/4 {
-			jr.batchSizeBytes = memoryLimit / 4
+		// NOTE: this comment should only be considered in a case of low workmem
+		// limit (which is a testing scenario).
+		//
+		// When using the Streamer API, we want to limit the memory usage of the
+		// join reader itself to be at most a quarter of the workmem limit. That
+		// memory usage is comprised of several parts:
+		// - the input batch (i.e. buffered input rows) which is limited by the
+		//   batch size hint;
+		// - some in-memory state of the join reader strategy;
+		// - some in-memory state of the span generator.
+		// We don't have any way of limiting the last two parts, so we apply a
+		// simple heuristic that each of those parts takes up on the order of
+		// the batch size hint.
+		//
+		// Thus, we arrive at the following setup:
+		// - make the batch size hint to be at most 1/12 of workmem
+		// - then reserve 3/12 of workmem for the memory usage of those three
+		// parts.
+		//
+		// Note that it is ok if the batch size hint is set to zero since the
+		// joinReader will always include at least one row into the lookup
+		// batch.
+		if jr.batchSizeBytes > memoryLimit/12 {
+			jr.batchSizeBytes = memoryLimit / 12
 		}
-		// jr.batchSizeBytes will be used up by the input batch, and we'll give
-		// everything else to the streamer budget.
-		jr.streamerInfo.budgetLimit = memoryLimit - jr.batchSizeBytes
+		// See the comment above for how we arrived at this calculation.
+		//
+		// That comment is made in the context of low workmem limit. However, in
+		// production we expect workmem limit to be on the order of 64MiB
+		// whereas the batch size hint is at most 4MiB, so the streamer will get
+		// at least (depending on the hint) on the order of 52MiB which is
+		// plenty enough.
+		jr.streamerInfo.budgetLimit = memoryLimit - 3*jr.batchSizeBytes
 		// We need to use an unlimited monitor for the streamer's budget since
 		// the streamer itself is responsible for staying under the limit.
 		jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
