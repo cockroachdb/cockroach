@@ -490,19 +490,13 @@ func (jr *joinReader) initJoinReaderStrategy(
 	spanGeneratorMemAcc := jr.MemMonitor.MakeBoundAccount()
 	var generator joinReaderSpanGenerator
 	if jr.lookupExpr.Expr == nil {
-		var keyToInputRowIndices map[string][]int
-		// See the comment in defaultSpanGenerator on why we don't need
-		// this map for index joins.
-		if readerType != indexJoinReaderType {
-			keyToInputRowIndices = make(map[string][]int)
-		}
 		defGen := &defaultSpanGenerator{}
 		if err := defGen.init(
 			flowCtx.EvalCtx,
 			flowCtx.Codec(),
 			&jr.fetchSpec,
 			jr.splitFamilyIDs,
-			keyToInputRowIndices,
+			readerType == indexJoinReaderType, /* uniqueRows */
 			jr.lookupCols,
 			&spanGeneratorMemAcc,
 		); err != nil {
@@ -680,6 +674,40 @@ func addWorkmemHint(err error) error {
 	)
 }
 
+type spansWithSpanIDs struct {
+	spans   roachpb.Spans
+	spanIDs []int
+}
+
+var _ sort.Interface = &spansWithSpanIDs{}
+
+func (s spansWithSpanIDs) Len() int {
+	return len(s.spans)
+}
+
+func (s spansWithSpanIDs) Less(i, j int) bool {
+	return s.spans[i].Key.Compare(s.spans[j].Key) < 0
+}
+
+func (s spansWithSpanIDs) Swap(i, j int) {
+	s.spans[i], s.spans[j] = s.spans[j], s.spans[i]
+	s.spanIDs[i], s.spanIDs[j] = s.spanIDs[j], s.spanIDs[i]
+}
+
+// sortSpans sorts the given spans while maintaining the spanIDs mapping (if it
+// is non-nil).
+func sortSpans(spans roachpb.Spans, spanIDs []int) {
+	if spanIDs != nil {
+		s := spansWithSpanIDs{
+			spans:   spans,
+			spanIDs: spanIDs,
+		}
+		sort.Sort(&s)
+	} else {
+		sort.Sort(spans)
+	}
+}
+
 // readInput reads the next batch of input rows and starts an index scan.
 // It can sometimes emit a single row on behalf of the previous batch.
 func (jr *joinReader) readInput() (
@@ -815,7 +843,7 @@ func (jr *joinReader) readInput() (
 	}
 
 	// Figure out what key spans we need to lookup.
-	spans, err := jr.strategy.processLookupRows(jr.scratchInputRows)
+	spans, spanIDs, err := jr.strategy.processLookupRows(jr.scratchInputRows)
 	if err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
@@ -851,7 +879,7 @@ func (jr *joinReader) readInput() (
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
 	} else {
-		sort.Sort(spans)
+		sortSpans(spans, spanIDs)
 	}
 
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
@@ -863,7 +891,7 @@ func (jr *joinReader) readInput() (
 	if jr.usesStreamer {
 		var kvBatchFetcher *row.TxnKVStreamer
 		kvBatchFetcher, err = row.NewTxnKVStreamer(
-			jr.Ctx, jr.streamerInfo.Streamer, spans, nil /* spanIDs */, jr.keyLocking,
+			jr.Ctx, jr.streamerInfo.Streamer, spans, spanIDs, jr.keyLocking,
 		)
 		if err != nil {
 			jr.MoveToDraining(err)
@@ -881,7 +909,7 @@ func (jr *joinReader) readInput() (
 			}
 		}
 		err = jr.fetcher.StartScan(
-			jr.Ctx, jr.FlowCtx.Txn, spans, nil /* spanIDs */, bytesLimit, rowinfra.NoRowLimit,
+			jr.Ctx, jr.FlowCtx.Txn, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
 			jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 	}
@@ -896,23 +924,8 @@ func (jr *joinReader) readInput() (
 // performLookup reads the next batch of index rows.
 func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	for {
-		// Construct a "partial key" of nCols, so we can match the key format that
-		// was stored in our keyToInputRowIndices map. This matches the format that
-		// is output in jr.generateSpan.
-		var key roachpb.Key
-		// Index joins do not look at this key parameter so don't bother populating
-		// it, since it is not cheap for long keys.
-		if jr.readerType != indexJoinReaderType {
-			var err error
-			key, err = jr.fetcher.PartialKey(jr.strategy.getMaxLookupKeyCols())
-			if err != nil {
-				jr.MoveToDraining(err)
-				return jrStateUnknown, jr.DrainHelper()
-			}
-		}
-
 		// Fetch the next row and tell the strategy to process it.
-		lookedUpRow, err := jr.fetcher.NextRow(jr.Ctx)
+		lookedUpRow, spanID, err := jr.fetcher.NextRow(jr.Ctx)
 		if err != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(err))
 			return jrStateUnknown, jr.DrainHelper()
@@ -924,7 +937,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		jr.rowsRead++
 		jr.curBatchRowsRead++
 
-		if nextState, err := jr.strategy.processLookedUpRow(jr.Ctx, lookedUpRow, key); err != nil {
+		if nextState, err := jr.strategy.processLookedUpRow(jr.Ctx, lookedUpRow, spanID); err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, jr.DrainHelper()
 		} else if nextState != jrPerformingLookup {
@@ -938,7 +951,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 	// the remote nodes for the current batch.
 	if jr.remoteLookupExpr.Expr != nil && !jr.strategy.generatedRemoteSpans() &&
 		jr.curBatchRowsRead != jr.curBatchInputRowCount {
-		spans, err := jr.strategy.generateRemoteSpans()
+		spans, spanIDs, err := jr.strategy.generateRemoteSpans()
 		if err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, jr.DrainHelper()
@@ -949,7 +962,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			// of results per batch. It's safe to reorder the spans here because we
 			// already restore the original order of the output during the output
 			// collection phase.
-			sort.Sort(spans)
+			sortSpans(spans, spanIDs)
 
 			log.VEventf(jr.Ctx, 1, "scanning %d remote spans", len(spans))
 			bytesLimit := rowinfra.GetDefaultBatchBytesLimit(jr.EvalCtx.TestingKnobs.ForceProductionValues)
@@ -957,7 +970,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 				bytesLimit = rowinfra.NoBytesLimit
 			}
 			if err := jr.fetcher.StartScan(
-				jr.Ctx, jr.FlowCtx.Txn, spans, nil /* spanIDs */, bytesLimit, rowinfra.NoRowLimit,
+				jr.Ctx, jr.FlowCtx.Txn, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
 				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
 			); err != nil {
 				jr.MoveToDraining(err)
