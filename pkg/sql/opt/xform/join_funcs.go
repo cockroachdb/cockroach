@@ -1611,3 +1611,34 @@ func (c *CustomFuncs) splitValues(
 	}
 	return localVals, remoteVals
 }
+
+// getfilteredCanonicalScan looks at a *ScanExpr or *SelectExpr "relation" and
+// returns the input *ScanExpr and FiltersExpr, along with ok=true, if the Scan
+// is a canonical scan. If "relation" is a different type, or if it's a
+// *SelectExpr with an Input other than a *ScanExpr, ok=false is returned. Scans
+// or Selects with no filters may return filters as nil.
+func (c *CustomFuncs) getfilteredCanonicalScan(
+	relation memo.RelExpr,
+) (scanExpr *memo.ScanExpr, filters memo.FiltersExpr, ok bool) {
+	var selectExpr *memo.SelectExpr
+	if selectExpr, ok = relation.(*memo.SelectExpr); ok {
+		if scanExpr, ok = selectExpr.Input.(*memo.ScanExpr); !ok {
+			return nil, nil, false
+		}
+		filters = selectExpr.Filters
+	} else if scanExpr, ok = relation.(*memo.ScanExpr); !ok {
+		return nil, nil, false
+	}
+	scanPrivate := &scanExpr.ScanPrivate
+	if !c.IsCanonicalScan(scanPrivate) {
+		return nil, nil, false
+	}
+	return scanExpr, filters, true
+}
+
+// IsCanonicalScanOrSelect returns true if `relation` is a canonical scan or a
+// select from a canonical scan.
+func (c *CustomFuncs) IsCanonicalScanOrSelect(relation memo.RelExpr) (ok bool) {
+	_, _, ok = c.getfilteredCanonicalScan(relation)
+	return ok
+}
