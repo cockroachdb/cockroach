@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -49,9 +50,15 @@ func TestMemoryLimit(t *testing.T) {
 	// aggregate memory usage exceeds the memory limit. It's also likely that
 	// the error is encountered in the SQL layer when performing accounting for
 	// the read datums.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serverArgs := base.TestServerArgs{
 		SQLMemoryPoolSize: 5 << 20, /* 5MiB */
-	})
+	}
+	serverArgs.Knobs.SQLEvalContext = &tree.EvalContextTestingKnobs{
+		// This test expects the default value of
+		// rowinfra.defaultBatchBytesLimit.
+		ForceProductionValues: true,
+	}
+	s, db, _ := serverutils.StartServer(t, serverArgs)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	_, err := db.Exec("CREATE TABLE foo (id INT PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute))")

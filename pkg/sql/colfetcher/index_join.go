@@ -252,7 +252,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 					false, /* limitBatches */
 					rowinfra.NoBytesLimit,
 					rowinfra.NoRowLimit,
-					s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+					s.flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 				)
 			}
 			if err != nil {
@@ -539,7 +539,7 @@ func NewColIndexJoin(
 		usesStreamer:     useStreamer,
 		limitHintHelper:  execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
-	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes)
+	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(flowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
 	op.prepareMemLimit(inputTypes)
 	if useStreamer {
 		op.streamerInfo.budgetLimit = 3 * memoryLimit

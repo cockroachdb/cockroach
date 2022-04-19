@@ -147,9 +147,9 @@ import (
 // A link to the issue will be printed out if the -print-blocklist-issues flag
 // is specified.
 //
-// There is a special blocklist directive '!metamorphic' that skips the whole
-// test when TAGS=metamorphic is specified for the logic test invocation.
-// NOTE: metamorphic directive takes precedence over all other directives.
+// There is a special directive '!metamorphic' that adjusts the server to force
+// the usage of production values for some constants that might change via the
+// metamorphic testing.
 //
 //
 // ###########################################################
@@ -1670,7 +1670,7 @@ func (t *logicTest) newCluster(
 					AssertFuncExprReturnTypes:       true,
 					DisableOptimizerRuleProbability: *disableOptRuleProbability,
 					OptimizerCostPerturbation:       *optimizerCostPerturbation,
-					ForceProductionBatchSizes:       serverArgs.forceProductionBatchSizes,
+					ForceProductionValues:           serverArgs.ForceProductionValues,
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					DeterministicExplain: true,
@@ -4200,9 +4200,10 @@ type TestServerArgs struct {
 	// argument for the server. If unset, then the default limit of 192MiB will
 	// be used.
 	maxSQLMemoryLimit int64
-	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
-	// to use the non-test value.
-	forceProductionBatchSizes bool
+	// If set, mutations.MaxBatchSize, row.getKVBatchSize, and other values
+	// randomized via the metamorphic testing will be overridden to use the
+	// production value.
+	ForceProductionValues bool
 	// If set, then sql.distsql.temp_storage.workmem is not randomized.
 	DisableWorkmemRandomization bool
 }
@@ -4378,7 +4379,7 @@ func RunLogicTestWithDefaultConfig(
 					}
 					// Each test needs a copy because of Parallel
 					serverArgsCopy := serverArgs
-					serverArgsCopy.forceProductionBatchSizes = onlyNonMetamorphic
+					serverArgsCopy.ForceProductionValues = serverArgs.ForceProductionValues || onlyNonMetamorphic
 					lt.setup(
 						cfg, serverArgsCopy, readClusterOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
 					)

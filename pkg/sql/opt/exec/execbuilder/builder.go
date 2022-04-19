@@ -18,16 +18,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
-// ParallelScanResultThreshold is the number of results up to which, if the
+// parallelScanResultThreshold is the number of results up to which, if the
 // maximum number of results returned by a scan is known, the scan disables
 // batch limits in the dist sender. This results in the parallelization of these
 // scans.
-const ParallelScanResultThreshold = 10000
+var parallelScanResultThreshold = uint64(util.ConstantWithMetamorphicTestRange(
+	"parallel-scan-result-threshold",
+	parallelScanResultThresholdProductionValue, /* defaultValue */
+	1, /* min */
+	parallelScanResultThresholdProductionValue, /* max */
+))
+
+const parallelScanResultThresholdProductionValue = 10000
+
+func getParallelScanResultThreshold(forceProductionValue bool) uint64 {
+	if forceProductionValue {
+		return parallelScanResultThresholdProductionValue
+	}
+	return parallelScanResultThreshold
+}
 
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
 // expression tree (opt.Expr).

@@ -631,10 +631,10 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 			ctx,
 			txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
-			rowinfra.DefaultBatchBytesLimit,
+			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
-			z.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+			z.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 		if err != nil {
 			return nil, err
@@ -773,10 +773,10 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 			z.Ctx,
 			z.FlowCtx.Txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
-			rowinfra.DefaultBatchBytesLimit,
+			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
-			z.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+			z.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 		if err != nil {
 			log.Errorf(z.Ctx, "scan error: %s", err)

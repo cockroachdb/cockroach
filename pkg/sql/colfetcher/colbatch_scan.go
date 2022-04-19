@@ -98,7 +98,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 		limitBatches,
 		s.batchBytesLimit,
 		s.limitHint,
-		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	); err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -246,7 +246,7 @@ func NewColBatchScan(
 	if !spec.Parallelize {
 		batchBytesLimit = rowinfra.BytesLimit(spec.BatchBytesLimit)
 		if batchBytesLimit == 0 {
-			batchBytesLimit = rowinfra.DefaultBatchBytesLimit
+			batchBytesLimit = rowinfra.GetDefaultBatchBytesLimit(flowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
 		}
 	}
 
