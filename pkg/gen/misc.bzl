@@ -5,6 +5,7 @@ MISC_SRCS = [
   "//pkg/kv/kvserver/concurrency:lockstate_interval_btree_test.go",
   "//pkg/kv/kvserver/spanlatch:latch_interval_btree.go",
   "//pkg/kv/kvserver/spanlatch:latch_interval_btree_test.go",
+  "//pkg/roachpb:batch_generated.go",
   "//pkg/roachprod/vm/aws:terraform/main.tf",
   "//pkg/sql/lexbase:keywords.go",
   "//pkg/sql/lexbase:reserved_keywords.go",

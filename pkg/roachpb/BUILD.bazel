@@ -208,5 +208,9 @@ stringer(
 batch_gen(
     name = "gen-batch-generated",
     src = ":roachpb_go_proto",
-    out = "batch_generated-gen.go",
+    out = "batch_generated.go",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
