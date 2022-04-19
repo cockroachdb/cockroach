@@ -209,8 +209,8 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			ctx, tr.FlowCtx.Txn, tr.Spans, bytesLimit, tr.limitHint,
-			tr.FlowCtx.TraceKV,
+			ctx, tr.FlowCtx.Txn, tr.Spans, nil /* spanIDs */, bytesLimit,
+			tr.limitHint, tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 	} else {

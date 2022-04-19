@@ -547,6 +547,7 @@ func (cf *cFetcher) StartScan(
 		ctx,
 		txn,
 		spans,
+		nil, /* spanIDs */
 		bsHeader,
 		cf.reverse,
 		batchBytesLimit,
@@ -578,7 +579,7 @@ func (cf *cFetcher) StartScanStreaming(
 	spans roachpb.Spans,
 	limitHint rowinfra.RowLimit,
 ) error {
-	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, cf.lockStrength)
+	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, nil /* spanIDs */, cf.lockStrength)
 	if err != nil {
 		return err
 	}
@@ -697,7 +698,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKVs, kv, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
+			moreKVs, kv, _, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, cf.convertFetchError(ctx, err)
 			}
@@ -847,7 +848,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			cf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
+			moreKVs, kv, _, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, cf.convertFetchError(ctx, err)
 			}

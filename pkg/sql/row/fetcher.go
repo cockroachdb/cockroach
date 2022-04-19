@@ -49,13 +49,36 @@ const DebugRowFetch = false
 // part of the output.
 const noOutputColumn = -1
 
+// kvBatchFetcherResponse contains a response from the KVBatchFetcher.
+type kvBatchFetcherResponse struct {
+	// moreKVs indicates whether this response contains some keys from the
+	// fetch.
+	//
+	// If true, then the fetch might (or might not) be complete at this point -
+	// another call to nextBatch() is needed to find out. If false, then the
+	// fetch has already been completed and this response doesn't have any
+	// fetched data.
+	moreKVs bool
+	// Only one of kvs and batchResponse will be set. Which one is set depends
+	// on the server version. Both must be handled by calling code.
+	//
+	// kvs, if set, is a slice of roachpb.KeyValue, the deserialized kv pairs
+	// that were fetched.
+	kvs []roachpb.KeyValue
+	// batchResponse, if set, is a packed byte slice containing the keys and
+	// values. An empty batchResponse indicates that nothing was fetched for the
+	// corresponding ScanRequest, and the caller is expected to skip over the
+	// response.
+	batchResponse []byte
+	// spanID is the ID associated with the span that generated this response.
+	spanID int
+}
+
 // KVBatchFetcher abstracts the logic of fetching KVs in batches.
 type KVBatchFetcher interface {
-	// nextBatch returns the next batch of rows. Returns false in the first
-	// parameter if there are no more keys in the scan. May return either a slice
-	// of KeyValues or a batchResponse, numKvs pair, depending on the server
-	// version - both must be handled by calling code.
-	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error)
+	// nextBatch returns the next batch of rows. See kvBatchFetcherResponse for
+	// details on what is returned.
+	nextBatch(ctx context.Context) (kvBatchFetcherResponse, error)
 
 	close(ctx context.Context)
 }
@@ -332,6 +355,24 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 //
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly (if Init() was called with
+// non-nil memory monitor). The caller can only reuse the spans slice after the
+// fetcher has been closed, and if the caller does, it becomes responsible for
+// the memory accounting.
+//
+// The fetcher also takes ownership of the spanIDs slice - it can modify the
+// slice, but it will **not** perform the memory accounting. It is the caller's
+// responsibility to track the memory under the spanIDs slice, and the slice
+// can only be reused once the fetcher has been closed. Notably, the capacity of
+// the slice will not be increased by the fetcher.
+//
+// spanIDs is a slice of user-defined identifiers of spans. If spanIDs is
+// non-nil, then it must be of the same length as spans, and some methods of the
+// Fetcher will return the fetched row with the span ID that corresponds to the
+// original span that the row belongs to. Nil spanIDs can be used to indicate
+// that the caller is not interested in that information.
+//
 // batchBytesLimit controls whether bytes limits are placed on the batches. If
 // set, bytes limits will be used to protect against running out of memory (on
 // both this client node, and on the server).
@@ -350,6 +391,7 @@ func (rf *Fetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	rowLimitHint rowinfra.RowLimit,
 	traceKV bool,
@@ -364,6 +406,7 @@ func (rf *Fetcher) StartScan(
 		kvBatchFetcherArgs{
 			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
 			spans:                      spans,
+			spanIDs:                    spanIDs,
 			reverse:                    rf.reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
@@ -467,6 +510,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		kvBatchFetcherArgs{
 			sendFn:                     sendFn,
 			spans:                      spans,
+			spanIDs:                    nil,
 			reverse:                    rf.reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
@@ -541,7 +585,7 @@ func (rf *Fetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 // nextKey retrieves the next key/value and sets kv/kvEnd. Returns whether the
 // key indicates a new row (as opposed to another family for the current row).
 func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, _ error) {
-	ok, kv, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+	ok, kv, _, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 	if err != nil {
 		return false, ConvertFetchError(&rf.table.spec, err)
 	}
