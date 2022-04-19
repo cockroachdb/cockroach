@@ -26,11 +26,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// maxDeleteRowsPerTxn limits max number of rows StatsCompactor deletes
-// per transaction. This is to avoid having large transaction which can
-// have negative impact on the overall system performance.
-const maxDeleteRowsPerTxn = 128
-
 // StatsCompactor is responsible for compacting older SQL Stats. It is
 // executed by sql.sqlStatsCompactionResumer.
 type StatsCompactor struct {
@@ -163,6 +158,7 @@ func (c *StatsCompactor) removeStaleRowsForShard(
 	shardIdx int,
 	existingRowCountPerShard, maxRowLimitPerShard int64,
 ) error {
+	maxDeleteRowsPerTxn := CompactionJobRowsToDeletePerTxn.Get(&c.st.SV)
 	if rowsToRemove := existingRowCountPerShard - maxRowLimitPerShard; rowsToRemove > 0 {
 		for remainToBeRemoved := rowsToRemove; remainToBeRemoved > 0; {
 			rowsToRemovePerTxn := remainToBeRemoved
