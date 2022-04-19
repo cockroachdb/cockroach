@@ -316,24 +316,6 @@ func (desc *wrapper) collectConstraintInfo(
 				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
 			}
-			colHiddenMap := make(map[descpb.ColumnID]bool, len(desc.Columns))
-			for i := range desc.Columns {
-				col := &desc.Columns[i]
-				colHiddenMap[col.ID] = col.Hidden
-			}
-			// Don't include constraints against only hidden columns.
-			// This prevents the auto-created rowid primary key index from showing up
-			// in show constraints.
-			hidden := true
-			for _, id := range index.KeyColumnIDs {
-				if !colHiddenMap[id] {
-					hidden = false
-					break
-				}
-			}
-			if hidden {
-				continue
-			}
 			indexName := index.Name
 			// If a primary key swap is occurring, then the primary index name can
 			// be seen as being under the new name.

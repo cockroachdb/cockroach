@@ -411,14 +411,16 @@ CREATE TABLE unique_without_index1 (a INT, b INT, CONSTRAINT ab UNIQUE WITHOUT I
 query TTTTB colnames
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-table_name            constraint_name  constraint_type  details                   validated
-unique_without_index  unique_a         UNIQUE           UNIQUE WITHOUT INDEX (a)  true
+table_name            constraint_name            constraint_type  details                   validated
+unique_without_index  unique_a                   UNIQUE           UNIQUE WITHOUT INDEX (a)  true
+unique_without_index  unique_without_index_pkey  PRIMARY KEY      PRIMARY KEY (rowid ASC)   true
 
 query TTTTB colnames
 SHOW CONSTRAINTS FROM unique_without_index1
 ----
-table_name             constraint_name  constraint_type  details                      validated
-unique_without_index1  ab               UNIQUE           UNIQUE WITHOUT INDEX (a, b)  true
+table_name             constraint_name             constraint_type  details                      validated
+unique_without_index1  ab                          UNIQUE           UNIQUE WITHOUT INDEX (a, b)  true
+unique_without_index1  unique_without_index1_pkey  PRIMARY KEY      PRIMARY KEY (rowid ASC)      true
 
 # Unique constraints without an index use the same name generation logic as
 # check constraints. A named constraint following an anonymous constraint
