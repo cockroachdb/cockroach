@@ -49,6 +49,7 @@ type Test interface {
 	Status(args ...interface{})
 	WorkerStatus(args ...interface{})
 	WorkerProgress(float64)
+	IsDebug() bool
 
 	// DeprecatedWorkload returns the path to the workload binary.
 	// Don't use this, invoke `./cockroach workload` instead.

@@ -46,6 +46,7 @@ type testImpl struct {
 
 	cockroach          string // path to main cockroach binary
 	deprecatedWorkload string // path to workload binary
+	debug              bool   // whether the test is in debug mode.
 	// buildVersion is the version of the Cockroach binary that the test will run
 	// against.
 	buildVersion version.Version
@@ -168,6 +169,11 @@ func (t *testImpl) status(ctx context.Context, id int64, args ...interface{}) {
 // status message is erased.
 func (t *testImpl) Status(args ...interface{}) {
 	t.status(context.TODO(), t.runnerID, args...)
+}
+
+// IsDebug returns true if the test is in a debug state.
+func (t *testImpl) IsDebug() bool {
+	return t.debug
 }
 
 // GetStatus returns the status of the tests's main goroutine.
