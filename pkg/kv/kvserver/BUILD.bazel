@@ -158,6 +158,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigptsreader",
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",

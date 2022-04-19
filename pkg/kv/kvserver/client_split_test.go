@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -2516,7 +2517,7 @@ func TestUnsplittableRange(t *testing.T) {
 				DefaultSystemZoneConfigOverride: &zoneSystemConfig,
 			},
 			SpanConfig: &spanconfig.TestingKnobs{
-				ProtectedTSReaderOverrideFn: spanconfig.EmptyProtectedTSReader,
+				ProtectedTSReaderOverrideFn: spanconfigptsreader.TestingEmptyProtectedTSReader,
 			},
 		},
 	})

@@ -481,19 +481,3 @@ type ProtectedTSReader interface {
 		protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, _ error,
 	)
 }
-
-// EmptyProtectedTSReader returns a ProtectedTSReader which contains no records
-// and is always up-to date. This is intended for testing.
-func EmptyProtectedTSReader(c *hlc.Clock) ProtectedTSReader {
-	return (*emptyProtectedTSReader)(c)
-}
-
-type emptyProtectedTSReader hlc.Clock
-
-// GetProtectionTimestamps is part of the spanconfig.ProtectedTSReader
-// interface.
-func (r *emptyProtectedTSReader) GetProtectionTimestamps(
-	context.Context, roachpb.Span,
-) ([]hlc.Timestamp, hlc.Timestamp, error) {
-	return nil, (*hlc.Clock)(r).Now(), nil
-}

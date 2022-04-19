@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "spanconfigptsreader",
-    srcs = ["adapter.go"],
+    srcs = [
+        "adapter.go",
+        "test_helpers.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader",
     visibility = ["//visibility:public"],
     deps = [
