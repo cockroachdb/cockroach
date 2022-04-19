@@ -110,6 +110,17 @@ type (
 	}
 )
 
+// featureFullBackupUserSubdir, when true, will create a full backup at a user
+// specified subdirectory if no backup already exists at that subdirectory. As
+// of 22.1, this feature is default disabled, and will be totally disabled by 22.2.
+var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"bulkio.backup.deprecated_full_backup_with_subdir.enabled",
+	"when true, a backup command with a user specified subdirectory will create a full backup at"+
+		" the subdirectory if no backup already exists at that subdirectory.",
+	false,
+).WithPublic()
+
 func newEncryptedDataKeyMap() *encryptedDataKeyMap {
 	return &encryptedDataKeyMap{make(map[hashedMasterKeyID][]byte)}
 }
@@ -794,8 +805,11 @@ func backupPlanHook(
 		if backupStmt.Nested {
 			if backupStmt.AppendToLatest {
 				initialDetails.Destination.Subdir = latestFileName
+				initialDetails.Destination.Exists = true
+
 			} else if subdir != "" {
 				initialDetails.Destination.Subdir = "/" + strings.TrimPrefix(subdir, "/")
+				initialDetails.Destination.Exists = true
 			} else {
 				initialDetails.Destination.Subdir = endTime.GoTime().Format(DateBasedIntoFolderName)
 			}
@@ -1690,6 +1704,13 @@ func getBackupDetailAndManifest(
 	if len(prevBackups) > 0 {
 		if err := requireEnterprise(execCfg, "incremental"); err != nil {
 			return jobspb.BackupDetails{}, BackupManifest{}, err
+		}
+		lastEndTime := prevBackups[len(prevBackups)-1].EndTime
+		if lastEndTime.Compare(initialDetails.EndTime) > 0 {
+			return jobspb.BackupDetails{}, BackupManifest{},
+				errors.Newf("`AS OF SYSTEM TIME` %s must be greater than "+
+					"the previous backup's end time of %s.",
+					initialDetails.EndTime.GoTime(), lastEndTime.GoTime())
 		}
 		startTime = prevBackups[len(prevBackups)-1].EndTime
 	}
