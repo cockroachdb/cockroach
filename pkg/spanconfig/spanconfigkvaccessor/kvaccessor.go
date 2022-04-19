@@ -159,49 +159,25 @@ func (k *KVAccessor) UpdateSpanConfigRecords(
 	ctx context.Context,
 	toDelete []spanconfig.Target,
 	toUpsert []spanconfig.Record,
-	leaseStartTime hlc.Timestamp,
-	leaseExpirationTime hlc.Timestamp,
+	minCommitTS, maxCommitTS hlc.Timestamp,
 ) error {
 	if k.optionalTxn != nil {
-		if k.optionalTxn.ReadTimestamp().Less(leaseStartTime) {
-			return errors.AssertionFailedf(
-				"scoped transaction's read timestamp is below the supplied lease start time",
-			)
-		}
-		if err := k.optionalTxn.UpdateDeadline(ctx, leaseExpirationTime); err != nil {
-			return errors.Wrapf(err, "scoped transaction's deadline cannot be updated")
-		}
-		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, k.optionalTxn)
+		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, k.optionalTxn, minCommitTS, maxCommitTS)
 	}
 
-	if err := k.waitForLeaseStart(ctx, leaseStartTime); err != nil {
-		return err
+	if fn := k.knobs.KVAccessorPreCommitMinTSWaitInterceptor; fn != nil {
+		fn()
 	}
-	// Given that our clock reading is past the supplied leaseStartTime now,
+	if err := k.clock.SleepUntil(ctx, minCommitTS); err != nil {
+		return errors.Wrapf(err, "waiting for clock to be in advance of minimum commit timestamp (%s)",
+			minCommitTS)
+	}
+	// Given that our clock reading is past the supplied minCommitTS now,
 	// we can go ahead and create a transaction and proceed to perform the
 	// update.
 	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		// Set the deadline of the transaction so that it commits before the
-		// lease of the job on behalf of which the KVAccessor is acting
-		// expires.
-		if leaseExpirationTime.Less(txn.ReadTimestamp()) {
-			return newRetryableLeaseExpiredError()
-		}
-		if err := txn.UpdateDeadline(ctx, leaseExpirationTime); err != nil {
-			return err
-		}
-		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, txn)
+		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, txn, minCommitTS, maxCommitTS)
 	})
-}
-
-func (k *KVAccessor) waitForLeaseStart(ctx context.Context, leaseStartTime hlc.Timestamp) error {
-	if fn := k.knobs.KVAccessorUpdateLeaseStartWaitInterceptor; fn != nil {
-		fn()
-	}
-	if err := k.clock.SleepUntil(ctx, leaseStartTime); err != nil {
-		return errors.Wrapf(err, "waiting for lease start time to be valid")
-	}
-	return nil
 }
 
 func newKVAccessor(
@@ -216,6 +192,7 @@ func newKVAccessor(
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
+
 	return &KVAccessor{
 		db:                     db,
 		ie:                     ie,
@@ -288,11 +265,41 @@ func (k *KVAccessor) getSpanConfigRecordsWithTxn(
 }
 
 func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
-	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record, txn *kv.Txn,
+	ctx context.Context,
+	toDelete []spanconfig.Target,
+	toUpsert []spanconfig.Record,
+	txn *kv.Txn,
+	minCommitTS, maxCommitTS hlc.Timestamp,
 ) error {
 	if txn == nil {
 		log.Fatalf(ctx, "expected non-nil txn")
 	}
+
+	if !minCommitTS.Less(maxCommitTS) {
+		return errors.AssertionFailedf("invalid commit interval [%s, %s)", minCommitTS, maxCommitTS)
+	}
+
+	if txn.ReadTimestamp().Less(minCommitTS) {
+		return errors.AssertionFailedf(
+			"transaction's read timestamp (%s) below the minimum commit timestamp (%s)",
+			txn.ReadTimestamp(), minCommitTS,
+		)
+	}
+
+	if maxCommitTS.Less(txn.ReadTimestamp()) {
+		return spanconfig.NewCommitTimestampOutOfBoundsError()
+	}
+
+	// Set the deadline of the transaction so that it commits before the maximum
+	// commit timestamp.
+	if err := txn.UpdateDeadline(ctx, maxCommitTS); err != nil {
+		return errors.Wrapf(err, "transaction deadline could not be updated")
+	}
+
+	if fn := k.knobs.KVAccessorPostCommitDeadlineSetInterceptor; fn != nil {
+		fn(txn)
+	}
+
 	if err := validateUpdateArgs(toDelete, toUpsert); err != nil {
 		return err
 	}

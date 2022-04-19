@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -402,15 +401,20 @@ func updateSpanConfigRecords(
 	}
 
 	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
+		sessionStart, sessionExpiration := session.Start(), session.Expiration()
+		if sessionExpiration.IsEmpty() {
+			return errors.Errorf("sqlliveness session has expired")
+		}
+
 		err := kvAccessor.UpdateSpanConfigRecords(
-			ctx, toDelete, toUpsert, session.StartTimestamp(), session.Expiration(),
+			ctx, toDelete, toUpsert, sessionStart, sessionExpiration,
 		)
 		if err != nil {
-			if spanconfigkvaccessor.IsRetryableLeaseExpiredError(err) {
+			if spanconfig.IsCommitTimestampOutOfBoundsError(err) {
 				// We expect the underlying sqlliveness session's expiration to be
 				// extended automatically, which makes this retry loop effective in the
-				// face of these retryable lease expired errors from the RPC call.
-				log.Infof(ctx, "error updating span config records %v; retrying", err)
+				// face of these retryable lease expired errors from the RPC.
+				log.Infof(ctx, "lease expired while updating span config records, retrying..")
 				continue
 			}
 			return err // not a retryable error, bubble up
