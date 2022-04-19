@@ -208,17 +208,36 @@ func MinimumRotatedRectangle(g geo.Geometry) (geo.Geometry, error) {
 	return gm, nil
 }
 
-// CheckBoundingBoxInfiniteCoordinates checks if the bounding box of a Geometry
-// has infinite coordinate.
-func CheckBoundingBoxInfiniteCoordinates(g geo.Geometry) bool {
+// BoundingBoxHasInfiniteCoordinates checks if the bounding box of a Geometry
+// has an infinite coordinate.
+func BoundingBoxHasInfiniteCoordinates(g geo.Geometry) bool {
 	boundingBox := g.BoundingBoxRef()
 	if boundingBox == nil {
 		return false
 	}
-	for _, coord := range []float64{boundingBox.LoX, boundingBox.LoY, boundingBox.HiX, boundingBox.HiY} {
-		if math.IsInf(coord, 0) {
-			return true
-		}
+	// Don't use `:= range []float64{...}` to avoid memory allocation.
+	isInf := func(ord float64) bool {
+		return math.IsInf(ord, 0)
+	}
+	if isInf(boundingBox.LoX) || isInf(boundingBox.LoY) || isInf(boundingBox.HiX) || isInf(boundingBox.HiY) {
+		return true
+	}
+	return false
+}
+
+// BoundingBoxHasNaNCoordinates checks if the bounding box of a Geometry
+// has a NaN coordinate.
+func BoundingBoxHasNaNCoordinates(g geo.Geometry) bool {
+	boundingBox := g.BoundingBoxRef()
+	if boundingBox == nil {
+		return false
+	}
+	// Don't use `:= range []float64{...}` to avoid memory allocation.
+	isNaN := func(ord float64) bool {
+		return math.IsNaN(ord)
+	}
+	if isNaN(boundingBox.LoX) || isNaN(boundingBox.LoY) || isNaN(boundingBox.HiX) || isNaN(boundingBox.HiY) {
+		return true
 	}
 	return false
 }
