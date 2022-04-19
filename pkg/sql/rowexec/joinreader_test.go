@@ -1469,6 +1469,8 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 	defer evalCtx.Stop(ctx)
 	defer diskMonitor.Stop(ctx)
 
+	evalCtx.TestingKnobs.ForceProductionValues = true
+
 	tempStoragePath, cleanupTempDir := testutils.TempDir(b)
 	defer cleanupTempDir()
 	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
@@ -1730,6 +1732,8 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 	defer s.Stopper().Stop(ctx)
 	defer evalCtx.Stop(ctx)
 	defer diskMonitor.Stop(ctx)
+
+	evalCtx.TestingKnobs.ForceProductionValues = true
 
 	tempStoragePath, cleanupTempDir := testutils.TempDir(b)
 	defer cleanupTempDir()

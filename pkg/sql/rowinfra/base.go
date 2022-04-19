@@ -12,6 +12,8 @@
 // that must also be accessible from other packages.
 package rowinfra
 
+import "github.com/cockroachdb/cockroach/pkg/util"
+
 // RowLimit represents a response limit expressed in terms of number of result
 // rows. RowLimits get ultimately converted to KeyLimits and are translated into
 // BatchRequest.MaxSpanRequestKeys.
@@ -31,13 +33,29 @@ const NoRowLimit RowLimit = 0
 // NoBytesLimit can be passed to Fetcher.StartScan to signify that the caller
 // doesn't want to limit the size of results for each scan request.
 //
-// See also DefaultBatchBytesLimit.
+// See also defaultBatchBytesLimit.
 const NoBytesLimit BytesLimit = 0
 
 // ProductionKVBatchSize is the kv batch size to use for production (i.e.,
 // non-test) clusters.
 const ProductionKVBatchSize KeyLimit = 100000
 
-// DefaultBatchBytesLimit is the maximum number of bytes a scan request can
+// defaultBatchBytesLimit is the maximum number of bytes a scan request can
 // return.
-const DefaultBatchBytesLimit BytesLimit = 10 << 20 // 10 MB
+var defaultBatchBytesLimit = BytesLimit(util.ConstantWithMetamorphicTestRange(
+	"default-batch-bytes-limit",
+	defaultBatchBytesLimitProductionValue, /* defaultValue */
+	1,                                     /* min */
+	64<<10,                                /* max, 64KiB */
+))
+
+const defaultBatchBytesLimitProductionValue = 10 << 20 /* 10MiB */
+
+// GetDefaultBatchBytesLimit returns the maximum number of bytes a scan request
+// can return.
+func GetDefaultBatchBytesLimit(forceProductionValue bool) BytesLimit {
+	if forceProductionValue {
+		return defaultBatchBytesLimitProductionValue
+	}
+	return defaultBatchBytesLimit
+}

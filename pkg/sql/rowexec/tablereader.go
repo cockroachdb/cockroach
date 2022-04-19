@@ -95,7 +95,7 @@ func newTableReader(
 	if !spec.Parallelize {
 		batchBytesLimit = rowinfra.BytesLimit(spec.BatchBytesLimit)
 		if batchBytesLimit == 0 {
-			batchBytesLimit = rowinfra.DefaultBatchBytesLimit
+			batchBytesLimit = rowinfra.GetDefaultBatchBytesLimit(flowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
 		}
 	}
 
@@ -199,14 +199,14 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 		err = tr.fetcher.StartScan(
 			ctx, tr.FlowCtx.Txn, tr.Spans, bytesLimit, tr.limitHint,
 			tr.FlowCtx.TraceKV,
-			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+			tr.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 	} else {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
 		err = tr.fetcher.StartInconsistentScan(
 			ctx, tr.FlowCtx.Cfg.DB, initialTS, tr.maxTimestampAge, tr.Spans,
 			bytesLimit, tr.limitHint, tr.FlowCtx.TraceKV,
-			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+			tr.EvalCtx.TestingKnobs.ForceProductionValues,
 			tr.EvalCtx.QualityOfService(),
 		)
 	}

@@ -30,5 +30,12 @@ func TestExecBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer sql.TestingOverrideExplainEnvVersion("CockroachDB execbuilder test version")()
 	skip.UnderDeadlock(t, "times out and/or hangs")
-	logictest.RunLogicTest(t, logictest.TestServerArgs{DisableWorkmemRandomization: true}, testutils.TestDataPath(t, "[^.]*"))
+	logictest.RunLogicTest(
+		t,
+		logictest.TestServerArgs{
+			ForceProductionValues:       true,
+			DisableWorkmemRandomization: true,
+		},
+		testutils.TestDataPath(t, "[^.]*"),
+	)
 }
