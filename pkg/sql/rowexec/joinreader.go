@@ -863,7 +863,9 @@ func (jr *joinReader) readInput() (
 	// joinReaderStrategy doesn't account for any memory used by the spans.
 	if jr.usesStreamer {
 		var kvBatchFetcher *row.TxnKVStreamer
-		kvBatchFetcher, err = row.NewTxnKVStreamer(jr.Ctx, jr.streamerInfo.Streamer, spans, jr.keyLocking)
+		kvBatchFetcher, err = row.NewTxnKVStreamer(
+			jr.Ctx, jr.streamerInfo.Streamer, spans, nil /* spanIDs */, jr.keyLocking,
+		)
 		if err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, nil, jr.DrainHelper()
@@ -880,7 +882,7 @@ func (jr *joinReader) readInput() (
 			}
 		}
 		err = jr.fetcher.StartScan(
-			jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
+			jr.Ctx, jr.FlowCtx.Txn, spans, nil /* spanIDs */, bytesLimit, rowinfra.NoRowLimit,
 			jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 	}
@@ -956,7 +958,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 				bytesLimit = rowinfra.NoBytesLimit
 			}
 			if err := jr.fetcher.StartScan(
-				jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
+				jr.Ctx, jr.FlowCtx.Txn, spans, nil /* spanIDs */, bytesLimit, rowinfra.NoRowLimit,
 				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
 			); err != nil {
 				jr.MoveToDraining(err)
