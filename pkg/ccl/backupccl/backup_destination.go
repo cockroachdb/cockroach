@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -136,7 +137,46 @@ func resolveDest(
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
-	if !exists {
+	if exists && !dest.Exists && chosenSuffix != "" && execCfg.Settings.Version.IsActive(ctx,
+		clusterversion.Start22_1) {
+		// We disallow a user from writing a full backup to a path in a collection containing an
+		// existing backup iff we're 99.9% confident this backup was planned on a 22.1 node.
+		return "",
+			"",
+			"",
+			nil,
+			nil,
+			errors.Newf("A full backup already exists in %s. "+
+				"Consider running an incremental backup to this full backup via `BACKUP INTO '%s' IN '%s'`",
+				plannedBackupDefaultURI, chosenSuffix, dest.To[0])
+
+	} else if !exists {
+		if dest.Exists {
+			// Implies the user passed a subdirectory in their backup command, either
+			// explicitly or using LATEST; however, we could not find an existing
+			// backup in that subdirectory.
+			// - Pre 22.1: this was fine. we created a full backup in their specified subdirectory.
+			// - 22.1: throw an error: full backups with an explicit subdirectory are deprecated.
+			// User can use old behavior by switching the 'bulkio.backup.full_backup_with_subdir.
+			// enabled' to true.
+			// - 22.2+: the backup will fail unconditionally.
+			// TODO (msbutler): throw error in 22.2
+			if err := featureflag.CheckEnabled(
+				ctx,
+				execCfg,
+				featureFullBackupUserSubdir,
+				"'Full Backup with user defined subdirectory'",
+			); err != nil {
+				return "", "", "", nil, nil, errors.Wrapf(err,
+					"The full backup cannot get written to '%s', a user defined subdirectory. "+
+						"To take a full backup, remove the subdirectory from the backup command, "+
+						"(i.e. run 'BACKUP ... INTO <collectionURI>'). "+
+						"Or, to take a full backup at a specific subdirectory, "+
+						"enable the deprecated syntax by switching the 'bulkio.backup."+
+						"deprecated_full_backup_with_subdir.enable' cluster setting to true; "+
+						"however, note this deprecated syntax will not be available in a future release.", chosenSuffix)
+			}
+		}
 		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
 		return collectionURI, plannedBackupDefaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
 	}
