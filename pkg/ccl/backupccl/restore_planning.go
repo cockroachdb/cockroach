@@ -1598,6 +1598,11 @@ func doRestorePlan(
 		}
 	}
 
+	err = ensureMultiRegionDatabaseRestoreIsAllowed(p, restoreDBs)
+	if err != nil {
+		return err
+	}
+
 	databaseModifiers, newTypeDescs, err := planDatabaseModifiersForRestore(ctx, p, sqlDescs, restoreDBs)
 	if err != nil {
 		return err
@@ -1949,6 +1954,33 @@ func renameTargetDatabaseDescriptor(
 	return nil
 }
 
+// ensureMultiRegionDatabaseRestoreIsAllowed returns an error if restoring a
+// multi-region database is not allowed.
+func ensureMultiRegionDatabaseRestoreIsAllowed(
+	p sql.PlanHookState, restoreDBs []catalog.DatabaseDescriptor,
+) error {
+	if p.ExecCfg().Codec.ForSystemTenant() ||
+		sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Get(&p.ExecCfg().Settings.SV) {
+		// The system tenant is always allowed to restore multi-region databases;
+		// secondary tenants are only allowed to restore multi-region databases
+		// if the cluster setting above allows such.
+		return nil
+	}
+	for _, dbDesc := range restoreDBs {
+		// If a database descriptor being restored is a multi-region database,
+		// return an error.
+		if dbDesc.IsMultiRegion() {
+			return pgerror.Newf(
+				pgcode.InvalidDatabaseDefinition,
+				"setting %s disallows secondary tenant to restore a multi-region database",
+				sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+			)
+		}
+	}
+	// We're good.
+	return nil
+}
+
 func planDatabaseModifiersForRestore(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -1959,6 +1991,12 @@ func planDatabaseModifiersForRestore(
 	defaultPrimaryRegion := catpb.RegionName(
 		sql.DefaultPrimaryRegion.Get(&p.ExecCfg().Settings.SV),
 	)
+	if !p.ExecCfg().Codec.ForSystemTenant() &&
+		!sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Get(&p.ExecCfg().Settings.SV) {
+		// We don't want to restore "regular" databases as multi-region databases
+		// for secondary tenants.
+		return nil, nil, nil
+	}
 	if defaultPrimaryRegion == "" {
 		return nil, nil, nil
 	}
