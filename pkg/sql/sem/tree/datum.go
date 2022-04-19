@@ -1644,6 +1644,26 @@ func NewDUuid(d DUuid) *DUuid {
 	return &d
 }
 
+// AsDUuid attempts to retrieve a DUuid from an Expr, returning a DUuid and
+// a flag signifying whether the assertion was successful.
+func AsDUuid(e Expr) (DUuid, bool) {
+	switch t := e.(type) {
+	case *DUuid:
+		return *t, true
+	}
+	return DUuid{}, false
+}
+
+// MustBeDUuid attempts to retrieve a DUuid from an Expr, panicking if the
+// assertion fails.
+func MustBeDUuid(e Expr) DUuid {
+	i, ok := AsDUuid(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DUuid, found %T", e))
+	}
+	return i
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DUuid) ResolvedType() *types.T {
 	return types.Uuid
