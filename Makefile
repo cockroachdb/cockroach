@@ -1752,7 +1752,8 @@ bins = \
   bin/uptodate \
   bin/urlcheck \
   bin/whoownsit \
-  bin/zerosum
+  bin/zerosum \
+	bin/migration
 
 # `xbins` contains binaries that should be compiled for the target architecture
 # (not the host), and should therefore be built with `xgo`.
