@@ -267,14 +267,11 @@ export const getSearchParams = (searchParams: string) => {
 
 // This function returns a key based on all parameters
 // that should be used to group statements.
-// Parameters being used: query, implicit_txn, database,
-// aggregated_ts and aggregation_interval.
+// Currently, using only statement_fingerprint_id
+// (created by ConstructStatementFingerprintID using:
+// query, implicit_txn, database, failed).
 export function statementKey(stmt: ExecutionStatistics): string {
-  return (
-    stmt.statement_fingerprint_id?.toString() +
-    stmt.aggregated_ts +
-    stmt.aggregation_interval
-  );
+  return stmt.statement_fingerprint_id?.toString();
 }
 
 // transactionScopedStatementKey is similar to statementKey, except that
