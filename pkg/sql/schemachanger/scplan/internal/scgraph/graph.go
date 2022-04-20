@@ -54,7 +54,65 @@ type Graph struct {
 
 	edges []Edge
 
+	alloc edgeAlloc
+
 	entities *rel.Database
+}
+
+type edgeAlloc struct {
+	largest         int
+	opEdges         []OpEdge
+	depEdges        []DepEdge
+	edgeTreeEntries []edgeTreeEntry
+	nodes           []screl.Node
+}
+
+func (ea *edgeAlloc) opEdge() *OpEdge {
+	if cap(ea.opEdges) == len(ea.opEdges) {
+		if ea.largest < cap(ea.opEdges) {
+			ea.largest = cap(ea.opEdges)
+		}
+		ea.opEdges = make([]OpEdge, 0, 1+ea.largest*2)
+	}
+	idx := len(ea.opEdges)
+	ea.opEdges = append(ea.opEdges, OpEdge{})
+	return &ea.opEdges[idx]
+}
+
+func (ea *edgeAlloc) depEdge() *DepEdge {
+	if cap(ea.depEdges) == len(ea.depEdges) {
+		if ea.largest < cap(ea.depEdges) {
+			ea.largest = cap(ea.depEdges)
+		}
+		ea.depEdges = make([]DepEdge, 0, 1+ea.largest*2)
+	}
+	idx := len(ea.depEdges)
+	ea.depEdges = append(ea.depEdges, DepEdge{})
+	return &ea.depEdges[idx]
+}
+
+func (ea *edgeAlloc) edgeTreeEntry() *edgeTreeEntry {
+	if cap(ea.edgeTreeEntries) == len(ea.edgeTreeEntries) {
+		if ea.largest < cap(ea.edgeTreeEntries) {
+			ea.largest = cap(ea.edgeTreeEntries)
+		}
+		ea.edgeTreeEntries = make([]edgeTreeEntry, 0, 1+ea.largest*2)
+	}
+	idx := len(ea.edgeTreeEntries)
+	ea.edgeTreeEntries = append(ea.edgeTreeEntries, edgeTreeEntry{})
+	return &ea.edgeTreeEntries[idx]
+}
+
+func (ea *edgeAlloc) node() *screl.Node {
+	if cap(ea.nodes) == len(ea.nodes) {
+		if ea.largest < cap(ea.nodes) {
+			ea.largest = cap(ea.nodes)
+		}
+		ea.nodes = make([]screl.Node, 0, 1+ea.largest*2)
+	}
+	idx := len(ea.nodes)
+	ea.nodes = append(ea.nodes, screl.Node{})
+	return &ea.nodes[idx]
 }
 
 // Database returns a database of the graph's underlying entities.
@@ -81,8 +139,8 @@ func New(cs scpb.CurrentState) (*Graph, error) {
 		opToOpEdge:   map[scop.Op]*OpEdge{},
 		entities:     db,
 	}
-	g.depEdgesFrom = newDepEdgeTree(fromTo, g.compareNodes)
-	g.depEdgesTo = newDepEdgeTree(toFrom, g.compareNodes)
+	g.depEdgesFrom = newDepEdgeTree(fromTo, &g.alloc, g.compareNodes)
+	g.depEdgesTo = newDepEdgeTree(toFrom, &g.alloc, g.compareNodes)
 	for i, status := range cs.Current {
 		t := &cs.Targets[i]
 		if existing, ok := g.targetIdxMap[t]; ok {
@@ -91,7 +149,8 @@ func New(cs scpb.CurrentState) (*Graph, error) {
 		idx := len(g.targets)
 		g.targetIdxMap[t] = idx
 		g.targets = append(g.targets, t)
-		n := &screl.Node{Target: t, CurrentStatus: status}
+		n := g.alloc.node()
+		n.Target, n.CurrentStatus = t, status
 		g.targetNodes = append(g.targetNodes, map[scpb.Status]*screl.Node{status: n})
 		if err := g.entities.Insert(n); err != nil {
 			return nil, err
@@ -138,10 +197,8 @@ func (g *Graph) getOrCreateNode(t *scpb.Target, s scpb.Status) (*screl.Node, err
 	if ts, ok := targetStatuses[s]; ok {
 		return ts, nil
 	}
-	ts := &screl.Node{
-		Target:        t,
-		CurrentStatus: s,
-	}
+	ts := g.alloc.node()
+	ts.Target, ts.CurrentStatus = t, s
 	targetStatuses[s] = ts
 	if err := g.entities.Insert(ts); err != nil {
 		return nil, err
@@ -176,8 +233,8 @@ func (g *Graph) GetOpEdgeFrom(n *screl.Node) (*OpEdge, bool) {
 func (g *Graph) AddOpEdges(
 	t *scpb.Target, from, to scpb.Status, revertible bool, minPhase scop.Phase, ops ...scop.Op,
 ) (err error) {
-
-	oe := &OpEdge{
+	oe := g.alloc.opEdge()
+	*oe = OpEdge{
 		op:         ops,
 		revertible: revertible,
 		minPhase:   minPhase,
@@ -226,7 +283,8 @@ func (g *Graph) AddDepEdge(
 	toTarget *scpb.Target,
 	toStatus scpb.Status,
 ) (err error) {
-	de := &DepEdge{rule: rule, kind: kind}
+	de := g.alloc.depEdge()
+	de.rule, de.kind = rule, kind
 	if de.from, err = g.getOrCreateNode(fromTarget, fromStatus); err != nil {
 		return err
 	}

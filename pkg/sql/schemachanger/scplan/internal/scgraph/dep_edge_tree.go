@@ -11,6 +11,8 @@
 package scgraph
 
 import (
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/google/btree"
@@ -20,16 +22,18 @@ type depEdgeTree struct {
 	t     *btree.BTree
 	order edgeTreeOrder
 	cmp   nodeCmpFn
+	alloc *edgeAlloc
 }
 
 type nodeCmpFn func(a, b *screl.Node) (less, eq bool)
 
-func newDepEdgeTree(order edgeTreeOrder, cmp nodeCmpFn) *depEdgeTree {
+func newDepEdgeTree(order edgeTreeOrder, alloc *edgeAlloc, cmp nodeCmpFn) *depEdgeTree {
 	const degree = 8 // arbitrary
 	return &depEdgeTree{
 		t:     btree.New(degree),
 		order: order,
 		cmp:   cmp,
+		alloc: alloc,
 	}
 }
 
@@ -59,19 +63,33 @@ const (
 // edgeTreeEntry BTree items for tracking edges
 // in an ordered manner.
 type edgeTreeEntry struct {
-	t    *depEdgeTree
-	edge *DepEdge
+	t     *depEdgeTree
+	alloc *edgeAlloc
+	edge  *DepEdge
 }
 
-func (et *depEdgeTree) insert(e *DepEdge) {
-	et.t.ReplaceOrInsert(&edgeTreeEntry{
-		t:    et,
-		edge: e,
-	})
+func (et *depEdgeTree) insert(edge *DepEdge) {
+	e := et.alloc.edgeTreeEntry()
+	e.t, e.edge = et, edge
+	et.t.ReplaceOrInsert(e)
+}
+
+var edgeTreeEntryPool = sync.Pool{
+	New: func() interface{} {
+		return &edgeTreeEntry{edge: &DepEdge{}}
+	},
+}
+
+func putEdgeTreeEntry(e *edgeTreeEntry) {
+	e.t = nil
+	*e.edge = DepEdge{}
+	edgeTreeEntryPool.Put(e)
 }
 
 func (et *depEdgeTree) iterateSourceNode(n *screl.Node, it DepEdgeIterator) (err error) {
-	e := &edgeTreeEntry{t: et, edge: &DepEdge{}}
+	e := edgeTreeEntryPool.Get().(*edgeTreeEntry)
+	defer putEdgeTreeEntry(e)
+	e.t = et
 	if et.order == fromTo {
 		e.edge.from = n
 	} else {

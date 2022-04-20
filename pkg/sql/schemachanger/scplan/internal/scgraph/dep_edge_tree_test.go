@@ -89,7 +89,7 @@ func TestDepEdgeTree(t *testing.T) {
 			}
 			return tcs.nodes[i]
 		}
-		tcs.tree = newDepEdgeTree(tc.order, func(a, b *screl.Node) (less, eq bool) {
+		tcs.tree = newDepEdgeTree(tc.order, &edgeAlloc{}, func(a, b *screl.Node) (less, eq bool) {
 			ai, bi := tcs.nodesToID[a], tcs.nodesToID[b]
 			return ai < bi, ai == bi
 		})
