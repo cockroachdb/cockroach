@@ -498,9 +498,9 @@ func TestExportDataWithMultipleRanges(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts.AsOfSystemTime()), backupPath)
 
 	sqlDB.QueryRow(t, `SELECT count(*) from [SHOW RANGES from TABLE fooTable]`).Scan(&rangeNum)
-	require.Equal(t, 4, rangeNum)
+	require.Equal(t, 1, rangeNum)
 	sqlDB.QueryRow(t, `SELECT count(*) from [SHOW BACKUP FILES $1]`, backupPath).Scan(&rangeNum)
-	require.Equal(t, 8, rangeNum)
+	require.Equal(t, 5, rangeNum)
 
 	t.Run("export-data-with-multiple-ranges", func(t *testing.T) {
 		setDebugContextDefault()
