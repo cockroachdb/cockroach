@@ -51,7 +51,7 @@ func (r registeredDepRule) MarshalYAML() (interface{}, error) {
 		Kind: yaml.MappingNode,
 		Content: []*yaml.Node{
 			{Kind: yaml.ScalarNode, Value: "name"},
-			{Kind: yaml.ScalarNode, Value: r.name},
+			{Kind: yaml.ScalarNode, Value: string(r.name)},
 			{Kind: yaml.ScalarNode, Value: "from"},
 			{Kind: yaml.ScalarNode, Value: string(r.from)},
 			{Kind: yaml.ScalarNode, Value: "kind"},
@@ -73,7 +73,7 @@ func (r registeredOpRule) MarshalYAML() (interface{}, error) {
 		Kind: yaml.MappingNode,
 		Content: []*yaml.Node{
 			{Kind: yaml.ScalarNode, Value: "name"},
-			{Kind: yaml.ScalarNode, Value: r.name},
+			{Kind: yaml.ScalarNode, Value: string(r.name)},
 			{Kind: yaml.ScalarNode, Value: "from"},
 			{Kind: yaml.ScalarNode, Value: string(r.from)},
 			{Kind: yaml.ScalarNode, Value: "query"},
