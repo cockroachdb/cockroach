@@ -1,0 +1,19 @@
+# LogicTest: local fakedist
+
+query ITIT colnames
+SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'read') WHERE range_id < 0
+----
+range_id error end_to_end_latency_ms verbose_trace
+
+query I
+SELECT count(1) FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'read') WHERE error != ''
+----
+0
+
+let $trace_str
+SELECT verbose_trace FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'write') WHERE range_id = 1
+
+query T
+SELECT substring('$trace_str', 33, 34)
+----
+operation:write probe _verbose:1
