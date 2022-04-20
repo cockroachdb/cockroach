@@ -134,7 +134,7 @@ func (m *visitor) RemoveIndexComment(_ context.Context, op scop.RemoveIndexComme
 }
 
 func (m *visitor) RemoveColumnComment(_ context.Context, op scop.RemoveColumnComment) error {
-	m.s.DeleteComment(op.TableID, int(op.ColumnID), keys.ColumnCommentType)
+	m.s.DeleteComment(op.TableID, int(op.PgAttributeNum), keys.ColumnCommentType)
 	return nil
 }
 

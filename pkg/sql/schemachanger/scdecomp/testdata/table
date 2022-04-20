@@ -59,6 +59,7 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 104
   Status: PUBLIC
 - IndexName:
@@ -209,16 +210,19 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
 - ColumnComment:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
 - ColumnComment:
     columnId: 3
     comment: __placeholder_comment__
+    pgAttributeNum: 3
     tableId: 105
   Status: PUBLIC
 - IndexName:
@@ -364,11 +368,13 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 104
   Status: PUBLIC
 - ColumnComment:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 104
   Status: PUBLIC
 - IndexName:
@@ -493,11 +499,13 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 108
   Status: PUBLIC
 - ColumnComment:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 108
   Status: PUBLIC
 - IndexName:

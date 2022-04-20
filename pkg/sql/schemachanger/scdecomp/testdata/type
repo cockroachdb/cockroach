@@ -230,26 +230,31 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 108
   Status: PUBLIC
 - ColumnComment:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 108
   Status: PUBLIC
 - ColumnComment:
     columnId: 3
     comment: __placeholder_comment__
+    pgAttributeNum: 3
     tableId: 108
   Status: PUBLIC
 - ColumnComment:
     columnId: 4
     comment: __placeholder_comment__
+    pgAttributeNum: 4
     tableId: 108
   Status: PUBLIC
 - ColumnComment:
     columnId: 5
     comment: __placeholder_comment__
+    pgAttributeNum: 5
     tableId: 108
   Status: PUBLIC
 - IndexName:

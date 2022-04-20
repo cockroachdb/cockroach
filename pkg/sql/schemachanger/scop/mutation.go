@@ -447,8 +447,9 @@ type RemoveIndexComment struct {
 // RemoveColumnComment is used to delete a comment associated with a column.
 type RemoveColumnComment struct {
 	mutationOp
-	TableID  descpb.ID
-	ColumnID descpb.ColumnID
+	TableID        descpb.ID
+	ColumnID       descpb.ColumnID
+	PgAttributeNum descpb.PGAttributeNum
 }
 
 // RemoveConstraintComment is used to delete a comment associated with a

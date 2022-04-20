@@ -158,6 +158,7 @@ object ColumnComment
 ColumnComment :  TableID
 ColumnComment :  ColumnID
 ColumnComment :  Comment
+ColumnComment :  PgAttributeNum
 
 object IndexName
 

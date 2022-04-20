@@ -518,7 +518,7 @@ deprules
   query:
     - $from[Type] = '*scpb.Column'
     - $from-target[TargetStatus] = PUBLIC
-    - $to[Type] IN ['*scpb.ColumnName', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnComment']
+    - $to[Type] IN ['*scpb.ColumnName', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = DELETE_ONLY
     - $to-node[CurrentStatus] = PUBLIC
@@ -534,6 +534,29 @@ deprules
     - $to[DescID] = $DescID-join-var
     - $from[ColumnID] = $ColumnID-join-var
     - $to[ColumnID] = $ColumnID-join-var
+- name: column existence precedes column comment
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.Column'
+    - $from-target[TargetStatus] = PUBLIC
+    - $to[Type] = '*scpb.ColumnComment'
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = DELETE_ONLY
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[PgAttributeNum] = $PgAttributeNum-join-var
+    - $to[PgAttributeNum] = $PgAttributeNum-join-var
 - name: DEFAULT or ON UPDATE existence precedes writes to column
   from: from-node
   kind: Precedence
@@ -601,8 +624,8 @@ deprules
     - $to-node[Target] = $to-target
     - $from[DescID] = $DescID-join-var
     - $to[DescID] = $DescID-join-var
-    - $from[ColumnID] = $ColumnID-join-var
-    - $to[ColumnID] = $ColumnID-join-var
+    - $from[PgAttributeNum] = $PgAttributeNum-join-var
+    - $to[PgAttributeNum] = $PgAttributeNum-join-var
 - name: column dependents removed after column no longer public
   from: from-node
   kind: Precedence
@@ -610,7 +633,7 @@ deprules
   query:
     - $from[Type] = '*scpb.Column'
     - $from-target[TargetStatus] = ABSENT
-    - $to[Type] IN ['*scpb.ColumnType', '*scpb.ColumnName', '*scpb.ColumnComment']
+    - $to[Type] IN ['*scpb.ColumnType', '*scpb.ColumnName']
     - $to-target[TargetStatus] = ABSENT
     - $from-node[CurrentStatus] = WRITE_ONLY
     - $to-node[CurrentStatus] = ABSENT
@@ -626,6 +649,29 @@ deprules
     - $to[DescID] = $DescID-join-var
     - $from[ColumnID] = $ColumnID-join-var
     - $to[ColumnID] = $ColumnID-join-var
+- name: column comments removed after column no longer public
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.Column'
+    - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.ColumnComment'
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = WRITE_ONLY
+    - $to-node[CurrentStatus] = ABSENT
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[PgAttributeNum] = $PgAttributeNum-join-var
+    - $to[PgAttributeNum] = $PgAttributeNum-join-var
 - name: column type dependents removed right before column type
   from: from-node
   kind: SameStagePrecedence
@@ -654,7 +700,7 @@ deprules
   kind: Precedence
   to: to-node
   query:
-    - $from[Type] IN ['*scpb.ColumnName', '*scpb.ColumnComment', '*scpb.ColumnType']
+    - $from[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType']
     - $from-target[TargetStatus] = ABSENT
     - $to[Type] = '*scpb.Column'
     - $to-target[TargetStatus] = ABSENT
@@ -672,6 +718,29 @@ deprules
     - $to[DescID] = $DescID-join-var
     - $from[ColumnID] = $ColumnID-join-var
     - $to[ColumnID] = $ColumnID-join-var
+- name: column comment removed before column
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.ColumnComment'
+    - $from-target[TargetStatus] = ABSENT
+    - $to[Type] = '*scpb.Column'
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = ABSENT
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[PgAttributeNum] = $PgAttributeNum-join-var
+    - $to[PgAttributeNum] = $PgAttributeNum-join-var
 - name: column type removed right before column when not dropping relation
   from: from-node
   kind: SameStagePrecedence
