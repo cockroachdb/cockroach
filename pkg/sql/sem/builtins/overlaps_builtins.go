@@ -43,7 +43,7 @@ var (
 )
 
 func initOverlapsBuiltins() {
-	// Add all overlapsBuiltins to the Builtins map after a sanity check.
+	// Add all overlapsBuiltins to the builtins map after a sanity check.
 	for k, v := range overlapsBuiltins {
 		if _, exists := builtins[k]; exists {
 			panic("duplicate builtin: " + k)

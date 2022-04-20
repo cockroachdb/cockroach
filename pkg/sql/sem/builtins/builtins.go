@@ -13,7 +13,6 @@ package builtins
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto/hmac"
 	"crypto/md5"
 	cryptorand "crypto/rand"
 	"crypto/sha1"
@@ -679,7 +678,6 @@ var builtins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityImmutable,
 		}),
 
-	"gen_random_uuid":  generateRandomUUID4Impl,
 	"uuid_generate_v4": generateRandomUUID4Impl,
 
 	"uuid_nil": generateConstantUUIDImpl(
@@ -1384,90 +1382,6 @@ var builtins = map[string]builtinDefinition{
 	"crc32c": hash32Builtin(
 		func() hash.Hash32 { return crc32.New(crc32.MakeTable(crc32.Castagnoli)) },
 		"Calculates the CRC-32 hash using the Castagnoli polynomial.",
-	),
-
-	"digest": makeBuiltin(
-		tree.FunctionProperties{Category: categoryCrypto},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"data", types.String}, {"type", types.String}},
-			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				alg := tree.MustBeDString(args[1])
-				hashFunc, err := getHashFunc(string(alg))
-				if err != nil {
-					return nil, err
-				}
-				h := hashFunc()
-				if ok, err := feedHash(h, args[:1]); !ok || err != nil {
-					return tree.DNull, err
-				}
-				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
-			},
-			Info: "Computes a binary hash of the given `data`. `type` is the algorithm " +
-				"to use (md5, sha1, sha224, sha256, sha384, or sha512).",
-			Volatility: tree.VolatilityLeakProof,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"data", types.Bytes}, {"type", types.String}},
-			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				alg := tree.MustBeDString(args[1])
-				hashFunc, err := getHashFunc(string(alg))
-				if err != nil {
-					return nil, err
-				}
-				h := hashFunc()
-				if ok, err := feedHash(h, args[:1]); !ok || err != nil {
-					return tree.DNull, err
-				}
-				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
-			},
-			Info: "Computes a binary hash of the given `data`. `type` is the algorithm " +
-				"to use (md5, sha1, sha224, sha256, sha384, or sha512).",
-			Volatility: tree.VolatilityImmutable,
-		},
-	),
-
-	"hmac": makeBuiltin(
-		tree.FunctionProperties{Category: categoryCrypto},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"data", types.String}, {"key", types.String}, {"type", types.String}},
-			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				key := tree.MustBeDString(args[1])
-				alg := tree.MustBeDString(args[2])
-				hashFunc, err := getHashFunc(string(alg))
-				if err != nil {
-					return nil, err
-				}
-				h := hmac.New(hashFunc, []byte(key))
-				if ok, err := feedHash(h, args[:1]); !ok || err != nil {
-					return tree.DNull, err
-				}
-				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
-			},
-			Info:       "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
-			Volatility: tree.VolatilityLeakProof,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"data", types.Bytes}, {"key", types.Bytes}, {"type", types.String}},
-			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				key := tree.MustBeDBytes(args[1])
-				alg := tree.MustBeDString(args[2])
-				hashFunc, err := getHashFunc(string(alg))
-				if err != nil {
-					return nil, err
-				}
-				h := hmac.New(hashFunc, []byte(key))
-				if ok, err := feedHash(h, args[:1]); !ok || err != nil {
-					return tree.DNull, err
-				}
-				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
-			},
-			Info:       "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
-			Volatility: tree.VolatilityImmutable,
-		},
 	),
 
 	"to_hex": makeBuiltin(

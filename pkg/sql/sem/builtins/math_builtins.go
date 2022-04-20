@@ -24,7 +24,7 @@ import (
 )
 
 func initMathBuiltins() {
-	// Add all mathBuiltins to the Builtins map after a sanity check.
+	// Add all mathBuiltins to the builtins map after a sanity check.
 	for k, v := range mathBuiltins {
 		if _, exists := builtins[k]; exists {
 			panic("duplicate builtin: " + k)
