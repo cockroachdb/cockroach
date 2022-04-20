@@ -397,6 +397,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			StoringColumnIDs:   cpy.StoreColumnIDs,
 			CompositeColumnIDs: cpy.CompositeColumnIDs,
 			IsInverted:         idx.GetType() == descpb.IndexDescriptor_INVERTED,
+			ConstraintID:       idx.GetConstraintID(),
 		}
 		index.KeyColumnDirections = make([]scpb.Index_Direction, len(index.KeyColumnIDs))
 		for i := 0; i < idx.NumKeyColumns(); i++ {

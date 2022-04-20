@@ -196,6 +196,7 @@ message Index {
   bool is_unique = 10;
   bool is_inverted = 11;
   cockroach.sql.catalog.catpb.ShardedDescriptor sharding = 12;
+  uint32 constraint_id = 13 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
 
   // Spec fields.
   // These fields only make sense if the element is for ABSENT -> PUBLIC.
