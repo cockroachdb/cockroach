@@ -135,26 +135,28 @@ cr="${abase}/cockroach${local}"
 # the same SHA multiple times and artifacts shouldn't mix.
 a="${abase}/$(date '+%H%M%S')"
 
+[ -z "${short}" ] && artifact_suffix= || artifact_suffix=-short
+
 if [ ! -f "${cr}" ] || [ "${force_build}" = "y" ]; then
   if [ -z "${local}" ]; then
-    ./build/builder.sh mkrelease amd64-linux-gnu "build${short}"
-    cp "cockroach${short}-linux-2.6.32-gnu-amd64" "${cr}"
+    ./dev build ${short} --cross=linux
+    cp "artifacts/cockroach${artifact_suffix}" "${cr}"
   else
-    make "build${short}"
-    cp "cockroach${short}" "${cr}"
+    ./dev build ${short}
+    cp "cockroach${artifact_suffix}" "${cr}"
   fi
 fi
 
 if [ ! -f "${wl}" ] || [ "${force_build}" = "y" ]; then
   if [ -z "${local}" ]; then
-    ./build/builder.sh mkrelease amd64-linux-gnu bin/workload
-    cp bin.docker_amd64/workload "${wl}"
+    ./dev build workload --cross=linux
+    cp "artifacts/workload" "${wl}"
   else
-    make bin/workload
-    cp bin/workload "${wl}"
+    ./dev build workload
+    cp "bin/workload" "${wl}"
   fi
-  make bin/roachtest
-  cp bin/roachtest "${rt}"
+  ./dev build roachtest
+  cp "bin/roachtest" "${rt}"
 fi
 
 # Creation of test data directory is deferred here to avoid spamming in
