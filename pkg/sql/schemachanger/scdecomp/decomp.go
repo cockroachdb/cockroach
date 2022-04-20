@@ -389,14 +389,16 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 	{
 		cpy := idx.IndexDescDeepCopy()
 		index := scpb.Index{
-			TableID:            tbl.GetID(),
-			IndexID:            idx.GetID(),
-			IsUnique:           idx.IsUnique(),
-			KeyColumnIDs:       cpy.KeyColumnIDs,
-			KeySuffixColumnIDs: cpy.KeySuffixColumnIDs,
-			StoringColumnIDs:   cpy.StoreColumnIDs,
-			CompositeColumnIDs: cpy.CompositeColumnIDs,
-			IsInverted:         idx.GetType() == descpb.IndexDescriptor_INVERTED,
+			TableID:             tbl.GetID(),
+			IndexID:             idx.GetID(),
+			IsUnique:            idx.IsUnique(),
+			KeyColumnIDs:        cpy.KeyColumnIDs,
+			KeySuffixColumnIDs:  cpy.KeySuffixColumnIDs,
+			StoringColumnIDs:    cpy.StoreColumnIDs,
+			CompositeColumnIDs:  cpy.CompositeColumnIDs,
+			IsInverted:          idx.GetType() == descpb.IndexDescriptor_INVERTED,
+			IsCreatedExplicitly: idx.IsCreatedExplicitly(),
+			ConstraintID:        idx.GetConstraintID(),
 		}
 		index.KeyColumnDirections = make([]scpb.Index_Direction, len(index.KeyColumnIDs))
 		for i := 0; i < idx.NumKeyColumns(); i++ {

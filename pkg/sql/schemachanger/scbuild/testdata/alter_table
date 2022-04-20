@@ -34,9 +34,10 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
     indexId: 2
     name: foo_pkey
     tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -44,9 +45,10 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
       keyColumnIds:
       - 1
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 2
       isUnique: true
       keyColumnDirections:
@@ -96,9 +98,10 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
     indexId: 2
     name: foo_pkey
     tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -106,9 +109,10 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
       keyColumnIds:
       - 1
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 2
       isUnique: true
       keyColumnDirections:
@@ -184,9 +188,10 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
     indexId: 2
     name: foo_pkey
     tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -194,9 +199,10 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       keyColumnIds:
       - 1
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 2
       isUnique: true
       keyColumnDirections:
@@ -243,9 +249,10 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
     indexId: 2
     name: foo_pkey
     tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -253,9 +260,10 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       keyColumnIds:
       - 1
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 2
       isUnique: true
       keyColumnDirections:
@@ -333,9 +341,10 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     indexId: 2
     name: bar_pkey
     tableId: 105
-- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -343,9 +352,10 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       keyColumnIds:
       - 1
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 2
       isUnique: true
       keyColumnDirections:
@@ -356,9 +366,10 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       storingColumnIds:
       - 2
       tableId: 104
-- [[PrimaryIndex:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
+- [[PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -368,9 +379,10 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       storingColumnIds:
       - 1
       tableId: 105
-- [[PrimaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 2
       isUnique: true
       keyColumnDirections:

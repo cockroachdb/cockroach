@@ -297,6 +297,7 @@ upsert descriptor #108
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
+  +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
   +            keyColumnDirections:
@@ -639,6 +640,7 @@ upsert descriptor #108
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
+  -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
   -            keyColumnDirections:
@@ -918,6 +920,7 @@ upsert descriptor #109
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
+  +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
   +            keyColumnDirections:
@@ -1152,6 +1155,7 @@ upsert descriptor #109
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
+  -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
   -            keyColumnDirections:
