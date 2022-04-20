@@ -11,6 +11,7 @@
 package scgraph
 
 import (
+	"reflect"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -75,12 +76,28 @@ func (g *Graph) Database() *rel.Database {
 // New constructs a new Graph. All initial nodes ought to correspond to distinct
 // targets. If they do not, an error will be returned.
 func New(cs scpb.CurrentState) (*Graph, error) {
-	db, err := rel.NewDatabase(screl.Schema, [][]rel.Attr{
-		{screl.DescID, rel.Type, screl.ColumnID},
-		{screl.ReferencedDescID, rel.Type},
-		{rel.Type, screl.Element, screl.CurrentStatus},
-		{rel.Type, screl.Target, screl.TargetStatus},
-	})
+	db, err := rel.NewDatabase(screl.Schema, []rel.Index{
+		{
+			Attrs:  []rel.Attr{rel.Type, screl.DescID, screl.ColumnID},
+			Exists: []rel.Attr{screl.DescID},
+		},
+		{
+			Attrs:  []rel.Attr{screl.ReferencedDescID, rel.Type},
+			Exists: []rel.Attr{screl.ReferencedDescID},
+		},
+		{
+			Attrs: []rel.Attr{screl.Element, screl.TargetStatus},
+			Where: []rel.IndexWhere{
+				{Attr: rel.Type, Eq: reflect.TypeOf((*scpb.Target)(nil))},
+			},
+		},
+		{
+			Attrs: []rel.Attr{screl.Target, screl.CurrentStatus},
+			Where: []rel.IndexWhere{
+				{Attr: rel.Type, Eq: reflect.TypeOf((*screl.Node)(nil))},
+			},
+		},
+	}...)
 	if err != nil {
 		return nil, err
 	}
