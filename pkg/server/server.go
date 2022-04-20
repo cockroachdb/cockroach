@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverrules"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -307,8 +308,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		log.Errorf(ctx, "unable to initialize periodic license metric update: %v", err)
 	}
 
-	// Create and add KV metric rules
+	// Create and add KV metric rules.
 	kvserver.CreateAndAddRules(ctx, ruleRegistry)
+	// Create and add server metric rules.
+	serverrules.CreateAndAddRules(ctx, ruleRegistry)
 
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during
