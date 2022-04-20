@@ -868,13 +868,31 @@ available replica will error.</p>
 </span></td></tr>
 <tr><td><a name="gen_random_ulid"></a><code>gen_random_ulid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random ULID and returns it as a value of UUID type.</p>
 </span></td></tr>
-<tr><td><a name="gen_random_uuid"></a><code>gen_random_uuid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random UUID and returns it as a value of UUID type.</p>
+<tr><td><a name="gen_random_uuid"></a><code>gen_random_uuid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random version 4 UUID, and returns it as a value of UUID type.</p>
 </span></td></tr>
 <tr><td><a name="unique_rowid"></a><code>unique_rowid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a unique ID used by CockroachDB to generate unique row IDs if a Primary Key isn’t defined for the table. The value is a combination of the insert timestamp and the ID of the node executing the statement, which guarantees this combination is globally unique. However, there can be gaps and the order is not completely guaranteed.</p>
 </span></td></tr>
 <tr><td><a name="unordered_unique_rowid"></a><code>unordered_unique_rowid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a unique ID. The value is a combination of the insert timestamp and the ID of the node executing the statement, which guarantees this combination is globally unique. The way it is generated there is no ordering</p>
 </span></td></tr>
-<tr><td><a name="uuid_generate_v4"></a><code>uuid_generate_v4() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random UUID and returns it as a value of UUID type.</p>
+<tr><td><a name="uuid_generate_v1"></a><code>uuid_generate_v1() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a version 1 UUID, and returns it as a value of UUID type. This uses the real MAC address of the server and a timestamp.</p>
+</span></td></tr>
+<tr><td><a name="uuid_generate_v1mc"></a><code>uuid_generate_v1mc() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a version 1 UUID, and returns it as a value of UUID type. This uses a random MAC address and a timestamp.</p>
+</span></td></tr>
+<tr><td><a name="uuid_generate_v3"></a><code>uuid_generate_v3(namespace: <a href="uuid.html">uuid</a>, name: <a href="string.html">string</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a version 3 UUID in the given namespace using the specified input name, with md5 as the hashing method. The namespace should be one of the special constants produced by the uuid_ns_*() functions.</p>
+</span></td></tr>
+<tr><td><a name="uuid_generate_v4"></a><code>uuid_generate_v4() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random version 4 UUID, and returns it as a value of UUID type.</p>
+</span></td></tr>
+<tr><td><a name="uuid_generate_v5"></a><code>uuid_generate_v5(namespace: <a href="uuid.html">uuid</a>, name: <a href="string.html">string</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a version 5 UUID in the given namespace using the specified input name. This is similar to a version 3 UUID, except it uses SHA-1 for hashing.</p>
+</span></td></tr>
+<tr><td><a name="uuid_nil"></a><code>uuid_nil() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns a nil UUID constant.</p>
+</span></td></tr>
+<tr><td><a name="uuid_ns_dns"></a><code>uuid_ns_dns() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns a constant designating the DNS namespace for UUIDs.</p>
+</span></td></tr>
+<tr><td><a name="uuid_ns_oid"></a><code>uuid_ns_oid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns a constant designating the ISO object identifier (OID) namespace for UUIDs. These are unrelated to the OID type used internally in the database.</p>
+</span></td></tr>
+<tr><td><a name="uuid_ns_url"></a><code>uuid_ns_url() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns a constant designating the URL namespace for UUIDs.</p>
+</span></td></tr>
+<tr><td><a name="uuid_ns_x500"></a><code>uuid_ns_x500() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns a constant designating the X.500 distinguished name (DN) namespace for UUIDs.</p>
 </span></td></tr>
 <tr><td><a name="uuid_v4"></a><code>uuid_v4() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a UUID.</p>
 </span></td></tr></tbody>

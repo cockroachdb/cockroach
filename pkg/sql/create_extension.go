@@ -43,7 +43,8 @@ func (n *createExtensionNode) unimplementedExtensionError(issue int) error {
 
 func (n *createExtensionNode) startExec(params runParams) error {
 	switch n.CreateExtension.Name {
-	case "postgis":
+	case "postgis",
+		"uuid-ossp":
 		telemetry.Inc(sqltelemetry.CreateExtensionCounter(n.CreateExtension.Name))
 		return nil
 	case "postgis_raster",
@@ -102,7 +103,6 @@ func (n *createExtensionNode) startExec(params runParams) error {
 		"tsm_system_rows",
 		"tsm_system_time",
 		"unaccent",
-		"uuid-ossp",
 		"xml2":
 		return n.unimplementedExtensionError(54516)
 	}
