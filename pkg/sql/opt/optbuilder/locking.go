@@ -10,7 +10,10 @@
 
 package optbuilder
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 // lockingSpec maintains a collection of FOR [KEY] UPDATE/SHARE items that apply
 // to a given scope. Locking clauses can be applied to the lockingSpec as they
@@ -70,11 +73,15 @@ func (lm lockingSpec) isSet() bool {
 
 // get returns the first row-level locking mode in the spec. If the spec was the
 // outcome of filter operation, this will be the only locking mode in the spec.
-func (lm lockingSpec) get() *tree.LockingItem {
+func (lm lockingSpec) get() opt.Locking {
 	if lm.isSet() {
-		return lm[0]
+		spec := lm[0]
+		return opt.Locking{
+			Strength:   spec.Strength,
+			WaitPolicy: spec.WaitPolicy,
+		}
 	}
-	return nil
+	return opt.Locking{}
 }
 
 // apply merges the locking clause into the current locking spec. The effect of

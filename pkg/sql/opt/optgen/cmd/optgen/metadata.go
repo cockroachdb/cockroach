@@ -242,7 +242,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"UniqueOrdinals":      {fullName: "cat.UniqueOrdinals", passByVal: true},
 		"ViewDeps":            {fullName: "opt.ViewDeps", passByVal: true},
 		"ViewTypeDeps":        {fullName: "opt.ViewTypeDeps", passByVal: true},
-		"LockingItem":         {fullName: "tree.LockingItem", isPointer: true},
+		"Locking":             {fullName: "opt.Locking", passByVal: true},
 		"MaterializeClause":   {fullName: "tree.MaterializeClause", passByVal: true},
 		"SpanExpression":      {fullName: "inverted.SpanExpression", isPointer: true, usePointerIntern: true},
 		"InvertedSpans":       {fullName: "inverted.Spans", passByVal: true},
