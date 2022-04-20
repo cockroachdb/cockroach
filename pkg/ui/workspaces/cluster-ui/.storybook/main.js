@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 const path = require("path");
-const appConfig = require("../webpack.config")();
+const appConfig = require("../webpack.config");
 
 const customConfig = appConfig();
 
