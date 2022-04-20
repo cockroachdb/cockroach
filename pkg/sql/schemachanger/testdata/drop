@@ -169,7 +169,7 @@ begin transaction #1
 ## StatementPhase stage 1 of 1 with 1 MutationType op
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 9 MutationType ops
+## PreCommitPhase stage 1 of 1 with 11 MutationType ops
 delete object namespace entry {104 107 t} -> 108
 upsert descriptor #108
   ...
@@ -194,6 +194,12 @@ upsert descriptor #108
   +    - ABSENT
   +    - WRITE_ONLY
   +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
   +    - VALIDATED
@@ -224,6 +230,12 @@ upsert descriptor #108
   +    - 16
   +    - 17
   +    - 18
+  +    - 19
+  +    - 20
+  +    - 21
+  +    - 22
+  +    - 23
+  +    - 24
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -393,6 +405,74 @@ upsert descriptor #108
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        column:
+  +          columnId: 4.294967295e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967295e+09
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967295e+09
+  +          name: crdb_internal_mvcc_timestamp
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967295e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: DecimalFamily
+  +              oid: 1700
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967294e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967294e+09
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967294e+09
+  +          name: tableoid
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967294e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: OidFamily
+  +              oid: 26
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
@@ -439,7 +519,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -463,6 +543,12 @@ upsert descriptor #108
   -    - ABSENT
   -    - WRITE_ONLY
   -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
   -    - VALIDATED
@@ -493,6 +579,12 @@ upsert descriptor #108
   -    - 16
   -    - 17
   -    - 18
+  -    - 19
+  -    - 20
+  -    - 21
+  -    - 22
+  -    - 23
+  -    - 24
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -656,6 +748,74 @@ upsert descriptor #108
   -          columnId: 3
   -          embeddedExpr:
   -            expr: unique_rowid()
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 4.294967295e+09
+  -          isHidden: true
+  -          isSystemColumn: true
+  -          pgAttributeNum: 4.294967295e+09
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 4.294967295e+09
+  -          name: crdb_internal_mvcc_timestamp
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 4.294967295e+09
+  -          embeddedTypeT:
+  -            type:
+  -              family: DecimalFamily
+  -              oid: 1700
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 4.294967294e+09
+  -          isHidden: true
+  -          isSystemColumn: true
+  -          pgAttributeNum: 4.294967294e+09
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 4.294967294e+09
+  -          name: tableoid
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 4.294967294e+09
+  -          embeddedTypeT:
+  -            type:
+  -              family: OidFamily
+  -              oid: 26
+  -          isNullable: true
+  -          isRelationBeingDropped: true
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -1321,7 +1481,7 @@ begin transaction #1
 ## StatementPhase stage 1 of 1 with 15 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 89 MutationType ops
+## PreCommitPhase stage 1 of 1 with 105 MutationType ops
 delete database namespace entry {0 0 db1} -> 111
 delete schema namespace entry {111 0 public} -> 112
 delete schema namespace entry {111 0 sc1} -> 113
@@ -1720,12 +1880,12 @@ upsert descriptor #115
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 63
-  +    - 64
-  +    - 65
-  +    - 66
-  +    - 67
-  +    - 68
+  +    - 75
+  +    - 76
+  +    - 77
+  +    - 78
+  +    - 79
+  +    - 80
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1812,6 +1972,12 @@ upsert descriptor #116
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
   +    - VALIDATED
   +    - ABSENT
   +    jobId: "1"
@@ -1821,18 +1987,6 @@ upsert descriptor #116
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 69
-  +    - 70
-  +    - 71
-  +    - 72
-  +    - 73
-  +    - 74
-  +    - 75
-  +    - 76
-  +    - 77
-  +    - 78
-  +    - 79
-  +    - 80
   +    - 81
   +    - 82
   +    - 83
@@ -1840,6 +1994,24 @@ upsert descriptor #116
   +    - 85
   +    - 86
   +    - 87
+  +    - 88
+  +    - 89
+  +    - 90
+  +    - 91
+  +    - 92
+  +    - 93
+  +    - 94
+  +    - 95
+  +    - 96
+  +    - 97
+  +    - 98
+  +    - 99
+  +    - 100
+  +    - 101
+  +    - 102
+  +    - 103
+  +    - 104
+  +    - 105
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -2012,6 +2184,74 @@ upsert descriptor #116
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        column:
+  +          columnId: 4.294967295e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967295e+09
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967295e+09
+  +          name: crdb_internal_mvcc_timestamp
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967295e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: DecimalFamily
+  +              oid: 1700
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967294e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967294e+09
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967294e+09
+  +          name: tableoid
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967294e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: OidFamily
+  +              oid: 26
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
@@ -2077,6 +2317,12 @@ upsert descriptor #117
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
   +    - VALIDATED
   +    - ABSENT
   +    jobId: "1"
@@ -2105,6 +2351,12 @@ upsert descriptor #117
   +    - 42
   +    - 43
   +    - 44
+  +    - 45
+  +    - 46
+  +    - 47
+  +    - 48
+  +    - 49
+  +    - 50
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -2277,6 +2529,74 @@ upsert descriptor #117
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        column:
+  +          columnId: 4.294967295e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967295e+09
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967295e+09
+  +          name: crdb_internal_mvcc_timestamp
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967295e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: DecimalFamily
+  +              oid: 1700
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967294e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967294e+09
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967294e+09
+  +          name: tableoid
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967294e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: OidFamily
+  +              oid: 26
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
@@ -2336,6 +2656,12 @@ upsert descriptor #118
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
   +    - VALIDATED
   +    - ABSENT
   +    - PUBLIC
@@ -2346,12 +2672,6 @@ upsert descriptor #118
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 45
-  +    - 46
-  +    - 47
-  +    - 48
-  +    - 49
-  +    - 50
   +    - 51
   +    - 52
   +    - 53
@@ -2364,6 +2684,18 @@ upsert descriptor #118
   +    - 60
   +    - 61
   +    - 62
+  +    - 63
+  +    - 64
+  +    - 65
+  +    - 66
+  +    - 67
+  +    - 68
+  +    - 69
+  +    - 70
+  +    - 71
+  +    - 72
+  +    - 73
+  +    - 74
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -2509,6 +2841,74 @@ upsert descriptor #118
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        column:
+  +          columnId: 4.294967295e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967295e+09
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967295e+09
+  +          name: crdb_internal_mvcc_timestamp
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967295e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: DecimalFamily
+  +              oid: 1700
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967294e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967294e+09
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967294e+09
+  +          name: tableoid
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967294e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: OidFamily
+  +              oid: 26
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
@@ -2571,6 +2971,12 @@ upsert descriptor #119
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -2578,15 +2984,21 @@ upsert descriptor #119
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 88
-  +    - 89
-  +    - 90
-  +    - 91
-  +    - 92
-  +    - 93
-  +    - 94
-  +    - 95
-  +    - 96
+  +    - 106
+  +    - 107
+  +    - 108
+  +    - 109
+  +    - 110
+  +    - 111
+  +    - 112
+  +    - 113
+  +    - 114
+  +    - 115
+  +    - 116
+  +    - 117
+  +    - 118
+  +    - 119
+  +    - 120
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -2675,6 +3087,74 @@ upsert descriptor #119
   +        sourceElementId: 9
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967295e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967295e+09
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967295e+09
+  +          name: crdb_internal_mvcc_timestamp
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967295e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: DecimalFamily
+  +              oid: 1700
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967294e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967294e+09
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967294e+09
+  +          name: tableoid
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967294e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: OidFamily
+  +              oid: 26
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 119
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      dependedOnBy:
      - columnIds:
   ...
@@ -2705,6 +3185,12 @@ upsert descriptor #120
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -2712,18 +3198,24 @@ upsert descriptor #120
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 97
-  +    - 98
-  +    - 99
-  +    - 100
-  +    - 101
-  +    - 102
-  +    - 103
-  +    - 104
-  +    - 105
-  +    - 106
-  +    - 107
-  +    - 108
+  +    - 121
+  +    - 122
+  +    - 123
+  +    - 124
+  +    - 125
+  +    - 126
+  +    - 127
+  +    - 128
+  +    - 129
+  +    - 130
+  +    - 131
+  +    - 132
+  +    - 133
+  +    - 134
+  +    - 135
+  +    - 136
+  +    - 137
+  +    - 138
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -2846,6 +3338,74 @@ upsert descriptor #120
   +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967295e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967295e+09
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967295e+09
+  +          name: crdb_internal_mvcc_timestamp
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967295e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: DecimalFamily
+  +              oid: 1700
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967294e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967294e+09
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967294e+09
+  +          name: tableoid
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967294e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: OidFamily
+  +              oid: 26
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      dependedOnBy:
      - columnIds:
   ...
@@ -2876,6 +3436,12 @@ upsert descriptor #121
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -2883,18 +3449,24 @@ upsert descriptor #121
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 109
-  +    - 110
-  +    - 111
-  +    - 112
-  +    - 113
-  +    - 114
-  +    - 115
-  +    - 116
-  +    - 117
-  +    - 118
-  +    - 119
-  +    - 120
+  +    - 139
+  +    - 140
+  +    - 141
+  +    - 142
+  +    - 143
+  +    - 144
+  +    - 145
+  +    - 146
+  +    - 147
+  +    - 148
+  +    - 149
+  +    - 150
+  +    - 151
+  +    - 152
+  +    - 153
+  +    - 154
+  +    - 155
+  +    - 156
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3018,6 +3590,74 @@ upsert descriptor #121
   +        sourceElementId: 11
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967295e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967295e+09
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967295e+09
+  +          name: crdb_internal_mvcc_timestamp
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967295e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: DecimalFamily
+  +              oid: 1700
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967294e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967294e+09
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967294e+09
+  +          name: tableoid
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967294e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: OidFamily
+  +              oid: 26
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 121
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      dependsOn:
      - 119
   ...
@@ -3048,6 +3688,12 @@ upsert descriptor #122
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -3055,18 +3701,24 @@ upsert descriptor #122
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 121
-  +    - 122
-  +    - 123
-  +    - 124
-  +    - 125
-  +    - 126
-  +    - 127
-  +    - 128
-  +    - 129
-  +    - 130
-  +    - 131
-  +    - 132
+  +    - 157
+  +    - 158
+  +    - 159
+  +    - 160
+  +    - 161
+  +    - 162
+  +    - 163
+  +    - 164
+  +    - 165
+  +    - 166
+  +    - 167
+  +    - 168
+  +    - 169
+  +    - 170
+  +    - 171
+  +    - 172
+  +    - 173
+  +    - 174
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3189,6 +3841,74 @@ upsert descriptor #122
   +        sourceElementId: 11
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967295e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967295e+09
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967295e+09
+  +          name: crdb_internal_mvcc_timestamp
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967295e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: DecimalFamily
+  +              oid: 1700
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967294e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967294e+09
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967294e+09
+  +          name: tableoid
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967294e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: OidFamily
+  +              oid: 26
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      dependedOnBy:
      - columnIds:
   ...
@@ -3220,13 +3940,13 @@ upsert descriptor #123
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 133
-  +    - 134
-  +    - 135
-  +    - 136
-  +    - 137
-  +    - 138
-  +    - 139
+  +    - 175
+  +    - 176
+  +    - 177
+  +    - 178
+  +    - 179
+  +    - 180
+  +    - 181
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3319,13 +4039,13 @@ upsert descriptor #124
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 140
-  +    - 141
-  +    - 142
-  +    - 143
-  +    - 144
-  +    - 145
-  +    - 146
+  +    - 182
+  +    - 183
+  +    - 184
+  +    - 185
+  +    - 186
+  +    - 187
+  +    - 188
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3431,6 +4151,12 @@ upsert descriptor #125
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -3438,21 +4164,27 @@ upsert descriptor #125
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 147
-  +    - 148
-  +    - 149
-  +    - 150
-  +    - 151
-  +    - 152
-  +    - 153
-  +    - 154
-  +    - 155
-  +    - 156
-  +    - 157
-  +    - 158
-  +    - 159
-  +    - 160
-  +    - 161
+  +    - 189
+  +    - 190
+  +    - 191
+  +    - 192
+  +    - 193
+  +    - 194
+  +    - 195
+  +    - 196
+  +    - 197
+  +    - 198
+  +    - 199
+  +    - 200
+  +    - 201
+  +    - 202
+  +    - 203
+  +    - 204
+  +    - 205
+  +    - 206
+  +    - 207
+  +    - 208
+  +    - 209
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3610,6 +4342,74 @@ upsert descriptor #125
   +        sourceElementId: 13
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967295e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967295e+09
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967295e+09
+  +          name: crdb_internal_mvcc_timestamp
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967295e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: DecimalFamily
+  +              oid: 1700
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967294e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967294e+09
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967294e+09
+  +          name: tableoid
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967294e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: OidFamily
+  +              oid: 26
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 13
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      dependsOn:
      - 122
   ...
@@ -3631,7 +4431,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 66 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 82 MutationType ops
 upsert descriptor #114
   ...
      createAsOfTime:
@@ -3739,12 +4539,12 @@ upsert descriptor #115
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 63
-  -    - 64
-  -    - 65
-  -    - 66
-  -    - 67
-  -    - 68
+  -    - 75
+  -    - 76
+  -    - 77
+  -    - 78
+  -    - 79
+  -    - 80
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -3829,6 +4629,12 @@ upsert descriptor #116
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
   -    - VALIDATED
   -    - ABSENT
   -    jobId: "1"
@@ -3838,18 +4644,6 @@ upsert descriptor #116
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 69
-  -    - 70
-  -    - 71
-  -    - 72
-  -    - 73
-  -    - 74
-  -    - 75
-  -    - 76
-  -    - 77
-  -    - 78
-  -    - 79
-  -    - 80
   -    - 81
   -    - 82
   -    - 83
@@ -3857,6 +4651,24 @@ upsert descriptor #116
   -    - 85
   -    - 86
   -    - 87
+  -    - 88
+  -    - 89
+  -    - 90
+  -    - 91
+  -    - 92
+  -    - 93
+  -    - 94
+  -    - 95
+  -    - 96
+  -    - 97
+  -    - 98
+  -    - 99
+  -    - 100
+  -    - 101
+  -    - 102
+  -    - 103
+  -    - 104
+  -    - 105
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -4029,6 +4841,74 @@ upsert descriptor #116
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
+  -        column:
+  -          columnId: 4.294967295e+09
+  -          isHidden: true
+  -          isSystemColumn: true
+  -          pgAttributeNum: 4.294967295e+09
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 4.294967295e+09
+  -          name: crdb_internal_mvcc_timestamp
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 4.294967295e+09
+  -          embeddedTypeT:
+  -            type:
+  -              family: DecimalFamily
+  -              oid: 1700
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 4.294967294e+09
+  -          isHidden: true
+  -          isSystemColumn: true
+  -          pgAttributeNum: 4.294967294e+09
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 4.294967294e+09
+  -          name: tableoid
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 4.294967294e+09
+  -          embeddedTypeT:
+  -            type:
+  -              family: OidFamily
+  -              oid: 26
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
@@ -4087,6 +4967,12 @@ upsert descriptor #117
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
   -    - VALIDATED
   -    - ABSENT
   -    jobId: "1"
@@ -4115,6 +5001,12 @@ upsert descriptor #117
   -    - 42
   -    - 43
   -    - 44
+  -    - 45
+  -    - 46
+  -    - 47
+  -    - 48
+  -    - 49
+  -    - 50
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -4287,6 +5179,74 @@ upsert descriptor #117
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
+  -        column:
+  -          columnId: 4.294967295e+09
+  -          isHidden: true
+  -          isSystemColumn: true
+  -          pgAttributeNum: 4.294967295e+09
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 4.294967295e+09
+  -          name: crdb_internal_mvcc_timestamp
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 4.294967295e+09
+  -          embeddedTypeT:
+  -            type:
+  -              family: DecimalFamily
+  -              oid: 1700
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 4.294967294e+09
+  -          isHidden: true
+  -          isSystemColumn: true
+  -          pgAttributeNum: 4.294967294e+09
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 4.294967294e+09
+  -          name: tableoid
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 4.294967294e+09
+  -          embeddedTypeT:
+  -            type:
+  -              family: OidFamily
+  -              oid: 26
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
@@ -4343,6 +5303,12 @@ upsert descriptor #118
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
   -    - VALIDATED
   -    - ABSENT
   -    - PUBLIC
@@ -4353,12 +5319,6 @@ upsert descriptor #118
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 45
-  -    - 46
-  -    - 47
-  -    - 48
-  -    - 49
-  -    - 50
   -    - 51
   -    - 52
   -    - 53
@@ -4371,6 +5331,18 @@ upsert descriptor #118
   -    - 60
   -    - 61
   -    - 62
+  -    - 63
+  -    - 64
+  -    - 65
+  -    - 66
+  -    - 67
+  -    - 68
+  -    - 69
+  -    - 70
+  -    - 71
+  -    - 72
+  -    - 73
+  -    - 74
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -4510,6 +5482,74 @@ upsert descriptor #118
   -          columnId: 2
   -          embeddedExpr:
   -            expr: current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 4.294967295e+09
+  -          isHidden: true
+  -          isSystemColumn: true
+  -          pgAttributeNum: 4.294967295e+09
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 4.294967295e+09
+  -          name: crdb_internal_mvcc_timestamp
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 4.294967295e+09
+  -          embeddedTypeT:
+  -            type:
+  -              family: DecimalFamily
+  -              oid: 1700
+  -          isNullable: true
+  -          isRelationBeingDropped: true
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 4.294967294e+09
+  -          isHidden: true
+  -          isSystemColumn: true
+  -          pgAttributeNum: 4.294967294e+09
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 4.294967294e+09
+  -          name: tableoid
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 4.294967294e+09
+  -          embeddedTypeT:
+  -            type:
+  -              family: OidFamily
+  -              oid: 26
+  -          isNullable: true
+  -          isRelationBeingDropped: true
   -          tableId: 118
   -      metadata:
   -        sourceElementId: 3
