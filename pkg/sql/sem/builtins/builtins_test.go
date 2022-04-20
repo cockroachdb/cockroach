@@ -469,35 +469,6 @@ func TestExtractTimeSpanFromTimeTZ(t *testing.T) {
 	}
 }
 
-// TestResetIndexUsageStatsOnRemoteSQLNode asserts that the built-in for
-// resetting index usage statistics works when it's being set up on a remote
-// node via DistSQL.
-func TestResetIndexUsageStatsOnRemoteSQLNode(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{},
-	})
-	defer testCluster.Stopper().Stop(ctx)
-	testConn := testCluster.ServerConn(2 /* idx */)
-	sqlDB := sqlutils.MakeSQLRunner(testConn)
-
-	query := `
-CREATE TABLE t (k INT PRIMARY KEY);
-INSERT INTO t SELECT generate_series(1, 30);
-
-ALTER TABLE t SPLIT AT VALUES (10), (20);
-ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;
-ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 2, 15;
-ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 3, 25;
-
-SELECT count(*) FROM t WHERE crdb_internal.reset_index_usage_stats();
-`
-
-	sqlDB.Exec(t, query)
-}
-
 func TestExtractTimeSpanFromInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
