@@ -112,6 +112,15 @@
             "cockroach/pkg/.*$": "first-party code"
         }
     },
+    "returncheck": {
+        "exclude_files": {
+            "cockroach/pkg/kv/kvclient/kvcoord/txn_interceptor_span_refresher_test.go": "existing failure",
+            "cockroach/pkg/kv/txn_external_test.go": "existing failure"
+        },
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code"
+        }
+    },
     "returnerrcheck": {
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"
