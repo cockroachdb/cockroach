@@ -2545,6 +2545,7 @@ func (s *statusServer) Range(
 func (s *statusServer) ListLocalSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
 ) (*serverpb.ListSessionsResponse, error) {
+	fmt.Printf("ListLocalSessions username: %s exclude_closed: %t\n", req.Username, req.ExcludeClosedSessions)
 	sessions, err := s.getLocalSessions(ctx, req)
 	if err != nil {
 		// NB: not using serverError() here since getLocalSessions
