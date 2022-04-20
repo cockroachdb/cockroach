@@ -629,6 +629,8 @@ func loadBackupManifests(
 	return backupManifests, memSize, nil
 }
 
+var errLocalityDescriptor = errors.New(`Locality Descriptor not found`)
+
 // getLocalityInfo takes a list of stores and their URIs, along with the main
 // backup manifest searches each for the locality pieces listed in the the
 // main manifest, returning the mapping.
@@ -672,7 +674,7 @@ func getLocalityInfo(
 			}
 		}
 		if !found {
-			return info, errors.Errorf("expected manifest %s not found in backup locations", filename)
+			return info, errors.Mark(errors.Newf("expected manifest %s not found in backup locations", filename), errLocalityDescriptor)
 		}
 	}
 	info.URIsByOriginalLocalityKV = urisByOrigLocality
