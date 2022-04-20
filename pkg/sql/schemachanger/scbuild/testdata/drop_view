@@ -14,10 +14,11 @@ DROP VIEW defaultdb.v1
     columnId: 1
     pgAttributeNum: 1
     tableId: 105
-- [[ColumnComment:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 105, PgAttributeNum: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 105
 - [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -143,55 +144,65 @@ DROP VIEW defaultdb.v1 CASCADE
     columnId: 3
     pgAttributeNum: 3
     tableId: 111
-- [[ColumnComment:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 105, PgAttributeNum: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 105
-- [[ColumnComment:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 106, PgAttributeNum: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 106
-- [[ColumnComment:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 106, PgAttributeNum: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 106
-- [[ColumnComment:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 107, PgAttributeNum: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 107
-- [[ColumnComment:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 107, PgAttributeNum: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 107
-- [[ColumnComment:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 108, PgAttributeNum: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 108
-- [[ColumnComment:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 108, PgAttributeNum: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 108
-- [[ColumnComment:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 111, PgAttributeNum: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 111
-- [[ColumnComment:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 111, PgAttributeNum: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 111
-- [[ColumnComment:{DescID: 111, ColumnID: 3}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 111, PgAttributeNum: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
     comment: __placeholder_comment__
+    pgAttributeNum: 3
     tableId: 111
 - [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   details:

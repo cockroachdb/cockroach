@@ -64,25 +64,25 @@ PreCommitPhase stage 1 of 1 with 33 MutationType ops
     [[ColumnName:{DescID: 107, Name: tracking_number, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 107, PgAttributeNum: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: carrier, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 107, PgAttributeNum: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SequenceOwner:{DescID: 107, ColumnID: 2, ReferencedDescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: status, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 107, PgAttributeNum: 3}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 107, ColumnID: 4}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: customer_id, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 107, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 107, PgAttributeNum: 4}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 107, ColumnID: 5}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: randcol, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 107, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 107, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 107, PgAttributeNum: 5}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 107, Name: shipments_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexComment:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -109,11 +109,11 @@ PreCommitPhase stage 1 of 1 with 33 MutationType ops
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: customer_id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 109, PgAttributeNum: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: carrier, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 109, PgAttributeNum: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.DrainDescriptorName
       Namespace:
@@ -346,19 +346,11 @@ deps
 DROP TABLE defaultdb.shipments CASCADE;
 ----
 - from: [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 107, ColumnID: 1}, ABSENT]
-  kind: Precedence
-  rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 107, Name: tracking_number, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: Precedence
-  rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 107, ColumnID: 2}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 107, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 107, ColumnID: 2}, WRITE_ONLY]
@@ -370,19 +362,11 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 107, ColumnID: 3}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 107, ColumnID: 3}, ABSENT]
-  kind: Precedence
-  rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 107, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 107, Name: status, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 107, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  kind: Precedence
-  rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 107, ColumnID: 4}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 107, ColumnID: 4}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 107, ColumnID: 4}, WRITE_ONLY]
@@ -394,19 +378,11 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 107, ColumnID: 5}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 107, ColumnID: 5}, ABSENT]
-  kind: Precedence
-  rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 107, ColumnID: 5}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 107, Name: randcol, ColumnID: 5}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 107, ColumnID: 5}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 5}, ABSENT]
-  kind: Precedence
-  rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
@@ -418,10 +394,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 109, ColumnID: 2}, ABSENT]
-  kind: Precedence
-  rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: carrier, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
@@ -429,59 +401,31 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [ColumnComment:{DescID: 107, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 1}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before column
-- from: [ColumnComment:{DescID: 107, ColumnID: 1}, ABSENT]
+- from: [ColumnComment:{DescID: 107, PgAttributeNum: 1}, ABSENT]
   to:   [Table:{DescID: 107}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 107, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 2}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before column
-- from: [ColumnComment:{DescID: 107, ColumnID: 2}, ABSENT]
+- from: [ColumnComment:{DescID: 107, PgAttributeNum: 2}, ABSENT]
   to:   [Table:{DescID: 107}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 107, ColumnID: 3}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 3}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before column
-- from: [ColumnComment:{DescID: 107, ColumnID: 3}, ABSENT]
+- from: [ColumnComment:{DescID: 107, PgAttributeNum: 3}, ABSENT]
   to:   [Table:{DescID: 107}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 107, ColumnID: 4}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 4}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before column
-- from: [ColumnComment:{DescID: 107, ColumnID: 4}, ABSENT]
+- from: [ColumnComment:{DescID: 107, PgAttributeNum: 4}, ABSENT]
   to:   [Table:{DescID: 107}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 107, ColumnID: 5}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 5}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before column
-- from: [ColumnComment:{DescID: 107, ColumnID: 5}, ABSENT]
+- from: [ColumnComment:{DescID: 107, PgAttributeNum: 5}, ABSENT]
   to:   [Table:{DescID: 107}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 109, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before column
-- from: [ColumnComment:{DescID: 109, ColumnID: 1}, ABSENT]
+- from: [ColumnComment:{DescID: 109, PgAttributeNum: 1}, ABSENT]
   to:   [View:{DescID: 109}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 109, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before column
-- from: [ColumnComment:{DescID: 109, ColumnID: 2}, ABSENT]
+- from: [ColumnComment:{DescID: 109, PgAttributeNum: 2}, ABSENT]
   to:   [View:{DescID: 109}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -794,16 +738,16 @@ PreCommitPhase stage 1 of 1 with 18 MutationType ops
     [[ColumnName:{DescID: 112, Name: x, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 112, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 112, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 112, PgAttributeNum: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 112, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 112, Name: y, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 112, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 112, PgAttributeNum: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 112, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 112, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 112, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 112, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 112, PgAttributeNum: 3}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 112, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 112, Name: greeter_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexComment:{DescID: 112, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT

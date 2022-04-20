@@ -15,15 +15,16 @@ func _() {
 	_ = x[ConstraintID-5]
 	_ = x[Name-6]
 	_ = x[ReferencedDescID-7]
-	_ = x[TargetStatus-8]
-	_ = x[CurrentStatus-9]
-	_ = x[Element-10]
-	_ = x[Target-11]
+	_ = x[PgAttributeNum-8]
+	_ = x[TargetStatus-9]
+	_ = x[CurrentStatus-10]
+	_ = x[Element-11]
+	_ = x[Target-12]
 }
 
-const _Attr_name = "DescIDIndexIDColumnFamilyIDColumnIDConstraintIDNameReferencedDescIDTargetStatusCurrentStatusElementTarget"
+const _Attr_name = "DescIDIndexIDColumnFamilyIDColumnIDConstraintIDNameReferencedDescIDPgAttributeNumTargetStatusCurrentStatusElementTarget"
 
-var _Attr_index = [...]uint8{0, 6, 13, 27, 35, 47, 51, 67, 79, 92, 99, 105}
+var _Attr_index = [...]uint8{0, 6, 13, 27, 35, 47, 51, 67, 81, 93, 106, 113, 119}
 
 func (i Attr) String() string {
 	i -= 1
