@@ -70,10 +70,10 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				emit(func(this *scpb.View, md targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.View, md *targetsWithElementMap) scop.Op {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.View, md targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.View, md *targetsWithElementMap) scop.Op {
 					if !this.IsMaterialized {
 						return nil
 

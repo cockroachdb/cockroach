@@ -52,10 +52,10 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				emit(func(this *scpb.Table, md targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Table, md *targetsWithElementMap) scop.Op {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Table, md targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Table, md *targetsWithElementMap) scop.Op {
 					return &scop.CreateGcJobForTable{
 						TableID:             this.TableID,
 						StatementForDropJob: statementForDropJob(this, md),
