@@ -74,7 +74,7 @@ func (r *registry) buildGraph(cs scpb.CurrentState) (_ *scgraph.Graph, err error
 		for _, e := range edgesToAdd {
 			var ops []scop.Op
 			if e.ops != nil {
-				ops = e.ops(e.n.Element(), md)
+				ops = e.ops(e.n.Element(), &md)
 			}
 			if err := g.AddOpEdges(
 				e.n.Target, e.from, e.to, e.revertible, e.minPhase, ops...,
