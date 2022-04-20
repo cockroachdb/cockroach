@@ -1,10 +1,12 @@
 # Load the components that lets us use cmake/make in third party deps.
 load("@rules_foreign_cc//foreign_cc:cmake.bzl", "cmake")
 load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
+load("archived.bzl", "LIBKRB5_LIBS", "archived_cdeps", "cdep_alias")
 
-# Define the build target for libjemalloc.
+archived_cdeps()
+
 configure_make(
-    name = "libjemalloc",
+    name = "libjemalloc_foreign",
     autoconf = True,
     configure_in_place = True,
     configure_options = [
@@ -28,6 +30,10 @@ configure_make(
         ],
         "//conditions:default": [],
     }),
+    copts = select({
+        "//build/toolchains:force_build_cdeps": [],
+        "//conditions:default": ["-fPIC"],
+    }),
     env = select({
         "//build/toolchains:dev": {"AR": ""},
         "//conditions:default": {},
@@ -45,14 +51,27 @@ configure_make(
     visibility = ["//visibility:public"],
 )
 
-# Define the build target for libproj.
+cdep_alias("libjemalloc")
+
 cmake(
-    name = "libproj",
+    name = "libproj_foreign",
     cache_entries = select({
         # TODO(ricky): The repetition here is dumb, but I don't know a cleaner
         # way to do it?
         # https://github.com/bazelbuild/bazel/issues/12457 would help.
+        "//build/toolchains:is_windows_force_build_cdeps": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_SYSTEM_NAME": "Generic",
+        },
         "@io_bazel_rules_go//go/platform:windows": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
+            "CMAKE_SYSTEM_NAME": "Generic",
+        },
+        "//build/toolchains:is_macos_force_build_cdeps": {
             "BUILD_LIBPROJ_SHARED": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_SYSTEM_NAME": "Generic",
@@ -60,11 +79,19 @@ cmake(
         "@io_bazel_rules_go//go/platform:darwin": {
             "BUILD_LIBPROJ_SHARED": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
             "CMAKE_SYSTEM_NAME": "Generic",
+        },
+        "//build/toolchains:force_build_cdeps": {
+            "BUILD_LIBPROJ_SHARED": "OFF",
+            "CMAKE_BUILD_TYPE": "Release",
         },
         "//conditions:default": {
             "BUILD_LIBPROJ_SHARED": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
         },
     }),
     generate_args = ["-GUnix Makefiles"],
@@ -73,9 +100,10 @@ cmake(
     visibility = ["//visibility:public"],
 )
 
-# Define the targets for libgeos.
+cdep_alias("libproj")
+
 cmake(
-    name = "libgeos",
+    name = "libgeos_foreign",
     cache_entries = select({
         "@io_bazel_rules_go//go/platform:windows": {
             "CMAKE_BUILD_TYPE": "Release",
@@ -96,13 +124,15 @@ cmake(
         },
     }),
     data = select({
+        # TODO: This select needs 4 cases to handle the differing host platforms,
+        # not just these 2 based on the target.
         "//build/toolchains:is_cross_macos_x86_64": [
             "@cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-install_name_tool",
             "@cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-otool",
         ],
         "//build/toolchains:is_cross_macos_arm64": [
-            "@cross_arm64_macos_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool",
-            "@cross_arm64_macos_toolchain//:bin/arm64-apple-darwin21.2-otool",
+            "@cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool",
+            "@cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-otool",
         ],
         "//conditions:default": [],
     }),
@@ -112,8 +142,8 @@ cmake(
             "OTOOL": "$(execpath @cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-otool)",
         },
         "//build/toolchains:is_cross_macos_arm64": {
-            "CMAKE_INSTALL_NAME_TOOL": "$(execpath @cross_arm64_macos_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool)",
-            "OTOOL": "$(execpath @cross_arm64_macos_toolchain//:bin/arm64-apple-darwin21.2-otool)",
+            "CMAKE_INSTALL_NAME_TOOL": "$(execpath @cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool)",
+            "OTOOL": "$(execpath @cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-otool)",
         },
         "//conditions:default": {},
     }),
@@ -159,9 +189,10 @@ cmake(
     visibility = ["//visibility:public"],
 )
 
-# Define the build target for kerberos.
+cdep_alias("libgeos")
+
 configure_make(
-    name = "libkrb5",
+    name = "libkrb5_foreign",
     autoreconf = True,
     autoreconf_directory = "src",
     autoreconf_options = [
@@ -177,8 +208,14 @@ configure_make(
         "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
         "//conditions:default": [],
     }),
-    # We specify -fcommon to get around duplicate definition errors in recent gcc.
-    copts = ["-fcommon"],
+    copts = select({
+        # NB: We specify -fcommon to get around duplicate definition errors in recent gcc.
+        "//build/toolchains:force_build_cdeps": ["-fcommon"],
+        "//conditions:default": [
+            "-fcommon",
+            "-fPIC",
+        ],
+    }),
     data = [":autom4te"],
     env = select({
         "//build/toolchains:cross": {
@@ -192,13 +229,7 @@ configure_make(
         },
     }),
     lib_source = "@krb5//:all",
-    out_static_libs = [
-        "libgssapi_krb5.a",
-        "libkrb5.a",
-        "libkrb5support.a",
-        "libk5crypto.a",
-        "libcom_err.a",
-    ],
+    out_static_libs = LIBKRB5_LIBS,
     postfix_script = ("""mkdir -p libkrb5/lib
 cp lib/libcom_err.a libkrb5/lib
 cp lib/libgssapi_krb5.a libkrb5/lib
@@ -210,25 +241,4 @@ cp include/gssapi/gssapi.h libkrb5/include/gssapi"""),
     visibility = ["//visibility:public"],
 )
 
-# This is extremely stupid and unnecessary, but in certain cases to depend on
-# the output of a `cmake` target, we need to launder through a filegroup:
-# https://github.com/bazelbuild/rules_foreign_cc/issues/619#issuecomment-844473637
-# This is apparently a bug. In the meantime, people can depend on the :*_files
-# targets rather than :libgeos where it matters.
-filegroup(
-    name = "libgeos_files",
-    srcs = [":libgeos"],
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "libproj_files",
-    srcs = [":libproj"],
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "libedit_files",
-    srcs = ["@com_github_knz_go_libedit//unix:edit"],
-    visibility = ["//visibility:public"],
-)
+cdep_alias("libkrb5")

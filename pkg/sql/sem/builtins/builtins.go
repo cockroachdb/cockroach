@@ -6433,12 +6433,20 @@ table's zone configuration this will return NULL.`,
 	),
 	"crdb_internal.reset_index_usage_stats": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category:         categorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errors.New("crdb_internal.reset_index_usage_stats() requires admin privilege")
+				}
 				if evalCtx.IndexUsageStatsController == nil {
 					return nil, errors.AssertionFailedf("index usage stats controller not set")
 				}
@@ -6454,12 +6462,20 @@ table's zone configuration this will return NULL.`,
 	),
 	"crdb_internal.reset_sql_stats": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category:         categorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errors.New("crdb_internal.reset_sql_stats() requires admin privilege")
+				}
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
 				}

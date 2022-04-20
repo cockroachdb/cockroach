@@ -18,11 +18,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
-	"github.com/cockroachdb/errors"
 )
 
 // fileMetadata captures the relevant stats associated with a given file
@@ -47,6 +47,8 @@ const (
 	// staged yet.
 	finalizePhase
 )
+
+var archivedCdepRegex = regexp.MustCompile("^external/archived_cdep_libgeos_[[:alpha:]]*/")
 
 // A watcher watches the status of a build and regularly copies over relevant
 // artifacts.
@@ -169,8 +171,10 @@ func (w watcher) stageTestArtifacts(phase Phase) error {
 // important for them to pop up before the build is complete, as with test
 // results.)
 func (w watcher) stageBinaryArtifacts() error {
+	crossConfig := getCrossConfig()
+	crossConfig = strings.TrimPrefix(crossConfig, "cross")
 	for _, bin := range w.info.goBinaries {
-		relBinPath := bazelutil.OutputOfBinaryRule(bin, usingCrossWindowsConfig())
+		relBinPath := bazelutil.OutputOfBinaryRule(bin, crossConfig == "windows")
 		err := w.maybeStageArtifact(w.info.binDir, relBinPath, 0755, finalizePhase,
 			copyContentTo)
 		if err != nil {
@@ -194,34 +198,30 @@ func (w watcher) stageBinaryArtifacts() error {
 			}
 		}
 	}
-	for _, bin := range w.info.cmakeTargets {
-		// These targets don't have stable, predictable locations, so
-		// they have to be hardcoded.
+	if w.info.geos {
+		// geos doesn't have a stable, predictable location, so we have
+		// to hard-code this.
 		var ext string
+		rootDir := "archived_cdep_libgeos_" + crossConfig
 		libDir := "lib"
-		if usingCrossWindowsConfig() {
+		if crossConfig == "windows" {
 			ext = "dll"
 			// NB: the libs end up in the "bin" subdir of libgeos
 			// on Windows.
 			libDir = "bin"
-		} else if usingCrossDarwinConfig() {
+		} else if strings.HasPrefix(crossConfig, "macos") {
 			ext = "dylib"
 		} else {
 			ext = "so"
 		}
-		switch bin {
-		case "//c-deps:libgeos":
-			for _, relBinPath := range []string{
-				fmt.Sprintf("c-deps/libgeos/%s/libgeos_c.%s", libDir, ext),
-				fmt.Sprintf("c-deps/libgeos/%s/libgeos.%s", libDir, ext),
-			} {
-				err := w.maybeStageArtifact(w.info.binDir, relBinPath, 0644, finalizePhase, copyContentTo)
-				if err != nil {
-					return err
-				}
+		for _, relBinPath := range []string{
+			fmt.Sprintf("external/%s/%s/libgeos_c.%s", rootDir, libDir, ext),
+			fmt.Sprintf("external/%s/%s/libgeos.%s", rootDir, libDir, ext),
+		} {
+			err := w.maybeStageArtifact(w.info.executionRootDir, relBinPath, 0644, finalizePhase, copyContentTo)
+			if err != nil {
+				return err
 			}
-		default:
-			return errors.Newf("Unrecognized cmake target %s", bin)
 		}
 	}
 	return nil
@@ -352,11 +352,16 @@ func (w watcher) maybeStageArtifact(
 		if err != nil {
 			return err
 		}
-		artifactsSubdir := filepath.Base(rootPath)
-		if !strings.HasPrefix(artifactsSubdir, "bazel") {
-			artifactsSubdir = "bazel-" + artifactsSubdir
+		var destPath string
+		if strings.HasPrefix(relPath, "external/archived_cdep_libgeos_") {
+			destPath = path.Join(artifactsDir, archivedCdepRegex.ReplaceAllString(relPath, "bazel-bin/c-deps/libgeos/"))
+		} else {
+			artifactsSubdir := filepath.Base(rootPath)
+			if !strings.HasPrefix(artifactsSubdir, "bazel") {
+				artifactsSubdir = "bazel-" + artifactsSubdir
+			}
+			destPath = path.Join(artifactsDir, artifactsSubdir, relPath)
 		}
-		destPath := path.Join(artifactsDir, artifactsSubdir, relPath)
 
 		stat, err := os.Stat(srcPath)
 		// stat errors can simply be ignored -- if the file doesn't

@@ -134,8 +134,18 @@ func findLibraryDirectories(flagLibraryDirectoryValue string, crdbBinaryLoc stri
 	}
 	// Account for the libraries to be in a bazel runfile path.
 	if bazel.BuiltWithBazel() {
-		if p, err := bazel.Runfile(path.Join("c-deps", "libgeos", "lib")); err == nil {
-			locs = append(locs, p)
+		pathsToCheck := []string{
+			path.Join("c-deps", "libgeos_foreign", "lib"),
+			path.Join("external", "archived_cdep_libgeos_linux", "lib"),
+			path.Join("external", "archived_cdep_libgeos_linuxarm", "lib"),
+			path.Join("external", "archived_cdep_libgeos_macos", "lib"),
+			path.Join("external", "archived_cdep_libgeos_macosarm", "lib"),
+			path.Join("external", "archived_cdep_libgeos_windows", "bin"),
+		}
+		for _, path := range pathsToCheck {
+			if p, err := bazel.Runfile(path); err == nil {
+				locs = append(locs, p)
+			}
 		}
 	}
 	locs = append(
