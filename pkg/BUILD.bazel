@@ -202,6 +202,7 @@ ALL_TESTS = [
     "//pkg/server/heapprofiler:heapprofiler_test",
     "//pkg/server/pgurl:pgurl_test",
     "//pkg/server/serverpb:serverpb_test",
+    "//pkg/server/serverrules:serverrules_test",
     "//pkg/server/settingswatcher:settingswatcher_test",
     "//pkg/server/status:status_test",
     "//pkg/server/systemconfigwatcher:systemconfigwatcher_test",
