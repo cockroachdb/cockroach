@@ -344,7 +344,7 @@ func newClient(
 	if region == "" {
 		if err := cloud.DelayedRetry(ctx, "s3manager.GetBucketRegion", s3ErrDelay, func() error {
 			region, err = s3manager.GetBucketRegion(ctx, sess, conf.bucket, "us-east-1")
-			return nil
+			return err
 		}); err != nil {
 			return s3Client{}, "", errors.Wrap(err, "could not find s3 bucket's region")
 		}

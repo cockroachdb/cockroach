@@ -131,6 +131,8 @@ func TestShowChangefeedJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	bucket, accessKey, secretKey := checkS3Credentials(t)
+
 	params, _ := tests.CreateTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
@@ -186,8 +188,8 @@ func TestShowChangefeedJobs(t *testing.T) {
 	sqlDB.QueryRow(t, query).Scan(&singleChangefeedID)
 
 	// Cannot use kafka for tests right now because of leaked goroutine issue
-	query = `CREATE CHANGEFEED FOR TABLE foo, bar INTO 
-		'experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`
+	query = fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo, bar INTO
+		'experimental-s3://%s/fake/path?AWS_ACCESS_KEY_ID=%s&AWS_SECRET_ACCESS_KEY=%s'`, bucket, accessKey, secretKey)
 	sqlDB.QueryRow(t, query).Scan(&multiChangefeedID)
 
 	var out row
@@ -195,8 +197,9 @@ func TestShowChangefeedJobs(t *testing.T) {
 	query = `SELECT job_id, sink_uri, full_table_names, format, IFNULL(topics, '') FROM [SHOW CHANGEFEED JOB $1]`
 	sqlDB.QueryRow(t, query, multiChangefeedID).Scan(&out.id, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
 
+	expectedURI := fmt.Sprintf("experimental-s3://%s/fake/path?AWS_ACCESS_KEY_ID=%s&AWS_SECRET_ACCESS_KEY=redacted", bucket, accessKey)
 	require.Equal(t, multiChangefeedID, out.id, "Expected id:%d but found id:%d", multiChangefeedID, out.id)
-	require.Equal(t, "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
+	require.Equal(t, expectedURI, out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", expectedURI, out.SinkURI)
 	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
 	require.Equal(t, "", out.topics, "Expected topics to be empty")
@@ -218,7 +221,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 	}
 
 	require.Equal(t, multiChangefeedID, out.id, "Expected id:%d but found id:%d", multiChangefeedID, out.id)
-	require.Equal(t, "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
+	require.Equal(t, expectedURI, out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", expectedURI, out.SinkURI)
 	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
 	require.Equal(t, "", out.topics, "Expected topics to be empty")
