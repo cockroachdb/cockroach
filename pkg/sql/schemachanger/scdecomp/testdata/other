@@ -197,12 +197,43 @@ ElementState:
     generatedAsIdentityType: 0
     isHidden: false
     isInaccessible: false
+    isSystemColumn: false
     pgAttributeNum: 1
+    tableId: 112
+  Status: PUBLIC
+- Column:
+    columnId: 4.294967294e+09
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: true
+    isInaccessible: false
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 112
+  Status: PUBLIC
+- Column:
+    columnId: 4.294967295e+09
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: true
+    isInaccessible: false
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
     tableId: 112
   Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: id
+    tableId: 112
+  Status: PUBLIC
+- ColumnName:
+    columnId: 4.294967294e+09
+    name: tableoid
+    tableId: 112
+  Status: PUBLIC
+- ColumnName:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
     tableId: 112
   Status: PUBLIC
 - ColumnType:
@@ -226,6 +257,60 @@ ElementState:
         udtMetadata: null
         visibleType: 0
         width: 64
+    familyId: 0
+    isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
+    tableId: 112
+  Status: PUBLIC
+- ColumnType:
+    columnId: 4.294967294e+09
+    computeExpr: null
+    embeddedTypeT:
+      closedTypeIds: []
+      type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
+        family: OidFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
+        oid: 26
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
+        width: 0
+    familyId: 0
+    isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
+    tableId: 112
+  Status: PUBLIC
+- ColumnType:
+    columnId: 4.294967295e+09
+    computeExpr: null
+    embeddedTypeT:
+      closedTypeIds: []
+      type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
+        family: DecimalFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
+        oid: 1700
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
+        width: 0
     familyId: 0
     isNullable: true
     isRelationBeingDropped: false
@@ -278,6 +363,7 @@ ElementState:
     generatedAsIdentityType: 0
     isHidden: false
     isInaccessible: false
+    isSystemColumn: false
     pgAttributeNum: 1
     tableId: 113
   Status: PUBLIC
@@ -287,7 +373,28 @@ ElementState:
     generatedAsIdentityType: 0
     isHidden: false
     isInaccessible: false
+    isSystemColumn: false
     pgAttributeNum: 2
+    tableId: 113
+  Status: PUBLIC
+- Column:
+    columnId: 4.294967294e+09
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: true
+    isInaccessible: false
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 113
+  Status: PUBLIC
+- Column:
+    columnId: 4.294967295e+09
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: true
+    isInaccessible: false
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
     tableId: 113
   Status: PUBLIC
 - ColumnName:
@@ -298,6 +405,16 @@ ElementState:
 - ColumnName:
     columnId: 2
     name: id
+    tableId: 113
+  Status: PUBLIC
+- ColumnName:
+    columnId: 4.294967294e+09
+    name: tableoid
+    tableId: 113
+  Status: PUBLIC
+- ColumnName:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
     tableId: 113
   Status: PUBLIC
 - ColumnType:
@@ -348,6 +465,60 @@ ElementState:
         udtMetadata: null
         visibleType: 0
         width: 64
+    familyId: 0
+    isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
+    tableId: 113
+  Status: PUBLIC
+- ColumnType:
+    columnId: 4.294967294e+09
+    computeExpr: null
+    embeddedTypeT:
+      closedTypeIds: []
+      type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
+        family: OidFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
+        oid: 26
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
+        width: 0
+    familyId: 0
+    isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
+    tableId: 113
+  Status: PUBLIC
+- ColumnType:
+    columnId: 4.294967295e+09
+    computeExpr: null
+    embeddedTypeT:
+      closedTypeIds: []
+      type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
+        family: DecimalFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
+        oid: 1700
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
+        width: 0
     familyId: 0
     isNullable: true
     isRelationBeingDropped: false

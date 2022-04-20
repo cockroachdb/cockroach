@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -99,6 +100,10 @@ func TestTruncateWithConcurrentMutations(t *testing.T) {
 
 		db := tc.ServerConn(0)
 		tdb := sqlutils.MakeSQLRunner(db)
+		tdb.ExecMultiple(t, strings.Split(`
+SET use_declarative_schema_changer = 'off';
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+`, `;`)...)
 
 		// Support setup schema changes.
 		close(unblock)

@@ -161,4 +161,3 @@ query T
 SELECT uuid_generate_v5(uuid_ns_oid(), 'dog')
 ----
 9a8b57c4-73a4-5dfb-b888-6fff478edf63
-

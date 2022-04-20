@@ -3766,7 +3766,11 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
-
+	// Declarative schema changer does not use then new MVCC backfiller, so
+	// fall back for now.
+	if _, err := sqlDB.Exec("SET use_declarative_schema_changer='off'"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`
  CREATE DATABASE t;
  CREATE TABLE t.test (k INT8 PRIMARY KEY, v INT8, pi DECIMAL DEFAULT (DECIMAL '3.14'));
