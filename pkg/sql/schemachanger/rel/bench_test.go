@@ -100,10 +100,10 @@ func BenchmarkLinkedList(b *testing.B) {
 	// ID, next, prev. Then we want to define A set of queries for the
 	// specified depth.
 	const numQueries = 16
-	runDepth := func(b *testing.B, lists, depth int, attrs [][]rel.Attr) {
+	runDepth := func(b *testing.B, lists, depth int, indexes []rel.Index) {
 		links := rand.Perm(lists + depth)
 		p := rand.Perm(lists)[:numQueries]
-		db, err := rel.NewDatabase(sc, attrs)
+		db, err := rel.NewDatabase(sc, indexes...)
 		require.NoError(b, err)
 		for i, j := range links {
 			require.NoError(b, db.Insert(&ListNode{ID: i, Next: j}))
@@ -133,13 +133,16 @@ func BenchmarkLinkedList(b *testing.B) {
 		}
 	}
 
-	for _, attrs := range [][][]rel.Attr{
-		{{nextAttr}, {idAttr}},
-		nil,
+	for _, indexes := range [][]rel.Index{
+		{
+			{Attrs: []rel.Attr{nextAttr}},
+			{Attrs: []rel.Attr{idAttr}},
+		},
+		{{}},
 	} {
 		forEachListDepth(func(lists, depth int) {
-			b.Run(fmt.Sprintf("lists=%d,depth=%d,%s", lists, depth, attrs), func(b *testing.B) {
-				runDepth(b, lists, depth, attrs)
+			b.Run(fmt.Sprintf("lists=%d,depth=%d,%v", lists, depth, indexes), func(b *testing.B) {
+				runDepth(b, lists, depth, indexes)
 			})
 		})
 	}

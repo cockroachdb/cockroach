@@ -145,8 +145,8 @@ func TestInvalidData(t *testing.T) {
 		}
 	})
 	t.Run("bad attributes in database", func(t *testing.T) {
-		_, err := rel.NewDatabase(schema, [][]rel.Attr{{stringAttr("not-exists")}})
-		require.EqualError(t, err, `unknown attribute not-exists in schema junk`)
+		_, err := rel.NewDatabase(schema, rel.Index{Attrs: []rel.Attr{stringAttr("not-exists")}})
+		require.EqualError(t, err, `invalid index attribute: unknown attribute not-exists in schema junk`)
 	})
 	t.Run("oneOf with more than one value", func(t *testing.T) {
 		type oneOf struct {

@@ -98,6 +98,7 @@ oprules
     - $constraint-dep[Type] = '*scpb.ConstraintName'
     - $relation[DescID] = $relation-id
     - $constraint[DescID] = $relation-id
+    - $constraint-dep[DescID] = $relation-id
     - $constraint[ConstraintID] = $constraint-id
     - $constraint-dep[ConstraintID] = $constraint-id
     - $relation-target[Type] = '*scpb.Target'
