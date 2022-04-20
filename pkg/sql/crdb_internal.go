@@ -5887,7 +5887,29 @@ CREATE TABLE crdb_internal.cluster_locks (
 			}),
 		},
 	},
-	generator: genClusterLocksGenerator(clusterLocksFilters{}),
+	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+		worker := func(wCtx context.Context, pusher rowPusher) error {
+			nextRow, err := clusterLocksTableGenerator(wCtx, p, clusterLocksFilters{})
+			if err != nil {
+				return err
+			}
+
+			var row tree.Datums
+			row, err = nextRow()
+			for row != nil && err == nil {
+				err = pusher.pushRow(row...)
+				if err != nil {
+					break
+				}
+
+				row, err = nextRow()
+			}
+
+			return err
+		}
+
+		return setupGenerator(ctx, worker, stopper)
+	},
 }
 
 type clusterLocksFilters struct {
@@ -5897,241 +5919,240 @@ type clusterLocksFilters struct {
 	contended    *bool
 }
 
-func genClusterLocksGenerator(
-	filters clusterLocksFilters,
-) func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-	return func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-		// TODO(sarkesian): remove gate for 22.2 release
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ClusterLocksVirtualTable) {
-			return nil, nil, pgerror.New(pgcode.FeatureNotSupported,
-				"table crdb_internal.cluster_locks is not supported on this version")
-		}
+func clusterLocksTableGenerator(
+	ctx context.Context, p *planner, filters clusterLocksFilters,
+) (virtualTableGenerator, error) {
+	// TODO(sarkesian): remove gate for 22.2 release
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ClusterLocksVirtualTable) {
+		return nil, pgerror.New(pgcode.FeatureNotSupported,
+			"table crdb_internal.cluster_locks is not supported on this version")
+	}
 
-		hasAdmin, err := p.HasAdminRole(ctx)
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !hasViewActivityOrViewActivityRedacted {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+	}
+	shouldRedactKeys := false
+	if !hasAdmin {
+		shouldRedactKeys, err = p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-		if !hasViewActivityOrViewActivityRedacted {
-			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
-		}
-		shouldRedactKeys := false
-		if !hasAdmin {
-			shouldRedactKeys, err = p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
-			if err != nil {
-				return nil, nil, err
-			}
-		}
+	}
 
-		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
-		if err != nil {
-			return nil, nil, err
+	all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	if err != nil {
+		return nil, err
+	}
+	descs := all.OrderedDescriptors()
+
+	privCheckerFunc := func(desc catalog.Descriptor) bool {
+		if hasAdmin {
+			return true
 		}
-		descs := all.OrderedDescriptors()
+		return p.CheckAnyPrivilege(ctx, desc) == nil
+	}
 
-		privCheckerFunc := func(desc catalog.Descriptor) bool {
-			if hasAdmin {
-				return true
-			}
-			return p.CheckAnyPrivilege(ctx, desc) == nil
+	_, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents :=
+		descriptorsByType(descs, privCheckerFunc)
+
+	var spansToQuery roachpb.Spans
+	for _, desc := range descs {
+		if !privCheckerFunc(desc) {
+			continue
 		}
-
-		_, dbNames, tableNames, schemaNames, indexNames, schemaParents, parents :=
-			descriptorsByType(descs, privCheckerFunc)
-
-		var spansToQuery roachpb.Spans
-		for _, desc := range descs {
-			if !privCheckerFunc(desc) {
+		switch desc := desc.(type) {
+		case catalog.TableDescriptor:
+			if filters.tableName != nil && *filters.tableName != desc.GetName() {
 				continue
 			}
-			switch desc := desc.(type) {
-			case catalog.TableDescriptor:
-				if filters.tableName != nil && *filters.tableName != desc.GetName() {
-					continue
-				}
-				if filters.tableID != nil && descpb.ID(*filters.tableID) != desc.GetID() {
-					continue
-				}
-				if filters.databaseName != nil && *filters.databaseName != dbNames[uint32(desc.GetParentID())] {
-					continue
-				}
-				spansToQuery = append(spansToQuery, desc.TableSpan(p.execCfg.Codec))
+			if filters.tableID != nil && descpb.ID(*filters.tableID) != desc.GetID() {
+				continue
 			}
+			if filters.databaseName != nil && *filters.databaseName != dbNames[uint32(desc.GetParentID())] {
+				continue
+			}
+			spansToQuery = append(spansToQuery, desc.TableSpan(p.execCfg.Codec))
 		}
+	}
 
-		spanIdx := 0
-		spansRemain := func() bool {
-			return spanIdx < len(spansToQuery)
-		}
-		getNextSpan := func() *roachpb.Span {
-			if !spansRemain() {
-				return nil
-			}
-
-			nextSpan := spansToQuery[spanIdx]
-			spanIdx++
-			return &nextSpan
-		}
-
-		var resp *roachpb.QueryLocksResponse
-		var locks []roachpb.LockStateInfo
-		var resumeSpan *roachpb.Span
-
-		fetchLocks := func(key, endKey roachpb.Key) error {
-			b := kv.Batch{}
-			queryLocksRequest := &roachpb.QueryLocksRequest{
-				RequestHeader: roachpb.RequestHeader{
-					Key:    key,
-					EndKey: endKey,
-				},
-				IncludeUncontended: true,
-			}
-			if filters.contended != nil && *filters.contended {
-				queryLocksRequest.IncludeUncontended = false
-			}
-
-			b.AddRawRequest(queryLocksRequest)
-
-			b.Header.MaxSpanRequestKeys = int64(rowinfra.ProductionKVBatchSize)
-			b.Header.TargetBytes = int64(rowinfra.GetDefaultBatchBytesLimit(p.extendedEvalCtx.TestingKnobs.ForceProductionValues))
-
-			err := p.txn.Run(ctx, &b)
-			if err != nil {
-				return err
-			}
-
-			if len(b.RawResponse().Responses) != 1 {
-				return errors.AssertionFailedf(
-					"unexpected response length of %d for QueryLocksRequest", len(b.RawResponse().Responses),
-				)
-			}
-
-			resp = b.RawResponse().Responses[0].GetQueryLocks()
-			locks = resp.Locks
-			resumeSpan = resp.ResumeSpan
+	spanIdx := 0
+	spansRemain := func() bool {
+		return spanIdx < len(spansToQuery)
+	}
+	getNextSpan := func() *roachpb.Span {
+		if !spansRemain() {
 			return nil
 		}
 
-		lockIdx := 0
-		getNextLock := func() (*roachpb.LockStateInfo, error) {
-			// If we don't yet have a response or the current response is exhausted,
-			// look for a span to query. This may be a ResumeSpan, in the case we
-			// need to fetch the next page of results for the current span, or it
-			// may be the next span in our list.
-			for lockIdx >= len(locks) && (spansRemain() || resumeSpan != nil) {
-				var spanToQuery *roachpb.Span
-				if resumeSpan != nil {
-					spanToQuery = resumeSpan
-				} else {
-					spanToQuery = getNextSpan()
-				}
+		nextSpan := spansToQuery[spanIdx]
+		spanIdx++
+		return &nextSpan
+	}
 
-				if spanToQuery != nil {
-					err := fetchLocks(spanToQuery.Key, spanToQuery.EndKey)
-					if err != nil {
-						return nil, err
-					}
-					lockIdx = 0
-				}
-			}
+	var resp *roachpb.QueryLocksResponse
+	var locks []roachpb.LockStateInfo
+	var resumeSpan *roachpb.Span
 
-			if lockIdx < len(locks) {
-				nextLock := locks[lockIdx]
-				lockIdx++
-				return &nextLock, nil
-			}
-
-			return nil, nil
+	fetchLocks := func(key, endKey roachpb.Key) error {
+		b := kv.Batch{}
+		queryLocksRequest := &roachpb.QueryLocksRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    key,
+				EndKey: endKey,
+			},
+			IncludeUncontended: true,
+		}
+		if filters.contended != nil && *filters.contended {
+			queryLocksRequest.IncludeUncontended = false
 		}
 
-		var curLock *roachpb.LockStateInfo
-		var fErr error
-		waiterIdx := -1
-		// Flatten response such that both lock holders and lock waiters are each
-		// individual rows in the final output. As such, we iterate through the
-		// locks received in the response and first output the lock holder, then
-		// each waiter, prior to moving onto the next lock (or fetching additional
-		// results as necessary).
-		return func() (tree.Datums, error) {
-			if curLock == nil || waiterIdx >= len(curLock.Waiters) {
-				curLock, fErr = getNextLock()
-				waiterIdx = -1
-			}
+		b.AddRawRequest(queryLocksRequest)
 
-			// If we couldn't get any more locks from getNextLock(), we have finished
-			// generating result rows.
-			if curLock == nil || fErr != nil {
-				return nil, fErr
-			}
+		b.Header.MaxSpanRequestKeys = int64(rowinfra.ProductionKVBatchSize)
+		b.Header.TargetBytes = int64(rowinfra.GetDefaultBatchBytesLimit(p.extendedEvalCtx.TestingKnobs.ForceProductionValues))
 
-			strengthDatum := tree.DNull
-			txnIDDatum := tree.DNull
-			tsDatum := tree.DNull
-			durationDatum := tree.DNull
-			granted := false
-			// Utilize -1 to indicate that the row represents the lock holder.
-			if waiterIdx < 0 {
-				if curLock.LockHolder != nil {
-					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: curLock.LockHolder.ID})
-					tsDatum = tree.TimestampToInexactDTimestamp(curLock.LockHolder.WriteTimestamp)
-					strengthDatum = tree.NewDString(lock.Exclusive.String())
-					durationDatum = tree.NewDInterval(
-						duration.MakeDuration(curLock.HoldDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
-						types.DefaultIntervalTypeMetadata,
-					)
-					granted = true
-				}
+		err := p.txn.Run(ctx, &b)
+		if err != nil {
+			return err
+		}
+
+		if len(b.RawResponse().Responses) != 1 {
+			return errors.AssertionFailedf(
+				"unexpected response length of %d for QueryLocksRequest", len(b.RawResponse().Responses),
+			)
+		}
+
+		resp = b.RawResponse().Responses[0].GetQueryLocks()
+		locks = resp.Locks
+		resumeSpan = resp.ResumeSpan
+		return nil
+	}
+
+	lockIdx := 0
+	getNextLock := func() (*roachpb.LockStateInfo, error) {
+		// If we don't yet have a response or the current response is exhausted,
+		// look for a span to query. This may be a ResumeSpan, in the case we
+		// need to fetch the next page of results for the current span, or it
+		// may be the next span in our list.
+		for lockIdx >= len(locks) && (spansRemain() || resumeSpan != nil) {
+			var spanToQuery *roachpb.Span
+			if resumeSpan != nil {
+				spanToQuery = resumeSpan
 			} else {
-				waiter := curLock.Waiters[waiterIdx]
-				if waiter.WaitingTxn != nil {
-					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: waiter.WaitingTxn.ID})
-					tsDatum = tree.TimestampToInexactDTimestamp(waiter.WaitingTxn.WriteTimestamp)
+				spanToQuery = getNextSpan()
+			}
+
+			if spanToQuery != nil {
+				err := fetchLocks(spanToQuery.Key, spanToQuery.EndKey)
+				if err != nil {
+					return nil, err
 				}
-				strengthDatum = tree.NewDString(waiter.Strength.String())
+				lockIdx = 0
+			}
+		}
+
+		if lockIdx < len(locks) {
+			nextLock := locks[lockIdx]
+			lockIdx++
+			return &nextLock, nil
+		}
+
+		return nil, nil
+	}
+
+	var curLock *roachpb.LockStateInfo
+	var fErr error
+	waiterIdx := -1
+	// Flatten response such that both lock holders and lock waiters are each
+	// individual rows in the final output. As such, we iterate through the
+	// locks received in the response and first output the lock holder, then
+	// each waiter, prior to moving onto the next lock (or fetching additional
+	// results as necessary).
+	getNextRow := func() (tree.Datums, error) {
+		if curLock == nil || waiterIdx >= len(curLock.Waiters) {
+			curLock, fErr = getNextLock()
+			waiterIdx = -1
+		}
+
+		// If we couldn't get any more locks from getNextLock(), we have finished
+		// generating result rows.
+		if curLock == nil {
+			return nil, fErr
+		}
+
+		strengthDatum := tree.DNull
+		txnIDDatum := tree.DNull
+		tsDatum := tree.DNull
+		durationDatum := tree.DNull
+		granted := false
+		// Utilize -1 to indicate that the row represents the lock holder.
+		if waiterIdx < 0 {
+			if curLock.LockHolder != nil {
+				txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: curLock.LockHolder.ID})
+				tsDatum = tree.TimestampToInexactDTimestamp(curLock.LockHolder.WriteTimestamp)
+				strengthDatum = tree.NewDString(lock.Exclusive.String())
 				durationDatum = tree.NewDInterval(
-					duration.MakeDuration(waiter.WaitDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
+					duration.MakeDuration(curLock.HoldDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
 					types.DefaultIntervalTypeMetadata,
 				)
+				granted = true
 			}
-
-			waiterIdx++
-
-			tableID, dbName, schemaName, tableName, indexName := lookupNamesByKey(
-				p, curLock.Key, dbNames, tableNames, schemaNames,
-				indexNames, schemaParents, parents,
+		} else {
+			waiter := curLock.Waiters[waiterIdx]
+			if waiter.WaitingTxn != nil {
+				txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: waiter.WaitingTxn.ID})
+				tsDatum = tree.TimestampToInexactDTimestamp(waiter.WaitingTxn.WriteTimestamp)
+			}
+			strengthDatum = tree.NewDString(waiter.Strength.String())
+			durationDatum = tree.NewDInterval(
+				duration.MakeDuration(waiter.WaitDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
+				types.DefaultIntervalTypeMetadata,
 			)
+		}
 
-			var keyOrRedacted roachpb.Key
-			var prettyKeyOrRedacted string
-			if !shouldRedactKeys {
-				keyOrRedacted, _, _ = keys.DecodeTenantPrefix(curLock.Key)
-				prettyKeyOrRedacted = keys.PrettyPrint(nil /* valDirs */, keyOrRedacted)
-			}
+		waiterIdx++
 
-			return tree.Datums{
-				tree.NewDInt(tree.DInt(curLock.RangeID)),     /* range_id */
-				tree.NewDInt(tree.DInt(tableID)),             /* table_id */
-				tree.NewDString(dbName),                      /* database_name */
-				tree.NewDString(schemaName),                  /* schema_name */
-				tree.NewDString(tableName),                   /* table_name */
-				tree.NewDString(indexName),                   /* index_name */
-				tree.NewDBytes(tree.DBytes(keyOrRedacted)),   /* lock_key */
-				tree.NewDString(prettyKeyOrRedacted),         /* lock_key_pretty */
-				txnIDDatum,                                   /* txn_id */
-				tsDatum,                                      /* ts */
-				strengthDatum,                                /* lock_strength */
-				tree.NewDString(curLock.Durability.String()), /* durability */
-				tree.MakeDBool(tree.DBool(granted)),          /* granted */
-				tree.MakeDBool(len(curLock.Waiters) > 0),     /* contended */
-				durationDatum,                                /* duration */
-			}, nil
+		tableID, dbName, schemaName, tableName, indexName := lookupNamesByKey(
+			p, curLock.Key, dbNames, tableNames, schemaNames,
+			indexNames, schemaParents, parents,
+		)
 
-		}, nil, nil
+		var keyOrRedacted roachpb.Key
+		var prettyKeyOrRedacted string
+		if !shouldRedactKeys {
+			keyOrRedacted, _, _ = keys.DecodeTenantPrefix(curLock.Key)
+			prettyKeyOrRedacted = keys.PrettyPrint(nil /* valDirs */, keyOrRedacted)
+		}
+
+		return tree.Datums{
+			tree.NewDInt(tree.DInt(curLock.RangeID)),     /* range_id */
+			tree.NewDInt(tree.DInt(tableID)),             /* table_id */
+			tree.NewDString(dbName),                      /* database_name */
+			tree.NewDString(schemaName),                  /* schema_name */
+			tree.NewDString(tableName),                   /* table_name */
+			tree.NewDString(indexName),                   /* index_name */
+			tree.NewDBytes(tree.DBytes(keyOrRedacted)),   /* lock_key */
+			tree.NewDString(prettyKeyOrRedacted),         /* lock_key_pretty */
+			txnIDDatum,                                   /* txn_id */
+			tsDatum,                                      /* ts */
+			strengthDatum,                                /* lock_strength */
+			tree.NewDString(curLock.Durability.String()), /* durability */
+			tree.MakeDBool(tree.DBool(granted)),          /* granted */
+			tree.MakeDBool(len(curLock.Waiters) > 0),     /* contended */
+			durationDatum,                                /* duration */
+		}, nil
 	}
+
+	return getNextRow, nil
 }
 
 func genPopulateClusterLocksWithIndex(
@@ -6145,25 +6166,20 @@ func genPopulateClusterLocksWithIndex(
 			return false, errors.AssertionFailedf("unexpected type %T for %s column in virtual table crdb_internal.cluster_locks", idxConstraint, idxColumnName)
 		}
 
-		return populateClusterLocksWithFilter(ctx, p, db, addRow, filters)
+		return populateClusterLocksWithFilter(ctx, p, addRow, filters)
 	}
 }
 
 func populateClusterLocksWithFilter(
-	ctx context.Context,
-	p *planner,
-	db catalog.DatabaseDescriptor,
-	addRow func(...tree.Datum) error,
-	filters clusterLocksFilters,
+	ctx context.Context, p *planner, addRow func(...tree.Datum) error, filters clusterLocksFilters,
 ) (matched bool, err error) {
-	var rowGenerator virtualTableGenerator
-	generator := genClusterLocksGenerator(filters)
-	rowGenerator, _, err = generator(ctx, p, db, nil /* stopper */)
+	var nextRow virtualTableGenerator
+	nextRow, err = clusterLocksTableGenerator(ctx, p, filters)
 	if err != nil {
 		return false, err
 	}
 	var row tree.Datums
-	row, err = rowGenerator()
+	row, err = nextRow()
 	for row != nil && err == nil {
 		err = addRow(row...)
 		if err != nil {
@@ -6171,7 +6187,7 @@ func populateClusterLocksWithFilter(
 		}
 		matched = true
 
-		row, err = rowGenerator()
+		row, err = nextRow()
 	}
 	return matched, err
 }
