@@ -679,8 +679,106 @@ var builtins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityImmutable,
 		}),
 
-	"gen_random_uuid":  generateRandomUUIDImpl,
-	"uuid_generate_v4": generateRandomUUIDImpl,
+	"gen_random_uuid":  generateRandomUUID4Impl,
+	"uuid_generate_v4": generateRandomUUID4Impl,
+
+	"uuid_nil": generateConstantUUIDImpl(
+		uuid.Nil, "Returns a nil UUID constant.",
+	),
+	"uuid_ns_dns": generateConstantUUIDImpl(
+		uuid.NamespaceDNS, "Returns a constant designating the DNS namespace for UUIDs.",
+	),
+	"uuid_ns_url": generateConstantUUIDImpl(
+		uuid.NamespaceURL, "Returns a constant designating the URL namespace for UUIDs.",
+	),
+	"uuid_ns_oid": generateConstantUUIDImpl(
+		uuid.NamespaceOID,
+		"Returns a constant designating the ISO object identifier (OID) namespace for UUIDs. "+
+			"These are unrelated to the OID type used internally in the database.",
+	),
+	"uuid_ns_x500": generateConstantUUIDImpl(
+		uuid.NamespaceX500, "Returns a constant designating the X.500 distinguished name (DN) namespace for UUIDs.",
+	),
+
+	"uuid_generate_v1": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				uv, err := uuid.NewV1()
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+			},
+			Info: "Generates a version 1 UUID, and returns it as a value of UUID type. " +
+				"This uses the real MAC address of the server and a timestamp.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"uuid_generate_v1mc": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				gen := uuid.NewGenWithHWAF(uuid.RandomHardwareAddrFunc)
+				uv, err := gen.NewV1()
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+			},
+			Info: "Generates a version 1 UUID, and returns it as a value of UUID type. " +
+				"This uses a random MAC address and a timestamp.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"uuid_generate_v3": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"namespace", types.Uuid}, {"name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				namespace := tree.MustBeDUuid(args[0])
+				name := tree.MustBeDString(args[1])
+				uv := uuid.NewV3(namespace.UUID, string(name))
+				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+			},
+			Info: "Generates a version 3 UUID in the given namespace using the specified input name, " +
+				"with md5 as the hashing method. " +
+				"The namespace should be one of the special constants produced by the uuid_ns_*() functions.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"uuid_generate_v5": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"namespace", types.Uuid}, {"name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				namespace := tree.MustBeDUuid(args[0])
+				name := tree.MustBeDString(args[1])
+				uv := uuid.NewV5(namespace.UUID, string(name))
+				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+			},
+			Info: "Generates a version 5 UUID in the given namespace using the specified input name. " +
+				"This is similar to a version 3 UUID, except it uses SHA-1 for hashing.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	"to_uuid": makeBuiltin(defProps(),
 		tree.Overload{
@@ -7144,7 +7242,7 @@ func getSubstringFromIndexOfLengthBytes(str, errMsg string, start, length int) (
 	return string(bytes[start:end]), nil
 }
 
-var generateRandomUUIDImpl = makeBuiltin(
+var generateRandomUUID4Impl = makeBuiltin(
 	tree.FunctionProperties{
 		Category: categoryIDGeneration,
 	},
@@ -7152,10 +7250,13 @@ var generateRandomUUIDImpl = makeBuiltin(
 		Types:      tree.ArgTypes{},
 		ReturnType: tree.FixedReturnType(types.Uuid),
 		Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-			uv := uuid.MakeV4()
+			uv, err := uuid.NewV4()
+			if err != nil {
+				return nil, err
+			}
 			return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
 		},
-		Info:       "Generates a random UUID and returns it as a value of UUID type.",
+		Info:       "Generates a random version 4 UUID, and returns it as a value of UUID type.",
 		Volatility: tree.VolatilityVolatile,
 	},
 )
@@ -7174,6 +7275,23 @@ var uuidV4Impl = makeBuiltin(
 		Volatility: tree.VolatilityVolatile,
 	},
 )
+
+func generateConstantUUIDImpl(id uuid.UUID, info string) builtinDefinition {
+	return makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.NewDUuid(tree.DUuid{UUID: id}), nil
+			},
+			Info:       info,
+			Volatility: tree.VolatilityImmutable,
+		},
+	)
+}
 
 const txnTSContextDoc = `
 
