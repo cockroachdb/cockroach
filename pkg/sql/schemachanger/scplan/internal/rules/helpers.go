@@ -111,6 +111,10 @@ func (d depRuleSpec) register() {
 		v := rel.Var("joined-from-ref-desc-id-with-to-desc-id-var")
 		c = append(c, from.AttrEqVar(screl.ReferencedDescID, v), to.AttrEqVar(screl.DescID, v))
 	}
+
+	c = append(c, from.AttrEqVar(screl.DescID, "var-to-tell-rel-from-is-an-element"))
+	c = append(c, to.AttrEqVar(screl.DescID, "var-to-tell-rel-to-is-an-element"))
+
 	if d.filter != nil {
 		c = append(c, rel.Filter(d.filterLabel, from, to)(d.filter))
 	}

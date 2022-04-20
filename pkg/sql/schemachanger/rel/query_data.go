@@ -43,21 +43,39 @@ type slot struct {
 // pointer to a primitive type. The type is the type from which the value
 // was derived and which should be presented to the user.
 type typedValue struct {
-	typ   reflect.Type
-	value interface{}
+	typ       reflect.Type
+	value     interface{}
+	inline    uintptr
+	inlineSet bool
 }
 
-func (tv typedValue) toInterface() interface{} {
+func (tv typedValue) toValue() reflect.Value {
 	if tv.typ == reflectTypeType {
-		return tv.value.(reflect.Type)
+		return reflect.ValueOf(tv.value)
 	}
 	if tv.typ.Kind() == reflect.Ptr {
 		if tv.typ.Elem().Kind() == reflect.Struct {
-			return tv.value
+			return reflect.ValueOf(tv.value)
 		}
-		return reflect.ValueOf(tv.value).Convert(tv.typ).Interface()
+		return reflect.ValueOf(tv.value).Convert(tv.typ)
 	}
-	return reflect.ValueOf(tv.value).Convert(reflect.PtrTo(tv.typ)).Elem().Interface()
+	return reflect.ValueOf(tv.value).Convert(reflect.PtrTo(tv.typ)).Elem()
+}
+
+func (tv typedValue) toInterface() interface{} {
+	return tv.toValue().Interface()
+}
+
+func (tv *typedValue) inlineValue(es *entitySet, attr ordinal) (uintptr, error) {
+	if tv.inlineSet {
+		return tv.inline, nil
+	}
+	v, err := es.makeInlineValue(attr, tv.toValue())
+	if err != nil {
+		return 0, err
+	}
+	tv.inline, tv.inlineSet = v, true
+	return tv.inline, nil
 }
 
 func (s *slot) eq(other slot) bool {
@@ -71,7 +89,7 @@ func (s *slot) eq(other slot) bool {
 	case other.value == nil:
 		return false
 	default:
-		_, eq := compare(s.value, other.value)
+		_, eq := compareNotNil(s.value, other.value)
 		return eq
 	}
 }
@@ -86,7 +104,7 @@ func maybeSet(
 	s := &slots[idx]
 	check := func() (shouldSet, foundContradiction bool) {
 		if !s.empty() {
-			if _, eq := compare(s.value, tv.value); !eq {
+			if _, eq := compareNotNil(s.value, tv.value); !eq {
 				return false, true
 			}
 			return false, false
@@ -98,7 +116,7 @@ func maybeSet(
 				if tv.typ != v.typ {
 					continue
 				}
-				if _, foundMatch = compare(v.value, tv.value); foundMatch {
+				if _, foundMatch = compareNotNil(v.value, tv.value); foundMatch {
 					break
 				}
 			}

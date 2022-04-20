@@ -34,9 +34,4 @@ const (
 	maxUserAttribute ordinal = 64 - iota
 )
 
-func isSystemAttribute(a Attr) bool {
-	_, isSystemAttr := a.(systemAttribute)
-	return isSystemAttr
-}
-
 var _ Attr = systemAttribute(0)
