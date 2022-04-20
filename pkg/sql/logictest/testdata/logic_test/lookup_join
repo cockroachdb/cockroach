@@ -7,6 +7,14 @@ CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e));
 INSERT INTO def VALUES (1, 1, 2), (2, 1, 1), (NULL, 2, 1)
 
 statement ok
+CREATE TABLE def_e_desc (d INT, e INT, f INT, PRIMARY KEY (f, e DESC));
+INSERT INTO def_e_desc VALUES (1, 1, 2), (2, 1, 1), (NULL, 2, 1)
+
+statement ok
+CREATE TABLE def_e_decimal (d INT, e DECIMAL, f INT, PRIMARY KEY (f, e));
+INSERT INTO def_e_decimal VALUES (1, 1, 2), (2, 1, 1), (NULL, 2, 1)
+
+statement ok
 CREATE TABLE gh (g INT, h INT, INDEX g_idx (g));
 INSERT INTO gh VALUES (NULL, 1)
 
@@ -24,6 +32,26 @@ ALTER TABLE abc INJECT STATISTICS '[
 
 statement ok
 ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+ALTER TABLE def_e_desc INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+ALTER TABLE def_e_decimal INJECT STATISTICS '[
   {
     "columns": ["f"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -66,6 +94,36 @@ SELECT * FROM abc JOIN def ON f = b AND a > 1 AND e > 1
 ----
 2  1  1  NULL  2  1
 
+query IIIIII
+SELECT * FROM abc JOIN def_e_desc ON f = b AND a > 1 AND e > 1
+----
+2  1  1  NULL  2  1
+
+query IIIIRI
+SELECT * FROM abc JOIN def_e_decimal ON f = b AND a > 1 AND e > 1
+----
+2  1  1  NULL  2  1
+
+# Filter on 'e' is a contradiction.
+query IIIIII
+SELECT * FROM abc JOIN def ON f = b AND a > 1 AND e < -9223372036854775808
+----
+
+# Filter on 'e' is a contradiction.
+query IIIIII
+SELECT * FROM abc JOIN def ON f = b AND a > 1 AND e > 9223372036854775807
+----
+
+# Filter on 'e' is a contradiction.
+query IIIIII
+SELECT * FROM abc JOIN def_e_desc ON f = b AND a > 1 AND e < -9223372036854775808
+----
+
+# Filter on 'e' is a contradiction.
+query IIIIII
+SELECT * FROM abc JOIN def_e_desc ON f = b AND a > 1 AND e > 9223372036854775807
+----
+
 # Filter right side of a lookup join with a restriction on an indexed column.
 query IIIIII rowsort
 SELECT * FROM abc JOIN def ON f = a WHERE f > 1
@@ -81,9 +139,37 @@ SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 2  1  1  2  1  1
 2  1  1  NULL  2  1
 
+query IIIIII rowsort
+SELECT * FROM abc JOIN def_e_desc ON f = b WHERE a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
+query IIIIRI rowsort
+SELECT * FROM abc JOIN def_e_decimal ON f = b WHERE a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
 # Test lookup join with restriction relating the left and right side.
 query IIIIII rowsort
 SELECT * FROM abc JOIN def ON f = b AND a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
+query IIIIII rowsort
+SELECT * FROM abc JOIN def_e_desc ON f = b AND a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
+query IIIIRI rowsort
+SELECT * FROM abc JOIN def_e_decimal ON f = b AND a >= e
 ----
 1  1  2  2  1  1
 2  1  1  2  1  1
