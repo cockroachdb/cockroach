@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Graph is a graph whose nodes are *scpb.Nodes. Graphs are constructed during
@@ -50,7 +51,7 @@ type Graph struct {
 
 	// noOpOpEdges that are marked optimized out, and will not generate
 	// any operations.
-	noOpOpEdges map[*OpEdge]map[string]struct{}
+	noOpOpEdges map[*OpEdge]map[RuleName]struct{}
 
 	edges []Edge
 
@@ -58,6 +59,14 @@ type Graph struct {
 
 	entities *rel.Database
 }
+
+// RuleName is the name of a rule. It exists as a type to avoid redaction and
+// clarify the meaning of the string.
+type RuleName string
+
+func (r RuleName) SafeValue() {}
+
+var _ redact.SafeValue = RuleName("")
 
 type edgeAlloc struct {
 	largest         int
@@ -135,7 +144,7 @@ func New(cs scpb.CurrentState) (*Graph, error) {
 	g := Graph{
 		targetIdxMap: map[*scpb.Target]int{},
 		opEdgesFrom:  map[*screl.Node]*OpEdge{},
-		noOpOpEdges:  map[*OpEdge]map[string]struct{}{},
+		noOpOpEdges:  map[*OpEdge]map[RuleName]struct{}{},
 		opToOpEdge:   map[scop.Op]*OpEdge{},
 		entities:     db,
 	}
@@ -173,7 +182,7 @@ func (g *Graph) ShallowClone() *Graph {
 		opToOpEdge:   g.opToOpEdge,
 		edges:        g.edges,
 		entities:     g.entities,
-		noOpOpEdges:  make(map[*OpEdge]map[string]struct{}),
+		noOpOpEdges:  make(map[*OpEdge]map[RuleName]struct{}),
 	}
 	// Any decorations for mutations will be copied.
 	for edge, noop := range g.noOpOpEdges {
@@ -276,7 +285,7 @@ func (g *Graph) GetOpEdgeFromOp(op scop.Op) *OpEdge {
 // AddDepEdge adds a dep edge connecting two nodes (specified by their targets
 // and statuses).
 func (g *Graph) AddDepEdge(
-	rule string,
+	rule RuleName,
 	kind DepEdgeKind,
 	fromTarget *scpb.Target,
 	fromStatus scpb.Status,
@@ -299,8 +308,8 @@ func (g *Graph) AddDepEdge(
 
 // MarkAsNoOp marks an edge as no-op, so that no operations are emitted from
 // this edge during planning.
-func (g *Graph) MarkAsNoOp(edge *OpEdge, rule ...string) {
-	m := make(map[string]struct{})
+func (g *Graph) MarkAsNoOp(edge *OpEdge, rule ...RuleName) {
+	m := make(map[RuleName]struct{})
 	for _, r := range rule {
 		m[r] = struct{}{}
 	}
@@ -317,7 +326,7 @@ func (g *Graph) IsNoOp(edge *OpEdge) bool {
 }
 
 // NoOpRules returns the rules which caused the edge to not emit any operations.
-func (g *Graph) NoOpRules(edge *OpEdge) (rules []string) {
+func (g *Graph) NoOpRules(edge *OpEdge) (rules []RuleName) {
 	if !g.IsNoOp(edge) {
 		return nil
 	}
@@ -325,7 +334,9 @@ func (g *Graph) NoOpRules(edge *OpEdge) (rules []string) {
 	for rule := range m {
 		rules = append(rules, rule)
 	}
-	sort.Strings(rules)
+	sort.Slice(rules, func(i, j int) bool {
+		return rules[i] < rules[j]
+	})
 	return rules
 }
 

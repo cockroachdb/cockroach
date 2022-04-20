@@ -21,13 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // ApplyDepRules adds dependency edges to the graph according to the
 // registered dependency rules.
 func ApplyDepRules(g *scgraph.Graph) error {
 	type toAdd struct {
-		name string
+		name scgraph.RuleName
 		kind scgraph.DepEdgeKind
 		from *screl.Node
 		to   *screl.Node
@@ -47,7 +48,7 @@ func ApplyDepRules(g *scgraph.Graph) error {
 			})
 			return nil
 		}); err != nil {
-			return err
+			return errors.Wrapf(err, "applying dep rule %s", dr.name)
 		}
 		if log.V(2) {
 			log.Infof(
@@ -74,7 +75,7 @@ func ApplyDepRules(g *scgraph.Graph) error {
 // to the registered rules.
 func ApplyOpRules(g *scgraph.Graph) (*scgraph.Graph, error) {
 	db := g.Database()
-	m := make(map[*screl.Node][]string)
+	m := make(map[*screl.Node][]scgraph.RuleName)
 	for _, rule := range registry.opRules {
 		var added int
 		start := timeutil.Now()
@@ -85,7 +86,7 @@ func ApplyOpRules(g *scgraph.Graph) (*scgraph.Graph, error) {
 			return nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "applying op rule %s", rule.name)
 		}
 		if log.V(2) {
 			log.Infof(
@@ -111,14 +112,14 @@ var registry struct {
 }
 
 type registeredDepRule struct {
-	name     string
+	name     scgraph.RuleName
 	from, to rel.Var
 	q        *rel.Query
 	kind     scgraph.DepEdgeKind
 }
 
 type registeredOpRule struct {
-	name string
+	name scgraph.RuleName
 	from rel.Var
 	q    *rel.Query
 }
@@ -126,10 +127,10 @@ type registeredOpRule struct {
 // registerDepRule registers a rule from which a set of dependency edges will
 // be derived in a graph.
 func registerDepRule(
-	ruleName string, edgeKind scgraph.DepEdgeKind, from, to rel.Var, query *rel.Query,
+	rn scgraph.RuleName, edgeKind scgraph.DepEdgeKind, from, to rel.Var, query *rel.Query,
 ) {
 	registry.depRules = append(registry.depRules, registeredDepRule{
-		name: ruleName,
+		name: rn,
 		kind: edgeKind,
 		from: from,
 		to:   to,
@@ -140,9 +141,9 @@ func registerDepRule(
 // registerOpRule adds a graph q that will label as no-op the op edge originating
 // from this node. There can only be one such edge per node, as per the edge
 // definitions in opgen.
-func registerOpRule(ruleName string, from rel.Var, q *rel.Query) {
+func registerOpRule(rn scgraph.RuleName, from rel.Var, q *rel.Query) {
 	registry.opRules = append(registry.opRules, registeredOpRule{
-		name: ruleName,
+		name: rn,
 		from: from,
 		q:    q,
 	})
