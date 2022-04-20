@@ -10,7 +10,7 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
     indexId: 2
     name: id1
     tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 2
@@ -34,7 +34,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
     indexId: 2
     name: id2
     tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 2
@@ -68,7 +68,7 @@ CREATE INDEX id3
     partitioning:
       numColumns: 1
     tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 2
@@ -123,9 +123,10 @@ CREATE INDEX id4
     indexId: 2
     name: t1_pkey
     tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -136,9 +137,10 @@ CREATE INDEX id4
       - 2
       - 3
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 2
       isUnique: true
       keyColumnDirections:
@@ -151,7 +153,7 @@ CREATE INDEX id4
       - 3
       - 4
       tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 3}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 3

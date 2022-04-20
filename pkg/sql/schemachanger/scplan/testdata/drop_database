@@ -147,7 +147,7 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 110, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
+    [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexComment:{DescID: 110, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -178,7 +178,7 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnComment:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
+    [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexComment:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -581,13 +581,13 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[PrimaryIndex:{DescID: 110, IndexID: 1}, ABSENT], VALIDATED] -> ABSENT
+    [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
     [[Table:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[PrimaryIndex:{DescID: 109, IndexID: 1}, ABSENT], VALIDATED] -> ABSENT
+    [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> ABSENT
     [[View:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[View:{DescID: 112}, ABSENT], DROPPED] -> ABSENT
@@ -1497,7 +1497,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [IndexComment:{DescID: 109, IndexID: 1}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 109, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexComment:{DescID: 109, IndexID: 1}, ABSENT]
@@ -1505,7 +1505,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [IndexComment:{DescID: 110, IndexID: 1}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 110, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexComment:{DescID: 110, IndexID: 1}, ABSENT]
@@ -1513,7 +1513,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 109, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT]
@@ -1521,7 +1521,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 110, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT]
@@ -1728,19 +1728,19 @@ DROP DATABASE db1 CASCADE
   to:   [View:{DescID: 117}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [PrimaryIndex:{DescID: 109, IndexID: 1}, VALIDATED]
+- from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexComment:{DescID: 109, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed after index no longer public
-- from: [PrimaryIndex:{DescID: 109, IndexID: 1}, VALIDATED]
+- from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed after index no longer public
-- from: [PrimaryIndex:{DescID: 110, IndexID: 1}, VALIDATED]
+- from: [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexComment:{DescID: 110, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed after index no longer public
-- from: [PrimaryIndex:{DescID: 110, IndexID: 1}, VALIDATED]
+- from: [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed after index no longer public
@@ -1781,7 +1781,7 @@ DROP DATABASE db1 CASCADE
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 109}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 109, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 110}, ABSENT]
@@ -1797,7 +1797,7 @@ DROP DATABASE db1 CASCADE
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 110}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 110, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [TableComment:{DescID: 107}, ABSENT]

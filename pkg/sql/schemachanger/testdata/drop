@@ -451,6 +451,7 @@ upsert descriptor #108
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
+  +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
   +            keyColumnDirections:
@@ -773,6 +774,7 @@ upsert descriptor #108
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
+  -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
   -            keyColumnDirections:
@@ -2259,6 +2261,7 @@ upsert descriptor #116
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
+  +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
   +            keyColumnDirections:
@@ -2577,6 +2580,7 @@ upsert descriptor #117
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
+  +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
   +            keyColumnDirections:
@@ -2851,6 +2855,7 @@ upsert descriptor #118
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
+  +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
   +            keyColumnDirections:
@@ -4607,6 +4612,7 @@ upsert descriptor #116
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
+  -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
   -            keyColumnDirections:
@@ -4918,6 +4924,7 @@ upsert descriptor #117
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
+  -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
   -            keyColumnDirections:
@@ -5189,6 +5196,7 @@ upsert descriptor #118
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
+  -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
   -            keyColumnDirections:
