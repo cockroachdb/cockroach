@@ -32,6 +32,11 @@ const (
 	capacityAvailableRatioRuleName        = "capacity_available:ratio"
 	nodeCapacityAvailableRatioRuleName    = "node:capacity_available:ratio"
 	clusterCapacityAvailableRatioRuleName = "cluster:capacity_available:ratio"
+	nodeRestartRuleName                   = "NodeRestart"
+	nodeCapacityLowRuleName               = "NodeCapacityLow"
+	nodeSQLBlockedRuleName                = "NodeSQLBlocked"
+	nodeCACertExpiryRuleName              = "NodeCACertExpiry"
+	nodeCertExpiryRuleName                = "NodeCertExpiry"
 )
 
 // CreateAndAddRules initializes all KV metric rules and adds them
@@ -50,6 +55,11 @@ func CreateAndAddRules(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
 	createAndRegisterCapacityAvailableRatioRule(ctx, ruleRegistry)
 	createAndRegisterNodeCapacityAvailableRatioRule(ctx, ruleRegistry)
 	createAndRegisterClusterCapacityAvailableRatioRule(ctx, ruleRegistry)
+	createAndRegisterNodeRestartRule(ctx, ruleRegistry)
+	createAndRegisterNodeCapacityLowRule(ctx, ruleRegistry)
+	createAndRegisterNodeSQLBlockedRule(ctx, ruleRegistry)
+	createAndRegisterNodeCACertExpiryRule(ctx, ruleRegistry)
+	createAndRegisterNodeCertExpiryRule(ctx, ruleRegistry)
 }
 
 func createAndRegisterUnavailableRangesRule(
@@ -65,7 +75,7 @@ func createAndRegisterUnavailableRangesRule(
 	help := "This check detects when the number of ranges with less than quorum replicas live are non-zero for too long"
 
 	rule, err := metric.NewAlertingRule(
-		trippedReplicaCircuitBreakersRuleName,
+		unavailableRangesRuleName,
 		expr,
 		annotations,
 		nil,
@@ -88,8 +98,8 @@ func createAndRegisterTrippedReplicaCircuitBreakersRule(
 	recommendedHoldDuration := 10 * time.Minute
 	help := "This check detects when Replicas have stopped serving traffic as a result of KV health issues"
 
-	unavailableRanges, err := metric.NewAlertingRule(
-		unavailableRangesRuleName,
+	rule, err := metric.NewAlertingRule(
+		trippedReplicaCircuitBreakersRuleName,
 		expr,
 		annotations,
 		nil,
@@ -97,7 +107,7 @@ func createAndRegisterTrippedReplicaCircuitBreakersRule(
 		help,
 		true,
 	)
-	maybeAddRuleToRegistry(ctx, err, unavailableRangesRuleName, unavailableRanges, ruleRegistry)
+	maybeAddRuleToRegistry(ctx, err, trippedReplicaCircuitBreakersRuleName, rule, ruleRegistry)
 }
 
 func createAndRegisterUnderReplicatedRangesRule(
@@ -276,6 +286,80 @@ func createAndRegisterClusterCapacityAvailableRatioRule(
 		true,
 	)
 	maybeAddRuleToRegistry(ctx, err, clusterCapacityAvailableRatioRuleName, clusterCapacityAvailableRatio, ruleRegistry)
+}
+
+func createAndRegisterNodeRestartRule(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
+	expr := "resets(sys_uptime[10m]) > 5"
+	annotations := []metric.LabelPair{{
+		Name:  proto.String("summary"),
+		Value: proto.String("Instance {{ $labels.instance }} restarted"),
+	}, {
+		Name:  proto.String("description"),
+		Value: proto.String("{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted {{ $value }} time(s) in 10m"),
+	}}
+	help := "Alert if a node restarts multiple times in a short span of time."
+	nodeRestartRule, err := metric.NewAlertingRule(
+		nodeRestartRuleName,
+		expr,
+		annotations,
+		nil,
+		time.Duration(0),
+		help,
+		true,
+	)
+	maybeAddRuleToRegistry(ctx, err, highOpenFDCountRuleName, nodeRestartRule, ruleRegistry)
+}
+
+func createAndRegisterNodeCapacityLowRule(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
+	expr := "capacity_available:ratio < 0.15"
+	help := "Alert when a node has less than 15% space remaining"
+	annotations := []metric.LabelPair{{
+		Name:  proto.String("summary"),
+		Value: proto.String("Store {{ $labels.store }} on node {{ $labels.instance }} at {{ $value}} available disk fraction"),
+	}}
+	nodeCapacityLowRule, err := metric.NewAlertingRule(nodeCapacityLowRuleName, expr, annotations, nil, time.Duration(0), help, true)
+	maybeAddRuleToRegistry(ctx, err, nodeCapacityLowRuleName, nodeCapacityLowRule, ruleRegistry)
+}
+
+func createAndRegisterNodeSQLBlockedRule(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
+	expr := "(sql_conns > 0) and (sql_query_count == 0)"
+	help := "Alert when node is not executing SQL despite having connections"
+	annotations := []metric.LabelPair{{
+		Name:  proto.String("summary"),
+		Value: proto.String("SQL queries on node {{ $labels.instance }} blocked"),
+	}}
+	nodeSQLBlockedRule, err := metric.NewAlertingRule(nodeSQLBlockedRuleName, expr, annotations, nil, time.Duration(0), help, true)
+	maybeAddRuleToRegistry(ctx, err, nodeSQLBlockedRuleName, nodeSQLBlockedRule, ruleRegistry)
+}
+
+func createAndRegisterNodeCACertExpiryRule(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
+	expr := "(security_certificate_expiration_ca > 0) and (security_certificate_expiration_ca - time()) < 86400 * 366"
+	help := "Alert when the CA certificate on a node will expire in less than a year"
+	annotations := []metric.LabelPair{{
+		Name:  proto.String("summary"),
+		Value: proto.String("CA certificate for {{ $labels.instance }} expires in less than a year"),
+	}}
+	labels := []metric.LabelPair{{
+		Name:  proto.String("frequency"),
+		Value: proto.String("daily"),
+	}}
+	nodeCACertExpiryRule, err := metric.NewAlertingRule(nodeCACertExpiryRuleName, expr, annotations, labels, time.Duration(0), help, true)
+	maybeAddRuleToRegistry(ctx, err, nodeCACertExpiryRuleName, nodeCACertExpiryRule, ruleRegistry)
+}
+
+func createAndRegisterNodeCertExpiryRule(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
+	expr := "(security_certificate_expiration_node > 0) and (security_certificate_expiration_node - time()) < 86400 * 183"
+	help := "Alert when a node certificate will expire in 6 months"
+	annotations := []metric.LabelPair{{
+		Name:  proto.String("summary"),
+		Value: proto.String("Node certificate for {{ $labels.instance }} expires in less than 6 months"),
+	}}
+	labels := []metric.LabelPair{{
+		Name:  proto.String("frequency"),
+		Value: proto.String("daily"),
+	}}
+	nodeCertExpiryRule, err := metric.NewAlertingRule(nodeCertExpiryRuleName, expr, annotations, labels, time.Duration(0), help, true)
+	maybeAddRuleToRegistry(ctx, err, nodeCertExpiryRuleName, nodeCertExpiryRule, ruleRegistry)
 }
 
 func maybeAddRuleToRegistry(

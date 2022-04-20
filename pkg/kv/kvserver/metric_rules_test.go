@@ -40,5 +40,10 @@ func TestMetricRules(t *testing.T) {
 	require.NotNil(t, ruleRegistry.GetRuleForTest(capacityAvailableRatioRuleName))
 	require.NotNil(t, ruleRegistry.GetRuleForTest(nodeCapacityAvailableRatioRuleName))
 	require.NotNil(t, ruleRegistry.GetRuleForTest(clusterCapacityAvailableRatioRuleName))
-	require.Equal(t, 12, ruleRegistry.GetRuleCountForTest())
+	require.NotNil(t, ruleRegistry.GetRuleForTest(nodeRestartRuleName))
+	require.NotNil(t, ruleRegistry.GetRuleForTest(nodeCapacityLowRuleName))
+	require.NotNil(t, ruleRegistry.GetRuleForTest(nodeSQLBlockedRuleName))
+	require.NotNil(t, ruleRegistry.GetRuleForTest(nodeCACertExpiryRuleName))
+	require.NotNil(t, ruleRegistry.GetRuleForTest(nodeCertExpiryRuleName))
+	require.Equal(t, 17, ruleRegistry.GetRuleCountForTest())
 }
