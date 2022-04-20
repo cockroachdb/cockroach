@@ -665,7 +665,7 @@ func createImportingDescriptors(
 	backupCodec keys.SQLCodec,
 	sqlDescs []catalog.Descriptor,
 	r *restoreResumer,
-) (*restorationDataBase, *mainRestorationData, error) {
+) (_ *restorationDataBase, _ *mainRestorationData, retErr error) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	var databases []catalog.DatabaseDescriptor
@@ -840,6 +840,76 @@ func createImportingDescriptors(
 		dbsByID[databases[i].GetID()] = databases[i]
 	}
 
+	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.EnsureSpanConfigReconciliation) {
+		// XXX: Pause the job and wait for that to pause to actually there. Poll
+		//      system.jobs to make sure.
+
+		// XXX: Get job ID.
+		executor := r.execCfg.InternalExecutor
+		row, err := executor.QueryRowEx(ctx, "get-span-config-job-id", nil,
+			sessiondata.NodeUserSessionDataOverride, `
+SELECT job_id FROM [SHOW AUTOMATIC JOBS]
+WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION' AND status = 'running'
+`)
+		if err != nil {
+			return nil, nil, err
+		}
+		if row == nil {
+			return nil, nil, errors.New("expected to find reconciliation job ID")
+		}
+		jobID := jobspb.JobID(tree.MustBeDInt(row[0]))
+		log.Infof(ctx, "xxx: got job ID: %d", jobID)
+
+		if _, err := executor.Exec(ctx, "pause-span-configs", nil,
+			` PAUSE job $1`, jobID); err != nil {
+			return nil, nil, err
+		}
+		log.Infof(ctx, "xxx: issued pause for reconciliation job")
+		retryOpts := retry.Options{
+			InitialBackoff: 100 * time.Millisecond,
+			MaxBackoff:     time.Second,
+			Multiplier:     2,
+		}
+
+		if err := retryOpts.Do(ctx, func(ctx context.Context) error {
+			row, err := executor.QueryRowEx(
+				ctx, "check-paused-span-configs", nil,
+				sessiondata.NodeUserSessionDataOverride,
+				`SELECT status FROM system.jobs WHERE id = $1`, jobID)
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				return errors.New("expected to find reconciliation job status")
+			}
+			if got := jobs.Status(tree.MustBeDString(row[0])); got != jobs.StatusPaused {
+				return errors.Errorf("expected job status %s, but got %s", jobs.StatusPaused, got)
+			}
+			return nil
+			// XXX: crdb_internal.spanconfig_force_reconcile would be nice to have.
+			// XXX: End, start the job again. Add the poison pill to ensure full
+			//      reconciliation. Don't have to implement poison pill now, could do it
+			//      when implementing incremental reconciliation post job-start. Not going
+			//      to aim this for 22.1.
+
+			// XXX: Could also wait here. we've checkpointed at least once. Want to wait
+			//      and observe another timestamp.
+			// XXX: Reconciliation job is run
+			// XXX: Add a cluster setting to by pass this check.
+		}); err != nil {
+			return nil, nil, err
+		}
+
+		log.Infof(ctx, "xxx: found paused reconciliation job")
+
+		defer func() {
+			if _, err := executor.Exec(ctx, "resume-span-configs", nil,
+				`RESUME job $1`, jobID); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
+			}
+		}()
+	}
+
 	if !details.PrepareCompleted {
 		err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
@@ -921,6 +991,11 @@ func createImportingDescriptors(
 						table.RowLevelTTL.ScheduleID = 0
 					}
 				}
+			}
+
+			// Write the new descriptors which are set in the OFFLINE state. // XXX: Here?
+			for _, db := range databases {
+				log.Infof(ctx, "xxx: writing fresh db descriptor (id=%d name=%s)", db.GetID(), db.GetName())
 			}
 
 			// Write the new descriptors which are set in the OFFLINE state.
@@ -1089,6 +1164,7 @@ func createImportingDescriptors(
 
 			// Emit to the event log now that the job has finished preparing descs.
 			emitRestoreJobEvent(ctx, p, jobs.StatusRunning, r.job)
+			// XXX: descriptors are prepared here.
 
 			return err
 		})
@@ -1988,6 +2064,9 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 		if details.DescriptorCoverage == tree.AllDescriptors {
 			// We've dropped defaultdb and postgres in the planning phase, we must
 			// recreate them now if the full cluster restore failed.
+			//
+			// XXX: Restoring them here.
+			log.Infof(ctx, "xxx: restoring defaultdb and postgres")
 			ie := p.ExecCfg().InternalExecutor
 			_, err := ie.Exec(ctx, "recreate-defaultdb", txn, "CREATE DATABASE IF NOT EXISTS defaultdb")
 			if err != nil {

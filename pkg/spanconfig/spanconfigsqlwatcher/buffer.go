@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -96,6 +97,11 @@ func (b *buffer) advance(rangefeed rangefeedKind, timestamp hlc.Timestamp) {
 func (b *buffer) add(ev event) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if ev.update.IsDescriptorUpdate() {
+		if ev.update.GetDescriptorUpdate().ID == descpb.ID(51) {
+			log.Infof(context.Background(), "xxx: adding %s with id=51 to buffer", ev.update.GetDescriptorUpdate().Type)
+		}
+	}
 	return b.mu.buffer.Add(ev)
 }
 
@@ -235,6 +241,8 @@ func (b *buffer) flush(
 		descType, err := combine(prevDescriptorSQLUpdate.Type,
 			descriptorUpdate.Type)
 		if err != nil {
+			panic(err)
+			log.Fatalf(ctx, "%v", err)
 			return nil, hlc.Timestamp{}, err
 		}
 		sqlUpdates[len(sqlUpdates)-1] = spanconfig.MakeDescriptorSQLUpdate(

@@ -198,8 +198,10 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 			return
 		}
 		value := ev.Value
+		deleted := false
 		if !ev.Value.IsPresent() {
 			// The descriptor was deleted.
+			deleted = true
 			value = ev.PrevValue
 		}
 
@@ -239,6 +241,9 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 			logcrash.ReportOrPanic(ctx, &s.settings.SV, "unknown descriptor unmarshalled %v", descriptor)
 		}
 
+		if id == descpb.ID(51) {
+			log.Infof(ctx, "xxx: received rangefeed event at %s (deleted=%t) for descriptor %s", ev.Value.Timestamp, deleted, descriptor.String())
+		}
 		rangefeedEvent := event{
 			timestamp: ev.Value.Timestamp,
 			update:    spanconfig.MakeDescriptorSQLUpdate(id, descType),

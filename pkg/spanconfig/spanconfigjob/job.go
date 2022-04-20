@@ -170,6 +170,9 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 			}
 			continue
 		}
+		// XXX: Double check semantics of pause. And write commentary about how on
+		// resume post-restore, we have to poison pill so that we skip the incremental
+		// step.
 		return nil // we're done here (the stopper was stopped, Reconcile exited cleanly)
 	}
 

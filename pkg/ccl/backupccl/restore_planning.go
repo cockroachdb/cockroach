@@ -1711,7 +1711,10 @@ func doRestorePlan(
 	// databases that are present in a new cluster.
 	// This is done so that they can be restored the same way any other user
 	// defined database would be restored from the backup.
+	//
+	// XXX: We're dropping things here.
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		log.Infof(ctx, "xxx: dropping defaultdb and postgres as part of restore")
 		if err := dropDefaultUserDBs(ctx, p.ExecCfg()); err != nil {
 			return err
 		}

@@ -690,6 +690,7 @@ func TestRestoreOldBackupMissingOfflineIndexes(t *testing.T) {
 			sqlDBRestore := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 			from := strings.Join(backupDirs[:i], `,`)
 			sqlDBRestore.Exec(t, fmt.Sprintf(`RESTORE FROM %s`, from))
+			sqlDBRestore.CheckQueryResults(t, `SELECT count(*) FROM system.descriptor WHERE id = 51`, [][]string{{`1`}})
 
 			for j := i; j > 1; j-- {
 				var res int64
