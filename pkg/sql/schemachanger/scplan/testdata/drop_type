@@ -72,23 +72,22 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
     [[AliasType:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         EnumType:
           arrayTypeId: 105
           typeId: 104
-      Statement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
-      StatementTag: DROP TYPE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
+        StatementTag: DROP TYPE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 104
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         AliasType:
           embeddedTypeT:
@@ -105,11 +104,14 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
               family: ArrayFamily
               oid: 100105
           typeId: 105
-      Statement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
-      StatementTag: DROP TYPE
-      TargetMetadata:
-        SourceElementID: 2
-        SubWorkID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
+        StatementTag: DROP TYPE
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 2
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 105
