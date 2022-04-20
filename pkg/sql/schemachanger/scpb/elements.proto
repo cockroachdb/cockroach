@@ -197,6 +197,14 @@ message Index {
   bool is_inverted = 11;
   cockroach.sql.catalog.catpb.ShardedDescriptor sharding = 12;
 
+  // IsCreatedExplicitly specifies whether this index was created explicitly
+  // (i.e. via 'CREATE INDEX' statement) and not implicitly (i.e. created for
+  // unique constraint).
+  bool is_created_explicitly = 13;
+  // ConstraintID is only set for primary keys and unique secondary indexes. It
+  // can be used to uniquely identify a constraint.
+  uint32 constraint_id = 14 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+
   // Spec fields.
   // These fields only make sense if the element is for ABSENT -> PUBLIC.
   //
