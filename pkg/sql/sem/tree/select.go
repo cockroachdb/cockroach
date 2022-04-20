@@ -1017,9 +1017,6 @@ func (node *LockingClause) Format(ctx *FmtCtx) {
 }
 
 // LockingItem represents a single locking item in a locking clause.
-//
-// NOTE: if this struct changes, HashLockingItem and IsLockingItemEqual
-// in opt/memo/interner.go will need to be updated accordingly.
 type LockingItem struct {
 	Strength   LockingStrength
 	Targets    TableNames
