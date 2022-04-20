@@ -70,7 +70,6 @@ func RegisterTests(r registry.Registry) {
 	registerLedger(r)
 	registerLibPQ(r)
 	registerLiquibase(r)
-	registerNetwork(r)
 	registerPebbleWriteThroughput(r)
 	registerPebbleYCSB(r)
 	registerPgjdbc(r)
