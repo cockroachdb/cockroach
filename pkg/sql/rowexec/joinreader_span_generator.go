@@ -47,7 +47,7 @@ type joinReaderSpanGenerator interface {
 	// getMatchingRowIndices returns the indices of the input rows that desire
 	// the given key (i.e., the indices of the rows passed to generateSpans that
 	// generated spans containing the given key).
-	getMatchingRowIndices(key roachpb.Key) []int
+	getMatchingRowIndices(key roachpb.Key) ([]int, error)
 
 	// maxLookupCols returns the maximum number of index columns used as the key
 	// for each lookup.
@@ -174,8 +174,8 @@ func (g *defaultSpanGenerator) generateSpans(
 }
 
 // getMatchingRowIndices is part of the joinReaderSpanGenerator interface.
-func (g *defaultSpanGenerator) getMatchingRowIndices(key roachpb.Key) []int {
-	return g.keyToInputRowIndices[string(key)]
+func (g *defaultSpanGenerator) getMatchingRowIndices(key roachpb.Key) ([]int, error) {
+	return g.keyToInputRowIndices[string(key)], nil
 }
 
 // maxLookupCols is part of the joinReaderSpanGenerator interface.
@@ -648,14 +648,14 @@ func (g *multiSpanGenerator) generateNonNullSpans(row rowenc.EncDatumRow) (roach
 
 // findInputRowIndicesByKey does a binary search to find the span that contains
 // the given key.
-func (s *spanRowIndices) findInputRowIndicesByKey(key roachpb.Key) []int {
+func (s *spanRowIndices) findInputRowIndicesByKey(key roachpb.Key) ([]int, error) {
 	i, j := 0, s.Len()
 	for i < j {
 		h := (i + j) >> 1
 		sp := (*s)[h]
 		switch sp.span.CompareKey(key) {
 		case 0:
-			return sp.rowIndices
+			return sp.rowIndices, nil
 		case -1:
 			j = h
 		case 1:
@@ -663,7 +663,7 @@ func (s *spanRowIndices) findInputRowIndicesByKey(key roachpb.Key) []int {
 		}
 	}
 
-	return nil
+	return nil, errors.AssertionFailedf("didn't find a span containing the key %s", key)
 }
 
 // generateSpans is part of the joinReaderSpanGenerator interface.
@@ -725,11 +725,11 @@ func (g *multiSpanGenerator) generateSpans(
 }
 
 // getMatchingRowIndices is part of the joinReaderSpanGenerator interface.
-func (g *multiSpanGenerator) getMatchingRowIndices(key roachpb.Key) []int {
+func (g *multiSpanGenerator) getMatchingRowIndices(key roachpb.Key) ([]int, error) {
 	if g.inequalityColIdx != -1 {
 		return g.spanToInputRowIndices.findInputRowIndicesByKey(key)
 	}
-	return g.keyToInputRowIndices[string(key)]
+	return g.keyToInputRowIndices[string(key)], nil
 }
 
 // memUsage returns the size of the data structures in the multiSpanGenerator
@@ -826,9 +826,9 @@ func (g *localityOptimizedSpanGenerator) generateRemoteSpans(
 }
 
 // getMatchingRowIndices is part of the joinReaderSpanGenerator interface.
-func (g *localityOptimizedSpanGenerator) getMatchingRowIndices(key roachpb.Key) []int {
-	if res := g.localSpanGen.getMatchingRowIndices(key); len(res) > 0 {
-		return res
+func (g *localityOptimizedSpanGenerator) getMatchingRowIndices(key roachpb.Key) ([]int, error) {
+	if res, err := g.localSpanGen.getMatchingRowIndices(key); len(res) > 0 || err != nil {
+		return res, err
 	}
 	return g.remoteSpanGen.getMatchingRowIndices(key)
 }

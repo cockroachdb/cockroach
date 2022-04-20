@@ -34,8 +34,7 @@ SET tracing = on, kv; SELECT * FROM abc JOIN def ON d = c WHERE a > 1 AND e > 1;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
 ----
-Scan /Table/107/1/{1/1/NULL-2}
-fetched: /def/def_pkey/1/1/f -> /2
+Scan /Table/107/1/{1/2-2}
 fetched: /def/def_pkey/1/2 -> <undecoded>
 
 statement ok
@@ -150,10 +149,8 @@ SET tracing = off;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
 ----
-Scan /Table/109/1/{1/2020-01-01T00:00:00Z/NULL-2}, /Table/109/1/{2/2020-01-01T00:00:00Z/NULL-3}
-fetched: /metric_values/metric_values_pkey/1/'2020-01-01 00:00:00+00:00'/value -> /0
+Scan /Table/109/1/{1/2020-01-01T00:00:00.000001Z-2}, /Table/109/1/{2/2020-01-01T00:00:00.000001Z-3}
 fetched: /metric_values/metric_values_pkey/1/'2020-01-01 00:00:01+00:00'/nullable/value -> /1/1
-fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:00:00+00:00'/value -> /2
 fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:00:01+00:00'/nullable/value -> /2/3
 fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:01:01+00:00'/nullable/value -> /-11/4
 fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:01:02+00:00'/nullable/value -> /-10/5
@@ -173,7 +170,7 @@ SET tracing = off;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
 ----
-Scan /Table/109/1/1/{NULL/NULL-2020-01-01T00:00:00Z}, /Table/109/1/2/{NULL/NULL-2020-01-01T00:00:00Z}
+Scan /Table/109/1/1/{!NULL-2020-01-01T00:00:00Z}, /Table/109/1/2/{!NULL-2020-01-01T00:00:00Z}
 
 statement ok
 SET tracing = on, kv;
@@ -191,9 +188,7 @@ SET tracing = off;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
 ----
-Scan /Table/110/1/1/{1920-01-01T23:59:58.999999999Z/NULL-NULL}, /Table/110/1/2/{1920-01-01T23:59:58.999999999Z/NULL-NULL}
-fetched: /metric_values_desc/metric_values_desc_pkey/1/'2020-01-01 00:00:00+00:00'/value -> /0
-fetched: /metric_values_desc/metric_values_desc_pkey/2/'2020-01-01 00:00:00+00:00'/value -> /2
+Scan /Table/110/1/1/{1920-01-01T23:59:59.000000999Z-!NULL}, /Table/110/1/2/{1920-01-01T23:59:59.000000999Z-!NULL}
 
 statement ok
 SET tracing = on, kv;
@@ -212,8 +207,7 @@ SET tracing = off;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
 ----
-Scan /Table/109/2/{1/1/NULL-2}, /Table/109/2/{2/1/NULL-3}
-fetched: /metric_values/secondary/1/1/'2020-01-01 00:00:01+00:00' -> <undecoded>
+Scan /Table/109/2/{1/2-2}, /Table/109/2/{2/2-3}
 fetched: /metric_values/secondary/2/2/'2020-01-01 00:00:01+00:00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:00:01Z/0
 fetched: /metric_values/metric_values_pkey/?/?/value -> /3
@@ -237,9 +231,7 @@ SET tracing = off;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
 ----
-Scan /Table/109/2/1/{NULL/NULL--10}, /Table/109/2/2/{NULL/NULL--10}
-fetched: /metric_values/secondary/1/NULL/'2020-01-01 00:00:00+00:00' -> <undecoded>
-fetched: /metric_values/secondary/2/NULL/'2020-01-01 00:00:00+00:00' -> <undecoded>
+Scan /Table/109/2/1/{!NULL--10}, /Table/109/2/2/{!NULL--10}
 fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00:00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:01:01Z/0
 fetched: /metric_values/metric_values_pkey/?/?/value -> /4
@@ -263,9 +255,7 @@ SET tracing = off;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
 ----
-Scan /Table/109/2/1/{NULL/NULL--9}, /Table/109/2/2/{NULL/NULL--9}
-fetched: /metric_values/secondary/1/NULL/'2020-01-01 00:00:00+00:00' -> <undecoded>
-fetched: /metric_values/secondary/2/NULL/'2020-01-01 00:00:00+00:00' -> <undecoded>
+Scan /Table/109/2/1/{!NULL--9}, /Table/109/2/2/{!NULL--9}
 fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00:00' -> <undecoded>
 fetched: /metric_values/secondary/2/-10/'2020-01-01 00:01:02+00:00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:01:01Z/0, /Table/109/1/2/2020-01-01T00:01:02Z/0
@@ -291,9 +281,7 @@ SET tracing = off;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
 ----
-Scan /Table/109/2/1/{NULL/NULL--9}, /Table/109/2/2/{NULL/NULL--9}
-fetched: /metric_values/secondary/1/NULL/'2020-01-01 00:00:00+00:00' -> <undecoded>
-fetched: /metric_values/secondary/2/NULL/'2020-01-01 00:00:00+00:00' -> <undecoded>
+Scan /Table/109/2/1/{!NULL--9}, /Table/109/2/2/{!NULL--9}
 fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00:00' -> <undecoded>
 fetched: /metric_values/secondary/2/-10/'2020-01-01 00:01:02+00:00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:01:01Z/0, /Table/109/1/2/2020-01-01T00:01:02Z/0
