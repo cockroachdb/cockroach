@@ -82,7 +82,7 @@ func TestJoinReader(t *testing.T) {
 	}
 
 	sqlutils.CreateTable(t, sqlDB, "t",
-		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), INDEX bs (b,s)",
+		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), INDEX bs (b,s), INDEX bssum (b,s,sum)",
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
@@ -94,7 +94,7 @@ func TestJoinReader(t *testing.T) {
 	tdSecondary := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	sqlutils.CreateTable(t, sqlDB, "t2",
-		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), FAMILY f1 (a, b), FAMILY f2 (s), FAMILY f3 (sum), INDEX bs (b,s)",
+		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), FAMILY f1 (a, b), FAMILY f2 (s), FAMILY f3 (sum), INDEX bs (b,s), INDEX bssum (b,s,sum)",
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
@@ -789,6 +789,76 @@ func TestJoinReader(t *testing.T) {
 				"[2 2 'two-two' false]]",
 		},
 		{
+			description: "Test locality optimized inner lookup join on covering secondary index with inequality filter",
+			indexIdx:    2,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 6},
+			},
+			input: [][]tree.Datum{
+				// No match for this row because of the inequality filter.
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+			},
+			fetchCols:        []uint32{0, 1, 2, 3},
+			lookupExpr:       "@5 = 1 AND @3 = @7 AND @6 > 1",
+			remoteLookupExpr: "@5 = 2 AND @3 = @7 AND @6 > 1",
+			joinType:         descpb.InnerJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      []*types.T{types.Int, types.Int, types.String},
+			expected:         "[[1 1 'one-one'] [0 2 'two'] [2 2 'two-two']]",
+		},
+		{
+			description: "Test locality optimized inner lookup join on covering secondary index with inequality filter, no local matches",
+			indexIdx:    2,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 6},
+			},
+			input: [][]tree.Datum{
+				// No match for this row because of the inequality filter.
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				// No match for this row because of the inequality filter.
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				// No match for this row because of the inequality filter.
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+			},
+			fetchCols:        []uint32{0, 1, 2, 3},
+			lookupExpr:       "@5 = 1 AND @3 = @7 AND @6 > 2",
+			remoteLookupExpr: "@5 = 2 AND @3 = @7 AND @6 > 2",
+			joinType:         descpb.InnerJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      []*types.T{types.Int, types.Int, types.String},
+			expected:         "[[2 2 'two-two']]",
+		},
+		{
+			description: "Test locality optimized inner lookup join on covering secondary index with inequality filter, no remote matches",
+			indexIdx:    2,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 6},
+			},
+			input: [][]tree.Datum{
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				// No match for this row because of the inequality filter.
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				// No match for this row because of the inequality filter.
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				// No match for this row because of the inequality filter.
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+			},
+			fetchCols:        []uint32{0, 1, 2, 3},
+			lookupExpr:       "@5 = 1 AND @3 = @7 AND @6 < 2",
+			remoteLookupExpr: "@5 = 2 AND @3 = @7 AND @6 < 2",
+			joinType:         descpb.InnerJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      []*types.T{types.Int, types.Int, types.String},
+			expected:         "[[0 1 'one']]",
+		},
+		{
 			description: "Test locality optimized left outer lookup join on secondary index",
 			indexIdx:    1,
 			post: execinfrapb.PostProcessSpec{
@@ -816,6 +886,76 @@ func TestJoinReader(t *testing.T) {
 				"[2 2 'two-two' false] [1 NULL NULL false] [2 0 NULL false]]",
 		},
 		{
+			description: "Test locality optimized left outer lookup join on covering secondary index with inequality filter",
+			indexIdx:    2,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 6},
+			},
+			input: [][]tree.Datum{
+				// No match for this row because of the inequality filter.
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+			},
+			fetchCols:        []uint32{0, 1, 2, 3},
+			lookupExpr:       "@5 = 1 AND @3 = @7 AND @6 > 1",
+			remoteLookupExpr: "@5 = 2 AND @3 = @7 AND @6 > 1",
+			joinType:         descpb.LeftOuterJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      []*types.T{types.Int, types.Int, types.String},
+			expected:         "[[0 1 NULL] [1 1 'one-one'] [0 2 'two'] [2 2 'two-two']]",
+		},
+		{
+			description: "Test locality optimized left outer lookup join on covering secondary index with inequality filter, no local matches",
+			indexIdx:    2,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 6},
+			},
+			input: [][]tree.Datum{
+				// No match for this row because of the inequality filter.
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				// No match for this row because of the inequality filter.
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				// No match for this row because of the inequality filter.
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+			},
+			fetchCols:        []uint32{0, 1, 2, 3},
+			lookupExpr:       "@5 = 1 AND @3 = @7 AND @6 > 2",
+			remoteLookupExpr: "@5 = 2 AND @3 = @7 AND @6 > 2",
+			joinType:         descpb.LeftOuterJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      []*types.T{types.Int, types.Int, types.String},
+			expected:         "[[0 1 NULL] [1 1 NULL] [0 2 NULL] [2 2 'two-two']]",
+		},
+		{
+			description: "Test locality optimized left outer lookup join on covering secondary index with inequality filter, no remote matches",
+			indexIdx:    2,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 6},
+			},
+			input: [][]tree.Datum{
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				// No match for this row because of the inequality filter.
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				// No match for this row because of the inequality filter.
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				// No match for this row because of the inequality filter.
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+			},
+			fetchCols:        []uint32{0, 1, 2, 3},
+			lookupExpr:       "@5 = 1 AND @3 = @7 AND @6 < 2",
+			remoteLookupExpr: "@5 = 2 AND @3 = @7 AND @6 < 2",
+			joinType:         descpb.LeftOuterJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      []*types.T{types.Int, types.Int, types.String},
+			expected:         "[[0 1 'one'] [1 1 NULL] [0 2 NULL] [2 2 NULL]]",
+		},
+		{
 			description: "Test locality optimized left semi lookup join on secondary index",
 			indexIdx:    1,
 			post: execinfrapb.PostProcessSpec{
@@ -839,6 +979,76 @@ func TestJoinReader(t *testing.T) {
 			inputTypes:       []*types.T{types.Int, types.Int, types.String},
 			outputTypes:      types.TwoIntCols,
 			expected:         "[[0 1] [1 1] [0 2] [2 2]]",
+		},
+		{
+			description: "Test locality optimized left semi lookup join on covering secondary index with inequality filter",
+			indexIdx:    2,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				// No match for this row because of the inequality filter.
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+			},
+			fetchCols:        []uint32{0, 1, 2, 3},
+			lookupExpr:       "@5 = 1 AND @3 = @7 AND @6 > 1",
+			remoteLookupExpr: "@5 = 2 AND @3 = @7 AND @6 > 1",
+			joinType:         descpb.LeftSemiJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      types.TwoIntCols,
+			expected:         "[[1 1] [0 2] [2 2]]",
+		},
+		{
+			description: "Test locality optimized left semi lookup join on covering secondary index with inequality filter, no local matches",
+			indexIdx:    2,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				// No match for this row because of the inequality filter.
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				// No match for this row because of the inequality filter.
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				// No match for this row because of the inequality filter.
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+			},
+			fetchCols:        []uint32{0, 1, 2, 3},
+			lookupExpr:       "@5 = 1 AND @3 = @7 AND @6 > 2",
+			remoteLookupExpr: "@5 = 2 AND @3 = @7 AND @6 > 2",
+			joinType:         descpb.LeftSemiJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      types.TwoIntCols,
+			expected:         "[[2 2]]",
+		},
+		{
+			description: "Test locality optimized left semi lookup join on covering secondary index with inequality filter, no remote matches",
+			indexIdx:    2,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{aFn(1), bFn(1), sqlutils.RowEnglishFn(1)},
+				// No match for this row because of the inequality filter.
+				{aFn(11), bFn(11), sqlutils.RowEnglishFn(11)},
+				// No match for this row because of the inequality filter.
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+				// No match for this row because of the inequality filter.
+				{aFn(22), bFn(22), sqlutils.RowEnglishFn(22)},
+			},
+			fetchCols:        []uint32{0, 1, 2, 3},
+			lookupExpr:       "@5 = 1 AND @3 = @7 AND @6 < 2",
+			remoteLookupExpr: "@5 = 2 AND @3 = @7 AND @6 < 2",
+			joinType:         descpb.LeftSemiJoin,
+			inputTypes:       []*types.T{types.Int, types.Int, types.String},
+			outputTypes:      types.TwoIntCols,
+			expected:         "[[0 1]]",
 		},
 	}
 	st := cluster.MakeTestingClusterSettings()

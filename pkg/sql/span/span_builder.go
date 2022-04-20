@@ -88,7 +88,8 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 	endInclusive bool,
 ) (_ roachpb.Span, containsNull bool, err error) {
 
-	if s.keyAndPrefixCols[prefixLen-1].Direction == descpb.IndexDescriptor_DESC {
+	isDesc := s.keyAndPrefixCols[prefixLen-1].Direction == descpb.IndexDescriptor_DESC
+	if isDesc {
 		startDatum, endDatum = endDatum, startDatum
 		startInclusive, endInclusive = endInclusive, startInclusive
 	}
@@ -100,18 +101,33 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 	var startKey, endKey roachpb.Key
 	var startContainsNull, endContainsNull bool
 	if startDatum != nil {
+		if !startInclusive {
+			// Since the spans are defined such that the start boundary is
+			// inclusive, yet our inequality condition wants to exclude it,
+			// we'll "advance" the start datum by one.
+			var ok bool
+			if isDesc {
+				startDatum, ok = startDatum.Prev(s.evalCtx)
+			} else {
+				startDatum, ok = startDatum.Next(s.evalCtx)
+			}
+			if !ok {
+				// The optimizer should have checked that the datum can be
+				// "advanced" when construing the range-based lookup join, so
+				// this is unexpected.
+				return roachpb.Span{}, false, errors.AssertionFailedf(
+					"couldn't get a Next or Prev value for %s", startDatum,
+				)
+			}
+		}
 		values[prefixLen-1] = rowenc.EncDatum{Datum: startDatum}
 		startKey, startContainsNull, err = makeKeyFromRow(values[:prefixLen])
-		if !startInclusive {
-			startKey = startKey.Next()
-		}
 	} else {
 		startKey, startContainsNull, err = makeKeyFromRow(values[:prefixLen-1])
 		// If we have an ascending index make sure not to include NULLs.
-		if s.keyAndPrefixCols[prefixLen-1].Direction == descpb.IndexDescriptor_ASC {
-			startKey = encoding.EncodeNullAscending(startKey)
+		if !isDesc {
+			startKey = encoding.EncodeNotNullAscending(startKey)
 		}
-		startKey = startKey.Next()
 	}
 
 	if err != nil {
@@ -127,8 +143,8 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 	} else {
 		endKey, endContainsNull, err = makeKeyFromRow(values[:prefixLen-1])
 		// If we have a descending index make sure not to include NULLs.
-		if s.keyAndPrefixCols[prefixLen-1].Direction == descpb.IndexDescriptor_DESC {
-			endKey = encoding.EncodeNullDescending(endKey)
+		if isDesc {
+			endKey = encoding.EncodeNotNullDescending(endKey)
 		} else {
 			endKey = endKey.PrefixEnd()
 		}

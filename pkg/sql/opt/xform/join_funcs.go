@@ -1342,15 +1342,56 @@ func (c *CustomFuncs) findJoinFilterConstants(
 func (c *CustomFuncs) findJoinFilterRange(
 	filters memo.FiltersExpr, col opt.ColumnID,
 ) (filterIdx int, ok bool) {
+	// canAdvance returns whether non-nil, non-NULL datum can be "advanced"
+	// (i.e. both Next and Prev can be called on it).
+	canAdvance := func(val tree.Datum) bool {
+		if val.IsMax(c.e.evalCtx) {
+			return false
+		}
+		_, ok := val.Next(c.e.evalCtx)
+		if !ok {
+			return false
+		}
+		if val.IsMin(c.e.evalCtx) {
+			return false
+		}
+		_, ok = val.Prev(c.e.evalCtx)
+		return ok
+	}
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
 		if props.TightConstraints && props.Constraints.Length() > 0 {
-			constraint := props.Constraints.Constraint(0)
-			constraintCol := constraint.Columns.Get(0).ID()
+			constraintObj := props.Constraints.Constraint(0)
+			constraintCol := constraintObj.Columns.Get(0)
 			// See comment in findFiltersForIndexLookup for why we check filter here.
 			// We only support 1 span in the execution engine so check that.
-			if constraintCol != col || constraint.Spans.Count() != 1 {
+			if constraintCol.ID() != col || constraintObj.Spans.Count() != 1 {
 				continue
+			}
+			span := constraintObj.Spans.Get(0)
+			// If we have a datum for either end of the span, we have to ensure
+			// that it can be "advanced" if the corresponding span boundary is
+			// exclusive.
+			//
+			// This limitation comes from the execution that must be able to
+			// "advance" the start boundary, but since we don't know the
+			// direction of the index here, we have to check both ends of the
+			// span.
+			if !span.StartKey().IsEmpty() && !span.StartKey().IsNull() {
+				val := span.StartKey().Value(0)
+				if span.StartBoundary() == constraint.ExcludeBoundary {
+					if !canAdvance(val) {
+						continue
+					}
+				}
+			}
+			if !span.EndKey().IsEmpty() && !span.EndKey().IsNull() {
+				val := span.EndKey().Value(0)
+				if span.EndBoundary() == constraint.ExcludeBoundary {
+					if !canAdvance(val) {
+						continue
+					}
+				}
 			}
 			return filterIdx, true
 		}
