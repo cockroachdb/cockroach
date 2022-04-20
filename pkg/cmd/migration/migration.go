@@ -38,6 +38,11 @@ var flagServe = flag.Bool(
 	false,
 	"Whether to serve a HTTP server",
 )
+var flagInitialImport = flag.Bool(
+	"initial-import",
+	false,
+	"Whether to do the initial import.",
+)
 var flagHTTPHostname = flag.String(
 	"hostname",
 	"",
@@ -62,8 +67,10 @@ func main() {
 		_ = conn.Close(ctx)
 	}()
 
-	if err := initialImport(ctx, conn); err != nil {
-		log.Fatal(errors.Wrap(err, "error creating initial table"))
+	if *flagInitialImport {
+		if err := initialImport(ctx, conn); err != nil {
+			log.Fatal(errors.Wrap(err, "error creating initial table"))
+		}
 	}
 
 	if *flagInitialImportFile != "" {
