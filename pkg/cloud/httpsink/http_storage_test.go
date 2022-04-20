@@ -162,7 +162,7 @@ func TestPutHttp(t *testing.T) {
 			t.Fatal(err)
 		}
 		s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
-			testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
+			testSettings, blobs.TestEmptyBlobClientFactory, nil, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -318,7 +318,7 @@ func TestCanDisableHttp(t *testing.T) {
 	s, err := cloud.MakeExternalStorage(
 		context.Background(),
 		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_http},
-		conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
+		conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil, nil)
 	require.Nil(t, s)
 	require.Error(t, err)
 }
@@ -339,7 +339,7 @@ func TestCanDisableOutbound(t *testing.T) {
 		s, err := cloud.MakeExternalStorage(
 			context.Background(),
 			roachpb.ExternalStorage{Provider: provider},
-			conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
+			conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil, nil)
 		require.Nil(t, s)
 		require.Error(t, err)
 	}
@@ -370,7 +370,7 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 	require.NoError(t, err)
 	s, err := cloud.MakeExternalStorage(
 		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,
-		nil, nil)
+		nil, nil, nil)
 	require.NoError(t, err)
 	stream, err := s.ReadFile(context.Background(), "file")
 	require.NoError(t, err)
