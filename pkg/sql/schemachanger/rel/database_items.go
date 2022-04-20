@@ -10,11 +10,7 @@
 
 package rel
 
-import (
-	"sync"
-
-	"github.com/google/btree"
-)
+import "sync"
 
 // valuesItem is used to construct query bounds from the tree.
 type valuesItem struct {
@@ -22,10 +18,6 @@ type valuesItem struct {
 	end     bool
 	values
 	idx *indexSpec
-}
-
-func (v *valuesItem) Less(than btree.Item) bool {
-	return v.idx.compareItems(v, than.(*valuesItem)) < 0
 }
 
 func (index *indexSpec) compareItems(a, b *valuesItem) (ret int) {
@@ -82,11 +74,11 @@ var valuesItemPool = sync.Pool{
 // getValuesItems uses the valuesItemPool to get the bounding valuesItems for
 // A given where clause and indexSpec. The valuesItems have A well defined
 // lifetime which is bound to A query so we may as well pool them.
-func getValuesItems(idx *indexSpec, v values) (from, to *valuesItem) {
+func getValuesItems(v values) (from, to *valuesItem) {
 	from = valuesItemPool.Get().(*valuesItem)
 	to = valuesItemPool.Get().(*valuesItem)
-	*from = valuesItem{isQuery: true, values: v, end: false, idx: idx}
-	*to = valuesItem{isQuery: true, values: v, end: true, idx: idx}
+	*from = valuesItem{isQuery: true, values: v, end: false}
+	*to = valuesItem{isQuery: true, values: v, end: true}
 	return from, to
 }
 

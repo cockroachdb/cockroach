@@ -6757,10 +6757,10 @@ def go_deps():
         name = "com_github_remyoudompheng_bigfft",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/remyoudompheng/bigfft",
-        sha256 = "04fb0a6c44cd9665764d43b3ed7c223c60cdae140e46b9fd1581887310d198a9",
-        strip_prefix = "github.com/remyoudompheng/bigfft@v0.0.0-20170806203942-52369c62f446",
+        sha256 = "60c422375fac36ea169eb6065af6c1b4895d8608bbd3fda9cddf98dee02e5d6a",
+        strip_prefix = "github.com/remyoudompheng/bigfft@v0.0.0-20200410134404-eec4a21b6bb0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/remyoudompheng/bigfft/com_github_remyoudompheng_bigfft-v0.0.0-20170806203942-52369c62f446.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/remyoudompheng/bigfft/com_github_remyoudompheng_bigfft-v0.0.0-20200410134404-eec4a21b6bb0.zip",
         ],
     )
     go_repository(
@@ -9232,6 +9232,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "org_modernc_b",
+        build_file_proto_mode = "disable_global",
+        importpath = "modernc.org/b",
+        sha256 = "07f6cb02288c4710069acf060d566d4782846950ef8e08e02c478940cec5f040",
+        strip_prefix = "modernc.org/b@v1.0.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/modernc.org/b/org_modernc_b-v1.0.2.zip",
+        ],
+    )
+    go_repository(
         name = "org_modernc_cc",
         build_file_proto_mode = "disable_global",
         importpath = "modernc.org/cc",
@@ -9239,6 +9249,16 @@ def go_deps():
         strip_prefix = "modernc.org/cc@v1.0.0",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/modernc.org/cc/org_modernc_cc-v1.0.0.zip",
+        ],
+    )
+    go_repository(
+        name = "org_modernc_fileutil",
+        build_file_proto_mode = "disable_global",
+        importpath = "modernc.org/fileutil",
+        sha256 = "04be109b1acc45a39ca3c56734a3c3705871b891aaa7d15ed010bc641db15fff",
+        strip_prefix = "modernc.org/fileutil@v1.0.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/modernc.org/fileutil/org_modernc_fileutil-v1.0.0.zip",
         ],
     )
     go_repository(
@@ -9255,20 +9275,20 @@ def go_deps():
         name = "org_modernc_mathutil",
         build_file_proto_mode = "disable_global",
         importpath = "modernc.org/mathutil",
-        sha256 = "766ad95195543fe1ac217ce9f54e1fb43119c25db2b89013b9ef5477ad2dd9d1",
-        strip_prefix = "modernc.org/mathutil@v1.0.0",
+        sha256 = "0a8061f6f3a4d7aab3a04aa5d723421c208b45fac29306024f0160da2a6b92f6",
+        strip_prefix = "modernc.org/mathutil@v1.4.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/modernc.org/mathutil/org_modernc_mathutil-v1.0.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/modernc.org/mathutil/org_modernc_mathutil-v1.4.1.zip",
         ],
     )
     go_repository(
         name = "org_modernc_strutil",
         build_file_proto_mode = "disable_global",
         importpath = "modernc.org/strutil",
-        sha256 = "4bbca362df97450c6f24b90b7dc80b97ecf19e5f0f5954655b26f335a0b8f378",
-        strip_prefix = "modernc.org/strutil@v1.0.0",
+        sha256 = "f8b615c79978c9c77f04ae8c9fbbd6967b8749b6e7c2e18964b59613ea9b9677",
+        strip_prefix = "modernc.org/strutil@v1.1.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/modernc.org/strutil/org_modernc_strutil-v1.0.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/modernc.org/strutil/org_modernc_strutil-v1.1.1.zip",
         ],
     )
     go_repository(

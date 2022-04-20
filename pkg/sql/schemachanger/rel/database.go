@@ -11,11 +11,12 @@
 package rel
 
 import (
+	"io"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
+	"modernc.org/b"
 )
 
 // Database is a data structure for indexing entities.
@@ -131,7 +132,9 @@ func NewDatabase(sc *Schema, indexes ...Index) (*Database, error) {
 		spec := indexSpec{mask: set, attrs: ords, s: &t.entitySet, exists: exists, where: predicate}
 		t.indexes[i] = index{
 			indexSpec: spec,
-			tree:      btree.New(32),
+			tree: b.TreeNew(func(a, b interface{}) int {
+				return spec.compareItems(a.(*valuesItem), b.(*valuesItem))
+			}),
 		}
 	}
 	return t, nil
@@ -162,7 +165,7 @@ func (t *Database) insert(v interface{}, es entityStore) (id int, err error) {
 		if idx.exists != 0 && !idx.exists.isContainedIn(e.attrs) {
 			continue
 		}
-		idx.tree.ReplaceOrInsert(&valuesItem{values: *e, idx: &idx.indexSpec})
+		idx.tree.Set(&valuesItem{values: *e}, struct{}{})
 	}
 	return id, nil
 }
@@ -184,7 +187,7 @@ func (t *Database) Insert(v interface{}) error {
 
 type index struct {
 	indexSpec
-	tree *btree.BTree
+	tree *b.Tree
 }
 
 type indexSpec struct {
@@ -208,14 +211,26 @@ func (t *Database) iterate(where values, hasAttrs ordinalSet, f entityIterator) 
 	if err != nil {
 		return err
 	}
-	from, to := getValuesItems(&idx.indexSpec, where)
+	from, to := getValuesItems(where)
 	defer putValuesItems(from, to)
-	idx.tree.AscendRange(from, to, func(i btree.Item) bool {
-		cv := i.(*valuesItem)
+	e, _ := idx.tree.Seek(from)
+	defer e.Close()
+	for {
+		c, _, err := e.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				err = nil
+			}
+			return err
+		}
+		cv := c.(*valuesItem)
+		if idx.indexSpec.compareItems(cv, to) >= 0 {
+			return nil
+		}
 		// We want to skip items which do not have values set for
 		// all members of the where clause.
 		if where.attrs.without(cv.attrs) != 0 {
-			return true
+			continue
 		}
 		var failed bool
 		toCheck.forEach(func(a ordinal) (wantMore bool) {
@@ -224,16 +239,15 @@ func (t *Database) iterate(where values, hasAttrs ordinalSet, f entityIterator) 
 			return !failed
 		})
 		if !failed {
-			if err = f.visit((entity)(cv.values)); err != nil {
+			if err := f.visit((entity)(cv.values)); err != nil {
 				if iterutil.Done(err) {
 					err = nil
 				}
-				return false
+				return err
 			}
+
 		}
-		return true
-	})
-	return err
+	}
 }
 
 // chooseIndex chooses an index which has A prefix with the highest number of
