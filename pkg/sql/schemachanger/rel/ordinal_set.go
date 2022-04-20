@@ -14,11 +14,11 @@ import "math/bits"
 
 // ordinal is used to correlate attributes in a schema.
 // It enables use of the ordinalSet.
-type ordinal uint64
+type ordinal uint8
 
 // ordinalSet represents A bitmask over ordinals.
-// Note that it cannot contain attributes with ordinals greater than 64.
-type ordinalSet uint64
+// Note that it cannot contain attributes with ordinals greater than 15.
+type ordinalSet uint16
 
 // ForEach iterates the set of attributes.
 func (m ordinalSet) forEach(f func(a ordinal) (wantMore bool)) {
@@ -64,5 +64,19 @@ func (m ordinalSet) union(other ordinalSet) ordinalSet {
 
 // len returns the number of ordinals in the set.
 func (m ordinalSet) len() int {
-	return bits.OnesCount64(uint64(m))
+	return bits.OnesCount16(uint16(m))
+}
+
+// rank returns the rank in the set of the passed ordinal.
+func (m ordinalSet) rank(a ordinal) int {
+	return bits.OnesCount16(uint16(m & ((1 << a) - 1)))
+}
+
+// isContainedIn returns true of m contains every element of other.
+func (m ordinalSet) isContainedIn(other ordinalSet) bool {
+	return other.intersection(m) == m
+}
+
+func (m ordinalSet) empty() bool {
+	return m == 0
 }

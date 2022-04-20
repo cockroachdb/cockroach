@@ -18,11 +18,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// entity is the internal representation of a struct pointer.
-// The idea is that ptr is the pointer itself and typ is a
-// pointer to the entityTypeSchema.
-type entity valuesMap
-
 // EqualOn is like CompareOn but only returns the boolean corresponding to
 // equality.
 func (sc *Schema) EqualOn(attrs []Attr, a, b interface{}) (eq bool) {
@@ -33,23 +28,40 @@ func (sc *Schema) EqualOn(attrs []Attr, a, b interface{}) (eq bool) {
 // CompareOn compares two entities. Note that it will panic if either variable
 // is malformed.
 func (sc *Schema) CompareOn(attrs []Attr, a, b interface{}) (less, eq bool) {
-	ae, err := toEntity(sc, a)
+	at, av, err := getEntityValueInfo(sc, a)
 	if err != nil {
 		panic(err)
 	}
-	be, err := toEntity(sc, b)
+	bt, bv, err := getEntityValueInfo(sc, b)
 	if err != nil {
 		panic(err)
 	}
-	defer putValues((*valuesMap)(ae))
-	defer putValues((*valuesMap)(be))
-	for _, a := range attrs {
-		ord, err := sc.getOrdinal(a)
-		if err != nil {
-			panic(err)
+	getAttrValue := func(t *entityTypeSchema, ord ordinal, v reflect.Value) interface{} {
+		for _, f := range at.attrFields[ord] {
+			if ret := f.comparableValue(unsafe.Pointer(v.Pointer())); ret != nil {
+				return ret
+			}
 		}
-		if less, eq = compareOn(ord, (*valuesMap)(ae), (*valuesMap)(be)); !eq {
-			return less, eq
+		return nil
+	}
+	for _, a := range attrs {
+		var aav, bav interface{}
+		switch a {
+		case Self:
+			aav, bav = a, b
+		case Type:
+			aav, bav = at.typ, bt.typ
+		default:
+			ord, err := sc.getOrdinal(a)
+			if err != nil {
+				panic(err)
+			}
+			aav = getAttrValue(at, ord, av)
+			bav = getAttrValue(bt, ord, bv)
+		}
+		less, eq = compareMaybeNil(aav, bav)
+		if !eq {
+			return less, false
 		}
 	}
 	return false, true
@@ -61,115 +73,33 @@ func (sc *Schema) CompareOn(attrs []Attr, a, b interface{}) (less, eq bool) {
 func (sc *Schema) IterateAttributes(
 	entityI interface{}, f func(attribute Attr, value interface{}) error,
 ) (err error) {
-
-	v, err := toEntity(sc, entityI)
+	ti, value, err := getEntityValueInfo(sc, entityI)
 	if err != nil {
 		return err
 	}
-	v.attrs.forEach(func(ord ordinal) (wantMore bool) {
-		a := sc.attrs[ord]
-		if isSystemAttribute(a) {
-			return true
-		}
-		tv, ok := v.getTypedValue(sc, ord)
-		if !ok {
-			err = errors.AssertionFailedf(
-				"failed to get typed value for populated scalar attribute %v for %T",
-				a, entityI,
-			)
-		} else {
-			err = f(a, tv.toInterface())
-		}
-		return err == nil
-	})
-	if iterutil.Done(err) {
-		err = nil
-	}
-	return err
-}
-
-// getComparableValue gets the value in its type-erased form from the
-// entity.
-func (e *entity) getComparableValue(sc *Schema, attribute Attr) interface{} {
-	return (*valuesMap)(e).get(sc.mustGetOrdinal(attribute))
-}
-
-func (e *entity) getTypeInfo(sc *Schema) *entityTypeSchema {
-	return sc.entityTypeSchemas[e.getComparableValue(sc, Type).(reflect.Type)]
-}
-
-// getTypedValue returns the typedValue for the attribute of the entity.
-// Recall that the entity stores in its values type-erased primitive values
-// for comparison (so-called comparableValues). We annotate these comparable
-// values in typedValue.
-func (e *entity) getTypedValue(sc *Schema, attr ordinal) (typedValue, bool) {
-	val := (*valuesMap)(e).get(attr)
-	if val == nil {
-		return typedValue{}, false
-	}
-	var typ reflect.Type
-
-	// To set the type, there's some disparate logic based on what attribute
-	// we're looking at. For the Type attribute, it's a reflect.Type.
-	// For scalar fields we know the type because we do not permit oneOf behavior.
-	// For entity fields, we don't store the type because it's dynamic. Instead we
-	// know that if the field points to an entity, then the value has not had its
-	// type erased for comparison.
-	if sc.attrs[attr] == Type {
-		typ = reflectTypeType
-	} else if fi, ok := e.getTypeInfo(sc).attrFields[attr]; ok && !fi[0].isEntity {
-		// This is a bit of a hack to deal with the fact that an attribute
-		// might have multiple fields which can lead to its value.
-		typ = fi[0].typ
-	} else {
-		typ = reflect.TypeOf(val)
-	}
-	return typedValue{
-		typ:   typ,
-		value: val,
-	}, true
-}
-
-func (e *entity) asMap() *valuesMap {
-	return (*valuesMap)(e)
-}
-
-func toEntity(s *Schema, v interface{}) (*entity, error) {
-	ti, value, err := getEntityValueInfo(s, v)
-	if err != nil {
-		return nil, err
-	}
-
-	e := getValues()
-	e.add(s.mustGetOrdinal(Type), value.Type())
-	e.add(s.mustGetOrdinal(Self), v)
+	vp := unsafe.Pointer(value.Pointer())
+	var seen ordinalSet
 	for _, field := range ti.fields {
-		// Note that this is the place where we type-erase scalar types.
-		// This could well not be worth the hassle.
-		var val interface{}
-		if field.isEntity {
-			val = field.value(unsafe.Pointer(value.Pointer()))
-		} else {
-			val = field.comparableValue(unsafe.Pointer(value.Pointer()))
-		}
-		if field.isPtr && val == nil {
+		v := field.value(vp)
+		if v == nil {
 			continue
-		} else if val == nil {
-			return nil, errors.AssertionFailedf(
-				"got nil value for non-pointer scalar attribute %s of type %s",
-				s.attrs[field.attr], ti.typ,
-			)
 		}
-		if e.attrs.contains(field.attr) {
-			return nil, errors.Errorf(
+		attr := sc.attrs[field.attr]
+		if seen.contains(field.attr) {
+			return errors.Errorf(
 				"%v contains second non-nil entry for %v at %s",
-				ti.typ, s.attrs[field.attr], field.path,
+				ti.typ, attr, field.path,
 			)
 		}
-		e.add(field.attr, val)
+		seen = seen.add(field.attr)
+		if err := f(attr, v); err != nil {
+			if iterutil.Done(err) {
+				err = nil
+			}
+			return err
+		}
 	}
-
-	return (*entity)(e), nil
+	return nil
 }
 
 func getEntityValueInfo(s *Schema, v interface{}) (*entityTypeSchema, reflect.Value, error) {

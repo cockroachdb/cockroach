@@ -144,9 +144,10 @@ func TestQueryBasic(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			tr, err := rel.NewDatabase(screl.Schema, [][]rel.Attr{
-				{screl.ColumnID},
-			})
+			tr, err := rel.NewDatabase(screl.Schema, []rel.Index{
+				{}, // an everything index
+				{Attrs: []rel.Attr{screl.ColumnID}},
+			}...)
 			require.NoError(t, err)
 			for _, n := range c.nodes {
 				require.NoError(t, tr.Insert(n))

@@ -40,11 +40,61 @@ var (
 	databaseTests = []reltest.DatabaseTest{
 		{
 			Data: []string{"a", "b", "c", "na", "nb", "nc"},
-			Indexes: [][][]rel.Attr{
-				nil,
-				{{value}, {pi8}, {i8, i16}},
-				{{rel.Type}, {rel.Self}},
-				{{rel.Self}},
+			Indexes: [][]rel.Index{
+				{{}}, // 0
+				{ // 1
+					{Attrs: []rel.Attr{value}},
+					{Attrs: []rel.Attr{pi8}},
+					{Attrs: []rel.Attr{i8, i16}},
+				},
+				{ // 2
+					{
+						Attrs: []rel.Attr{value},
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*node)(nil))},
+						},
+					},
+					{
+						Attrs: []rel.Attr{pi8},
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*entity)(nil))},
+						},
+					},
+					{
+						Attrs: []rel.Attr{i8, i16},
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*entity)(nil))},
+						},
+					},
+				},
+				{ // 3
+					{
+						Attrs: []rel.Attr{value},
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*node)(nil))},
+						},
+					},
+					{
+						Attrs:  []rel.Attr{pi8},
+						Exists: []rel.Attr{pi8},
+					},
+					{
+						Attrs: []rel.Attr{i8, i16},
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*entity)(nil))},
+						},
+					},
+				},
+				{ // 4
+					{Attrs: []rel.Attr{rel.Type}},
+					{Attrs: []rel.Attr{rel.Self}},
+				},
+				{ // 5
+					{Attrs: []rel.Attr{rel.Self}},
+				},
+				{ // 6
+					{Attrs: []rel.Attr{rel.Self}, Exists: []rel.Attr{rel.Self}},
+				},
 			},
 			QueryCases: []reltest.QueryTest{
 				{
@@ -59,6 +109,7 @@ var (
 					Results: [][]interface{}{
 						{a, int8(1), int8(1)},
 					},
+					UnsatisfiableIndexes: []int{2},
 				},
 				{
 					Name: "a-c-b join",
@@ -74,6 +125,7 @@ var (
 					Results: [][]interface{}{
 						{a, b, c},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "nil values don't show up",
@@ -85,6 +137,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
+					UnsatisfiableIndexes: []int{2},
 				},
 				{
 					Name: "nil values don't show up, scalar pointers same as pointers",
@@ -96,11 +149,27 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
+					UnsatisfiableIndexes: []int{2},
 				},
 				{
 					Name: "list all the values",
 					Query: rel.Clauses{
 						v("value").AttrEqVar(i8, "i8"),
+					},
+					Entities: []v{"value"},
+					ResVars:  []v{"value", "i8"},
+					Results: [][]interface{}{
+						{a, int8(1)},
+						{b, int8(2)},
+						{c, int8(2)},
+					},
+					UnsatisfiableIndexes: []int{2, 3},
+				},
+				{
+					Name: "list all the values with type constraint",
+					Query: rel.Clauses{
+						v("value").AttrEqVar(i8, "i8"),
+						v("value").Type((*entity)(nil)),
 					},
 					Entities: []v{"value"},
 					ResVars:  []v{"value", "i8"},
@@ -123,11 +192,13 @@ var (
 						{nb, b},
 						{nc, c},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "list all the i8 values",
 					Query: rel.Clauses{
 						v("value").AttrEqVar(i8, "i8"),
+						v("value").Type((*entity)(nil)),
 					},
 					Entities: []v{"value"},
 					ResVars:  []v{"i8"},
@@ -152,6 +223,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "types of all the entities",
@@ -168,6 +240,7 @@ var (
 						{nb, reflect.TypeOf((*node)(nil))},
 						{nc, reflect.TypeOf((*node)(nil))},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "nodes by type",
@@ -182,9 +255,10 @@ var (
 					Results: [][]interface{}{
 						{na, nb, nc, a},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
-					Name: "nodes by type",
+					Name: "list nodes",
 					Query: rel.Clauses{
 						v("n").Type((*node)(nil)),
 					},
@@ -222,6 +296,7 @@ var (
 					Results: [][]interface{}{
 						{c},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "contradiction due to missing attribute",
@@ -229,9 +304,10 @@ var (
 						v("entity").AttrEq(rel.Self, c),
 						v("entity").AttrEqVar(pi8, "pi8"),
 					},
-					Entities: []v{"entity"},
-					ResVars:  []v{"entity", "pi8"},
-					Results:  [][]interface{}{},
+					Entities:             []v{"entity"},
+					ResVars:              []v{"entity", "pi8"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{2},
 				},
 				{
 					Name: "self eq self",
@@ -243,6 +319,7 @@ var (
 					Results: [][]interface{}{
 						{a}, {b}, {c}, {na}, {nb}, {nc},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "variable type mismatch",
@@ -268,6 +345,7 @@ var (
 						{na, a, na, a},
 						{na, a, nc, c},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "entity bound via variable with ne filter",
@@ -287,6 +365,7 @@ var (
 					Results: [][]interface{}{
 						{na, a, nc, c},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "any value type mismatch",
@@ -303,9 +382,10 @@ var (
 						v("e").AttrEqVar(i8, "i8"),
 						v("i8").In(1, 2),
 					},
-					Entities: []v{"e"},
-					ResVars:  []v{"e", "i8"},
-					Results:  [][]interface{}{},
+					Entities:             []v{"e"},
+					ResVars:              []v{"e", "i8"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "pointer scalar values any",
@@ -317,6 +397,7 @@ var (
 					Results: [][]interface{}{
 						{a}, {b}, {c},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "pointer scalar values",
@@ -328,6 +409,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "nil pointer scalar values any",
@@ -348,9 +430,10 @@ var (
 					Query: rel.Clauses{
 						v("e").AttrIn(i8, newInt8(4), newInt8(5)),
 					},
-					Entities: []v{"e"},
-					ResVars:  []v{"e"},
-					Results:  [][]interface{}{},
+					Entities:             []v{"e"},
+					ResVars:              []v{"e"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 				{
 					Name: "any clause no match on variable eq",
@@ -358,9 +441,10 @@ var (
 						v("e").AttrEqVar(i8, "i8"),
 						v("i8").In(int8(3), int8(4)),
 					},
-					Entities: []v{"e"},
-					ResVars:  []v{"e", "i8"},
-					Results:  [][]interface{}{},
+					Entities:             []v{"e"},
+					ResVars:              []v{"e", "i8"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{2, 3},
 				},
 			},
 		},

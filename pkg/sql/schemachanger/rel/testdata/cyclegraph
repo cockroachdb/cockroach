@@ -7,8 +7,12 @@ data:
 attributes: {}
 queries:
     - indexes:
-        - []
-        - [[s], [c], [name]]
+        0:
+            - {attrs: []}
+        1:
+            - {attrs: [s]}
+            - {attrs: [c]}
+            - {attrs: [name]}
       data: [container1]
       queries:
         oneOf member:

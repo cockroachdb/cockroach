@@ -91,22 +91,35 @@ func (ec *evalContext) iterateNext() error {
 	// If there exists an any clause, which forms a disjunction, over some
 	// attribute for the next entity, iterate independently over each of the
 	// values.
-	where, anyAttr, anyValues := ec.buildWhere()
-	defer putValues(where)
+	where, hasAttrs, anyAttr, anyValues, err := ec.buildWhere()
+	if err != nil {
+		return err
+	}
 	if len(anyValues) > 0 {
-		for _, v := range anyValues {
-			where.add(anyAttr, v.value)
-			if err := ec.db.iterate(where, ec); err != nil {
+		for i := range anyValues {
+			// Interact with the slice directly in order to potentially set
+			// the inline value.
+			v := &anyValues[i]
+			iv, err := v.inlineValue(&ec.db.entitySet, anyAttr)
+			if err != nil {
+				return err
+			}
+			if !where.add(anyAttr, iv) {
+				return errors.AssertionFailedf(
+					"failed to create predicate with more than %d attributes", numAttrs,
+				)
+			}
+			if err := ec.db.iterate(where, hasAttrs, ec); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 	// If there's no anyValues, directly iterate the database.
-	return ec.db.iterate(where, ec)
+	return ec.db.iterate(where, hasAttrs, ec)
 }
 
-func (ec *evalContext) visit(e *entity) error {
+func (ec *evalContext) visit(e entity) error {
 	// Keep track of which slots were filled as part of this step in the
 	// evaluation and then unset them when we pop out of this stack frame.
 	var slotsFilled util.FastIntSet
@@ -122,8 +135,8 @@ func (ec *evalContext) visit(e *entity) error {
 	if foundContradiction := maybeSet(
 		ec.slots, ec.q.entities[ec.cur],
 		typedValue{
-			typ:   e.getTypeInfo(ec.db.Schema()).typ,
-			value: e.getComparableValue(ec.db.schema, Self),
+			typ:   e.getTypeInfo(&ec.db.entitySet).typ,
+			value: e.getSelf(&ec.db.entitySet),
 		},
 		&slotsFilled,
 	); foundContradiction {
@@ -140,7 +153,7 @@ func (ec *evalContext) visit(e *entity) error {
 				continue
 			}
 
-			tv, ok := e.getTypedValue(ec.db.schema, f.attr)
+			tv, ok := e.getTypedValue(&ec.db.entitySet, f.attr)
 			if !ok {
 				return true // we have no value for this attribute, contradiction
 			}
@@ -227,9 +240,16 @@ func (ec *evalContext) checkFilter(i int) bool {
 // entity in the join. In the face of an existing any clause for the current
 // entity, the corresponding attribute and values will be returned for use
 // breaking the disjunction into separate indexed searches for each value.
-func (ec *evalContext) buildWhere() (where *valuesMap, anyAttr ordinal, anyValues []typedValue) {
-	where = getValues()
-
+func (ec *evalContext) buildWhere() (
+	where values,
+	hasAttrs ordinalSet,
+	anyAttr ordinal,
+	anyValues []typedValue,
+	_ error,
+) {
+	hasAttrs = hasAttrs.
+		add(ec.db.schema.typeOrdinal).
+		add(ec.db.schema.selfOrdinal)
 	// The logic here is that if there's an any for a slotIdx with a fact for the
 	// current entity, maybe we want to use it to bound our search. In general,
 	// it will help if we have an index that covers the current facts plus this
@@ -242,14 +262,22 @@ func (ec *evalContext) buildWhere() (where *valuesMap, anyAttr ordinal, anyValue
 		if f.variable != ec.q.entities[ec.cur] {
 			continue
 		}
-		s := ec.slots[f.value]
-		if !s.empty() {
-			where.add(f.attr, s.value)
+		hasAttrs = hasAttrs.add(f.attr)
+		if s := &ec.slots[f.value]; !s.empty() {
+			p, err := s.inlineValue(&ec.db.entitySet, f.attr)
+			if err != nil {
+				return values{}, 0, 0, nil, err
+			}
+			if !where.add(f.attr, p) {
+				return values{}, 0, 0, nil, errors.AssertionFailedf(
+					"failed to create predicate with more than %d attributes", numAttrs,
+				)
+			}
 		} else if anyValues == nil && s.any != nil {
 			anyAttr, anyValues = f.attr, s.any
 		}
 	}
-	return where, anyAttr, anyValues
+	return where, hasAttrs, anyAttr, anyValues, nil
 }
 
 // unify is like unifyReturningContradiction but it does not return the fact.
@@ -325,7 +353,7 @@ func (ec *evalContext) maybeVisitAlreadyBoundEntity() (done bool, _ error) {
 	if s.empty() {
 		return false, nil
 	}
-	e, ok := ec.db.entities[s.value]
+	eid, ok := ec.db.hash[s.value]
 
 	// This is the case where we've somehow bound the entity to a
 	// value that does not exist in the database. This could happen
@@ -336,7 +364,7 @@ func (ec *evalContext) maybeVisitAlreadyBoundEntity() (done bool, _ error) {
 	if !ok {
 		return true, nil // contradiction
 	}
-	return true, ec.visit(e)
+	return true, ec.visit(ec.db.entities[eid])
 }
 
 func (ec *evalContext) getFilterInput(i int) (ins []reflect.Value) {

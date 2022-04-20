@@ -198,7 +198,7 @@ func init() {
 				(*scpb.ConstraintName)(nil),
 			),
 
-			relationID.Entities(screl.DescID, relation, constraint),
+			relationID.Entities(screl.DescID, relation, constraint, dep),
 			constraintID.Entities(screl.ConstraintID, constraint, dep),
 
 			screl.JoinTarget(relation, relationTarget),

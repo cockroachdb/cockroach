@@ -17,7 +17,7 @@ import (
 )
 
 // compare assumes that a and b are comparable and of the same type.
-func compare(a, b interface{}) (less, eq bool) {
+func compareNotNil(a, b interface{}) (less, eq bool) {
 	// Note: this would be nice and easy to represent generics
 	switch a := a.(type) {
 	case *int:
@@ -93,15 +93,8 @@ func compare(a, b interface{}) (less, eq bool) {
 		}
 		return false, *a == *b
 	case reflect.Type:
-		b := b.(reflect.Type)
-		switch {
-		case a == b:
-			return false, true
-		case a.PkgPath() == b.PkgPath():
-			return a.String() < b.String(), false
-		default:
-			return a.PkgPath() < b.PkgPath(), false
-		}
+		return compareTypes(a, b.(reflect.Type))
+
 	default:
 		// We expect this to be two struct pointers, probably of the same kind but,
 		// we don't care. If it's a struct pointer, we're going to compare on
@@ -117,26 +110,58 @@ func compare(a, b interface{}) (less, eq bool) {
 	}
 }
 
-var kindTypeMap = map[reflect.Kind]reflect.Type{
-	reflect.Int:     reflect.TypeOf((*int)(nil)).Elem(),
-	reflect.Int64:   reflect.TypeOf((*int64)(nil)).Elem(),
-	reflect.Int32:   reflect.TypeOf((*int32)(nil)).Elem(),
-	reflect.Int16:   reflect.TypeOf((*int16)(nil)).Elem(),
-	reflect.Int8:    reflect.TypeOf((*int8)(nil)).Elem(),
-	reflect.Uint:    reflect.TypeOf((*uint)(nil)).Elem(),
-	reflect.Uint64:  reflect.TypeOf((*uint64)(nil)).Elem(),
-	reflect.Uint32:  reflect.TypeOf((*uint32)(nil)).Elem(),
-	reflect.Uint16:  reflect.TypeOf((*uint16)(nil)).Elem(),
-	reflect.Uint8:   reflect.TypeOf((*uint8)(nil)).Elem(),
-	reflect.Uintptr: reflect.TypeOf((*uintptr)(nil)).Elem(),
-	reflect.String:  reflect.TypeOf((*string)(nil)).Elem(),
-
-	// TODO(ajwerner): Fill out all of the kinds.
+func compareTypes(a, b reflect.Type) (less, eq bool) {
+	switch {
+	case a == b:
+		return false, true
+	case a.PkgPath() == b.PkgPath():
+		return a.String() < b.String(), false
+	default:
+		return a.PkgPath() < b.PkgPath(), false
+	}
 }
 
-func isSupportScalarKind(kind reflect.Kind) bool {
-	_, ok := kindTypeMap[kind]
-	return kind != reflect.Ptr && ok
+type kindMap = map[reflect.Kind]reflect.Type
+
+var (
+	intKindMap = kindMap{
+		reflect.Int:   reflect.TypeOf((*int)(nil)).Elem(),
+		reflect.Int64: reflect.TypeOf((*int64)(nil)).Elem(),
+		reflect.Int32: reflect.TypeOf((*int32)(nil)).Elem(),
+		reflect.Int16: reflect.TypeOf((*int16)(nil)).Elem(),
+		reflect.Int8:  reflect.TypeOf((*int8)(nil)).Elem(),
+
+		// TODO(ajwerner): Fill out all of the kinds.
+	}
+	uintKindMap = kindMap{
+		reflect.Uint:    reflect.TypeOf((*uint)(nil)).Elem(),
+		reflect.Uint64:  reflect.TypeOf((*uint64)(nil)).Elem(),
+		reflect.Uint32:  reflect.TypeOf((*uint32)(nil)).Elem(),
+		reflect.Uint16:  reflect.TypeOf((*uint16)(nil)).Elem(),
+		reflect.Uint8:   reflect.TypeOf((*uint8)(nil)).Elem(),
+		reflect.Uintptr: reflect.TypeOf((*uintptr)(nil)).Elem(),
+	}
+
+	kindTypeMap = func() kindMap {
+		m := make(kindMap, len(intKindMap)+len(uintKindMap)+1)
+		m[reflect.String] = reflect.TypeOf((*string)(nil)).Elem()
+		for _, src := range []kindMap{uintKindMap, intKindMap} {
+			for k, t := range src {
+				m[k] = t
+			}
+		}
+		return m
+	}()
+)
+
+func isUintKind(kind reflect.Kind) bool {
+	_, ok := uintKindMap[kind]
+	return ok
+}
+
+func isIntKind(kind reflect.Kind) bool {
+	_, ok := intKindMap[kind]
+	return ok
 }
 
 func getComparableType(t reflect.Type) reflect.Type {
@@ -150,15 +175,13 @@ func getComparableType(t reflect.Type) reflect.Type {
 	return ct
 }
 
-// compareOn compares two elements on A given attribute.
+// compareOn compares two values on A given attribute.
 // If the entities do not return the same type of value for the
 // attribute, this function will panic. Note that it is fine if
 // either or both do not contain this attribute. The lack of A
 // value is considered the highest value; you can think of this
 // library as sorting with NULLS LAST.
-func compareOn(attr ordinal, a, b *valuesMap) (less, eq bool) {
-	av := a.get(attr)
-	bv := b.get(attr)
+func compareMaybeNil(av, bv interface{}) (bool, bool) {
 	switch {
 	case av == nil && bv == nil:
 		return false, true
@@ -167,17 +190,6 @@ func compareOn(attr ordinal, a, b *valuesMap) (less, eq bool) {
 	case bv == nil:
 		return true, false
 	default:
-		return compare(av, bv)
+		return compareNotNil(av, bv)
 	}
-}
-
-// compareEntities compares two elements by their attributes.
-func compareEntities(a, b *entity) (less, eq bool) {
-	ordinalSet.union(
-		a.attrs, b.attrs,
-	).forEach(func(attr ordinal) (wantMore bool) {
-		less, eq = compareOn(attr, a.asMap(), b.asMap())
-		return eq
-	})
-	return less, eq
 }

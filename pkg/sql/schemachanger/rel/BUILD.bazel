@@ -7,6 +7,7 @@ go_library(
         "attribute.go",
         "compare.go",
         "database.go",
+        "database_entity_set.go",
         "database_items.go",
         "doc.go",
         "entity.go",
