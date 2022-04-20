@@ -87,10 +87,13 @@ const (
 	BackupSchemaDetails
 )
 
+// TODO (msbutler): 22.2 after removing old style show backup syntax, rename
+// Path to Subdir and InCollection to Dest.
+
 // ShowBackup represents a SHOW BACKUP statement.
 type ShowBackup struct {
 	Path         Expr
-	InCollection Expr
+	InCollection StringOrPlaceholderOptList
 	From         bool
 	Details      ShowBackupDetails
 	Options      KVOptions
@@ -100,7 +103,7 @@ type ShowBackup struct {
 func (node *ShowBackup) Format(ctx *FmtCtx) {
 	if node.InCollection != nil && node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
-		ctx.FormatNode(node.InCollection)
+		ctx.FormatNode(&node.InCollection)
 		return
 	}
 	ctx.WriteString("SHOW BACKUP ")
@@ -121,7 +124,7 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Path)
 	if node.InCollection != nil {
 		ctx.WriteString(" IN ")
-		ctx.FormatNode(node.InCollection)
+		ctx.FormatNode(&node.InCollection)
 	}
 	if len(node.Options) > 0 {
 		ctx.WriteString(" WITH ")
