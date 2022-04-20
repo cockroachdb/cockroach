@@ -6,9 +6,7 @@ SET use_declarative_schema_changer = 'on'
 statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
 
-# Declarative is not fully enabled for this statement,
-# so it should error out.
-statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+statement ok
 EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
 
 statement ok
@@ -23,16 +21,22 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
-│       ├── • 3 elements transitioning toward PUBLIC
+│       ├── • 4 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
 │       │   │     ABSENT → DELETE_ONLY
 │       │   │
+│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
-│       │   │         rule: "column type set right after column existence"
+│       │   │   └── • SameStagePrecedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   │         rule: "column named right before column becomes public"
 │       │   │
 │       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
 │       │       │ ABSENT → DELETE_ONLY
@@ -40,7 +44,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
 │       │             rule: "column existence precedes index existence"
 │       │
-│       └── • 6 Mutation operations
+│       └── • 7 Mutation operations
 │           │
 │           ├── • MakeAddedColumnDeleteOnly
 │           │     Column:
@@ -49,19 +53,25 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           │       TableID: 106
 │           │
 │           ├── • LogEvent
-│           │     Authorization:
-│           │       UserName: root
 │           │     Element:
 │           │       Column:
 │           │         columnId: 2
 │           │         pgAttributeNum: 2
 │           │         tableId: 106
-│           │     Statement: ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8
-│           │     StatementTag: ALTER TABLE
-│           │     TargetMetadata:
-│           │       SourceElementID: 1
-│           │       SubWorkID: 1
+│           │     EventBase:
+│           │       Authorization:
+│           │         UserName: root
+│           │       Statement: ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8
+│           │       StatementTag: ALTER TABLE
+│           │       TargetMetadata:
+│           │         SourceElementID: 1
+│           │         SubWorkID: 1
 │           │     TargetStatus: 2
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 2
+│           │     Name: j
+│           │     TableID: 106
 │           │
 │           ├── • SetAddedColumnType
 │           │     ColumnType:
@@ -176,22 +186,13 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
 │       │             rule: "dependents removed after index no longer public"
 │       │
-│       ├── • 4 elements transitioning toward PUBLIC
+│       ├── • 3 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
 │       │   │   │ WRITE_ONLY → PUBLIC
 │       │   │   │
-│       │   │   ├── • SameStagePrecedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
-│       │   │   │     rule: "column named right before column becomes public"
-│       │   │   │
 │       │   │   └── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
 │       │   │         rule: "column depends on primary index"
-│       │   │
-│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
-│       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
-│       │   │         rule: "column existence precedes column dependents"
 │       │   │
 │       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
 │       │   │   │ VALIDATED → PUBLIC
@@ -225,16 +226,30 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           │     TableID: 106
 │           │
 │           ├── • MakeAddedPrimaryIndexPublic
+│           │     EventBase:
+│           │       Authorization:
+│           │         UserName: root
+│           │       Statement: ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8
+│           │       StatementTag: ALTER TABLE
+│           │       TargetMetadata:
+│           │         SourceElementID: 1
+│           │         SubWorkID: 1
 │           │     IndexID: 2
-│           │     TableID: 106
-│           │
-│           ├── • SetColumnName
-│           │     ColumnID: 2
-│           │     Name: j
 │           │     TableID: 106
 │           │
 │           ├── • MakeColumnPublic
 │           │     ColumnID: 2
+│           │     EventBase:
+│           │       Authorization:
+│           │         UserName: root
+│           │       Statement: ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8
+│           │       StatementTag: ALTER TABLE
+│           │       TargetMetadata:
+│           │         SourceElementID: 1
+│           │         SubWorkID: 1
+│           │     TableID: 106
+│           │
+│           ├── • RefreshStats
 │           │     TableID: 106
 │           │
 │           ├── • SetJobStateOnDescriptor
@@ -287,6 +302,14 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8
+            │       StatementTag: ALTER TABLE
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
             │     IndexID: 1
             │     TableID: 106
             │
@@ -298,6 +321,8 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
+
+
 
 
 
@@ -641,16 +666,17 @@ EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
         └── • 6 Mutation operations
             │
             ├── • LogEvent
-            │     Authorization:
-            │       UserName: root
             │     Element:
             │       Sequence:
             │         sequenceId: 113
-            │     Statement: DROP SEQUENCE ‹test›.public.‹sq1› CASCADE
-            │     StatementTag: DROP SEQUENCE
-            │     TargetMetadata:
-            │       SourceElementID: 1
-            │       SubWorkID: 1
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: DROP SEQUENCE ‹test›.public.‹sq1› CASCADE
+            │       StatementTag: DROP SEQUENCE
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
             │     TargetStatus: 1
             │
             ├── • CreateGcJobForTable
@@ -873,7 +899,7 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │              └── MarkDescriptorAsDroppedSynthetically {"DescID":150}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
- │         ├── 45 elements transitioning toward ABSENT
+ │         ├── 69 elements transitioning toward ABSENT
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 147, Name: v1dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 147}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 147, Name: admin}
@@ -883,6 +909,12 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 147, ColumnID: 1, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 147, Name: name, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 147, ColumnID: 4294967295, PgAttributeNum: 4294967295}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 147, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 4294967295}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 147, ColumnID: 4294967294, PgAttributeNum: 4294967294}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 147, Name: tableoid, ColumnID: 4294967294}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 4294967294}
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 148, Name: v2dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 148}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 148, Name: admin}
@@ -895,6 +927,12 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 2, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 148, Name: n2, ColumnID: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 2}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 4294967295, PgAttributeNum: 4294967295}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 148, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 4294967295}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 4294967294, PgAttributeNum: 4294967294}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 148, Name: tableoid, ColumnID: 4294967294}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 4294967294}
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 149, Name: v3dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 149}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 149, Name: admin}
@@ -907,6 +945,12 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 2, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 149, Name: n1, ColumnID: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 2}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 4294967295, PgAttributeNum: 4294967295}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 149, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 4294967295}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 4294967294, PgAttributeNum: 4294967294}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 149, Name: tableoid, ColumnID: 4294967294}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 4294967294}
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 150, Name: v4dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 150}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 150, Name: admin}
@@ -918,19 +962,33 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 1}
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 2, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 150, Name: n1, ColumnID: 2}
- │         │    └── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 2}
- │         └── 29 Mutation operations
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 2}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 4294967295, PgAttributeNum: 4294967295}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 150, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 4294967295}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 4294967294, PgAttributeNum: 4294967294}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 150, Name: tableoid, ColumnID: 4294967294}
+ │         │    └── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 4294967294}
+ │         └── 37 Mutation operations
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":147,"Name":"v1dep","SchemaID":105}}
  │              ├── RemoveDroppedColumnType {"ColumnID":1,"TableID":147}
+ │              ├── RemoveDroppedColumnType {"ColumnID":4294967295,"TableID":147}
+ │              ├── RemoveDroppedColumnType {"ColumnID":4294967294,"TableID":147}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":148,"Name":"v2dep","SchemaID":105}}
  │              ├── RemoveDroppedColumnType {"ColumnID":1,"TableID":148}
  │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":148}
+ │              ├── RemoveDroppedColumnType {"ColumnID":4294967295,"TableID":148}
+ │              ├── RemoveDroppedColumnType {"ColumnID":4294967294,"TableID":148}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":149,"Name":"v3dep","SchemaID":105}}
  │              ├── RemoveDroppedColumnType {"ColumnID":1,"TableID":149}
  │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":149}
+ │              ├── RemoveDroppedColumnType {"ColumnID":4294967295,"TableID":149}
+ │              ├── RemoveDroppedColumnType {"ColumnID":4294967294,"TableID":149}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":150,"Name":"v4dep","SchemaID":105}}
  │              ├── RemoveDroppedColumnType {"ColumnID":1,"TableID":150}
  │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":150}
+ │              ├── RemoveDroppedColumnType {"ColumnID":4294967295,"TableID":150}
+ │              ├── RemoveDroppedColumnType {"ColumnID":4294967294,"TableID":150}
  │              ├── MarkDescriptorAsDropped {"DescID":149}
  │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":149}
  │              ├── RemoveAllTableComments {"TableID":149}
@@ -951,40 +1009,57 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 11 elements transitioning toward ABSENT
+           ├── 19 elements transitioning toward ABSENT
            │    ├── DROPPED    → ABSENT View:{DescID: 147}
            │    ├── WRITE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 1, PgAttributeNum: 1}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 4294967295, PgAttributeNum: 4294967295}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 4294967294, PgAttributeNum: 4294967294}
            │    ├── DROPPED    → ABSENT View:{DescID: 148}
            │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 1, PgAttributeNum: 1}
            │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 2, PgAttributeNum: 2}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 4294967295, PgAttributeNum: 4294967295}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 4294967294, PgAttributeNum: 4294967294}
            │    ├── DROPPED    → ABSENT View:{DescID: 149}
            │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 1, PgAttributeNum: 1}
            │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 2, PgAttributeNum: 2}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 4294967295, PgAttributeNum: 4294967295}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 4294967294, PgAttributeNum: 4294967294}
            │    ├── DROPPED    → ABSENT View:{DescID: 150}
            │    ├── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 1, PgAttributeNum: 1}
-           │    └── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 2, PgAttributeNum: 2}
-           └── 21 Mutation operations
-                ├── LogEvent {"Statement":"DROP VIEW ‹test›...","StatementTag":"DROP VIEW","TargetStatus":1}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 2, PgAttributeNum: 2}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 4294967295, PgAttributeNum: 4294967295}
+           │    └── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 4294967294, PgAttributeNum: 4294967294}
+           └── 29 Mutation operations
+                ├── LogEvent {"TargetStatus":1}
                 ├── DeleteDescriptor {"DescriptorID":147}
                 ├── MakeColumnAbsent {"ColumnID":1,"TableID":147}
-                ├── LogEvent {"Statement":"DROP VIEW ‹test›...","StatementTag":"DROP VIEW","TargetStatus":1}
+                ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":147}
+                ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":147}
+                ├── LogEvent {"TargetStatus":1}
                 ├── DeleteDescriptor {"DescriptorID":148}
                 ├── MakeColumnAbsent {"ColumnID":1,"TableID":148}
                 ├── MakeColumnAbsent {"ColumnID":2,"TableID":148}
-                ├── LogEvent {"Statement":"DROP VIEW ‹test›...","StatementTag":"DROP VIEW","TargetStatus":1}
+                ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":148}
+                ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":148}
+                ├── LogEvent {"TargetStatus":1}
                 ├── DeleteDescriptor {"DescriptorID":149}
                 ├── MakeColumnAbsent {"ColumnID":1,"TableID":149}
                 ├── MakeColumnAbsent {"ColumnID":2,"TableID":149}
-                ├── LogEvent {"Statement":"DROP VIEW ‹test›...","StatementTag":"DROP VIEW","TargetStatus":1}
+                ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":149}
+                ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":149}
+                ├── LogEvent {"TargetStatus":1}
                 ├── DeleteDescriptor {"DescriptorID":150}
                 ├── MakeColumnAbsent {"ColumnID":1,"TableID":150}
                 ├── MakeColumnAbsent {"ColumnID":2,"TableID":150}
+                ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":150}
+                ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":150}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":146}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":147}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":148}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":149}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":150}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
+
 
 
 
@@ -1682,6 +1757,7 @@ FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
 1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.fooev ADD COLUMN j INT8", "TableName": "test.public.fooev", "Tag": "ALTER TABLE", "User": "root"}
+1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 1}
 
 subtest names-with-escaped-chars
 
