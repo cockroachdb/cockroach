@@ -137,9 +137,9 @@ type Metrics struct {
 	ProbePlanFailures  *metric.Counter
 }
 
-// proberOps is an interface that the prober will use to run ops against some
+// proberOpsI is an interface that the prober will use to run ops against some
 // system. This interface exists so that ops can be mocked for tests.
-type proberOps interface {
+type proberOpsI interface {
 	Read(key interface{}) func(context.Context, *kv.Txn) error
 	Write(key interface{}) func(context.Context, *kv.Txn) error
 }
@@ -157,12 +157,11 @@ type proberTxn interface {
 	TxnRootKV(context.Context, func(context.Context, *kv.Txn) error) error
 }
 
-// proberOpsImpl is used to probe the kv layer.
-type proberOpsImpl struct {
-}
+// ProberOps collects the methods used to probe the KV layer.
+type ProberOps struct{}
 
 // We attempt to commit a txn that reads some data at the key.
-func (p *proberOpsImpl) Read(key interface{}) func(context.Context, *kv.Txn) error {
+func (p *ProberOps) Read(key interface{}) func(context.Context, *kv.Txn) error {
 	return func(ctx context.Context, txn *kv.Txn) error {
 		_, err := txn.Get(ctx, key)
 		return err
@@ -176,7 +175,7 @@ func (p *proberOpsImpl) Read(key interface{}) func(context.Context, *kv.Txn) err
 // there is no need to clean up data at the key post range split / merge.
 // Note that MVCC tombstones may be left by the probe, but this is okay, as
 // GC will clean it up.
-func (p *proberOpsImpl) Write(key interface{}) func(context.Context, *kv.Txn) error {
+func (p *ProberOps) Write(key interface{}) func(context.Context, *kv.Txn) error {
 	return func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.Put(ctx, key, putValue); err != nil {
 			return err
@@ -272,10 +271,10 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 // Doesn't return an error. Instead increments error type specific metrics.
 func (p *Prober) readProbe(ctx context.Context, db *kv.DB, pl planner) {
-	p.readProbeImpl(ctx, &proberOpsImpl{}, &proberTxnImpl{db: p.db}, pl)
+	p.readProbeImpl(ctx, &ProberOps{}, &proberTxnImpl{db: p.db}, pl)
 }
 
-func (p *Prober) readProbeImpl(ctx context.Context, ops proberOps, txns proberTxn, pl planner) {
+func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberTxn, pl planner) {
 	if !readEnabled.Get(&p.settings.SV) {
 		return
 	}
@@ -330,10 +329,10 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOps, txns proberTx
 
 // Doesn't return an error. Instead increments error type specific metrics.
 func (p *Prober) writeProbe(ctx context.Context, db *kv.DB, pl planner) {
-	p.writeProbeImpl(ctx, &proberOpsImpl{}, &proberTxnImpl{db: p.db}, pl)
+	p.writeProbeImpl(ctx, &ProberOps{}, &proberTxnImpl{db: p.db}, pl)
 }
 
-func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOps, txns proberTxn, pl planner) {
+func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns proberTxn, pl planner) {
 	if !writeEnabled.Get(&p.settings.SV) {
 		return
 	}
