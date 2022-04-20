@@ -100,7 +100,7 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
       DescID: 116
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 117
-PreCommitPhase stage 1 of 1 with 83 MutationType ops
+PreCommitPhase stage 1 of 1 with 97 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -147,6 +147,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -173,6 +179,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -184,6 +196,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 111, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 111, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -196,6 +214,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 112, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 112, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 112, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 112, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 112, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 113}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -208,6 +232,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -220,6 +250,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 114, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 114, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 115}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -249,6 +285,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 117, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 117, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 117, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 117, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnName:{DescID: 117, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.DrainDescriptorName
       Namespace:
@@ -304,6 +346,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
       BackReferencedTableID: 110
       SequenceIDs:
       - 107
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967294
+      TableID: 110
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
@@ -330,6 +378,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
       BackReferencedTableID: 109
       SequenceIDs:
       - 108
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967294
+      TableID: 109
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
@@ -338,6 +392,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
         SchemaID: 106
     *scop.RemoveDroppedColumnType
       ColumnID: 1
+      TableID: 111
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967295
+      TableID: 111
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967294
       TableID: 111
     *scop.DrainDescriptorName
       Namespace:
@@ -351,6 +411,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 112
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967295
+      TableID: 112
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967294
+      TableID: 112
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
@@ -363,6 +429,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 113
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967294
+      TableID: 113
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
@@ -374,6 +446,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
       TableID: 114
     *scop.RemoveDroppedColumnType
       ColumnID: 2
+      TableID: 114
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967295
+      TableID: 114
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967294
       TableID: 114
     *scop.DrainDescriptorName
       Namespace:
@@ -401,6 +479,12 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
       TableID: 117
     *scop.RemoveDroppedColumnType
       ColumnID: 3
+      TableID: 117
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967295
+      TableID: 117
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967294
       TableID: 117
     *scop.MarkDescriptorAsDropped
       DescID: 104
@@ -542,13 +626,13 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
       - 117
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 59 MutationType ops
         pending
       Statements:
       - statement: DROP DATABASE db1 CASCADE
         redactedstatement: DROP DATABASE ‹db1› CASCADE
         statementtag: DROP DATABASE
-PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
   transitions:
     [[Database:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
     [[Schema:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
@@ -558,42 +642,57 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
     [[Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
     [[Table:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> ABSENT
     [[View:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 111, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 111, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[View:{DescID: 112}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 112, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 112, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 112, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[View:{DescID: 113}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[View:{DescID: 114}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 114, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 114, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[EnumType:{DescID: 115}, ABSENT], DROPPED] -> ABSENT
     [[AliasType:{DescID: 116}, ABSENT], DROPPED] -> ABSENT
     [[View:{DescID: 117}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 117, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 117, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 117, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 117, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
   ops:
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Database:
           databaseId: 104
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForDatabase
       DatabaseID: 104
@@ -602,84 +701,87 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
     *scop.DeleteDescriptor
       DescriptorID: 104
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Schema:
           isPublic: true
           schemaId: 105
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 2
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 105
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Schema:
           schemaId: 106
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 2
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 2
+          SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 106
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Sequence:
           sequenceId: 107
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 3
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 107
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Sequence:
           sequenceId: 108
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 6
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 108
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         EnumType:
           arrayTypeId: 116
           typeId: 115
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 6
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 115
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         AliasType:
           embeddedTypeT:
@@ -696,103 +798,252 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
               family: ArrayFamily
               oid: 100116
           typeId: 116
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 14
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 14
+          SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 116
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         View:
           usesRelationIds:
           - 109
           viewId: 111
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 8
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 8
+          SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 111
     *scop.MakeColumnAbsent
       ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 8
+          SubWorkID: 1
+      TableID: 111
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 8
+          SubWorkID: 1
+      TableID: 111
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 8
+          SubWorkID: 1
       TableID: 111
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         View:
           usesRelationIds:
           - 111
           viewId: 112
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 9
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 9
+          SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 112
     *scop.MakeColumnAbsent
       ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 9
+          SubWorkID: 1
       TableID: 112
     *scop.MakeColumnAbsent
       ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 9
+          SubWorkID: 1
+      TableID: 112
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 9
+          SubWorkID: 1
+      TableID: 112
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 9
+          SubWorkID: 1
       TableID: 112
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         View:
           usesRelationIds:
           - 111
           - 112
           viewId: 113
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 10
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 113
     *scop.MakeColumnAbsent
       ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
       TableID: 113
     *scop.MakeColumnAbsent
       ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 113
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 113
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
       TableID: 113
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         View:
           usesRelationIds:
           - 112
           viewId: 114
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 10
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 114
     *scop.MakeColumnAbsent
       ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
       TableID: 114
     *scop.MakeColumnAbsent
       ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 114
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 114
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
       TableID: 114
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         View:
           usesRelationIds:
@@ -801,34 +1052,84 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
           - 115
           - 116
           viewId: 117
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 12
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 117
     *scop.MakeColumnAbsent
       ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
       TableID: 117
     *scop.MakeColumnAbsent
       ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
       TableID: 117
     *scop.MakeColumnAbsent
       ColumnID: 3
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
+      TableID: 117
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
+      TableID: 117
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
       TableID: 117
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Table:
           tableId: 110
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 3
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       StatementForDropJob:
@@ -836,24 +1137,71 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
       TableID: 110
     *scop.MakeColumnAbsent
       ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
       TableID: 110
     *scop.MakeColumnAbsent
       ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
       TableID: 110
     *scop.MakeColumnAbsent
       ColumnID: 3
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+      TableID: 110
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+      TableID: 110
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
       TableID: 110
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Table:
           tableId: 109
-      Statement: DROP DATABASE ‹db1› CASCADE
-      StatementTag: DROP DATABASE
-      TargetMetadata:
-        SourceElementID: 6
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       StatementForDropJob:
@@ -861,12 +1209,58 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
       TableID: 109
     *scop.MakeColumnAbsent
       ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
       TableID: 109
     *scop.MakeColumnAbsent
       ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
       TableID: 109
     *scop.MakeColumnAbsent
       ColumnID: 3
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
+      TableID: 109
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
+      TableID: 109
+    *scop.MakeColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
       TableID: 109
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
@@ -945,6 +1339,22 @@ DROP DATABASE db1 CASCADE
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 109, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 109, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 109, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 109, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -969,12 +1379,44 @@ DROP DATABASE db1 CASCADE
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 110, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 110, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 110, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 110, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 111, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 111, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 111, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 111, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 112, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
@@ -993,6 +1435,22 @@ DROP DATABASE db1 CASCADE
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 112, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 112, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 112, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 112, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 112, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 112, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1009,6 +1467,22 @@ DROP DATABASE db1 CASCADE
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 113, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 113, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 113, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 113, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1023,6 +1497,22 @@ DROP DATABASE db1 CASCADE
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 114, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 114, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 114, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 114, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 117, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
@@ -1047,6 +1537,22 @@ DROP DATABASE db1 CASCADE
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 117, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 117, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 117, ColumnID: 4294967294, PgAttributeNum: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 117, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 117, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column dependents removed after column no longer public
+- from: [Column:{DescID: 117, ColumnID: 4294967295, PgAttributeNum: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 3}, ABSENT]
@@ -1081,6 +1587,14 @@ DROP DATABASE db1 CASCADE
   to:   [Table:{DescID: 110}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 109}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
   kind: Precedence
@@ -1097,12 +1611,28 @@ DROP DATABASE db1 CASCADE
   to:   [Table:{DescID: 109}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 109}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT]
   to:   [Table:{DescID: 109}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 110}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT]
@@ -1121,6 +1651,14 @@ DROP DATABASE db1 CASCADE
   to:   [Table:{DescID: 110}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 110}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
   kind: Precedence
@@ -1129,12 +1667,36 @@ DROP DATABASE db1 CASCADE
   to:   [Table:{DescID: 110}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 111, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 111}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT]
   to:   [View:{DescID: 111}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 111, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 111}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 112, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 112, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 112}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT]
@@ -1153,6 +1715,22 @@ DROP DATABASE db1 CASCADE
   to:   [View:{DescID: 112}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 112, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 112, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 112}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 113}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
   kind: Precedence
@@ -1169,6 +1747,22 @@ DROP DATABASE db1 CASCADE
   to:   [View:{DescID: 113}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 113}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 114}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
   kind: Precedence
@@ -1183,6 +1777,22 @@ DROP DATABASE db1 CASCADE
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT]
   to:   [View:{DescID: 114}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 114}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 117, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 117, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 117}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT]
@@ -1206,6 +1816,14 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 117, Name: n2, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 117}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ColumnName:{DescID: 117, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 117, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [View:{DescID: 117}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -1221,6 +1839,14 @@ DROP DATABASE db1 CASCADE
   to:   [Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
   kind: Precedence
@@ -1233,8 +1859,24 @@ DROP DATABASE db1 CASCADE
   to:   [Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 111, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 111, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
@@ -1245,6 +1887,14 @@ DROP DATABASE db1 CASCADE
   to:   [Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
   kind: Precedence
@@ -1253,12 +1903,28 @@ DROP DATABASE db1 CASCADE
   to:   [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
@@ -1271,6 +1937,14 @@ DROP DATABASE db1 CASCADE
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT]
@@ -1538,6 +2212,14 @@ DROP DATABASE db1 CASCADE
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 109}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [Table:{DescID: 109}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [Table:{DescID: 109}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
@@ -1551,6 +2233,14 @@ DROP DATABASE db1 CASCADE
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 110}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [Table:{DescID: 110}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [Table:{DescID: 110}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 110}, ABSENT]
@@ -1693,6 +2383,14 @@ DROP DATABASE db1 CASCADE
   to:   [Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
+- from: [View:{DescID: 111}, ABSENT]
+  to:   [Column:{DescID: 111, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [View:{DescID: 111}, ABSENT]
+  to:   [Column:{DescID: 111, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [Table:{DescID: 109}, DROPPED]
   kind: Precedence
@@ -1705,6 +2403,14 @@ DROP DATABASE db1 CASCADE
   to:   [Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
+- from: [View:{DescID: 112}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [View:{DescID: 112}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [View:{DescID: 111}, DROPPED]
   kind: Precedence
@@ -1715,6 +2421,14 @@ DROP DATABASE db1 CASCADE
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 113}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [View:{DescID: 113}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [View:{DescID: 113}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 113}, DROPPED]
@@ -1733,6 +2447,14 @@ DROP DATABASE db1 CASCADE
   to:   [Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
+- from: [View:{DescID: 114}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [View:{DescID: 114}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [View:{DescID: 112}, DROPPED]
   kind: Precedence
@@ -1747,6 +2469,14 @@ DROP DATABASE db1 CASCADE
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 117}, ABSENT]
   to:   [Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [View:{DescID: 117}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 4294967294, PgAttributeNum: 4294967294}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependent element removal right after descriptor removal
+- from: [View:{DescID: 117}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 4294967295, PgAttributeNum: 4294967295}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 117}, DROPPED]
