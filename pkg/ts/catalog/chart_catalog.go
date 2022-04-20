@@ -654,6 +654,14 @@ var charts = []sectionDescription{
 				Title:   "Keys Read Per Second",
 				Metrics: []string{"rebalancing.readspersecond"},
 			},
+			{
+				Title:   "Bytes Read Per Second",
+				Metrics: []string{"rebalancing.readbytespersecond"},
+			},
+			{
+				Title:   "Bytes Written Per Second",
+				Metrics: []string{"rebalancing.writebytespersecond"},
+			},
 		},
 	},
 	{
