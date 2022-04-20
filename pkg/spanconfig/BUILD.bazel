@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "spanconfig",
     srcs = [
+        "errors.go",
         "protectedts_state_reader.go",
         "record.go",
         "spanconfig.go",
@@ -26,6 +27,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
         "@com_github_stretchr_testify//require",
     ],
 )

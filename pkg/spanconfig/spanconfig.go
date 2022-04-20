@@ -38,25 +38,23 @@ type KVAccessor interface {
 		ctx context.Context, id roachpb.TenantID,
 	) ([]roachpb.SpanConfig, error)
 
-	// UpdateSpanConfigRecords updates configurations for the given key targets.
-	// This is a "targeted" API: the exact targets being deleted are expected to
-	// have been present; if targets are being updated with new configs, they're
-	// expected to be present exactly as well.
+	// UpdateSpanConfigRecords updates configurations for the given targets. This
+	// is a "targeted" API: the targets being deleted are expected to have been
+	// present.
 	//
 	// Targets are not allowed to overlap with each other. When divvying up an
 	// existing target into multiple others with distinct configs, callers must
 	// issue deletes for the previous target and upserts for the new records.
-	//
-	// The updates being requested are performed atomically and at a timestamp
-	// within the [LeaseStartTime, LeaseExpirationTime) interval. Typically,
-	// this is the lease interval of the reconciliation job on behalf of which
-	// the KVAccessor is acting.
+	// The updates are performed atomically and at a timestamp within
+	// [minCommitTS, maxCommitTS). Typically, this is the lease interval of the
+	// reconciliation job on behalf of which the KVAccessor is acting. If we're
+	// unable to commit within the interval, a commitTimestampOutOfBoundsError is
+	// returned.
 	UpdateSpanConfigRecords(
 		ctx context.Context,
 		toDelete []Target,
 		toUpsert []Record,
-		leaseStartTime hlc.Timestamp,
-		leaseExpirationTime hlc.Timestamp,
+		minCommitTS, maxCommitTS hlc.Timestamp,
 	) error
 
 	// WithTxn returns a KVAccessor that runs using the given transaction (with

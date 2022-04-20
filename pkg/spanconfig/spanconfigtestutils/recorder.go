@@ -61,11 +61,10 @@ func (r *KVAccessorRecorder) UpdateSpanConfigRecords(
 	ctx context.Context,
 	toDelete []spanconfig.Target,
 	toUpsert []spanconfig.Record,
-	leaseStartTime hlc.Timestamp,
-	leaseExpirationTime hlc.Timestamp,
+	minCommitTS, maxCommitTS hlc.Timestamp,
 ) error {
 	if err := r.underlying.UpdateSpanConfigRecords(
-		ctx, toDelete, toUpsert, leaseStartTime, leaseExpirationTime,
+		ctx, toDelete, toUpsert, minCommitTS, maxCommitTS,
 	); err != nil {
 		return err
 	}

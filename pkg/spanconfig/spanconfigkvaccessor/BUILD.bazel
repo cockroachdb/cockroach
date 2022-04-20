@@ -4,7 +4,6 @@ go_library(
     name = "spanconfigkvaccessor",
     srcs = [
         "dummy.go",
-        "error.go",
         "kvaccessor.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor",
@@ -24,7 +23,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//proto",
     ],
 )
 
