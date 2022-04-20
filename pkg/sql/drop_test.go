@@ -1287,7 +1287,7 @@ func TestDropPhysicalTableGC(t *testing.T) {
 }
 
 func dropLargeDatabaseGeneric(
-	t *testing.T, workloadParams sqltestutils.GenerateViewBasedGraphSchemaParams, useDeclarative bool,
+	t testing.TB, workloadParams sqltestutils.GenerateViewBasedGraphSchemaParams, useDeclarative bool,
 ) {
 	// Creates a complex schema with a view based graph that nests within
 	// each other, which can lead to long DROP times specially if there
@@ -1312,6 +1312,10 @@ CREATE DATABASE largedb;
 		sqlDB.Exec(t, `SET use_declarative_schema_changer=off;`)
 	}
 	startTime := timeutil.Now()
+	if b, isB := t.(*testing.B); isB {
+		b.StartTimer()
+		defer b.StopTimer()
+	}
 	sqlDB.Exec(t, `DROP DATABASE largedb;`)
 	t.Logf("Total time for drop (declarative: %t) %f",
 		useDeclarative,
@@ -1330,6 +1334,33 @@ func TestDropLargeDatabaseWithLegacySchemaChanger(t *testing.T) {
 			GraphDepth:         4,
 		},
 		false)
+}
+
+func BenchmarkDropLargeDatabase(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+
+	for _, declarative := range []bool{false, true} {
+		for _, tables := range []int{2} {
+			for _, depth := range []int{12} {
+				for _, columns := range []int{1} {
+					b.Run(fmt.Sprintf("tables=%d,columns=%d,depth=%d,declarative=%t",
+						tables*depth, columns*tables*depth, depth, declarative), func(b *testing.B) {
+						for i := 0; i < b.N; i++ {
+							b.StopTimer()
+							dropLargeDatabaseGeneric(b,
+								sqltestutils.GenerateViewBasedGraphSchemaParams{
+									SchemaName:         "largedb",
+									NumTablesPerDepth:  tables,
+									NumColumnsPerTable: columns,
+									GraphDepth:         depth,
+								},
+								declarative)
+						}
+					})
+				}
+			}
+		}
+	}
 }
 
 func TestDropLargeDatabaseWithDeclarativeSchemaChanger(t *testing.T) {
