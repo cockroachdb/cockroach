@@ -26,16 +26,26 @@ import (
 // ApplyDepRules adds dependency edges to the graph according to the
 // registered dependency rules.
 func ApplyDepRules(g *scgraph.Graph) error {
+	type toAdd struct {
+		name string
+		kind scgraph.DepEdgeKind
+		from *screl.Node
+		to   *screl.Node
+	}
+	var edges []toAdd
 	for _, dr := range registry.depRules {
+		edges = edges[:0]
 		start := timeutil.Now()
 		var added int
 		if err := dr.q.Iterate(g.Database(), func(r rel.Result) error {
-			from := r.Var(dr.from).(*screl.Node)
-			to := r.Var(dr.to).(*screl.Node)
 			added++
-			return g.AddDepEdge(
-				dr.name, dr.kind, from.Target, from.CurrentStatus, to.Target, to.CurrentStatus,
-			)
+			edges = append(edges, toAdd{
+				name: dr.name,
+				kind: dr.kind,
+				from: r.Var(dr.from).(*screl.Node),
+				to:   r.Var(dr.to).(*screl.Node),
+			})
+			return nil
 		}); err != nil {
 			return err
 		}
@@ -45,7 +55,18 @@ func ApplyDepRules(g *scgraph.Graph) error {
 				dr.name, added, timeutil.Since(start),
 			)
 		}
+		for i := range edges {
+			e := &edges[i]
+			if err := g.AddDepEdge(
+				e.name, e.kind,
+				e.from.Target, e.from.CurrentStatus,
+				e.to.Target, e.to.CurrentStatus,
+			); err != nil {
+				return err
+			}
+		}
 	}
+
 	return nil
 }
 
