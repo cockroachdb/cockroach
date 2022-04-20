@@ -232,7 +232,7 @@ func makeLimiter(
 	fn := func(ctx context.Context) {
 		rate := quotapool.Limit(s.rate.Get(sv))
 		if rate == 0 {
-			rate = quotapool.Limit(math.MaxInt64)
+			rate = quotapool.Limit(math.Inf(1))
 		}
 		burst := s.burst.Get(sv)
 		if burst == 0 {
