@@ -2358,11 +2358,6 @@ func newTableDesc(
 	return ret, nil
 }
 
-// defaultTTLScheduleCron is the default cron duration for row-level TTL.
-// defaultTTLScheduleCron cannot be a cluster setting as this would involve
-// changing all existing schedules to match the new setting.
-const defaultTTLScheduleCron = "@hourly"
-
 // newRowLevelTTLScheduledJob returns a *jobs.ScheduledJob for row level TTL
 // for a given table.
 func newRowLevelTTLScheduledJob(
@@ -2380,7 +2375,7 @@ func newRowLevelTTLScheduledJob(
 		OnError: jobspb.ScheduleDetails_RETRY_SCHED,
 	})
 
-	if err := sj.SetSchedule(rowLevelTTLSchedule(ttl)); err != nil {
+	if err := sj.SetSchedule(ttl.DeletionCronOrDefault()); err != nil {
 		return nil, err
 	}
 	args := &catpb.ScheduledRowLevelTTLArgs{
@@ -2395,13 +2390,6 @@ func newRowLevelTTLScheduledJob(
 		jobspb.ExecutionArguments{Args: any},
 	)
 	return sj, nil
-}
-
-func rowLevelTTLSchedule(ttl *catpb.RowLevelTTL) string {
-	if override := ttl.DeletionCron; override != "" {
-		return override
-	}
-	return defaultTTLScheduleCron
 }
 
 func checkTTLEnabledForCluster(ctx context.Context, st *cluster.Settings) error {
