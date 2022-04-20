@@ -12,8 +12,11 @@ package quotapool
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // Limit defines a rate in terms of quota per second.
@@ -23,7 +26,8 @@ type Limit float64
 // It has the added feature that quota acquired from the pool can be returned
 // in the case that they end up not getting used.
 type RateLimiter struct {
-	qp *AbstractPool
+	qp    *AbstractPool
+	isInf syncutil.AtomicBool
 }
 
 // NewRateLimiter defines a new RateLimiter. The limiter is implemented as a
@@ -35,6 +39,7 @@ func NewRateLimiter(name string, rate Limit, burst int64, options ...Option) *Ra
 	tb := &TokenBucket{}
 	rl.qp = New(name, tb, options...)
 	tb.Init(TokensPerSecond(rate), Tokens(burst), rl.qp.timeSource)
+	rl.isInf.Set(math.IsInf(float64(rate), 1))
 	return rl
 }
 
@@ -54,6 +59,9 @@ func (rl *RateLimiter) WaitN(ctx context.Context, n int64) error {
 		// Special case 0 acquisition.
 		return nil
 	}
+	if rl.isInf.Get() {
+		return nil
+	}
 	r := rl.newRateRequest(n)
 	defer rl.putRateRequest(r)
 	if err := rl.qp.Acquire(ctx, r); err != nil {
@@ -66,6 +74,10 @@ func (rl *RateLimiter) WaitN(ctx context.Context, n int64) error {
 // false and not block if there is currently insufficient quota or the pool is
 // closed.
 func (rl *RateLimiter) AdmitN(n int64) bool {
+	if rl.isInf.Get() {
+		return true
+	}
+
 	r := rl.newRateRequest(n)
 	defer rl.putRateRequest(r)
 	return rl.qp.Acquire(context.Background(), (*rateRequestNoWait)(r)) == nil
@@ -79,6 +91,7 @@ func (rl *RateLimiter) AdmitN(n int64) bool {
 // putting the limiter into debt.
 func (rl *RateLimiter) UpdateLimit(rate Limit, burst int64) {
 	rl.qp.Update(func(res Resource) (shouldNotify bool) {
+		rl.isInf.Set(math.IsInf(float64(rate), 1))
 		tb := res.(*TokenBucket)
 		tb.UpdateConfig(TokensPerSecond(rate), Tokens(burst))
 		return true
