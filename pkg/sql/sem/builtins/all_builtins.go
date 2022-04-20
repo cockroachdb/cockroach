@@ -41,6 +41,7 @@ func init() {
 	initOverlapsBuiltins()
 	initReplicationBuiltins()
 	initPgcryptoBuiltins()
+	initProbeRangesBuiltins()
 
 	AllBuiltinNames = make([]string, 0, len(builtins))
 	AllAggregateBuiltinNames = make([]string, 0, len(aggregates))
