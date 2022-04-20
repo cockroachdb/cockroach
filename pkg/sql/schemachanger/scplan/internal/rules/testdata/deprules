@@ -488,14 +488,14 @@ deprules
     - $to[DescID] = $DescID-join-var
     - $from[IndexID] = $IndexID-join-var
     - $to[IndexID] = $IndexID-join-var
-- name: column type set right after column existence
+- name: column name set right after column existence
   from: from-node
   kind: SameStagePrecedence
   to: to-node
   query:
     - $from[Type] = '*scpb.Column'
     - $from-target[TargetStatus] = PUBLIC
-    - $to[Type] = '*scpb.ColumnType'
+    - $to[Type] = '*scpb.ColumnName'
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = DELETE_ONLY
     - $to-node[CurrentStatus] = PUBLIC
@@ -587,7 +587,7 @@ deprules
   query:
     - $from[Type] = '*scpb.ColumnName'
     - $from-target[TargetStatus] = PUBLIC
-    - $to[Type] = '*scpb.Column'
+    - $to[Type] = '*scpb.ColumnType'
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = PUBLIC
     - $to-node[CurrentStatus] = PUBLIC
@@ -835,3 +835,27 @@ deprules
     - $from[DescID] = $DescID-join-var
     - $to[DescID] = $DescID-join-var
     - column-featured-in-index(*scpb.Column, scpb.Element)($from, $to)
+- name: ensure columns are in increasing order
+  from: laterColumn-node
+  kind: SameStagePrecedence
+  to: earlierColumn-node
+  query:
+    - $status IN [WRITE_ONLY, PUBLIC]
+    - $target-status = PUBLIC
+    - $laterColumn[Type] = '*scpb.Column'
+    - $earlierColumn[Type] = '*scpb.Column'
+    - $laterColumn[DescID] = $table-id
+    - $earlierColumn[DescID] = $table-id
+    - column-later-column-is-greater(*scpb.Column, *scpb.Column)($laterColumn, $earlierColumn)
+    - $laterColumn-target[TargetStatus] = $target-status
+    - $earlierColumn-target[TargetStatus] = $target-status
+    - $laterColumn-node[CurrentStatus] = $status
+    - $earlierColumn-node[CurrentStatus] = $status
+    - $laterColumn-target[Type] = '*scpb.Target'
+    - $laterColumn-target[Element] = $laterColumn
+    - $laterColumn-node[Type] = '*screl.Node'
+    - $laterColumn-node[Target] = $laterColumn-target
+    - $earlierColumn-target[Type] = '*scpb.Target'
+    - $earlierColumn-target[Element] = $earlierColumn
+    - $earlierColumn-node[Type] = '*screl.Node'
+    - $earlierColumn-node[Target] = $earlierColumn-target
