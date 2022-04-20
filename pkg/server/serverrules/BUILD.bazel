@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "serverrules",
+    srcs = ["metric_rules.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/serverrules",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver",
+        "//pkg/util/metric",
+        "@com_github_gogo_protobuf//proto",
+    ],
+)
+
+go_test(
+    name = "serverrules_test",
+    srcs = ["metric_rules_test.go"],
+    embed = [":serverrules"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "@com_github_stretchr_testify//require",
+    ],
+)
