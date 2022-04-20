@@ -33,8 +33,9 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.ColumnComment) scop.Op {
 					return &scop.RemoveColumnComment{
-						TableID:  this.TableID,
-						ColumnID: this.ColumnID,
+						TableID:        this.TableID,
+						ColumnID:       this.ColumnID,
+						PgAttributeNum: this.PgAttributeNum,
 					}
 				}),
 			),

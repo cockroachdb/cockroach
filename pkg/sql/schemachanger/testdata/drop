@@ -350,6 +350,7 @@ upsert descriptor #108
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -391,6 +392,7 @@ upsert descriptor #108
   +        columnComment:
   +          columnId: 2
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 2
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -443,6 +445,7 @@ upsert descriptor #108
   +        columnComment:
   +          columnId: 3
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 3
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -673,6 +676,7 @@ upsert descriptor #108
   -        columnComment:
   -          columnId: 1
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 1
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -714,6 +718,7 @@ upsert descriptor #108
   -        columnComment:
   -          columnId: 2
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 2
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -766,6 +771,7 @@ upsert descriptor #108
   -        columnComment:
   -          columnId: 3
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 3
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -2156,6 +2162,7 @@ upsert descriptor #116
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2199,6 +2206,7 @@ upsert descriptor #116
   +        columnComment:
   +          columnId: 2
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 2
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2253,6 +2261,7 @@ upsert descriptor #116
   +        columnComment:
   +          columnId: 3
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 3
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2475,6 +2484,7 @@ upsert descriptor #117
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -2518,6 +2528,7 @@ upsert descriptor #117
   +        columnComment:
   +          columnId: 2
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 2
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -2572,6 +2583,7 @@ upsert descriptor #117
   +        columnComment:
   +          columnId: 3
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 3
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -2786,6 +2798,7 @@ upsert descriptor #118
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 118
   +      metadata:
   +        sourceElementId: 3
@@ -2847,6 +2860,7 @@ upsert descriptor #118
   +        columnComment:
   +          columnId: 2
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 2
   +          tableId: 118
   +      metadata:
   +        sourceElementId: 3
@@ -3044,6 +3058,7 @@ upsert descriptor #119
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 119
   +      metadata:
   +        sourceElementId: 9
@@ -3204,6 +3219,7 @@ upsert descriptor #120
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 120
   +      metadata:
   +        sourceElementId: 10
@@ -3247,6 +3263,7 @@ upsert descriptor #120
   +        columnComment:
   +          columnId: 2
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 2
   +          tableId: 120
   +      metadata:
   +        sourceElementId: 10
@@ -3408,6 +3425,7 @@ upsert descriptor #121
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 121
   +      metadata:
   +        sourceElementId: 11
@@ -3451,6 +3469,7 @@ upsert descriptor #121
   +        columnComment:
   +          columnId: 2
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 2
   +          tableId: 121
   +      metadata:
   +        sourceElementId: 11
@@ -3611,6 +3630,7 @@ upsert descriptor #122
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 122
   +      metadata:
   +        sourceElementId: 11
@@ -3654,6 +3674,7 @@ upsert descriptor #122
   +        columnComment:
   +          columnId: 2
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 2
   +          tableId: 122
   +      metadata:
   +        sourceElementId: 11
@@ -4032,6 +4053,7 @@ upsert descriptor #125
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -4075,6 +4097,7 @@ upsert descriptor #125
   +        columnComment:
   +          columnId: 2
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 2
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -4118,6 +4141,7 @@ upsert descriptor #125
   +        columnComment:
   +          columnId: 3
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 3
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -4507,6 +4531,7 @@ upsert descriptor #116
   -        columnComment:
   -          columnId: 1
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 1
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -4550,6 +4575,7 @@ upsert descriptor #116
   -        columnComment:
   -          columnId: 2
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 2
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -4604,6 +4630,7 @@ upsert descriptor #116
   -        columnComment:
   -          columnId: 3
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 3
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -4819,6 +4846,7 @@ upsert descriptor #117
   -        columnComment:
   -          columnId: 1
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 1
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -4862,6 +4890,7 @@ upsert descriptor #117
   -        columnComment:
   -          columnId: 2
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 2
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -4916,6 +4945,7 @@ upsert descriptor #117
   -        columnComment:
   -          columnId: 3
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 3
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -5127,6 +5157,7 @@ upsert descriptor #118
   -        columnComment:
   -          columnId: 1
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 1
   -          tableId: 118
   -      metadata:
   -        sourceElementId: 3
@@ -5188,6 +5219,7 @@ upsert descriptor #118
   -        columnComment:
   -          columnId: 2
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 2
   -          tableId: 118
   -      metadata:
   -        sourceElementId: 3

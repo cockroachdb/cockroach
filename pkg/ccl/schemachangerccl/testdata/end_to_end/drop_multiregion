@@ -230,6 +230,7 @@ upsert descriptor #108
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -289,6 +290,7 @@ upsert descriptor #108
   +        columnComment:
   +          columnId: 2
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 2
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -573,6 +575,7 @@ upsert descriptor #108
   -        columnComment:
   -          columnId: 1
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 1
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -632,6 +635,7 @@ upsert descriptor #108
   -        columnComment:
   -          columnId: 2
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 2
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -912,6 +916,7 @@ upsert descriptor #109
   +        columnComment:
   +          columnId: 1
   +          comment: __placeholder_comment__
+  +          pgAttributeNum: 1
   +          tableId: 109
   +      metadata:
   +        sourceElementId: 1
@@ -1147,6 +1152,7 @@ upsert descriptor #109
   -        columnComment:
   -          columnId: 1
   -          comment: __placeholder_comment__
+  -          pgAttributeNum: 1
   -          tableId: 109
   -      metadata:
   -        sourceElementId: 1

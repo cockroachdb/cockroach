@@ -433,6 +433,7 @@ message ColumnComment {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   string comment = 3;
+  uint32 pg_attribute_num = 4 [(gogoproto.customname) = "PgAttributeNum", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PGAttributeNum"];
 }
 
 message ConstraintComment {
