@@ -12,6 +12,7 @@ package spanconfigsqlwatcher
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
@@ -96,6 +97,11 @@ func (b *buffer) advance(rangefeed rangefeedKind, timestamp hlc.Timestamp) {
 func (b *buffer) add(ev event) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if ev.update.IsDescriptorUpdate() {
+		if ev.update.GetDescriptorUpdate().ID == descpb.ID(51) {
+			log.Infof(context.Background(), "xxx: adding %s to buffer", ev.update.GetDescriptorUpdate())
+		}
+	}
 	return b.mu.buffer.Add(ev)
 }
 
@@ -235,6 +241,7 @@ func (b *buffer) flush(
 		descType, err := combine(prevDescriptorSQLUpdate.Type,
 			descriptorUpdate.Type)
 		if err != nil {
+			log.Fatalf(ctx, "%s vs. %s: %v", prevDescriptorSQLUpdate, descriptorUpdate, err)
 			return nil, hlc.Timestamp{}, err
 		}
 		sqlUpdates[len(sqlUpdates)-1] = spanconfig.MakeDescriptorSQLUpdate(
