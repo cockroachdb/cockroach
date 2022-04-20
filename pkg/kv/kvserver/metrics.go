@@ -311,6 +311,18 @@ var (
 		Measurement: "Keys/Sec",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAverageWriteBytesPerSecond = metric.Metadata{
+		Name:        "rebalancing.writebytespersecond",
+		Help:        "Average number of bytes read recently per second.",
+		Measurement: "Bytes/Sec",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaAverageReadBytesPerSecond = metric.Metadata{
+		Name:        "rebalancing.readbytespersecond",
+		Help:        "Average number of bytes written recently per second.",
+		Measurement: "Bytes/Sec",
+		Unit:        metric.Unit_BYTES,
+	}
 
 	// Metric for tracking follower reads.
 	metaFollowerReadsCount = metric.Metadata{
@@ -1379,11 +1391,13 @@ type StoreMetrics struct {
 	Reserved           *metric.Gauge
 
 	// Rebalancing metrics.
-	L0SubLevelsHistogram     *metric.Histogram
-	AverageQueriesPerSecond  *metric.GaugeFloat64
-	AverageWritesPerSecond   *metric.GaugeFloat64
-	AverageReadsPerSecond    *metric.GaugeFloat64
-	AverageRequestsPerSecond *metric.GaugeFloat64
+	L0SubLevelsHistogram       *metric.Histogram
+	AverageQueriesPerSecond    *metric.GaugeFloat64
+	AverageWritesPerSecond     *metric.GaugeFloat64
+	AverageReadsPerSecond      *metric.GaugeFloat64
+	AverageRequestsPerSecond   *metric.GaugeFloat64
+	AverageWriteBytesPerSecond *metric.GaugeFloat64
+	AverageReadBytesPerSecond  *metric.GaugeFloat64
 
 	// Follower read metrics.
 	FollowerReadsCount *metric.Counter
@@ -1836,8 +1850,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			l0SublevelMaxSampled,
 			1, /* sig figures (integer) */
 		),
-		AverageRequestsPerSecond: metric.NewGaugeFloat64(metaAverageRequestsPerSecond),
-		AverageReadsPerSecond:    metric.NewGaugeFloat64(metaAverageReadsPerSecond),
+		AverageRequestsPerSecond:   metric.NewGaugeFloat64(metaAverageRequestsPerSecond),
+		AverageReadsPerSecond:      metric.NewGaugeFloat64(metaAverageReadsPerSecond),
+		AverageWriteBytesPerSecond: metric.NewGaugeFloat64(metaAverageWriteBytesPerSecond),
+		AverageReadBytesPerSecond:  metric.NewGaugeFloat64(metaAverageReadBytesPerSecond),
 
 		// Follower reads metrics.
 		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
