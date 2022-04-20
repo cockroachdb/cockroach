@@ -69,15 +69,47 @@ func TestSQLStatsCompactor(t *testing.T) {
 
 	testCases := []struct {
 		stmtCount            int
-		maxPersistedRowLimit []int
+		maxPersistedRowLimit int
+		rowsToDeletePerTxn   int
 	}{
 		{
 			stmtCount:            10,
-			maxPersistedRowLimit: []int{2, 9},
+			maxPersistedRowLimit: 2,
+			rowsToDeletePerTxn:   1,
+		},
+		{
+			stmtCount:            10,
+			maxPersistedRowLimit: 2,
+			rowsToDeletePerTxn:   4,
+		},
+		{
+			stmtCount:            10,
+			maxPersistedRowLimit: 2,
+			rowsToDeletePerTxn:   128,
+		},
+		{
+			stmtCount:            10,
+			maxPersistedRowLimit: 2,
+			rowsToDeletePerTxn:   1024,
 		},
 		{
 			stmtCount:            200,
-			maxPersistedRowLimit: []int{160, 205},
+			maxPersistedRowLimit: 40,
+			rowsToDeletePerTxn:   1,
+		},
+		{
+			stmtCount:            200,
+			maxPersistedRowLimit: 40,
+			rowsToDeletePerTxn:   2,
+		},
+		{
+			stmtCount:            200,
+			maxPersistedRowLimit: 40,
+			rowsToDeletePerTxn:   1024,
+		},
+		{
+			stmtCount:            200,
+			maxPersistedRowLimit: 205,
 		},
 	}
 
@@ -111,88 +143,100 @@ func TestSQLStatsCompactor(t *testing.T) {
 	}()
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("stmtCount=%d", tc.stmtCount), func(t *testing.T) {
-			for _, maxPersistedRowLimit := range tc.maxPersistedRowLimit {
-				t.Run(fmt.Sprintf("maxPersistedRowLimit=%d", maxPersistedRowLimit), func(t *testing.T) {
-					_, err := internalExecutor.ExecEx(
-						ctx,
-						"truncate-stmt-stats",
-						nil,
-						sessiondata.InternalExecutorOverride{
-							User: security.NodeUserName(),
-						},
-						"TRUNCATE system.statement_statistics",
-					)
-					require.NoError(t, err)
-					_, err = internalExecutor.ExecEx(
-						ctx,
-						"truncate-txn-stats",
-						nil,
-						sessiondata.InternalExecutorOverride{
-							User: security.NodeUserName(),
-						},
-						"TRUNCATE system.transaction_statistics",
-					)
-					require.NoError(t, err)
-					firstServerSQLStats :=
-						firstServer.
-							SQLServer().(*sql.Server).
-							GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
-					firstSQLConn.Exec(t,
-						"SET CLUSTER SETTING sql.stats.persisted_rows.max = $1",
-						maxPersistedRowLimit)
+		t.Run(fmt.Sprintf("stmtCount=%d/maxPersistedRowLimit=%d/rowsDeletePerTxn=%d",
+			tc.stmtCount,
+			tc.maxPersistedRowLimit,
+			tc.rowsToDeletePerTxn,
+		), func(t *testing.T) {
+			_, err := internalExecutor.ExecEx(
+				ctx,
+				"truncate-stmt-stats",
+				nil,
+				sessiondata.InternalExecutorOverride{
+					User: security.NodeUserName(),
+				},
+				"TRUNCATE system.statement_statistics",
+			)
+			require.NoError(t, err)
+			_, err = internalExecutor.ExecEx(
+				ctx,
+				"truncate-txn-stats",
+				nil,
+				sessiondata.InternalExecutorOverride{
+					User: security.NodeUserName(),
+				},
+				"TRUNCATE system.transaction_statistics",
+			)
+			require.NoError(t, err)
+			firstServerSQLStats :=
+				firstServer.
+					SQLServer().(*sql.Server).
+					GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+			firstSQLConn.Exec(t,
+				"SET CLUSTER SETTING sql.stats.persisted_rows.max = $1",
+				tc.maxPersistedRowLimit)
 
-					stmt := "SELECT 1"
-					for i := 0; i < tc.stmtCount; i++ {
-						firstSQLConn.Exec(t, stmt)
-						// Mutate the stmt to create different fingerprint.
-						stmt = fmt.Sprintf("%s, 1", stmt)
-					}
-
-					firstServerSQLStats.Flush(ctx)
-
-					statsCompactor := persistedsqlstats.NewStatsCompactor(
-						firstServer.ClusterSettings(),
-						firstServer.InternalExecutor().(sqlutil.InternalExecutor),
-						firstServer.DB(),
-						metric.NewCounter(metric.Metadata{}),
-						&sqlstats.TestingKnobs{
-							AOSTClause: "AS OF SYSTEM TIME '-1us'",
-						},
-					)
-
-					// Initial compaction should remove the all the oldest entries.
-					expectedDeletedStmtFingerprints, expectedDeletedTxnFingerprints :=
-						getTopSortedFingerprints(t, firstSQLConn, maxPersistedRowLimit)
-					err = statsCompactor.DeleteOldestEntries(ctx)
-					require.NoError(t, err)
-
-					actualStmtFingerprints, actualTxnFingerprints :=
-						getTopSortedFingerprints(t, firstSQLConn, 0 /* limit */)
-
-					require.GreaterOrEqual(t, maxPersistedRowLimit, len(actualStmtFingerprints))
-					require.GreaterOrEqual(t, maxPersistedRowLimit, len(actualTxnFingerprints))
-
-					for fingerprintID := range actualStmtFingerprints {
-						for _, deletedFingerprintID := range expectedDeletedStmtFingerprints {
-							require.NotEqual(t, deletedFingerprintID, fingerprintID)
-						}
-					}
-
-					for fingerprintID := range actualTxnFingerprints {
-						for _, deletedFingerprintID := range expectedDeletedTxnFingerprints {
-							require.NotEqual(t, deletedFingerprintID, fingerprintID)
-						}
-					}
-
-					// Calling it again should be a noop.
-					err = statsCompactor.DeleteOldestEntries(ctx)
-					require.NoError(t, err)
-					stmtStatsCnt, txnStatsCnt := getPersistedStatsEntry(t, firstSQLConn)
-					require.GreaterOrEqual(t, maxPersistedRowLimit, stmtStatsCnt)
-					require.GreaterOrEqual(t, maxPersistedRowLimit, txnStatsCnt)
-				})
+			if tc.rowsToDeletePerTxn > 0 {
+				firstSQLConn.Exec(t,
+					"SET CLUSTER SETTING sql.stats.cleanup.rows_to_delete_per_txn = $1",
+					tc.rowsToDeletePerTxn)
+			} else {
+				firstSQLConn.Exec(t, "RESET CLUSTER SETTING sql.stats.cleanup.rows_to_delete_per_txn")
 			}
+
+			stmt := "SELECT 1"
+			for i := 0; i < tc.stmtCount; i++ {
+				firstSQLConn.Exec(t, stmt)
+				// Mutate the stmt to create different fingerprint.
+				stmt = fmt.Sprintf("%s, 1", stmt)
+			}
+
+			firstServerSQLStats.Flush(ctx)
+
+			statsCompactor := persistedsqlstats.NewStatsCompactor(
+				firstServer.ClusterSettings(),
+				firstServer.InternalExecutor().(sqlutil.InternalExecutor),
+				firstServer.DB(),
+				metric.NewCounter(metric.Metadata{}),
+				&sqlstats.TestingKnobs{
+					AOSTClause: "AS OF SYSTEM TIME '-1us'",
+				},
+			)
+
+			// Initial compaction should remove the all the oldest entries.
+			expectedDeletedStmtFingerprints, expectedDeletedTxnFingerprints :=
+				getTopSortedFingerprints(t, firstSQLConn, tc.maxPersistedRowLimit)
+			err = statsCompactor.DeleteOldestEntries(ctx)
+			require.NoError(t, err)
+
+			// Sanity check.
+			require.Equal(t, tc.maxPersistedRowLimit, len(expectedDeletedStmtFingerprints))
+			require.Equal(t, tc.maxPersistedRowLimit, len(expectedDeletedTxnFingerprints))
+
+			actualStmtFingerprints, actualTxnFingerprints :=
+				getTopSortedFingerprints(t, firstSQLConn, 0 /* limit */)
+
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, len(actualStmtFingerprints))
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, len(actualTxnFingerprints))
+
+			for fingerprintID := range actualStmtFingerprints {
+				for _, deletedFingerprintID := range expectedDeletedStmtFingerprints {
+					require.NotEqual(t, deletedFingerprintID, fingerprintID)
+				}
+			}
+
+			for fingerprintID := range actualTxnFingerprints {
+				for _, deletedFingerprintID := range expectedDeletedTxnFingerprints {
+					require.NotEqual(t, deletedFingerprintID, fingerprintID)
+				}
+			}
+
+			// Calling it again should be a noop.
+			err = statsCompactor.DeleteOldestEntries(ctx)
+			require.NoError(t, err)
+			stmtStatsCnt, txnStatsCnt := getPersistedStatsEntry(t, firstSQLConn)
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, stmtStatsCnt)
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, txnStatsCnt)
 		})
 	}
 }
