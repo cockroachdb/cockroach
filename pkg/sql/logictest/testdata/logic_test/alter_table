@@ -613,10 +613,10 @@ CREATE SEQUENCE initial_seq
 statement error pgcode 0A000 cannot evaluate scalar expressions containing sequence operations in this context
 ALTER TABLE add_default ADD g INT DEFAULT nextval('initial_seq')
 
-statement error pgcode 22C01 cannot evaluate scalar expressions using table lookups in this context
+statement error pgcode XX000 .*cannot evaluate scalar expressions using table lookups in this context.*
 ALTER TABLE add_default ADD g OID DEFAULT 'foo'::regclass::oid
 
-statement error pgcode 22C01 cannot evaluate scalar expressions using table lookups in this context
+statement error pgcode XX000 .*cannot evaluate scalar expressions using table lookups in this context.*
 ALTER TABLE add_default ADD g INT DEFAULT 'foo'::regtype::INT
 
 subtest 26422
@@ -774,7 +774,7 @@ CREATE TABLE default_err_test (foo text)
 statement ok
 INSERT INTO default_err_test VALUES ('foo'), ('bar'), ('baz')
 
-statement error some_msg
+statement error pgcode XX000 .*some_msg.*
 ALTER TABLE default_err_test ADD COLUMN id int DEFAULT crdb_internal.force_error('foo', 'some_msg')
 
 query T
@@ -1899,7 +1899,7 @@ SELECT count(usage_count)
 query I
 SELECT count(usage_count)
   FROM crdb_internal.feature_usage
- WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 4;
+ WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 1;
 ----
 1
 

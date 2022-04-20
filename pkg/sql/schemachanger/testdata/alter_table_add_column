@@ -13,11 +13,13 @@ ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
+increment telemetry for sql.schema.qualifcation.default_expr
+increment telemetry for sql.schema.new_column_type.int8
 begin transaction #1
 # begin StatementPhase
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 7 MutationType ops
+## PreCommitPhase stage 1 of 1 with 8 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -29,7 +31,7 @@ upsert descriptor #106
   +    - PUBLIC
   +    - PUBLIC
   +    - DELETE_ONLY
-  +    - ABSENT
+  +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - DELETE_ONLY
@@ -150,7 +152,8 @@ upsert descriptor #106
   +    - 2
        columnNames:
        - i
-  +    - crdb_internal_column_2_name_placeholder
+  +    - j
+  +    defaultColumnId: 2
        name: primary
      formatVersion: 3
      id: 106
@@ -159,7 +162,7 @@ upsert descriptor #106
   +  - column:
   +      defaultExpr: 42:::INT8
   +      id: 2
-  +      name: crdb_internal_column_2_name_placeholder
+  +      name: j
   +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
@@ -189,7 +192,7 @@ upsert descriptor #106
   +      storeColumnIds:
   +      - 2
   +      storeColumnNames:
-  +      - crdb_internal_column_2_name_placeholder
+  +      - j
   +      unique: true
   +      version: 4
   +    mutationId: 1
@@ -226,7 +229,7 @@ upsert descriptor #106
        - PUBLIC
   -    - DELETE_ONLY
   +    - WRITE_ONLY
-       - ABSENT
+       - PUBLIC
        - PUBLIC
        - PUBLIC
   -    - DELETE_ONLY
@@ -286,12 +289,11 @@ upsert descriptor #106
        - PUBLIC
        - PUBLIC
   -    - WRITE_ONLY
-  -    - ABSENT
+       - PUBLIC
        - PUBLIC
        - PUBLIC
   -    - WRITE_ONLY
   -    - ABSENT
-  +    - PUBLIC
   +    - PUBLIC
        jobId: "1"
        relevantStatements:
@@ -302,19 +304,12 @@ upsert descriptor #106
        targetRanks:
        - 0
   ...
-       columnNames:
-       - i
-  -    - crdb_internal_column_2_name_placeholder
-  +    - j
-       name: primary
-     formatVersion: 3
-  ...
      modificationTime: {}
      mutations:
   -  - column:
   -      defaultExpr: 42:::INT8
   -      id: 2
-  -      name: crdb_internal_column_2_name_placeholder
+  -      name: j
   -      pgAttributeNum: 2
   -      type:
   -        family: IntFamily
@@ -347,7 +342,7 @@ upsert descriptor #106
   -      storeColumnIds:
   -      - 2
   -      storeColumnNames:
-  -      - crdb_internal_column_2_name_placeholder
+  -      - j
          unique: true
          version: 4
   ...
@@ -569,6 +564,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
+write *eventpb.FinishSchemaChange to event log for descriptor 106
 create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"

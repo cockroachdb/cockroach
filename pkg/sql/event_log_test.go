@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStructuredEventLogging(t *testing.T) {
@@ -119,6 +120,7 @@ func TestPerfLogging(t *testing.T) {
 		logRe string
 		// Whether we expect to find any log messages matching logRe.
 		logExpected bool
+		breakHere   bool
 		// Logging channel all log messages matching logRe must be in.
 		channel logpb.Channel
 		// Optional queries to execute before/after running query.
@@ -276,6 +278,7 @@ func TestPerfLogging(t *testing.T) {
 			errRe:       ``,
 			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/4/0›"`,
 			logExpected: true,
+			breakHere:   true,
 			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
@@ -641,7 +644,7 @@ func TestPerfLogging(t *testing.T) {
                 SET CLUSTER SETTING sql.defaults.transaction_rows_written_err = DEFAULT;
                 SET CLUSTER SETTING sql.defaults.transaction_rows_read_log = DEFAULT;
                 SET CLUSTER SETTING sql.defaults.transaction_rows_read_err = DEFAULT;
-                RESET transaction_rows_written_log;
+								RESET transaction_rows_written_log;
                 RESET transaction_rows_written_err;
                 RESET transaction_rows_read_log;
                 RESET transaction_rows_read_err;
@@ -676,6 +679,12 @@ func TestPerfLogging(t *testing.T) {
 	// Start a SQL server.
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
+	// TODO(fqazi): Enable with MVCC back filler support, since max_row_size is
+	// not properly enforced right now.
+	_, err = sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("SET use_declarative_schema_changer='off'")
+	require.NoError(t, err)
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Enable slow query logging and large row logging.
@@ -699,7 +708,9 @@ func TestPerfLogging(t *testing.T) {
 				continue
 			}
 		}
-
+		if tc.breakHere {
+			t.Log("FOUND")
+		}
 		t.Log(tc.query)
 		start := timeutil.Now().UnixNano()
 		if tc.errRe != "" {

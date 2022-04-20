@@ -817,7 +817,7 @@ statement error unsupported binary operator
 ALTER TABLE x ADD COLUMN d INT AS (a / 0) STORED
 
 # Verify an error during computation fails.
-statement error division by zero
+statement error pgcode XX000 .*division by zero.*
 ALTER TABLE x ADD COLUMN d INT AS (a // 0) STORED
 
 statement ok
