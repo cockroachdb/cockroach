@@ -212,6 +212,16 @@ func Pause(t *testing.T, dir string, newCluster NewClusterFunc) {
 				return
 			}
 		}
+
+		// Need to reset "postCommit" and "nonRevertible" before testFunc being
+		// called for next test. The reason is that if a test did not generate any
+		// post commit phase, the "countStates()" function won't take any effect
+		// since "processPlanInPhase()" only calls the input "processFunc" for the
+		// specified phase. So that such test would inherit "postCommit" and
+		// "nonRevertible" from a previous test which generates post commit phase
+		// stages.
+		postCommit = 0
+		nonRevertible = 0
 	}
 	testPauseCase = func(t *testing.T, setup, stmts []parser.Statement, ord int) {
 		var numInjectedFailures uint32

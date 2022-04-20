@@ -1668,7 +1668,7 @@ func (n *Node) UpdateSpanConfigs(
 		return nil, err
 	}
 	if err := n.spanConfigAccessor.UpdateSpanConfigRecords(
-		ctx, toDelete, toUpsert, req.LeaseStartTime, req.LeaseExpirationTime,
+		ctx, toDelete, toUpsert, req.MinCommitTimestamp, req.MaxCommitTimestamp,
 	); err != nil {
 		return &roachpb.UpdateSpanConfigsResponse{
 			Error: errors.EncodeError(ctx, err),
