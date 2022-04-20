@@ -137,13 +137,19 @@ type sstReader struct {
 	}
 }
 
-// Close implements io.Closer.
-func (r *sstReader) Close() error {
+func (r *sstReader) reset() error {
 	r.pos = 0
 	var err error
 	if r.body != nil {
 		err = r.body.Close(r.ctx)
+		r.body = nil
 	}
+	return err
+}
+
+// Close implements io.Closer.
+func (r *sstReader) Close() error {
+	err := r.reset()
 	r.ctx = nil
 	return err
 }
@@ -203,7 +209,7 @@ func (r *sstReader) ReadAt(p []byte, offset int64) (int, error) {
 
 	// Position the underlying reader at offset if needed.
 	if r.pos != offset {
-		if err := r.Close(); err != nil {
+		if err := r.reset(); err != nil {
 			return 0, err
 		}
 		b, err := r.openAt(offset)
