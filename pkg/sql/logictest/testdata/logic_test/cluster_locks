@@ -34,13 +34,22 @@ statement ok
 BEGIN
 
 statement async readReq ok
-select * from t for update
+SELECT * FROM t
 
 user root
 
+query TTT colnames,retry
+SELECT user_name, query, phase FROM crdb_internal.cluster_queries WHERE user_name='testuser'
+----
+user_name   query             phase
+testuser    SELECT * FROM t   executing
+
 statement ok
-ROLLBACK
+COMMIT
 
 user testuser
 
 awaitstatement readReq
+
+statement ok
+COMMIT
