@@ -372,10 +372,13 @@ var PasswordHashMethod = settings.RegisterEnumSetting(
 	settings.TenantWritable,
 	"server.user_login.password_encryption",
 	"which hash method to use to encode cleartext passwords passed via ALTER/CREATE USER/ROLE WITH PASSWORD",
-	// Note: the default is initially SCRAM, even in mixed-version clusters where
+	// Note: It's possible to set the default to SCRAM, even in mixed-version clusters where
 	// previous-version nodes do not know anything about SCRAM. This is handled
 	// in the GetConfiguredPasswordHashMethod() function.
-	"scram-sha-256",
+	//
+	// We'd like to default this to SCRAM, but is pending the following issue:
+	// https://github.com/cockroachdb/cockroach/issues/80246
+	HashBCrypt.String(),
 	map[int64]string{
 		int64(HashBCrypt):      HashBCrypt.String(),
 		int64(HashSCRAMSHA256): HashSCRAMSHA256.String(),
@@ -822,7 +825,9 @@ var autoUpgradePasswordHashes = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled",
 	"whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256",
-	true,
+	// We'd like to default this to true, but is pending the following issue:
+	// https://github.com/cockroachdb/cockroach/issues/80246
+	false,
 ).WithPublic()
 
 // MaybeUpgradePasswordHash looks at the cleartext and the hashed

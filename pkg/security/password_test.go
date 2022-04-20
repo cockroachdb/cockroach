@@ -39,6 +39,11 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 	ctx := context.Background()
 	s := cluster.MakeTestingClusterSettings()
 
+	// Temporary override until resolution of
+	// https://github.com/cockroachdb/cockroach/issues/80246.
+	PasswordHashMethod.Override(ctx, &s.SV, int64(HashSCRAMSHA256))
+	autoUpgradePasswordHashes.Override(ctx, &s.SV, true)
+
 	const cleartext = "hello"
 
 	ourDefault := int(BcryptCost.Get(&s.SV))

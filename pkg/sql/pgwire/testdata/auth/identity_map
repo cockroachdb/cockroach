@@ -3,6 +3,14 @@
 config secure
 ----
 
+# Temp setting override until the following issue is resolved:
+# https://github.com/cockroachdb/cockroach/issues/80246
+sql
+SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';
+SET CLUSTER SETTING server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled = true;
+----
+ok
+
 
 # Set HBA to add an ident map.
 set_hba
