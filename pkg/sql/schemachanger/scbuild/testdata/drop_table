@@ -65,6 +65,20 @@ DROP TABLE defaultdb.shipments CASCADE;
     columnId: 3
     pgAttributeNum: 3
     tableId: 109
+- [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 109
+- [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
+    tableId: 109
 - [[Column:{DescID: 109, ColumnID: 4}, ABSENT], PUBLIC]
   details:
     columnId: 4
@@ -89,6 +103,20 @@ DROP TABLE defaultdb.shipments CASCADE;
   details:
     columnId: 2
     pgAttributeNum: 2
+    tableId: 111
+- [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 111
+- [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
     tableId: 111
 - [[ColumnComment:{DescID: 109, ColumnID: 1, Comment: tracking_number is good}, ABSENT], PUBLIC]
   details:
@@ -119,6 +147,11 @@ DROP TABLE defaultdb.shipments CASCADE;
     columnId: 2
     name: carrier
     tableId: 109
+- [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
+    tableId: 109
 - [[ColumnName:{DescID: 109, Name: customer_id, ColumnID: 4}, ABSENT], PUBLIC]
   details:
     columnId: 4
@@ -133,6 +166,11 @@ DROP TABLE defaultdb.shipments CASCADE;
   details:
     columnId: 3
     name: status
+    tableId: 109
+- [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    name: tableoid
     tableId: 109
 - [[ColumnName:{DescID: 109, Name: tracking_number, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -149,10 +187,20 @@ DROP TABLE defaultdb.shipments CASCADE;
     columnId: 2
     name: carrier
     tableId: 111
+- [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
+    tableId: 111
 - [[ColumnName:{DescID: 111, Name: customer_id, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     name: customer_id
+    tableId: 111
+- [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    name: tableoid
     tableId: 111
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -180,6 +228,26 @@ DROP TABLE defaultdb.shipments CASCADE;
       type:
         family: StringFamily
         oid: 25
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 109
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    embeddedTypeT:
+      type:
+        family: OidFamily
+        oid: 26
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 109
+- [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    embeddedTypeT:
+      type:
+        family: DecimalFamily
+        oid: 1700
     isNullable: true
     isRelationBeingDropped: true
     tableId: 109
@@ -243,6 +311,26 @@ DROP TABLE defaultdb.shipments CASCADE;
       type:
         family: StringFamily
         oid: 25
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 111
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    embeddedTypeT:
+      type:
+        family: OidFamily
+        oid: 26
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 111
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    embeddedTypeT:
+      type:
+        family: DecimalFamily
+        oid: 1700
     isNullable: true
     isRelationBeingDropped: true
     tableId: 111
