@@ -21,6 +21,7 @@ option go_package = "execinfrapb";
 
 import "jobs/jobspb/jobs.proto";
 import "roachpb/data.proto";
+import "sql/execinfrapb/data.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -56,6 +57,8 @@ message ChangeAggregatorSpec {
      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"
   ];
 
+  // select is the "select clause" for predicate changefeed.
+  optional Expression select = 6 [(gogoproto.nullable) = false];
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
