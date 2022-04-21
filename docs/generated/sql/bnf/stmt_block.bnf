@@ -535,6 +535,7 @@ create_schedule_for_backup_stmt ::=
 
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
+	| 'CREATE' 'CHANGEFEED' opt_changefeed_sink opt_with_options 'AS' 'SELECT' target_list 'FROM' insert_target opt_where_clause
 
 create_extension_stmt ::=
 	'CREATE' 'EXTENSION' 'IF' 'NOT' 'EXISTS' name
@@ -1642,6 +1643,9 @@ changefeed_targets ::=
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
 
+target_list ::=
+	( target_elem ) ( ( ',' target_elem ) )*
+
 with_clause ::=
 	'WITH' cte_list
 	| 'WITH' 'RECURSIVE' cte_list
@@ -1657,9 +1661,6 @@ limit_clause ::=
 	| 'LIMIT' a_expr
 	| 'FETCH' first_or_next select_fetch_first_value row_or_rows 'ONLY'
 	| 'FETCH' first_or_next row_or_rows 'ONLY'
-
-target_list ::=
-	( target_elem ) ( ( ',' target_elem ) )*
 
 drop_database_stmt ::=
 	'DROP' 'DATABASE' database_name opt_drop_behavior
@@ -2261,10 +2262,13 @@ opt_sequence_option_list ::=
 	| 
 
 changefeed_target ::=
-	'TABLE' table_name
-	| table_name
-	| 'TABLE' table_name 'FAMILY' family_name
-	| table_name 'FAMILY' family_name
+	opt_table_prefix table_name opt_changefeed_family
+
+target_elem ::=
+	a_expr 'AS' target_name
+	| a_expr 'identifier'
+	| a_expr
+	| '*'
 
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*
@@ -2298,12 +2302,6 @@ select_fetch_first_value ::=
 row_or_rows ::=
 	'ROW'
 	| 'ROWS'
-
-target_elem ::=
-	a_expr 'AS' target_name
-	| a_expr 'identifier'
-	| a_expr
-	| '*'
 
 table_index_name_list ::=
 	( table_index_name ) ( ( ',' table_index_name ) )*
@@ -2785,8 +2783,16 @@ create_as_table_defs ::=
 enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
 
-family_name ::=
-	name
+opt_table_prefix ::=
+	'TABLE'
+	| 
+
+opt_changefeed_family ::=
+	'FAMILY' family_name
+	| 
+
+target_name ::=
+	unrestricted_name
 
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
@@ -2803,9 +2809,6 @@ sortby ::=
 only_signed_fconst ::=
 	'+' 'FCONST'
 	| '-' 'FCONST'
-
-target_name ::=
-	unrestricted_name
 
 scrub_option ::=
 	'INDEX' 'ALL'
@@ -3148,6 +3151,9 @@ family_def ::=
 
 create_as_constraint_def ::=
 	create_as_constraint_elem
+
+family_name ::=
+	name
 
 materialize_clause ::=
 	'MATERIALIZED'

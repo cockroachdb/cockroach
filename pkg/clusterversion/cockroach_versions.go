@@ -377,6 +377,9 @@ const (
 	// ON UPDATE) expression can be defined to be 'nextval('s')'; we want to be
 	// able to refer to sequence 's' by its ID, since 's' might be later renamed.
 	UpgradeSequenceToBeReferencedByID
+	// EnablePredicateProjectionChangefeed indicates that changefeeds support
+	// predicates and projections.
+	EnablePredicateProjectionChangefeed
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -665,6 +668,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     UpgradeSequenceToBeReferencedByID,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
+	},
+	{
+		Key:     EnablePredicateProjectionChangefeed,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 18},
 	},
 
 	// *************************************************

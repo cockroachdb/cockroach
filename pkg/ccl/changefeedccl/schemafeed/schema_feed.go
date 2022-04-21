@@ -14,13 +14,16 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -28,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -79,24 +83,34 @@ type SchemaFeed interface {
 func New(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
+	user username.SQLUsername,
+	evalCtx *eval.Context,
 	events changefeedbase.SchemaChangeEventClass,
 	targets []jobspb.ChangefeedTargetSpecification,
 	initialHighwater hlc.Timestamp,
 	metrics *Metrics,
 	changefeedOpts map[string]string,
+	sc *tree.SelectClause,
 ) SchemaFeed {
 	m := &schemaFeed{
 		filter:            schemaChangeEventFilters[events],
 		db:                cfg.DB,
 		clock:             cfg.DB.Clock(),
 		settings:          cfg.Settings,
+		codec:             cfg.Codec,
 		targets:           targets,
 		leaseMgr:          cfg.LeaseManager.(*lease.Manager),
 		ie:                cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
 		collectionFactory: cfg.CollectionFactory,
 		metrics:           metrics,
 		changefeedOpts:    changefeedOpts,
+		selectClause:      sc,
+		evalCtx:           evalCtx.Copy(),
+		scFactory: func() (interface{}, func()) {
+			return cfg.JobRegistry.NewSpanConstrainer(user)
+		},
 	}
+
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
 	m.mu.typeDeps = typeDependencyTracker{deps: make(map[descpb.ID][]descpb.ID)}
@@ -118,10 +132,15 @@ type schemaFeed struct {
 	db             *kv.DB
 	clock          *hlc.Clock
 	settings       *cluster.Settings
+	codec          keys.SQLCodec
 	targets        []jobspb.ChangefeedTargetSpecification
 	ie             sqlutil.InternalExecutor
 	metrics        *Metrics
 	changefeedOpts map[string]string
+	selectClause   *tree.SelectClause
+	scFactory      func() (interface{}, func()) // factory to create sql.SpanConstrainer
+	evalCtx        *eval.Context
+	sc             sql.SpanConstrainer // Set when Run called.
 
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
@@ -247,6 +266,10 @@ func (tf *schemaFeed) Run(ctx context.Context) error {
 	if err := tf.markStarted(); err != nil {
 		return err
 	}
+
+	spanConstrainI, cleanup := tf.scFactory()
+	defer cleanup()
+	tf.sc = spanConstrainI.(sql.SpanConstrainer)
 
 	// Fetch the table descs as of the initial highWater and prime the table
 	// history with them. This addresses #41694 where we'd skip the rest of a
@@ -521,6 +544,31 @@ func formatEvent(e TableEvent) string {
 	return fmt.Sprintf("%v->%v", formatDesc(e.Before), formatDesc(e.After))
 }
 
+func (tf *schemaFeed) validateChangefeedExpression(
+	ctx context.Context, desc catalog.TableDescriptor,
+) error {
+	if tf.selectClause == nil {
+		// No predicates configured
+		return nil
+	}
+
+	if len(tf.targets) != 1 {
+		return errors.AssertionFailedf(
+			"predicate changefeeds cannot target more than 1 target (found %d)", len(tf.targets))
+	}
+
+	includeVirtual := tf.changefeedOpts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
+	if err := cdceval.ValidateSelectForTarget(
+		ctx, tf.settings, tf.sc, tf.evalCtx, tf.codec, desc,
+		tf.targets[0], tf.selectClause, includeVirtual,
+	); err != nil {
+		return errors.Wrapf(err,
+			"changefeed expression  [%s] is not valid for table %q, version %d",
+			tree.AsString(tf.selectClause), desc.GetName(), desc.GetVersion())
+	}
+	return nil
+}
+
 func (tf *schemaFeed) validateDescriptor(
 	ctx context.Context, earliestTsBeingIngested hlc.Timestamp, desc catalog.Descriptor,
 ) error {
@@ -584,6 +632,11 @@ func (tf *schemaFeed) validateDescriptor(
 				})
 			}
 		}
+
+		if err := tf.validateChangefeedExpression(ctx, desc); err != nil {
+			return err
+		}
+
 		// Add the types used by the table into the dependency tracker.
 		if err := tf.mu.typeDeps.ingestTable(desc); err != nil {
 			return err

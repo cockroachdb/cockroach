@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // multi-tenant tests
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"    // locality-related table mutations
@@ -4013,7 +4012,9 @@ func TestChangefeedDescription(t *testing.T) {
 	defer stopServer()
 
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	// Create enum to ensure enum values displayed correctly in the summary.
+	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, status status)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
 	sink, cleanup := sqlutils.PGUrl(t, s.Server.SQLAddr(), t.Name(), url.User(username.RootUser))
@@ -4021,19 +4022,49 @@ func TestChangefeedDescription(t *testing.T) {
 	sink.Scheme = changefeedbase.SinkSchemeExperimentalSQL
 	sink.Path = `d`
 
-	var jobID jobspb.JobID
-	sqlDB.QueryRow(t,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, envelope = $2`, sink.String(), `wrapped`,
-	).Scan(&jobID)
-
-	var description string
-	sqlDB.QueryRow(t,
-		`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
-	).Scan(&description)
 	redactedSink := strings.Replace(sink.String(), username.RootUser, `redacted`, 1)
-	expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + redactedSink +
-		`' WITH envelope = 'wrapped', updated`
-	require.Equal(t, expected, description)
+	for _, tc := range []struct {
+		create string
+		descr  string
+	}{
+		{
+			create: "CREATE CHANGEFEED FOR foo INTO $1 WITH updated, envelope = $2",
+			descr:  `CREATE CHANGEFEED FOR TABLE foo INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated`,
+		},
+		{
+			create: "CREATE CHANGEFEED FOR public.foo INTO $1 WITH updated, envelope = $2",
+			descr:  `CREATE CHANGEFEED FOR TABLE public.foo INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated`,
+		},
+		{
+			create: "CREATE CHANGEFEED FOR d.public.foo INTO $1 WITH updated, envelope = $2",
+			descr:  `CREATE CHANGEFEED FOR TABLE d.public.foo INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated`,
+		},
+		{
+			create: "CREATE CHANGEFEED INTO $1 WITH updated, envelope = $2 AS SELECT a FROM foo WHERE a % 2 = 0",
+			descr:  `CREATE CHANGEFEED INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated AS SELECT a FROM foo WHERE (a % 2) = 0`,
+		},
+		{
+			create: "CREATE CHANGEFEED INTO $1 WITH updated, envelope = $2 AS SELECT a FROM public.foo AS bar WHERE a % 2 = 0",
+			descr:  `CREATE CHANGEFEED INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated AS SELECT a FROM public.foo AS bar WHERE (a % 2) = 0`,
+		},
+		{
+			create: "CREATE CHANGEFEED INTO $1 WITH updated, envelope = $2 AS SELECT a FROM foo WHERE status IN ('open', 'closed')",
+			descr:  `CREATE CHANGEFEED INTO '` + redactedSink + `' WITH envelope = 'wrapped', updated AS SELECT a FROM foo WHERE status IN ('open', 'closed')`,
+		},
+	} {
+		t.Run(tc.create, func(t *testing.T) {
+			var jobID jobspb.JobID
+			sqlDB.QueryRow(t, tc.create, sink.String(), `wrapped`).Scan(&jobID)
+
+			var description string
+			sqlDB.QueryRow(t,
+				`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
+			).Scan(&description)
+
+			require.Equal(t, tc.descr, description)
+		})
+	}
+
 }
 
 func TestChangefeedPauseUnpause(t *testing.T) {
@@ -5981,51 +6012,111 @@ func TestChangefeedOnlyInitialScanCSVSinkless(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 }
 
-func TestChangefeedPrimaryKeyFilter(t *testing.T) {
+func TestChangefeedPredicates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b string)")
-		sqlDB.Exec(t, "CREATE TABLE bar (a INT PRIMARY KEY, b string)")
-		sqlDB.Exec(t, "INSERT INTO foo SELECT * FROM generate_series(1, 20)")
+		sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
+		sqlDB.Exec(t, `
+CREATE TABLE foo (
+  a INT, 
+  b STRING, 
+  c STRING,
+  d STRING AS (concat(b, c)) VIRTUAL, 
+  e status DEFAULT 'inactive',
+  PRIMARY KEY (a, b)
+)`)
 
-		sqlDB.ExpectErr(t, "can only be used with schema_change_policy=stop",
-			`CREATE CHANGEFEED FOR foo, bar WITH primary_key_filter='a < 5 OR a > 18'`)
-
-		sqlDB.ExpectErr(t, `option primary_key_filter can only be used with 1 changefeed target`,
-			`CREATE CHANGEFEED FOR foo, bar WITH schema_change_policy='stop', primary_key_filter='a < 5 OR a > 18'`)
-
-		feed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH schema_change_policy='stop', primary_key_filter='a < 5 OR a > 18'`)
+		sqlDB.Exec(t, `
+INSERT INTO foo (a, b) VALUES (0, 'zero'), (1, 'one');
+INSERT INTO foo (a, b, e) VALUES (2, 'two', 'closed');
+`)
+		feed := feed(t, f, `
+CREATE CHANGEFEED 
+AS SELECT * FROM foo 
+WHERE e IN ('open', 'closed') AND NOT cdc_is_delete()`)
 		defer closeFeed(t, feed)
 
 		assertPayloads(t, feed, []string{
-			`foo: [1]->{"after": {"a": 1, "b": null}}`,
-			`foo: [2]->{"after": {"a": 2, "b": null}}`,
-			`foo: [3]->{"after": {"a": 3, "b": null}}`,
-			`foo: [4]->{"after": {"a": 4, "b": null}}`,
-			`foo: [19]->{"after": {"a": 19, "b": null}}`,
-			`foo: [20]->{"after": {"a": 20, "b": null}}`,
+			`foo: [2, "two"]->{"after": {"a": 2, "b": "two", "c": null, "e": "closed"}}`,
 		})
 
-		for i := 0; i < 22; i++ {
-			sqlDB.Exec(t, "UPSERT INTO foo VALUES ($1, $2)", i, strconv.Itoa(i))
-		}
+		sqlDB.Exec(t, `
+UPDATE foo SET e = 'open', c = 'really open' WHERE a=0;  -- should be emitted
+DELETE FROM foo WHERE a=2; -- should be skipped
+INSERT INTO foo (a, b, e) VALUES (3, 'tres', 'closed'); -- should be emitted
+`)
 
 		assertPayloads(t, feed, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "0"}}`,
-			`foo: [1]->{"after": {"a": 1, "b": "1"}}`,
-			`foo: [2]->{"after": {"a": 2, "b": "2"}}`,
-			`foo: [3]->{"after": {"a": 3, "b": "3"}}`,
-			`foo: [4]->{"after": {"a": 4, "b": "4"}}`,
-			`foo: [19]->{"after": {"a": 19, "b": "19"}}`,
-			`foo: [20]->{"after": {"a": 20, "b": "20"}}`,
-			`foo: [21]->{"after": {"a": 21, "b": "21"}}`,
+			`foo: [0, "zero"]->{"after": {"a": 0, "b": "zero", "c": "really open", "e": "open"}}`,
+			`foo: [3, "tres"]->{"after": {"a": 3, "b": "tres", "c": null, "e": "closed"}}`,
 		})
 	}
 
 	cdcTest(t, testFn)
+}
+
+// Some predicates and projections can be verified when creating changefeed.
+// The types of errors that can be detected early on is restricted to simple checks
+// (such as type checking, non-existent columns, etc).  More complex errors detected
+// during execution.
+// Verify that's the case.
+func TestChangefeedInvalidPredicate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, db, stopServer := startTestFullServer(t, feedTestOptions{})
+	defer stopServer()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
+	sqlDB.Exec(t, `
+CREATE TABLE foo (
+  a INT, 
+  b STRING, 
+  c STRING,
+  d STRING AS (concat(b, c)) VIRTUAL, 
+  e status DEFAULT 'inactive',
+  PRIMARY KEY (a, b)
+)`)
+
+	for _, tc := range []struct {
+		name   string
+		create string
+		err    string
+	}{
+		{
+			name:   "no such column",
+			create: `CREATE CHANGEFEED INTO 'null://' AS SELECT no_such_column FROM foo`,
+			err:    `column "no_such_column" does not exist`,
+		},
+		{
+			name:   "wrong type",
+			create: `CREATE CHANGEFEED INTO 'null://' AS SELECT * FROM foo WHERE a = 'wrong type'`,
+			err:    `could not parse "wrong type" as type int`,
+		},
+		{
+			name:   "invalid enum value",
+			create: `CREATE CHANGEFEED INTO 'null://' AS SELECT * FROM foo WHERE e = 'bad'`,
+			err:    `invalid input value for enum status: "bad"`,
+		},
+		{
+			name:   "contradiction: a > 1 && a < 1",
+			create: `CREATE CHANGEFEED INTO 'null://'  AS SELECT * FROM foo WHERE a > 1 AND a < 1`,
+			err:    `filter .* is a contradiction`,
+		},
+		{
+			name:   "contradiction: a IS null",
+			create: `CREATE CHANGEFEED INTO 'null://' AS SELECT * FROM foo WHERE a IS NULL`,
+			err:    `filter .* is a contradiction`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sqlDB.ExpectErr(t, tc.err, tc.create)
+		})
+	}
 }
 
 func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
@@ -6170,18 +6261,17 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 
 	// Record the number of aggregators in planning
 	aggregatorCount := 0
-	distflowKnobs := changefeeddist.TestingKnobs{
-		OnDistflowSpec: func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, _ *execinfrapb.ChangeFrontierSpec) {
-			aggregatorCount = len(aggregatorSpecs)
-		},
-	}
 
 	// Create 2 connections of the same tenant on a cluster to have 2 pods
 	tc, _, cleanupDB := startTestCluster(t)
 	defer cleanupDB()
 
 	tenantKnobs := base.TestingKnobs{
-		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{DistflowKnobs: distflowKnobs}},
+		DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{
+			OnDistflowSpec: func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, _ *execinfrapb.ChangeFrontierSpec) {
+				aggregatorCount = len(aggregatorSpecs)
+			},
+		}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		Server:           &server.TestingKnobs{},
 	}

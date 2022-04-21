@@ -1385,6 +1385,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
 %type <tree.Expr> opt_changefeed_sink
+%type <str> opt_changefeed_family
 
 %type <str> explain_option_name
 %type <[]string> explain_option_list opt_enum_val_list enum_val_list
@@ -3972,6 +3973,25 @@ create_changefeed_stmt:
       Options: $6.kvOptions(),
     }
   }
+| CREATE CHANGEFEED /*$3=*/ opt_changefeed_sink /*$4=*/ opt_with_options
+  AS SELECT /*$7=*/target_list FROM /*$9=*/insert_target /*$10=*/opt_where_clause
+  {
+    target, err := tree.ChangefeedTargetFromTableExpr($9.tblExpr())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+
+    $$.val = &tree.CreateChangefeed{
+    	SinkURI: $3.expr(),
+    	Options: $4.kvOptions(),
+    	Targets: tree.ChangefeedTargets{target},
+    	Select:  &tree.SelectClause{
+         Exprs: $7.selExprs(),
+         From:  tree.From{Tables: tree.TableExprs{$9.tblExpr()}},
+         Where: tree.NewWhere(tree.AstWhere, $10.expr()),
+      },
+    }
+  }
 | EXPERIMENTAL CHANGEFEED FOR changefeed_targets opt_with_options
   {
     /* SKIP DOC */
@@ -3992,36 +4012,29 @@ changefeed_targets:
   }
 
 changefeed_target:
-  TABLE table_name
+  opt_table_prefix table_name opt_changefeed_family
   {
     $$.val = tree.ChangefeedTarget{
-      TableName: $2.unresolvedObjectName().ToUnresolvedName(),
-      }
-  }
-| table_name
-  {
-    $$.val = tree.ChangefeedTarget{
-      TableName: $1.unresolvedObjectName().ToUnresolvedName(),
-      }
-  }
-|
-  TABLE table_name FAMILY family_name
-  {
-    $$.val = tree.ChangefeedTarget{
-      TableName: $2.unresolvedObjectName().ToUnresolvedName(),
-      FamilyName: tree.Name($4),
-      }
-  }
-|
-table_name FAMILY family_name
-  {
-    $$.val = tree.ChangefeedTarget{
-      TableName: $1.unresolvedObjectName().ToUnresolvedName(),
+      TableName:  $2.unresolvedObjectName().ToUnresolvedName(),
       FamilyName: tree.Name($3),
-      }
+    }
   }
 
+opt_table_prefix:
+  TABLE
+  {}
+| /* EMPTY */
+  {}
 
+opt_changefeed_family:
+  FAMILY family_name
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = ""
+  }
 
 opt_changefeed_sink:
   INTO string_or_placeholder

@@ -177,6 +177,8 @@ func (c ResultColumn) Ordinal() int {
 type EventDescriptor struct {
 	Metadata
 
+	td catalog.TableDescriptor
+
 	// List of result columns produced by this descriptor.
 	// This may be different from the table descriptors public columns
 	// (e.g. in case of projection).
@@ -188,7 +190,8 @@ type EventDescriptor struct {
 	udtCols   []int // Columns containing UDTs.
 }
 
-func newEventDescriptor(
+// NewEventDescriptor returns EventDescriptor for specified table and family descriptors.
+func NewEventDescriptor(
 	desc catalog.TableDescriptor,
 	family *descpb.ColumnFamilyDescriptor,
 	includeVirtualColumns bool,
@@ -204,6 +207,7 @@ func newEventDescriptor(
 			HasOtherFamilies: desc.NumFamilies() > 1,
 			SchemaTS:         schemaTS,
 		},
+		td: desc,
 	}
 
 	// addColumn is a helper to add a column to this descriptor.
@@ -286,6 +290,18 @@ func (d *EventDescriptor) Equals(other *EventDescriptor) bool {
 	return other != nil && d.TableID == other.TableID && d.Version == other.Version && d.FamilyID == other.FamilyID
 }
 
+// HasUserDefinedTypes returns true if this descriptor contains user defined columns.
+func (d *EventDescriptor) HasUserDefinedTypes() bool {
+	return len(d.udtCols) > 0
+}
+
+// TableDescriptor  returns underlying table descriptor.  This method is exposed
+// to make it easier to integrate with the rest of descriptor APIs; prefer to use
+// higher level methods/structs (s.a. Metadata) instead.
+func (d *EventDescriptor) TableDescriptor() catalog.TableDescriptor {
+	return d.td
+}
+
 type eventDescriptorFactory func(
 	desc catalog.TableDescriptor,
 	family *descpb.ColumnFamilyDescriptor,
@@ -335,7 +351,7 @@ func getEventDescriptorCached(
 		return ed, nil
 	}
 
-	ed, err := newEventDescriptor(desc, family, includeVirtual, schemaTS)
+	ed, err := NewEventDescriptor(desc, family, includeVirtual, schemaTS)
 	if err != nil {
 		return nil, err
 	}
@@ -490,7 +506,7 @@ func TestingMakeEventRow(
 		panic(err) // primary column family always exists.
 	}
 	const includeVirtual = false
-	ed, err := newEventDescriptor(desc, family, includeVirtual, hlc.Timestamp{})
+	ed, err := NewEventDescriptor(desc, family, includeVirtual, hlc.Timestamp{})
 	if err != nil {
 		panic(err)
 	}
