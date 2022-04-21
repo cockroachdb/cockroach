@@ -125,4 +125,7 @@ type MutationVisitorStateUpdater interface {
 
 	// DeleteSchedule deletes a scheduled job.
 	DeleteSchedule(scheduleID int64)
+
+	// RefreshStats refresh stats for a given descriptor.
+	RefreshStats(id descpb.ID)
 }
