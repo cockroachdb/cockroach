@@ -207,6 +207,7 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 112
   Status: PUBLIC
 - Namespace:
@@ -293,11 +294,13 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 113
   Status: PUBLIC
 - ColumnComment:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 113
   Status: PUBLIC
 - Namespace:

@@ -79,6 +79,7 @@ upsert descriptor #106
   +    - elementProto:
   +        column:
   +          columnId: 2
+  +          pgAttributeNum: 2
   +          tableId: 106
   +      metadata:
   +        sourceElementId: 1
@@ -159,6 +160,7 @@ upsert descriptor #106
   +      defaultExpr: 42:::INT8
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
+  +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -269,6 +271,7 @@ upsert descriptor #106
   +  - defaultExpr: 42:::INT8
   +    id: 2
   +    name: j
+  +    pgAttributeNum: 2
   +    type:
   +      family: IntFamily
   +      oid: 20
@@ -312,6 +315,7 @@ upsert descriptor #106
   -      defaultExpr: 42:::INT8
   -      id: 2
   -      name: crdb_internal_column_2_name_placeholder
+  -      pgAttributeNum: 2
   -      type:
   -        family: IntFamily
   -        oid: 20
@@ -463,6 +467,7 @@ upsert descriptor #106
   -    - elementProto:
   -        column:
   -          columnId: 2
+  -          pgAttributeNum: 2
   -          tableId: 106
   -      metadata:
   -        sourceElementId: 1

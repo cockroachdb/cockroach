@@ -25,19 +25,19 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │
 │       ├── • 3 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • Column:{DescID: 106, ColumnID: 2}
+│       │   ├── • Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
 │       │   │     ABSENT → DELETE_ONLY
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
 │       │   │         rule: "column type set right after column existence"
 │       │   │
 │       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
 │       │       │ ABSENT → DELETE_ONLY
 │       │       │
-│       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
 │       │             rule: "column existence precedes index existence"
 │       │
 │       └── • 6 Mutation operations
@@ -45,6 +45,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           ├── • MakeAddedColumnDeleteOnly
 │           │     Column:
 │           │       ColumnID: 2
+│           │       PgAttributeNum: 2
 │           │       TableID: 106
 │           │
 │           ├── • LogEvent
@@ -53,6 +54,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           │     Element:
 │           │       Column:
 │           │         columnId: 2
+│           │         pgAttributeNum: 2
 │           │         tableId: 106
 │           │     Statement: ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8
 │           │     StatementTag: ALTER TABLE
@@ -108,7 +110,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │   │   │
 │   │   ├── • 2 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • Column:{DescID: 106, ColumnID: 2}
+│   │   │   ├── • Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
 │   │   │   │   │ DELETE_ONLY → WRITE_ONLY
 │   │   │   │   │
 │   │   │   │   └── • Precedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
@@ -176,7 +178,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │
 │       ├── • 4 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • Column:{DescID: 106, ColumnID: 2}
+│       │   ├── • Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
 │       │   │   │ WRITE_ONLY → PUBLIC
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
@@ -188,7 +190,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │
 │       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
@@ -887,10 +889,10 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 147}
  │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 147, ReferencedDescID: 105}
  │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 147}
- │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 147, ColumnID: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 147, ColumnID: 1, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 147, Name: name, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 147, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 147, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 148, Name: v2dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 148}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 148, Name: admin}
@@ -898,14 +900,14 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 148}
  │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 148, ReferencedDescID: 105}
  │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 148}
- │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 1, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 148, Name: n1, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 148, ColumnID: 1}
- │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 148, PgAttributeNum: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 2, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 148, Name: n2, ColumnID: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 2}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 148, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 148, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 149, Name: v3dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 149}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 149, Name: admin}
@@ -913,14 +915,14 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 149}
  │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 149, ReferencedDescID: 105}
  │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 149}
- │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 1, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 149, Name: name, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 149, ColumnID: 1}
- │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 149, PgAttributeNum: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 2, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 149, Name: n1, ColumnID: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 2}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 149, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 149, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 150, Name: v4dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 150}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 150, Name: admin}
@@ -928,14 +930,14 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 150}
  │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 150, ReferencedDescID: 105}
  │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 150}
- │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 1, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 150, Name: n2, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 150, ColumnID: 1}
- │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 150, PgAttributeNum: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 2, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 150, Name: n1, ColumnID: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 2}
- │         │    └── PUBLIC      → ABSENT     ColumnComment:{DescID: 150, ColumnID: 2}
+ │         │    └── PUBLIC      → ABSENT     ColumnComment:{DescID: 150, PgAttributeNum: 2}
  │         └── 29 Mutation operations
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":147,"Name":"v1dep","SchemaID":105}}
  │              ├── RemoveDroppedColumnType {"ColumnID":1,"TableID":147}
@@ -970,16 +972,16 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 11 elements transitioning toward ABSENT
            │    ├── DROPPED    → ABSENT View:{DescID: 147}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 1}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 1, PgAttributeNum: 1}
            │    ├── DROPPED    → ABSENT View:{DescID: 148}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 1}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 2}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 1, PgAttributeNum: 1}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 2, PgAttributeNum: 2}
            │    ├── DROPPED    → ABSENT View:{DescID: 149}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 1}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 2}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 1, PgAttributeNum: 1}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 2, PgAttributeNum: 2}
            │    ├── DROPPED    → ABSENT View:{DescID: 150}
-           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 1}
-           │    └── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 2}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 1, PgAttributeNum: 1}
+           │    └── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 2, PgAttributeNum: 2}
            └── 21 Mutation operations
                 ├── LogEvent {"Statement":"DROP VIEW ‹test›...","StatementTag":"DROP VIEW","TargetStatus":1}
                 ├── DeleteDescriptor {"DescriptorID":147}

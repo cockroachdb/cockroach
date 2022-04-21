@@ -363,9 +363,10 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 	}
 	// TODO(postamar): proper handling of comments
 	w.ev(scpb.Status_PUBLIC, &scpb.ColumnComment{
-		TableID:  tbl.GetID(),
-		ColumnID: col.GetID(),
-		Comment:  scpb.PlaceHolderComment,
+		TableID:        tbl.GetID(),
+		ColumnID:       col.GetID(),
+		PgAttributeNum: col.GetPGAttributeNum(),
+		Comment:        scpb.PlaceHolderComment,
 	})
 	owns := catalog.MakeDescriptorIDSet(col.ColumnDesc().OwnsSequenceIds...)
 	owns.Remove(catid.InvalidDescID)

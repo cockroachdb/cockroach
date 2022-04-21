@@ -136,11 +136,13 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 110
   Status: PUBLIC
 - ColumnComment:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 110
   Status: PUBLIC
 - IndexName:
@@ -261,11 +263,13 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 109
   Status: PUBLIC
 - ColumnComment:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 109
   Status: PUBLIC
 - IndexName:
@@ -411,16 +415,19 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: __placeholder_comment__
+    pgAttributeNum: 1
     tableId: 108
   Status: PUBLIC
 - ColumnComment:
     columnId: 2
     comment: __placeholder_comment__
+    pgAttributeNum: 2
     tableId: 108
   Status: PUBLIC
 - ColumnComment:
     columnId: 3
     comment: __placeholder_comment__
+    pgAttributeNum: 3
     tableId: 108
   Status: PUBLIC
 - IndexName:
