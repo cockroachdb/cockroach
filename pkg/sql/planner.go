@@ -144,7 +144,7 @@ func (evalCtx *extendedEvalContext) QueueJob(
 		ctx,
 		record,
 		jobID,
-		evalCtx.Txn,
+		evalCtx.TxnToDelete,
 	)
 	if err != nil {
 		return nil, err
@@ -471,7 +471,7 @@ func internalExtendedEvalCtx(
 	}
 	ret := extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Txn:                       txn,
+			TxnToDelete:               txn,
 			SessionDataStack:          sds,
 			TxnReadOnly:               false,
 			TxnImplicit:               true,

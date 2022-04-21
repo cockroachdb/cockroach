@@ -67,7 +67,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 	datums, cols, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
 		params.ctx,
 		"load-schedule",
-		params.EvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		params.EvalContext().TxnToDelete, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
 			"SELECT schedule_id, next_run, schedule_expr, executor_type, execution_args FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),
@@ -93,7 +93,7 @@ func updateSchedule(params runParams, schedule *jobs.ScheduledJob) error {
 	return schedule.Update(
 		params.ctx,
 		params.ExecCfg().InternalExecutor,
-		params.EvalContext().Txn,
+		params.EvalContext().TxnToDelete,
 	)
 }
 
@@ -163,7 +163,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 					scheduleControllerEnv,
 					scheduledjobs.ProdJobSchedulerEnv,
 					schedule,
-					params.extendedEvalCtx.Txn,
+					params.extendedEvalCtx.TxnToDelete,
 					params.p.Descriptors(),
 				); err != nil {
 					return errors.Wrap(err, "failed to run OnDrop")

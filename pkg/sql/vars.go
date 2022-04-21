@@ -282,7 +282,7 @@ var varGen = map[string]sessionVar{
 			if len(dbName) != 0 {
 				// Verify database descriptor exists.
 				if _, err := evalCtx.Descs.GetImmutableDatabaseByName(
-					ctx, evalCtx.Txn, dbName, tree.DatabaseLookupFlags{Required: true},
+					ctx, evalCtx.TxnToDelete, dbName, tree.DatabaseLookupFlags{Required: true},
 				); err != nil {
 					return "", err
 				}
@@ -1416,7 +1416,7 @@ var varGen = map[string]sessionVar{
 	// CockroachDB extension.
 	`transaction_priority`: {
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
-			return evalCtx.Txn.UserPriority().String(), nil
+			return evalCtx.TxnToDelete.UserPriority().String(), nil
 		},
 	},
 

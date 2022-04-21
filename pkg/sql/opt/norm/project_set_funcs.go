@@ -124,7 +124,7 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 			if err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator retrieval failed"))
 			}
-			if err = generator.Start(c.f.evalCtx.Context, c.f.evalCtx.Txn); err != nil {
+			if err = generator.Start(c.f.evalCtx.Context, nil); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator.Start failed"))
 			}
 

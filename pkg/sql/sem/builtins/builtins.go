@@ -5214,7 +5214,7 @@ value if you rely on the HLC for accuracy.`,
 				minDuration := args[0].(*tree.DInterval).Duration
 				elapsed := duration.MakeDuration(int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)), 0, 0)
 				if elapsed.Compare(minDuration) < 0 {
-					return nil, ctx.Txn.GenerateForcedRetryableError(
+					return nil, ctx.TxnToDelete.GenerateForcedRetryableError(
 						ctx.Ctx(), "forced by crdb_internal.force_retry()")
 				}
 				return tree.DZero, nil
@@ -5240,7 +5240,7 @@ value if you rely on the HLC for accuracy.`,
 						Key: key,
 					},
 				})
-				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
+				if err := ctx.TxnToDelete.Run(ctx.Context, b); err != nil {
 					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching leaseholder")
 				}
 				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
@@ -5335,7 +5335,7 @@ value if you rely on the HLC for accuracy.`,
 						Key: key,
 					},
 				})
-				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
+				if err := ctx.TxnToDelete.Run(ctx.Context, b); err != nil {
 					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching range stats")
 				}
 				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.RangeStatsResponse).MVCCStats
@@ -5547,7 +5547,7 @@ value if you rely on the HLC for accuracy.`,
 				// instead of cobbling a descs.Collection in this way.
 				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
 				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack))
-				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
+				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.TxnToDelete, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
 				}
@@ -5585,7 +5585,7 @@ value if you rely on the HLC for accuracy.`,
 				// instead of cobbling a descs.Collection in this way.
 				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
 				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack))
-				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
+				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.TxnToDelete, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
 				}
@@ -5817,7 +5817,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.StringArray),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				prefix := ctx.Codec.MigrationKeyPrefix()
-				keyvals, err := ctx.Txn.Scan(ctx.Context, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
+				keyvals, err := ctx.TxnToDelete.Scan(ctx.Context, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
 				if err != nil {
 					return nil, errors.Wrapf(err, "failed to get list of completed migrations")
 				}

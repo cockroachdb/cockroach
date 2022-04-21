@@ -301,10 +301,10 @@ func (ds *ServerImpl) setupFlow(
 		// the whole evalContext, but that isn't free, so we choose to restore
 		// the original state in order to avoid performance regressions.
 		origMon := evalCtx.Mon
-		origTxn := evalCtx.Txn
+		//origTxn := evalCtx.TxnToDelete
 		onFlowCleanup = func() {
 			evalCtx.Mon = origMon
-			evalCtx.Txn = origTxn
+			//evalCtx.TxnToDelete = origTxn
 		}
 		evalCtx.Mon = monitor
 		if localState.HasConcurrency {
@@ -315,7 +315,7 @@ func (ds *ServerImpl) setupFlow(
 			}
 			// Update the Txn field early (before f.SetTxn() below) since some
 			// processors capture the field in their constructor (see #41992).
-			evalCtx.Txn = leafTxn
+			//evalCtx.TxnToDelete = leafTxn
 		}
 	} else {
 		if localState.IsLocal {
@@ -348,15 +348,15 @@ func (ds *ServerImpl) setupFlow(
 			Tracer:           ds.ServerConfig.Tracer,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
-			Context:                   ctx,
-			Planner:                   &faketreeeval.DummyEvalPlanner{},
-			PrivilegedAccessor:        &faketreeeval.DummyPrivilegedAccessor{},
-			SessionAccessor:           &faketreeeval.DummySessionAccessor{},
-			ClientNoticeSender:        &faketreeeval.DummyClientNoticeSender{},
-			Sequence:                  &faketreeeval.DummySequenceOperators{},
-			Tenant:                    &faketreeeval.DummyTenantOperator{},
-			Regions:                   &faketreeeval.DummyRegionOperator{},
-			Txn:                       leafTxn,
+			Context:            ctx,
+			Planner:            &faketreeeval.DummyEvalPlanner{},
+			PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
+			SessionAccessor:    &faketreeeval.DummySessionAccessor{},
+			ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
+			Sequence:           &faketreeeval.DummySequenceOperators{},
+			Tenant:             &faketreeeval.DummyTenantOperator{},
+			Regions:            &faketreeeval.DummyRegionOperator{},
+			//TxnToDelete:               leafTxn,
 			SQLLivenessReader:         ds.ServerConfig.SQLLivenessReader,
 			SQLStatsController:        ds.ServerConfig.SQLStatsController,
 			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,
@@ -367,7 +367,7 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
+		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(), leafTxn,
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
@@ -444,6 +444,7 @@ func (ds *ServerImpl) newFlowContext(
 	collectStats bool,
 	localState LocalState,
 	isGatewayNode bool,
+	txn *kv.Txn,
 ) execinfra.FlowCtx {
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
@@ -451,7 +452,7 @@ func (ds *ServerImpl) newFlowContext(
 		Cfg:            &ds.ServerConfig,
 		ID:             id,
 		EvalCtx:        evalCtx,
-		Txn:            evalCtx.Txn,
+		Txn:            txn,
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
 		CollectStats:   collectStats,

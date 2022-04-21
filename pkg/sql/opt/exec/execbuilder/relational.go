@@ -162,7 +162,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		if !b.evalCtx.Settings.Version.IsActive(
 			b.evalCtx.Ctx(), clusterversion.DisableSystemConfigGossipTrigger,
 		) {
-			if err := b.evalCtx.Txn.DeprecatedSetSystemConfigTrigger(b.evalCtx.Codec.ForSystemTenant()); err != nil {
+			if err := b.evalCtx.TxnToDelete.DeprecatedSetSystemConfigTrigger(b.evalCtx.Codec.ForSystemTenant()); err != nil {
 				return execPlan{}, errors.WithSecondaryError(
 					unimplemented.NewWithIssuef(26508,
 						"the first schema change statement in a transaction must precede any writes"),
