@@ -48,6 +48,11 @@ func init() {
 						ColumnID:  this.ColumnID,
 					}
 				}),
+				emit(func(this *scpb.Column) scop.Op {
+					return &scop.RefreshStats{
+						TableID: this.TableID,
+					}
+				}),
 			),
 		),
 		toAbsent(
