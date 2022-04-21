@@ -116,7 +116,7 @@ GRANT admin TO foo`); err != nil {
 			if err == nil {
 				defer func() { _ = dbSQL.Close(ctx) }()
 			}
-			if !testutils.IsError(err, "failed SASL auth") {
+			if !testutils.IsError(err, "failed SASL auth|password authentication failed") {
 				t.Fatalf("expected password error, got %v", err)
 			}
 		}()
