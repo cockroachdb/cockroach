@@ -78,6 +78,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.Settings,
 		execCfg.IndexValidator,
 		execCfg.DescMetadaUpdaterFactory,
+		execCfg.StatsRefresher,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
 		execCtx.SessionData(),

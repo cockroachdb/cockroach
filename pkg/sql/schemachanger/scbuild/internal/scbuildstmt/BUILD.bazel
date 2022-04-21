@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

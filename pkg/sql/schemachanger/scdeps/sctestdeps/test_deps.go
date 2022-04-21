@@ -966,6 +966,7 @@ func (s *TestState) LogEvent(
 	return nil
 }
 
+// LogEventForSchemaChange implements scexec.EventLogger
 func (s *TestState) LogEventForSchemaChange(
 	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
 ) error {
@@ -1063,4 +1064,14 @@ func (s *TestState) IsTableEmpty(
 // TableReader implement scexec.Dependencies.
 func (s *TestState) TableReader() scbuild.TableReader {
 	return s
+}
+
+// StatsRefresher implement scexec.Dependencies.
+func (s *TestState) StatsRefresher() scexec.StatsRefreshQueue {
+	return s
+}
+
+// AddTableForStatsRefresh implements scexec.StatsRefreshQueue
+func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
+	s.LogSideEffectf("adding table for stats refresh: %d", id)
 }

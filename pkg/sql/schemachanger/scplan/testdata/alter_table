@@ -152,6 +152,8 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
     *scop.MakeColumnPublic
       ColumnID: 2
       TableID: 104
+    *scop.RefreshStats
+      TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.SetJobStateOnDescriptor
@@ -334,6 +336,8 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
       TableID: 104
     *scop.MakeColumnPublic
       ColumnID: 2
+      TableID: 104
+    *scop.RefreshStats
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -556,11 +560,15 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
       ColumnID: 2
       Name: j
       TableID: 104
+    *scop.RefreshStats
+      TableID: 104
     *scop.MakeColumnPublic
       ColumnID: 3
       TableID: 104
     *scop.MakeColumnPublic
       ColumnID: 2
+      TableID: 104
+    *scop.RefreshStats
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -726,6 +734,8 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
       TableID: 104
     *scop.MakeColumnPublic
       ColumnID: 2
+      TableID: 104
+    *scop.RefreshStats
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -991,8 +1001,12 @@ PostCommitPhase stage 4 of 4 with 15 MutationType ops
     *scop.MakeColumnPublic
       ColumnID: 2
       TableID: 104
+    *scop.RefreshStats
+      TableID: 104
     *scop.MakeColumnPublic
       ColumnID: 3
+      TableID: 107
+    *scop.RefreshStats
       TableID: 107
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104

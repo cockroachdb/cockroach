@@ -12,15 +12,18 @@ package scdeps
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -41,6 +44,7 @@ func NewJobRunDependencies(
 	settings *cluster.Settings,
 	indexValidator scexec.IndexValidator,
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
+	statsRefresher scexec.StatsRefresher,
 	testingKnobs *scrun.TestingKnobs,
 	statements []string,
 	sessionData *sessiondata.SessionData,
@@ -63,6 +67,7 @@ func NewJobRunDependencies(
 		commentUpdaterFactory: commentUpdaterFactory,
 		sessionData:           sessionData,
 		kvTrace:               kvTrace,
+		statsRefresher:        statsRefresher,
 	}
 }
 
@@ -71,6 +76,7 @@ type jobExecutionDeps struct {
 	db                    *kv.DB
 	internalExecutor      sqlutil.InternalExecutor
 	eventLoggerFactory    func(txn *kv.Txn) scexec.EventLogger
+	statsRefresher        scexec.StatsRefresher
 	backfiller            scexec.Backfiller
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory
 	rangeCounter          RangeCounter
@@ -97,6 +103,7 @@ func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 // WithTxnInJob implements the scrun.JobRunDependencies interface.
 func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) error {
 	var createdJobs []jobspb.JobID
+	var tableStatsToRefresh []descpb.ID
 	err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
@@ -109,6 +116,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				jobRegistry:        d.jobRegistry,
 				indexValidator:     d.indexValidator,
 				eventLogger:        d.eventLoggerFactory(txn),
+				statsRefresher:     d.statsRefresher,
 				schemaChangerJobID: d.job.ID(),
 				kvTrace:            d.kvTrace,
 			},
@@ -130,6 +138,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			return err
 		}
 		createdJobs = ed.CreatedJobs()
+		tableStatsToRefresh = ed.getTablesForStatsRefresh()
 		return nil
 	})
 	if err != nil {
@@ -137,6 +146,21 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 	}
 	if len(createdJobs) > 0 {
 		d.jobRegistry.NotifyToResume(ctx, createdJobs...)
+	}
+	if len(tableStatsToRefresh) > 0 {
+		err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			for _, id := range tableStatsToRefresh {
+				tbl, err := descriptors.GetImmutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+				if err != nil {
+					return err
+				}
+				d.statsRefresher.NotifyMutation(tbl, math.MaxInt32)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

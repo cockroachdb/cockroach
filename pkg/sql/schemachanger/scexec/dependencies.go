@@ -39,6 +39,7 @@ type Dependencies interface {
 	IndexSpanSplitter() IndexSpanSplitter
 	EventLogger() EventLogger
 	DescriptorMetadataUpdater(ctx context.Context) DescriptorMetadataUpdater
+	StatsRefresher() StatsRefreshQueue
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
@@ -299,4 +300,17 @@ type DescriptorMetadataUpdaterFactory interface {
 	NewMetadataUpdater(
 		ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
 	) DescriptorMetadataUpdater
+}
+
+// StatsRefreshQueue queues table for stats refreshes.
+type StatsRefreshQueue interface {
+	// AddTableForStatsRefresh adds a table for a stats refresh.
+	AddTableForStatsRefresh(id descpb.ID)
+}
+
+// StatsRefresher responsible for refreshing table stats.
+type StatsRefresher interface {
+	// NotifyMutation notifies the stats refresher that a table needs its
+	// statistics updated.
+	NotifyMutation(table catalog.TableDescriptor, rowsAffected int)
 }

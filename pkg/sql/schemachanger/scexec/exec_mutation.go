@@ -73,6 +73,12 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	); err != nil {
 		return err
 	}
+	if err := refreshStatsForDescriptors(
+		ctx,
+		mvs,
+		deps.StatsRefresher()); err != nil {
+		return err
+	}
 	return manageJobs(
 		ctx,
 		gcJobRecords,
@@ -289,6 +295,15 @@ func updateDescriptorMetadata(
 	return nil
 }
 
+func refreshStatsForDescriptors(
+	_ context.Context, mvs *mutationVisitorState, statsRefresher StatsRefreshQueue,
+) error {
+	for descriptorID := range mvs.statsToRefresh {
+		statsRefresher.AddTableForStatsRefresh(descriptorID)
+	}
+	return nil
+}
+
 func manageJobs(
 	ctx context.Context,
 	gcJobs []jobs.Record,
@@ -339,6 +354,7 @@ type mutationVisitorState struct {
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
 	eventsByStatement            map[uint32][]eventPayload
 	scheduleIDsToDelete          []int64
+	statsToRefresh               map[descpb.ID]struct{}
 
 	gcJobs
 }
@@ -393,6 +409,7 @@ func newMutationVisitorState(c Catalog) *mutationVisitorState {
 		c:                 c,
 		drainedNames:      make(map[descpb.ID][]descpb.NameInfo),
 		eventsByStatement: make(map[uint32][]eventPayload),
+		statsToRefresh:    make(map[descpb.ID]struct{}),
 	}
 }
 
@@ -489,6 +506,10 @@ func (mvs *mutationVisitorState) DeleteDatabaseRoleSettings(
 
 func (mvs *mutationVisitorState) DeleteSchedule(scheduleID int64) {
 	mvs.scheduleIDsToDelete = append(mvs.scheduleIDsToDelete, scheduleID)
+}
+
+func (mvs *mutationVisitorState) RefreshStats(descriptorID descpb.ID) {
+	mvs.statsToRefresh[descriptorID] = struct{}{}
 }
 
 func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo) {
