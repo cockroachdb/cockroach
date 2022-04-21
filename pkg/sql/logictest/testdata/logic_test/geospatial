@@ -5880,3 +5880,14 @@ SELECT ST_LineCrossingDirection(line1, line2), ST_LineCrossingDirection(line2, l
 -1  1
 2   -2
 -2  2
+
+# NaN coordinates do not work with PIP.
+query BBB
+SELECT ST_Intersects(point, polygon), ST_Within(point, polygon), ST_Contains(polygon, point)
+FROM ( VALUES
+  (ST_MakePoint('NaN', 1), 'POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry),
+  (ST_MakePoint(0, 1), ST_MakePolygon(ST_AddPoint(ST_AddPoint('LINESTRING(0 0, 1 0)', ST_MakePoint(0, 'NaN')), ST_MakePoint(0, 0))))
+) t(point, polygon)
+----
+false  false  false
+false  false  false
