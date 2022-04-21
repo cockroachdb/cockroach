@@ -82,8 +82,10 @@ func (s *session) Expiration() hlc.Timestamp {
 	return s.mu.exp
 }
 
-// StartTimestamp implements the sqlliveness.Session interface.
-func (s *session) StartTimestamp() hlc.Timestamp { return hlc.MinTimestamp }
+// Start implements the sqlliveness.Session interface.
+func (s *session) Start() hlc.Timestamp {
+	return s.start
+}
 
 // RegisterCallbackForSessionExpiry adds the given function to the list
 // of functions called after a session expires. The functions are

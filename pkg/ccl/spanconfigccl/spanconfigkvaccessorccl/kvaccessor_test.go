@@ -10,81 +10,140 @@ package spanconfigkvaccessorccl
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
-// TestKVAccessorUpdatesHandleLeaseIntervals ensures the KVAccessor updates are
-// only performed under a valid lease.
-func TestKVAccessorUpdatesHandleLeaseIntervals(t *testing.T) {
+// TestCommitTSIntervals ensures the KVAccessor updates are
+// only committed within the given time interval.
+func TestCommitTSIntervals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	ts, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	tick := (500 * time.Millisecond).Nanoseconds()
+	manual := hlc.NewHybridManualClock()
+
+	var i interceptor
+	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				ClockSource: manual.UnixNano,
+			},
+			SpanConfig: &spanconfig.TestingKnobs{
+				KVAccessorPostCommitDeadlineSetInterceptor: func(txn *kv.Txn) {
+					i.invoke(txn)
+				},
+			},
+		},
+	})
 	defer ts.Stopper().Stop(ctx)
 
 	tt, _ := serverutils.StartTenant(t, ts, base.TestTenantArgs{
 		TenantID: roachpb.MakeTenantID(10),
 	})
 
-	const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
-	tdb := sqlutils.MakeSQLRunner(sqlDBRaw)
-	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
+	manual.Pause() // control the clock manually below
 
 	testCases := []struct {
 		name string
 		test func(t *testing.T, accessor spanconfig.KVAccessor, clock *hlc.Clock)
 	}{
 		{
-			name: "lease-starts-prior-to-now",
+			name: "start < min < end < max",
 			test: func(t *testing.T, accessor spanconfig.KVAccessor, clock *hlc.Clock) {
-				// Issue a request with the lease starting before now -- it should succeed.
-				leaseStartTime := clock.Now().Add(-5*time.Second.Nanoseconds(), 0)
+				// Issue a request with the minimum commit timestamp after now -- it
+				// should block until the current timestamp advances.
+				minCommitTS := clock.Now().Add(tick, 0)
+
+				updatedC := make(chan error)
+				updateCtx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				go func() {
+					updatedC <- accessor.UpdateSpanConfigRecords(
+						updateCtx, nil /* toDelete */, nil /* toUpsert */, minCommitTS, hlc.MaxTimestamp,
+					)
+				}()
+				select {
+				case err := <-updatedC:
+					t.Fatalf("update unexpectedly completed with err = %v", err)
+				case <-time.After(100 * time.Millisecond):
+				}
+
+				manual.Resume()
+				select {
+				case err := <-updatedC:
+					require.NoError(t, err)
+				case <-time.After(15 * time.Second):
+					t.Fatal("update still blocked")
+				}
+				manual.Pause()
+			},
+		},
+		{
+			name: "min < start < end < max",
+			test: func(t *testing.T, accessor spanconfig.KVAccessor, clock *hlc.Clock) {
+				// Issue a request with the min commit timestamp before current time --
+				// it should succeed.
+				minCommitTS := clock.Now().Add(-tick, 0)
 				err := accessor.UpdateSpanConfigRecords(
-					ctx, nil /* toDelete */, nil /* toUpsert */, leaseStartTime, hlc.MaxTimestamp,
+					ctx, nil /* toDelete */, nil /* toUpsert */, minCommitTS, hlc.MaxTimestamp,
 				)
 				require.NoError(t, err)
 			},
 		},
 		{
-			name: "lease-starts-in-the-future",
+			name: "min < max < start < end",
 			test: func(t *testing.T, accessor spanconfig.KVAccessor, clock *hlc.Clock) {
-				// Issue a request with the lease starting after now -- it should wait until
-				// the current timestamp advances but eventually succeed.
-				leaseStartTime := clock.Now().Add(1*time.Second.Nanoseconds(), 0)
+				// Issue a request with the max commit timestamp before the current time
+				// -- it should fail.
+				maxCommitTS := clock.Now().Add(-tick, 0)
 				err := accessor.UpdateSpanConfigRecords(
-					ctx, nil /* toDelete */, nil /* toUpsert */, leaseStartTime, hlc.MaxTimestamp,
-				)
-				require.NoError(t, err)
-			},
-		},
-		{
-			name: "expired-lease",
-			test: func(t *testing.T, accessor spanconfig.KVAccessor, clock *hlc.Clock) {
-				leaseExpiration := clock.Now().Add(-1*time.Second.Nanoseconds(), 0)
-				err := accessor.UpdateSpanConfigRecords(
-					ctx, nil /* toDelete */, nil /* toUpsert */, hlc.MinTimestamp, leaseExpiration,
+					ctx, nil /* toDelete */, nil /* toUpsert */, hlc.MinTimestamp, maxCommitTS,
 				)
 				require.Error(t, err)
-				require.True(t, spanconfigkvaccessor.IsRetryableLeaseExpiredError(err))
+				require.True(t, spanconfig.IsCommitTimestampOutOfBoundsError(err))
+			},
+		},
+		{
+			name: "min < start < max < end",
+			test: func(t *testing.T, accessor spanconfig.KVAccessor, clock *hlc.Clock) {
+				// Issue a request with the max commit timestamp lower than the time it
+				// would take for the update to finish.
+				maxCommitTS := clock.Now().Add(tick, 0)
+
+				// Set the fn to run down the clock past the max commit timestamp, and
+				// to also bump the txn's timestamp past it.
+				i.set(func(txn *kv.Txn) {
+					manual.Resume()
+					require.NoError(t, clock.SleepUntil(ctx, maxCommitTS))
+					manual.Pause()
+					require.NoError(t, txn.SetFixedTimestamp(ctx, clock.Now()))
+				})
+				defer i.set(nil)
+
+				err := accessor.UpdateSpanConfigRecords(
+					ctx, nil /* toDelete */, nil /* toUpsert */, hlc.MinTimestamp, maxCommitTS,
+				)
+				require.Error(t, err)
+				require.True(t, spanconfig.IsCommitTimestampOutOfBoundsError(err))
 			},
 		},
 	}
 
-	testutils.RunTrueAndFalse(t, "secondary-tenant", func(t *testing.T, isSecondaryTenant bool) {
+	testutils.RunTrueAndFalse(t, "tenant", func(t *testing.T, isSecondaryTenant bool) {
 		accessor := ts.SpanConfigKVAccessor().(spanconfig.KVAccessor)
 		if isSecondaryTenant {
 			accessor = tt.SpanConfigKVAccessor().(spanconfig.KVAccessor)
@@ -96,4 +155,24 @@ func TestKVAccessorUpdatesHandleLeaseIntervals(t *testing.T) {
 			})
 		}
 	})
+}
+
+type interceptor struct {
+	syncutil.Mutex
+	fn func(*kv.Txn)
+}
+
+func (i *interceptor) set(fn func(*kv.Txn)) {
+	i.Lock()
+	defer i.Unlock()
+	i.fn = fn
+}
+
+func (i *interceptor) invoke(txn *kv.Txn) {
+	i.Lock()
+	defer i.Unlock()
+
+	if i.fn != nil {
+		i.fn(txn)
+	}
 }
