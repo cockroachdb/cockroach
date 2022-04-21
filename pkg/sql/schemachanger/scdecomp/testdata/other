@@ -15,12 +15,16 @@ sc1
 BackReferencedIDs:
 ElementState:
 - Schema:
+    isPublic: false
+    isTemporary: false
+    isVirtual: false
     schemaId: 106
   Status: PUBLIC
 - Namespace:
     databaseId: 104
     descriptorId: 106
     name: sc1
+    schemaId: 0
   Status: PUBLIC
 - Owner:
     descriptorId: 106
@@ -52,12 +56,15 @@ BackReferencedIDs:
 ElementState:
 - Schema:
     isPublic: true
+    isTemporary: false
+    isVirtual: false
     schemaId: 105
   Status: PUBLIC
 - Namespace:
     databaseId: 104
     descriptorId: 105
     name: public
+    schemaId: 0
   Status: PUBLIC
 - Owner:
     descriptorId: 105
@@ -98,8 +105,10 @@ ElementState:
     databaseId: 104
   Status: PUBLIC
 - Namespace:
+    databaseId: 0
     descriptorId: 104
     name: db1
+    schemaId: 0
   Status: PUBLIC
 - Owner:
     descriptorId: 104
@@ -137,6 +146,7 @@ BackReferencedIDs:
 ElementState:
 - EnumType:
     arrayTypeId: 111
+    isMultiRegion: false
     typeId: 110
   Status: PUBLIC
 - Namespace:
@@ -176,12 +186,19 @@ BackReferencedIDs:
   - 113
 ElementState:
 - View:
+    isMaterialized: false
+    isTemporary: false
     usesRelationIds:
     - 109
+    usesTypeIds: []
     viewId: 112
   Status: PUBLIC
 - Column:
     columnId: 1
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 1
     tableId: 112
   Status: PUBLIC
@@ -196,12 +213,29 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     columnId: 1
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
         width: 64
+    familyId: 0
     isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 112
   Status: PUBLIC
 - ColumnComment:
@@ -241,6 +275,8 @@ v2
 BackReferencedIDs:
 ElementState:
 - View:
+    isMaterialized: false
+    isTemporary: false
     usesRelationIds:
     - 112
     usesTypeIds:
@@ -250,11 +286,19 @@ ElementState:
   Status: PUBLIC
 - Column:
     columnId: 1
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 1
     tableId: 113
   Status: PUBLIC
 - Column:
     columnId: 2
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 2
     tableId: 113
   Status: PUBLIC
@@ -274,21 +318,56 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     columnId: 1
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: StringFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 25
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
+        width: 0
+    familyId: 0
     isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 113
   Status: PUBLIC
 - ColumnType:
     columnId: 2
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
         width: 64
+    familyId: 0
     isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 113
   Status: PUBLIC
 - ColumnComment:

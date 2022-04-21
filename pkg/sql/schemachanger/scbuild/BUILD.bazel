@@ -66,6 +66,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
+        "//pkg/sql/protoreflect",
         "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
         "//pkg/sql/schemachanger/scerrors",

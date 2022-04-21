@@ -85,8 +85,8 @@ func WithBuilderDependenciesFromTestServer(
 }
 
 // ProtoToYAML marshals a protobuf to YAML in a roundabout way.
-func ProtoToYAML(m protoutil.Message) (string, error) {
-	js, err := protoreflect.MessageToJSON(m, protoreflect.FmtFlags{})
+func ProtoToYAML(m protoutil.Message, fmtFlags protoreflect.FmtFlags) (string, error) {
+	js, err := protoreflect.MessageToJSON(m, fmtFlags)
 	if err != nil {
 		return "", err
 	}
@@ -152,7 +152,7 @@ func ProtoDiff(a, b protoutil.Message, args DiffArgs) string {
 		if m == nil {
 			return ""
 		}
-		str, err := ProtoToYAML(m)
+		str, err := ProtoToYAML(m, protoreflect.FmtFlags{})
 		if err != nil {
 			panic(err)
 		}
