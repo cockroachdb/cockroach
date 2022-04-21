@@ -13,6 +13,7 @@ BackReferencedIDs:
   - 105
 ElementState:
 - Sequence:
+    isTemporary: false
     sequenceId: 104
   Status: PUBLIC
 - TableComment:
@@ -55,6 +56,7 @@ BackReferencedIDs:
   - 105
 ElementState:
 - Sequence:
+    isTemporary: false
     sequenceId: 106
   Status: PUBLIC
 - TableComment:
@@ -92,34 +94,52 @@ tbl
 BackReferencedIDs:
 ElementState:
 - Table:
+    isTemporary: false
     tableId: 105
   Status: PUBLIC
 - ColumnFamily:
+    familyId: 0
     name: primary
     tableId: 105
   Status: PUBLIC
 - Column:
     columnId: 1
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
 - Column:
     columnId: 2
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
+      compositeColumnIds: []
       constraintId: 1
       indexId: 1
+      isConcurrently: false
+      isCreatedExplicitly: false
+      isInverted: false
       isUnique: true
       keyColumnDirections:
       - ASC
       keyColumnIds:
       - 1
+      keySuffixColumnIds: []
+      sharding: null
+      sourceIndexId: 0
       storingColumnIds:
       - 2
       tableId: 105
+      temporaryIndexId: 0
   Status: PUBLIC
 - TableComment:
     comment: __placeholder_comment__
@@ -137,21 +157,56 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     columnId: 1
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
         width: 64
+    familyId: 0
+    isNullable: false
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 105
   Status: PUBLIC
 - ColumnType:
     columnId: 2
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
         width: 64
+    familyId: 0
     isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 105
   Status: PUBLIC
 - ColumnDefaultExpression:
@@ -160,12 +215,15 @@ ElementState:
       expr: nextval(104:::REGCLASS)
       usesSequenceIds:
       - 104
+      usesTypeIds: []
     tableId: 105
   Status: PUBLIC
 - ColumnOnUpdateExpression:
     columnId: 2
     embeddedExpr:
       expr: 123:::INT8
+      usesSequenceIds: []
+      usesTypeIds: []
     tableId: 105
   Status: PUBLIC
 - SequenceOwner:
@@ -232,34 +290,52 @@ tbl
 BackReferencedIDs:
 ElementState:
 - Table:
+    isTemporary: false
     tableId: 105
   Status: PUBLIC
 - ColumnFamily:
+    familyId: 0
     name: primary
     tableId: 105
   Status: PUBLIC
 - Column:
     columnId: 1
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
 - Column:
     columnId: 2
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
+      compositeColumnIds: []
       constraintId: 1
       indexId: 1
+      isConcurrently: false
+      isCreatedExplicitly: false
+      isInverted: false
       isUnique: true
       keyColumnDirections:
       - ASC
       keyColumnIds:
       - 1
+      keySuffixColumnIds: []
+      sharding: null
+      sourceIndexId: 0
       storingColumnIds:
       - 2
       tableId: 105
+      temporaryIndexId: 0
   Status: PUBLIC
 - TableComment:
     comment: __placeholder_comment__
@@ -277,21 +353,56 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     columnId: 1
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
         width: 64
+    familyId: 0
+    isNullable: false
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 105
   Status: PUBLIC
 - ColumnType:
     columnId: 2
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
         width: 64
+    familyId: 0
     isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 105
   Status: PUBLIC
 - ColumnComment:
@@ -347,6 +458,7 @@ seq
 BackReferencedIDs:
 ElementState:
 - Sequence:
+    isTemporary: false
     sequenceId: 104
   Status: PUBLIC
 - TableComment:
