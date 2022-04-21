@@ -2011,6 +2011,13 @@ func (c *CustomFuncs) getfilteredCanonicalScan(
 	return scanExpr, filters, true
 }
 
+// IsCanonicalScanOrSelect returns true if `relation` is a canonical scan or a
+// select from a canonical scan.
+func (c *CustomFuncs) IsCanonicalScanOrSelect(relation memo.RelExpr) (ok bool) {
+	_, _, ok = c.getfilteredCanonicalScan(relation)
+	return ok
+}
+
 // findInterestingDisjunctionPairForJoin groups disjunction subexpressions into
 // an "interesting" pair of join predicates.
 //
