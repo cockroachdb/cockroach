@@ -96,7 +96,6 @@ const (
 	OptOnError                  = `on_error`
 	OptMetricsScope             = `metrics_label`
 	OptVirtualColumns           = `virtual_columns`
-	OptPrimaryKeyFilter         = `primary_key_filter`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -313,7 +312,6 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptOnError:                  enum("pause", "fail"),
 	OptMetricsScope:             stringOption,
 	OptVirtualColumns:           enum("omitted", "null"),
-	OptPrimaryKeyFilter:         stringOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -325,7 +323,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly,
-	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptPrimaryKeyFilter)
+	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics)
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil
@@ -758,19 +756,14 @@ func (s StatementOptions) GetSchemaChangeHandlingOptions() (SchemaChangeHandling
 // Filters are aspects of the feed that the backing
 // kvfeed or rangefeed want to know about.
 type Filters struct {
-	WithDiff         bool
-	WithPredicate    bool
-	PrimaryKeyFilter string
+	WithDiff bool
 }
 
 // GetFilters returns a populated Filters.
 func (s StatementOptions) GetFilters() Filters {
 	_, withDiff := s.m[OptDiff]
-	filter, withPredicate := s.m[OptPrimaryKeyFilter]
 	return Filters{
-		WithDiff:         withDiff,
-		WithPredicate:    withPredicate,
-		PrimaryKeyFilter: filter,
+		WithDiff: withDiff,
 	}
 }
 
@@ -819,6 +812,11 @@ func (s StatementOptions) GetResolvedTimestampInterval() (*time.Duration, bool, 
 func (s StatementOptions) GetMetricScope() (string, bool) {
 	v, ok := s.m[OptMetricsScope]
 	return v, ok
+}
+
+// IncludeVirtual returns true if we need to set placeholder nulls for virtual columns.
+func (s StatementOptions) IncludeVirtual() bool {
+	return s.m[OptVirtualColumns] == string(OptVirtualColumnsNull)
 }
 
 // GetMinCheckpointFrequency returns the minimum frequency with which checkpoints should be

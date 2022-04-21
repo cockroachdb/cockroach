@@ -28,7 +28,7 @@ func TestProjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -41,7 +41,7 @@ CREATE TABLE foo (
   PRIMARY KEY (b, a)
 )`)
 
-	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
+	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	encDatums := makeEncDatumRow(tree.NewDInt(1), tree.NewDString("one"), tree.DNull)
 
 	t.Run("row_was_deleted", func(t *testing.T) {

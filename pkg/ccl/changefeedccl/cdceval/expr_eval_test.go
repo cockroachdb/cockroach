@@ -38,68 +38,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNoopPredicate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t,
-		"CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, d INT, FAMILY most (a,b,c), FAMILY only_d (d))")
-	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
-
-	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
-	ctx := context.Background()
-	decoder, err := cdcevent.NewEventDecoder(
-		ctx, &serverCfg,
-		[]jobspb.ChangefeedTargetSpecification{
-			{
-				Type:       jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
-				TableID:    desc.GetID(),
-				FamilyName: "most",
-			},
-		}, false)
-	require.NoError(t, err)
-
-	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), desc)
-	defer cleanup()
-	sqlDB.Exec(t, "INSERT INTO foo (a, b, d) VALUES (1, 'one', -1)")
-	testRow := decodeRow(t, decoder, popRow(t), false)
-
-	e, err := makeEvaluator(t, s.ClusterSettings(), "")
-	require.NoError(t, err)
-
-	matches, err := e.MatchesFilter(ctx, testRow, hlc.Timestamp{}, testRow)
-	require.NoError(t, err)
-	require.True(t, matches)
-
-	projection, err := e.Projection(ctx, testRow, hlc.Timestamp{}, testRow)
-	require.NoError(t, err)
-	require.Equal(t, testRow.EventDescriptor, projection.EventDescriptor)
-}
-
-// readSortedRangeFeedValues reads n values, and sorts them based on key order.
-func readSortedRangeFeedValues(
-	t *testing.T, n int, row func(t *testing.T) *roachpb.RangeFeedValue,
-) (res []roachpb.RangeFeedValue) {
-	t.Helper()
-	for i := 0; i < n; i++ {
-		v := row(t)
-		res = append(res, *v)
-	}
-	sort.Slice(res, func(i, j int) bool {
-		return res[i].Key.Compare(res[j].Key) < 0
-	})
-	return res
-}
-
 func TestEvaluator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -115,7 +58,7 @@ CREATE TABLE foo (
   FAMILY main (a, b, e),
   FAMILY only_c (c)
 )`)
-	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
+	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 
 	type decodeExpectation struct {
 		expectUnwatchedErr bool
@@ -200,6 +143,18 @@ CREATE TABLE foo (
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (3, '3rd test')"},
 			predicate:  "SELECT e, a FROM _",
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"3rd test", "3"},
+					allValues: map[string]string{"a": "3", "e": "inactive"},
+				},
+			},
+		},
+		{
+			testName:   "main/projection_aliased",
+			familyName: "main",
+			actions:    []string{"INSERT INTO foo (a, b) VALUES (3, '3rd test')"},
+			predicate:  "SELECT bar.e, a FROM foo AS bar",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"3rd test", "3"},
@@ -501,7 +456,8 @@ CREATE TABLE foo (
 				require.NoError(t, err)
 
 				if expect.expectFiltered {
-					require.Equal(t, expect.keyValues, slurpKeys(t, updatedRow), "isDelete=%t fid=%d", updatedRow.IsDeleted(), eventFamilyID)
+					require.Equal(t, expect.keyValues, slurpKeys(t, updatedRow),
+						"isDelete=%t fid=%d", updatedRow.IsDeleted(), eventFamilyID)
 					matches, err := evaluator.MatchesFilter(ctx, updatedRow, v.Timestamp(), prevRow)
 					require.NoError(t, err)
 					require.False(t, matches, "keys: %v", slurpKeys(t, updatedRow))
@@ -573,14 +529,14 @@ func TestEvaluatesProjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, ""+
 		"CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, d INT, "+
 		"FAMILY most (a,b,c), FAMILY only_d (d))")
-	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
+	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	testRow := cdcevent.TestingMakeEventRow(desc, 0, randEncDatumRow(t, desc, 0), false)
 
 	verifyConstantsFolded := func(p *exprEval) {
@@ -652,26 +608,13 @@ func TestEvaluatesProjection(t *testing.T) {
 
 // makeEvaluator creates Evaluator and configures it with specified
 // select statement predicate.
-func makeEvaluator(t *testing.T, st *cluster.Settings, selectStr string) (Evaluator, error) {
+func makeEvaluator(t *testing.T, st *cluster.Settings, selectStr string) (*Evaluator, error) {
 	t.Helper()
-	evalCtx := eval.MakeTestingEvalContext(st)
-	e := NewEvaluator(&evalCtx)
-	if selectStr == "" {
-		return e, nil
-	}
 	s, err := parser.ParseOne(selectStr)
 	require.NoError(t, err)
 	slct := s.AST.(*tree.Select).Select.(*tree.SelectClause)
-	if err := e.ConfigureProjection(slct.Exprs); err != nil {
-		return Evaluator{}, err
-	}
-
-	if slct.Where != nil {
-		if err := e.ConfigureFilter(slct.Where.Expr); err != nil {
-			return Evaluator{}, err
-		}
-	}
-	return e, nil
+	evalCtx := eval.MakeTestingEvalContext(st)
+	return NewEvaluator(&evalCtx, slct)
 }
 
 func makeExprEval(
@@ -747,4 +690,19 @@ func makeEncDatumRow(datums ...tree.Datum) (row rowenc.EncDatumRow) {
 		row = append(row, rowenc.EncDatum{Datum: d})
 	}
 	return row
+}
+
+// readSortedRangeFeedValues reads n values, and sorts them based on key order.
+func readSortedRangeFeedValues(
+	t *testing.T, n int, row func(t *testing.T) *roachpb.RangeFeedValue,
+) (res []roachpb.RangeFeedValue) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		v := row(t)
+		res = append(res, *v)
+	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Key.Compare(res[j].Key) < 0
+	})
+	return res
 }

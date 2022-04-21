@@ -123,6 +123,7 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/server.guaranteedExitFatal": true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.kafkaLogAdapter).Printf": true,
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.wrapExprError":             true,
 
 	"github.com/cockroachdb/redact.Sprintf":              true,
 	"github.com/cockroachdb/redact.Fprintf":              true,

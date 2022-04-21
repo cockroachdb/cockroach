@@ -11,9 +11,9 @@ package changefeedccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -34,13 +34,14 @@ type TestingKnobs struct {
 	// be skipped.
 	ShouldSkipResolved func(resolved *jobspb.ResolvedSpan) bool
 	// FeedKnobs are kvfeed testing knobs.
-	FeedKnobs     kvfeed.TestingKnobs
-	DistflowKnobs changefeeddist.TestingKnobs
+	FeedKnobs kvfeed.TestingKnobs
 	// NullSinkIsExternalIOAccounted controls whether we record
 	// tenant usage for the null sink. By default the null sink is
 	// not accounted but it is useful to treat it as accounted in
 	// tests.
 	NullSinkIsExternalIOAccounted bool
+	// OnDistflowSpec is called when specs for distflow planning have been created
+	OnDistflowSpec func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, frontierSpec *execinfrapb.ChangeFrontierSpec)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

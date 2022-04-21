@@ -46,7 +46,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdctest",
-        "//pkg/ccl/utilccl",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
