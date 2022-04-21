@@ -546,6 +546,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("left fixed columns: %v = %v", t.LeftFixedCols, leftVals)
 			tp.Childf("right fixed columns: %v = %v", t.RightFixedCols, rightVals)
 		}
+		f.formatLockingWithPrefix(tp, "left ", t.LeftLocking)
+		f.formatLockingWithPrefix(tp, "right ", t.RightLocking)
 
 	case *MergeJoinExpr:
 		if !t.Flags.Empty() {
@@ -1397,6 +1399,12 @@ func (f *ExprFmtCtx) formatCol(label string, id opt.ColumnID, notNullCols opt.Co
 // formatLocking adds a new treeprinter child for the row-level locking policy,
 // if the policy is configured to perform row-level locking.
 func (f *ExprFmtCtx) formatLocking(tp treeprinter.Node, locking opt.Locking) {
+	f.formatLockingWithPrefix(tp, "", locking)
+}
+
+func (f *ExprFmtCtx) formatLockingWithPrefix(
+	tp treeprinter.Node, labelPrefix string, locking opt.Locking,
+) {
 	if !locking.IsLocking() {
 		return
 	}
@@ -1424,7 +1432,7 @@ func (f *ExprFmtCtx) formatLocking(tp treeprinter.Node, locking opt.Locking) {
 	default:
 		panic(errors.AssertionFailedf("unexpected wait policy"))
 	}
-	tp.Childf("locking: %s%s", strength, wait)
+	tp.Childf("%slocking: %s%s", labelPrefix, strength, wait)
 }
 
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to

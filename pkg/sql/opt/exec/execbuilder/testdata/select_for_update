@@ -1824,28 +1824,29 @@ EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b @> '{1, 2}' FOR UPDATE
 distribution: local
 vectorized: true
 ·
-• index join
+• lookup join (inner)
 │ columns: (a, b, c)
 │ estimated row count: 12 (missing stats)
 │ table: inverted@inverted_pkey
-│ key columns: a
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @> ARRAY[1,2]
 │ locking strength: for update
 │
 └── • project
     │ columns: (a)
-    │ estimated row count: 111 (missing stats)
+    │ estimated row count: 12 (missing stats)
     │
-    └── • inverted filter
-        │ columns: (a, b_inverted_key)
-        │ inverted column: b_inverted_key
-        │ num spans: 1
-        │
-        └── • scan
-              columns: (a, b_inverted_key)
-              estimated row count: 111 (missing stats)
-              table: inverted@b_inv
-              spans: /1-/3
-              locking strength: for update
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          left table: inverted@b_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          left locking strength: for update
+          right table: inverted@b_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
+          right locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
@@ -1915,6 +1916,73 @@ vectorized: true
                   table: inverted@inverted_pkey
                   spans: FULL SCAN
                   locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Tests with zigzag joins.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE zigzag (
+  a INT PRIMARY KEY,
+  b INT,
+  c FLOAT,
+  d JSONB,
+  INDEX b_idx(b),
+  INDEX c_idx(c),
+  INVERTED INDEX d_idx(d)
+)
+
+query T
+EXPLAIN (VERBOSE) SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c)
+│ estimated row count: 1 (missing stats)
+│
+└── • zigzag join
+      columns: (a, b, a, c)
+      pred: (b = 5) AND (c = 6.0)
+      left table: zigzag@b_idx
+      left columns: (a, b)
+      left fixed values: 1 column
+      left locking strength: for update
+      right table: zigzag@c_idx
+      right columns: (a, c)
+      right fixed values: 1 column
+      right locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) SELECT * from zigzag where d @> '{"a": {"b": "c"}, "f": "g"}' FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d)
+│ estimated row count: 12 (missing stats)
+│ table: zigzag@zigzag_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: d @> '{"a": {"b": "c"}, "f": "g"}'
+│ locking strength: for update
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 12 (missing stats)
+    │
+    └── • zigzag join
+          columns: (a, d_inverted_key, a, d_inverted_key)
+          left table: zigzag@d_idx
+          left columns: (a, d_inverted_key)
+          left fixed values: 1 column
+          left locking strength: for update
+          right table: zigzag@d_idx
+          right columns: (a, d_inverted_key)
+          right fixed values: 1 column
+          right locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with the NOWAIT lock wait policy.
