@@ -1150,7 +1150,10 @@ func (cf *cFetcher) processValueBytes(
 	)
 	// Continue reading data until there's none left or we've finished
 	// populating the data for all of the requested columns.
-	for len(valueBytes) > 0 && cf.machine.remainingValueColsByIdx.Len() > 0 {
+	// Keep track of the number of remaining values columns separately, because
+	// it's expensive to keep calling .Len() in the loop.
+	remainingValueCols := cf.machine.remainingValueColsByIdx.Len()
+	for len(valueBytes) > 0 && remainingValueCols > 0 {
 		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
@@ -1198,6 +1201,7 @@ func (cf *cFetcher) processValueBytes(
 			return "", "", err
 		}
 		cf.machine.remainingValueColsByIdx.Remove(vecIdx)
+		remainingValueCols--
 		if cf.traceKV {
 			dVal := cf.getDatumAt(vecIdx, cf.machine.rowIdx)
 			if _, err := fmt.Fprintf(cf.machine.prettyValueBuf, "/%v", dVal.String()); err != nil {
