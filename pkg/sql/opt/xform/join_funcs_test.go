@@ -11,12 +11,10 @@
 package xform_test
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
@@ -25,85 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-func TestCustomFuncs_makeRangeFilter(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	fb := makeFilterBuilder(t)
-	col := fb.tbl.ColumnID(0)
-	intLow := tree.NewDInt(0)
-	intHigh := tree.NewDInt(1)
-	nullKey := constraint.MakeKey(tree.DNull)
-
-	tests := []struct {
-		name          string
-		filter        string
-		start         constraint.Key
-		startBoundary constraint.SpanBoundary
-		end           constraint.Key
-		endBoundary   constraint.SpanBoundary
-	}{
-		{"lt", "@1 < 1",
-			constraint.EmptyKey, constraint.IncludeBoundary,
-			constraint.MakeKey(intHigh), constraint.ExcludeBoundary,
-		},
-		{"le", "@1 <= 1",
-			constraint.EmptyKey, constraint.IncludeBoundary,
-			constraint.MakeKey(intHigh), constraint.IncludeBoundary,
-		},
-		{"gt", "@1 > 0",
-			constraint.MakeKey(intLow), constraint.ExcludeBoundary,
-			constraint.EmptyKey, constraint.IncludeBoundary,
-		},
-		{"ge", "@1 >= 0",
-			constraint.MakeKey(intLow), constraint.IncludeBoundary,
-			constraint.EmptyKey, constraint.IncludeBoundary,
-		},
-		{"lt-null", "@1 < 1",
-			nullKey, constraint.ExcludeBoundary,
-			constraint.MakeKey(intHigh), constraint.ExcludeBoundary,
-		},
-		{"le-null", "@1 <= 1",
-			nullKey, constraint.ExcludeBoundary,
-			constraint.MakeKey(intHigh), constraint.IncludeBoundary,
-		},
-		{"gt-null", "@1 > 0",
-			constraint.MakeKey(intLow), constraint.ExcludeBoundary,
-			nullKey, constraint.IncludeBoundary,
-		},
-		{"ge-null", "@1 >= 0",
-			constraint.MakeKey(intLow), constraint.IncludeBoundary,
-			nullKey, constraint.IncludeBoundary,
-		},
-		{"ge&lt", "@1 >= 0 AND @1 < 1",
-			constraint.MakeKey(intLow), constraint.IncludeBoundary,
-			constraint.MakeKey(intHigh), constraint.ExcludeBoundary,
-		},
-		{"ge&le", "@1 >= 0 AND @1 <= 1",
-			constraint.MakeKey(intLow), constraint.IncludeBoundary,
-			constraint.MakeKey(intHigh), constraint.IncludeBoundary,
-		},
-		{"gt&lt", "@1 > 0 AND @1 < 1",
-			constraint.MakeKey(intLow), constraint.ExcludeBoundary,
-			constraint.MakeKey(intHigh), constraint.ExcludeBoundary,
-		},
-		{"gt&le", "@1 > 0 AND @1 <= 1",
-			constraint.MakeKey(intLow), constraint.ExcludeBoundary,
-			constraint.MakeKey(intHigh), constraint.IncludeBoundary,
-		},
-	}
-	fut := xform.TestingMakeRangeFilterFromSpan
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := fb.o.CustomFuncs()
-			var sp constraint.Span
-			sp.Init(tt.start, tt.startBoundary, tt.end, tt.endBoundary)
-			want := fb.buildFilter(tt.filter)
-			if got := fut(c, col, &sp); !reflect.DeepEqual(got, want) {
-				t.Errorf("makeRangeFilter() = %v, want %v", got, want)
-			}
-		})
-	}
-}
 
 type testFilterBuilder struct {
 	t       *testing.T
