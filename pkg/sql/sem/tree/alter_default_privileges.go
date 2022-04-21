@@ -39,7 +39,9 @@ type AlterDefaultPrivileges struct {
 // Format implements the NodeFormatter interface.
 func (n *AlterDefaultPrivileges) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DEFAULT PRIVILEGES ")
-	if len(n.Roles) > 0 {
+	if n.ForAllRoles {
+		ctx.WriteString("FOR ALL ROLES ")
+	} else if len(n.Roles) > 0 {
 		ctx.WriteString("FOR ROLE ")
 		for i, role := range n.Roles {
 			if i > 0 {
