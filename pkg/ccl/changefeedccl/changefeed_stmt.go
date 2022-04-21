@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -293,7 +294,7 @@ func createChangefeedJobRecord(
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 	}
 
-	jobDescription, err := changefeedJobDescription(p, changefeedStmt.CreateChangefeed, sinkURI, opts)
+	jobDescription, err := changefeedJobDescription(changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -376,6 +377,45 @@ func createChangefeedJobRecord(
 		TargetSpecifications: targets,
 	}
 
+	if changefeedStmt.Select != nil {
+		// Serialize changefeed expression.
+		if err := validateAndNormalizeChangefeedExpression(
+			ctx, p, changefeedStmt.Select, targetDescs, targets, opts.IncludeVirtual(),
+		); err != nil {
+			return nil, err
+		}
+		details.Select = cdceval.AsStringUnredacted(changefeedStmt.Select)
+	}
+
+	// TODO(dan): In an attempt to present the most helpful error message to the
+	// user, the ordering requirements between all these usage validations have
+	// become extremely fragile and non-obvious.
+	//
+	// - `validateDetails` has to run first to fill in defaults for `envelope`
+	//   and `format` if the user didn't specify them.
+	// - Then `getEncoder` is run to return any configuration errors.
+	// - Then the changefeed is opted in to `OptKeyInValue` for any cloud
+	//   storage sink or webhook sink. Kafka etc have a key and value field in
+	//   each message but cloud storage sinks and webhook sinks don't have
+	//   anywhere to put the key. So if the key is not in the value, then for
+	//   DELETEs there is no way to recover which key was deleted. We could make
+	//   the user explicitly pass this option for every cloud storage sink/
+	//   webhook sink and error if they don't, but that seems user-hostile for
+	//   insufficient reason. We can't do this any earlier, because we might
+	//   return errors about `key_in_value` being incompatible which is
+	//   confusing when the user didn't type that option.
+	//   This is the same for the topic and webhook sink, which uses
+	//   `topic_in_value` to embed the topic in the value by default, since it
+	//   has no other avenue to express the topic.
+	// - Finally, we create a "canary" sink to test sink configuration and
+	//   connectivity. This has to go last because it is strange to return sink
+	//   connectivity errors before we've finished validating all the other
+	//   options. We should probably split sink configuration checking and sink
+	//   connectivity checking into separate methods.
+	//
+	// The only upside in all this nonsense is the tests are decent. I've tuned
+	// this particular order simply by rearranging stuff until the changefeedccl
+	// tests all pass.
 	parsedSink, err := url.Parse(sinkURI)
 	if err != nil {
 		return nil, err
@@ -389,23 +429,6 @@ func createChangefeedJobRecord(
 
 	if err = validateDetailsAndOptions(details, opts); err != nil {
 		return nil, err
-	}
-
-	filters := opts.GetFilters()
-
-	if filters.WithPredicate {
-		policy, err := opts.GetSchemaChangeHandlingOptions()
-		if err != nil {
-			return nil, err
-		}
-		if policy.Policy != changefeedbase.OptSchemaChangePolicyStop {
-			return nil, errors.Newf("option %s can only be used with %s=%s",
-				changefeedbase.OptPrimaryKeyFilter, changefeedbase.OptSchemaChangePolicy,
-				changefeedbase.OptSchemaChangePolicyStop)
-		}
-		if err := validatePrimaryKeyFilterExpression(ctx, p, filters.PrimaryKeyFilter, targetDescs); err != nil {
-			return nil, err
-		}
 	}
 
 	encodingOpts, err := opts.GetEncodingOptions()
@@ -713,10 +736,7 @@ func validateSink(
 }
 
 func changefeedJobDescription(
-	p sql.PlanHookState,
-	changefeed *tree.CreateChangefeed,
-	sinkURI string,
-	opts changefeedbase.StatementOptions,
+	changefeed *tree.CreateChangefeed, sinkURI string, opts changefeedbase.StatementOptions,
 ) (string, error) {
 	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{
 		changefeedbase.SinkParamSASLPassword,
@@ -733,6 +753,7 @@ func changefeedJobDescription(
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
 		SinkURI: tree.NewDString(cleanedSinkURI),
+		Select:  changefeed.Select,
 	}
 	opts.ForEachWithRedaction(func(k string, v string) {
 		opt := tree.KVOption{Key: tree.Name(k)}
@@ -742,8 +763,7 @@ func changefeedJobDescription(
 		c.Options = append(c.Options, opt)
 	})
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
-	ann := p.ExtendedEvalContext().Annotations
-	return tree.AsStringWithFQNames(c, ann), nil
+	return tree.AsString(c), nil
 }
 
 func redactUser(uri string) string {
@@ -780,29 +800,37 @@ func validateDetailsAndOptions(
 			)
 		}
 	}
+
+	{
+		if details.Select != "" {
+			if len(details.TargetSpecifications) != 1 {
+				return errors.Errorf(
+					"CREATE CHANGEFEED ... AS SELECT ... is not supported for more than 1 table")
+			}
+		}
+	}
 	return nil
 }
 
-func validatePrimaryKeyFilterExpression(
+// validateAndNormalizeChangefeedExpression validates and normalizes changefeed expressions.
+// This method modifies passed in select clause to reflect normalization step.
+func validateAndNormalizeChangefeedExpression(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	filterExpr string,
+	sc *tree.SelectClause,
 	descriptors map[tree.TablePattern]catalog.Descriptor,
+	targets []jobspb.ChangefeedTargetSpecification,
+	includeVirtual bool,
 ) error {
-	if len(descriptors) > 1 {
-		return pgerror.Newf(pgcode.InvalidParameterValue,
-			"option %s can only be used with 1 changefeed target (found %d)",
-			changefeedbase.OptPrimaryKeyFilter, len(descriptors),
-		)
+	if len(descriptors) != 1 || len(targets) != 1 {
+		return pgerror.Newf(pgcode.InvalidParameterValue, "CDC expressions require single table")
 	}
-
 	var tableDescr catalog.TableDescriptor
 	for _, d := range descriptors {
 		tableDescr = d.(catalog.TableDescriptor)
 	}
-
-	_, err := constrainSpansByExpression(ctx, execCtx, filterExpr, tableDescr)
-	return err
+	return cdceval.NormalizeAndValidateSelectForTarget(
+		ctx, execCtx, tableDescr, targets[0], sc, includeVirtual)
 }
 
 type changefeedResumer struct {

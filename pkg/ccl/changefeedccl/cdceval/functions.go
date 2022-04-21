@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -153,7 +152,7 @@ func prevRowAsJSON(evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
 }
 
 type cdcCustomFunctionResolver struct {
-	sessiondata.SearchPath
+	tree.SearchPath
 }
 
 // Resolve implements tree.CustomFunctionDefinitionResolver

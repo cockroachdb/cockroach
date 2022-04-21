@@ -83,15 +83,29 @@ func MakeRangeFeedValueReader(
 // GetHydratedTableDescriptor returns a table descriptor for the specified
 // table.  The descriptor is "hydrated" if it has user defined data types.
 func GetHydratedTableDescriptor(
-	t *testing.T, execCfgI interface{}, kvDB *kv.DB, tableName tree.Name,
+	t *testing.T, execCfgI interface{}, parts ...tree.Name,
 ) (td catalog.TableDescriptor) {
 	t.Helper()
+	dbName, scName, tableName := func() (tree.Name, tree.Name, tree.Name) {
+		switch len(parts) {
+		case 1:
+			return "defaultdb", "public", parts[0]
+		case 2:
+			return parts[0], "public", parts[1]
+		case 3:
+			return parts[0], parts[1], parts[2]
+		default:
+			t.Fatal("invalid length")
+			return "", "", ""
+		}
+	}()
+
 	execCfg := execCfgI.(sql.ExecutorConfig)
 	var found bool
 	require.NoError(t, sql.DescsTxn(context.Background(), &execCfg,
 		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
 			found, td, err = col.GetImmutableTableByName(ctx, txn,
-				tree.NewTableNameWithSchema("defaultdb", "public", tableName),
+				tree.NewTableNameWithSchema(dbName, scName, tableName),
 				tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
 						Required:    true,

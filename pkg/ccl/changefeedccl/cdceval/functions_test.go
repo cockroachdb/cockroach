@@ -33,14 +33,14 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, ""+
 		"CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, d INT, "+
 		"FAMILY most (a,b,c), FAMILY only_d (d))")
-	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
+	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 
 	ctx := context.Background()
 

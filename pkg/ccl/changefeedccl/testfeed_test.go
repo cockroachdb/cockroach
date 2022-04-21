@@ -175,12 +175,7 @@ func (c *sinklessFeed) start() error {
 		return err
 	}
 
-	// The syntax for a sinkless changefeed is `EXPERIMENTAL CHANGEFEED FOR ...`
-	// but it's convenient to accept the `CREATE CHANGEFEED` syntax from the
-	// test, so we can keep the current abstraction of running each test over
-	// both types. This bit turns what we received into the real sinkless
-	// syntax.
-	create := strings.Replace(c.create, `CREATE CHANGEFEED`, `EXPERIMENTAL CHANGEFEED`, 1)
+	create := c.create
 	if !c.latestResolved.IsEmpty() {
 		// NB: The TODO in Next means c.latestResolved is currently never set for
 		// non-json feeds.
@@ -584,6 +579,7 @@ type enterpriseFeedFactory struct {
 }
 
 func (e enterpriseFeedFactory) startFeedJob(f *jobFeed, create string, args ...interface{}) error {
+	log.Infof(context.Background(), "Starting feed job: %q", create)
 	e.di.prepareJob(f)
 	if err := e.db.QueryRow(create, args...).Scan(&f.jobID); err != nil {
 		return err
