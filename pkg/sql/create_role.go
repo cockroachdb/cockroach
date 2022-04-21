@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -255,9 +256,9 @@ func retrievePasswordFromRoleOptions(
 }
 
 func (p *planner) checkPasswordAndGetHash(
-	ctx context.Context, password string,
+	ctx context.Context, passwordStr string,
 ) (hashedPassword []byte, err error) {
-	if password == "" {
+	if passwordStr == "" {
 		return hashedPassword, security.ErrEmptyPassword
 	}
 
@@ -266,7 +267,7 @@ func (p *planner) checkPasswordAndGetHash(
 		var isPreHashed, schemeSupported bool
 		var schemeName string
 		var issueNum int
-		isPreHashed, schemeSupported, issueNum, schemeName, hashedPassword, err = security.CheckPasswordHashValidity(ctx, []byte(password))
+		isPreHashed, schemeSupported, issueNum, schemeName, hashedPassword, err = password.CheckPasswordHashValidity(ctx, []byte(passwordStr))
 		if err != nil {
 			return hashedPassword, pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
@@ -278,12 +279,22 @@ func (p *planner) checkPasswordAndGetHash(
 		}
 	}
 
-	if minLength := security.MinPasswordLength.Get(&st.SV); minLength >= 1 && int64(len(password)) < minLength {
+	if minLength := security.MinPasswordLength.Get(&st.SV); minLength >= 1 && int64(len(passwordStr)) < minLength {
 		return nil, errors.WithHintf(security.ErrPasswordTooShort,
 			"Passwords must be %d characters or longer.", minLength)
 	}
 
-	hashedPassword, err = security.HashPassword(ctx, &st.SV, password)
+	method := security.GetConfiguredPasswordHashMethod(ctx, &st.SV)
+	var cost int
+	switch method {
+	case password.HashBCrypt:
+		cost = int(security.BcryptCost.Get(&st.SV))
+	case password.HashSCRAMSHA256:
+		cost = int(security.SCRAMCost.Get(&st.SV))
+	default:
+		return nil, errors.Newf("unsupported hash method: %v", method)
+	}
+	hashedPassword, err = password.HashPassword(ctx, cost, method, passwordStr)
 	if err != nil {
 		return hashedPassword, err
 	}

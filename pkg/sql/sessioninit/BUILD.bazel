@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/security",
+        "//pkg/security/password",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",

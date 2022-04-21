@@ -120,6 +120,7 @@ go_library(
         "//pkg/rpc/nodedialer",
         "//pkg/scheduledjobs",
         "//pkg/security",
+        "//pkg/security/password",
         "//pkg/server/debug",
         "//pkg/server/diagnostics",
         "//pkg/server/diagnostics/diagnosticspb",
