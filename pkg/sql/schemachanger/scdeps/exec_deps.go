@@ -61,6 +61,7 @@ func NewExecutorDependencies(
 	clock scmutationexec.Clock,
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
 	eventLogger scexec.EventLogger,
+	statsRefresher scexec.StatsRefresher,
 	kvTrace bool,
 	schemaChangerJobID jobspb.JobID,
 	statements []string,
@@ -73,6 +74,7 @@ func NewExecutorDependencies(
 			jobRegistry:        jobRegistry,
 			indexValidator:     indexValidator,
 			eventLogger:        eventLogger,
+			statsRefresher:     statsRefresher,
 			schemaChangerJobID: schemaChangerJobID,
 			kvTrace:            kvTrace,
 		},
@@ -88,16 +90,18 @@ func NewExecutorDependencies(
 }
 
 type txnDeps struct {
-	txn                *kv.Txn
-	codec              keys.SQLCodec
-	descsCollection    *descs.Collection
-	jobRegistry        JobRegistry
-	createdJobs        []jobspb.JobID
-	indexValidator     scexec.IndexValidator
-	eventLogger        scexec.EventLogger
-	deletedDescriptors catalog.DescriptorIDSet
-	schemaChangerJobID jobspb.JobID
-	kvTrace            bool
+	txn                 *kv.Txn
+	codec               keys.SQLCodec
+	descsCollection     *descs.Collection
+	jobRegistry         JobRegistry
+	createdJobs         []jobspb.JobID
+	indexValidator      scexec.IndexValidator
+	statsRefresher      scexec.StatsRefresher
+	tableStatsToRefresh []descpb.ID
+	eventLogger         scexec.EventLogger
+	deletedDescriptors  catalog.DescriptorIDSet
+	schemaChangerJobID  jobspb.JobID
+	kvTrace             bool
 }
 
 func (d *txnDeps) UpdateSchemaChangeJob(
@@ -422,6 +426,22 @@ type EventLoggerFactory = func(*kv.Txn) scexec.EventLogger
 // EventLogger implements scexec.Dependencies
 func (d *execDeps) EventLogger() scexec.EventLogger {
 	return d.eventLogger
+}
+
+// AddTableForStatsRefresh adds a table for stats refresh once we are finished
+// executing the current transaction.
+func (d *execDeps) AddTableForStatsRefresh(id descpb.ID) {
+	d.tableStatsToRefresh = append(d.tableStatsToRefresh, id)
+}
+
+// getTablesForStatsRefresh gets tables that need refresh for stats.
+func (d *execDeps) getTablesForStatsRefresh() []descpb.ID {
+	return d.tableStatsToRefresh
+}
+
+// StatsRefreshQueue implements scexec.Dependencies
+func (d *execDeps) StatsRefresher() scexec.StatsRefreshQueue {
+	return d
 }
 
 // NewNoOpBackfillTracker constructs a backfill tracker which does not do
