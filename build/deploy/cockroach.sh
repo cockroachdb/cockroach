@@ -263,7 +263,7 @@ run_single_node() {
     process_init_files /docker-entrypoint-initdb.d/*
     # Bring the background server process to the foreground, otherwise the
     # docker container will automatically exit here.
-    echo "init_finished" > ./cockroach-data/init_success
+    echo "init_finished" > ./init_success
     fg %1
   else
       exec $cockroach_entrypoint start-single-node \
