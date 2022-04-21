@@ -243,6 +243,12 @@ type Flags struct {
 	// more than MemoGroupLimit memo groups are constructed during optimization.
 	MemoGroupLimit int64
 
+	// SuppressSizeCheckReport is used by the check-size command to disable
+	// printing of the number of rules applied or memo groups constructed so that
+	// it can be used as an upper-bound sanity check and not a requirement for an
+	// exact number of rules or memo groups.
+	SuppressSizeCheckReport bool
+
 	// QueryArgs are values for placeholders, used for assign-placeholders-*.
 	QueryArgs []string
 
@@ -402,12 +408,14 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //    Injects table statistics from a json file.
 //
-//  - check-size [rule-limit=...] [group-limit=...]
+//  - check-size [rule-limit=...] [group-limit=...] [suppress-report]
 //
 //    Fully optimizes the given query and outputs the number of rules applied
 //    and memo groups created. If the rule-limit or group-limit flags are set,
 //    check-size will result in a test error if the rule application or memo
-//    group count exceeds the corresponding limit.
+//    group count exceeds the corresponding limit. If either the rule-limit or
+//    group-limit options are used the suppress-report option suppresses
+//    printing of the number of rules and groups explored.
 //
 //  - index-candidates
 //
@@ -1059,6 +1067,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "split-diff":
 		f.OptStepsSplitDiff = true
+
+	case "suppress-report":
+		f.SuppressSizeCheckReport = true
 
 	case "rule-limit":
 		if len(arg.Vals) != 1 {
@@ -2092,7 +2103,11 @@ func (ot *OptTester) CheckSize() (string, error) {
 	if ot.Flags.MemoGroupLimit > 0 && groups > ot.Flags.MemoGroupLimit {
 		return "", fmt.Errorf("memo groups exceeded limit: %d groups", groups)
 	}
-	return fmt.Sprintf("Rules Applied: %d\nGroups Added: %d\n", ruleApplications, groups), nil
+	var message string
+	if !ot.Flags.SuppressSizeCheckReport {
+		message = fmt.Sprintf("Rules Applied: %d\nGroups Added: %d\n", ruleApplications, groups)
+	}
+	return message, nil
 }
 
 // IndexCandidates is used with the index-candidates option. It finds index
