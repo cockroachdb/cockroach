@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -72,7 +73,7 @@ type AuthInfo struct {
 	// CanLoginDBConsole is set to false if the user has NOLOGIN role option.
 	CanLoginDBConsole bool
 	// HashedPassword is the hashed password and can be nil.
-	HashedPassword security.PasswordHash
+	HashedPassword password.PasswordHash
 	// ValidUntil is the VALID UNTIL role option.
 	ValidUntil *tree.DTimestamp
 }

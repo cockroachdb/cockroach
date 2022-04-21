@@ -281,6 +281,7 @@ go_library(
         "//pkg/rpc/nodedialer",
         "//pkg/scheduledjobs",
         "//pkg/security",
+        "//pkg/security/password",
         "//pkg/security/sessionrevival",
         "//pkg/server/pgurl",
         "//pkg/server/serverpb",
