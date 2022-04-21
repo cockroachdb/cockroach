@@ -11,10 +11,14 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,14 +34,16 @@ type eventContext struct {
 }
 
 type kvEventToRowConsumer struct {
-	frontier *span.Frontier
-	encoder  Encoder
-	scratch  bufalloc.ByteAllocator
-	sink     Sink
-	cursor   hlc.Timestamp
-	knobs    TestingKnobs
-	decoder  cdcevent.Decoder
-	details  ChangefeedConfig
+	frontier  *span.Frontier
+	encoder   Encoder
+	scratch   bufalloc.ByteAllocator
+	sink      Sink
+	cursor    hlc.Timestamp
+	knobs     TestingKnobs
+	decoder   cdcevent.Decoder
+	details   ChangefeedConfig
+	evaluator *cdceval.Evaluator
+	safeExpr  string
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
@@ -46,19 +52,37 @@ type kvEventToRowConsumer struct {
 func newKVEventToRowConsumer(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
+	evalCtx *eval.Context,
 	frontier *span.Frontier,
 	cursor hlc.Timestamp,
 	sink Sink,
 	encoder Encoder,
 	details ChangefeedConfig,
+	expr execinfrapb.Expression,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
 ) (*kvEventToRowConsumer, error) {
 	includeVirtual := details.Opts.IncludeVirtual()
 	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual)
+
 	if err != nil {
 		return nil, err
 	}
+
+	var evaluator *cdceval.Evaluator
+	var safeExpr string
+	if expr.Expr != "" {
+		expr, err := cdceval.ParseChangefeedExpression(expr.Expr)
+		if err != nil {
+			return nil, err
+		}
+		safeExpr = tree.AsString(expr)
+		evaluator, err = cdceval.NewEvaluator(evalCtx, expr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &kvEventToRowConsumer{
 		frontier:             frontier,
 		encoder:              encoder,
@@ -69,6 +93,8 @@ func newKVEventToRowConsumer(
 		knobs:                knobs,
 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 		topicNamer:           topicNamer,
+		evaluator:            evaluator,
+		safeExpr:             safeExpr,
 	}, nil
 }
 
@@ -133,6 +159,26 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		return err
 	}
 
+	if c.evaluator != nil {
+		matches, err := c.evaluator.MatchesFilter(ctx, updatedRow, mvccTimestamp, prevRow)
+		if err != nil {
+			return errors.Wrapf(err, "while matching filter: %s", c.safeExpr)
+		}
+		if !matches {
+			// TODO(yevgeniy): Add metrics
+			return nil
+		}
+		projection, err := c.evaluator.Projection(ctx, updatedRow, mvccTimestamp, prevRow)
+		if err != nil {
+			return errors.Wrapf(err, "while evaluating projection: %s", c.safeExpr)
+		}
+		updatedRow = projection
+
+		// Clear out prevRow.  Projection can already emit previous row; thus
+		// it would be superfluous to also encode prevRow.
+		prevRow = cdcevent.Row{}
+	}
+
 	topic, err := c.topicForEvent(updatedRow.Metadata)
 	if err != nil {
 		return err
@@ -169,6 +215,8 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		return err
 	}
 	c.scratch, keyCopy = c.scratch.Copy(encodedKey, 0 /* extraCap */)
+	// TODO(yevgeniy): Some refactoring is needed in the encoder: namely, prevRow
+	// might not be available at all when working with changefeed expressions.
 	encodedValue, err := c.encoder.EncodeValue(ctx, evCtx, updatedRow, prevRow)
 	if err != nil {
 		return err

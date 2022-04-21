@@ -382,6 +382,9 @@ const (
 	AddSSTableTombstones
 	// SystemPrivilegesTable adds system.privileges table.
 	SystemPrivilegesTable
+	// EnablePredicateProjectionChangefeed indicates that changefeeds support
+	// predicates and projections.
+	EnablePredicateProjectionChangefeed
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -678,6 +681,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SystemPrivilegesTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 22},
+	},
+	{
+		Key:     EnablePredicateProjectionChangefeed,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 24},
 	},
 
 	// *************************************************

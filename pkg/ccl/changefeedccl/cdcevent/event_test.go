@@ -34,7 +34,7 @@ func TestEventDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -51,7 +51,7 @@ CREATE TABLE foo (
   FAMILY only_c (c)
 )`)
 
-	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
+	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	mainFamily := mustGetFamily(t, tableDesc, 0)
 	cFamily := mustGetFamily(t, tableDesc, 1)
 
@@ -90,7 +90,7 @@ CREATE TABLE foo (
 		},
 	} {
 		t.Run(fmt.Sprintf("%s/includeVirtual=%t", tc.family.Name, tc.includeVirtual), func(t *testing.T) {
-			ed, err := newEventDescriptor(tableDesc, tc.family, tc.includeVirtual, s.Clock().Now())
+			ed, err := NewEventDescriptor(tableDesc, tc.family, tc.includeVirtual, s.Clock().Now())
 			require.NoError(t, err)
 
 			// Verify Metadata information for event descriptor.
@@ -112,7 +112,7 @@ func TestEventDecoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -129,7 +129,7 @@ CREATE TABLE foo (
   FAMILY only_c (c)
 )`)
 
-	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
+	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), tableDesc)
 	defer cleanup()
 

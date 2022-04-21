@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -247,8 +248,10 @@ func createBenchmarkChangefeed(
 		return nil, nil, err
 	}
 	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
-	eventConsumer, err := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
-		sink, encoder, makeChangefeedConfigFromJobDetails(details), TestingKnobs{}, nil)
+	eventConsumer, err := newKVEventToRowConsumer(ctx, &serverCfg, nil, sf, initialHighWater,
+		sink, encoder, makeChangefeedConfigFromJobDetails(details),
+		execinfrapb.Expression{}, TestingKnobs{}, nil)
+
 	if err != nil {
 		return nil, nil, err
 	}
