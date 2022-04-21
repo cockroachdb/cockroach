@@ -181,7 +181,7 @@ func (gj gcJobs) makeRecords(
 			addStmt(&s, idx.statement)
 			j.Indexes = append(j.Indexes, jobspb.SchemaChangeGCDetails_DroppedIndex{
 				IndexID:  idx.indexID,
-				DropTime: 0,
+				DropTime: now.UnixNano(),
 			})
 		}
 		if len(j.Indexes) > 0 {
