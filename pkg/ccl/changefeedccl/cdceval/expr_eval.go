@@ -27,11 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // Evaluator is a responsible for evaluating expressions in CDC.
 type Evaluator struct {
 	selectors []tree.SelectExpr
+	from      tree.TableExpr
 	where     tree.Expr
 
 	evalCtx *eval.Context
@@ -40,38 +42,23 @@ type Evaluator struct {
 	evaluator *exprEval
 }
 
-// NewEvaluator returns new evaluator instance.
-func NewEvaluator(evalCtx *eval.Context) Evaluator {
-	return Evaluator{evalCtx: evalCtx.Copy()}
-}
+// NewEvaluator returns evaluator configured to process specified
+// select expression.
+func NewEvaluator(evalCtx *eval.Context, sc *tree.SelectClause) (*Evaluator, error) {
+	e := &Evaluator{evalCtx: evalCtx.Copy()}
 
-// ConfigureProjection configures this evaluator to evaluate projection
-func (e *Evaluator) ConfigureProjection(exprs tree.SelectExprs) error {
-	if len(exprs) == 0 {
-		return pgerror.New(pgcode.InvalidParameterValue, "expected at least 1 projection")
-	}
-	e.selectors = exprs
-	for _, se := range e.selectors {
-		expr, err := validateExpressionForCDC(se.Expr)
-		if err != nil {
-			return err
+	if len(sc.From.Tables) > 0 { // 0 tables used only in tests.
+		if len(sc.From.Tables) != 1 {
+			return nil, errors.AssertionFailedf("expected 1 table, found %d", len(sc.From.Tables))
 		}
-		se.Expr = expr
+		e.from = sc.From.Tables[0]
 	}
-	return nil
-}
 
-// ConfigureFilter configures this evaluator to match rows against filter expression.
-func (e *Evaluator) ConfigureFilter(filter tree.Expr) error {
-	if filter == nil {
-		return nil
+	if err := e.initSelectClause(sc); err != nil {
+		return nil, err
 	}
-	expr, err := validateExpressionForCDC(filter)
-	if err != nil {
-		return err
-	}
-	e.where = expr
-	return nil
+
+	return e, nil
 }
 
 // ComputeVirtualColumns updates row with computed values for all virtual columns.
@@ -112,13 +99,68 @@ func (e *Evaluator) Projection(
 	return e.evaluator.evalProjection(ctx, updatedRow, mvccTS, prevRow)
 }
 
-// initEval initializes evaluator for the specified event descriptor.
-func (e *Evaluator) initEval(ctx context.Context, d *cdcevent.EventDescriptor) error {
-	if e.evaluator != nil && d.Equals(e.evaluator.EventDescriptor) {
-		return nil
+// initSelectClause configures this evaluator to evaluate specified select clause.
+func (e *Evaluator) initSelectClause(sc *tree.SelectClause) error {
+	if len(sc.Exprs) == 0 { // Shouldn't happen, but be defensive.
+		return pgerror.New(pgcode.InvalidParameterValue,
+			"expected at least 1 projection")
 	}
 
-	evaluator := newExprEval(e.evalCtx, d)
+	e.selectors = sc.Exprs
+	for _, se := range e.selectors {
+		expr, err := validateExpressionForCDC(se.Expr)
+		if err != nil {
+			return err
+		}
+		se.Expr = expr
+	}
+
+	if sc.Where != nil {
+		expr, err := validateExpressionForCDC(sc.Where.Expr)
+		if err != nil {
+			return err
+		}
+		e.where = expr
+	}
+
+	return nil
+}
+
+// initEval initializes evaluator for the specified event descriptor.
+func (e *Evaluator) initEval(ctx context.Context, d *cdcevent.EventDescriptor) error {
+	if e.evaluator != nil {
+		if d.EqualsWithUDTCheck(e.evaluator.EventDescriptor) {
+			// Event descriptor and UDT types are the same -- re-use the same evaluator.
+			return nil
+		}
+
+		if d.EqualsVersion(e.evaluator.EventDescriptor) {
+			// Here, we know that even though descriptor versions are the same, the
+			// check for equality with UDT type check failed.  Thus, we know some user
+			// defined types have changed.
+			// The previously parsed select & filter expressions have type annotations,
+			// and those may now be incorrect.  So, parse and re-initialize evaluator
+			// expressions.
+			var where *tree.Where
+			if e.where != nil {
+				where = tree.NewWhere(tree.AstWhere, e.where)
+			}
+			sc, err := ParseChangefeedExpression(AsStringUnredacted(&tree.SelectClause{
+				From:  tree.From{Tables: tree.TableExprs{e.from}},
+				Exprs: e.selectors,
+				Where: where,
+			}))
+			if err != nil {
+				return err
+			}
+			if err := e.initSelectClause(sc); err != nil {
+				return err
+			}
+			// Fall through to re-create e.evaluator.
+		}
+	}
+
+	evaluator := newExprEval(e.evalCtx, d, tableNameOrAlias(d.TableName, e.from))
 	for _, selector := range e.selectors {
 		if err := evaluator.addSelector(ctx, selector, len(e.selectors)); err != nil {
 			return err
@@ -135,17 +177,17 @@ func (e *Evaluator) initEval(ctx context.Context, d *cdcevent.EventDescriptor) e
 
 type exprEval struct {
 	*cdcevent.EventDescriptor
-	semaCtx tree.SemaContext
+	semaCtx *tree.SemaContext
 	evalCtx *eval.Context
 
 	evalHelper *rowContainer         // evalHelper is a container tree.IndexedVarContainer.
 	iVarHelper tree.IndexedVarHelper // iVarHelper helps create indexed variables bound to evalHelper.
 	resolver   cdcNameResolver       // resolver responsible for performing function name resolution.
 
-	starProjection bool
-	selectors      []tree.TypedExpr // set of expressions to evaluate when performing evalProjection.
-	projection     cdcevent.Projection
-	filter         tree.TypedExpr // where clause filter
+	starProjection bool                // Set to true if we have a single '*' projection.
+	selectors      []tree.TypedExpr    // set of expressions to evaluate when performing evalProjection.
+	projection     cdcevent.Projection // cdcevent.Projects helps construct projection results.
+	filter         tree.TypedExpr      // where clause filter
 
 	// keep track of number of times particular column name was used
 	// in selectors.  Since the data produced by CDC gets converted
@@ -158,11 +200,13 @@ type exprEval struct {
 	rowEvalCtx rowEvalContext
 }
 
-func newExprEval(evalCtx *eval.Context, ed *cdcevent.EventDescriptor) *exprEval {
+func newExprEval(
+	evalCtx *eval.Context, ed *cdcevent.EventDescriptor, tableName *tree.TableName,
+) *exprEval {
 	cols := ed.ResultColumns()
 	e := &exprEval{
 		EventDescriptor: ed,
-		semaCtx:         tree.MakeSemaContext(),
+		semaCtx:         newSemaCtx(ed),
 		evalCtx:         evalCtx.Copy(),
 		evalHelper:      &rowContainer{cols: cols},
 		projection:      cdcevent.MakeProjection(ed),
@@ -197,10 +241,7 @@ func newExprEval(evalCtx *eval.Context, ed *cdcevent.EventDescriptor) *exprEval 
 	e.resolver = cdcNameResolver{
 		EventDescriptor: ed,
 		NameResolutionVisitor: schemaexpr.MakeNameResolutionVisitor(
-			colinfo.NewSourceInfoForSingleTable(
-				tree.MakeUnqualifiedTableName(tree.Name(ed.TableName)),
-				nakedResultColumns(),
-			),
+			colinfo.NewSourceInfoForSingleTable(*tableName, nakedResultColumns()),
 			e.iVarHelper,
 		),
 	}
@@ -374,7 +415,8 @@ func (e *exprEval) typeCheck(
 ) (tree.TypedExpr, error) {
 	// If we have variable free immutable expressions, then we can just evaluate it right away.
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		ctx, expr, targetType, "cdc", &e.semaCtx, volatility.Immutable, false)
+		ctx, expr, targetType, "cdc", e.semaCtx,
+		volatility.Immutable, true)
 	if err == nil {
 		d, err := eval.Expr(e.evalCtx, typedExpr)
 		if err != nil {
@@ -395,7 +437,7 @@ func (e *exprEval) typeCheck(
 	}
 
 	// Run type check & normalize.
-	typedExpr, err = expr.TypeCheck(ctx, &e.semaCtx, targetType)
+	typedExpr, err = expr.TypeCheck(ctx, e.semaCtx, targetType)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +465,7 @@ func (e *exprEval) evalExpr(
 			return nil, v.err
 		}
 
-		typedExpr, err := tree.TypeCheck(ctx, newExpr, &e.semaCtx, targetType)
+		typedExpr, err := tree.TypeCheck(ctx, newExpr, e.semaCtx, targetType)
 		if err != nil {
 			return nil, err
 		}
@@ -669,6 +711,67 @@ func (v *replaceIndexVarVisitor) VisitPost(expr tree.Expr) (newNode tree.Expr) {
 // in the Annotation field of evalCtx when evaluating expressions.
 const cdcAnnotationAddr tree.AnnotationIdx = iota + 1
 
+// rowEvalContextFromEvalContext returns rowEvalContext stored as an annotation
+// in evalCtx.
 func rowEvalContextFromEvalContext(evalCtx *eval.Context) *rowEvalContext {
 	return evalCtx.Annotations.Get(cdcAnnotationAddr).(*rowEvalContext)
+}
+
+// newSemaCtx returns new tree.SemaCtx configured for cdc.
+func newSemaCtx(d *cdcevent.EventDescriptor) *tree.SemaContext {
+	sema := tree.MakeSemaContext()
+	sema.SearchPath = &cdcCustomFunctionResolver{SearchPath: sessiondata.DefaultSearchPath}
+	sema.Properties.Require("cdc",
+		tree.RejectAggregates|tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectNestedGenerators,
+	)
+	if d.HasUserDefinedTypes() {
+		sema.TypeResolver = newTypeReferenceResolver(d)
+	}
+	return &sema
+}
+
+// cdcTypeReferenceReesolver is responsible for resolving user defined types.
+type cdcTypeReferenceResolver struct {
+	byName map[string]*types.T
+	byOID  map[oid.Oid]*types.T
+}
+
+var _ tree.TypeReferenceResolver = (*cdcTypeReferenceResolver)(nil)
+
+func newTypeReferenceResolver(d *cdcevent.EventDescriptor) tree.TypeReferenceResolver {
+	// Because EventDescriptor is built with hydrated table descriptors, we don't need
+	// to do any fancy resolution; just go through user defined columns in the descriptor
+	// and build the lookup maps.
+	r := &cdcTypeReferenceResolver{
+		byName: make(map[string]*types.T),
+		byOID:  make(map[oid.Oid]*types.T),
+	}
+
+	for _, c := range d.ResultColumns() {
+		if c.Typ.UserDefined() {
+			r.byName[c.Typ.Name()] = c.Typ
+			r.byOID[c.Typ.Oid()] = c.Typ
+		}
+	}
+	return r
+}
+
+// ResolveType implements tree.TypeReferenceResolver.
+func (r *cdcTypeReferenceResolver) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	if typ, found := r.byName[name.Object()]; found {
+		return typ, nil
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedObject, "undefined object %s", name)
+}
+
+// ResolveTypeByOID implements tree.TypeReferenceResolver.
+func (r *cdcTypeReferenceResolver) ResolveTypeByOID(
+	ctx context.Context, oid oid.Oid,
+) (*types.T, error) {
+	if typ, found := r.byOID[oid]; found {
+		return typ, nil
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedObject, "undefined object with OID %d", oid)
 }
