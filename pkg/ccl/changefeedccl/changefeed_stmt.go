@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -306,7 +307,7 @@ func createChangefeedJobRecord(
 		// Still serialize the experimental_ form for backwards compatibility
 	}
 
-	jobDescription, err := changefeedJobDescription(p, changefeedStmt.CreateChangefeed, sinkURI, opts)
+	jobDescription, err := changefeedJobDescription(changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -381,6 +382,11 @@ func createChangefeedJobRecord(
 		TargetSpecifications: targets,
 	}
 
+	if changefeedStmt.Select != nil {
+		// Serialize changefeed expression.
+		details.Select = cdceval.AsStringUnredacted(changefeedStmt.Select)
+	}
+
 	// TODO(dan): In an attempt to present the most helpful error message to the
 	// user, the ordering requirements between all these usage validations have
 	// become extremely fragile and non-obvious.
@@ -425,16 +431,8 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
-	if filterExpr, isSet := details.Opts[changefeedbase.OptPrimaryKeyFilter]; isSet {
-		policy := changefeedbase.SchemaChangePolicy(details.Opts[changefeedbase.OptSchemaChangePolicy])
-		if policy != changefeedbase.OptSchemaChangePolicyStop {
-			return nil, errors.Newf("option %s can only be used with %s=%s",
-				changefeedbase.OptPrimaryKeyFilter, changefeedbase.OptSchemaChangePolicy,
-				changefeedbase.OptSchemaChangePolicyStop)
-		}
-		if err := validatePrimaryKeyFilterExpression(ctx, p, filterExpr, targetDescs); err != nil {
-			return nil, err
-		}
+	if err := validateChangefeedExpression(ctx, p, details, targetDescs); err != nil {
+		return nil, err
 	}
 
 	if _, err := getEncoder(details.Opts, AllTargets(details)); err != nil {
@@ -712,7 +710,7 @@ func validateSink(
 }
 
 func changefeedJobDescription(
-	p sql.PlanHookState, changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
+	changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
 ) (string, error) {
 	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{
 		changefeedbase.SinkParamSASLPassword,
@@ -729,6 +727,7 @@ func changefeedJobDescription(
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
 		SinkURI: tree.NewDString(cleanedSinkURI),
+		Select:  changefeed.Select,
 	}
 	for k, v := range opts {
 		if k == changefeedbase.OptWebhookAuthHeader {
@@ -741,8 +740,7 @@ func changefeedJobDescription(
 		c.Options = append(c.Options, opt)
 	}
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
-	ann := p.ExtendedEvalContext().Annotations
-	return tree.AsStringWithFQNames(c, ann), nil
+	return tree.AsString(c), nil
 }
 
 func redactUser(uri string) string {
@@ -895,20 +893,33 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 			)
 		}
 	}
+
+	{
+		if details.Select != "" {
+			if len(details.TargetSpecifications) != 1 {
+				return jobspb.ChangefeedDetails{}, errors.Errorf(
+					"CREATE CHANGEFEED ... AS SELECT ... is not supported for more than 1 table")
+			}
+		}
+	}
 	return details, nil
 }
 
-func validatePrimaryKeyFilterExpression(
+// validateChangefeedExpression validates changefeed expression (select clause).
+func validateChangefeedExpression(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	filterExpr string,
+	details jobspb.ChangefeedDetails,
 	descriptors map[tree.TablePattern]catalog.Descriptor,
 ) error {
-	if len(descriptors) > 1 {
+	if details.Select == "" {
+		return nil
+	}
+
+	if len(descriptors) != 1 {
 		return pgerror.Newf(pgcode.InvalidParameterValue,
-			"option %s can only be used with 1 changefeed target (found %d)",
-			changefeedbase.OptPrimaryKeyFilter, len(descriptors),
-		)
+			"projections and filter can only be used with single target (found %d)",
+			len(descriptors))
 	}
 
 	var tableDescr catalog.TableDescriptor
@@ -916,8 +927,17 @@ func validatePrimaryKeyFilterExpression(
 		tableDescr = d.(catalog.TableDescriptor)
 	}
 
-	_, err := constrainSpansByExpression(ctx, execCtx, filterExpr, tableDescr)
-	return err
+	expr, err := cdceval.ParseChangefeedExpression(details.Select)
+	if err != nil {
+		return err
+	}
+	target := details.TargetSpecifications[0]
+	includeVirtual := details.Opts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
+	execCfg := execCtx.ExecCfg()
+	evalCtx := &execCtx.ExtendedEvalContext().Context
+	return cdceval.ValidateSelectForTarget(
+		ctx, execCfg.Settings, execCtx, evalCtx, execCfg.Codec,
+		tableDescr, target, expr, includeVirtual)
 }
 
 type changefeedResumer struct {

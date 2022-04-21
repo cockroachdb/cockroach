@@ -18,9 +18,9 @@ Namely, this package concerns itself with 3 things:
 
 Evaluator is the gateway into the evaluation logic; it has 3 methods matching
 the above use cases. Before filtering and projection can be used, Evaluator must
-be configured with appropriate predicate and filtering expressions via ConfigureProjection.
+be configured with appropriate predicate and filtering expressions via configureProjection.
 
-If the Evaluator is not configured with ConfigureProjection, then each event is assumed
+If the Evaluator is not configured with configureProjection, then each event is assumed
 to match filter by default, and projection operation is an identity operation returning input
 row.
 

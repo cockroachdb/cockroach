@@ -235,6 +235,12 @@ func (r *Registry) SetSessionBoundInternalExecutorFactory(
 	r.sessionBoundInternalExecutorFactory = factory
 }
 
+// NewSpanConstrainer returns an instance of sql.SpanConstrainer as an interface{},
+// and a cleanup function.
+func (r *Registry) NewSpanConstrainer(user username.SQLUsername) (interface{}, func()) {
+	return r.execCtx("constrain-spans", user)
+}
+
 // MetricsStruct returns the metrics for production monitoring of each job type.
 // They're all stored as the `metric.Struct` interface because of dependency
 // cycles.
