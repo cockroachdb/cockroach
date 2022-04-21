@@ -1164,6 +1164,48 @@ project
            └── i1.b:2 @> i2.b:8
 
 # ------------------------------------------------------------------------------
+# Tests with zigzag joins.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE zigzag (
+  a INT PRIMARY KEY,
+  b INT,
+  c FLOAT,
+  d JSONB,
+  INDEX b_idx(b),
+  INDEX c_idx(c),
+  INVERTED INDEX d_idx(d)
+)
+----
+
+build
+SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0 FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null
+ └── select
+      ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      ├── scan zigzag
+      │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    └── locking: for-update
+      └── filters
+           └── (b:2 = 5) AND (c:3 = 6.0)
+
+build
+SELECT * from zigzag where d @> '{"a": {"b": "c"}, "f": "g"}' FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2 c:3 d:4!null
+ └── select
+      ├── columns: a:1!null b:2 c:3 d:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      ├── scan zigzag
+      │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    └── locking: for-update
+      └── filters
+           └── d:4 @> '{"a": {"b": "c"}, "f": "g"}'
+
+# ------------------------------------------------------------------------------
 # Tests with virtual tables.
 # ------------------------------------------------------------------------------
 

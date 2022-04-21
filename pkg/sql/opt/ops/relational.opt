@@ -631,6 +631,22 @@ define ZigzagJoinPrivate {
     LeftFixedCols ColList
     RightFixedCols ColList
 
+    # LeftLocking and RightLocking represent the row-level locking modes of the
+    # scans over the ZigzagJoin's two tables. Most zigzag joins leave these
+    # unset (Strength = ForNone), which indicates that no row-level locking will
+    # be performed while joining the two tables. Stronger locking modes are used
+    # by SELECT .. FOR [KEY] UPDATE/SHARE statements and by the initial row
+    # retrieval of DELETE and UPDATE statements.
+    #
+    # The row-level locking modes also dictates the policy used by the
+    # ZigzagJoin when handling conflicting locks held by other active
+    # transactions. Most zigzag joins leave the policies set to the default
+    # (WaitPolicy = Block), but different wait policies are used by SELECT ..
+    # FOR UPDATE/SHARE SKIP LOCKED/NOWAIT statements to react differently to
+    # conflicting locks.
+    LeftLocking Locking
+    RightLocking Locking
+
     # Cols is the set of columns produced by the zigzag join. This set can
     # contain columns from either side's index.
     Cols ColSet

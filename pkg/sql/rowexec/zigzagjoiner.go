@@ -457,10 +457,12 @@ func (z *zigzagJoiner) setupInfo(
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
 		row.FetcherInitArgs{
-			LockTimeout: flowCtx.EvalCtx.SessionData().LockTimeout,
-			Alloc:       &info.alloc,
-			MemMonitor:  flowCtx.EvalCtx.Mon,
-			Spec:        &spec.FetchSpec,
+			LockStrength:   spec.LockingStrength,
+			LockWaitPolicy: spec.LockingWaitPolicy,
+			LockTimeout:    flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:          &info.alloc,
+			MemMonitor:     flowCtx.EvalCtx.Mon,
+			Spec:           &spec.FetchSpec,
 		},
 	); err != nil {
 		return err
