@@ -573,7 +573,7 @@ go_test(
         "zone_test.go",
     ],
     data = glob(["testdata/**"]) + [
-        "@cockroach//c-deps:libgeos",
+        "@com_github_cockroachdb_cockroach//c-deps:libgeos",
         "//pkg/sql:information_schema.go",
         "//pkg/sql:pg_catalog.go",
         "//pkg/sql/vtable:information_schema.go",
