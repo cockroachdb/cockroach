@@ -188,6 +188,7 @@ ALL_TESTS = [
     "//pkg/rpc/nodedialer:nodedialer_test",
     "//pkg/rpc:rpc_test",
     "//pkg/security/certmgr:certmgr_test",
+    "//pkg/security/password:password_test",
     "//pkg/security/sessionrevival:sessionrevival_test",
     "//pkg/security:security_test",
     "//pkg/server/debug/goroutineui:goroutineui_test",
