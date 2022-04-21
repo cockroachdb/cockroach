@@ -90,6 +90,12 @@ func main() {
 
 	if *flagServe {
 		mux := http.NewServeMux()
+		mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
+			if _, err := w.Write([]byte("OK")); err != nil {
+				log.Printf("could not write response: %v", err)
+			}
+		})
 		mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
 			if _, err := w.Write([]byte("OK")); err != nil {

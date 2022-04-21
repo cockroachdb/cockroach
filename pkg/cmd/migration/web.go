@@ -33,6 +33,7 @@ type importAttempt struct {
 func getHandler(pgURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := func() error {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 			fmt.Printf("received get request\n")
 			ctx := r.Context()
 
@@ -46,7 +47,6 @@ func getHandler(pgURL string) http.HandlerFunc {
 			}()
 
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
 
 			q := "SELECT id, ts, data FROM import_meta ORDER BY ts DESC LIMIT 1"
 			var params []interface{}
@@ -68,9 +68,9 @@ func getHandler(pgURL string) http.HandlerFunc {
 func sqlHandler(pgURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := func() error {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 			if r.Method == "OPTIONS" {
 				headers := w.Header()
-				headers.Add("Access-Control-Allow-Origin", "*")
 				headers.Add("Vary", "Origin")
 				headers.Add("Vary", "Access-Control-Request-Method")
 				headers.Add("Vary", "Access-Control-Request-Headers")
@@ -92,7 +92,6 @@ func sqlHandler(pgURL string) http.HandlerFunc {
 			}()
 
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
 
 			type reqJSON struct {
 				Database string `json:"database"`
@@ -156,10 +155,10 @@ func sqlHandler(pgURL string) http.HandlerFunc {
 
 func uploadFileHandler(pgURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		if err := func() error {
 			if r.Method == "OPTIONS" {
 				headers := w.Header()
-				headers.Add("Access-Control-Allow-Origin", "*")
 				headers.Add("Vary", "Origin")
 				headers.Add("Vary", "Access-Control-Request-Method")
 				headers.Add("Vary", "Access-Control-Request-Headers")
@@ -182,7 +181,6 @@ func uploadFileHandler(pgURL string) http.HandlerFunc {
 			}()
 
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
 
 			if err := r.ParseMultipartForm(1 << 20); err != nil {
 				return err
@@ -215,10 +213,10 @@ func uploadFileHandler(pgURL string) http.HandlerFunc {
 
 func fixSerialHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Access-Control-Allow-Origin", "*")
 		if err := func() error {
 			if r.Method == "OPTIONS" {
 				headers := w.Header()
-				headers.Add("Access-Control-Allow-Origin", "*")
 				headers.Add("Vary", "Origin")
 				headers.Add("Vary", "Access-Control-Request-Method")
 				headers.Add("Vary", "Access-Control-Request-Headers")
@@ -293,7 +291,6 @@ func fixSerialHandler() http.HandlerFunc {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
 
 			if err := json.NewEncoder(w).Encode(ret); err != nil {
 				return err
@@ -308,10 +305,10 @@ func fixSerialHandler() http.HandlerFunc {
 
 func retryHandler(pgURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Access-Control-Allow-Origin", "*")
 		if err := func() error {
 			if r.Method == "OPTIONS" {
 				headers := w.Header()
-				headers.Add("Access-Control-Allow-Origin", "*")
 				headers.Add("Vary", "Origin")
 				headers.Add("Vary", "Access-Control-Request-Method")
 				headers.Add("Vary", "Access-Control-Request-Headers")
@@ -339,7 +336,6 @@ func retryHandler(pgURL string) http.HandlerFunc {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
 
 			h, err := newJSONHook(ia.ImportMetadata)
 			if err != nil {
