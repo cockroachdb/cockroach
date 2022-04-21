@@ -66,3 +66,51 @@ CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'
 CREATE CHANGEFEED FOR TABLE (foo) INTO ('sink') WITH bar = ('baz') -- fully parenthesized
 CREATE CHANGEFEED FOR TABLE foo INTO '_' WITH bar = '_' -- literals removed
 CREATE CHANGEFEED FOR TABLE _ INTO 'sink' WITH _ = 'baz' -- identifiers removed
+
+parse
+CREATE CHANGEFEED AS SELECT * FROM foo
+----
+CREATE CHANGEFEED AS SELECT * FROM foo
+CREATE CHANGEFEED AS SELECT (*) FROM foo -- fully parenthesized
+CREATE CHANGEFEED AS SELECT * FROM foo -- literals removed
+CREATE CHANGEFEED AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE CHANGEFEED AS SELECT * FROM foo AS bar
+----
+CREATE CHANGEFEED AS SELECT * FROM foo AS bar
+CREATE CHANGEFEED AS SELECT (*) FROM foo AS bar -- fully parenthesized
+CREATE CHANGEFEED AS SELECT * FROM foo AS bar -- literals removed
+CREATE CHANGEFEED AS SELECT * FROM _ AS _ -- identifiers removed
+
+parse
+CREATE CHANGEFEED AS SELECT a, b, c FROM foo
+----
+CREATE CHANGEFEED AS SELECT a, b, c FROM foo
+CREATE CHANGEFEED AS SELECT (a), (b), (c) FROM foo -- fully parenthesized
+CREATE CHANGEFEED AS SELECT a, b, c FROM foo -- literals removed
+CREATE CHANGEFEED AS SELECT _, _, _ FROM _ -- identifiers removed
+
+parse
+CREATE CHANGEFEED AS SELECT * FROM foo WHERE a  > b
+----
+CREATE CHANGEFEED AS SELECT * FROM foo WHERE a > b -- normalized!
+CREATE CHANGEFEED AS SELECT (*) FROM foo WHERE ((a) > (b)) -- fully parenthesized
+CREATE CHANGEFEED AS SELECT * FROM foo WHERE a > b -- literals removed
+CREATE CHANGEFEED AS SELECT * FROM _ WHERE _ > _ -- identifiers removed
+
+parse
+CREATE CHANGEFEED WITH opt='val' AS SELECT * FROM foo WHERE a  > b
+----
+CREATE CHANGEFEED WITH opt = 'val' AS SELECT * FROM foo WHERE a > b -- normalized!
+CREATE CHANGEFEED WITH opt = ('val') AS SELECT (*) FROM foo WHERE ((a) > (b)) -- fully parenthesized
+CREATE CHANGEFEED WITH opt = '_' AS SELECT * FROM foo WHERE a > b -- literals removed
+CREATE CHANGEFEED WITH _ = 'val' AS SELECT * FROM _ WHERE _ > _ -- identifiers removed
+
+parse
+CREATE CHANGEFEED INTO 'null://' WITH opt='val' AS SELECT * FROM foo WHERE a  > b
+----
+CREATE CHANGEFEED INTO 'null://' WITH opt = 'val' AS SELECT * FROM foo WHERE a > b -- normalized!
+CREATE CHANGEFEED INTO ('null://') WITH opt = ('val') AS SELECT (*) FROM foo WHERE ((a) > (b)) -- fully parenthesized
+CREATE CHANGEFEED INTO '_' WITH opt = '_' AS SELECT * FROM foo WHERE a > b -- literals removed
+CREATE CHANGEFEED INTO 'null://' WITH _ = 'val' AS SELECT * FROM _ WHERE _ > _ -- identifiers removed

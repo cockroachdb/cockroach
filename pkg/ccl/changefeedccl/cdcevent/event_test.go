@@ -89,7 +89,7 @@ CREATE TABLE foo (
 		},
 	} {
 		t.Run(fmt.Sprintf("%s/includeVirtual=%t", tc.family.Name, tc.includeVirtual), func(t *testing.T) {
-			ed, err := newEventDescriptor(tableDesc, tc.family, tc.includeVirtual, s.Clock().Now())
+			ed, err := NewEventDescriptor(tableDesc, tc.family, tc.includeVirtual, s.Clock().Now())
 			require.NoError(t, err)
 
 			// Verify Metadata information for event descriptor.
