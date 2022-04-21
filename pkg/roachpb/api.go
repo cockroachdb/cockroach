@@ -434,6 +434,8 @@ func (r *AdminScatterResponse) combine(c combinable) error {
 		}
 
 		r.RangeInfos = append(r.RangeInfos, otherR.RangeInfos...)
+		r.MVCCStats.Add(otherR.MVCCStats)
+		r.ReplicasScatteredBytes += otherR.ReplicasScatteredBytes
 	}
 	return nil
 }
