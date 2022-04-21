@@ -433,7 +433,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 					log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
 				} else {
 					b.stats.scatters++
-					moved := sz(resp.MVCCStats.Total())
+					moved := sz(resp.ReplicasScatteredBytes)
 					b.stats.scatterMoved += moved
 					if moved > 0 {
 						log.VEventf(ctx, 1, "%s split scattered %s in non-empty range %s", b.name, moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
