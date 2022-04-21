@@ -1383,6 +1383,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
 %type <tree.Expr> opt_changefeed_sink
+%type <str> opt_changefeed_family
 
 %type <str> explain_option_name
 %type <[]string> explain_option_list opt_enum_val_list enum_val_list
@@ -3970,6 +3971,16 @@ create_changefeed_stmt:
       Options: $6.kvOptions(),
     }
   }
+| CREATE CHANGEFEED opt_changefeed_sink opt_with_options AS SELECT target_list FROM changefeed_target opt_where_clause
+  {
+    $$.val = &tree.CreateChangefeed{
+    	SinkURI:   $3.expr(),
+    	Options:   $4.kvOptions(),
+    	Selectors: $7.selExprs(),
+    	Targets:   tree.ChangefeedTargets{$9.changefeedTarget()},
+      Where:     tree.NewWhere(tree.AstWhere, $10.expr()),
+    }
+  }
 | EXPERIMENTAL CHANGEFEED FOR changefeed_targets opt_with_options
   {
     /* SKIP DOC */
@@ -3990,36 +4001,29 @@ changefeed_targets:
   }
 
 changefeed_target:
-  TABLE table_name
+  opt_table_prefix table_name opt_changefeed_family
   {
     $$.val = tree.ChangefeedTarget{
-      TableName: $2.unresolvedObjectName().ToUnresolvedName(),
-      }
-  }
-| table_name
-  {
-    $$.val = tree.ChangefeedTarget{
-      TableName: $1.unresolvedObjectName().ToUnresolvedName(),
-      }
-  }
-|
-  TABLE table_name FAMILY family_name
-  {
-    $$.val = tree.ChangefeedTarget{
-      TableName: $2.unresolvedObjectName().ToUnresolvedName(),
-      FamilyName: tree.Name($4),
-      }
-  }
-|
-table_name FAMILY family_name
-  {
-    $$.val = tree.ChangefeedTarget{
-      TableName: $1.unresolvedObjectName().ToUnresolvedName(),
+      TableName:  $2.unresolvedObjectName().ToUnresolvedName(),
       FamilyName: tree.Name($3),
-      }
+    }
   }
 
+opt_table_prefix:
+  TABLE
+  {}
+| /* EMPTY */
+  {}
 
+opt_changefeed_family:
+  FAMILY family_name
+  {
+    $$ = $2
+  }
+| /* EMPTY */
+  {
+    $$ = ""
+  }
 
 opt_changefeed_sink:
   INTO string_or_placeholder

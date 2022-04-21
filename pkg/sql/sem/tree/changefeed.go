@@ -12,15 +12,21 @@ package tree
 
 // CreateChangefeed represents a CREATE CHANGEFEED statement.
 type CreateChangefeed struct {
-	Targets ChangefeedTargets
-	SinkURI Expr
-	Options KVOptions
+	Targets   ChangefeedTargets
+	SinkURI   Expr
+	Options   KVOptions
+	Selectors SelectExprs
+	Where     *Where
 }
 
 var _ Statement = &CreateChangefeed{}
 
 // Format implements the NodeFormatter interface.
 func (node *CreateChangefeed) Format(ctx *FmtCtx) {
+	if len(node.Selectors) > 0 {
+		node.formatWithPredicates(ctx)
+		return
+	}
 	if node.SinkURI != nil {
 		ctx.WriteString("CREATE ")
 	} else {
@@ -28,6 +34,7 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 		// prefix. They're also still EXPERIMENTAL, so they get marked as such.
 		ctx.WriteString("EXPERIMENTAL ")
 	}
+
 	ctx.WriteString("CHANGEFEED FOR ")
 	ctx.FormatNode(&node.Targets)
 	if node.SinkURI != nil {
@@ -37,6 +44,28 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 	if node.Options != nil {
 		ctx.WriteString(" WITH ")
 		ctx.FormatNode(&node.Options)
+	}
+}
+
+// formatWithPredicates is a helper to format node when creating
+// changefeed with predicates.
+func (node *CreateChangefeed) formatWithPredicates(ctx *FmtCtx) {
+	ctx.WriteString("CREATE CHANGEFEED")
+	if node.SinkURI != nil {
+		ctx.WriteString(" INTO ")
+		ctx.FormatNode(node.SinkURI)
+	}
+	if node.Options != nil {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
+	}
+	ctx.WriteString(" AS SELECT ")
+	node.Selectors.Format(ctx)
+	ctx.WriteString(" FROM ")
+	node.Targets.Format(ctx)
+	if node.Where != nil {
+		ctx.WriteByte(' ')
+		node.Where.Format(ctx)
 	}
 }
 

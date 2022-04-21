@@ -379,6 +379,10 @@ func createChangefeedJobRecord(
 		StatementTime:        statementTime,
 		EndTime:              endTime,
 		TargetSpecifications: targets,
+		SelectClause:         tree.AsString(&changefeedStmt.Selectors),
+	}
+	if changefeedStmt.Where != nil {
+		details.WhereClause = tree.AsString(changefeedStmt.Where)
 	}
 
 	// TODO(dan): In an attempt to present the most helpful error message to the
@@ -893,6 +897,12 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 				details.EndTime.AsOfSystemTime(),
 				details.StatementTime.AsOfSystemTime(),
 			)
+		}
+	}
+	{
+		if (details.SelectClause != "" || details.WhereClause != "") && len(details.TargetSpecifications) > 1 {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				"CREATE CHANGEFEED ... AS SELECT ... is not supported for more than 1 table")
 		}
 	}
 	return details, nil

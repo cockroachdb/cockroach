@@ -772,8 +772,11 @@ message ChangefeedDetails {
   util.hlc.Timestamp end_time = 9 [(gogoproto.nullable) = false];
   repeated ChangefeedTargetSpecification target_specifications = 8 [(gogoproto.nullable) = false];
 
+  string select_clause = 10;
+  string where_clause = 11;
   reserved 1, 2, 5;
   reserved "targets";
+  // NEXT ID: 12
 }
 
 message ResolvedSpan {
