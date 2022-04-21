@@ -190,7 +190,7 @@ func DecodeUntaggedDatum(
 		if err != nil {
 			return nil, nil, err
 		}
-		return decodeArray(a, t.ArrayContents(), b)
+		return decodeArray(a, t, b)
 	case types.TupleFamily:
 		return decodeTuple(a, t, buf)
 	case types.EnumFamily:

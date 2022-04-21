@@ -2448,6 +2448,9 @@ func performCastWithoutPrecisionTruncation(
 			return res, err
 		case *DArray:
 			dcast := NewDArray(t.ArrayContents())
+			if err := dcast.MaybeSetCustomOid(t); err != nil {
+				return nil, err
+			}
 			for _, e := range v.Array {
 				ecast := DNull
 				if e != DNull {

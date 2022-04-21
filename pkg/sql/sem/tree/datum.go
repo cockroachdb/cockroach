@@ -4184,7 +4184,24 @@ func MustBeDArray(e Expr) *DArray {
 	return i
 }
 
-// ResolvedType implements the TypedExpr interface.
+// MaybeSetCustomOid checks whether t has a special oid that we want to set into
+// d. Must be kept in sync with DArray.ResolvedType. Returns an error if t is
+// not an array type.
+func (d *DArray) MaybeSetCustomOid(t *types.T) error {
+	if t.Family() != types.ArrayFamily {
+		return errors.AssertionFailedf("expected array type, got %s", t.SQLString())
+	}
+	switch t.Oid() {
+	case oid.T_int2vector:
+		d.customOid = oid.T_int2vector
+	case oid.T_oidvector:
+		d.customOid = oid.T_oidvector
+	}
+	return nil
+}
+
+// ResolvedType implements the TypedExpr interface. Must be kept in sync with
+// DArray.MaybeSetCustomOid.
 func (d *DArray) ResolvedType() *types.T {
 	switch d.customOid {
 	case oid.T_int2vector:
@@ -5376,8 +5393,8 @@ func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
 }
 
-// NewDIntVectorFromDArray is a helper routine to create a *DIntVector
-// (implemented as a *DOidWrapper) initialized from an existing *DArray.
+// NewDIntVectorFromDArray is a helper routine to create a new *DArray,
+// initialized from an existing *DArray, with the special oid for IntVector.
 func NewDIntVectorFromDArray(d *DArray) Datum {
 	ret := new(DArray)
 	*ret = *d
@@ -5385,8 +5402,8 @@ func NewDIntVectorFromDArray(d *DArray) Datum {
 	return ret
 }
 
-// NewDOidVectorFromDArray is a helper routine to create a *DOidVector
-// (implemented as a *DOidWrapper) initialized from an existing *DArray.
+// NewDOidVectorFromDArray is a helper routine to create a new *DArray,
+// initialized from an existing *DArray, with the special oid for OidVector.
 func NewDOidVectorFromDArray(d *DArray) Datum {
 	ret := new(DArray)
 	*ret = *d
