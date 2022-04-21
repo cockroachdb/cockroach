@@ -230,8 +230,9 @@ func injectTimeIntoEvalCtx(ctx *tree.EvalContext, walltime int64) {
 	sec := walltime / int64(time.Second)
 	nsec := walltime % int64(time.Second)
 	unixtime := timeutil.Unix(sec, nsec)
-	ctx.StmtTimestamp = unixtime
-	ctx.TxnTimestamp = unixtime
+	ctx.SetTxnTimestamp(unixtime)
+	ctx.SetStmtTimestamp(unixtime)
+	ctx.SetTxnCommitTimestamp(hlc.Timestamp{WallTime: walltime})
 }
 
 func makeInputConverter(

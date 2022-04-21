@@ -62,7 +62,7 @@ func alterChangefeedPlanHook(
 		}
 		jobID := jobspb.JobID(tree.MustBeDInt(typedExpr))
 
-		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn)
+		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.ExtendedEvalContext().TxnToDelete)
 		if err != nil {
 			err = errors.Wrapf(err, `could not load job with job id %d`, jobID)
 			return err
@@ -139,7 +139,7 @@ func alterChangefeedPlanHook(
 		newPayload.Description = jobRecord.Description
 		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
 
-		err = p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn, lockForUpdate, func(
+		err = p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.ExtendedEvalContext().TxnToDelete, lockForUpdate, func(
 			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
 			ju.UpdatePayload(&newPayload)
@@ -337,7 +337,7 @@ func generateNewTargets(
 		k := targetKey{TableID: targetSpec.TableID, FamilyName: tree.Name(targetSpec.FamilyName)}
 		desc := descResolver.DescByID[targetSpec.TableID].(catalog.TableDescriptor)
 
-		tbName, err := getQualifiedTableNameObj(ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, desc)
+		tbName, err := getQualifiedTableNameObj(ctx, p.ExecCfg(), p.ExtendedEvalContext().TxnToDelete, desc)
 		if err != nil {
 			return nil, nil, hlc.Timestamp{}, nil, err
 		}

@@ -755,6 +755,7 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 			p.extendedEvalCtx.AsOfSystemTime = asOf
 			if !asOf.BoundedStaleness {
 				p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
+				p.extendedEvalCtx.SetTxnCommitTimestamp(p.Txn().ReadTimestamp())
 				if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
 					return err
 				}

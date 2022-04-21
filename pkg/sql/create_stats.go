@@ -587,6 +587,8 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			if err := txn.SetFixedTimestamp(ctx, *details.AsOf); err != nil {
 				return err
 			}
+
+			p.ExtendedEvalContext().SetTxnCommitTimestamp(txn.ReadTimestamp())
 		}
 
 		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn,

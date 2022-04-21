@@ -2699,7 +2699,10 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 		// want all those stages to share the same stmtTS.
 		evalCtx.StmtTimestamp = stmtTS
 	}
-	evalCtx.TxnTimestamp = ex.state.sqlTimestamp
+	evalCtx.SetTxnTimestamp(ex.state.sqlTimestamp)
+	if txn != nil {
+		evalCtx.SetTxnCommitTimestamp(txn.CommitTimestamp())
+	}
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil

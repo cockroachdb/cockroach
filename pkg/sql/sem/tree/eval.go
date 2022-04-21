@@ -3644,6 +3644,9 @@ type EvalContext struct {
 	// transaction_timestamp() and the like.
 	TxnTimestamp time.Time
 
+	// Represents the logical cluster timestamp.
+	TxnCommitTimestamp hlc.Timestamp
+
 	// AsOfSystemTime denotes the explicit AS OF SYSTEM TIME timestamp for the
 	// query, if any. If the query is not an AS OF SYSTEM TIME query,
 	// AsOfSystemTime is nil.
@@ -3761,9 +3764,10 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 // MemoryMonitor. Ownership of the memory monitor is transferred to the
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) EvalContext {
+	txn := &kv.Txn{}
 	ctx := EvalContext{
 		Codec:            keys.SystemSQLCodec,
-		TxnToDelete:      &kv.Txn{},
+		TxnToDelete:      txn,
 		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 		Settings:         st,
 		NodeID:           base.TestingIDContainer,
@@ -3774,6 +3778,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
+	//ctx.SetTxnCommitTimestamp(txn.CommitTimestamp())
 	return ctx
 }
 
@@ -4025,6 +4030,17 @@ func (ctx *EvalContext) SetTxnTimestamp(ts time.Time) {
 // SetStmtTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 	ctx.StmtTimestamp = ts
+}
+
+func (ctx *EvalContext) SetTxnCommitTimestamp(ts hlc.Timestamp) {
+	ctx.TxnCommitTimestamp = ts
+}
+
+func (ctx *EvalContext) GetTxnCommitTimestamp() (hlc.Timestamp, error) {
+	if (ctx.TxnCommitTimestamp == hlc.Timestamp{}) {
+		return hlc.Timestamp{}, errors.AssertionFailedf("commit timestamp was unset")
+	}
+	return ctx.TxnCommitTimestamp, nil
 }
 
 // GetLocation returns the session timezone.

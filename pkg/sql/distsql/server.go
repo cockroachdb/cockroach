@@ -363,6 +363,9 @@ func (ds *ServerImpl) setupFlow(
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
+		if leafTxn != nil {
+			evalCtx.SetTxnCommitTimestamp(leafTxn.ReadTimestamp())
+		}
 	}
 
 	// Create the FlowCtx for the flow.

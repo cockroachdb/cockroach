@@ -469,6 +469,7 @@ func internalExtendedEvalCtx(
 			indexUsageStatsController = &idxusage.Controller{}
 		}
 	}
+
 	ret := extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			TxnToDelete:               txn,
@@ -487,6 +488,9 @@ func internalExtendedEvalCtx(
 		Tracing:         &SessionTracing{},
 		Descs:           tables,
 		indexUsageStats: indexUsageStats,
+	}
+	if txn != nil {
+		ret.SetTxnCommitTimestamp(txn.ReadTimestamp())
 	}
 	ret.copyFromExecCfg(execCfg)
 	return ret
