@@ -793,7 +793,11 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 			if len(values) > 0 {
 				constFilter = c.makeConstFilter(idxCol, values)
 			} else if foundRange {
-				constFilter = c.makeRangeFilter(idxCol, constFilter)
+				if filter, ok := c.makeRangeFilter(idxCol, constFilter); ok {
+					constFilter = filter
+				} else {
+					break
+				}
 			}
 		}
 		constFilters = append(constFilters, constFilter)
@@ -873,12 +877,14 @@ func (c *CustomFuncs) makeConstFilter(col opt.ColumnID, values tree.Datums) memo
 // makeRangeFilter builds a filter from a constrained column, we assume the
 // column is constrained by at least 1 tight constraint. This code doesn't
 // handle descending columns.
-func (c *CustomFuncs) makeRangeFilter(col opt.ColumnID, filter memo.FiltersItem) memo.FiltersItem {
+func (c *CustomFuncs) makeRangeFilter(
+	col opt.ColumnID, filter memo.FiltersItem,
+) (memo.FiltersItem, bool) {
 	props := filter.ScalarProps()
 	if props.Constraints.Length() == 0 ||
 		props.Constraints.Constraint(0).Spans.Count() != 1 ||
 		props.Constraints.Constraint(0).Columns.Get(0).Descending() {
-		panic(errors.AssertionFailedf("makeRangeFilter needs at least one ascending constraint with one span"))
+		return memo.FiltersItem{}, false
 	}
 	span := props.Constraints.Constraint(0).Spans.Get(0)
 	return c.makeRangeFilterFromSpan(col, span)
@@ -887,7 +893,7 @@ func (c *CustomFuncs) makeRangeFilter(col opt.ColumnID, filter memo.FiltersItem)
 // makeRangeFilterFromSpan constructs a filter from a constraint.Span.
 func (c *CustomFuncs) makeRangeFilterFromSpan(
 	col opt.ColumnID, span *constraint.Span,
-) memo.FiltersItem {
+) (memo.FiltersItem, bool) {
 	variable := c.e.f.ConstructVariable(col)
 	var left, right opt.ScalarExpr
 
@@ -913,14 +919,13 @@ func (c *CustomFuncs) makeRangeFilterFromSpan(
 	}
 
 	if left != nil && right != nil {
-		return c.e.f.ConstructFiltersItem(c.e.f.ConstructRange(c.e.f.ConstructAnd(right, left)))
+		return c.e.f.ConstructFiltersItem(c.e.f.ConstructRange(c.e.f.ConstructAnd(right, left))), true
 	} else if left != nil {
-		return c.e.f.ConstructFiltersItem(left)
+		return c.e.f.ConstructFiltersItem(left), true
 	} else if right != nil {
-		return c.e.f.ConstructFiltersItem(right)
+		return c.e.f.ConstructFiltersItem(right), true
 	}
-
-	panic(errors.AssertionFailedf("Constraint needs a valid start or end key"))
+	return memo.FiltersItem{}, false
 }
 
 // constructContinuationColumnForPairedJoin constructs a continuation column
@@ -1347,9 +1352,11 @@ func (c *CustomFuncs) findJoinFilterRange(
 		if props.TightConstraints && props.Constraints.Length() > 0 {
 			constraint := props.Constraints.Constraint(0)
 			constraintCol := constraint.Columns.Get(0).ID()
-			// See comment in findFiltersForIndexLookup for why we check filter here.
-			// We only support 1 span in the execution engine so check that.
-			if constraintCol != col || constraint.Spans.Count() != 1 {
+			// See comment in findFiltersForIndexLookup for why we check filter
+			// here. We only support 1 span in the execution engine so check
+			// that.
+			if constraintCol != col || constraint.Spans.Count() != 1 ||
+				!c.isCanonicalLookupJoinFilter(filters[filterIdx]) {
 				continue
 			}
 			return filterIdx, true
