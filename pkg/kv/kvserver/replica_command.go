@@ -3356,10 +3356,18 @@ func (r *Replica) adminScatter(
 			return roachpb.AdminScatterResponse{}, errors.Errorf("existing range size %d exceeds specified limit %d", existing, limit)
 		}
 	}
-	// Loop until the replicate queue decides there is nothing left to do or until
-	// we hit `maxAttempts` for the range. Note that we disable lease transfers
-	// until the final step as transferring the lease prevents any further action
-	// on this node.
+
+	// Construct a mapping of the replicas of this range to their current store.
+	// This is used to below to check which replicas were actually moved by the
+	// replicate queue .
+	oldStoreIDs := make(map[roachpb.ReplicaID]roachpb.StoreID)
+	for _, rd := range r.Desc().Replicas().Descriptors() {
+		oldStoreIDs[rd.ReplicaID] = rd.StoreID
+	}
+
+	// Loop until we hit an error or until we hit `maxAttempts` for the range.
+	// Note that we disable lease transfers until the final step as transferring
+	// the lease prevents any further action on this node.
 	var allowLeaseTransfer bool
 	var err error
 	requeue := true
@@ -3406,11 +3414,28 @@ func (r *Replica) adminScatter(
 		}
 	}
 
+	// Compute how many replicas of this range were moved by the replicate queue.
+	var numReplicasMoved int
+	for _, rd := range r.Desc().Replicas().Descriptors() {
+		preScatterStoreID, ok := oldStoreIDs[rd.ReplicaID]
+		if !ok {
+			continue
+		}
+		postScatterStoreID := rd.StoreID
+		if preScatterStoreID != postScatterStoreID {
+			numReplicasMoved++
+		}
+	}
+
 	ri := r.GetRangeInfo(ctx)
 	stats := r.GetMVCCStats()
 	return roachpb.AdminScatterResponse{
 		RangeInfos: []roachpb.RangeInfo{ri},
-		MVCCStats:  &stats,
+		MVCCStats:  stats,
+		// Note, we use this range's MVCCStats to estimate the size of the replicas
+		// that were moved so the value may not be entirely accurate, but it is
+		// adequate.
+		ReplicasScatteredBytes: stats.Total() * int64(numReplicasMoved),
 	}, nil
 }
 
