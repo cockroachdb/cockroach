@@ -259,6 +259,7 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),
 		execCfg.DescMetadaUpdaterFactory,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
+		execCfg.StatsRefresher,
 		kvTrace,
 		schemaChangerJobID,
 		stmts,
