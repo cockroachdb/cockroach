@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
@@ -50,7 +51,11 @@ type rateAndBurstSettings struct {
 	burst *settings.ByteSizeSetting
 }
 
-var limiterSettings = map[roachpb.ExternalStorageProvider]rateAndBurstSettings{}
+type readAndWriteSettings struct {
+	read, write rateAndBurstSettings
+}
+
+var limiterSettings = map[roachpb.ExternalStorageProvider]readAndWriteSettings{}
 
 // RegisterExternalStorageProvider registers an external storage provider for a
 // given URI scheme and provider type.
@@ -79,17 +84,33 @@ func RegisterExternalStorageProvider(
 	if sinkName == "null" {
 		sinkName = "nullsink" // keep the settings name pieces free of reserved keywords.
 	}
-	rateName := fmt.Sprintf("cloudstorage.%s.write.node_rate_limit", sinkName)
-	burstName := fmt.Sprintf("cloudstorage.%s.write.node_burst_limit", sinkName)
-	limiterSettings[providerType] = rateAndBurstSettings{
-		rate: settings.RegisterByteSizeSetting(settings.TenantWritable, rateName,
-			"limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero",
-			0, settings.NonNegativeInt,
-		),
-		burst: settings.RegisterByteSizeSetting(settings.TenantWritable, burstName,
-			"burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero",
-			0, settings.NonNegativeInt,
-		),
+
+	readRateName := fmt.Sprintf("cloudstorage.%s.read.node_rate_limit", sinkName)
+	readBurstName := fmt.Sprintf("cloudstorage.%s.read.node_burst_limit", sinkName)
+	writeRateName := fmt.Sprintf("cloudstorage.%s.write.node_rate_limit", sinkName)
+	writeBurstName := fmt.Sprintf("cloudstorage.%s.write.node_burst_limit", sinkName)
+
+	limiterSettings[providerType] = readAndWriteSettings{
+		read: rateAndBurstSettings{
+			rate: settings.RegisterByteSizeSetting(settings.TenantWritable, readRateName,
+				"limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero",
+				0, settings.NonNegativeInt,
+			),
+			burst: settings.RegisterByteSizeSetting(settings.TenantWritable, readBurstName,
+				"burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero",
+				0, settings.NonNegativeInt,
+			),
+		},
+		write: rateAndBurstSettings{
+			rate: settings.RegisterByteSizeSetting(settings.TenantWritable, writeRateName,
+				"limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero",
+				0, settings.NonNegativeInt,
+			),
+			burst: settings.RegisterByteSizeSetting(settings.TenantWritable, writeBurstName,
+				"burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero",
+				0, settings.NonNegativeInt,
+			),
+		},
 	}
 }
 
@@ -196,40 +217,70 @@ func MakeExternalStorage(
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
 
+type rwLimiter struct {
+	read, write *quotapool.RateLimiter
+}
+
 // Limiters represents a collection of rate limiters for a given server to use
 // when interacting with the providers in the collection.
-type Limiters map[roachpb.ExternalStorageProvider]*quotapool.RateLimiter
+type Limiters map[roachpb.ExternalStorageProvider]rwLimiter
+
+func makeLimiter(
+	ctx context.Context, sv *settings.Values, s rateAndBurstSettings,
+) *quotapool.RateLimiter {
+	lim := quotapool.NewRateLimiter(s.rate.Key(), quotapool.Limit(0), 0)
+	fn := func(ctx context.Context) {
+		rate := quotapool.Limit(s.rate.Get(sv))
+		if rate == 0 {
+			rate = quotapool.Limit(math.Inf(1))
+		}
+		burst := s.burst.Get(sv)
+		if burst == 0 {
+			burst = math.MaxInt64
+		}
+		lim.UpdateLimit(rate, burst)
+	}
+	s.rate.SetOnChange(sv, fn)
+	s.burst.SetOnChange(sv, fn)
+	fn(ctx)
+	return lim
+}
 
 // MakeLimiters makes limiters for all registered ExternalStorageProviders and
 // sets them up to be updated when settings change. It should be called only
 // once per server at creation.
 func MakeLimiters(ctx context.Context, sv *settings.Values) Limiters {
-	m := make(map[roachpb.ExternalStorageProvider]*quotapool.RateLimiter, len(limiterSettings))
+	m := make(Limiters, len(limiterSettings))
 	for k := range limiterSettings {
 		l := limiterSettings[k]
-		lim := quotapool.NewRateLimiter(l.rate.Key(), quotapool.Limit(0), 0)
-		fn := func(ctx context.Context) {
-			rate := quotapool.Limit(l.rate.Get(sv))
-			if rate == 0 {
-				rate = quotapool.Limit(math.MaxInt64)
-			}
-			burst := l.burst.Get(sv)
-			if burst == 0 {
-				burst = math.MaxInt64
-			}
-			lim.UpdateLimit(rate, burst)
-		}
-		l.rate.SetOnChange(sv, fn)
-		l.burst.SetOnChange(sv, fn)
-		fn(ctx)
-		m[k] = lim
+		m[k] = rwLimiter{read: makeLimiter(ctx, sv, l.read), write: makeLimiter(ctx, sv, l.write)}
 	}
 	return m
 }
 
 type limitWrapper struct {
 	ExternalStorage
-	lim *quotapool.RateLimiter
+	lim rwLimiter
+}
+
+func (l *limitWrapper) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
+	r, err := l.ExternalStorage.ReadFile(ctx, basename)
+	if err != nil {
+		return r, err
+	}
+
+	return &limitedReader{r: r, lim: l.lim.read}, nil
+}
+
+func (l *limitWrapper) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
+) (ioctx.ReadCloserCtx, int64, error) {
+	r, s, err := l.ExternalStorage.ReadFileAt(ctx, basename, offset)
+	if err != nil {
+		return r, s, err
+	}
+
+	return &limitedReader{r: r, lim: l.lim.read}, s, nil
 }
 
 func (l *limitWrapper) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
@@ -238,7 +289,37 @@ func (l *limitWrapper) Writer(ctx context.Context, basename string) (io.WriteClo
 		return nil, err
 	}
 
-	return &limitedWriter{w: w, ctx: ctx, lim: l.lim}, nil
+	return &limitedWriter{w: w, ctx: ctx, lim: l.lim.write}, nil
+}
+
+type limitedReader struct {
+	r    ioctx.ReadCloserCtx
+	lim  *quotapool.RateLimiter
+	pool int64 // used to pool small write calls into fewer bigger limiter calls.
+}
+
+func (l *limitedReader) Read(ctx context.Context, p []byte) (int, error) {
+	n, err := l.r.Read(ctx, p)
+	// rather than go to the limiter on every single request, given those requests
+	// can be small and the limiter is not cheap, add up reads until we have some
+	// non-trivial size then go to the limiter with that all at once; this does
+	// mean we'll be somewhat spiky but only to the batched limit size (128kb).
+	l.pool += int64(n)
+	const batchedWriteLimit = 128 << 10
+	if l.pool > batchedWriteLimit {
+		if err := l.lim.WaitN(ctx, l.pool); err != nil {
+			log.Warningf(ctx, "failed to throttle write: %+v", err)
+		}
+		l.pool = 0
+	}
+	return n, err
+}
+
+func (l *limitedReader) Close(ctx context.Context) error {
+	if err := l.lim.WaitN(ctx, l.pool); err != nil {
+		log.Warningf(ctx, "failed to throttle closing write: %+v", err)
+	}
+	return l.r.Close(ctx)
 }
 
 type limitedWriter struct {
