@@ -2825,3 +2825,32 @@ project
       └── projections
            ├── COALESCE(abcd.d:4, dxby.d:8) [as=d:15]
            └── COALESCE(abcd.b:2, dxby.b:10) [as=b:16]
+
+# Regression for #79886
+exec-ddl
+CREATE TABLE tab2 (pk INT8 PRIMARY KEY, col0 INT8, col1 FLOAT8, col3 INT8)
+----
+
+exec-ddl
+CREATE INDEX idx_tab2_0 ON tab2 (col3,col1)
+----
+
+opt
+SELECT pk
+  FROM tab2
+ WHERE (col3 IN (SELECT col0 FROM tab2)) AND col1 IS NULL
+----
+project
+ ├── columns: pk:1!null
+ └── semi-join (hash)
+      ├── columns: pk:1!null col1:3 col3:4
+      ├── select
+      │    ├── columns: pk:1!null col1:3 col3:4
+      │    ├── scan tab2@idx_tab2_0
+      │    │    └── columns: pk:1!null col1:3 col3:4
+      │    └── filters
+      │         └── col1:3 IS NULL
+      ├── scan tab2
+      │    └── columns: col0:8
+      └── filters
+           └── col3:4 = col0:8
