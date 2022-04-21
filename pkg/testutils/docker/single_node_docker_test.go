@@ -522,7 +522,7 @@ func (dn *dockerNode) waitInitFinishes(ctx context.Context) error {
 	// initialization process has finished or timeout.
 	res, err = dn.execCommand(ctx, []string{
 		"./docker-fsnotify",
-		"/cockroach/cockroach-data",
+		"/cockroach",
 		initSuccessFile,
 		strconv.Itoa(int(waitInitTimeout.Seconds())),
 	}, "/cockroach")
@@ -530,7 +530,7 @@ func (dn *dockerNode) waitInitFinishes(ctx context.Context) error {
 		return errors.Wrapf(err, "cannot run fsnotify to listen to %s:\nres:%#v\n", initSuccessFile, res)
 	}
 
-	if strings.Contains(res.stdOut, "finished") {
+	if strings.Contains(res.stdOut, "finished\r\n") {
 		return nil
 	}
 	return errors.Wrap(errors.Newf("%#v", res), "error waiting the initialization to finish")
