@@ -12317,3 +12317,39 @@ project
            │    ├── constraint: /29/30/31: [/2 - ]
            │    └── ordering: +29
            └── filters (true)
+
+# Regression for #79886
+exec-ddl
+CREATE TABLE t79886 (pk INT8 PRIMARY KEY, col0 INT8, col1 FLOAT8, col3 INT8)
+----
+
+exec-ddl
+CREATE INDEX idx_tab2_0 ON t79886 (col3,col1)
+----
+
+opt
+SELECT pk
+  FROM t79886
+ WHERE (col3 IN (SELECT col0 FROM t79886)) AND col1 IS NULL
+----
+project
+ ├── columns: pk:1!null
+ ├── key: (1)
+ └── semi-join (hash)
+      ├── columns: pk:1!null col1:3 col3:4
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(4)
+      ├── select
+      │    ├── columns: pk:1!null col1:3 col3:4
+      │    ├── key: (1)
+      │    ├── fd: ()-->(3), (1)-->(4)
+      │    ├── scan t79886@idx_tab2_0
+      │    │    ├── columns: pk:1!null col1:3 col3:4
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(3,4)
+      │    └── filters
+      │         └── col1:3 IS NULL [outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+      ├── scan t79886
+      │    └── columns: col0:8
+      └── filters
+           └── col3:4 = col0:8 [outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ]), fd=(4)==(8), (8)==(4)]
