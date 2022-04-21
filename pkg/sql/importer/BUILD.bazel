@@ -146,7 +146,7 @@ go_test(
         "testutils_test.go",
     ],
     data = glob(["testdata/**"]) + [
-        "@cockroach//c-deps:libgeos",
+        "@com_github_cockroachdb_cockroach//c-deps:libgeos",
     ],
     embed = [":importer"],
     # It's a large test, so use 16 shards to run test cases.

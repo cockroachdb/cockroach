@@ -370,7 +370,7 @@ func dumpPatchArgsForRepo(repoName string) error {
 	if _, err := os.Stat(candidate); err == nil {
 		fmt.Printf(`        patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:%s.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:%s.patch",
         ],
 `, repoName)
 	} else if !os.IsNotExist(err) {

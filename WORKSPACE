@@ -1,7 +1,7 @@
 # Define the top level namespace. This lets everything be addressable using
-# `@cockroach//...`.
+# `@com_github_cockroachdb_cockroach//...`.
 workspace(
-    name = "cockroach",
+    name = "com_github_cockroachdb_cockroach",
     managed_directories = {
         "@npm": ["pkg/ui/node_modules"],
     },
@@ -123,7 +123,7 @@ http_archive(
         "@io_bazel_rules_go//third_party:go_googleapis-deletebuild.patch",
         "@io_bazel_rules_go//third_party:go_googleapis-directives.patch",
         "@io_bazel_rules_go//third_party:go_googleapis-gazelle.patch",
-        "@cockroach//build/patches:go_googleapis.patch",
+        "@com_github_cockroachdb_cockroach//build/patches:go_googleapis.patch",
     ],
     sha256 = "a85c6a00e9cf0f004992ebea1d10688e3beea9f8e1a5a04ee53f367e72ee85af",
     strip_prefix = "googleapis-409e134ffaacc243052b08e6fb8e2d458014ed37",
@@ -168,7 +168,7 @@ go_download_sdk(
 
 go_rules_dependencies()
 
-go_register_toolchains(nogo = "@cockroach//:crdb_nogo")
+go_register_toolchains(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 
 ###############################
 # end rules_go dependencies #
