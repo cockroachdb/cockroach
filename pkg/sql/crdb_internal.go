@@ -5920,7 +5920,10 @@ CREATE TABLE crdb_internal.cluster_locks (
 	},
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		worker := func(wCtx context.Context, pusher rowPusher) error {
-			nextRow, err := clusterLocksTableGenerator(wCtx, p, clusterLocksFilters{})
+			acct := p.EvalContext().Mon.MakeBoundAccount()
+			defer acct.Close(wCtx)
+
+			nextRow, err := clusterLocksTableGenerator(wCtx, p, &acct, clusterLocksFilters{})
 			if err != nil {
 				return err
 			}
@@ -5951,7 +5954,7 @@ type clusterLocksFilters struct {
 }
 
 func clusterLocksTableGenerator(
-	ctx context.Context, p *planner, filters clusterLocksFilters,
+	ctx context.Context, p *planner, acct *mon.BoundAccount, filters clusterLocksFilters,
 ) (virtualTableGenerator, error) {
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ClusterLocksVirtualTable) {
 		return nil, pgerror.New(pgcode.FeatureNotSupported,
@@ -6050,6 +6053,10 @@ func clusterLocksTableGenerator(
 		b.Header.MaxSpanRequestKeys = int64(rowinfra.ProductionKVBatchSize)
 		b.Header.TargetBytes = int64(rowinfra.GetDefaultBatchBytesLimit(p.extendedEvalCtx.TestingKnobs.ForceProductionValues))
 
+		if resp != nil && resp.Size() > 0 {
+			acct.Shrink(ctx, int64(resp.Size()))
+		}
+
 		err := p.txn.Run(ctx, &b)
 		if err != nil {
 			return err
@@ -6058,6 +6065,11 @@ func clusterLocksTableGenerator(
 		resp = b.RawResponse().Responses[0].GetQueryLocks()
 		locks = resp.Locks
 		resumeSpan = resp.ResumeSpan
+
+		if err = acct.Grow(ctx, int64(resp.Size())); err != nil {
+			return err
+		}
+
 		return nil
 	}
 
@@ -6184,8 +6196,11 @@ func clusterLocksTableGenerator(
 func populateClusterLocksWithFilter(
 	ctx context.Context, p *planner, addRow func(...tree.Datum) error, filters clusterLocksFilters,
 ) (matched bool, err error) {
+	acct := p.EvalContext().Mon.MakeBoundAccount()
+	defer acct.Close(ctx)
+
 	var nextRow virtualTableGenerator
-	nextRow, err = clusterLocksTableGenerator(ctx, p, filters)
+	nextRow, err = clusterLocksTableGenerator(ctx, p, &acct, filters)
 	if err != nil {
 		return false, err
 	}
