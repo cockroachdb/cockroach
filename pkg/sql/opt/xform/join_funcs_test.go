@@ -98,7 +98,7 @@ func TestCustomFuncs_makeRangeFilter(t *testing.T) {
 			var sp constraint.Span
 			sp.Init(tt.start, tt.startBoundary, tt.end, tt.endBoundary)
 			want := fb.buildFilter(tt.filter)
-			if got := fut(c, col, &sp); !reflect.DeepEqual(got, want) {
+			if got, _ := fut(c, col, &sp); !reflect.DeepEqual(got, want) {
 				t.Errorf("makeRangeFilter() = %v, want %v", got, want)
 			}
 		})
