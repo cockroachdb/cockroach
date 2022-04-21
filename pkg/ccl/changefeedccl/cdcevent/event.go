@@ -188,7 +188,8 @@ type EventDescriptor struct {
 	udtCols   []int // Columns containing UDTs.
 }
 
-func newEventDescriptor(
+// NewEventDescriptor returns EventDescriptor for specified table and family descriptors.
+func NewEventDescriptor(
 	desc catalog.TableDescriptor,
 	family *descpb.ColumnFamilyDescriptor,
 	includeVirtualColumns bool,
@@ -335,7 +336,7 @@ func getEventDescriptorCached(
 		return ed, nil
 	}
 
-	ed, err := newEventDescriptor(desc, family, includeVirtual, schemaTS)
+	ed, err := NewEventDescriptor(desc, family, includeVirtual, schemaTS)
 	if err != nil {
 		return nil, err
 	}
@@ -490,7 +491,7 @@ func TestingMakeEventRow(
 		panic(err) // primary column family always exists.
 	}
 	const includeVirtual = false
-	ed, err := newEventDescriptor(desc, family, includeVirtual, hlc.Timestamp{})
+	ed, err := NewEventDescriptor(desc, family, includeVirtual, hlc.Timestamp{})
 	if err != nil {
 		panic(err)
 	}

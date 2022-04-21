@@ -10,6 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/cdceval",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -25,6 +26,7 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",

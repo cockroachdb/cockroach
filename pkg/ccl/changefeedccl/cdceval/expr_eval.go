@@ -40,38 +40,19 @@ type Evaluator struct {
 	evaluator *exprEval
 }
 
-// NewEvaluator returns new evaluator instance.
-func NewEvaluator(evalCtx *eval.Context) Evaluator {
-	return Evaluator{evalCtx: evalCtx.Copy()}
-}
-
-// ConfigureProjection configures this evaluator to evaluate projection
-func (e *Evaluator) ConfigureProjection(exprs tree.SelectExprs) error {
-	if len(exprs) == 0 {
-		return pgerror.New(pgcode.InvalidParameterValue, "expected at least 1 projection")
+// NewEvaluator returns evaluator configured to process specified
+// select expression.
+func NewEvaluator(evalCtx *eval.Context, sc *tree.SelectClause) (*Evaluator, error) {
+	e := &Evaluator{evalCtx: evalCtx.Copy()}
+	if err := e.configureProjection(sc.Exprs); err != nil {
+		return nil, err
 	}
-	e.selectors = exprs
-	for _, se := range e.selectors {
-		expr, err := validateExpressionForCDC(se.Expr)
-		if err != nil {
-			return err
+	if sc.Where != nil {
+		if err := e.configureFilter(sc.Where.Expr); err != nil {
+			return nil, err
 		}
-		se.Expr = expr
 	}
-	return nil
-}
-
-// ConfigureFilter configures this evaluator to match rows against filter expression.
-func (e *Evaluator) ConfigureFilter(filter tree.Expr) error {
-	if filter == nil {
-		return nil
-	}
-	expr, err := validateExpressionForCDC(filter)
-	if err != nil {
-		return err
-	}
-	e.where = expr
-	return nil
+	return e, nil
 }
 
 // ComputeVirtualColumns updates row with computed values for all virtual columns.
@@ -112,6 +93,35 @@ func (e *Evaluator) Projection(
 	return e.evaluator.evalProjection(ctx, updatedRow, mvccTS, prevRow)
 }
 
+// configureProjection configures this evaluator to evaluate projection.
+func (e *Evaluator) configureProjection(exprs tree.SelectExprs) error {
+	if len(exprs) == 0 { // Shouldn't happen, but be defensive.
+		return pgerror.New(pgcode.InvalidParameterValue,
+			"expected at least 1 projection")
+	}
+
+	e.selectors = exprs
+	for _, se := range e.selectors {
+		expr, err := validateExpressionForCDC(se.Expr)
+		if err != nil {
+			return err
+		}
+		se.Expr = expr
+	}
+	return nil
+}
+
+// configureFilter configures this evaluator to match rows against
+// filter expression.
+func (e *Evaluator) configureFilter(filter tree.Expr) error {
+	expr, err := validateExpressionForCDC(filter)
+	if err != nil {
+		return err
+	}
+	e.where = expr
+	return nil
+}
+
 // initEval initializes evaluator for the specified event descriptor.
 func (e *Evaluator) initEval(ctx context.Context, d *cdcevent.EventDescriptor) error {
 	if e.evaluator != nil && d.Equals(e.evaluator.EventDescriptor) {
@@ -135,7 +145,7 @@ func (e *Evaluator) initEval(ctx context.Context, d *cdcevent.EventDescriptor) e
 
 type exprEval struct {
 	*cdcevent.EventDescriptor
-	semaCtx tree.SemaContext
+	semaCtx *tree.SemaContext
 	evalCtx *eval.Context
 
 	evalHelper *rowContainer         // evalHelper is a container tree.IndexedVarContainer.
@@ -162,7 +172,7 @@ func newExprEval(evalCtx *eval.Context, ed *cdcevent.EventDescriptor) *exprEval 
 	cols := ed.ResultColumns()
 	e := &exprEval{
 		EventDescriptor: ed,
-		semaCtx:         tree.MakeSemaContext(),
+		semaCtx:         newSemaCtx(),
 		evalCtx:         evalCtx.Copy(),
 		evalHelper:      &rowContainer{cols: cols},
 		projection:      cdcevent.MakeProjection(ed),
@@ -374,7 +384,7 @@ func (e *exprEval) typeCheck(
 ) (tree.TypedExpr, error) {
 	// If we have variable free immutable expressions, then we can just evaluate it right away.
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		ctx, expr, targetType, "cdc", &e.semaCtx, volatility.Immutable)
+		ctx, expr, targetType, "cdc", e.semaCtx, volatility.Immutable)
 	if err == nil {
 		d, err := eval.Expr(e.evalCtx, typedExpr)
 		if err != nil {
@@ -395,7 +405,7 @@ func (e *exprEval) typeCheck(
 	}
 
 	// Run type check & normalize.
-	typedExpr, err = expr.TypeCheck(ctx, &e.semaCtx, targetType)
+	typedExpr, err = expr.TypeCheck(ctx, e.semaCtx, targetType)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +433,7 @@ func (e *exprEval) evalExpr(
 			return nil, v.err
 		}
 
-		typedExpr, err := tree.TypeCheck(ctx, newExpr, &e.semaCtx, targetType)
+		typedExpr, err := tree.TypeCheck(ctx, newExpr, e.semaCtx, targetType)
 		if err != nil {
 			return nil, err
 		}
@@ -669,6 +679,18 @@ func (v *replaceIndexVarVisitor) VisitPost(expr tree.Expr) (newNode tree.Expr) {
 // in the Annotation field of evalCtx when evaluating expressions.
 const cdcAnnotationAddr tree.AnnotationIdx = iota + 1
 
+// rowEvalContextFromEvalContext returns rowEvalContext stored as an annotation
+// in evalCtx.
 func rowEvalContextFromEvalContext(evalCtx *eval.Context) *rowEvalContext {
 	return evalCtx.Annotations.Get(cdcAnnotationAddr).(*rowEvalContext)
+}
+
+// newSemaCtx returns new tree.SemaCtx configured for cdc.
+func newSemaCtx() *tree.SemaContext {
+	sema := tree.MakeSemaContext()
+	sema.SearchPath = &cdcCustomFunctionResolver{SearchPath: sessiondata.DefaultSearchPath}
+	sema.Properties.Require("cdc",
+		tree.RejectAggregates|tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectNestedGenerators,
+	)
+	return &sema
 }

@@ -365,6 +365,9 @@ const (
 	// version is guaranteed to reside in a cluster where all nodes support range
 	// keys at the Pebble layer.
 	EnablePebbleFormatVersionRangeKeys
+	// EnablePredicateProjectionChangefeed indicates that changefeeds support
+	// predicates and projections.
+	EnablePredicateProjectionChangefeed
 
 	// TrigramInvertedIndexes enables the creation of trigram inverted indexes
 	// on strings.
@@ -652,6 +655,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     RemoveGrantPrivilege,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
+	},
+	{
+		Key:     EnablePredicateProjectionChangefeed,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
 	},
 
 	// *************************************************

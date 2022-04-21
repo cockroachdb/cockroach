@@ -652,26 +652,13 @@ func TestEvaluatesProjection(t *testing.T) {
 
 // makeEvaluator creates Evaluator and configures it with specified
 // select statement predicate.
-func makeEvaluator(t *testing.T, st *cluster.Settings, selectStr string) (Evaluator, error) {
+func makeEvaluator(t *testing.T, st *cluster.Settings, selectStr string) (*Evaluator, error) {
 	t.Helper()
-	evalCtx := eval.MakeTestingEvalContext(st)
-	e := NewEvaluator(&evalCtx)
-	if selectStr == "" {
-		return e, nil
-	}
 	s, err := parser.ParseOne(selectStr)
 	require.NoError(t, err)
 	slct := s.AST.(*tree.Select).Select.(*tree.SelectClause)
-	if err := e.ConfigureProjection(slct.Exprs); err != nil {
-		return Evaluator{}, err
-	}
-
-	if slct.Where != nil {
-		if err := e.ConfigureFilter(slct.Where.Expr); err != nil {
-			return Evaluator{}, err
-		}
-	}
-	return e, nil
+	evalCtx := eval.MakeTestingEvalContext(st)
+	return NewEvaluator(&evalCtx, slct)
 }
 
 func makeExprEval(
