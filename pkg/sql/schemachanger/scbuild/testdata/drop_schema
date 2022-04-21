@@ -661,9 +661,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   details:
     descriptorId: 115
     owner: root
-- [[PrimaryIndex:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC]
+- [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:

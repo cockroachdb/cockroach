@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-func newLogEventOp(e scpb.Element, md targetsWithElementMap) *scop.LogEvent {
+func newLogEventOp(e scpb.Element, md *targetsWithElementMap) *scop.LogEvent {
 	idx, ok := md.elementToTarget[e]
 	if !ok {
 		panic(errors.AssertionFailedf(
@@ -39,7 +39,7 @@ func newLogEventOp(e scpb.Element, md targetsWithElementMap) *scop.LogEvent {
 	}
 }
 
-func statementForDropJob(e scpb.Element, md targetsWithElementMap) scop.StatementForDropJob {
+func statementForDropJob(e scpb.Element, md *targetsWithElementMap) scop.StatementForDropJob {
 	stmtID := md.Targets[md.elementToTarget[e]].Metadata.StatementID
 	return scop.StatementForDropJob{
 		// Using the redactable string but with stripped markers gives us a
@@ -85,7 +85,7 @@ func makeTargetsWithElementMap(cs scpb.CurrentState) targetsWithElementMap {
 
 // opsFunc are a fully-compiled and checked set of functions to emit operations
 // given an element value.
-type opsFunc func(element scpb.Element, md targetsWithElementMap) []scop.Op
+type opsFunc func(element scpb.Element, md *targetsWithElementMap) []scop.Op
 
 func makeOpsFunc(el scpb.Element, fns []interface{}) (opsFunc, error) {
 	var funcValues []reflect.Value
@@ -95,7 +95,7 @@ func makeOpsFunc(el scpb.Element, fns []interface{}) (opsFunc, error) {
 		}
 		funcValues = append(funcValues, reflect.ValueOf(fn))
 	}
-	return func(element scpb.Element, md targetsWithElementMap) []scop.Op {
+	return func(element scpb.Element, md *targetsWithElementMap) []scop.Op {
 		ret := make([]scop.Op, 0, len(funcValues))
 		in := []reflect.Value{reflect.ValueOf(element)}
 		inWithMeta := []reflect.Value{reflect.ValueOf(element), reflect.ValueOf(md)}
@@ -127,7 +127,7 @@ func checkOpFunc(el scpb.Element, fn interface{}) error {
 	elType := reflect.TypeOf(el)
 	if !(fnT.NumIn() == 1 && fnT.In(0) == elType) &&
 		!(fnT.NumIn() == 2 && fnT.In(0) == elType &&
-			fnT.In(1) == reflect.TypeOf(targetsWithElementMap{})) {
+			fnT.In(1) == reflect.TypeOf((*targetsWithElementMap)(nil))) {
 		return errors.Errorf(
 			"expected %v to be a func with one argument of type %s", fnT, elType,
 		)

@@ -47,10 +47,10 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				emit(func(this *scpb.Database, md targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Database, md *targetsWithElementMap) scop.Op {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Database, md targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Database, md *targetsWithElementMap) scop.Op {
 					return &scop.CreateGcJobForDatabase{
 						DatabaseID:          this.DatabaseID,
 						StatementForDropJob: statementForDropJob(this, md),

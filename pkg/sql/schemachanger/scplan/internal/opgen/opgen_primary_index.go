@@ -89,7 +89,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.PrimaryIndex, md targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.PrimaryIndex, md *targetsWithElementMap) scop.Op {
 					return &scop.CreateGcJobForIndex{
 						TableID:             this.TableID,
 						IndexID:             this.IndexID,
