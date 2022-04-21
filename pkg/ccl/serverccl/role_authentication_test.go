@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -154,7 +155,7 @@ func TestVerifyPassword(t *testing.T) {
 				validDBConsole = false
 			}
 			if exists && (canLoginSQL || canLoginDBConsole) {
-				var hashedPassword security.PasswordHash
+				var hashedPassword password.PasswordHash
 				expired, hashedPassword, err = pwRetrieveFn(ctx)
 				if err != nil {
 					t.Errorf(
@@ -165,7 +166,7 @@ func TestVerifyPassword(t *testing.T) {
 					)
 				}
 
-				pwCompare, err := security.CompareHashAndCleartextPassword(ctx, hashedPassword, tc.password)
+				pwCompare, err := password.CompareHashAndCleartextPassword(ctx, hashedPassword, tc.password)
 				if err != nil {
 					t.Error(err)
 					valid = false
