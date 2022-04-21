@@ -50,6 +50,7 @@ ElementState:
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -230,6 +231,7 @@ ElementState:
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
+      constraintId: 2
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -242,6 +244,7 @@ ElementState:
   Status: PUBLIC
 - SecondaryIndex:
     embeddedIndex:
+      constraintId: 1
       indexId: 2
       isUnique: true
       keyColumnDirections:

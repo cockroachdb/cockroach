@@ -27,7 +27,7 @@ func init() {
 						Column: *protoutil.Clone(this).(*scpb.Column),
 					}
 				}),
-				emit(func(this *scpb.Column, md targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Column, md *targetsWithElementMap) scop.Op {
 					return newLogEventOp(this, md)
 				}),
 			),
@@ -59,7 +59,7 @@ func init() {
 						ColumnID: this.ColumnID,
 					}
 				}),
-				emit(func(this *scpb.Column, md targetsWithElementMap) scop.Op {
+				emit(func(this *scpb.Column, md *targetsWithElementMap) scop.Op {
 					return newLogEventOp(this, md)
 				}),
 			),
