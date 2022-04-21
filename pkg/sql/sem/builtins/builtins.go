@@ -8106,27 +8106,6 @@ func bitsOverload2(
 	}
 }
 
-// getHashFunc returns a function that will create a new hash.Hash using the
-// given algorithm.
-func getHashFunc(alg string) (func() hash.Hash, error) {
-	switch strings.ToLower(alg) {
-	case "md5":
-		return md5.New, nil
-	case "sha1":
-		return sha1.New, nil
-	case "sha224":
-		return sha256.New224, nil
-	case "sha256":
-		return sha256.New, nil
-	case "sha384":
-		return sha512.New384, nil
-	case "sha512":
-		return sha512.New, nil
-	default:
-		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot use %q, no such hash algorithm", alg)
-	}
-}
-
 // feedHash returns true if it encounters any non-Null datum.
 func feedHash(h hash.Hash, args tree.Datums) (bool, error) {
 	var nonNullSeen bool

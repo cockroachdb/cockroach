@@ -61,3 +61,95 @@ query IB
 SELECT length(gen_random_uuid()::BYTES), gen_random_uuid() = gen_random_uuid()
 ----
 16 false
+
+
+subtest gen_salt_invalid_algo
+
+statement error pgcode 22023 unknown salt algorithm
+SELECT gen_salt('invalid')
+
+statement error pgcode 22023 unknown salt algorithm
+SELECT gen_salt('invalid', 0)
+
+subtest gen_salt_des
+
+query I
+SELECT char_length(gen_salt('des'))
+----
+2
+
+query I
+SELECT char_length(gen_salt('des', rounds))
+FROM (VALUES (0), (25)) AS t (rounds)
+----
+2
+2
+
+# invalid rounds
+statement error pgcode 22023 incorrect number of rounds
+SELECT gen_salt('des', 1)
+
+subtest gen_salt_xdes
+
+query TI
+SELECT substr(salt, 1, 5), char_length(salt)
+FROM (SELECT gen_salt('xdes') AS salt)
+----
+_J9..  9
+
+query TI
+SELECT substr(salt, 1, 5), char_length(salt)
+FROM (SELECT gen_salt('xdes', rounds) AS salt FROM (VALUES (0), (1), (16777215)) AS t (rounds))
+----
+_J9..  9
+_/...  9
+_zzzz  9
+
+# invalid even rounds
+statement error pgcode 22023 incorrect number of rounds
+SELECT gen_salt('xdes', 2)
+
+# invalid min rounds
+statement error pgcode 22023 incorrect number of rounds
+SELECT gen_salt('xdes', -1)
+
+# invalid max rounds
+statement error pgcode 22023 incorrect number of rounds
+SELECT gen_salt('xdes', 16777216)
+
+subtest gen_salt_md5
+
+query TI
+SELECT substr(salt, 1, 3), char_length(salt)
+FROM (SELECT gen_salt('md5') AS salt)
+----
+$1$ 11
+
+query TI
+SELECT substr(salt, 1, 3), char_length(salt)
+FROM (SELECT gen_salt('md5', rounds) AS salt FROM (VALUES (0), (1000)) AS t (rounds))
+----
+$1$ 11
+$1$ 11
+
+# invalid rounds
+statement error pgcode 22023 incorrect number of rounds
+SELECT gen_salt('md5', 1)
+
+subtest gen_salt_bf
+
+query TI
+SELECT substr(salt, 1, 7), char_length(salt)
+FROM (SELECT gen_salt('bf', rounds) AS salt FROM (VALUES (0), (4), (31)) AS t (rounds))
+----
+$2a$06$ 29
+$2a$04$ 29
+$2a$31$ 29
+
+# invalid min rounds
+statement error pgcode 22023 incorrect number of rounds
+SELECT gen_salt('bf', 3)
+
+# invalid max rounds
+statement error pgcode 22023 incorrect number of rounds
+SELECT gen_salt('bf', 32)
