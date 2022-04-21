@@ -27,31 +27,49 @@ table_implicit
 BackReferencedIDs:
 ElementState:
 - Table:
+    isTemporary: false
     tableId: 104
   Status: PUBLIC
 - ColumnFamily:
+    familyId: 0
     name: fam_0_pk_a_j
     tableId: 104
   Status: PUBLIC
 - Column:
     columnId: 1
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 1
     tableId: 104
   Status: PUBLIC
 - Column:
     columnId: 2
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 2
     tableId: 104
   Status: PUBLIC
 - Column:
     columnId: 3
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 3
     tableId: 104
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
+      compositeColumnIds: []
       constraintId: 1
       indexId: 1
+      isConcurrently: false
+      isCreatedExplicitly: false
+      isInverted: false
       isUnique: true
       keyColumnDirections:
       - ASC
@@ -59,14 +77,23 @@ ElementState:
       keyColumnIds:
       - 2
       - 1
+      keySuffixColumnIds: []
+      sharding: null
+      sourceIndexId: 0
       storingColumnIds:
       - 3
       tableId: 104
+      temporaryIndexId: 0
   Status: PUBLIC
 - SecondaryIndex:
     embeddedIndex:
+      compositeColumnIds: []
+      constraintId: 0
       indexId: 2
+      isConcurrently: false
+      isCreatedExplicitly: false
       isInverted: true
+      isUnique: false
       keyColumnDirections:
       - ASC
       - ASC
@@ -75,7 +102,11 @@ ElementState:
       - 3
       keySuffixColumnIds:
       - 1
+      sharding: null
+      sourceIndexId: 0
+      storingColumnIds: []
       tableId: 104
+      temporaryIndexId: 0
   Status: PUBLIC
 - TableComment:
     comment: __placeholder_comment__
@@ -98,29 +129,83 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     columnId: 1
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
         width: 64
+    familyId: 0
+    isNullable: false
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 104
   Status: PUBLIC
 - ColumnType:
     columnId: 2
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
         width: 64
+    familyId: 0
+    isNullable: false
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 104
   Status: PUBLIC
 - ColumnType:
     columnId: 3
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: JsonFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 3802
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
+        width: 0
+    familyId: 0
     isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 104
   Status: PUBLIC
 - ColumnComment:
@@ -156,11 +241,16 @@ ElementState:
     partitioning:
       list:
       - name: pk_implicit
-        subpartitioning: {}
+        subpartitioning:
+          list: []
+          numColumns: 0
+          numImplicitColumns: 0
+          range: []
         values:
         - AwI=
       numColumns: 1
       numImplicitColumns: 1
+      range: []
     tableId: 104
   Status: PUBLIC
 - IndexPartitioning:
@@ -168,11 +258,16 @@ ElementState:
     partitioning:
       list:
       - name: j_implicit
-        subpartitioning: {}
+        subpartitioning:
+          list: []
+          numColumns: 0
+          numImplicitColumns: 0
+          range: []
         values:
         - Awo=
       numColumns: 1
       numImplicitColumns: 1
+      range: []
     tableId: 104
   Status: PUBLIC
 - IndexComment:
@@ -216,39 +311,61 @@ table_partitioned_index
 BackReferencedIDs:
 ElementState:
 - Table:
+    isTemporary: false
     tableId: 105
   Status: PUBLIC
 - ColumnFamily:
+    familyId: 0
     name: primary
     tableId: 105
   Status: PUBLIC
 - Column:
     columnId: 1
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
 - Column:
     columnId: 2
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: false
+    isInaccessible: false
     pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
+      compositeColumnIds: []
       constraintId: 2
       indexId: 1
+      isConcurrently: false
+      isCreatedExplicitly: false
+      isInverted: false
       isUnique: true
       keyColumnDirections:
       - ASC
       keyColumnIds:
       - 1
+      keySuffixColumnIds: []
+      sharding: null
+      sourceIndexId: 0
       storingColumnIds:
       - 2
       tableId: 105
+      temporaryIndexId: 0
   Status: PUBLIC
 - SecondaryIndex:
     embeddedIndex:
+      compositeColumnIds: []
       constraintId: 1
       indexId: 2
+      isConcurrently: false
+      isCreatedExplicitly: false
+      isInverted: false
       isUnique: true
       keyColumnDirections:
       - ASC
@@ -256,7 +373,11 @@ ElementState:
       - 2
       keySuffixColumnIds:
       - 1
+      sharding: null
+      sourceIndexId: 0
+      storingColumnIds: []
       tableId: 105
+      temporaryIndexId: 0
   Status: PUBLIC
 - TableComment:
     comment: __placeholder_comment__
@@ -274,21 +395,56 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     columnId: 1
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
         width: 64
+    familyId: 0
+    isNullable: false
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 105
   Status: PUBLIC
 - ColumnType:
     columnId: 2
+    computeExpr: null
     embeddedTypeT:
+      closedTypeIds: []
       type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
         family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
         oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
         width: 64
+    familyId: 0
     isNullable: true
+    isRelationBeingDropped: false
+    isVirtual: false
     tableId: 105
   Status: PUBLIC
 - ColumnComment:
@@ -318,10 +474,16 @@ ElementState:
     partitioning:
       list:
       - name: p1
-        subpartitioning: {}
+        subpartitioning:
+          list: []
+          numColumns: 0
+          numImplicitColumns: 0
+          range: []
         values:
         - AwI=
       numColumns: 1
+      numImplicitColumns: 0
+      range: []
     tableId: 105
   Status: PUBLIC
 - IndexComment:

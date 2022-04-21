@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
@@ -196,7 +197,7 @@ func marshalState(t *testing.T, state scpb.CurrentState) string {
 			Target:        &state.Targets[i],
 			CurrentStatus: status,
 		}
-		yaml, err := sctestutils.ProtoToYAML(node.Target.Element())
+		yaml, err := sctestutils.ProtoToYAML(node.Target.Element(), protoreflect.FmtFlags{})
 		require.NoError(t, err)
 		entry := strings.Builder{}
 		entry.WriteString("- ")
