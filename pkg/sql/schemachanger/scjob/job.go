@@ -85,7 +85,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCtx.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
 
-	return scrun.RunSchemaChangesInJob(
+	err := scrun.RunSchemaChangesInJob(
 		ctx,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		execCfg.Settings,
@@ -94,4 +94,12 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		payload.DescriptorIDs,
 		n.rollback,
 	)
+	// Return permanent errors back, otherwise we will try to retry
+	if sql.IsPermanentSchemaChangeError(err) {
+		return err
+	}
+	if err != nil {
+		return jobs.MarkAsRetryJobError(err)
+	}
+	return nil
 }
