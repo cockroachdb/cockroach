@@ -29,6 +29,7 @@ go_test(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/security",
+        "//pkg/security/password",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",

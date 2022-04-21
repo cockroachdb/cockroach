@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "password",
+    srcs = ["password.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/password",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+        "//pkg/util/quotapool",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_xdg_go_pbkdf2//:pbkdf2",
+        "@com_github_xdg_go_scram//:scram",
+        "@com_github_xdg_go_stringprep//:stringprep",
+        "@org_golang_x_crypto//bcrypt",
+    ],
+)

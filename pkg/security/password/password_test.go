@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package security
+package password
 
 import (
 	"context"
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,7 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 
 	const cleartext = "hello"
 
-	ourDefault := int(BcryptCost.Get(&s.SV))
+	ourDefault := int(security.BcryptCost.Get(&s.SV))
 
 	// Don't iterate all the way to 31: the larger values
 	// incur incredibly large hashing times.
@@ -53,7 +54,9 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 			require.Equal(t, HashBCrypt, bh.Method())
 
 			// Check conversion succeeds.
-			converted, prevHash, newHashBytes, hashMethod, err := MaybeUpgradePasswordHash(ctx, &s.SV, cleartext, bh)
+			autoUpgradePasswordHashesBool := security.AutoUpgradePasswordHashes.Get(&s.SV)
+			method := security.GetConfiguredPasswordHashMethod(ctx, &s.SV)
+			converted, prevHash, newHashBytes, hashMethod, err := MaybeUpgradePasswordHash(ctx, autoUpgradePasswordHashesBool, method, cleartext, bh)
 			require.NoError(t, err)
 			require.True(t, converted)
 			require.Equal(t, "SCRAM-SHA-256", string(newHashBytes)[:13])
@@ -66,7 +69,10 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 			require.Equal(t, bcryptCostToSCRAMIterCount[i], int64(creds.Iters))
 
 			// Check that converted hash can't be converted further.
-			ec, _, _, _, err := MaybeUpgradePasswordHash(ctx, &s.SV, cleartext, newHash)
+			autoUpgradePasswordHashesBool = security.AutoUpgradePasswordHashes.Get(&s.SV)
+			method = security.GetConfiguredPasswordHashMethod(ctx, &s.SV)
+
+			ec, _, _, _, err := MaybeUpgradePasswordHash(ctx, autoUpgradePasswordHashesBool, method, cleartext, newHash)
 			require.NoError(t, err)
 			require.False(t, ec)
 		})
