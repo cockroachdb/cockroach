@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1279,6 +1280,13 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 func TestAlterChangefeedUpdateFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Skip this test for now.  It used to test alter changefeed with
+	// now deprecated and removed 'primary_key_filter' option.
+	// Since predicates and projections are no longer a "string" option,
+	// alter statement implementation (and grammar) needs to be updated, and
+	// this test modified and re-enabled.
+	skip.WithIssue(t, 82491)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
