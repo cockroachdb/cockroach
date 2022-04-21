@@ -882,7 +882,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "grant_stmt",
-		inline: []string{"privileges", "opt_privileges_clause"},
+		inline: []string{"privileges", "opt_privileges_clause", "opt_with_grant_option"},
 	},
 	{
 		name: "foreign_key_column_level",
