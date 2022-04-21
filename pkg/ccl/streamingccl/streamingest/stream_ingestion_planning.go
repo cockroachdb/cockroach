@@ -197,7 +197,7 @@ func ingestionPlanHook(
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		sj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr,
-			jobID, p.ExtendedEvalContext().Txn)
+			jobID, p.Txn())
 		if err != nil {
 			return err
 		}

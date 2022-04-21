@@ -163,7 +163,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 					scheduleControllerEnv,
 					scheduledjobs.ProdJobSchedulerEnv,
 					schedule,
-					params.extendedEvalCtx.Txn,
+					params.p.Txn(),
 					params.p.Descriptors(),
 				); err != nil {
 					return errors.Wrap(err, "failed to run OnDrop")

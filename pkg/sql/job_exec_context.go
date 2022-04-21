@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -64,6 +65,7 @@ func (e *plannerJobExecContext) MigrationJobDeps() migration.JobDeps {
 func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
 	return e.p.SpanConfigReconciler()
 }
+func (e *plannerJobExecContext) Txn() *kv.Txn { return e.p.Txn() }
 
 // JobExecContext provides the execution environment for a job. It is what is
 // passed to the Resume/OnFailOrCancel/OnPauseRequested methods of a jobs's
@@ -85,4 +87,5 @@ type JobExecContext interface {
 	User() security.SQLUsername
 	MigrationJobDeps() migration.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
+	Txn() *kv.Txn
 }

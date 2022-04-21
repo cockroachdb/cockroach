@@ -495,7 +495,7 @@ func importPlanHook(
 		} else {
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
-			txn := p.ExtendedEvalContext().Txn
+			txn := p.Txn()
 			db, err = p.Accessor().GetDatabaseDesc(ctx, txn, p.SessionData().Database, tree.DatabaseLookupFlags{
 				AvoidLeased: true,
 				Required:    true,
@@ -944,7 +944,7 @@ func importPlanHook(
 			// record. We do not wait for the job to finish.
 			jobID := p.ExecCfg().JobRegistry.MakeJobID()
 			_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-				ctx, jr, jobID, p.ExtendedEvalContext().Txn)
+				ctx, jr, jobID, p.Txn())
 			if err != nil {
 				return err
 			}
@@ -956,7 +956,7 @@ func importPlanHook(
 
 		// We create the job record in the planner's transaction to ensure that
 		// the job record creation happens transactionally.
-		plannerTxn := p.ExtendedEvalContext().Txn
+		plannerTxn := p.Txn()
 
 		// Construct the job and commit the transaction. Perform this work in a
 		// closure to ensure that the job is cleaned up if an error occurs.
