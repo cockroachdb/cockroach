@@ -14,6 +14,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -84,6 +86,8 @@ func New(
 	initialHighwater hlc.Timestamp,
 	metrics *Metrics,
 	changefeedOpts map[string]string,
+	projection tree.SelectExprs,
+	filter tree.Expr,
 ) SchemaFeed {
 	m := &schemaFeed{
 		filter:            schemaChangeEventFilters[events],
@@ -96,7 +100,10 @@ func New(
 		collectionFactory: cfg.CollectionFactory,
 		metrics:           metrics,
 		changefeedOpts:    changefeedOpts,
+		projection:        projection,
+		predicate:         filter,
 	}
+
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
 	m.mu.typeDeps = typeDependencyTracker{deps: make(map[descpb.ID][]descpb.ID)}
@@ -122,6 +129,8 @@ type schemaFeed struct {
 	ie             sqlutil.InternalExecutor
 	metrics        *Metrics
 	changefeedOpts map[string]string
+	projection     tree.SelectExprs
+	predicate      tree.Expr
 
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
@@ -521,6 +530,26 @@ func formatEvent(e TableEvent) string {
 	return fmt.Sprintf("%v->%v", formatDesc(e.Before), formatDesc(e.After))
 }
 
+func (tf *schemaFeed) validatePredicates(ctx context.Context, desc catalog.TableDescriptor) error {
+	if len(tf.projection) == 0 {
+		// No predicates configured
+		return nil
+	}
+
+	if len(tf.targets) != 1 {
+		return errors.AssertionFailedf("predicate changefeeds cannot target more than 1 target (found %d)", len(tf.targets))
+	}
+	evalCtx := eval.MakeTestingEvalContext(tf.settings)
+	includeVirtual := tf.changefeedOpts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
+	if err := cdceval.ValidatePredicatesForTarget(ctx, tf.settings, &evalCtx, desc,
+		tf.targets[0], tf.projection, tf.predicate, includeVirtual); err != nil {
+		return errors.Wrapf(err,
+			"projection %s and/or filter %s are not valid for table %q, version %d"+
+				tree.AsString(&tf.projection), tree.AsString(tf.predicate), desc.GetName(), desc.GetVersion())
+	}
+	return nil
+}
+
 func (tf *schemaFeed) validateDescriptor(
 	ctx context.Context, earliestTsBeingIngested hlc.Timestamp, desc catalog.Descriptor,
 ) error {
@@ -584,6 +613,11 @@ func (tf *schemaFeed) validateDescriptor(
 				})
 			}
 		}
+
+		if err := tf.validatePredicates(ctx, desc); err != nil {
+			return err
+		}
+
 		// Add the types used by the table into the dependency tracker.
 		if err := tf.mu.typeDeps.ingestTable(desc); err != nil {
 			return err

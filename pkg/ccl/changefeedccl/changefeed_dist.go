@@ -11,8 +11,8 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -90,16 +92,14 @@ func distChangefeedFlow(
 		}
 	}
 
-	execCfg := execCtx.ExecCfg()
 	var initialHighWater hlc.Timestamp
-	var trackedSpans []roachpb.Span
+	schemaTS := details.StatementTime
 	{
-		spansTS := details.StatementTime
 		if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
 			initialHighWater = *h
 			// If we have a high-water set, use it to compute the spans, since the
 			// ones at the statement time may have been garbage collected by now.
-			spansTS = initialHighWater
+			schemaTS = initialHighWater
 		}
 
 		// We want to fetch the target spans as of the timestamp following the
@@ -111,30 +111,7 @@ func distChangefeedFlow(
 		// schema change and thus should see the side-effect of the schema change.
 		isRestartAfterCheckpointOrNoInitialScan := progress.GetHighWater() != nil
 		if isRestartAfterCheckpointOrNoInitialScan {
-			spansTS = spansTS.Next()
-		}
-		var err error
-		var tableDescs []catalog.TableDescriptor
-		tableDescs, err = fetchTableDescriptors(ctx, execCfg, AllTargets(details), spansTS)
-		if err != nil {
-			return err
-		}
-
-		if filterExpr, isSet := details.Opts[changefeedbase.OptPrimaryKeyFilter]; isSet {
-			if len(tableDescs) > 1 {
-				return pgerror.Newf(pgcode.InvalidParameterValue,
-					"option %s can only be used with 1 changefeed target (found %d)",
-					changefeedbase.OptPrimaryKeyFilter, len(tableDescs),
-				)
-			}
-			trackedSpans, err = constrainSpansByExpression(ctx, execCtx, filterExpr, tableDescs[0])
-			if err != nil {
-				return err
-			}
-		} else {
-			for _, d := range tableDescs {
-				trackedSpans = append(trackedSpans, d.PrimaryIndexSpan(execCfg.Codec))
-			}
+			schemaTS = schemaTS.Next()
 		}
 	}
 
@@ -143,13 +120,8 @@ func distChangefeedFlow(
 		checkpoint = *cf.Checkpoint
 	}
 
-	var distflowKnobs changefeeddist.TestingKnobs
-	if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs != nil {
-		distflowKnobs = knobs.DistflowKnobs
-	}
-
-	return changefeeddist.StartDistChangefeed(
-		ctx, execCtx, jobID, details, trackedSpans, initialHighWater, checkpoint, resultsCh, distflowKnobs)
+	return startDistChangefeed(
+		ctx, execCtx, jobID, schemaTS, details, initialHighWater, checkpoint, resultsCh)
 }
 
 func fetchTableDescriptors(
@@ -192,23 +164,211 @@ func fetchTableDescriptors(
 	return targetDescs, nil
 }
 
-func constrainSpansByExpression(
-	ctx context.Context, execCtx sql.JobExecContext, filterStr string, descr catalog.TableDescriptor,
-) ([]roachpb.Span, error) {
+// changefeedResultTypes is the types returned by changefeed stream.
+var changefeedResultTypes = []*types.T{
+	types.Bytes,  // aggregator progress update
+	types.String, // topic
+	types.Bytes,  // key
+	types.Bytes,  // value
+}
+
+func fetchSpansForTables(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	tableDescs []catalog.TableDescriptor,
+	filterStr string,
+) ([]roachpb.Span, string, error) {
+	var trackedSpans []roachpb.Span
 	if filterStr == "" {
-		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-			"option %s must not be empty", changefeedbase.OptPrimaryKeyFilter,
-		)
+		for _, d := range tableDescs {
+			trackedSpans = append(trackedSpans, d.PrimaryIndexSpan(execCtx.ExecCfg().Codec))
+		}
+		return trackedSpans, "", nil
 	}
 
-	filterExpr, err := parser.ParseExpr(filterStr)
+	if len(tableDescs) > 1 {
+		return nil, "", pgerror.Newf(pgcode.InvalidParameterValue,
+			"filter can only be used with single target (found %d)",
+			len(tableDescs))
+	}
+
+	return cdceval.ConstrainPrimaryIndexSpanByFilter(ctx, execCtx, filterStr, tableDescs[0])
+}
+
+// startDistChangefeed starts distributed changefeed execution.
+func startDistChangefeed(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
+	schemaTS hlc.Timestamp,
+	details jobspb.ChangefeedDetails,
+	initialHighWater hlc.Timestamp,
+	checkpoint jobspb.ChangefeedProgress_Checkpoint,
+	resultsCh chan<- tree.Datums,
+) error {
+	execCfg := execCtx.ExecCfg()
+	tableDescs, err := fetchTableDescriptors(ctx, execCfg, AllTargets(details), schemaTS)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
-			"filter expression %s must be a valid SQL expression", changefeedbase.OptPrimaryKeyFilter)
+		return err
+	}
+	trackedSpans, remainingFilter, err := fetchSpansForTables(ctx, execCtx, tableDescs, details.WhereClause)
+	if err != nil {
+		return err
 	}
 
-	semaCtx := tree.MakeSemaContext()
-	spans, _, err := execCtx.ConstrainPrimaryIndexSpanByExpr(
-		ctx, sql.MustFullyConstrain, nil, descr, &execCtx.ExtendedEvalContext().Context, &semaCtx, filterExpr)
-	return spans, err
+	// Changefeed flows handle transactional consistency themselves.
+	var noTxn *kv.Txn
+
+	dsp := execCtx.DistSQLPlanner()
+	evalCtx := execCtx.ExtendedEvalContext()
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn,
+		sql.DistributionTypeAlways)
+
+	var spanPartitions []sql.SpanPartition
+	if details.SinkURI == `` {
+		// Sinkless feeds get one ChangeAggregator on the gateway.
+		spanPartitions = []sql.SpanPartition{{SQLInstanceID: dsp.GatewayID(), Spans: trackedSpans}}
+	} else {
+		// All other feeds get a ChangeAggregator local on the leaseholder.
+		var err error
+		spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Use the same checkpoint for all aggregators; each aggregator will only look at
+	// spans that are assigned to it.
+	// We could compute per-aggregator checkpoint, but that's probably an overkill.
+	aggregatorCheckpoint := execinfrapb.ChangeAggregatorSpec_Checkpoint{
+		Spans:     checkpoint.Spans,
+		Timestamp: checkpoint.Timestamp,
+	}
+
+	var checkpointSpanGroup roachpb.SpanGroup
+	checkpointSpanGroup.Add(checkpoint.Spans...)
+
+	aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
+	for i, sp := range spanPartitions {
+		watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
+		for watchIdx, nodeSpan := range sp.Spans {
+			initialResolved := initialHighWater
+			if checkpointSpanGroup.Encloses(nodeSpan) {
+				initialResolved = checkpoint.Timestamp
+			}
+			watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
+				Span:            nodeSpan,
+				InitialResolved: initialResolved,
+			}
+		}
+
+		aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
+			Watches:    watches,
+			Checkpoint: aggregatorCheckpoint,
+			Feed:       details,
+			UserProto:  execCtx.User().EncodeProto(),
+			JobID:      jobID,
+			Projection: execinfrapb.Expression{Expr: details.SelectClause},
+			Filter:     execinfrapb.Expression{Expr: remainingFilter},
+		}
+	}
+
+	// NB: This SpanFrontier processor depends on the set of tracked spans being
+	// static. Currently there is no way for them to change after the changefeed
+	// is created, even if it is paused and unpaused, but #28982 describes some
+	// ways that this might happen in the future.
+	changeFrontierSpec := execinfrapb.ChangeFrontierSpec{
+		TrackedSpans: trackedSpans,
+		Feed:         details,
+		JobID:        jobID,
+		UserProto:    execCtx.User().EncodeProto(),
+	}
+
+	cfKnobs := execCfg.DistSQLSrv.TestingKnobs.Changefeed
+	if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil && knobs.OnDistflowSpec != nil {
+		knobs.OnDistflowSpec(aggregatorSpecs, &changeFrontierSpec)
+	}
+
+	aggregatorCorePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
+	for i, sp := range spanPartitions {
+		aggregatorCorePlacement[i].SQLInstanceID = sp.SQLInstanceID
+		aggregatorCorePlacement[i].Core.ChangeAggregator = aggregatorSpecs[i]
+	}
+
+	p := planCtx.NewPhysicalPlan()
+	p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{})
+	p.AddSingleGroupStage(
+		dsp.GatewayID(),
+		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
+		execinfrapb.PostProcessSpec{},
+		changefeedResultTypes,
+	)
+
+	p.PlanToStreamColMap = []int{1, 2, 3}
+	dsp.FinalizePlan(planCtx, p)
+
+	resultRows := makeChangefeedResultWriter(resultsCh)
+	recv := sql.MakeDistSQLReceiver(
+		ctx,
+		resultRows,
+		tree.Rows,
+		execCtx.ExecCfg().RangeDescriptorCache,
+		noTxn,
+		nil, /* clockUpdater */
+		evalCtx.Tracing,
+		execCtx.ExecCfg().ContentionRegistry,
+		nil, /* testingPushCallback */
+	)
+	defer recv.Release()
+
+	var finishedSetupFn func()
+	if details.SinkURI != `` {
+		// We abuse the job's results channel to make CREATE CHANGEFEED wait for
+		// this before returning to the user to ensure the setup went okay. Job
+		// resumption doesn't have the same hack, but at the moment ignores
+		// results and so is currently okay. Return nil instead of anything
+		// meaningful so that if we start doing anything with the results
+		// returned by resumed jobs, then it breaks instead of returning
+		// nonsense.
+		finishedSetupFn = func() { resultsCh <- tree.Datums(nil) }
+	}
+
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := *evalCtx
+	dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)()
+	return resultRows.Err()
+}
+
+// changefeedResultWriter implements the `sql.rowResultWriter` that sends
+// the received rows back over the given channel.
+type changefeedResultWriter struct {
+	rowsCh       chan<- tree.Datums
+	rowsAffected int
+	err          error
+}
+
+func makeChangefeedResultWriter(rowsCh chan<- tree.Datums) *changefeedResultWriter {
+	return &changefeedResultWriter{rowsCh: rowsCh}
+}
+
+func (w *changefeedResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	// Copy the row because it's not guaranteed to exist after this function
+	// returns.
+	row = append(tree.Datums(nil), row...)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case w.rowsCh <- row:
+		return nil
+	}
+}
+func (w *changefeedResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
+	w.rowsAffected += n
+}
+func (w *changefeedResultWriter) SetError(err error) {
+	w.err = err
+}
+func (w *changefeedResultWriter) Err() error {
+	return w.err
 }

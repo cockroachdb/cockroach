@@ -13,9 +13,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
@@ -147,7 +147,7 @@ func newChangeAggregatorProcessor(
 	if err := ca.Init(
 		ca,
 		post,
-		changefeeddist.ChangefeedResultTypes,
+		changefeedResultTypes,
 		flowCtx,
 		processorID,
 		output,
@@ -298,7 +298,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 
 	ca.eventConsumer, err = newKVEventToRowConsumer(
-		ctx, ca.flowCtx.Cfg, ca.frontier.SpanFrontier(), kvFeedHighWater,
+		ctx, ca.flowCtx.Cfg, ca.flowCtx.EvalCtx, ca.frontier.SpanFrontier(), kvFeedHighWater,
 		ca.sink, ca.encoder, ca.spec.Feed, ca.knobs, ca.topicNamer)
 
 	if err != nil {
@@ -323,7 +323,10 @@ func (ca *changeAggregator) startKVFeed(
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
 	// we return the kvevent.Reader part to the caller.
-	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan, endTime)
+	kvfeedCfg, err := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan, endTime)
+	if err != nil {
+		return nil, err
+	}
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -355,7 +358,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
 	endTime hlc.Timestamp,
-) kvfeed.Config {
+) (kvfeed.Config, error) {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		ca.spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
 	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
@@ -363,15 +366,23 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
 	cfg := ca.flowCtx.Cfg
 
-	var sf schemafeed.SchemaFeed
-
 	initialScanOnly := endTime.EqOrdering(initialHighWater)
+	var sf schemafeed.SchemaFeed
 
 	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore || initialScanOnly {
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
+		var projection tree.SelectExprs
+		var filter tree.Expr
+		if ca.spec.Projection.Expr != "" {
+			var err error
+			projection, filter, err = cdceval.ParseProjectionAndFilter(ca.spec.Projection.Expr, ca.spec.Filter.Expr)
+			if err != nil {
+				return kvfeed.Config{}, err
+			}
+		}
 		sf = schemafeed.New(ctx, cfg, schemaChangeEvents, AllTargets(ca.spec.Feed),
-			initialHighWater, &ca.metrics.SchemaFeedMetrics, ca.spec.Feed.Opts)
+			initialHighWater, &ca.metrics.SchemaFeedMetrics, ca.spec.Feed.Opts, projection, filter)
 	}
 
 	return kvfeed.Config{
@@ -397,7 +408,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		SchemaChangePolicy:      schemaChangePolicy,
 		SchemaFeed:              sf,
 		Knobs:                   ca.knobs.FeedKnobs,
-	}
+	}, nil
 }
 
 // setupSpans is called on start to extract the spans for this changefeed as a
@@ -1060,7 +1071,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 }
 
 func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
-	if err := d.EnsureDecoded(changefeeddist.ChangefeedResultTypes[0], &cf.a); err != nil {
+	if err := d.EnsureDecoded(changefeedResultTypes[0], &cf.a); err != nil {
 		return err
 	}
 	raw, ok := d.Datum.(*tree.DBytes)

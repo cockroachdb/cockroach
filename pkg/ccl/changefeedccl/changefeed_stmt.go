@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -379,6 +380,10 @@ func createChangefeedJobRecord(
 		StatementTime:        statementTime,
 		EndTime:              endTime,
 		TargetSpecifications: targets,
+		SelectClause:         tree.AsString(&changefeedStmt.Selectors),
+	}
+	if changefeedStmt.Where != nil {
+		details.WhereClause = tree.AsString(changefeedStmt.Where.Expr)
 	}
 
 	// TODO(dan): In an attempt to present the most helpful error message to the
@@ -425,16 +430,8 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
-	if filterExpr, isSet := details.Opts[changefeedbase.OptPrimaryKeyFilter]; isSet {
-		policy := changefeedbase.SchemaChangePolicy(details.Opts[changefeedbase.OptSchemaChangePolicy])
-		if policy != changefeedbase.OptSchemaChangePolicyStop {
-			return nil, errors.Newf("option %s can only be used with %s=%s",
-				changefeedbase.OptPrimaryKeyFilter, changefeedbase.OptSchemaChangePolicy,
-				changefeedbase.OptSchemaChangePolicyStop)
-		}
-		if err := validatePrimaryKeyFilterExpression(ctx, p, filterExpr, targetDescs); err != nil {
-			return nil, err
-		}
+	if err := validatePredicates(ctx, p, details, targetDescs); err != nil {
+		return nil, err
 	}
 
 	if _, err := getEncoder(details.Opts, AllTargets(details)); err != nil {
@@ -895,20 +892,32 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 			)
 		}
 	}
+
+	{
+		if details.SelectClause != "" || details.WhereClause != "" {
+			if len(details.TargetSpecifications) > 1 {
+				return jobspb.ChangefeedDetails{}, errors.Errorf(
+					"CREATE CHANGEFEED ... AS SELECT ... is not supported for more than 1 table")
+			}
+		}
+	}
 	return details, nil
 }
 
-func validatePrimaryKeyFilterExpression(
+func validatePredicates(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	filterExpr string,
+	details jobspb.ChangefeedDetails,
 	descriptors map[tree.TablePattern]catalog.Descriptor,
 ) error {
-	if len(descriptors) > 1 {
+	if details.SelectClause == "" {
+		return nil
+	}
+
+	if len(descriptors) != 1 {
 		return pgerror.Newf(pgcode.InvalidParameterValue,
-			"option %s can only be used with 1 changefeed target (found %d)",
-			changefeedbase.OptPrimaryKeyFilter, len(descriptors),
-		)
+			"projections and filter can only be used with single target (found %d)",
+			len(descriptors))
 	}
 
 	var tableDescr catalog.TableDescriptor
@@ -916,8 +925,15 @@ func validatePrimaryKeyFilterExpression(
 		tableDescr = d.(catalog.TableDescriptor)
 	}
 
-	_, err := constrainSpansByExpression(ctx, execCtx, filterExpr, tableDescr)
-	return err
+	projection, filter, err := cdceval.ParseProjectionAndFilter(details.SelectClause, details.WhereClause)
+	if err != nil {
+		return err
+	}
+	target := details.TargetSpecifications[0]
+	includeVirtual := details.Opts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
+	return cdceval.ValidatePredicatesForTarget(
+		ctx, execCtx.ExecCfg().Settings, &execCtx.ExtendedEvalContext().Context,
+		tableDescr, target, projection, filter, includeVirtual)
 }
 
 type changefeedResumer struct {

@@ -655,7 +655,7 @@ func TestEvaluatesProjection(t *testing.T) {
 func makeEvaluator(t *testing.T, st *cluster.Settings, selectStr string) (Evaluator, error) {
 	t.Helper()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	e := NewEvaluator(&evalCtx)
+	e := MakeEvaluator(&evalCtx)
 	if selectStr == "" {
 		return e, nil
 	}

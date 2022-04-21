@@ -40,9 +40,23 @@ type Evaluator struct {
 	evaluator *exprEval
 }
 
-// NewEvaluator returns new evaluator instance.
-func NewEvaluator(evalCtx *eval.Context) Evaluator {
+// MakeEvaluator returns initialized Evaluator.
+func MakeEvaluator(evalCtx *eval.Context) Evaluator {
 	return Evaluator{evalCtx: evalCtx.Copy()}
+}
+
+// NewEvaluatorForExpressions returns evaluator configured to process specified projection and filter expressions.
+func NewEvaluatorForExpressions(
+	evalCtx *eval.Context, projection tree.SelectExprs, filter tree.Expr,
+) (*Evaluator, error) {
+	e := MakeEvaluator(evalCtx)
+	if err := e.ConfigureProjection(projection); err != nil {
+		return nil, err
+	}
+	if err := e.ConfigureFilter(filter); err != nil {
+		return nil, err
+	}
+	return &e, nil
 }
 
 // ConfigureProjection configures this evaluator to evaluate projection
@@ -135,7 +149,7 @@ func (e *Evaluator) initEval(ctx context.Context, d *cdcevent.EventDescriptor) e
 
 type exprEval struct {
 	*cdcevent.EventDescriptor
-	semaCtx tree.SemaContext
+	semaCtx *tree.SemaContext
 	evalCtx *eval.Context
 
 	evalHelper *rowContainer         // evalHelper is a container tree.IndexedVarContainer.
@@ -162,7 +176,7 @@ func newExprEval(evalCtx *eval.Context, ed *cdcevent.EventDescriptor) *exprEval 
 	cols := ed.ResultColumns()
 	e := &exprEval{
 		EventDescriptor: ed,
-		semaCtx:         tree.MakeSemaContext(),
+		semaCtx:         newSemaCtx(),
 		evalCtx:         evalCtx.Copy(),
 		evalHelper:      &rowContainer{cols: cols},
 		projection:      cdcevent.MakeProjection(ed),
@@ -374,7 +388,7 @@ func (e *exprEval) typeCheck(
 ) (tree.TypedExpr, error) {
 	// If we have variable free immutable expressions, then we can just evaluate it right away.
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		ctx, expr, targetType, "cdc", &e.semaCtx, volatility.Immutable)
+		ctx, expr, targetType, "cdc", e.semaCtx, volatility.Immutable)
 	if err == nil {
 		d, err := eval.Expr(e.evalCtx, typedExpr)
 		if err != nil {
@@ -395,7 +409,7 @@ func (e *exprEval) typeCheck(
 	}
 
 	// Run type check & normalize.
-	typedExpr, err = expr.TypeCheck(ctx, &e.semaCtx, targetType)
+	typedExpr, err = expr.TypeCheck(ctx, e.semaCtx, targetType)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +437,7 @@ func (e *exprEval) evalExpr(
 			return nil, v.err
 		}
 
-		typedExpr, err := tree.TypeCheck(ctx, newExpr, &e.semaCtx, targetType)
+		typedExpr, err := tree.TypeCheck(ctx, newExpr, e.semaCtx, targetType)
 		if err != nil {
 			return nil, err
 		}
@@ -669,6 +683,18 @@ func (v *replaceIndexVarVisitor) VisitPost(expr tree.Expr) (newNode tree.Expr) {
 // in the Annotation field of evalCtx when evaluating expressions.
 const cdcAnnotationAddr tree.AnnotationIdx = iota + 1
 
+// rowEvalContextFromEvalContext returns rowEvalContext stored as an annotation
+// in evalCtx.
 func rowEvalContextFromEvalContext(evalCtx *eval.Context) *rowEvalContext {
 	return evalCtx.Annotations.Get(cdcAnnotationAddr).(*rowEvalContext)
+}
+
+// newSemaCtx returns new tree.SemaCtx configured for cdc.
+func newSemaCtx() *tree.SemaContext {
+	sema := tree.MakeSemaContext()
+	sema.SearchPath = &cdcCustomFunctionResolver{SearchPath: sessiondata.DefaultSearchPath}
+	sema.Properties.Require("cdc",
+		tree.RejectAggregates|tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectNestedGenerators,
+	)
+	return &sema
 }

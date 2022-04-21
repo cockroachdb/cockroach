@@ -11,12 +11,14 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,14 +34,15 @@ type eventContext struct {
 }
 
 type kvEventToRowConsumer struct {
-	frontier *span.Frontier
-	encoder  Encoder
-	scratch  bufalloc.ByteAllocator
-	sink     Sink
-	cursor   hlc.Timestamp
-	knobs    TestingKnobs
-	decoder  cdcevent.Decoder
-	details  jobspb.ChangefeedDetails
+	frontier  *span.Frontier
+	encoder   Encoder
+	scratch   bufalloc.ByteAllocator
+	sink      Sink
+	cursor    hlc.Timestamp
+	knobs     TestingKnobs
+	decoder   cdcevent.Decoder
+	details   jobspb.ChangefeedDetails
+	evaluator *cdceval.Evaluator
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
@@ -48,6 +51,7 @@ type kvEventToRowConsumer struct {
 func newKVEventToRowConsumer(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
+	evalCtx *eval.Context,
 	frontier *span.Frontier,
 	cursor hlc.Timestamp,
 	sink Sink,
@@ -61,6 +65,19 @@ func newKVEventToRowConsumer(
 	if err != nil {
 		return nil, err
 	}
+
+	var evaluator *cdceval.Evaluator
+	if details.SelectClause != "" {
+		projection, filter, err := cdceval.ParseProjectionAndFilter(details.SelectClause, details.WhereClause)
+		if err != nil {
+			return nil, err
+		}
+		evaluator, err = cdceval.NewEvaluatorForExpressions(evalCtx, projection, filter)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &kvEventToRowConsumer{
 		frontier:             frontier,
 		encoder:              encoder,
@@ -71,6 +88,7 @@ func newKVEventToRowConsumer(
 		knobs:                knobs,
 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 		topicNamer:           topicNamer,
+		evaluator:            evaluator,
 	}, nil
 }
 
@@ -133,6 +151,23 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 			return nil
 		}
 		return err
+	}
+
+	if c.evaluator != nil {
+		matches, err := c.evaluator.MatchesFilter(ctx, updatedRow, mvccTimestamp, prevRow)
+		if err != nil {
+			return err
+		}
+		if !matches {
+			// TODO(yevgeniy): Add metrics
+			return nil
+		}
+		projection, err := c.evaluator.Projection(ctx, updatedRow, mvccTimestamp, prevRow)
+		if err != nil {
+			return err
+		}
+		updatedRow = projection
+		prevRow = cdcevent.Row{}
 	}
 
 	topic, err := c.topicForEvent(updatedRow.Metadata)
