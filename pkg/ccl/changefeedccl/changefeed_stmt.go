@@ -625,7 +625,7 @@ func getTargetsAndTables(
 			}
 		} else {
 			_, qualified := opts[changefeedbase.OptFullTableName]
-			name, err := getChangefeedTargetName(ctx, td, p.ExecCfg(), p.ExtendedEvalContext().Txn, qualified)
+			name, err := getChangefeedTargetName(ctx, td, p.ExecCfg(), p.Txn(), qualified)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -935,7 +935,7 @@ func (b *changefeedResumer) handleChangefeedError(
 		const errorFmt = "job failed (%v) but is being paused because of %s=%s"
 		errorMessage := fmt.Sprintf(errorFmt, changefeedErr,
 			changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
-		return b.job.PauseRequested(ctx, jobExec.ExtendedEvalContext().Txn, func(ctx context.Context,
+		return b.job.PauseRequested(ctx, jobExec.Txn(), func(ctx context.Context,
 			planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
 			err := b.OnPauseRequest(ctx, jobExec, txn, progress)
 			if err != nil {
