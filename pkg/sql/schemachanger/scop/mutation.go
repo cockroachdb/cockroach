@@ -481,3 +481,9 @@ type DeleteSchedule struct {
 	mutationOp
 	ScheduleID int64
 }
+
+// RefreshStats is used to queue a table for stats refresh.
+type RefreshStats struct {
+	mutationOp
+	TableID descpb.ID
+}
