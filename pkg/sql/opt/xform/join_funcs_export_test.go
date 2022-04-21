@@ -10,5 +10,4 @@
 
 package xform
 
-var TestingMakeRangeFilterFromSpan = (*CustomFuncs).makeRangeFilterFromSpan
 var TestingIsCanonicalLookupJoinFilter = (*CustomFuncs).isCanonicalLookupJoinFilter
