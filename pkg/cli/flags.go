@@ -849,7 +849,12 @@ func init() {
 				"For details, see: "+build.MakeIssueURL(53404))
 
 		boolFlag(f, &demoCtx.DisableLicenseAcquisition, cliflags.DemoNoLicense)
+
 		boolFlag(f, &demoCtx.Multitenant, cliflags.DemoMultitenant)
+		// TODO(knz): Currently the multitenant UX for 'demo' is not
+		// satisfying for end-users. Let's not advertise it too much.
+		_ = f.MarkHidden(cliflags.DemoMultitenant.Name)
+
 		boolFlag(f, &demoCtx.SimulateLatency, cliflags.Global)
 		// The --empty flag is only valid for the top level demo command,
 		// so we use the regular flag set.
