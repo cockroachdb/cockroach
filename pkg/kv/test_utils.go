@@ -49,6 +49,7 @@ func OnlyFollowerReads(rec tracing.Recording) bool {
 func IsExpectedRelocateError(err error) bool {
 	allowlist := []string{
 		"descriptor changed",
+		"raced with a concurrent replication change",
 		"unable to remove replica .* which is not present",
 		"unable to add replica .* which is already present",
 		"none of the remaining voters .* are legal additions", // https://github.com/cockroachdb/cockroach/issues/74902
