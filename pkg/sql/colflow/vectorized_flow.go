@@ -188,9 +188,10 @@ func (f *vectorizedFlow) Setup(
 	helper := newVectorizedFlowCreatorHelper(f.FlowBase)
 
 	diskQueueCfg := colcontainer.DiskQueueCfg{
-		FS:             f.Cfg.TempFS,
-		DistSQLMetrics: f.Cfg.Metrics,
-		GetPather:      f,
+		FS:                  f.Cfg.TempFS,
+		GetPather:           f,
+		SpilledBytesWritten: f.Cfg.Metrics.SpilledBytesWritten,
+		SpilledBytesRead:    f.Cfg.Metrics.SpilledBytesRead,
 	}
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
 		return ctx, nil, err
@@ -279,6 +280,11 @@ func (f *vectorizedFlow) GetPath(ctx context.Context) string {
 	if err := f.Cfg.TempFS.MkdirAll(f.tempStorage.path); err != nil {
 		colexecerror.InternalError(errors.Wrap(err, "unable to create temporary storage directory"))
 	}
+	// We have just created the temporary directory which will be used for all
+	// disk-spilling operations of this flow, thus, it is a convenient place to
+	// increment the counter of the number of queries spilled - this code won't
+	// be executed for this flow in the future since we short-circuit above.
+	f.Cfg.Metrics.QueriesSpilled.Inc(1)
 	return f.tempStorage.path
 }
 
