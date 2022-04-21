@@ -440,10 +440,19 @@ func (s *ColIndexJoin) GetCumulativeContentionTime() time.Duration {
 // we can remove this limit.
 var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
 	"ColIndexJoin-batch-size",
-	4<<20, /* 4 MB */
-	1,     /* min */
-	4<<20, /* max */
+	productionIndexJoinBatchSize, /* defaultValue */
+	1,                            /* min */
+	productionIndexJoinBatchSize, /* max */
 ))
+
+const productionIndexJoinBatchSize = 4 << 20 /* 4MiB */
+
+func getIndexJoinBatchSize(forceProductionValue bool) int64 {
+	if forceProductionValue {
+		return productionIndexJoinBatchSize
+	}
+	return inputBatchSizeLimit
+}
 
 // NewColIndexJoin creates a new ColIndexJoin operator.
 //
@@ -528,7 +537,7 @@ func NewColIndexJoin(
 		usesStreamer:     useStreamer,
 		limitHintHelper:  execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
-	op.mem.inputBatchSizeLimit = inputBatchSizeLimit
+	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes)
 	op.prepareMemLimit(inputTypes)
 	if useStreamer {
 		op.streamerInfo.budgetLimit = 3 * memoryLimit
@@ -537,7 +546,7 @@ func NewColIndexJoin(
 			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
 		}
 		op.streamerInfo.diskMonitor = diskMonitor
-		if memoryLimit < inputBatchSizeLimit {
+		if memoryLimit < op.mem.inputBatchSizeLimit {
 			// If we have a low workmem limit, then we want to reduce the input
 			// batch size limit.
 			//
