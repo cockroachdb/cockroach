@@ -694,6 +694,7 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 	wantedCols exec.TableColumnOrdinalSet,
 	fixedVals []tree.TypedExpr,
 	eqCols []exec.TableColumnOrdinal,
+	locking opt.Locking,
 ) (zigzagPlanningSide, error) {
 	desc := table.(*optTable).desc
 	colCfg := scanColumnsConfig{wantedColumns: make([]tree.ColumnID, 0, wantedCols.Len())}
@@ -716,11 +717,13 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 	// TODO (cucaroach): update indexUsageStats.
 
 	return zigzagPlanningSide{
-		desc:        desc,
-		index:       index.(*optIndex).idx,
-		cols:        cols,
-		eqCols:      convertTableOrdinalsToInts(eqCols),
-		fixedValues: valuesSpec,
+		desc:              desc,
+		index:             index.(*optIndex).idx,
+		cols:              cols,
+		eqCols:            convertTableOrdinalsToInts(eqCols),
+		fixedValues:       valuesSpec,
+		lockingStrength:   descpb.ToScanLockingStrength(locking.Strength),
+		lockingWaitPolicy: descpb.ToScanLockingWaitPolicy(locking.WaitPolicy),
 	}, nil
 }
 
@@ -730,11 +733,13 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 	leftCols exec.TableColumnOrdinalSet,
 	leftFixedVals []tree.TypedExpr,
 	leftEqCols []exec.TableColumnOrdinal,
+	leftLocking opt.Locking,
 	rightTable cat.Table,
 	rightIndex cat.Index,
 	rightCols exec.TableColumnOrdinalSet,
 	rightFixedVals []tree.TypedExpr,
 	rightEqCols []exec.TableColumnOrdinal,
+	rightLocking opt.Locking,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
@@ -744,11 +749,11 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 
 	sides := make([]zigzagPlanningSide, 2)
 	var err error
-	sides[0], err = e.constructZigzagJoinSide(planCtx, leftTable, leftIndex, leftCols, leftFixedVals, leftEqCols)
+	sides[0], err = e.constructZigzagJoinSide(planCtx, leftTable, leftIndex, leftCols, leftFixedVals, leftEqCols, leftLocking)
 	if err != nil {
 		return nil, err
 	}
-	sides[1], err = e.constructZigzagJoinSide(planCtx, rightTable, rightIndex, rightCols, rightFixedVals, rightEqCols)
+	sides[1], err = e.constructZigzagJoinSide(planCtx, rightTable, rightIndex, rightCols, rightFixedVals, rightEqCols, rightLocking)
 	if err != nil {
 		return nil, err
 	}

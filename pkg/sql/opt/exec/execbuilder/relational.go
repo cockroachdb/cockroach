@@ -1982,6 +1982,13 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	leftOrdinals, leftColMap := b.getColumns(leftCols, join.LeftTable)
 	rightOrdinals, rightColMap := b.getColumns(rightCols, join.RightTable)
 
+	leftLocking := join.LeftLocking
+	rightLocking := join.RightLocking
+	if b.forceForUpdateLocking {
+		leftLocking = forUpdateLocking
+		rightLocking = forUpdateLocking
+	}
+
 	allCols := joinOutputMap(leftColMap, rightColMap)
 
 	res := execPlan{outputCols: allCols}
@@ -2022,11 +2029,13 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 		leftOrdinals,
 		leftFixedVals,
 		leftEqCols,
+		leftLocking,
 		rightTable,
 		rightIndex,
 		rightOrdinals,
 		rightFixedVals,
 		rightEqCols,
+		rightLocking,
 		onExpr,
 		res.reqOrdering(join),
 	)

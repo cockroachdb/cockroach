@@ -860,7 +860,10 @@ func (ef *execFactory) ConstructInvertedJoin(
 // Helper function to create a scanNode from just a table / index descriptor
 // and requested cols.
 func (ef *execFactory) constructScanForZigzag(
-	index catalog.Index, tableDesc catalog.TableDescriptor, cols exec.TableColumnOrdinalSet,
+	index catalog.Index,
+	tableDesc catalog.TableDescriptor,
+	cols exec.TableColumnOrdinalSet,
+	locking opt.Locking,
 ) (*scanNode, error) {
 
 	colCfg := scanColumnsConfig{
@@ -886,6 +889,8 @@ func (ef *execFactory) constructScanForZigzag(
 	}
 
 	scan.index = index
+	scan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 
 	return scan, nil
 }
@@ -897,11 +902,13 @@ func (ef *execFactory) ConstructZigzagJoin(
 	leftCols exec.TableColumnOrdinalSet,
 	leftFixedVals []tree.TypedExpr,
 	leftEqCols []exec.TableColumnOrdinal,
+	leftLocking opt.Locking,
 	rightTable cat.Table,
 	rightIndex cat.Index,
 	rightCols exec.TableColumnOrdinalSet,
 	rightFixedVals []tree.TypedExpr,
 	rightEqCols []exec.TableColumnOrdinal,
+	rightLocking opt.Locking,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
@@ -910,11 +917,11 @@ func (ef *execFactory) ConstructZigzagJoin(
 	rightIdx := rightIndex.(*optIndex).idx
 	rightTabDesc := rightTable.(*optTable).desc
 
-	leftScan, err := ef.constructScanForZigzag(leftIdx, leftTabDesc, leftCols)
+	leftScan, err := ef.constructScanForZigzag(leftIdx, leftTabDesc, leftCols, leftLocking)
 	if err != nil {
 		return nil, err
 	}
-	rightScan, err := ef.constructScanForZigzag(rightIdx, rightTabDesc, rightCols)
+	rightScan, err := ef.constructScanForZigzag(rightIdx, rightTabDesc, rightCols, rightLocking)
 	if err != nil {
 		return nil, err
 	}

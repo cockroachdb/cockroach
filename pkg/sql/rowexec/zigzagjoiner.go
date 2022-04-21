@@ -486,10 +486,8 @@ func (z *zigzagJoiner) setupInfo(
 		neededCols,
 		flowCtx.EvalCtx.Mon,
 		info.alloc,
-		// NB: zigzag joins are disabled when a row-level locking clause is
-		// supplied, so there is no locking strength on *ZigzagJoinerSpec.
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
+		spec.LockingStrengths[side],
+		spec.LockingWaitPolicies[side],
 		false, /* withSystemColumns */
 	)
 	if err != nil {

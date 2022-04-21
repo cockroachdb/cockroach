@@ -635,6 +635,15 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return canDistribute, nil
 
 	case *zigzagJoinNode:
+		for _, side := range n.sides {
+			if side.scan.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+				// ZigZag joins that are performing row-level locking cannot
+				// currently be distributed because their locks would not be
+				// propagated back to the root transaction coordinator.
+				// TODO(nvanbenschoten): lift this restriction.
+				return cannotDistribute, cannotDistributeRowLevelLockingErr
+			}
+		}
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
@@ -2604,11 +2613,13 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		}
 
 		sides[i] = zigzagPlanningSide{
-			desc:        side.scan.desc,
-			index:       side.scan.index,
-			cols:        side.scan.cols,
-			eqCols:      side.eqCols,
-			fixedValues: valuesSpec,
+			desc:              side.scan.desc,
+			index:             side.scan.index,
+			cols:              side.scan.cols,
+			eqCols:            side.eqCols,
+			fixedValues:       valuesSpec,
+			lockingStrength:   side.scan.lockingStrength,
+			lockingWaitPolicy: side.scan.lockingWaitPolicy,
 		}
 	}
 
@@ -2621,11 +2632,13 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 }
 
 type zigzagPlanningSide struct {
-	desc        catalog.TableDescriptor
-	index       catalog.Index
-	cols        []catalog.Column
-	eqCols      []int
-	fixedValues *execinfrapb.ValuesCoreSpec
+	desc              catalog.TableDescriptor
+	index             catalog.Index
+	cols              []catalog.Column
+	eqCols            []int
+	fixedValues       *execinfrapb.ValuesCoreSpec
+	lockingStrength   descpb.ScanLockingStrength
+	lockingWaitPolicy descpb.ScanLockingWaitPolicy
 }
 
 type zigzagPlanningInfo struct {
@@ -2644,6 +2657,8 @@ func (dsp *DistSQLPlanner) planZigzagJoin(
 	indexOrdinals := make([]uint32, len(pi.sides))
 	cols := make([]execinfrapb.Columns, len(pi.sides))
 	fixedValues := make([]*execinfrapb.ValuesCoreSpec, len(pi.sides))
+	lockingStrengths := make([]descpb.ScanLockingStrength, len(pi.sides))
+	lockingWaitPolicies := make([]descpb.ScanLockingWaitPolicy, len(pi.sides))
 
 	for i, side := range pi.sides {
 		tables[i] = *side.desc.TableDesc()
@@ -2657,16 +2672,20 @@ func (dsp *DistSQLPlanner) planZigzagJoin(
 			cols[i].Columns[j] = uint32(col)
 		}
 		fixedValues[i] = side.fixedValues
+		lockingStrengths[i] = side.lockingStrength
+		lockingWaitPolicies[i] = side.lockingWaitPolicy
 	}
 
 	// The zigzag join node only represents inner joins, so hardcode Type to
 	// InnerJoin.
 	zigzagJoinerSpec := execinfrapb.ZigzagJoinerSpec{
-		Tables:        tables,
-		EqColumns:     cols,
-		IndexOrdinals: indexOrdinals,
-		FixedValues:   fixedValues,
-		Type:          descpb.InnerJoin,
+		Tables:              tables,
+		EqColumns:           cols,
+		IndexOrdinals:       indexOrdinals,
+		FixedValues:         fixedValues,
+		Type:                descpb.InnerJoin,
+		LockingStrengths:    lockingStrengths,
+		LockingWaitPolicies: lockingWaitPolicies,
 	}
 
 	// The internal schema of the zigzag joiner is:

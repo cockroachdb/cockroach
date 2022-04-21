@@ -486,6 +486,15 @@ message ZigzagJoinerSpec {
   repeated ValuesCoreSpec fixed_values = 5;
 
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+
+  // Indicates the row-level locking strength to be used by the scan. If set to
+  // FOR_NONE, no row-level locking should be performed.
+  repeated sqlbase.ScanLockingStrength locking_strengths = 1000 [(gogoproto.nullable) = false];
+
+  // Indicates the policy to be used by the scan for handling conflicting locks
+  // held by other active transactions when attempting to lock rows. Always set
+  // to BLOCK when locking_strength is FOR_NONE.
+  repeated sqlbase.ScanLockingWaitPolicy locking_wait_policies = 1001 [(gogoproto.nullable) = false];
 }
 
 // MergeJoinerSpec is the specification for a merge join processor. The processor
