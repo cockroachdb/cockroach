@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // Boundary returns the boundary of a given Geometry.
@@ -42,6 +44,10 @@ func Centroid(g geo.Geometry) (geo.Geometry, error) {
 
 // MinimumBoundingCircle returns minimum bounding circle of an EWKB
 func MinimumBoundingCircle(g geo.Geometry) (geo.Geometry, geo.Geometry, float64, error) {
+	if BoundingBoxHasInfiniteCoordinates(g) {
+		return geo.Geometry{}, geo.Geometry{}, 0, pgerror.Newf(pgcode.InvalidParameterValue, "value out of range: overflow")
+	}
+
 	polygonEWKB, centroidEWKB, radius, err := geos.MinimumBoundingCircle(g.EWKB())
 	if err != nil {
 		return geo.Geometry{}, geo.Geometry{}, 0, err

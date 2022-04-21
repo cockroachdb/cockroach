@@ -60,6 +60,9 @@ func LineMerge(g geo.Geometry) (geo.Geometry, error) {
 	if g.Empty() {
 		return g, nil
 	}
+	if BoundingBoxHasInfiniteCoordinates(g) {
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "value out of range: overflow")
+	}
 	ret, err := geos.LineMerge(g.EWKB())
 	if err != nil {
 		return geo.Geometry{}, err
