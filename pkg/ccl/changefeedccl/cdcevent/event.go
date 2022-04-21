@@ -177,6 +177,8 @@ func (c ResultColumn) Ordinal() int {
 type EventDescriptor struct {
 	Metadata
 
+	td catalog.TableDescriptor
+
 	// List of result columns produced by this descriptor.
 	// This may be different from the table descriptors public columns
 	// (e.g. in case of projection).
@@ -188,7 +190,8 @@ type EventDescriptor struct {
 	udtCols   []int // Columns containing UDTs.
 }
 
-func newEventDescriptor(
+// NewEventDescriptor returns EventDescriptor for specified table and family descriptors.
+func NewEventDescriptor(
 	desc catalog.TableDescriptor,
 	family *descpb.ColumnFamilyDescriptor,
 	includeVirtualColumns bool,
@@ -204,6 +207,7 @@ func newEventDescriptor(
 			HasOtherFamilies: desc.NumFamilies() > 1,
 			SchemaTS:         schemaTS,
 		},
+		td: desc,
 	}
 
 	// addColumn is a helper to add a column to this descriptor.
@@ -281,9 +285,30 @@ func (d *EventDescriptor) ResultColumns() []ResultColumn {
 	return d.cols
 }
 
-// Equals returns true if this descriptor equals other.
-func (d *EventDescriptor) Equals(other *EventDescriptor) bool {
-	return other != nil && d.TableID == other.TableID && d.Version == other.Version && d.FamilyID == other.FamilyID
+// EqualsVersion returns true if this descriptor equals other.
+func (d *EventDescriptor) EqualsVersion(other *EventDescriptor) bool {
+	return d.TableID == other.TableID &&
+		d.Version == other.Version &&
+		d.FamilyID == other.FamilyID
+}
+
+// EqualsWithUDTCheck returns true if event descriptors are the same version and
+// their user defined types (if any) are also matching.
+func (d *EventDescriptor) EqualsWithUDTCheck(other *EventDescriptor) bool {
+	return d.EqualsVersion(other) &&
+		catalog.UserDefinedTypeColsHaveSameVersion(d.td, other.td)
+}
+
+// HasUserDefinedTypes returns true if this descriptor contains user defined columns.
+func (d *EventDescriptor) HasUserDefinedTypes() bool {
+	return len(d.udtCols) > 0
+}
+
+// TableDescriptor  returns underlying table descriptor.  This method is exposed
+// to make it easier to integrate with the rest of descriptor APIs; prefer to use
+// higher level methods/structs (s.a. Metadata) instead.
+func (d *EventDescriptor) TableDescriptor() catalog.TableDescriptor {
+	return d.td
 }
 
 type eventDescriptorFactory func(
@@ -323,19 +348,12 @@ func getEventDescriptorCached(
 
 	if v, ok := cache.Get(idVer); ok {
 		ed := v.(*EventDescriptor)
-
-		// Normally, this is a no-op since majority of changefeeds do not use UDTs.
-		// However, in case we do, we must update cached UDT information based on this
-		// descriptor since it has up-to-date type information.
-		for _, udtColIdx := range ed.udtCols {
-			ord := ed.cols[udtColIdx].ord
-			ed.cols[udtColIdx].Typ = desc.PublicColumns()[ord].GetType()
+		if catalog.UserDefinedTypeColsHaveSameVersion(ed.td, desc) {
+			return ed, nil
 		}
-
-		return ed, nil
 	}
 
-	ed, err := newEventDescriptor(desc, family, includeVirtual, schemaTS)
+	ed, err := NewEventDescriptor(desc, family, includeVirtual, schemaTS)
 	if err != nil {
 		return nil, err
 	}
@@ -490,7 +508,7 @@ func TestingMakeEventRow(
 		panic(err) // primary column family always exists.
 	}
 	const includeVirtual = false
-	ed, err := newEventDescriptor(desc, family, includeVirtual, hlc.Timestamp{})
+	ed, err := NewEventDescriptor(desc, family, includeVirtual, hlc.Timestamp{})
 	if err != nil {
 		panic(err)
 	}
