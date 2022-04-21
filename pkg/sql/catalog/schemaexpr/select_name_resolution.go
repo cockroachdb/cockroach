@@ -111,3 +111,23 @@ func ResolveNamesUsingVisitor(
 	expr, _ = tree.WalkExpr(v, expr)
 	return expr, v.err
 }
+
+// Err returns visitor error.
+func (v *NameResolutionVisitor) Err() error {
+	return v.err
+}
+
+// MakeNameResolutionVisitor returns initialized name resolution visitor.
+func MakeNameResolutionVisitor(
+	source *colinfo.DataSourceInfo,
+	ivarHelper tree.IndexedVarHelper,
+	searchPath sessiondata.SearchPath,
+) NameResolutionVisitor {
+	return NameResolutionVisitor{
+		iVarHelper: ivarHelper,
+		searchPath: searchPath,
+		resolver: colinfo.ColumnResolver{
+			Source: source,
+		},
+	}
+}
