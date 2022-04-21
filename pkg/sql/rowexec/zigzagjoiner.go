@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -284,6 +285,19 @@ func newZigzagJoiner(
 		return nil, errors.AssertionFailedf("only inner zigzag joins are supported, %s requested", spec.Type)
 	}
 	z := &zigzagJoiner{}
+
+	// Make sure the key column types are hydrated. The fetched column types
+	// will be hydrated in ProcessorBase.Init (via joinerBase.init below).
+	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	for _, fetchSpec := range []descpb.IndexFetchSpec{spec.Sides[0].FetchSpec, spec.Sides[1].FetchSpec} {
+		for i := range fetchSpec.KeyAndSuffixColumns {
+			if err := typedesc.EnsureTypeIsHydrated(
+				flowCtx.EvalCtx.Ctx(), fetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
+			); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	leftColumnTypes := spec.Sides[0].FetchSpec.FetchedColumnTypes()
 	rightColumnTypes := spec.Sides[1].FetchSpec.FetchedColumnTypes()

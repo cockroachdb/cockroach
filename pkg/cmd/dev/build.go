@@ -75,6 +75,7 @@ var buildTargetMapping = map[string]string{
 	"crlfmt":           "@com_github_cockroachdb_crlfmt//:crlfmt",
 	"dev":              "//pkg/cmd/dev:dev",
 	"docgen":           "//pkg/cmd/docgen:docgen",
+	"docs-issue-gen":   "//pkg/cmd/docs-issue-generation:docs-issue-generation",
 	"execgen":          "//pkg/sql/colexec/execgen/cmd/execgen:execgen",
 	"gofmt":            "@com_github_cockroachdb_gostdlib//cmd/gofmt:gofmt",
 	"goimports":        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports:goimports",

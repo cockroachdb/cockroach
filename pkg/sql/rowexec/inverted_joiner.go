@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -217,6 +218,17 @@ func newInvertedJoiner(
 		outputColTypes = append(outputColTypes, rightColTypes...)
 		if spec.OutputGroupContinuationForLeftRow {
 			outputColTypes = append(outputColTypes, types.Bool)
+		}
+	}
+
+	// Make sure the key column types are hydrated. The fetched column types
+	// will be hydrated in ProcessorBase.Init below.
+	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	for i := range spec.FetchSpec.KeyAndSuffixColumns {
+		if err := typedesc.EnsureTypeIsHydrated(
+			flowCtx.EvalCtx.Ctx(), spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
+		); err != nil {
+			return nil, err
 		}
 	}
 
