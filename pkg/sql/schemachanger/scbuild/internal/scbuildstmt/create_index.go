@@ -252,9 +252,10 @@ func maybeCreateAndAddShardCol(
 	spec := addColumnSpec{
 		tbl: tbl,
 		col: &scpb.Column{
-			TableID:  tbl.TableID,
-			ColumnID: shardColID,
-			IsHidden: true,
+			TableID:        tbl.TableID,
+			ColumnID:       shardColID,
+			IsHidden:       true,
+			PgAttributeNum: catid.PGAttributeNum(shardColID),
 		},
 		name: &scpb.ColumnName{
 			TableID:  tbl.TableID,
