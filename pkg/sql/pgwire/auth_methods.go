@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -170,7 +171,7 @@ func passwordAuthenticator(
 	}
 
 	// Extract the password response from the client.
-	password, err := passwordString(pwdData)
+	passwordStr, err := passwordString(pwdData)
 	if err != nil {
 		c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 		return err
@@ -185,7 +186,7 @@ func passwordAuthenticator(
 	if expired {
 		c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
 		return errExpiredPassword
-	} else if hashedPassword.Method() == security.HashMissingPassword {
+	} else if hashedPassword.Method() == password.HashMissingPassword {
 		c.LogAuthInfof(ctx, "user has no password defined")
 		// NB: the failure reason will be automatically handled by the fallback
 		// in auth.go (and report CREDENTIALS_INVALID).
@@ -193,7 +194,7 @@ func passwordAuthenticator(
 
 	// Now check the cleartext password against the retrieved credentials.
 	err = security.UserAuthPasswordHook(
-		false /*insecure*/, password, hashedPassword,
+		false /*insecure*/, passwordStr, hashedPassword,
 	)(ctx, systemIdentity, clientConnection)
 
 	if err == nil {
@@ -207,7 +208,7 @@ func passwordAuthenticator(
 		sql.MaybeUpgradeStoredPasswordHash(ctx,
 			execCfg,
 			systemIdentity,
-			password, hashedPassword)
+			passwordStr, hashedPassword)
 	}
 
 	return err
@@ -293,14 +294,14 @@ func scramAuthenticator(
 		if expired {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
 			return creds, errExpiredPassword
-		} else if hashedPassword.Method() != security.HashSCRAMSHA256 {
+		} else if hashedPassword.Method() != password.HashSCRAMSHA256 {
 			const credentialsNotSCRAM = "user password hash not in SCRAM format"
 			c.LogAuthInfof(ctx, credentialsNotSCRAM)
 			return creds, errors.New(credentialsNotSCRAM)
 		}
 
 		// The method check above ensures this cast is always valid.
-		ok, creds := security.GetSCRAMStoredCredentials(hashedPassword)
+		ok, creds := password.GetSCRAMStoredCredentials(hashedPassword)
 		if !ok {
 			return creds, errors.AssertionFailedf("programming error: hash method is SCRAM but no stored credentials")
 		}
@@ -513,10 +514,10 @@ func authAutoSelectPasswordProtocol(
 		// each authenticator, so we might as well use them. To do this,
 		// we capture the same information into the closure that the
 		// authenticator will call anyway.
-		newpwfn := func(ctx context.Context) (bool, security.PasswordHash, error) { return expired, hashedPassword, err }
+		newpwfn := func(ctx context.Context) (bool, password.PasswordHash, error) { return expired, hashedPassword, err }
 
 		// Was the password using the bcrypt hash encoding?
-		if err == nil && hashedPassword.Method() == security.HashBCrypt {
+		if err == nil && hashedPassword.Method() == password.HashBCrypt {
 			// Yes: we have no choice but to request a cleartext password.
 			c.LogAuthInfof(ctx, "found stored crdb-bcrypt credentials; requesting cleartext password")
 			return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
