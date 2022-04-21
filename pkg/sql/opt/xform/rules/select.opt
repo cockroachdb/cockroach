@@ -65,10 +65,7 @@
 # doesn't seem to be a strong reason to support this, but if one comes up, it
 # should be possible to lift this restriction.
 [GenerateZigzagJoins, Explore]
-(Select
-    (Scan $scan:*) & (IsCanonicalScan $scan) & ^(IsLocking $scan)
-    $filters:*
-)
+(Select (Scan $scan:*) & (IsCanonicalScan $scan) $filters:*)
 =>
 (GenerateZigzagJoins $scan $filters)
 
@@ -88,7 +85,6 @@
 (Select
     (Scan $scan:*) &
         (IsCanonicalScan $scan) &
-        ^(IsLocking $scan) &
         (HasInvertedIndexes $scan)
     $filters:*
 )
