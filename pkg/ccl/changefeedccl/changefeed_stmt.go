@@ -876,6 +876,14 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 			)
 		}
 	}
+	{
+		_, isSet := details.Opts[changefeedbase.OptPrimaryKeyFilter]
+		if isSet {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`option %s is currently unsupported`, changefeedbase.OptPrimaryKeyFilter,
+			)
+		}
+	}
 	return details, nil
 }
 
