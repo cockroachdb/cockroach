@@ -83,54 +83,6 @@ DROP TABLE defaultdb.shipments CASCADE;
     columnId: 2
     pgAttributeNum: 2
     tableId: 111
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 109
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 109
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 3}, ABSENT], PUBLIC]
-  details:
-    columnId: 3
-    comment: __placeholder_comment__
-    pgAttributeNum: 3
-    tableId: 109
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 4}, ABSENT], PUBLIC]
-  details:
-    columnId: 4
-    comment: __placeholder_comment__
-    pgAttributeNum: 4
-    tableId: 109
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 5}, ABSENT], PUBLIC]
-  details:
-    columnId: 5
-    comment: __placeholder_comment__
-    pgAttributeNum: 5
-    tableId: 109
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 6}, ABSENT], PUBLIC]
-  details:
-    columnId: 6
-    comment: __placeholder_comment__
-    pgAttributeNum: 6
-    tableId: 109
-- [[ColumnComment:{DescID: 111, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 111
-- [[ColumnComment:{DescID: 111, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 111
 - [[ColumnDefaultExpression:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -281,16 +233,6 @@ DROP TABLE defaultdb.shipments CASCADE;
     isNullable: true
     isRelationBeingDropped: true
     tableId: 111
-- [[ConstraintComment:{DescID: 109, ConstraintID: 2}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    constraintId: 2
-    tableId: 109
-- [[ConstraintComment:{DescID: 109, ConstraintID: 3}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    constraintId: 3
-    tableId: 109
 - [[ConstraintName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC]
   details:
     constraintId: 2
@@ -318,11 +260,6 @@ DROP TABLE defaultdb.shipments CASCADE;
     referencedColumnIds:
     - 2
     referencedTableId: 105
-    tableId: 109
-- [[IndexComment:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    indexId: 1
     tableId: 109
 - [[IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
@@ -399,18 +336,6 @@ DROP TABLE defaultdb.shipments CASCADE;
 - [[Table:{DescID: 109}, ABSENT], PUBLIC]
   details:
     tableId: 109
-- [[TableComment:{DescID: 109}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 109
-- [[TableComment:{DescID: 110}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 110
-- [[TableComment:{DescID: 111}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 111
 - [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 109
