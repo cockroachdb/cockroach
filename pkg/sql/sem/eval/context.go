@@ -155,8 +155,6 @@ type Context struct {
 
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn
-	// A handle to the database.
-	DB *kv.DB
 
 	ReCache *tree.RegexpCache
 
@@ -197,9 +195,32 @@ type Context struct {
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
 	KVStoresIterator kvserverbase.StoresIterator
+
+	// ConsistencyChecker is to generate the results in calls to
+	// crdb_internal.check_consistency.
+	ConsistencyChecker ConsistencyCheckRunner
+
+	// RangeProber is used in calls to crdb_internal.probe_ranges.
+	RangeProber RangeProber
 }
 
 var _ tree.ParseTimeContext = &Context{}
+
+// ConsistencyCheckRunner is an interface embedded in eval.Context used by
+// crdb_internal.check_consistency.
+type ConsistencyCheckRunner interface {
+	CheckConsistency(
+		ctx context.Context, from, to roachpb.Key, mode roachpb.ChecksumMode,
+	) (*roachpb.CheckConsistencyResponse, error)
+}
+
+// RangeProber is an interface embedded in eval.Context used by
+// crdb_internal.probe_ranges.
+type RangeProber interface {
+	RunProbe(
+		ctx context.Context, key roachpb.Key, isWrite bool,
+	) error
+}
 
 // UnwrapDatum encapsulates UnwrapDatum for use in the tree.CompareContext.
 func (ec *Context) UnwrapDatum(d tree.Datum) tree.Datum {

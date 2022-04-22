@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -63,13 +64,10 @@ func runImport(
 	}
 
 	evalCtx := flowCtx.NewEvalCtx()
-	// TODO(adityamaru): Should we just plumb the flowCtx instead of this
-	// assignment.
-	evalCtx.DB = flowCtx.Cfg.DB
 	evalCtx.Regions = makeImportRegionOperator(spec.DatabasePrimaryRegion)
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.TypeResolver = importResolver
-	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider)
+	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider, flowCtx.Cfg.DB)
 	if err != nil {
 		return nil, err
 	}
@@ -461,6 +459,7 @@ type parallelImportContext struct {
 	targetCols       tree.NameList           // List of columns to import.  nil if importing all columns.
 	kvCh             chan row.KVBatch        // Channel for sending KV batches.
 	seqChunkProvider *row.SeqChunkProvider   // Used to reserve chunks of sequence values.
+	db               *kv.DB
 }
 
 // importFileContext describes state specific to a file being imported.
@@ -485,11 +484,11 @@ func handleCorruptRow(ctx context.Context, fileCtx *importFileContext, err error
 }
 
 func makeDatumConverter(
-	ctx context.Context, importCtx *parallelImportContext, fileCtx *importFileContext,
+	ctx context.Context, importCtx *parallelImportContext, fileCtx *importFileContext, db *kv.DB,
 ) (*row.DatumRowConverter, error) {
 	conv, err := row.NewDatumRowConverter(
 		ctx, importCtx.semaCtx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx,
-		importCtx.kvCh, importCtx.seqChunkProvider, nil /* metrics */)
+		importCtx.kvCh, importCtx.seqChunkProvider, nil /* metrics */, db)
 	if err == nil {
 		conv.KvBatch.Source = fileCtx.source
 	}
@@ -694,7 +693,7 @@ func (p *parallelImporter) importWorker(
 	fileCtx *importFileContext,
 	minEmitted []int64,
 ) error {
-	conv, err := makeDatumConverter(ctx, importCtx, fileCtx)
+	conv, err := makeDatumConverter(ctx, importCtx, fileCtx, importCtx.db)
 	if err != nil {
 		return err
 	}

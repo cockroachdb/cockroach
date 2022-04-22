@@ -277,6 +277,7 @@ func importGenUUID(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) 
 type SeqChunkProvider struct {
 	JobID    jobspb.JobID
 	Registry *jobs.Registry
+	DB       *kv.DB
 }
 
 // RequestChunk updates seqMetadata with information about the chunk of sequence
@@ -287,7 +288,7 @@ func (j *SeqChunkProvider) RequestChunk(
 	evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
 ) error {
 	var hasAllocatedChunk bool
-	return evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
+	return j.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		var foundFromPreviouslyAllocatedChunk bool
 		resolveChunkFunc := func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
@@ -306,7 +307,7 @@ func (j *SeqChunkProvider) RequestChunk(
 
 			// Reserve a new sequence value chunk at the KV level.
 			if !hasAllocatedChunk {
-				if err := reserveChunkOfSeqVals(evalCtx, c, seqMetadata); err != nil {
+				if err := reserveChunkOfSeqVals(evalCtx, c, seqMetadata, j.DB); err != nil {
 					return err
 				}
 				hasAllocatedChunk = true
@@ -444,7 +445,7 @@ func (j *SeqChunkProvider) checkForPreviouslyAllocatedChunks(
 // reserveChunkOfSeqVals ascertains the size of the next chunk, and reserves it
 // at the KV level. The seqMetadata is updated to reflect this.
 func reserveChunkOfSeqVals(
-	evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
+	evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata, db *kv.DB,
 ) error {
 	seqOpts := seqMetadata.seqDesc.GetSequenceOpts()
 	newChunkSize := int64(initialChunkSize)
@@ -468,7 +469,7 @@ func reserveChunkOfSeqVals(
 	incrementValBy := newChunkSize * seqOpts.Increment
 	// incrementSequenceByVal keeps retrying until it is able to find a slot
 	// of incrementValBy.
-	seqVal, err := incrementSequenceByVal(evalCtx.Context, seqMetadata.seqDesc, evalCtx.DB,
+	seqVal, err := incrementSequenceByVal(evalCtx.Context, seqMetadata.seqDesc, db,
 		evalCtx.Codec, incrementValBy)
 	if err != nil {
 		return err

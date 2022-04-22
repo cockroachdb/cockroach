@@ -82,7 +82,6 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 
 	evalCtx := &eval.Context{
 		Context: ctx,
-		DB:      db,
 		Codec:   keys.TODOSQLCodec,
 	}
 
@@ -188,7 +187,9 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			job := createMockImportJob(ctx, t, registry, test.allocatedChunks, test.resumePos)
-			j := &SeqChunkProvider{Registry: registry, JobID: job.ID()}
+			j := &SeqChunkProvider{
+				Registry: registry, JobID: job.ID(), DB: db,
+			}
 			annot := &CellInfoAnnotation{
 				sourceID: 0,
 				rowID:    test.rowID,

@@ -1595,9 +1595,9 @@ func (j *jsonPopulateRecordSetGenerator) Values() (tree.Datums, error) {
 }
 
 type checkConsistencyGenerator struct {
-	db       *kv.DB
-	from, to roachpb.Key
-	mode     roachpb.ChecksumMode
+	consistencyChecker eval.ConsistencyCheckRunner
+	from, to           roachpb.Key
+	mode               roachpb.ChecksumMode
 	// remainingRows is populated by Start(). Each Next() call peels of the first
 	// row and moves it to curRow.
 	remainingRows []roachpb.CheckConsistencyResponse_Result
@@ -1640,10 +1640,10 @@ func makeCheckConsistencyGenerator(
 	}
 
 	return &checkConsistencyGenerator{
-		db:   ctx.DB,
-		from: keyFrom,
-		to:   keyTo,
-		mode: mode,
+		consistencyChecker: ctx.ConsistencyChecker,
+		from:               keyFrom,
+		to:                 keyTo,
+		mode:               mode,
 	}, nil
 }
 
@@ -1659,23 +1659,10 @@ func (*checkConsistencyGenerator) ResolvedType() *types.T {
 
 // Start is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error {
-	var b kv.Batch
-	b.AddRawRequest(&roachpb.CheckConsistencyRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    c.from,
-			EndKey: c.to,
-		},
-		Mode: c.mode,
-		// No meaningful diff can be created if we're checking the stats only,
-		// so request one only if a full check is run.
-		WithDiff: c.mode == roachpb.ChecksumMode_CHECK_FULL,
-	})
-	// NB: DistSender has special code to avoid parallelizing the request if
-	// we're requesting CHECK_FULL.
-	if err := c.db.Run(ctx, &b); err != nil {
+	resp, err := c.consistencyChecker.CheckConsistency(ctx, c.from, c.to, c.mode)
+	if err != nil {
 		return err
 	}
-	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.CheckConsistencyResponse)
 	c.remainingRows = resp.Result
 	return nil
 }

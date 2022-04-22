@@ -51,6 +51,9 @@ func TestMysqldumpDataReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
 	files := getMysqldumpTestdata(t)
 
 	ctx := context.Background()
@@ -64,7 +67,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	// a parameter used for generating unique rowid, random, and gen_random_uuid as default
 	// expressions. Here, the parameter doesn't matter so we pass in 0.
 	converter, err := newMysqldumpReader(ctx, &semaCtx, kvCh, 0 /*walltime*/, tables,
-		testEvalCtx, opts)
+		testEvalCtx, opts, db)
 	if err != nil {
 		t.Fatal(err)
 	}

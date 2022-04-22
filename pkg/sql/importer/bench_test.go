@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -76,6 +78,8 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 	tableID := descpb.ID(bootstrap.TestingUserDescID(0))
 	ts := timeutil.Now()
 
+	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
+
 	var bytes int64
 	b.ResetTimer()
 	for _, t := range g.Tables() {
@@ -89,7 +93,7 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(kvCh)
 			wc := importer.NewWorkloadKVConverter(
-				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
+				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh, db)
 			evalCtx := &eval.Context{
 				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 				Codec:            keys.SystemSQLCodec,

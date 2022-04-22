@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -70,6 +71,7 @@ func newMysqldumpReader(
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *eval.Context,
 	opts roachpb.MysqldumpOptions,
+	db *kv.DB,
 ) (*mysqldumpReader, error) {
 	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh, walltime: walltime, opts: opts}
 
@@ -81,7 +83,7 @@ func newMysqldumpReader(
 		}
 		conv, err := row.NewDatumRowConverter(ctx, semaCtx, tabledesc.NewBuilder(table.Desc).
 			BuildImmutableTable(), nil /* targetColNames */, evalCtx, kvCh,
-			nil /* seqChunkProvider */, nil /* metrics */)
+			nil /* seqChunkProvider */, nil /* metrics */, db)
 		if err != nil {
 			return nil, err
 		}

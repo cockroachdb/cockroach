@@ -20,6 +20,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -51,6 +52,7 @@ func newPgCopyReader(
 	tableDesc catalog.TableDescriptor,
 	targetCols tree.NameList,
 	evalCtx *eval.Context,
+	db *kv.DB,
 ) (*pgCopyReader, error) {
 	return &pgCopyReader{
 		importCtx: &parallelImportContext{
@@ -61,6 +63,7 @@ func newPgCopyReader(
 			tableDesc:  tableDesc,
 			targetCols: targetCols,
 			kvCh:       kvCh,
+			db:         db,
 		},
 		opts: opts,
 	}, nil

@@ -223,7 +223,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 
 	// Check that the descriptor ID is less than the counter used for creating new
 	// descriptor IDs. If not, and if the force flag is set, increment it.
-	maxDescIDKeyVal, err := p.extendedEvalCtx.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
+	maxDescIDKeyVal, err := p.execCfg.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
 	if err != nil {
 		return err
 	}
@@ -237,7 +237,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 				"descriptor ID %d must be less than the descriptor ID sequence value %d", descID, maxDescID)
 		}
 		inc := descID - maxDescID + 1
-		_, err = kv.IncrementValRetryable(ctx, p.extendedEvalCtx.DB, p.extendedEvalCtx.Codec.DescIDSequenceKey(), inc)
+		_, err = kv.IncrementValRetryable(ctx, p.ExecCfg().DB, p.extendedEvalCtx.Codec.DescIDSequenceKey(), inc)
 		if err != nil {
 			return err
 		}
@@ -764,7 +764,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 		return errors.New("descriptor still exists force deletion is blocked")
 	}
 	// Validate the descriptor ID could have been used
-	maxDescID, err := p.extendedEvalCtx.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
+	maxDescID, err := p.ExecCfg().DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
 	if err != nil {
 		return err
 	}
