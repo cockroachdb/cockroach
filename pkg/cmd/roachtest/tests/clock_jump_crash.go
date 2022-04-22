@@ -138,7 +138,7 @@ func registerClockJumpTests(r registry.Registry) {
 			Owner: registry.OwnerKV,
 			// These tests muck with NTP, therefore we don't want the cluster reused
 			// by others.
-			Cluster: r.MakeClusterSpec(1, spec.ReuseTagged("offset-injector")),
+			Cluster: r.MakeClusterSpec(1, spec.ReuseTagged("offset-injector"), spec.TerminateOnMigration()),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClockJump(ctx, t, c, tc)
 			},
