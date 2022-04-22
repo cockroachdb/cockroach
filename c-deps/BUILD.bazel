@@ -3,6 +3,11 @@ load("@rules_foreign_cc//foreign_cc:cmake.bzl", "cmake")
 load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
 load("archived.bzl", "LIBKRB5_LIBS", "archived_cdeps", "cdep_alias")
 
+exports_files([
+    "archived.bzl",
+    "REPOSITORIES.bzl",
+])
+
 archived_cdeps()
 
 configure_make(

@@ -190,3 +190,30 @@ func ExpectSingletonStringList(x syntax.Expr) (string, error) {
 		return "", fmt.Errorf("expected list of strings, got %v of type %T", l, l)
 	}
 }
+
+// ExpectTupleOfStrings returns the strings in the tuple represented by this
+// Expr or an error if this is not a string tuple of the correct length.
+func ExpectTupleOfStrings(x syntax.Expr, length int) ([]string, error) {
+	for {
+		switch t := x.(type) {
+		case *syntax.ParenExpr:
+			x = t.X
+			continue
+		case *syntax.TupleExpr:
+			if len(t.List) != length {
+				return nil, fmt.Errorf("expected tuple to have %d item, got %d in %v", length, len(t.List), t)
+			}
+			ret := make([]string, 0, len(t.List))
+			for _, sub := range t.List {
+				s, err := ExpectLiteralString(sub)
+				if err != nil {
+					return nil, err
+				}
+				ret = append(ret, s)
+			}
+			return ret, nil
+		default:
+			return nil, fmt.Errorf("expected tuple of strings, got %v of type %T", t, t)
+		}
+	}
+}
