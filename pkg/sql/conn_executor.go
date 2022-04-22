@@ -1778,7 +1778,7 @@ func (ex *connExecutor) run(
 	parentMon *mon.BytesMonitor,
 	reserved mon.BoundAccount,
 	onCancel context.CancelFunc,
-) error {
+) (err error) {
 	if !ex.activated {
 		ex.activate(ctx, parentMon, reserved)
 	}
@@ -1788,7 +1788,15 @@ func (ex *connExecutor) run(
 	ex.sessionID = ex.generateID()
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex.queryCancelKey, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
-	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID, ex.queryCancelKey)
+
+	defer func() {
+		ex.server.cfg.SessionRegistry.deregister(ex.sessionID, ex.queryCancelKey)
+		addErr := ex.server.cfg.ClosedSessionCache.add(ctx, ex.sessionID, ex.serialize())
+		if addErr != nil {
+			err = errors.CombineErrors(err, addErr)
+		}
+	}()
+
 	for {
 		ex.curStmtAST = nil
 		if err := ctx.Err(); err != nil {
@@ -3089,6 +3097,10 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		lastActiveQuery = truncateSQL(ex.mu.LastActiveQuery.String())
 		lastActiveQueryNoConstants = truncateSQL(formatStatementHideConstants(ex.mu.LastActiveQuery))
 	}
+	status := serverpb.Session_IDLE
+	if len(activeQueries) > 0 {
+		status = serverpb.Session_ACTIVE
+	}
 
 	// We always use base here as the fields from the SessionData should always
 	// be that of the root session.
@@ -3111,6 +3123,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		AllocBytes:                 ex.mon.AllocBytes(),
 		MaxAllocBytes:              ex.mon.MaximumBytes(),
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,
+		Status:                     status,
 	}
 }
 

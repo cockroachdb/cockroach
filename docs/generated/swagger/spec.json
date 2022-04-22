@@ -552,6 +552,12 @@
             "in": "query"
           },
           {
+            "type": "bool",
+            "description": "Boolean to exclude closed sessions; if unspecified, defaults to false and closed sessions are included in the response.",
+            "name": "exclude_closed_sessions",
+            "in": "query"
+          },
+          {
             "type": "integer",
             "description": "Maximum number of results to return in this call.",
             "name": "limit",
@@ -1180,6 +1186,12 @@
           "type": "string",
           "x-go-name": "ClientAddress"
         },
+        "end": {
+          "description": "Timestamp of session's end.",
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "End"
+        },
         "id": {
           "description": "ID of the session (uint128 represented as raw bytes).",
           "type": "array",
@@ -1214,12 +1226,21 @@
           "format": "date-time",
           "x-go-name": "Start"
         },
+        "status": {
+          "$ref": "#/definitions/Session_Status"
+        },
         "username": {
           "description": "Username of the user for this session.",
           "type": "string",
           "x-go-name": "Username"
         }
       },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "Session_Status": {
+      "type": "integer",
+      "format": "int32",
+      "title": "Enum for sessions status.",
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
     },
     "StoreID": {
