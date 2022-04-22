@@ -11,6 +11,7 @@
 package norm
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/evalhelper"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,7 +125,7 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 			if err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator retrieval failed"))
 			}
-			if err = generator.Start(c.f.evalCtx.Context, c.f.evalCtx.Txn); err != nil {
+			if err = generator.Start(c.f.evalCtx.Context, evalhelper.EvalCtxTxnToKVTxn(c.f.evalCtx.EvalCtxTxn)); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator.Start failed"))
 			}
 

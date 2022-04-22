@@ -66,7 +66,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		)
 
 		ctx := tree.EvalContext{
-			Txn: kv.NewTxnFromProto(
+			EvalCtxTxn: kv.NewTxnFromProto(
 				context.Background(),
 				db,
 				1, /* gatewayNodeID */

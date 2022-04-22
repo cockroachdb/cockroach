@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalhelper"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -144,7 +145,7 @@ func (evalCtx *extendedEvalContext) QueueJob(
 		ctx,
 		record,
 		jobID,
-		evalCtx.Txn,
+		evalhelper.EvalCtxTxnToKVTxn(evalCtx.EvalCtxTxn),
 	)
 	if err != nil {
 		return nil, err
@@ -471,7 +472,7 @@ func internalExtendedEvalCtx(
 	}
 	ret := extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Txn:                       txn,
+			EvalCtxTxn:                txn,
 			SessionDataStack:          sds,
 			TxnReadOnly:               false,
 			TxnImplicit:               true,

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalhelper"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1983,7 +1984,7 @@ func makePayloadsForTraceGenerator(
 	it, err := ctx.Planner.QueryIteratorEx(
 		ctx.Ctx(),
 		"crdb_internal.payloads_for_trace",
-		ctx.Txn,
+		evalhelper.EvalCtxTxnToKVTxn(ctx),
 		sessiondata.NoSessionDataOverride,
 		query,
 		traceID,
