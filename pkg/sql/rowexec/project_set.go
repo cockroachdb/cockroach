@@ -105,7 +105,7 @@ func newProjectSetProcessor(
 	}
 
 	// Initialize exprHelpers.
-	semaCtx := ps.FlowCtx.NewSemaContext(ps.EvalCtx.Txn)
+	semaCtx := ps.FlowCtx.NewSemaContext(ps.FlowCtx.Txn)
 	for i, expr := range ps.spec.Exprs {
 		var helper execinfrapb.ExprHelper
 		err := helper.Init(expr, ps.input.OutputTypes(), semaCtx, ps.EvalCtx)
