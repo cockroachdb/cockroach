@@ -74,7 +74,7 @@ func GetLiveClusterRegions(ctx context.Context, p PlanHookState) (LiveClusterReg
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx,
 		"get_live_cluster_regions",
-		p.ExtendedEvalContext().Txn,
+		p.Txn(),
 		override,
 		"SELECT region FROM [SHOW REGIONS FROM CLUSTER]",
 	)

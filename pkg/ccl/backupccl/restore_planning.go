@@ -1630,7 +1630,7 @@ func doRestorePlan(
 				return errors.Errorf("%q option can only be used when restoring a single tenant", restoreOptAsTenant)
 			}
 			res, err := p.ExecCfg().InternalExecutor.QueryRow(
-				ctx, "restore-lookup-tenant", p.ExtendedEvalContext().Txn,
+				ctx, "restore-lookup-tenant", p.Txn(),
 				`SELECT active FROM system.tenants WHERE id = $1`, newTenantID.ToUint64(),
 			)
 			if err != nil {
@@ -1645,7 +1645,7 @@ func doRestorePlan(
 		} else {
 			for _, i := range tenants {
 				res, err := p.ExecCfg().InternalExecutor.QueryRow(
-					ctx, "restore-lookup-tenant", p.ExtendedEvalContext().Txn,
+					ctx, "restore-lookup-tenant", p.Txn(),
 					`SELECT active FROM system.tenants WHERE id = $1`, i.ID,
 				)
 				if err != nil {
@@ -1836,7 +1836,7 @@ func doRestorePlan(
 		// We do not wait for the job to finish.
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-			ctx, jr, jobID, p.ExtendedEvalContext().Txn)
+			ctx, jr, jobID, p.Txn())
 		if err != nil {
 			return err
 		}
@@ -1847,7 +1847,7 @@ func doRestorePlan(
 
 	// We create the job record in the planner's transaction to ensure that
 	// the job record creation happens transactionally.
-	plannerTxn := p.ExtendedEvalContext().Txn
+	plannerTxn := p.Txn()
 
 	// Construct the job and commit the transaction. Perform this work in a
 	// closure to ensure that the job is cleaned up if an error occurs.

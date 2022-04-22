@@ -146,13 +146,13 @@ func (s *Store) MergeRange(
 	}
 
 	if leftRepl.leaseholderStats != nil {
-		leftRepl.leaseholderStats.resetRequestCounts()
+		leftRepl.leaseholderStats.ResetRequestCounts()
 	}
 	if leftRepl.writeStats != nil {
 		// Note: this could be drastically improved by adding a replicaStats method
 		// that merges stats. Resetting stats is typically bad for the rebalancing
 		// logic that depends on them.
-		leftRepl.writeStats.resetRequestCounts()
+		leftRepl.writeStats.ResetRequestCounts()
 	}
 
 	leftRepl.loadStats.merge(rightRepl.loadStats)

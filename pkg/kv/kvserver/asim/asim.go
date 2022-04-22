@@ -14,7 +14,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/google/btree"
 )
@@ -70,7 +70,7 @@ type Replica struct {
 // Store simulates a store within a node.
 type Store struct {
 	replicas  map[int]*Replica
-	allocator kvserver.Allocator
+	allocator allocatorimpl.Allocator
 }
 
 // Node represents a node within the cluster.
@@ -117,12 +117,11 @@ func (s *State) AddNode() (nodeID int) {
 
 // AddStore adds a store to an existing node.
 func (s *State) AddStore(node int) {
-	allocator := kvserver.MakeAllocator(
+	allocator := allocatorimpl.MakeAllocator(
 		nil,
 		func(string) (time.Duration, bool) {
 			return 0, true
 		},
-		nil,
 		nil,
 	)
 	s.Nodes[node].Stores = append(s.Nodes[node].Stores, &Store{allocator: allocator})
@@ -131,7 +130,7 @@ func (s *State) AddStore(node int) {
 // ApplyAllocatorAction updates the state with allocator ops such as
 // moving/adding/removing replicas.
 func (s *State) ApplyAllocatorAction(
-	ctx context.Context, action kvserver.AllocatorAction, priority float64,
+	ctx context.Context, action allocatorimpl.AllocatorAction, priority float64,
 ) {
 }
 
@@ -149,17 +148,17 @@ func shouldRun(time.Time) bool {
 // RunAllocator runs the allocator code for some replicas as needed.
 func RunAllocator(
 	ctx context.Context,
-	allocator kvserver.Allocator,
+	allocator allocatorimpl.Allocator,
 	spanConf roachpb.SpanConfig,
 	desc *roachpb.RangeDescriptor,
 	tick time.Time,
-) (done bool, action kvserver.AllocatorAction, priority float64) {
+) (done bool, action allocatorimpl.AllocatorAction, priority float64) {
 	// TODO: we should pace the calls to ComputeAction. The replicate queue tries
 	// to call ComputeAction for all replicas at a steady pace, to complete a pass
 	// within 10 minutes. We should have similar logic here (using simulated
 	// time).
 	if !shouldRun(tick) {
-		return true, kvserver.AllocatorNoop, 0
+		return true, allocatorimpl.AllocatorNoop, 0
 	}
 	action, priority = allocator.ComputeAction(ctx, spanConf, desc)
 	return false, action, priority

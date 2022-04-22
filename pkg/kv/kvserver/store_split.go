@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -319,14 +320,14 @@ func (s *Store) SplitRange(
 
 	// Clear the original range's request stats, since they include requests for
 	// spans that are now owned by the new range.
-	leftRepl.leaseholderStats.resetRequestCounts()
+	leftRepl.leaseholderStats.ResetRequestCounts()
 
 	if rightReplOrNil == nil {
-		throwawayRightWriteStats := new(replicaStats)
-		leftRepl.writeStats.splitRequestCounts(throwawayRightWriteStats)
+		throwawayRightWriteStats := new(replicastats.ReplicaStats)
+		leftRepl.writeStats.SplitRequestCounts(throwawayRightWriteStats)
 	} else {
 		rightRepl := rightReplOrNil
-		leftRepl.writeStats.splitRequestCounts(rightRepl.writeStats)
+		leftRepl.writeStats.SplitRequestCounts(rightRepl.writeStats)
 		leftRepl.loadStats.split(rightRepl.loadStats)
 		if err := s.addReplicaInternalLocked(rightRepl); err != nil {
 			return errors.Wrapf(err, "unable to add replica %v", rightRepl)

@@ -153,7 +153,7 @@ func (sq *splitQueue) shouldQueue(
 type unsplittableRangeError struct{}
 
 func (unsplittableRangeError) Error() string         { return "could not find valid split key" }
-func (unsplittableRangeError) purgatoryErrorMarker() {}
+func (unsplittableRangeError) PurgatoryErrorMarker() {}
 
 var _ purgatoryError = unsplittableRangeError{}
 

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
@@ -39,7 +41,7 @@ type StoreTestingKnobs struct {
 	ConsistencyTestingKnobs ConsistencyTestingKnobs
 	TenantRateKnobs         tenantrate.TestingKnobs
 	StorageKnobs            storage.TestingKnobs
-	AllocatorKnobs          *AllocatorTestingKnobs
+	AllocatorKnobs          *allocator.TestingKnobs
 
 	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
@@ -409,21 +411,13 @@ type NodeLivenessTestingKnobs struct {
 	RenewalDuration time.Duration
 	// StorePoolNodeLivenessFn is the function used by the StorePool to determine
 	// whether a node is live or not.
-	StorePoolNodeLivenessFn NodeLivenessFunc
+	StorePoolNodeLivenessFn storepool.NodeLivenessFunc
 }
 
 var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (NodeLivenessTestingKnobs) ModuleTestingKnobs() {}
-
-// AllocatorTestingKnobs allows tests to override the behavior of `Allocator`.
-type AllocatorTestingKnobs struct {
-	// AllowLeaseTransfersToReplicasNeedingSnapshots permits lease transfer
-	// targets produced by the Allocator to include replicas that may be waiting
-	// for snapshots.
-	AllowLeaseTransfersToReplicasNeedingSnapshots bool
-}
 
 // PinnedLeasesKnob is a testing know for controlling what store can acquire a
 // lease for specific ranges.

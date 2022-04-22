@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { ComputeByteAxisDomain } from "oss/src/views/cluster/util/graphs";
+import { ComputeByteAxisDomain } from "@cockroachlabs/cluster-ui";
 import assert from "assert";
 
 describe("ComputeByteAxisDomain", () => {
@@ -36,7 +36,7 @@ describe("ComputeByteAxisDomain", () => {
     // Now trying new domain with old ticks
     // The `m` in this case is "milli" meaning `10^-3`
     // see: https://github.com/d3/d3-format#locale_formatPrefix
-    assert.equal(newDomain.tickFormat(256000), "244.140625m");
+    assert.equal(newDomain.tickFormat(256000), "0.2441");
     assert.equal(newDomain.guideFormat(256000), "0.24 MiB");
   });
 });

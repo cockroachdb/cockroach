@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -917,8 +918,8 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 	drainingNodeIdx := 0
 	drainingNodeID := tc.Servers[0].Gossip().NodeID.Get()
 
-	nodeIDAppearsInStoreList := func(id roachpb.NodeID, sl kvserver.StoreList) bool {
-		for _, store := range sl.Stores() {
+	nodeIDAppearsInStoreList := func(id roachpb.NodeID, sl storepool.StoreList) bool {
+		for _, store := range sl.TestingStores() {
 			if store.Node.NodeID == id {
 				return true
 			}
@@ -948,7 +949,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			for i, s := range tc.Servers {
 				curNodeID := s.Gossip().NodeID.Get()
-				sl, alive, _ := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.GetStoreList()
+				sl, alive, _ := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.TestingGetStoreList()
 				if alive != expectedLive {
 					return errors.Errorf(
 						"expected %d live stores but got %d from node %d",
@@ -982,7 +983,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			for i, s := range tc.Servers {
 				curNodeID := s.Gossip().NodeID.Get()
-				sl, alive, _ := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.GetStoreList()
+				sl, alive, _ := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.TestingGetStoreList()
 				if alive != expectedLive {
 					return errors.Errorf(
 						"expected %d live stores but got %d from node %d",
@@ -996,7 +997,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 						"expected node %d to appear in node %d's store list: %+v",
 						drainingNodeID,
 						curNodeID,
-						sl.Stores(),
+						sl.TestingStores(),
 					)
 				}
 			}

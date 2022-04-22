@@ -17,6 +17,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -1832,8 +1833,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AverageWritesPerSecond:  metric.NewGaugeFloat64(metaAverageWritesPerSecond),
 		L0SubLevelsHistogram: metric.NewHistogram(
 			metaL0SubLevelHistogram,
-			l0SublevelInterval,
-			l0SublevelMaxSampled,
+			allocatorimpl.L0SublevelInterval,
+			allocatorimpl.L0SublevelMaxSampled,
 			1, /* sig figures (integer) */
 		),
 		AverageRequestsPerSecond: metric.NewGaugeFloat64(metaAverageRequestsPerSecond),
