@@ -62,9 +62,6 @@ func runImport(
 	}
 
 	evalCtx := flowCtx.NewEvalCtx()
-	// TODO(adityamaru): Should we just plumb the flowCtx instead of this
-	// assignment.
-	evalCtx.DB = flowCtx.Cfg.DB
 	evalCtx.Regions = makeImportRegionOperator(spec.DatabasePrimaryRegion)
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.TypeResolver = importResolver

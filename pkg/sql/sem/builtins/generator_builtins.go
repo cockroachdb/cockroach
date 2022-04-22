@@ -1603,7 +1603,7 @@ func (j *jsonPopulateRecordSetGenerator) Values() (tree.Datums, error) {
 }
 
 type checkConsistencyGenerator struct {
-	db       *kv.DB
+	txn      *kv.Txn
 	from, to roachpb.Key
 	mode     roachpb.ChecksumMode
 	// remainingRows is populated by Start(). Each Next() call peels of the first
@@ -1648,7 +1648,7 @@ func makeCheckConsistencyGenerator(
 	}
 
 	return &checkConsistencyGenerator{
-		db:   ctx.DB,
+		txn:  evalhelper.EvalCtxTxnToKVTxn(ctx.EvalCtxTxn),
 		from: keyFrom,
 		to:   keyTo,
 		mode: mode,
@@ -1678,9 +1678,10 @@ func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error 
 		// so request one only if a full check is run.
 		WithDiff: c.mode == roachpb.ChecksumMode_CHECK_FULL,
 	})
+
 	// NB: DistSender has special code to avoid parallelizing the request if
 	// we're requesting CHECK_FULL.
-	if err := c.db.Run(ctx, &b); err != nil {
+	if err := c.txn.Run(ctx, &b); err != nil {
 		return err
 	}
 	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.CheckConsistencyResponse)

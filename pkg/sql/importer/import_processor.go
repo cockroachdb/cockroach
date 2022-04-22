@@ -171,6 +171,7 @@ func newReadImportDataProcessor(
 		cp.seqChunkProvider = &row.SeqChunkProvider{
 			JobID:    cp.spec.Progress.JobID,
 			Registry: cp.flowCtx.Cfg.JobRegistry,
+			DB:       cp.flowCtx.Cfg.DB,
 		}
 	}
 

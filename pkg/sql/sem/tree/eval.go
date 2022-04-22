@@ -3699,9 +3699,7 @@ type EvalContext struct {
 	PreparedStatementState PreparedStatementState
 
 	// The transaction in which the statement is executing.
-	Txn *kv.Txn
-	// A handle to the database.
-	DB *kv.DB
+	EvalCtxTxn interface{}
 
 	ReCache *RegexpCache
 
