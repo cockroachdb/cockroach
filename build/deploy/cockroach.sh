@@ -9,7 +9,11 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0, included in the file
 # licenses/APL.txt.
-set -eu
+
+# set -e: If the command returns a non-zero exit status, exit the shell.
+# set -u: errors if an variable is referenced before being set
+# set -m: enable job control.
+set -eum
 
 cockroach_entrypoint="/cockroach/cockroach"
 
@@ -19,6 +23,7 @@ listen_addr=
 advertise_addr=
 default_listen_addr_host="127.0.0.1"
 default_port="26257"
+default_log_dir="./cockroach-data/logs"
 
 advertise_addr_host=$default_listen_addr_host
 
@@ -126,12 +131,13 @@ setup_env() {
 start_init_node() {
   echo "starting node for the initialization process. This could take a couple seconds..."
   rm -f server_fifo; mkfifo server_fifo
-  local start_node_query=( $cockroach_entrypoint start-single-node \
-                           --background
+  local start_node_query=( exec $cockroach_entrypoint start-single-node \
                            --listening-url-file=server_fifo \
                            --pid-file=server_pid \
                            --advertise-addr="$advertise_addr" \
-                           --certs-dir="$certs_dir" )
+                           --certs-dir="$certs_dir" \
+                           --log="file-defaults: {dir: $default_log_dir}" \
+                           "$@" )
 
   # Start the node and run in the background.
   "${start_node_query[@]}" &
@@ -168,6 +174,7 @@ setup_db() {
 # usage: process_init_files [file [file [...]]]
 # e.g. process_init_files /your_folder/*
 process_init_files() {
+  echo "start running init files from /docker-entrypoint-initdb.d"
   for f in "$@"; do
     case "$f" in
       *.sh)
@@ -187,20 +194,7 @@ process_init_files() {
     esac
     echo
   done
-}
-
-# stop_init_node is to stop the single node for the initialization.
-stop_init_node() {
-  kill $(cat server_pid)
-  local timeout=100
-  local time_counter=0
-  until [[ $time_counter -eq $timeout ]] || kill -0 $(cat server_pid); do
-    echo >&2 "finishing cockroach init process"
-    sleep 2
-    time_counter=$((time_counter+1))
-  done
-  check_if_server_fully_stopped
-  echo >&2 "cockroach init process finished, restart the server now"
+  echo "end running init files from /docker-entrypoint-initdb.d"
 }
 
 # run_sql_query is a helper function to run sql queries.
@@ -257,64 +251,27 @@ create_default_user() {
   fi
 }
 
-# check_if_server_fully_stopped is to wait until the init server is fully
-# stopped or timeout.
-check_if_server_fully_stopped() {
-  local log_path=./cockroach-data/logs/cockroach.log
-  local timeout=20
-  local time_counter=0
-
-  until [[ ( $time_counter -eq $timeout ) || ( -f $log_path ) ]]; do
-    echo >&2 "$log_path doesn't exist, waiting ..."
-    sleep 2
-    time_counter=$((time_counter+1))
-  done
-
-  # If timeout, exit the program.
-  if [[ $time_counter -ge $timeout ]]; then
-    echo >&2 "error: timeout for finding log file"
-    exit 1
-  fi
-
-  time_counter=0
-  echo >&2 "waiting for the init server to be fully stopped..."
-
-  # Wait until either the last line of the log contains "server drained and
-  # shutdown completed" or timeout.
-  until [[ ( $time_counter -eq $timeout ) || \
-        ( "$(tail -1 $log_path)" == *"server drained and shutdown completed"* ) ]];
-  do
-    sleep 2
-    time_counter=$((time_counter+1))
-  done
-
-  # If timeout, exit the program.
-  if [[ $time_counter -ge $timeout ]]; then
-    echo >&2 "error: timeout for stopping the init server"
-    exit 1
-  fi
-  echo >&2 "init server fully stopped"
-}
-
 # run_single_node process the command if it contains `start-single-node` argument.
 run_single_node() {
   # If /cockroach-data is empty, run the initialization steps.
   if [[ $(ls -A cockroach-data | wc -l) = 0 ]]; then
     setup_certs_dir
     setup_env
-    # Start the init server.
+    # Start the server.
     start_init_node "$@"
     setup_db "$@"
     process_init_files /docker-entrypoint-initdb.d/*
-    # Stop the init server.
-    stop_init_node
-    touch init_success
+    # Bring the background server process to the foreground, otherwise the
+    # docker container will automatically exit here.
+    echo "init_finished" > ./init_success
+    fg %1
+  else
+      exec $cockroach_entrypoint start-single-node \
+          --certs-dir="$certs_dir" \
+          --advertise-addr=$advertise_addr \
+          "$@"
   fi
-  # Start the real server.
-  exec $cockroach_entrypoint start-single-node \
-      --certs-dir="$certs_dir" \
-      --advertise-addr=$advertise_addr \
-      "$@"
+
 }
 
 _main() {
