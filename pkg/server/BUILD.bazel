@@ -158,6 +158,7 @@ go_library(
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/colexec",
+        "//pkg/sql/consistencychecker",
         "//pkg/sql/contention",
         "//pkg/sql/contentionpb",
         "//pkg/sql/descmetadata",

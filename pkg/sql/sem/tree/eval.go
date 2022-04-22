@@ -3586,6 +3586,14 @@ type IndexUsageStatsController interface {
 	ResetIndexUsageStats(ctx context.Context) error
 }
 
+// ConsistencyCheckRunner is an interface embedded in EvalCtx used by
+// crdb_internal.check_consistency.
+type ConsistencyCheckRunner interface {
+	CheckConsistency(
+		ctx context.Context, from, to roachpb.Key, mode roachpb.ChecksumMode,
+	) (*roachpb.CheckConsistencyResponse, error)
+}
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
@@ -3700,8 +3708,6 @@ type EvalContext struct {
 
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn
-	// A handle to the database.
-	DB *kv.DB
 
 	ReCache *RegexpCache
 
@@ -3742,6 +3748,10 @@ type EvalContext struct {
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
 	KVStoresIterator kvserverbase.StoresIterator
+
+	// ConsistencyChecker is to generate the results in calls to
+	// crdb_internal.check_consistency.
+	ConsistencyChecker ConsistencyCheckRunner
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
