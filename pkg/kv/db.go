@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -668,6 +669,12 @@ func (db *DB) AddSSTable(
 	batchTs hlc.Timestamp,
 ) error {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
+	b.AdmissionHeader = roachpb.AdmissionHeader{
+		Priority:                 int32(admission.BulkNormalPri),
+		CreateTime:               timeutil.Now().UnixNano(),
+		Source:                   roachpb.AdmissionHeader_FROM_SQL,
+		NoMemoryReservedAtSource: true,
+	}
 	b.addSSTable(begin, end, data, disallowShadowing, stats, ingestAsWrites)
 	return getOneErr(db.Run(ctx, b), b)
 }
