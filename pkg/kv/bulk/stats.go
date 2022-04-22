@@ -28,12 +28,12 @@ import (
 type ingestionPerformanceStats struct {
 	dataSizeAtomic int64
 
-	bufferFlushes     int // number of buffer flushes.
-	flushesDueToSize  int // number of buffer flushes due to buffer size.
-	batches           int // number of batches (addsstable calls) sent.
-	batchesDueToRange int // number of batches due to range bounds.
-	batchesDueToSize  int // number of batches due to batch size.
-	splitRetries      int // extra sub-batches created due to unexpected splits.
+	bufferFlushes      int   // number of buffer flushes.
+	flushesDueToSize   int   // number of buffer flushes due to buffer size.
+	batches            int   // number of batches (addsstable calls) sent.
+	batchesDueToRange  int   // number of batches due to range bounds.
+	batchesDueToSize   int   // number of batches due to batch size.
+	splitRetriesAtomic int64 // extra sub-batches created due to unexpected splits.
 
 	splits, scatters int // number of splits/scatters sent.
 	scatterMoved     sz  // total size moved by scatter calls.
@@ -94,7 +94,7 @@ func (s ingestionPerformanceStats) LogFlushes(
 		s.batches,
 		s.batchesDueToRange,
 		s.batchesDueToSize,
-		s.splitRetries,
+		atomic.LoadInt64(&s.splitRetriesAtomic),
 	)
 }
 
