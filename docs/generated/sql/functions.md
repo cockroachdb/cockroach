@@ -2203,6 +2203,10 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_makebox2d"></a><code>st_makebox2d(geometry_a: geometry, geometry_b: geometry) &rarr; box2d</code></td><td><span class="funcdesc"><p>Creates a box2d from two points. Errors if arguments are not two non-empty points.</p>
 </span></td></tr>
+<tr><td><a name="st_makeenvelope"></a><code>st_makeenvelope(xmin: <a href="float.html">float</a>, ymin: <a href="float.html">float</a>, xmax: <a href="float.html">float</a>, ymax: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a box2d from bounds (the default srid value is 0).</p>
+</span></td></tr>
+<tr><td><a name="st_makeenvelope"></a><code>st_makeenvelope(xmin: <a href="float.html">float</a>, ymin: <a href="float.html">float</a>, xmax: <a href="float.html">float</a>, ymax: <a href="float.html">float</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a box2d from bounds.</p>
+</span></td></tr>
 <tr><td><a name="st_makepoint"></a><code>st_makepoint(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X and Y coordinates.</p>
 </span></td></tr>
 <tr><td><a name="st_makepoint"></a><code>st_makepoint(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>, z: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X, Y, and Z coordinates.</p>
