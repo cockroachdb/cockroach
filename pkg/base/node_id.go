@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -43,6 +42,9 @@ type NodeIDContainer struct {
 	// precompute this value to speed up String() and keep it from allocating
 	// memory dynamically.
 	str atomic.Value
+
+	// OnSet, if non-nil, is called after the ID is set with the new value.
+	OnSet func(roachpb.NodeID)
 }
 
 // String returns the node ID, or "?" if it is unset.
@@ -84,24 +86,23 @@ func (n *NodeIDContainer) Set(ctx context.Context, val roachpb.NodeID) {
 
 func (n *NodeIDContainer) setInternal(ctx context.Context, val int32, sqlInstance bool) {
 	if val <= 0 {
-		log.Fatalf(ctx, "trying to set invalid NodeID: %d", val)
+		panic(errors.AssertionFailedf("trying to set invalid NodeID: %d", val))
 	}
 	oldVal := atomic.SwapInt32(&n.nodeID, val)
-	if oldVal == 0 {
-		if log.V(2) {
-			log.Infof(ctx, "ID set to %d", val)
-		}
-	} else if n.sqlInstance != sqlInstance {
+	if n.sqlInstance != sqlInstance {
 		serverIs := map[bool]redact.SafeString{false: "SQL instance", true: "node"}
-		log.Fatalf(ctx, "server is a %v, cannot set %v ID", serverIs[!n.sqlInstance], serverIs[sqlInstance])
-	} else if oldVal != val {
-		log.Fatalf(ctx, "different IDs set: %d, then %d", oldVal, val)
+		panic(errors.AssertionFailedf("server is a %v, cannot set %v ID", serverIs[!n.sqlInstance], serverIs[sqlInstance]))
+	} else if oldVal != 0 && oldVal != val {
+		panic(errors.AssertionFailedf("different IDs set: %d, then %d", oldVal, val))
 	}
 	prefix := ""
 	if sqlInstance {
 		prefix = "sql"
 	}
 	n.str.Store(prefix + strconv.Itoa(int(val)))
+	if oldVal == 0 && n.OnSet != nil {
+		n.OnSet(roachpb.NodeID(val))
+	}
 }
 
 // Reset changes the NodeID regardless of the old value.
@@ -155,20 +156,12 @@ func (s *StoreIDContainer) Get() int32 {
 // Set sets the current storeID. If it is already set, the value should match.
 func (s *StoreIDContainer) Set(ctx context.Context, val int32) {
 	if val != TempStoreID && val <= 0 {
-		if log.V(2) {
-			log.Infof(
-				ctx, "trying to set invalid storeID for the store in the Pebble log: %d",
-				val)
-		}
-		return
+		panic(errors.AssertionFailedf("trying to set invalid storeID for the store in the Pebble log: %d", val))
 	}
 	oldVal := atomic.SwapInt32(&s.storeID, val)
 	if oldVal != 0 && oldVal != val {
-		if log.V(2) {
-			log.Infof(
-				ctx, "different storeIDs set for the store in the Pebble log: %d, then %d",
-				oldVal, val)
-		}
+		panic(errors.AssertionFailedf("different storeIDs set for the store in the Pebble log: %d, then %d",
+			oldVal, val))
 	}
 	if val == TempStoreID {
 		s.str.Store("temp")
@@ -204,7 +197,7 @@ func NewSQLIDContainerForNode(nodeID *NodeIDContainer) *SQLIDContainer {
 		// caller would call NewSQLIDContainerForNode() once, cast the
 		// result type to `*NodeIDContainer`, then mistakenly call
 		// NewSQLIDContainerForNode() again.
-		log.Fatalf(context.Background(), "programming error: container is already for a SQL instance")
+		panic(errors.AssertionFailedf("programming error: container is already for a SQL instance"))
 	}
 	return (*SQLIDContainer)(nodeID)
 }
