@@ -1,4 +1,4 @@
-FROM ubuntu:focal-20210119
+FROM ubuntu:focal-20220404
 ARG TARGETPLATFORM
 
 RUN apt-get update \
