@@ -91,6 +91,10 @@ func TestConverterFlushesBatches(t *testing.T) {
 	ctx := context.Background()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
+	params := base.TestServerArgs{}
+	s, _, db := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
 	tests := []testSpec{
 		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
 		newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
@@ -118,7 +122,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 				kvCh := make(chan row.KVBatch, batchSize)
 				semaCtx := tree.MakeSemaContext()
 				conv, err := makeInputConverter(ctx, &semaCtx, converterSpec, &evalCtx, kvCh,
-					nil /* seqChunkProvider */)
+					nil /* seqChunkProvider */, db)
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}

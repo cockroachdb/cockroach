@@ -3700,8 +3700,6 @@ type EvalContext struct {
 
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn
-	// A handle to the database.
-	DB *kv.DB
 
 	ReCache *RegexpCache
 
