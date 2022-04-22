@@ -11,6 +11,7 @@ package sqlproxyccl
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"math/rand"
 	"net"
@@ -37,11 +38,11 @@ func TestForward(t *testing.T) {
 	t.Run("closed_when_processors_error", func(t *testing.T) {
 		p1, p2 := net.Pipe()
 
-		f, err := forward(
-			bgCtx, nil /* connector */, nil /* metrics */, p1, p2, nil, /* timeSource */
-		)
-		require.NoError(t, err)
+		f := newForwarder(bgCtx, nil /* connector */, nil /* metrics */, nil /* timeSource */)
 		defer f.Close()
+
+		err := f.run(p1, p2)
+		require.NoError(t, err)
 
 		// Close the connection right away to simulate processor error.
 		p1.Close()
@@ -69,16 +70,11 @@ func TestForward(t *testing.T) {
 		t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 		timeSource := timeutil.NewManualTime(t0)
 
-		f, err := forward(
-			ctx,
-			nil, /* connector */
-			nil, /* metrics */
-			clientProxy,
-			serverProxy,
-			timeSource,
-		)
-		require.NoError(t, err)
+		f := newForwarder(ctx, nil /* connector */, nil /* metrics */, timeSource)
 		defer f.Close()
+
+		err := f.run(clientProxy, serverProxy)
+		require.NoError(t, err)
 		require.Nil(t, f.ctx.Err())
 		require.False(t, f.IsIdle())
 
@@ -214,16 +210,11 @@ func TestForward(t *testing.T) {
 		t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 		timeSource := timeutil.NewManualTime(t0)
 
-		f, err := forward(
-			ctx,
-			nil, /* connector */
-			nil, /* metrics */
-			clientProxy,
-			serverProxy,
-			timeSource,
-		)
-		require.NoError(t, err)
+		f := newForwarder(ctx, nil /* connector */, nil /* metrics */, timeSource)
 		defer f.Close()
+
+		err := f.run(clientProxy, serverProxy)
+		require.NoError(t, err)
 		require.Nil(t, f.ctx.Err())
 		require.False(t, f.IsIdle())
 
@@ -323,10 +314,7 @@ func TestForwarder_Context(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := logtags.AddTag(context.Background(), "foo", "bar")
-	p1, p2 := net.Pipe()
-
-	f, err := forward(ctx, nil /* connector */, nil /* metrics */, p1, p2, nil /* timeSource */)
-	require.NoError(t, err)
+	f := newForwarder(ctx, nil /* connector */, nil /* metrics */, nil /* timeSource */)
 	defer f.Close()
 
 	// Check that the right context was returned.
@@ -339,15 +327,22 @@ func TestForwarder_Close(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	p1, p2 := net.Pipe()
+	for _, withRun := range []bool{true, false} {
+		t.Run(fmt.Sprintf("withRun=%t", withRun), func(t *testing.T) {
+			f := newForwarder(ctx, nil /* connector */, nil /* metrics */, nil /* timeSource */)
+			defer f.Close()
 
-	f, err := forward(ctx, nil /* connector */, nil /* metrics */, p1, p2, nil /* timeSource */)
-	require.NoError(t, err)
-	defer f.Close()
-	require.Nil(t, f.ctx.Err())
+			if withRun {
+				p1, p2 := net.Pipe()
+				err := f.run(p1, p2)
+				require.NoError(t, err)
+			}
 
-	f.Close()
-	require.EqualError(t, f.ctx.Err(), context.Canceled.Error())
+			require.Nil(t, f.ctx.Err())
+			f.Close()
+			require.EqualError(t, f.ctx.Err(), context.Canceled.Error())
+		})
+	}
 }
 
 func TestForwarder_ServerRemoteAddr(t *testing.T) {
@@ -356,9 +351,13 @@ func TestForwarder_ServerRemoteAddr(t *testing.T) {
 	ctx := context.Background()
 	p1, p2 := net.Pipe()
 
-	f, err := forward(ctx, nil /* connector */, nil /* metrics */, p1, p2, nil /* timeSource */)
-	require.NoError(t, err)
+	f := newForwarder(ctx, nil /* connector */, nil /* metrics */, nil /* timeSource */)
 	defer f.Close()
+
+	require.Equal(t, "", f.ServerRemoteAddr())
+
+	err := f.run(p1, p2)
+	require.NoError(t, err)
 
 	require.Equal(t, "pipe", f.ServerRemoteAddr())
 }
@@ -369,9 +368,11 @@ func TestForwarder_tryReportError(t *testing.T) {
 	ctx := context.Background()
 	p1, p2 := net.Pipe()
 
-	f, err := forward(ctx, nil /* connector */, nil /* metrics */, p1, p2, nil /* timeSource */)
-	require.NoError(t, err)
+	f := newForwarder(ctx, nil /* connector */, nil /* metrics */, nil /* timeSource */)
 	defer f.Close()
+
+	err := f.run(p1, p2)
+	require.NoError(t, err)
 
 	select {
 	case err := <-f.errCh:
@@ -403,16 +404,11 @@ func TestForwarder_replaceServerConn(t *testing.T) {
 	clientProxy, client := net.Pipe()
 	serverProxy, server := net.Pipe()
 
-	f, err := forward(
-		ctx,
-		nil, /* connector */
-		nil, /* metrics */
-		clientProxy,
-		serverProxy,
-		nil, /* timeSource */
-	)
-	require.NoError(t, err)
+	f := newForwarder(ctx, nil /* connector */, nil /* metrics */, nil /* timeSource */)
 	defer f.Close()
+
+	err := f.run(clientProxy, serverProxy)
+	require.NoError(t, err)
 
 	c, s := f.getConns()
 	require.Equal(t, clientProxy, c.Conn)
