@@ -32,8 +32,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	gcsapi "google.golang.org/api/storage/v1"
 )
 
 const (
@@ -43,6 +45,9 @@ const (
 	// CredentialsParam is the query parameter for the base64-encoded contents of
 	// the Google Application Credentials JSON file.
 	CredentialsParam = "CREDENTIALS"
+	// TargetPrincipalParam is the target principal to impersonate. The target
+	// principal should have the necessary access to the relevant cloud services.
+	TargetPrincipalParam = "TARGET"
 )
 
 // gcsChunkingEnabled is used to enable and disable chunking of file upload to
@@ -63,6 +68,7 @@ func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 		Auth:           uri.Query().Get(cloud.AuthParam),
 		BillingProject: uri.Query().Get(GoogleBillingProjectParam),
 		Credentials:    uri.Query().Get(CredentialsParam),
+		Target:         uri.Query().Get(TargetPrincipalParam),
 	}
 	conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 	return conf, nil
@@ -116,26 +122,38 @@ func makeGCSStorage(
 
 	switch conf.Auth {
 	case cloud.AuthParamImplicit:
-		// Do nothing; use implicit params:
+		// Use implicit params to access storage or impersonate target:
 		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
+	case cloud.AuthParamAssume:
+		if conf.Target == "" {
+			return nil, errors.Errorf(
+				"%s must be set for %s = %s",
+				TargetPrincipalParam,
+				cloud.AuthParam,
+				cloud.AuthParamAssume,
+			)
+		}
+
+		assumeOpt, err := createImpersonateCredentials(ctx, conf.Target, []string{scope}, conf.Credentials)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to assume %s", conf.Target)
+		}
+		opts = append(opts, assumeOpt)
+
 	default:
 		if conf.Credentials == "" {
 			return nil, errors.Errorf(
-				"%s must be set unless %q is %q",
+				"%s must be set if %q is %q",
 				CredentialsParam,
 				cloud.AuthParam,
-				cloud.AuthParamImplicit,
+				cloud.AuthParamSpecified,
 			)
 		}
-		decodedKey, err := base64.StdEncoding.DecodeString(conf.Credentials)
+		authOption, err := createAuthOption(ctx, conf.Credentials, scope)
 		if err != nil {
-			return nil, errors.Wrapf(err, "decoding value of %s", CredentialsParam)
+			return nil, errors.Wrapf(err, "error getting credentials from %s", CredentialsParam)
 		}
-		source, err := google.JWTConfigFromJSON(decodedKey, scope)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating GCS oauth token source from specified credentials")
-		}
-		opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
+		opts = append(opts, authOption)
 	}
 	g, err := gcs.NewClient(ctx, opts...)
 	if err != nil {
@@ -155,6 +173,51 @@ func makeGCSStorage(
 	}, nil
 }
 
+func createAuthOption(
+	ctx context.Context, credentials string, scopes ...string,
+) (option.ClientOption, error) {
+	var authOption option.ClientOption
+	if credentials != "" {
+		decodedKey, err := base64.StdEncoding.DecodeString(credentials)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error decoding value")
+		}
+		source, err := google.JWTConfigFromJSON(decodedKey, scopes...)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating GCS oauth token source from specified credentials")
+		}
+
+		authOption = option.WithTokenSource(source.TokenSource(ctx))
+	}
+
+	return authOption, nil
+}
+
+func createImpersonateCredentials(
+	ctx context.Context, target string, scopes []string, credentials string,
+) (option.ClientOption, error) {
+	var opts []option.ClientOption
+	if credentials != "" {
+		authOpt, err := createAuthOption(ctx, credentials, gcsapi.CloudPlatformScope)
+		if err != nil {
+			return nil, errors.Wrap(err, "specified credentials")
+		}
+
+		opts = append(opts, authOpt)
+	}
+
+	cfg := impersonate.CredentialsConfig{
+		TargetPrincipal: target,
+		Scopes:          scopes,
+	}
+
+	source, err := impersonate.CredentialsTokenSource(ctx, cfg, opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "impersonate credentials")
+	}
+
+	return option.WithTokenSource(source), nil
+}
 func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	_, sp := tracing.ChildSpan(ctx, "gcs.Writer")
 	defer sp.Finish()

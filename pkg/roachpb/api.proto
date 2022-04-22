@@ -1398,6 +1398,8 @@ message ExternalStorage {
     string billing_project = 4;
 
     string credentials = 5;
+
+    string target = 6;
   }
   message Azure {
     string container = 1;

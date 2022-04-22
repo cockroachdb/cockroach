@@ -93,6 +93,83 @@ func TestPutGoogleCloud(t *testing.T) {
 	})
 }
 
+func TestGCSAssumeRole(t *testing.T) {
+	user := security.RootUserName()
+	testSettings := cluster.MakeTestingClusterSettings()
+
+	limitedBucket := os.Getenv("GS_LIMITED_BUCKET")
+	if limitedBucket == "" {
+		skip.IgnoreLint(t, "GS_LIMITED_BUCKET env var must be set")
+	}
+	target := os.Getenv("GCP_TARGET_PRINCIPAL")
+	if target == "" {
+		skip.IgnoreLint(t, "GCP_TARGET_PRINCIPAL env var must be set")
+	}
+
+	t.Run("specified", func(t *testing.T) {
+		credentials := os.Getenv("CREDENTIALS")
+		if credentials == "" {
+			skip.IgnoreLint(t, "CREDENTIALS env var must be set")
+		}
+
+		// Verify that specified permissions with the credentials do not give us
+		// access to the bucket.
+		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, "backup-test-assume-role",
+			CredentialsParam, url.QueryEscape(credentials)), user, nil, nil, testSettings)
+
+		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s&%s=%s",
+			limitedBucket,
+			"backup-test-assume-role",
+			cloud.AuthParam,
+			cloud.AuthParamAssume,
+			TargetPrincipalParam,
+			target, CredentialsParam,
+			url.QueryEscape(credentials),
+		),
+			false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t,
+			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s&%s=%s",
+				limitedBucket,
+				"backup-test-assume-role",
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamAssume,
+				TargetPrincipalParam,
+				target,
+				CredentialsParam,
+				url.QueryEscape(credentials),
+			),
+			security.RootUserName(), nil, nil, testSettings,
+		)
+	})
+
+	t.Run("implicit", func(t *testing.T) {
+		if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
+			skip.IgnoreLint(t, err)
+		}
+
+		// Verify that implicit permissions with the credentials do not give us
+		// access to the bucket.
+		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, "backup-test-assume-role",
+			cloud.AuthParam, cloud.AuthParamImplicit), user, nil, nil, testSettings)
+
+		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role",
+			cloud.AuthParam, cloud.AuthParamAssume, TargetPrincipalParam, target), false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t,
+			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
+				limitedBucket,
+				"backup-test-assume-role",
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamAssume,
+				TargetPrincipalParam,
+				target,
+			),
+			security.RootUserName(), nil, nil, testSettings,
+		)
+	})
+}
+
 func requireImplicitGoogleCredentials(t *testing.T) {
 	t.Helper()
 	// TODO(yevgeniy): Fix default credentials check.

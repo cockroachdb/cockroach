@@ -1444,7 +1444,7 @@ func doRestorePlan(
 		// restore has been used to encrypt the backup at least once.
 		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 		for _, encFile := range opts {
-			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(kms,
+			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(ctx, kms,
 				newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
 					baseStores[0].Settings(),
 					&ioConf,

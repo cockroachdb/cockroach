@@ -41,12 +41,14 @@ func init() {
 type kmsURIParams struct {
 	credentials string
 	auth        string
+	target      string
 }
 
 func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 	params := kmsURIParams{
 		credentials: kmsURI.Query().Get(CredentialsParam),
 		auth:        kmsURI.Query().Get(cloud.AuthParam),
+		target:      kmsURI.Query().Get(TargetPrincipalParam),
 	}
 
 	return params
@@ -54,7 +56,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 
 // MakeGCSKMS is the factory method which returns a configured, ready-to-use
 // GCS KMS object.
-func MakeGCSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
+func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	if env.KMSConfig().DisableOutbound {
 		return nil, errors.New("external IO must be enabled to use GCS KMS")
 	}
@@ -68,11 +70,21 @@ func MakeGCSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 
 	// Client options to authenticate and start a GCS KMS session.
 	// Currently only accepting json of service account.
-	var credentialsOpt []option.ClientOption
+	var clientOpts []option.ClientOption
+	var credentialsOpt option.ClientOption
+	if kmsURIParams.credentials != "" {
+		// Credentials are passed in base64 encoded, so decode the credentials first.
+		credentialsJSON, err := base64.StdEncoding.DecodeString(kmsURIParams.credentials)
+		if err != nil {
+			return nil, err
+		}
+
+		credentialsOpt = option.WithCredentialsJSON(credentialsJSON)
+	}
 
 	switch kmsURIParams.auth {
 	case "", cloud.AuthParamSpecified:
-		if kmsURIParams.credentials == "" {
+		if credentialsOpt == nil {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
 				cloud.AuthParam,
@@ -81,26 +93,37 @@ func MakeGCSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 			)
 		}
 
-		// Credentials are passed in base64 encoded, so decode the credentials first.
-		credentialsJSON, err := base64.StdEncoding.DecodeString(kmsURIParams.credentials)
-		if err != nil {
-			return nil, err
-		}
-
-		credentialsOpt = append(credentialsOpt, option.WithCredentialsJSON(credentialsJSON))
+		clientOpts = append(clientOpts, credentialsOpt)
 	case cloud.AuthParamImplicit:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for gcs due to --external-io-implicit-credentials flag")
 		}
 		// If implicit credentials used, no client options needed.
+	case cloud.AuthParamAssume:
+		if kmsURIParams.target == "" {
+			return nil, errors.Errorf(
+				"%s is set to '%s', but %s is not set",
+				cloud.AuthParam,
+				cloud.AuthParamAssume,
+				TargetPrincipalParam,
+			)
+		}
+		impersonateOpt, err := createImpersonateCredentials(ctx, kmsURIParams.target, kms.DefaultAuthScopes(), kmsURIParams.credentials)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error impersonating %s", kmsURIParams.target)
+		}
+
+		clientOpts = append(
+			clientOpts,
+			impersonateOpt,
+			option.WithScopes(kms.DefaultAuthScopes()...),
+		)
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
 
-	ctx := context.Background()
-
-	kmc, err := kms.NewKeyManagementClient(ctx, credentialsOpt...)
+	kmc, err := kms.NewKeyManagementClient(ctx, clientOpts...)
 
 	if err != nil {
 		return nil, err

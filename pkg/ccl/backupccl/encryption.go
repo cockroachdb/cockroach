@@ -83,11 +83,14 @@ func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID
 // encryption/decryption operations during this BACKUP. By default it is the
 // first KMS URI passed during the incremental BACKUP.
 func validateKMSURIsAgainstFullBackup(
-	kmsURIs []string, kmsMasterKeyIDToDataKey *encryptedDataKeyMap, kmsEnv cloud.KMSEnv,
+	ctx context.Context,
+	kmsURIs []string,
+	kmsMasterKeyIDToDataKey *encryptedDataKeyMap,
+	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions_KMSInfo, error) {
 	var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 	for _, kmsURI := range kmsURIs {
-		kms, err := cloud.KMSFromURI(kmsURI, kmsEnv)
+		kms, err := cloud.KMSFromURI(ctx, kmsURI, kmsEnv)
 		if err != nil {
 			return nil, err
 		}
@@ -171,7 +174,7 @@ func makeNewEncryptionOptions(
 func getEncryptedDataKeyFromURI(
 	ctx context.Context, plaintextDataKey []byte, kmsURI string, kmsEnv cloud.KMSEnv,
 ) (string, []byte, error) {
-	kms, err := cloud.KMSFromURI(kmsURI, kmsEnv)
+	kms, err := cloud.KMSFromURI(ctx, kmsURI, kmsEnv)
 	if err != nil {
 		return "", nil, err
 	}
@@ -281,7 +284,7 @@ func getEncryptionFromBase(
 		case jobspb.EncryptionMode_KMS:
 			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 			for _, encFile := range opts {
-				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(encryptionParams.RawKmsUris,
+				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(ctx, encryptionParams.RawKmsUris,
 					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
 				if err == nil {
 					break
@@ -314,7 +317,7 @@ func getEncryptionKey(
 		// Contact the selected KMS to derive the decrypted data key.
 		// TODO(pbardea): Add a check here if encryption.KMSInfo is unexpectedly nil
 		// here to avoid a panic, and return an error instead.
-		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
+		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, &backupKMSEnv{
 			settings: settings,
 			conf:     &ioConf,
 		})
