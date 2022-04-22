@@ -137,6 +137,7 @@ go_test(
     embed = [":builtins"],
     deps = [
         "//pkg/base",
+        "//pkg/geo",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/security",
