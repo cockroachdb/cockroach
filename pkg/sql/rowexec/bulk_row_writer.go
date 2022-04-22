@@ -104,7 +104,7 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	semaCtx := tree.MakeSemaContext()
 	conv, err := row.NewDatumRowConverter(
 		ctx, &semaCtx, sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh, nil,
-		/* seqChunkProvider */ sp.flowCtx.GetRowMetrics(),
+		/* seqChunkProvider */ sp.flowCtx.GetRowMetrics(), sp.flowCtx.Cfg.DB,
 	)
 	if err != nil {
 		return err

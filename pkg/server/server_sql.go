@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/consistencychecker"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -786,6 +787,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeFeedFactory:           cfg.rangeFeedFactory,
 		CollectionFactory:          collectionFactory,
 		SystemTableIDResolver:      descs.MakeSystemTableIDResolver(collectionFactory, cfg.circularInternalExecutor, cfg.db),
+		ConsistencyChecker:         consistencychecker.NewConsistencyChecker(cfg.db),
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
