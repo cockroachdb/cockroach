@@ -1550,7 +1550,7 @@ var informationSchemaSessionVariables = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
-			value, err := gen.Get(&p.extendedEvalCtx)
+			value, err := gen.Get(&p.extendedEvalCtx, p.Txn())
 			if err != nil {
 				return err
 			}

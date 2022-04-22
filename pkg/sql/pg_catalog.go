@@ -2505,7 +2505,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 			if gen.Hidden {
 				continue
 			}
-			value, err := gen.Get(&p.extendedEvalCtx)
+			value, err := gen.Get(&p.extendedEvalCtx, p.Txn())
 			if err != nil {
 				return err
 			}
