@@ -8,6 +8,10 @@ CREATE TABLE multi_region_test_db.public.table_regional_by_table (
   a INT
 ) LOCALITY REGIONAL BY TABLE IN "us-east2";
 CREATE TABLE multi_region_test_db.public.table_global (b INT) LOCALITY GLOBAL;
+COMMENT ON DATABASE multi_region_test_db IS 'multi region db is good';
+COMMENT ON TABLE multi_region_test_db.public.table_regional_by_row IS 'regional by row is good';
+COMMENT ON COLUMN multi_region_test_db.public.table_regional_by_row.k IS 'k is good';
+COMMENT ON INDEX multi_region_test_db.public.table_regional_by_row@table_regional_by_row_pkey IS 'pkey is good';
 ----
 
 decompose
@@ -53,7 +57,7 @@ ElementState:
     roleName: __placeholder_role_name__
   Status: PUBLIC
 - DatabaseComment:
-    comment: __placeholder_comment__
+    comment: multi region db is good
     databaseId: 104
   Status: PUBLIC
 
@@ -109,10 +113,6 @@ ElementState:
       - 1
       tableId: 110
       temporaryIndexId: 0
-  Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 110
   Status: PUBLIC
 - TableLocalityGlobal:
     tableId: 110
@@ -189,26 +189,9 @@ ElementState:
       usesTypeIds: []
     tableId: 110
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 110
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 110
-  Status: PUBLIC
 - IndexName:
     indexId: 1
     name: table_global_pkey
-    tableId: 110
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 1
     tableId: 110
   Status: PUBLIC
 - Namespace:
@@ -289,10 +272,6 @@ ElementState:
       tableId: 109
       temporaryIndexId: 0
   Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 109
-  Status: PUBLIC
 - TableLocalitySecondaryRegion:
     regionEnumTypeId: 105
     regionName: us-east2
@@ -370,26 +349,9 @@ ElementState:
       usesTypeIds: []
     tableId: 109
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 109
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 109
-  Status: PUBLIC
 - IndexName:
     indexId: 1
     name: table_regional_by_table_pkey
-    tableId: 109
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 1
     tableId: 109
   Status: PUBLIC
 - Namespace:
@@ -482,7 +444,7 @@ ElementState:
       temporaryIndexId: 0
   Status: PUBLIC
 - TableComment:
-    comment: __placeholder_comment__
+    comment: regional by row is good
     tableId: 108
   Status: PUBLIC
 - TableLocalityRegionalByRow:
@@ -600,20 +562,8 @@ ElementState:
   Status: PUBLIC
 - ColumnComment:
     columnId: 1
-    comment: __placeholder_comment__
+    comment: k is good
     pgAttributeNum: 1
-    tableId: 108
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 108
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 3
-    comment: __placeholder_comment__
-    pgAttributeNum: 3
     tableId: 108
   Status: PUBLIC
 - IndexName:
@@ -655,7 +605,7 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - IndexComment:
-    comment: __placeholder_comment__
+    comment: pkey is good
     indexId: 1
     tableId: 108
   Status: PUBLIC
