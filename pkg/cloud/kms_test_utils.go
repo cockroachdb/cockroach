@@ -40,9 +40,9 @@ func (e *TestKMSEnv) KMSConfig() *base.ExternalIODirConfig {
 
 // KMSEncryptDecrypt is the method used to test if the given KMS can
 // correctly encrypt and decrypt a string
-func KMSEncryptDecrypt(t *testing.T, kmsURI string, env TestKMSEnv) {
+func KMSEncryptDecrypt(t *testing.T, kmsURI string, env KMSEnv) {
 	ctx := context.Background()
-	kms, err := KMSFromURI(kmsURI, &env)
+	kms, err := KMSFromURI(ctx, kmsURI, env)
 	require.NoError(t, err)
 
 	t.Run("simple encrypt decrypt", func(t *testing.T) {
@@ -58,4 +58,19 @@ func KMSEncryptDecrypt(t *testing.T, kmsURI string, env TestKMSEnv) {
 
 		require.NoError(t, kms.Close())
 	})
+}
+
+// CheckNoKMSAccess verifies that trying to encrypt with the given kmsURI gives
+// a permission error.
+func CheckNoKMSAccess(t *testing.T, kmsURI string, env KMSEnv) {
+	ctx := context.Background()
+	kms, err := KMSFromURI(ctx, kmsURI, env)
+	require.NoError(t, err)
+
+	_, err = kms.Encrypt(ctx, []byte("test bytes"))
+	if err == nil {
+		t.Fatalf("expected error when encrypting with kms %s", kmsURI)
+	}
+
+	require.Regexp(t, "PermissionDenied", err)
 }
