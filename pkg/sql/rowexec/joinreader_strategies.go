@@ -187,7 +187,10 @@ func (s *joinReaderNoOrderingStrategy) processLookupRows(
 func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 	_ context.Context, row rowenc.EncDatumRow, key roachpb.Key,
 ) (joinReaderState, error) {
-	matchingInputRowIndices := s.getMatchingRowIndices(key)
+	matchingInputRowIndices, err := s.getMatchingRowIndices(key)
+	if err != nil {
+		return jrStateUnknown, err
+	}
 	if s.isPartialJoin {
 		// In the case of partial joins, only process input rows that have not been
 		// matched yet. Make a copy of the matching input row indices to avoid
@@ -604,7 +607,10 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	ctx context.Context, row rowenc.EncDatumRow, key roachpb.Key,
 ) (joinReaderState, error) {
-	matchingInputRowIndices := s.getMatchingRowIndices(key)
+	matchingInputRowIndices, err := s.getMatchingRowIndices(key)
+	if err != nil {
+		return jrStateUnknown, err
+	}
 	var containerIdx int
 	if !s.isPartialJoin {
 		// Replace missing values with nulls to appease the row container.
