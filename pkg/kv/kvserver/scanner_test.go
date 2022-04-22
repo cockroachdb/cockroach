@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -148,7 +149,7 @@ func (tq *testQueue) Start(stopper *stop.Stopper) {
 
 // NB: MaybeAddAsync on a testQueue is actually synchronous.
 func (tq *testQueue) MaybeAddAsync(
-	ctx context.Context, replI replicaInQueue, now hlc.ClockTimestamp,
+	ctx context.Context, replI kvqueue.replicaInQueue, now hlc.ClockTimestamp,
 ) {
 	repl := replI.(*Replica)
 

@@ -28,6 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftlogqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicagcqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -613,7 +616,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 		// Recompute under raft lock so that the log doesn't change while we
 		// compute its size.
 		repl.RaftLock()
-		realSize, err := kvserver.ComputeRaftLogSize(
+		realSize, err := kvraftlogqueue.ComputeRaftLogSize(
 			ctx, repl.RangeID, repl.Engine(), repl.SideloadedRaftMuLocked(),
 		)
 		size, _ := repl.GetRaftLogSize()
@@ -2033,7 +2036,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	if removeBeforeTruncateAndReAdd {
 		// Verify old replica is GC'd. Wait out the replica gc queue
 		// inactivity threshold and force a gc scan.
-		manualClock.Increment(int64(kvserver.ReplicaGCQueueCheckInterval + 1))
+		manualClock.Increment(int64(kvreplicagcqueue.ReplicaGCQueueCheckInterval + 1))
 		testutils.SucceedsSoon(t, func() error {
 			tc.GetFirstStoreFromServer(t, 1).MustForceReplicaGCScanAndProcess()
 			_, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
@@ -2145,7 +2148,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 
 	// Wait out the range lease and the unleased duration to make the replica GC'able.
 	manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
-	manualClock.Increment(int64(kvserver.ReplicaGCQueueCheckInterval + 1))
+	manualClock.Increment(int64(kvreplicagcqueue.ReplicaGCQueueCheckInterval + 1))
 	tc.GetFirstStoreFromServer(t, 1).SetReplicaGCQueueActive(true)
 	tc.GetFirstStoreFromServer(t, 1).MustForceReplicaGCScanAndProcess()
 
@@ -2703,7 +2706,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 			if td.remove {
 				// Simulate second replica being transferred by removing it.
-				if err := store0.RemoveReplica(ctx, replica2, replica2.Desc().NextReplicaID, kvserver.RemoveOptions{
+				if err := store0.RemoveReplica(ctx, replica2, replica2.Desc().NextReplicaID, kvqueue.RemoveOptions{
 					DestroyData: true,
 				}); err != nil {
 					t.Fatal(err)
@@ -3327,7 +3330,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
 		manualClock.Increment(int64(
-			kvserver.ReplicaGCQueueCheckInterval) + 1)
+			kvreplicagcqueue.ReplicaGCQueueCheckInterval) + 1)
 		tc.GetFirstStoreFromServer(t, 1).MustForceReplicaGCScanAndProcess()
 
 		actual := tc.ReadIntFromStores(key)
@@ -3417,7 +3420,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	tc.GetFirstStoreFromServer(t, 2).SetReplicaGCQueueActive(true)
 	manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
 	manualClock.Increment(int64(
-		kvserver.ReplicaGCQueueCheckInterval) + 1)
+		kvreplicagcqueue.ReplicaGCQueueCheckInterval) + 1)
 	tc.GetFirstStoreFromServer(t, 2).MustForceReplicaGCScanAndProcess()
 	tc.WaitForValues(t, key, []int64{16, 0, 0})
 

@@ -24,14 +24,14 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvconsistencyqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -47,19 +47,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
 )
-
-func (s *Store) Transport() *RaftTransport {
-	return s.cfg.Transport
-}
-
-func (s *Store) FindTargetAndTransferLease(
-	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
-) (bool, error) {
-	transferStatus, err := s.replicateQueue.shedLease(
-		ctx, repl, desc, conf, allocator.TransferLeaseOptions{ExcludeLeaseRepl: true},
-	)
-	return transferStatus == allocator.TransferOK, err
-}
 
 // AddReplica adds the replica to the store's replica map and to the sorted
 // replicasByKey slice. To be used only by unittests.
@@ -104,7 +91,7 @@ func ConsistencyQueueShouldQueue(
 	disableLastProcessedCheck bool,
 	interval time.Duration,
 ) (bool, float64) {
-	return consistencyQueueShouldQueueImpl(ctx, now, consistencyShouldQueueData{
+	return kvconsistencyqueue.ShouldQueueImpl(ctx, now, kvconsistencyqueue.ShouldQueueData{
 		desc, getQueueLastProcessed, isNodeAvailable,
 		disableLastProcessedCheck, interval})
 }
@@ -123,12 +110,6 @@ func (s *Store) LogReplicaChangeTest(
 	return s.logChange(ctx, txn, changeType, replica, desc, reason, details)
 }
 
-// ReplicateQueuePurgatoryLength returns the number of replicas in replicate
-// queue purgatory.
-func (s *Store) ReplicateQueuePurgatoryLength() int {
-	return s.replicateQueue.PurgatoryLength()
-}
-
 // SplitQueuePurgatoryLength returns the number of replicas in split
 // queue purgatory.
 func (s *Store) SplitQueuePurgatoryLength() int {
@@ -143,11 +124,6 @@ func (s *Store) SetRaftLogQueueActive(active bool) {
 // SetReplicaGCQueueActive enables or disables the replica GC queue.
 func (s *Store) SetReplicaGCQueueActive(active bool) {
 	s.setReplicaGCQueueActive(active)
-}
-
-// SetSplitQueueActive enables or disables the split queue.
-func (s *Store) SetSplitQueueActive(active bool) {
-	s.setSplitQueueActive(active)
 }
 
 // SetMergeQueueActive enables or disables the merge queue.
@@ -172,13 +148,13 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.enqueueRaftUpdateCheck(rangeID)
 }
 
-func manualQueue(s *Store, q queueImpl, repl *Replica) error {
+func manualQueue(s *Store, q kvqueue.QueueImpl, repl *Replica) error {
 	cfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 	if cfg == nil {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
 	ctx := repl.AnnotateCtx(context.Background())
-	_, err := q.process(ctx, repl, cfg)
+	_, err := q.Process(ctx, repl, cfg)
 	return err
 }
 
@@ -195,7 +171,7 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 
 // ManualRaftSnapshot will manually send a raft snapshot to the target replica.
 func (s *Store) ManualRaftSnapshot(repl *Replica, target roachpb.ReplicaID) error {
-	return s.raftSnapshotQueue.processRaftSnapshot(context.Background(), repl, target)
+	return s.raftSnapshotQueue.ProcessRaftSnapshot(context.Background(), repl, target)
 }
 
 func (s *Store) ReservationCount() int {
@@ -235,14 +211,6 @@ func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, reader)
-}
-
-func (r *Replica) RaftLock() {
-	r.raftMu.Lock()
-}
-
-func (r *Replica) RaftUnlock() {
-	r.raftMu.Unlock()
 }
 
 // GetLastIndex is the same function as LastIndex but it does not require
@@ -319,7 +287,7 @@ func (r *Replica) IsFollowerActiveSince(
 ) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastUpdateTimes.isFollowerActiveSince(ctx, followerID, timeutil.Now(), threshold)
+	return r.mu.lastUpdateTimes.IsFollowerActiveSince(ctx, followerID, timeutil.Now(), threshold)
 }
 
 // GetTSCacheHighWater returns the high water mark of the replica's timestamp
@@ -331,14 +299,8 @@ func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 	return t
 }
 
-// ShouldBackpressureWrites returns whether writes to the range should be
-// subject to backpressure.
-func (r *Replica) ShouldBackpressureWrites() bool {
-	return r.shouldBackpressureWrites()
-}
-
 // GetRaftLogSize returns the approximate raft log size and whether it is
-// trustworthy.. See r.mu.raftLogSize for details.
+// trustworthy. See r.mu.raftLogSize for details.
 func (r *Replica) GetRaftLogSize() (int64, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -359,24 +321,12 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 	return r.mu.internalRaftGroup != nil
 }
 
-// SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
-// to RaftLock() or some other guarantee that r.raftMu is held.
-func (r *Replica) SideloadedRaftMuLocked() SideloadStorage {
-	return r.raftMu.sideloaded
-}
-
 // LargestPreviousMaxRangeSizeBytes returns the in-memory value used to mitigate
 // backpressure when the zone.RangeMaxSize is decreased.
 func (r *Replica) LargestPreviousMaxRangeSizeBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.largestPreviousMaxRangeSizeBytes
-}
-
-// LoadBasedSplitter returns the replica's split.Decider, which is used to
-// assist load-based split (and merge) decisions.
-func (r *Replica) LoadBasedSplitter() *split.Decider {
-	return &r.loadBasedSplitter
 }
 
 func MakeSSTable(
@@ -455,7 +405,7 @@ func SetMockAddSSTable() (undo func()) {
 // GetQueueLastProcessed returns the last processed timestamp for the
 // specified queue, or the zero timestamp if not available.
 func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.Timestamp, error) {
-	return r.getQueueLastProcessed(ctx, queue)
+	return r.GetQueueLastProcessed(ctx, queue)
 }
 
 func (r *Replica) MaybeUnquiesceAndWakeLeader() bool {

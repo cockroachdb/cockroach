@@ -22,9 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftlogqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftsnapshotqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicasideload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -874,7 +877,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		firstPurge := rd.Entries[0].Index // first new entry written
 		purgeTerm := rd.Entries[0].Term - 1
 		lastPurge := prevLastIndex // old end of the log, include in deletion
-		purgedSize, err := maybePurgeSideloaded(ctx, r.raftMu.sideloaded, firstPurge, lastPurge, purgeTerm)
+		purgedSize, err := replicasideload.MaybePurgeSideloaded(ctx, r.raftMu.sideloaded, firstPurge, lastPurge, purgeTerm)
 		if err != nil {
 			const expl = "while purging sideloaded storage"
 			return stats, expl, err
@@ -1345,7 +1348,7 @@ func (r *Replica) sendRaftMessagesRaftMuLocked(ctx context.Context, messages []r
 				prevIndex := message.Index  // index of entry preceding the append
 				for j := range message.Entries {
 					ent := &message.Entries[j]
-					assertSideloadedRaftCommandInlined(ctx, ent)
+					replicasideload.AssertSideloadedRaftCommandInlined(ctx, ent)
 
 					if prevIndex+1 != ent.Index {
 						log.Fatalf(ctx,
@@ -1436,7 +1439,7 @@ func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Me
 
 	// Raft-initiated snapshots are handled by the Raft snapshot queue.
 	if msg.Type == raftpb.MsgSnap {
-		r.store.raftSnapshotQueue.AddAsync(ctx, r, raftSnapshotPriority)
+		r.store.raftSnapshotQueue.AddAsync(ctx, r, kvraftsnapshotqueue.RaftSnapshotPriority)
 		return
 	}
 
@@ -1486,7 +1489,7 @@ func (r *Replica) sendRaftMessageRequest(
 	return r.store.cfg.Transport.SendAsync(req, r.connectionClass.get())
 }
 
-func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID, snapErr error) {
+func (r *Replica) ReportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID, snapErr error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 
@@ -1554,16 +1557,16 @@ func (r *Replica) completeSnapshotLogTruncationConstraint(
 		return
 	}
 
-	deadline := now.Add(RaftLogQueuePendingSnapshotGracePeriod)
+	deadline := now.Add(kvraftlogqueue.RaftLogQueuePendingSnapshotGracePeriod)
 	item.deadline = deadline
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
 }
 
-// getAndGCSnapshotLogTruncationConstraints returns the minimum index of any
+// GetAndGCSnapshotLogTruncationConstraints returns the minimum index of any
 // currently outstanding snapshot being sent from this replica to the specified
 // recipient or 0 if there isn't one. Passing 0 for recipientStore means any
 // recipient.
-func (r *Replica) getAndGCSnapshotLogTruncationConstraints(
+func (r *Replica) GetAndGCSnapshotLogTruncationConstraints(
 	now time.Time, recipientStore roachpb.StoreID,
 ) (minSnapIndex uint64) {
 	r.mu.Lock()
@@ -1779,12 +1782,12 @@ func (r *Replica) campaignLocked(ctx context.Context) {
 	r.store.enqueueRaftUpdateCheck(r.RangeID)
 }
 
-// a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
+// a LastUpdateTimesMap is maintained on the Raft leader to keep track of the
 // last communication received from followers, which in turn informs the quota
 // pool and log truncations.
-type lastUpdateTimesMap map[roachpb.ReplicaID]time.Time
+type LastUpdateTimesMap map[roachpb.ReplicaID]time.Time
 
-func (m lastUpdateTimesMap) update(replicaID roachpb.ReplicaID, now time.Time) {
+func (m LastUpdateTimesMap) update(replicaID roachpb.ReplicaID, now time.Time) {
 	if m == nil {
 		return
 	}
@@ -1799,7 +1802,7 @@ func (m lastUpdateTimesMap) update(replicaID roachpb.ReplicaID, now time.Time) {
 // live as they may be down and could artificially seem alive forever assuming
 // a suitable pattern of quiesce and unquiesce operations (and this in turn
 // can interfere with Raft log truncations).
-func (m lastUpdateTimesMap) updateOnUnquiesce(
+func (m LastUpdateTimesMap) updateOnUnquiesce(
 	descs []roachpb.ReplicaDescriptor, prs map[uint64]tracker.Progress, now time.Time,
 ) {
 	for _, desc := range descs {
@@ -1815,15 +1818,15 @@ func (m lastUpdateTimesMap) updateOnUnquiesce(
 // callback is invoked. Raft leadership is usually stable, so there is no danger
 // of artificially keeping down followers alive, though if it started
 // flip-flopping at a <10s cadence there would be a risk of that happening.
-func (m lastUpdateTimesMap) updateOnBecomeLeader(descs []roachpb.ReplicaDescriptor, now time.Time) {
+func (m LastUpdateTimesMap) updateOnBecomeLeader(descs []roachpb.ReplicaDescriptor, now time.Time) {
 	for _, desc := range descs {
 		m.update(desc.ReplicaID, now)
 	}
 }
 
-// isFollowerActiveSince returns whether the specified follower has made
+// IsFollowerActiveSince returns whether the specified follower has made
 // communication with the leader recently (since threshold).
-func (m lastUpdateTimesMap) isFollowerActiveSince(
+func (m LastUpdateTimesMap) IsFollowerActiveSince(
 	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time, threshold time.Duration,
 ) bool {
 	lastUpdateTime, ok := m[replicaID]
@@ -2024,39 +2027,6 @@ func handleTruncatedStateBelowRaftPreApply(
 	}
 
 	return true, nil
-}
-
-// ComputeRaftLogSize computes the size (in bytes) of the Raft log from the
-// storage engine. This will iterate over the Raft log and sideloaded files, so
-// depending on the size of these it can be mildly to extremely expensive and
-// thus should not be called frequently.
-//
-// The sideloaded storage may be nil, in which case it is treated as empty.
-func ComputeRaftLogSize(
-	ctx context.Context, rangeID roachpb.RangeID, reader storage.Reader, sideloaded SideloadStorage,
-) (int64, error) {
-	prefix := keys.RaftLogPrefix(rangeID)
-	prefixEnd := prefix.PrefixEnd()
-	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		LowerBound: prefix,
-		UpperBound: prefixEnd,
-	})
-	defer iter.Close()
-	ms, err := iter.ComputeStats(prefix, prefixEnd, 0 /* nowNanos */)
-	if err != nil {
-		return 0, err
-	}
-	var totalSideloaded int64
-	if sideloaded != nil {
-		var err error
-		// The remaining bytes if one were to truncate [0, 0) gives us the total
-		// number of bytes in sideloaded files.
-		_, totalSideloaded, err = sideloaded.BytesIfTruncatedFromTo(ctx, 0, 0)
-		if err != nil {
-			return 0, err
-		}
-	}
-	return ms.SysBytes + totalSideloaded, nil
 }
 
 func shouldCampaignAfterConfChange(

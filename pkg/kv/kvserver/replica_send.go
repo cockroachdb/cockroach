@@ -138,7 +138,7 @@ func (r *Replica) sendWithoutRangeID(
 	ctx = r.AnnotateCtx(ctx)
 
 	// If the internal Raft group is not initialized, create it and wake the leader.
-	r.maybeInitializeRaftGroup(ctx)
+	r.MaybeInitializeRaftGroup(ctx)
 
 	isReadOnly := ba.IsReadOnly()
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {

@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvraftlogqueue",
+    srcs = ["raft_log_queue.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftlogqueue",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver/kvqueue",
+        "//pkg/kv/kvserver/replicasideload",
+        "//pkg/kv/kvserver/storemetrics",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/storage",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "kvraftlogqueue_test",
+    srcs = ["raft_log_queue_test.go"],
+    embed = [":kvraftlogqueue"],
+    deps = [
+        "//pkg/kv/kvserver/kvqueue",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//assert",
+        "@io_etcd_go_etcd_raft_v3//:raft",
+        "@io_etcd_go_etcd_raft_v3//tracker",
+    ],
+)

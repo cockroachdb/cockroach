@@ -95,7 +95,7 @@ func (r *Replica) readProtectedTimestampsRLocked(
 	return ts, nil
 }
 
-// checkProtectedTimestampsForGC determines whether the Replica can run GC. If
+// CheckProtectedTimestampsForGC determines whether the Replica can run GC. If
 // the Replica can run GC, this method returns the latest timestamp which can be
 // used to determine a valid new GCThreshold. The policy is passed in rather
 // than read from the replica state to ensure that the same value used for this
@@ -103,10 +103,10 @@ func (r *Replica) readProtectedTimestampsRLocked(
 //
 // In the case that GC can proceed, four timestamps are returned: The timestamp
 // corresponding to the state of the cache used to make the determination (used
-// for markPendingGC when actually performing GC), the timestamp used as the
+// for MarkPendingGC when actually performing GC), the timestamp used as the
 // basis to calculate the new gc threshold (used for scoring and reporting), the
 // old gc threshold, and the new gc threshold.
-func (r *Replica) checkProtectedTimestampsForGC(
+func (r *Replica) CheckProtectedTimestampsForGC(
 	ctx context.Context, gcTTL time.Duration,
 ) (canGC bool, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold hlc.Timestamp, _ error) {
 
@@ -164,7 +164,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	return true, read.readAt, gcTimestamp, oldThreshold, newThreshold, nil
 }
 
-// markPendingGC is called just prior to sending the GC request to increase the
+// MarkPendingGC is called just prior to sending the GC request to increase the
 // GC threshold during MVCC GC queue processing. This method synchronizes such
 // requests with the processing of AdminVerifyProtectedTimestamp requests. Such
 // synchronization is important to prevent races where the protected timestamp
@@ -172,7 +172,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 // verification request arrives which applies under a later cache state and then
 // the gc queue, acting on older cache state, attempts to set the gc threshold
 // above a successfully verified record.
-func (r *Replica) markPendingGC(readAt, newThreshold hlc.Timestamp) error {
+func (r *Replica) MarkPendingGC(readAt, newThreshold hlc.Timestamp) error {
 	r.protectedTimestampMu.Lock()
 	defer r.protectedTimestampMu.Unlock()
 	if readAt.Less(r.protectedTimestampMu.minStateReadTimestamp) {

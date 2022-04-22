@@ -24,6 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvmergequeue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicatequeue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvsplitqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -73,7 +77,7 @@ func (r *Replica) AdminSplit(
 
 	err := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
 		var err error
-		reply, err = r.adminSplitWithDescriptor(ctx, args, desc, true /* delayable */, reason)
+		reply, err = r.AdminSplitWithDescriptor(ctx, args, desc, true /* delayable */, reason)
 		return err
 	})
 	return reply, err
@@ -287,7 +291,7 @@ func splitTxnStickyUpdateAttempt(
 	return txn.Run(ctx, b)
 }
 
-// adminSplitWithDescriptor divides the range into into two ranges, using
+// AdminSplitWithDescriptor divides the range into into two ranges, using
 // either args.SplitKey (if provided) or an internally computed key that aims
 // to roughly equipartition the range by size. The split is done inside of a
 // distributed txn which writes updated left and new right hand side range
@@ -305,7 +309,7 @@ func splitTxnStickyUpdateAttempt(
 // TODO(tschottdorf): should assert that split key is not a local key.
 //
 // See the comment on splitTrigger for details on the complexities.
-func (r *Replica) adminSplitWithDescriptor(
+func (r *Replica) AdminSplitWithDescriptor(
 	ctx context.Context,
 	args roachpb.AdminSplitRequest,
 	desc *roachpb.RangeDescriptor,
@@ -341,7 +345,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			}
 			if foundSplitKey == nil {
 				// No suitable split key could be found.
-				return reply, unsplittableRangeError{}
+				return reply, kvsplitqueue.UnsplittableRangeError{}
 			}
 		} else {
 			// If the key that routed this request to this range is now out of this
@@ -399,7 +403,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 				// NB: we have to wrap the existing error here as consumers of this code
 				// look at the root cause to sniff out the changed descriptor.
-				err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
+				err = &kvqueue.BenignError{Err: wrapDescChangedError(err, desc, actualDesc)}
 			}
 			return reply, err
 		}
@@ -433,7 +437,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 			// NB: we have to wrap the existing error here as consumers of this code
 			// look at the root cause to sniff out the changed descriptor.
-			err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
+			err = &kvqueue.BenignError{Err: wrapDescChangedError(err, desc, actualDesc)}
 		}
 		return reply, errors.Wrapf(err, "split at key %s failed", splitKey)
 	}
@@ -516,7 +520,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 			// NB: we have to wrap the existing error here as consumers of this code
 			// look at the root cause to sniff out the changed descriptor.
-			err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
+			err = &kvqueue.BenignError{Err: wrapDescChangedError(err, desc, actualDesc)}
 		}
 		return reply, err
 	}
@@ -551,7 +555,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 		// Without the lease, a replica's local descriptor can be arbitrarily
 		// stale, which will result in a ConditionFailedError. To avoid this, we
 		// make sure that we still have the lease before each attempt.
-		if _, pErr := r.redirectOnOrAcquireLease(ctx); pErr != nil {
+		if _, pErr := r.RedirectOnOrAcquireLease(ctx); pErr != nil {
 			return pErr
 		}
 
@@ -660,7 +664,7 @@ func (r *Replica) AdminMerge(
 			return errors.Errorf("cannot merge ranges when rhs is in a joint state or has learners: %s",
 				rReplicas)
 		}
-		if !replicasCollocated(lReplicas.Descriptors(), rReplicas.Descriptors()) {
+		if !kvmergequeue.ReplicasCollocated(lReplicas.Descriptors(), rReplicas.Descriptors()) {
 			return errors.Errorf("ranges not collocated; %s != %s", lReplicas, rReplicas)
 		}
 
@@ -987,18 +991,15 @@ func (r *Replica) ChangeReplicas(
 	if knobs := r.store.TestingKnobs(); util.RaceEnabled &&
 		!knobs.DisableReplicateQueue &&
 		!knobs.AllowUnsynchronizedReplicationChanges {
-		bq := r.store.replicateQueue.baseQueue
-		bq.mu.Lock()
-		disabled := bq.mu.disabled
-		bq.mu.Unlock()
-		if !disabled {
+		bq := r.store.replicateQueue.BaseQueue
+		if !bq.Disabled() {
 			return nil, errors.New("must disable replicate queue to use ChangeReplicas manually")
 		}
 	}
-	return r.changeReplicasImpl(ctx, desc, priority, reason, details, chgs)
+	return r.ChangeReplicasImpl(ctx, desc, priority, reason, details, chgs)
 }
 
-func (r *Replica) changeReplicasImpl(
+func (r *Replica) ChangeReplicasImpl(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	priority kvserverpb.SnapshotRequest_Priority,
@@ -1146,7 +1147,7 @@ func (r *Replica) changeReplicasImpl(
 		// If we demoted or swapped any voters with non-voters, we likely are in a
 		// joint config or have learners on the range. Let's exit the joint config
 		// and remove the learners.
-		return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
+		return r.MaybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
 	}
 	return desc, nil
 }
@@ -1301,10 +1302,10 @@ func (r *Replica) TestingRemoveLearner(
 	return desc, err
 }
 
-// maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
+// MaybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
 // returns, all remaining replicas will be of type VOTER_FULL or NON_VOTER.
-func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
+func (r *Replica) MaybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	ctx context.Context, desc *roachpb.RangeDescriptor,
 ) (rangeDesc *roachpb.RangeDescriptor, err error) {
 	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
@@ -1660,8 +1661,10 @@ func (r *Replica) initializeRaftLearners(
 	//
 	// Also note that the lock only prevents the raft snapshot queue from sending
 	// snapshots to learners and non-voters, it will still send them to voters.
-	// There are more details about this locking in
-	_ = (*raftSnapshotQueue)(nil).processRaftSnapshot
+	// There are more details about this locking in:
+	//
+	//    _ = (*kvraftsnapshotqueue.RaftSnapshotQueue)(nil).processRaftSnapshot
+	//
 	// as well as a TODO about fixing all this to be less subtle and brittle.
 	releaseSnapshotLockFn := r.lockLearnerSnapshot(ctx, targets)
 	defer releaseSnapshotLockFn()
@@ -1786,7 +1789,7 @@ func (r *Replica) initializeRaftLearners(
 		// orphaned learner. Second, this tickled some bugs in etcd/raft around
 		// switching between StateSnapshot and StateProbe. Even if we worked through
 		// these, it would be susceptible to future similar issues.
-		if err := r.sendSnapshot(ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority); err != nil {
+		if err := r.SendSnapshot(ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority); err != nil {
 			return nil, err
 		}
 	}
@@ -1881,7 +1884,7 @@ func (r *Replica) execReplicationChangesForVoters(
 
 	// Leave the joint config if we entered one. Also, remove any learners we
 	// might have picked up due to removal-via-demotion.
-	return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
+	return r.MaybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
 }
 
 // tryRollbackRaftLearner attempts to remove a learner specified by the target.
@@ -2304,7 +2307,7 @@ func execChangeReplicasTxn(
 					return false
 				}) {
 				// NB: we use newQuorumError which is recognized by the replicate queue.
-				return newQuorumError("range %s cannot make progress with proposed changes add=%v del=%v "+
+				return kvreplicatequeue.NewQuorumError("range %s cannot make progress with proposed changes add=%v del=%v "+
 					"based on live replicas %v", crt.Desc, crt.Added(), crt.Removed(), liveReplicas)
 			}
 			return nil
@@ -2374,7 +2377,7 @@ func execChangeReplicasTxn(
 			// as "secondary payload", in case the error object makes it way
 			// to logs or telemetry during a crash.
 			err = errors.WithSecondaryError(newDescChangedError(referenceDesc, actualDesc), err)
-			err = &benignError{err}
+			err = &kvqueue.BenignError{Err: err}
 		}
 		return nil, errors.Wrapf(err, "change replicas of r%d failed", referenceDesc.RangeID)
 	}
@@ -2446,7 +2449,7 @@ func recordRangeEventsInLog(
 	return nil
 }
 
-// sendSnapshot sends a snapshot of the replica state to the specified replica.
+// SendSnapshot sends a snapshot of the replica state to the specified replica.
 // Currently only invoked from replicateQueue and raftSnapshotQueue. Be careful
 // about adding additional calls as generating a snapshot is moderately
 // expensive.
@@ -2557,7 +2560,7 @@ func recordRangeEventsInLog(
 // callers of `shouldAcceptSnapshotData` return an error so that we no longer
 // have to worry about racing with a second snapshot. See the comment on
 // ReplicaPlaceholder for details.
-func (r *Replica) sendSnapshot(
+func (r *Replica) SendSnapshot(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
 	snapType kvserverpb.SnapshotRequest_Type,
@@ -2566,13 +2569,13 @@ func (r *Replica) sendSnapshot(
 	defer func() {
 		// Report the snapshot status to Raft, which expects us to do this once we
 		// finish sending the snapshot.
-		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
+		r.ReportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
 
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
 	if err != nil {
 		err = errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
-		return errors.Mark(err, errMarkSnapshotError)
+		return errors.Mark(err, kvreplicatequeue.ErrMarkSnapshotError)
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
@@ -2583,7 +2586,7 @@ func (r *Replica) sendSnapshot(
 	// the leaseholder and we haven't yet applied the configuration change that's
 	// adding the recipient to the range.
 	if _, ok := snap.State.Desc.GetReplicaDescriptor(recipient.StoreID); !ok {
-		return errors.Wrapf(errMarkSnapshotError,
+		return errors.Wrapf(kvreplicatequeue.ErrMarkSnapshotError,
 			"attempting to send snapshot that does not contain the recipient as a replica; "+
 				"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc)
 	}
@@ -2597,7 +2600,7 @@ func (r *Replica) sendSnapshot(
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
 		// haven't woken up yet.
-		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
+		return &kvqueue.BenignError{Err: errors.Wrap(kvreplicatequeue.ErrMarkSnapshotError, "raft status not initialized")}
 	}
 
 	// We avoid shipping over the past Raft log in the snapshot by changing
@@ -2664,34 +2667,9 @@ func (r *Replica) sendSnapshot(
 
 			log.Fatal(ctx, "malformed snapshot generated")
 		}
-		return errors.Mark(err, errMarkSnapshotError)
+		return errors.Mark(err, kvreplicatequeue.ErrMarkSnapshotError)
 	}
 	return nil
-}
-
-// replicasCollocated is used in AdminMerge to ensure that the ranges are
-// all collocate on the same set of replicas.
-func replicasCollocated(a, b []roachpb.ReplicaDescriptor) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	set := make(map[roachpb.StoreID]int)
-	for _, replica := range a {
-		set[replica.StoreID]++
-	}
-
-	for _, replica := range b {
-		set[replica.StoreID]--
-	}
-
-	for _, value := range set {
-		if value != 0 {
-			return false
-		}
-	}
-
-	return true
 }
 
 func checkDescsEqual(
@@ -2841,7 +2819,7 @@ func (r *Replica) AdminRelocateRange(
 	// Remove learners so we don't have to think about relocating them, and leave
 	// the joint config if we're in one.
 	newDesc, err :=
-		r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
+		r.MaybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
 		return err
@@ -2931,7 +2909,7 @@ func (r *Replica) relocateReplicas(
 				newDesc, err := r.store.DB().AdminChangeReplicas(ctx, startKey, rangeDesc, ops)
 				if err != nil {
 					returnErr := errors.Wrapf(err, "while carrying out changes %v", ops)
-					if !isSnapshotError(err) {
+					if !kvreplicatequeue.IsSnapshotError(err) {
 						return rangeDesc, returnErr
 					}
 					if every.ShouldLog() {
@@ -3206,7 +3184,7 @@ func (r *Replica) relocateOne(
 
 	var ops []roachpb.ReplicationChange
 	if shouldAdd && shouldRemove {
-		ops, _, err = replicationChangesForRebalance(
+		ops, _, err = kvreplicatequeue.ReplicationChangesForRebalance(
 			ctx, desc, len(existingVoters), additionTarget, removalTarget, args.targetType,
 		)
 		if err != nil {
@@ -3365,7 +3343,7 @@ func (r *Replica) adminScatter(
 	var allowLeaseTransfer bool
 	var err error
 	requeue := true
-	canTransferLease := func(ctx context.Context, repl *Replica) bool { return allowLeaseTransfer }
+	canTransferLease := func(ctx context.Context, repl kvqueue.Replica) bool { return allowLeaseTransfer }
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
 			break
@@ -3373,12 +3351,12 @@ func (r *Replica) adminScatter(
 		if currentAttempt == maxAttempts-1 || !requeue {
 			allowLeaseTransfer = true
 		}
-		requeue, err = rq.processOneChange(
+		requeue, err = rq.ProcessOneChange(
 			ctx, r, canTransferLease, true /* scatter */, false, /* dryRun */
 		)
 		if err != nil {
 			// TODO(tbg): can this use IsRetriableReplicationError?
-			if isSnapshotError(err) {
+			if kvreplicatequeue.IsSnapshotError(err) {
 				continue
 			}
 			break

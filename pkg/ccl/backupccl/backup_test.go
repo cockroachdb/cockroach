@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -9195,8 +9196,10 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	defer cleanup()
 	args := base.TestClusterArgs{}
 	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		DisableGCQueue:            true,
-		DisableLastProcessedCheck: true,
+		DisableGCQueue: true,
+		QueueKnobs: kvqueue.TestingKnobs{
+			DisableLastProcessedCheck: true,
+		},
 	}
 	args.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	args.ServerArgs.ExternalIODir = localExternalDir
@@ -9294,8 +9297,10 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		DisableGCQueue:            true,
-		DisableLastProcessedCheck: true,
+		DisableGCQueue: true,
+		QueueKnobs: kvqueue.TestingKnobs{
+			DisableLastProcessedCheck: true,
+		},
 	}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	tc := testcluster.StartTestCluster(t, 1, params)

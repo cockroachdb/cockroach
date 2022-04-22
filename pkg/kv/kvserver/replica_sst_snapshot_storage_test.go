@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicasideload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -35,7 +36,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
 	testLimiter := rate.NewLimiter(rate.Inf, 0)
 
-	cleanup, eng := newOnDiskEngine(ctx, t)
+	cleanup, eng := replicasideload.newOnDiskEngine(ctx, t)
 	defer cleanup()
 	defer eng.Close()
 
@@ -117,7 +118,7 @@ func TestSSTSnapshotStorageContextCancellation(t *testing.T) {
 	testLimiter := rate.NewLimiter(rate.Inf, 0)
 
 	ctx := context.Background()
-	cleanup, eng := newOnDiskEngine(ctx, t)
+	cleanup, eng := replicasideload.newOnDiskEngine(ctx, t)
 	defer cleanup()
 	defer eng.Close()
 
@@ -154,7 +155,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
 	testLimiter := rate.NewLimiter(rate.Inf, 0)
 
-	cleanup, eng := newOnDiskEngine(ctx, t)
+	cleanup, eng := replicasideload.newOnDiskEngine(ctx, t)
 	defer cleanup()
 	defer eng.Close()
 

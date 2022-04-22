@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvtsmaintenancequeue"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -70,4 +70,4 @@ func (tsdb *DB) MaintainTimeSeries(
 }
 
 // Assert that DB implements the necessary interface from the storage package.
-var _ kvserver.TimeSeriesDataStore = (*DB)(nil)
+var _ kvtsmaintenancequeue.TimeSeriesDataStore = (*DB)(nil)

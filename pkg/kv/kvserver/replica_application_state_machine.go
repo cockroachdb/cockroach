@@ -17,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftlogqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicagcqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -291,7 +293,7 @@ func checkForcedErr(
 		)
 		if isLeaseRequest {
 			// For lease requests we return a special error that
-			// redirectOnOrAcquireLease() understands. Note that these
+			// RedirectOnOrAcquireLease() understands. Note that these
 			// requests don't go through the DistSender.
 			return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *replicaState.Lease,
@@ -317,7 +319,7 @@ func checkForcedErr(
 		// counter makes sense from a testing perspective.
 		//
 		// However, leases get special vetting to make sure we don't give one to a replica that was
-		// since removed (see #15385 and a comment in redirectOnOrAcquireLease).
+		// since removed (see #15385 and a comment in RedirectOnOrAcquireLease).
 		if _, ok := replicaState.Desc.GetReplicaDescriptor(requestedLease.Replica.StoreID); !ok {
 			return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *replicaState.Lease,
@@ -708,11 +710,11 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		rhsRepl.mu.Lock()
 		rhsRepl.mu.destroyStatus.Set(
 			roachpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
-			destroyReasonRemoved)
+			kvserverbase.DestroyReasonRemoved)
 		rhsRepl.mu.Unlock()
 		rhsRepl.readOnlyCmdMu.Unlock()
 
-		// Use math.MaxInt32 (mergedTombstoneReplicaID) as the nextReplicaID as an
+		// Use math.MaxInt32 (MergedTombstoneReplicaID) as the nextReplicaID as an
 		// extra safeguard against creating new replicas of the RHS. This isn't
 		// required for correctness, since the merge protocol should guarantee that
 		// no new replicas of the RHS can ever be created, but it doesn't hurt to
@@ -720,7 +722,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		const clearRangeIDLocalOnly = true
 		const mustClearRange = false
 		if err := rhsRepl.preDestroyRaftMuLocked(
-			ctx, b.batch, b.batch, mergedTombstoneReplicaID, clearRangeIDLocalOnly, mustClearRange,
+			ctx, b.batch, b.batch, kvreplicagcqueue.MergedTombstoneReplicaID, clearRangeIDLocalOnly, mustClearRange,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to destroy replica before merge")
 		}
@@ -756,7 +758,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// only for deciding how to truncate the raft log, which is not part of
 		// the state machine. Also, we will eventually eliminate this check by
 		// only supporting loosely coupled truncation.
-		looselyCoupledTruncation := isLooselyCoupledRaftLogTruncationEnabled(ctx, b.r.ClusterSettings())
+		looselyCoupledTruncation := kvraftlogqueue.IsLooselyCoupledRaftLogTruncationEnabled(ctx, b.r.ClusterSettings())
 		// In addition to cluster version and cluster settings, we also apply
 		// immediately if RaftExpectedFirstIndex is not populated (see comment in
 		// that proto).
@@ -826,7 +828,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		b.r.mu.Lock()
 		b.r.mu.destroyStatus.Set(
 			roachpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
-			destroyReasonRemoved)
+			kvserverbase.DestroyReasonRemoved)
 		b.r.mu.Unlock()
 		b.r.readOnlyCmdMu.Unlock()
 		b.changeRemovesReplica = true
@@ -979,7 +981,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Record the stats delta in the StoreMetrics.
 	deltaStats := *b.state.Stats
 	deltaStats.Subtract(prevStats)
-	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, deltaStats)
+	r.store.metrics.AddMVCCStats(ctx, r.tenantMetricsRef, deltaStats)
 
 	// Record the write activity, passing a 0 nodeID because replica.writeStats
 	// intentionally doesn't track the origin of the writes.

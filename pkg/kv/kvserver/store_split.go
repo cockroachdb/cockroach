@@ -175,7 +175,7 @@ func splitPostApply(
 		if _, ok := rightReplOrNil.TenantID(); ok {
 			// TODO(tbg): why this check to get here? Is this really checking if the RHS
 			// is already initialized? But isn't it always, at this point?
-			rightReplOrNil.store.metrics.addMVCCStats(ctx, rightReplOrNil.tenantMetricsRef, deltaMS)
+			rightReplOrNil.store.metrics.AddMVCCStats(ctx, rightReplOrNil.tenantMetricsRef, deltaMS)
 		} else {
 			log.Fatalf(ctx, "%s: found replica which is RHS of a split "+
 				"without a valid tenant ID", rightReplOrNil)

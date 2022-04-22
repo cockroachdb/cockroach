@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "base.go",
         "bulk_adder.go",
+        "destroy_reason.go",
         "knobs.go",
         "raftversion.go",
         "stores.go",

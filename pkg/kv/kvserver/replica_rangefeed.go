@@ -759,7 +759,7 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 		// lease. We don't care about the request's result, only its routing. We're
 		// employing higher-level machinery here (the DistSender); there's no better
 		// way to ensure that someone (potentially another replica) takes a lease.
-		// In particular, r.redirectOnOrAcquireLease() doesn't work because, if the
+		// In particular, r.RedirectOnOrAcquireLease() doesn't work because, if the
 		// current lease is invalid and the current replica is not a leader, the
 		// current replica will not take a lease.
 		log.VEventf(ctx, 2, "ensuring lease for rangefeed range. current lease invalid: %s", lease.Lease)

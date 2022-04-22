@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicasideload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -180,7 +181,7 @@ func (f *SSTSnapshotStorageFile) Write(contents []byte) (int, error) {
 	if err := f.ensureFile(); err != nil {
 		return 0, err
 	}
-	if err := limitBulkIOWrite(f.ctx, f.scratch.storage.limiter, len(contents)); err != nil {
+	if err := replicasideload.LimitBulkIOWrite(f.ctx, f.scratch.storage.limiter, len(contents)); err != nil {
 		return 0, err
 	}
 	return f.file.Write(contents)

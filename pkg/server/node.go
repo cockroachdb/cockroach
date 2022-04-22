@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmissioncontroller"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -222,7 +223,7 @@ type Node struct {
 
 	perReplicaServer kvserver.Server
 
-	admissionController kvserver.KVAdmissionController
+	admissionController kvadmissioncontroller.KVAdmissionController
 
 	tenantUsage multitenant.TenantUsageServer
 
@@ -373,7 +374,7 @@ func NewNode(
 		txnMetrics: txnMetrics,
 		sqlExec:    sqlExec,
 		clusterID:  clusterID,
-		admissionController: kvserver.MakeKVAdmissionController(
+		admissionController: kvadmissioncontroller.MakeKVAdmissionController(
 			kvAdmissionQ, storeGrantCoords, cfg.Settings),
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
@@ -780,13 +781,13 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 }
 
 // GetTenantWeights implements kvserver.TenantWeightProvider.
-func (n *Node) GetTenantWeights() kvserver.TenantWeights {
-	weights := kvserver.TenantWeights{
+func (n *Node) GetTenantWeights() kvadmissioncontroller.TenantWeights {
+	weights := kvadmissioncontroller.TenantWeights{
 		Node: make(map[uint64]uint32),
 	}
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 		sw := make(map[uint64]uint32)
-		weights.Stores = append(weights.Stores, kvserver.TenantWeightsForStore{
+		weights.Stores = append(weights.Stores, kvadmissioncontroller.TenantWeightsForStore{
 			StoreID: store.StoreID(),
 			Weights: sw,
 		})

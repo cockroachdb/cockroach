@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicagcqueue"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -42,7 +43,7 @@ func (rd *replicaMsgAppDropper) ShouldDrop(
 	if lhsRepl == nil {
 		return nil, false
 	}
-	lhsRepl.store.replicaGCQueue.AddAsync(ctx, lhsRepl, replicaGCPriorityDefault)
+	lhsRepl.store.replicaGCQueue.AddAsync(ctx, lhsRepl, kvreplicagcqueue.ReplicaGCPriorityDefault)
 	return lhsRepl, true
 }
 

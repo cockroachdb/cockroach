@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -340,7 +341,7 @@ func (r *Replica) handleChangeReplicasResult(
 	// Note that a replica's destroy status is only ever updated under the
 	// raftMu and we validated that the replica was not RemovingOrRemoved
 	// before processing this raft ready.
-	if ds, _ := r.IsDestroyed(); ds != destroyReasonRemoved {
+	if ds, _ := r.IsDestroyed(); ds != kvserverbase.DestroyReasonRemoved {
 		return false // changeRemovedReplica
 	}
 
@@ -356,7 +357,7 @@ func (r *Replica) handleChangeReplicasResult(
 		log.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
 	}
 
-	if _, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
+	if _, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), kvqueue.RemoveOptions{
 		// We destroyed the data when the batch committed so don't destroy it again.
 		DestroyData: false,
 	}); err != nil {

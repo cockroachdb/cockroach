@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,7 +35,7 @@ type replicaQueue interface {
 	// MaybeAdd adds the replica to the queue if the replica meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
-	MaybeAddAsync(context.Context, replicaInQueue, hlc.ClockTimestamp)
+	MaybeAddAsync(context.Context, kvqueue.Replica, hlc.ClockTimestamp)
 	// MaybeRemove removes the replica from the queue if it is present.
 	MaybeRemove(roachpb.RangeID)
 	// Name returns the name of the queue.

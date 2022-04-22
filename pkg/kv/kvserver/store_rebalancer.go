@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicatequeue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storemetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -103,9 +105,12 @@ type StoreRebalancer struct {
 	log.AmbientContext
 	metrics         StoreRebalancerMetrics
 	st              *cluster.Settings
-	rq              *replicateQueue
+	rq              *kvreplicatequeue.ReplicateQueue
 	replRankings    *replicaRankings
 	getRaftStatusFn func(replica *Replica) *raft.Status
+	allocator       allocatorimpl.Allocator
+	storePool       *storepool.StorePool
+	// XXX: storepool
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
@@ -113,7 +118,10 @@ type StoreRebalancer struct {
 func NewStoreRebalancer(
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
-	rq *replicateQueue,
+	rq *kvreplicatequeue.ReplicateQueue,
+	allocator allocatorimpl.Allocator,
+	metrics *storemetrics.StoreMetrics,
+	storePool *storepool.StorePool,
 	replRankings *replicaRankings,
 ) *StoreRebalancer {
 	sr := &StoreRebalancer{
@@ -121,13 +129,15 @@ func NewStoreRebalancer(
 		metrics:        makeStoreRebalancerMetrics(),
 		st:             st,
 		rq:             rq,
+		allocator:      allocator,
+		storePool:      storePool,
 		replRankings:   replRankings,
 		getRaftStatusFn: func(replica *Replica) *raft.Status {
 			return replica.RaftStatus()
 		},
 	}
 	sr.AddLogTag("store-rebalancer", nil)
-	sr.rq.store.metrics.registry.AddMetricStruct(&sr.metrics)
+	metrics.Registry.AddMetricStruct(&sr.metrics)
 	return sr
 }
 
@@ -170,7 +180,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				continue
 			}
 
-			storeList, _, _ := sr.rq.store.cfg.StorePool.GetStoreList(storepool.StoreFilterSuspect)
+			storeList, _, _ := sr.storePool.GetStoreList(storepool.StoreFilterSuspect)
 			sr.rebalanceStore(ctx, mode, storeList)
 		}
 	})
@@ -183,8 +193,8 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 // balance.
 func (sr *StoreRebalancer) scorerOptions(ctx context.Context) *allocatorimpl.QPSScorerOptions {
 	return &allocatorimpl.QPSScorerOptions{
-		StoreHealthOptions:    sr.rq.allocator.StoreHealthOptions(ctx),
-		Deterministic:         sr.rq.store.cfg.StorePool.Deterministic,
+		StoreHealthOptions:    sr.allocator.StoreHealthOptions(ctx),
+		Deterministic:         sr.storePool.Deterministic,
 		QPSRebalanceThreshold: allocator.QPSRebalanceThreshold.Get(&sr.st.SV),
 		MinRequiredQPSDiff:    allocator.MinQPSDifferenceForTransfers.Get(&sr.st.SV),
 	}
@@ -206,7 +216,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 	options := sr.scorerOptions(ctx)
 	var localDesc *roachpb.StoreDescriptor
 	for i := range allStoresList.Stores {
-		if allStoresList.Stores[i].StoreID == sr.rq.store.StoreID() {
+		if allStoresList.Stores[i].StoreID == sr.rq.Store.StoreID() {
 			localDesc = &allStoresList.Stores[i]
 			break
 		}
@@ -246,9 +256,9 @@ func (sr *StoreRebalancer) rebalanceStore(
 			break
 		}
 
-		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
+		timeout := sr.rq.ProcessTimeoutFunc(sr.st, replWithStats.repl)
 		if err := contextutil.RunWithTimeout(ctx, "transfer lease", timeout, func(ctx context.Context) error {
-			return sr.rq.transferLease(ctx, replWithStats.repl, target, replWithStats.qps)
+			return sr.rq.TransferLease(ctx, replWithStats.repl, target, replWithStats.qps)
 		}); err != nil {
 			log.Errorf(ctx, "unable to transfer lease to s%d: %+v", target.StoreID, err)
 			continue
@@ -315,9 +325,9 @@ func (sr *StoreRebalancer) rebalanceStore(
 			nonVoterTargets,
 		)
 
-		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
+		timeout := sr.rq.ProcessTimeoutFunc(sr.st, replWithStats.repl)
 		if err := contextutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
-			return sr.rq.store.DB().AdminRelocateRange(
+			return sr.rq.Store.DB().AdminRelocateRange(
 				ctx,
 				descBeforeRebalance.StartKey.AsRawKey(),
 				voterTargets,
@@ -369,7 +379,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 	storeMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
 ) (replicaWithStats, roachpb.ReplicaDescriptor, []replicaWithStats) {
 	var considerForRebalance []replicaWithStats
-	now := sr.rq.store.Clock().NowAsClockTimestamp()
+	now := sr.rq.Clock.NowAsClockTimestamp()
 	for {
 		if len(*hottestRanges) == 0 {
 			return replicaWithStats{}, roachpb.ReplicaDescriptor{}, considerForRebalance
@@ -412,7 +422,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		// waiting for a snapshot).
 		candidates = allocatorimpl.FilterBehindReplicas(ctx, sr.getRaftStatusFn(replWithStats.repl), candidates)
 
-		candidate := sr.rq.allocator.TransferLeaseTarget(
+		candidate := sr.allocator.TransferLeaseTarget(
 			ctx,
 			conf,
 			candidates,
@@ -437,7 +447,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 
 		filteredStoreList := storeList.ExcludeInvalid(conf.Constraints)
 		filteredStoreList = storeList.ExcludeInvalid(conf.VoterConstraints)
-		if sr.rq.allocator.FollowTheWorkloadPrefersLocal(
+		if sr.allocator.FollowTheWorkloadPrefersLocal(
 			ctx,
 			filteredStoreList,
 			*localDesc,
@@ -485,7 +495,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 	allStoresList storepool.StoreList,
 	options *allocatorimpl.QPSScorerOptions,
 ) (replWithStats replicaWithStats, voterTargets, nonVoterTargets []roachpb.ReplicationTarget) {
-	now := sr.rq.store.Clock().NowAsClockTimestamp()
+	now := sr.rq.Clock.NowAsClockTimestamp()
 	for {
 		if len(*hottestRanges) == 0 {
 			return replicaWithStats{}, nil, nil
@@ -515,7 +525,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		}
 
 		rangeDesc, conf := replWithStats.repl.DescAndSpanConfig()
-		clusterNodes := sr.rq.allocator.StorePool.ClusterNodeCount()
+		clusterNodes := sr.allocator.StorePool.ClusterNodeCount()
 		numDesiredVoters := allocatorimpl.GetNeededVoters(conf.GetNumVoters(), clusterNodes)
 		numDesiredNonVoters := allocatorimpl.GetNeededNonVoters(numDesiredVoters, int(conf.GetNumNonVoters()), clusterNodes)
 		if expected, actual := numDesiredVoters, len(rangeDesc.Replicas().VoterDescriptors()); expected != actual {
@@ -638,13 +648,13 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 	for i := 0; i < len(finalVoterTargets); i++ {
 		// TODO(aayush): Figure out a way to plumb the `details` here into
 		// `AdminRelocateRange` so that these decisions show up in system.rangelog
-		add, remove, _, shouldRebalance := sr.rq.allocator.RebalanceTarget(
+		add, remove, _, shouldRebalance := sr.allocator.RebalanceTarget(
 			ctx,
 			rbCtx.conf,
 			rbCtx.replWithStats.repl.RaftStatus(),
 			finalVoterTargets,
 			finalNonVoterTargets,
-			rangeUsageInfoForRepl(rbCtx.replWithStats.repl),
+			kvreplicatequeue.RangeUsageInfoForRepl(rbCtx.replWithStats.repl),
 			storepool.StoreFilterSuspect,
 			allocatorimpl.VoterTarget,
 			options,
@@ -702,13 +712,13 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 	}
 
 	for i := 0; i < len(finalNonVoterTargets); i++ {
-		add, remove, _, shouldRebalance := sr.rq.allocator.RebalanceTarget(
+		add, remove, _, shouldRebalance := sr.allocator.RebalanceTarget(
 			ctx,
 			rbCtx.conf,
 			rbCtx.replWithStats.repl.RaftStatus(),
 			finalVoterTargets,
 			finalNonVoterTargets,
-			rangeUsageInfoForRepl(rbCtx.replWithStats.repl),
+			kvreplicatequeue.RangeUsageInfoForRepl(rbCtx.replWithStats.repl),
 			storepool.StoreFilterSuspect,
 			allocatorimpl.NonVoterTarget,
 			options,

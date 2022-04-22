@@ -123,13 +123,13 @@ func (r *Replica) signallerForBatch(ba *roachpb.BatchRequest) signaller {
 	return r.breaker.Signal()
 }
 
-// shouldBackpressureWrites returns whether writes to the range should be
+// ShouldBackpressureWrites returns whether writes to the range should be
 // subject to backpressure. This is based on the size of the range in
 // relation to the split size. The method returns true if the range is more
 // than backpressureRangeSizeMultiplier times larger than the split size but not
 // larger than that by more than backpressureByteTolerance (see that comment for
 // further explanation).
-func (r *Replica) shouldBackpressureWrites() bool {
+func (r *Replica) ShouldBackpressureWrites() bool {
 	mult := backpressureRangeSizeMultiplier.Get(&r.store.cfg.Settings.SV)
 	if mult == 0 {
 		// Disabled.
@@ -159,7 +159,7 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *roachpb.BatchR
 	// if one exists. This does not place a hard upper bound on the size of
 	// a range because we don't track all in-flight requests (like we do for
 	// the quota pool), but it does create an effective soft upper bound.
-	for first := true; r.shouldBackpressureWrites(); first = false {
+	for first := true; r.ShouldBackpressureWrites(); first = false {
 		if first {
 			r.store.metrics.BackpressuredOnSplitRequests.Inc(1)
 			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1)

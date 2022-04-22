@@ -1104,7 +1104,7 @@ func (r *Replica) leaseGoodToGo(
 	return r.leaseGoodToGoRLocked(ctx, now, reqTS)
 }
 
-// redirectOnOrAcquireLease checks whether this replica has the lease at
+// RedirectOnOrAcquireLease checks whether this replica has the lease at
 // the current timestamp. If it does, returns the lease and its status.
 // If another replica currently holds the lease, redirects by returning
 // NotLeaseHolderError and an empty lease status.
@@ -1119,21 +1119,21 @@ func (r *Replica) leaseGoodToGo(
 //  will fail as well. If it succeeds, as is likely, then the write
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
-func (r *Replica) redirectOnOrAcquireLease(
+func (r *Replica) RedirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
 	return r.redirectOnOrAcquireLeaseForRequest(ctx, hlc.Timestamp{}, r.breaker.Signal())
 }
 
-// TestingAcquireLease is redirectOnOrAcquireLease exposed for tests.
+// TestingAcquireLease is RedirectOnOrAcquireLease exposed for tests.
 func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStatus, error) {
 	ctx = r.AnnotateCtx(ctx)
 	ctx = logtags.AddTag(ctx, "lease-acq", nil)
-	l, pErr := r.redirectOnOrAcquireLease(ctx)
+	l, pErr := r.RedirectOnOrAcquireLease(ctx)
 	return l, pErr.GoError()
 }
 
-// redirectOnOrAcquireLeaseForRequest is like redirectOnOrAcquireLease,
+// redirectOnOrAcquireLeaseForRequest is like RedirectOnOrAcquireLease,
 // but it accepts a specific request timestamp instead of assuming that
 // the request is operating at the current time.
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
@@ -1380,10 +1380,10 @@ func (r *Replica) maybeExtendLeaseAsync(ctx context.Context, st kvserverpb.Lease
 	_ = r.requestLeaseLocked(ctx, st)
 }
 
-// checkLeaseRespectsPreferences checks if current replica owns the lease and
+// CheckLeaseRespectsPreferences checks if current replica owns the lease and
 // if it respects the lease preferences defined in the span config. If there are no
 // preferences defined then it will return true and consider that to be in-conformance.
-func (r *Replica) checkLeaseRespectsPreferences(ctx context.Context) (bool, error) {
+func (r *Replica) CheckLeaseRespectsPreferences(ctx context.Context) (bool, error) {
 	if !r.OwnsValidLease(ctx, r.store.cfg.Clock.NowAsClockTimestamp()) {
 		return false, errors.Errorf("replica %s is not the leaseholder, cannot check lease preferences", r)
 	}

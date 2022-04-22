@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvmergequeue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -4170,7 +4171,7 @@ func TestMergeQueue(t *testing.T) {
 	manualClock := hlc.NewHybridManualClock()
 	settings := cluster.MakeTestingClusterSettings()
 	sv := &settings.SV
-	kvserver.MergeQueueInterval.Override(ctx, sv, 0) // process greedily
+	kvmergequeue.MergeQueueInterval.Override(ctx, sv, 0) // process greedily
 
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMinBytes = proto.Int64(1 << 10) // 1KB

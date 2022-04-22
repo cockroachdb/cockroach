@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "storemetrics",
+    srcs = ["metrics.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storemetrics",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/kv/kvserver/batcheval/result",
+        "//pkg/kv/kvserver/rangefeed",
+        "//pkg/multitenant",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
+        "//pkg/util/syncutil",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
+    ],
+)
+
+go_test(
+    name = "storemetrics_test",
+    srcs = ["metrics_test.go"],
+    embed = [":storemetrics"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/storage/enginepb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+    ],
+)

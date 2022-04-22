@@ -11,18 +11,10 @@
 package kvserver
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicatequeue"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
-
-// NB: don't change the string here; this will cause cross-version issues
-// since this singleton is used as a marker.
-var errMarkSnapshotError = errors.New("snapshot failed")
-
-// isSnapshotError returns true iff the error indicates that a snapshot failed.
-func isSnapshotError(err error) bool {
-	return errors.Is(err, errMarkSnapshotError)
-}
 
 // NB: don't change the string here; this will cause cross-version issues
 // since this singleton is used as a marker.
@@ -32,7 +24,7 @@ var errMarkCanRetryReplicationChangeWithUpdatedDesc = errors.New("should retry w
 // assumed to have been emitted by the KV layer during a replication change
 // operation) is likely to succeed when retried with an updated descriptor.
 func IsRetriableReplicationChangeError(err error) bool {
-	return errors.Is(err, errMarkCanRetryReplicationChangeWithUpdatedDesc) || isSnapshotError(err)
+	return errors.Is(err, errMarkCanRetryReplicationChangeWithUpdatedDesc) || kvreplicatequeue.IsSnapshotError(err)
 }
 
 const (

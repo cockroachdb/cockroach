@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvmvccgcqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -531,7 +533,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Error(err)
 	}
 	// Remove range 1.
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, kvqueue.RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -547,7 +549,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Fatal("expected error re-adding same range")
 	}
 	// Try to remove range 1 again.
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, kvqueue.RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Fatalf("didn't expect error re-removing same range: %v", err)
@@ -650,7 +652,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, kvqueue.RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Fatal(err)
@@ -695,7 +697,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, kvqueue.RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -779,7 +781,7 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, kvqueue.RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -1897,7 +1899,7 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	// Write three keys at time t0.
 	t0 := 1 * time.Second
 	manualClock.Set(t0.Nanoseconds())
-	h := roachpb.Header{Timestamp: makeTS(t0.Nanoseconds(), 0)}
+	h := roachpb.Header{Timestamp: kvmvccgcqueue.makeTS(t0.Nanoseconds(), 0)}
 	for _, keyStr := range []string{"a", "b", "c"} {
 		key := roachpb.Key(keyStr)
 		putArgs := putArgs(key, []byte("value"))
@@ -1911,7 +1913,7 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	sArgs := scanArgs(span.Key, span.EndKey)
 	t1 := 2 * time.Second
 	manualClock.Set(t1.Nanoseconds())
-	h.Timestamp = makeTS(t1.Nanoseconds(), 0)
+	h.Timestamp = kvmvccgcqueue.makeTS(t1.Nanoseconds(), 0)
 	h.MaxSpanRequestKeys = 2
 	reply, pErr := kv.SendWrappedWith(ctx, store.TestSender(), h, sArgs)
 	if pErr != nil {
@@ -1928,18 +1930,18 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 
 	// Verify the timestamp cache has been set for "b".Next(), but not for "c".
 	rTS, _ := store.tsCache.GetMax(roachpb.Key("b").Next(), nil)
-	if a, e := rTS, makeTS(t1.Nanoseconds(), 0); a != e {
+	if a, e := rTS, kvmvccgcqueue.makeTS(t1.Nanoseconds(), 0); a != e {
 		t.Errorf("expected timestamp cache for \"b\".Next() set to %s; got %s", e, a)
 	}
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
-	if a, lt := rTS, makeTS(t1.Nanoseconds(), 0); lt.LessEq(a) {
+	if a, lt := rTS, kvmvccgcqueue.makeTS(t1.Nanoseconds(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"c\" set less than %s; got %s", lt, a)
 	}
 
 	// Reverse scan the span at t1 with max keys and verify the expected resume span.
 	t2 := 3 * time.Second
 	manualClock.Set(t2.Nanoseconds())
-	h.Timestamp = makeTS(t2.Nanoseconds(), 0)
+	h.Timestamp = kvmvccgcqueue.makeTS(t2.Nanoseconds(), 0)
 	rsArgs := revScanArgs(span.Key, span.EndKey)
 	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), h, rsArgs)
 	if pErr != nil {
@@ -1956,11 +1958,11 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 
 	// Verify the timestamp cache has been set for "a".Next(), but not for "a".
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("a").Next(), nil)
-	if a, e := rTS, makeTS(t2.Nanoseconds(), 0); a != e {
+	if a, e := rTS, kvmvccgcqueue.makeTS(t2.Nanoseconds(), 0); a != e {
 		t.Errorf("expected timestamp cache for \"a\".Next() set to %s; got %s", e, a)
 	}
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("a"), nil)
-	if a, lt := rTS, makeTS(t2.Nanoseconds(), 0); lt.LessEq(a) {
+	if a, lt := rTS, kvmvccgcqueue.makeTS(t2.Nanoseconds(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"a\" set less than %s; got %s", lt, a)
 	}
 
@@ -1970,7 +1972,7 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	// evaluated due to the key limit should not be accounted for.
 	t3 := 4 * time.Second
 	manualClock.Set(t3.Nanoseconds())
-	h.Timestamp = makeTS(t3.Nanoseconds(), 0)
+	h.Timestamp = kvmvccgcqueue.makeTS(t3.Nanoseconds(), 0)
 	ba := roachpb.BatchRequest{}
 	ba.Header = h
 	ba.Add(getArgsString("a"), getArgsString("b"), getArgsString("c"))
@@ -1990,11 +1992,11 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 
 	// Verify the timestamp cache has been set for "a" and "b", but not for "c".
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("a"), nil)
-	require.Equal(t, makeTS(t3.Nanoseconds(), 0), rTS)
+	require.Equal(t, kvmvccgcqueue.makeTS(t3.Nanoseconds(), 0), rTS)
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("b"), nil)
-	require.Equal(t, makeTS(t3.Nanoseconds(), 0), rTS)
+	require.Equal(t, kvmvccgcqueue.makeTS(t3.Nanoseconds(), 0), rTS)
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
-	require.Equal(t, makeTS(t2.Nanoseconds(), 0), rTS)
+	require.Equal(t, kvmvccgcqueue.makeTS(t2.Nanoseconds(), 0), rTS)
 }
 
 // TestStoreScanIntents verifies that a scan across 10 intents resolves
@@ -2365,7 +2367,9 @@ func (fq *fakeRangeQueue) Start(_ *stop.Stopper) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeAddAsync(context.Context, replicaInQueue, hlc.ClockTimestamp) {
+func (fq *fakeRangeQueue) MaybeAddAsync(
+	context.Context, kvqueue.replicaInQueue, hlc.ClockTimestamp,
+) {
 	// Do nothing
 }
 
@@ -2411,7 +2415,7 @@ func TestMaybeRemove(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, repl, repl.Desc().NextReplicaID, kvqueue.RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -2528,7 +2532,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, kvqueue.RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)
@@ -2666,7 +2670,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, kvqueue.RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Fatal(err)
@@ -2789,7 +2793,7 @@ func (sp *fakeStorePool) Throttle(
 }
 
 // TestSendSnapshotThrottling tests the store pool throttling behavior of
-// store.sendSnapshot, ensuring that it properly updates the StorePool on
+// store.SendSnapshot, ensuring that it properly updates the StorePool on
 // various exceptional conditions and new capacity estimates.
 func TestSendSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()

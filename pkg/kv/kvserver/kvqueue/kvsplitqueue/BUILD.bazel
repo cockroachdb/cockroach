@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvsplitqueue",
+    srcs = ["split_queue.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvsplitqueue",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvserver/kvqueue",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/storemetrics",
+        "//pkg/roachpb",
+        "//pkg/server/telemetry",
+        "//pkg/spanconfig",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvtsmaintenancequeue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
@@ -42,6 +44,7 @@ type StoreTestingKnobs struct {
 	TenantRateKnobs         tenantrate.TestingKnobs
 	StorageKnobs            storage.TestingKnobs
 	AllocatorKnobs          *allocator.TestingKnobs
+	QueueKnobs              kvqueue.TestingKnobs
 
 	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
@@ -132,9 +135,6 @@ type StoreTestingKnobs struct {
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
 	DisableReplicateQueue bool
-	// DisableReplicaRebalancing disables rebalancing of replicas but otherwise
-	// leaves the replicate queue operational.
-	DisableReplicaRebalancing bool
 	// DisableLoadBasedSplitting turns off LBS so no splits happen because of load.
 	DisableLoadBasedSplitting bool
 	// DisableSplitQueue disables the split queue.
@@ -226,15 +226,6 @@ type StoreTestingKnobs struct {
 	RefreshReasonTicksPeriod int
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft bool
-	// DisableLastProcessedCheck disables checking on replica queue last processed times.
-	DisableLastProcessedCheck bool
-	// ReplicateQueueAcceptsUnsplit allows the replication queue to
-	// process ranges that need to be split, for use in tests that use
-	// the replication queue but disable the split queue.
-	ReplicateQueueAcceptsUnsplit bool
-	// SplitQueuePurgatoryChan allows a test to control the channel used to
-	// trigger split queue purgatory processing.
-	SplitQueuePurgatoryChan <-chan time.Time
 	// SkipMinSizeCheck, if set, makes the store creation process skip the check
 	// for a minimum size.
 	SkipMinSizeCheck bool
@@ -292,9 +283,6 @@ type StoreTestingKnobs struct {
 	// raft log, the result will be an voter that is unable to participate in
 	// quorum.
 	ReplicaSkipInitialSnapshot func() bool
-	// RaftSnapshotQueueSkipReplica causes the raft snapshot queue to skip sending
-	// a snapshot to a follower replica.
-	RaftSnapshotQueueSkipReplica func() bool
 	// VoterAddStopAfterJointConfig causes voter addition to return early if
 	// the func returns true. This happens before transitioning out of a joint
 	// configuration, after the joint configuration has been entered by means
@@ -367,7 +355,7 @@ type StoreTestingKnobs struct {
 	GossipWhenCapacityDeltaExceedsFraction float64
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
-	TimeSeriesDataStore TimeSeriesDataStore
+	TimeSeriesDataStore kvtsmaintenancequeue.TimeSeriesDataStore
 
 	// Called whenever a range campaigns as a result of a tick. This
 	// is called under the replica lock and raftMu, so basically don't

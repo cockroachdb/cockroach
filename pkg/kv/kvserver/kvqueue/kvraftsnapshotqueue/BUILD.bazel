@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvraftsnapshotqueue",
+    srcs = ["raft_snapshot_queue.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftsnapshotqueue",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvqueue",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/storemetrics",
+        "//pkg/roachpb",
+        "//pkg/spanconfig",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@io_etcd_go_etcd_raft_v3//tracker",
+    ],
+)

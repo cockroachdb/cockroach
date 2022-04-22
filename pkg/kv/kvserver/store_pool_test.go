@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicatequeue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -88,7 +89,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	replica.leaseholderStats = rs
 	replica.writeStats = rs
 
-	rangeUsageInfo := rangeUsageInfoForRepl(&replica)
+	rangeUsageInfo := kvreplicatequeue.rangeUsageInfoForRepl(&replica)
 	QPS, _ := replica.leaseholderStats.AverageRatePerSecond()
 	WPS, _ := replica.writeStats.AverageRatePerSecond()
 
@@ -200,7 +201,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	}
 	replica.leaseholderStats = replicastats.NewReplicaStats(store.Clock(), nil)
 
-	rangeUsageInfo := rangeUsageInfoForRepl(replica)
+	rangeUsageInfo := kvreplicatequeue.rangeUsageInfoForRepl(replica)
 
 	// Update StorePool, which should be a no-op.
 	storeID := roachpb.StoreID(1)

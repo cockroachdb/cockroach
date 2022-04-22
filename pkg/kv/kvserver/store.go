@@ -41,11 +41,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmissioncontroller"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvconsistencyqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvmergequeue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvmvccgcqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftlogqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftsnapshotqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicagcqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicatequeue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvsplitqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvtsmaintenancequeue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicasideload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storemetrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -60,7 +73,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -713,23 +725,23 @@ type Store struct {
 	allocator       allocatorimpl.Allocator // Makes allocation decisions
 	replRankings    *replicaRankings
 	storeRebalancer *StoreRebalancer
-	rangeIDAlloc    *idalloc.Allocator // Range ID allocator
-	mvccGCQueue     *mvccGCQueue       // MVCC GC queue
-	mergeQueue      *mergeQueue        // Range merging queue
-	splitQueue      *splitQueue        // Range splitting queue
-	replicateQueue  *replicateQueue    // Replication queue
-	replicaGCQueue  *replicaGCQueue    // Replica GC queue
-	raftLogQueue    *raftLogQueue      // Raft log truncation queue
+	rangeIDAlloc    *idalloc.Allocator               // Range ID allocator
+	mvccGCQueue     *kvmvccgcqueue.MvccGCQueue       // MVCC GC queue
+	mergeQueue      *kvmergequeue.MergeQueue         // Range merging queue
+	splitQueue      *kvsplitqueue.SplitQueue         // Range splitting queue
+	replicateQueue  *kvreplicatequeue.ReplicateQueue // Replication queue
+	replicaGCQueue  *kvreplicagcqueue.ReplicaGCQueue // Replica GC queue
+	raftLogQueue    *kvraftlogqueue.RaftLogQueue     // Raft log truncation queue
 	// Carries out truncations proposed by the raft log queue, and "replicated"
 	// via raft, when they are safe. Created in Store.Start.
 	raftTruncator      *raftLogTruncator
-	raftSnapshotQueue  *raftSnapshotQueue          // Raft repair queue
-	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
-	scanner            *replicaScanner             // Replica scanner
-	consistencyQueue   *consistencyQueue           // Replica consistency check queue
-	consistencyLimiter *quotapool.RateLimiter      // Rate limits consistency checks
-	consistencySem     *quotapool.IntPool          // Limit concurrent consistency checks
-	metrics            *StoreMetrics
+	raftSnapshotQueue  *kvraftsnapshotqueue.RaftSnapshotQueue           // Raft repair queue
+	tsMaintenanceQueue *kvtsmaintenancequeue.TimeSeriesMaintenanceQueue // Time series maintenance queue
+	scanner            *replicaScanner                                  // Replica scanner
+	consistencyQueue   *kvconsistencyqueue.ConsistencyQueue             // Replica consistency check queue
+	consistencyLimiter *quotapool.RateLimiter                           // Rate limits consistency checks
+	consistencySem     *quotapool.IntPool                               // Limit concurrent consistency checks
+	metrics            *storemetrics.StoreMetrics
 	intentResolver     *intentresolver.IntentResolver
 	recoveryMgr        txnrecovery.Manager
 	raftEntryCache     *raftentry.Cache
@@ -985,7 +997,7 @@ type StoreConfig struct {
 
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
-	TimeSeriesDataStore TimeSeriesDataStore
+	TimeSeriesDataStore kvtsmaintenancequeue.TimeSeriesDataStore
 
 	// CoalescedHeartbeatsInterval is the interval for which heartbeat messages
 	// are queued and then sent as a single coalesced heartbeat; it is a
@@ -1066,7 +1078,7 @@ type StoreConfig struct {
 	SpanConfigSubscriber spanconfig.KVSubscriber
 
 	// KVAdmissionController is an optional field used for admission control.
-	KVAdmissionController KVAdmissionController
+	KVAdmissionController kvadmissioncontroller.KVAdmissionController
 
 	// SystemConfigProvider is used to drive replication decision-making in the
 	// mixed-version state, before the span configuration infrastructure has been
@@ -1084,8 +1096,7 @@ type ConsistencyTestingKnobs struct {
 	OnBadChecksumFatal func(roachpb.StoreIdent)
 	// If non-nil, BadChecksumReportDiff is called by CheckConsistency() on a
 	// checksum mismatch to report the diff between snapshots.
-	BadChecksumReportDiff      func(roachpb.StoreIdent, ReplicaSnapshotDiffSlice)
-	ConsistencyQueueResultHook func(response roachpb.CheckConsistencyResponse)
+	BadChecksumReportDiff func(roachpb.StoreIdent, ReplicaSnapshotDiffSlice)
 }
 
 // Valid returns true if the StoreConfig is populated correctly.
@@ -1152,7 +1163,7 @@ func NewStore(
 		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
 		engine:   eng,
 		nodeDesc: nodeDesc,
-		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
+		metrics:  storemetrics.NewStoreMetrics(cfg.HistogramWindowInterval),
 		ctSender: cfg.ClosedTimestampSender,
 	}
 	if cfg.RPCContext != nil {
@@ -1163,8 +1174,8 @@ func NewStore(
 		}, cfg.TestingKnobs.AllocatorKnobs)
 	}
 	if s.metrics != nil {
-		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedLeaseTransferMetrics)
-		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedReplicaRebalanceMetrics)
+		s.metrics.Registry.AddMetricStruct(s.allocator.Metrics.LoadBasedLeaseTransferMetrics)
+		s.metrics.Registry.AddMetricStruct(s.allocator.Metrics.LoadBasedReplicaRebalanceMetrics)
 	}
 	s.replRankings = newReplicaRankings()
 
@@ -1172,7 +1183,7 @@ func NewStore(
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
 
 	s.raftEntryCache = raftentry.NewCache(cfg.RaftEntryCacheSize)
-	s.metrics.registry.AddMetricStruct(s.raftEntryCache.Metrics())
+	s.metrics.Registry.AddMetricStruct(s.raftEntryCache.Metrics())
 
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
@@ -1194,10 +1205,10 @@ func NewStore(
 	s.rangefeedReplicas.Unlock()
 
 	s.tsCache = tscache.New(cfg.Clock)
-	s.metrics.registry.AddMetricStruct(s.tsCache.Metrics())
+	s.metrics.Registry.AddMetricStruct(s.tsCache.Metrics())
 
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
-	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
+	s.metrics.Registry.AddMetricStruct(s.txnWaitMetrics)
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
 	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
@@ -1206,7 +1217,7 @@ func NewStore(
 		s.renewableLeasesSignal = make(chan struct{}, 1)
 	}
 
-	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), bulkIOWriteBurst)
+	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), replicasideload.BulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		s.limiters.BulkIOWriteRate.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
 	})
@@ -1265,7 +1276,7 @@ func NewStore(
 	})
 
 	s.tenantRateLimiters = tenantrate.NewLimiterFactory(&cfg.Settings.SV, &cfg.TestingKnobs.TenantRateKnobs)
-	s.metrics.registry.AddMetricStruct(s.tenantRateLimiters.Metrics())
+	s.metrics.Registry.AddMetricStruct(s.tenantRateLimiters.Metrics())
 
 	s.systemConfigUpdateQueueRateLimiter = quotapool.NewRateLimiter(
 		"SystemConfigUpdateQueue",
@@ -1287,14 +1298,30 @@ func NewStore(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
-		s.mvccGCQueue = newMVCCGCQueue(s)
-		s.mergeQueue = newMergeQueue(s, s.db)
-		s.splitQueue = newSplitQueue(s, s.db)
-		s.replicateQueue = newReplicateQueue(s, s.allocator)
-		s.replicaGCQueue = newReplicaGCQueue(s, s.db)
-		s.raftLogQueue = newRaftLogQueue(s, s.db)
-		s.raftSnapshotQueue = newRaftSnapshotQueue(s)
-		s.consistencyQueue = newConsistencyQueue(s)
+		s.mvccGCQueue = kvmvccgcqueue.NewMVCCGCQueue(
+			s, s.metrics, &s.cfg.TestingKnobs.QueueKnobs,
+		)
+		s.mergeQueue = kvmergequeue.NewMergeQueue(
+			s, s.db, s.metrics, s.cfg.SpanConfigsDisabled, &s.cfg.TestingKnobs.QueueKnobs,
+		)
+		s.splitQueue = kvsplitqueue.NewSplitQueue(
+			s, s.db, s.metrics, &s.cfg.TestingKnobs.QueueKnobs,
+		)
+		s.replicateQueue = kvreplicatequeue.NewReplicateQueue(
+			s, s.allocator, s.metrics, &s.cfg.TestingKnobs.QueueKnobs,
+		)
+		s.replicaGCQueue = kvreplicagcqueue.NewReplicaGCQueue(
+			s, s.db, s.metrics, &s.cfg.TestingKnobs.QueueKnobs,
+		)
+		s.raftLogQueue = kvraftlogqueue.NewRaftLogQueue(
+			s, s.db, s.metrics, &s.cfg.TestingKnobs.QueueKnobs,
+		)
+		s.raftSnapshotQueue = kvraftsnapshotqueue.NewRaftSnapshotQueue(
+			s, s.metrics, &s.cfg.TestingKnobs.QueueKnobs,
+		)
+		s.consistencyQueue = kvconsistencyqueue.NewConsistencyQueue(
+			s, s.metrics, s.ClusterSettings(), &s.cfg.TestingKnobs.QueueKnobs,
+		)
 		// NOTE: If more queue types are added, please also add them to the list of
 		// queues on the EnqueueRange debug page as defined in
 		// pkg/ui/src/views/reports/containers/enqueueRange/index.tsx
@@ -1306,8 +1333,8 @@ func NewStore(
 			tsDS = s.cfg.TestingKnobs.TimeSeriesDataStore
 		}
 		if tsDS != nil {
-			s.tsMaintenanceQueue = newTimeSeriesMaintenanceQueue(
-				s, s.db, tsDS,
+			s.tsMaintenanceQueue = kvtsmaintenancequeue.NewTimeSeriesMaintenanceQueue(
+				s, s.db, tsDS, s.metrics, s.ClusterSettings(), &s.cfg.TestingKnobs.QueueKnobs,
 			)
 			s.scanner.AddQueues(s.tsMaintenanceQueue)
 		}
@@ -1506,7 +1533,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					}
 
 					start := timeutil.Now()
-					transferStatus, err := s.replicateQueue.shedLease(
+					transferStatus, err := s.replicateQueue.ShedLease(
 						ctx,
 						r,
 						desc,
@@ -1831,7 +1858,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
 		RangeDescriptorCache: intentResolverRangeCache,
 	})
-	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
+	s.metrics.Registry.AddMetricStruct(s.intentResolver.Metrics)
 
 	// Create the raft log truncator and register the callback.
 	s.raftTruncator = makeRaftLogTruncator(s.cfg.AmbientCtx, (*storeForTruncatorImpl)(s), stopper)
@@ -1846,7 +1873,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.recoveryMgr = txnrecovery.NewManager(
 		s.cfg.AmbientCtx, s.cfg.Clock, s.db, stopper,
 	)
-	s.metrics.registry.AddMetricStruct(s.recoveryMgr.Metrics())
+	s.metrics.Registry.AddMetricStruct(s.recoveryMgr.Metrics())
 
 	s.rangeIDAlloc = idAlloc
 
@@ -1906,7 +1933,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			if _, ok := rep.TenantID(); ok {
 				// TODO(tbg): why the check? We're definitely an initialized range so
 				// we have a tenantID.
-				s.metrics.addMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
+				s.metrics.AddMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
 			} else {
 				return errors.AssertionFailedf("found newly constructed replica"+
 					" for range %d at generation %d with an invalid tenant ID in store %d",
@@ -1918,7 +1945,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
 				// We are no longer a member of the range, but we didn't GC the replica
 				// before shutting down. Add the replica to the GC queue.
-				s.replicaGCQueue.AddAsync(ctx, rep, replicaGCPriorityRemoved)
+				s.replicaGCQueue.AddAsync(ctx, rep, kvreplicagcqueue.ReplicaGCPriorityRemoved)
 			}
 
 			// Note that we do not create raft groups at this time; they will be created
@@ -2013,22 +2040,22 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	if s.replicateQueue != nil {
 		s.storeRebalancer = NewStoreRebalancer(
-			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings)
+			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.allocator, s.metrics, s.cfg.StorePool, s.replRankings)
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
 
 	s.consistencyLimiter = quotapool.NewRateLimiter(
 		"ConsistencyQueue",
-		quotapool.Limit(consistencyCheckRate.Get(&s.ClusterSettings().SV)),
-		consistencyCheckRate.Get(&s.ClusterSettings().SV)*consistencyCheckRateBurstFactor,
-		quotapool.WithMinimumWait(consistencyCheckRateMinWait))
+		quotapool.Limit(kvconsistencyqueue.CheckRate.Get(&s.ClusterSettings().SV)),
+		kvconsistencyqueue.CheckRate.Get(&s.ClusterSettings().SV)*kvconsistencyqueue.CheckRateBurstFactor,
+		quotapool.WithMinimumWait(kvconsistencyqueue.CheckRateMinWait))
 
-	consistencyCheckRate.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-		rate := consistencyCheckRate.Get(&s.ClusterSettings().SV)
-		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*consistencyCheckRateBurstFactor)
+	kvconsistencyqueue.CheckRate.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
+		rate := kvconsistencyqueue.CheckRate.Get(&s.ClusterSettings().SV)
+		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*kvconsistencyqueue.CheckRateBurstFactor)
 	})
 	s.consistencySem = quotapool.NewIntPool("concurrent async consistency checks",
-		consistencyCheckAsyncConcurrency)
+		kvconsistencyqueue.CheckAsyncConcurrency)
 	s.stopper.AddCloser(s.consistencySem.Closer("stopper"))
 
 	// Set the started flag (for unittests).
@@ -2136,12 +2163,10 @@ func (s *Store) startGossip() {
 	}
 }
 
-var errSysCfgUnavailable = errors.New("system config not available in gossip")
-
 // GetConfReader exposes access to a configuration reader.
 func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, error) {
 	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
-		return nil, errSysCfgUnavailable
+		return nil, kvqueue.ErrSysCfgUnavailable
 	}
 
 	// We need a version gate here before switching over to the span configs
@@ -2174,7 +2199,7 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 		if sysCfg == nil {
-			return nil, errSysCfgUnavailable
+			return nil, kvqueue.ErrSysCfgUnavailable
 		}
 		return sysCfg, nil
 	}
@@ -2213,7 +2238,7 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 				numRenewableLeases++
 				repl := (*Replica)(v)
 				annotatedCtx := repl.AnnotateCtx(ctx)
-				if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
+				if _, pErr := repl.RedirectOnOrAcquireLease(annotatedCtx); pErr != nil {
 					if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 						log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
 					}
@@ -2362,10 +2387,10 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		}
 
 		if shouldQueue {
-			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h kvqueue.QueueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
-			s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h kvqueue.QueueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 		}
@@ -2440,10 +2465,10 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 			// we queue blindly; we could instead only queue it if we knew the
 			// range's keyspans has a split in there somewhere, or was now part of a
 			// larger range and eligible for a merge.
-			s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h kvqueue.QueueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
-			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h kvqueue.QueueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 			return nil // more
@@ -2468,10 +2493,10 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 		}
 
 		repl.SetSpanConfig(conf)
-		s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h kvqueue.QueueHelper) {
 			h.MaybeAdd(ctx, repl, now)
 		})
-		s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h kvqueue.QueueHelper) {
 			h.MaybeAdd(ctx, repl, now)
 		})
 		return true // more
@@ -2790,7 +2815,7 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 
 // GetReplica fetches a replica by Range ID. Returns an error if no replica is found.
 //
-// See also GetReplicaIfExists for a more perfomant version.
+// See also GetReplicaIfExists for a more performant version.
 func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	if r := s.GetReplicaIfExists(rangeID); r != nil {
 		return r, nil
@@ -2997,17 +3022,17 @@ func (s *Store) ReplicaCount() int {
 
 // Registry returns the store registry.
 func (s *Store) Registry() *metric.Registry {
-	return s.metrics.registry
+	return s.metrics.Registry
 }
 
 // Metrics returns the store's metric struct.
-func (s *Store) Metrics() *StoreMetrics {
+func (s *Store) Metrics() *storemetrics.StoreMetrics {
 	return s.metrics
 }
 
 // ReplicateQueueMetrics returns the store's replicateQueue metric struct.
-func (s *Store) ReplicateQueueMetrics() ReplicateQueueMetrics {
-	return s.replicateQueue.metrics
+func (s *Store) ReplicateQueueMetrics() kvreplicatequeue.ReplicateQueueMetrics {
+	return s.replicateQueue.Metrics
 }
 
 // Descriptor returns a StoreDescriptor including current store
@@ -3255,14 +3280,14 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 
 	// Get the latest engine metrics.
 	m := s.engine.GetMetrics()
-	s.metrics.updateEngineMetrics(m)
+	s.metrics.UpdateEngineMetrics(m)
 
 	// Get engine Env stats.
 	envStats, err := s.engine.GetEnvStats()
 	if err != nil {
 		return err
 	}
-	s.metrics.updateEnvStats(*envStats)
+	s.metrics.UpdateEnvStats(*envStats)
 
 	// Log this metric infrequently (with current configurations,
 	// every 10 minutes). Trigger on tick 1 instead of tick 0 so that
@@ -3350,8 +3375,8 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeyS
 func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Recording, error) {
 	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator dry run")
 	defer collectAndFinish()
-	canTransferLease := func(ctx context.Context, repl *Replica) bool { return true }
-	_, err := s.replicateQueue.processOneChange(
+	canTransferLease := func(ctx context.Context, repl kvqueue.Replica) bool { return true }
+	_, err := s.replicateQueue.ProcessOneChange(
 		ctx, repl, canTransferLease, false /* scatter */, true, /* dryRun */
 	)
 	if err != nil {
@@ -3376,11 +3401,11 @@ func (s *Store) ManuallyEnqueue(
 		return nil, nil, errors.Errorf("not enqueueing uninitialized replica %s", repl)
 	}
 
-	var queue queueImpl
+	var queue kvqueue.QueueImpl
 	var needsLease bool
 	for _, replicaQueue := range s.scanner.queues {
 		if strings.EqualFold(replicaQueue.Name(), queueName) {
-			queue = replicaQueue.(queueImpl)
+			queue = replicaQueue.(kvqueue.QueueImpl)
 			needsLease = replicaQueue.NeedsLease()
 		}
 	}
@@ -3413,7 +3438,7 @@ func (s *Store) ManuallyEnqueue(
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
-		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
+		shouldQueue, priority := queue.ShouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
 			return collectAndFinish(), nil, nil
@@ -3421,7 +3446,7 @@ func (s *Store) ManuallyEnqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := queue.process(ctx, repl, confReader)
+	processed, processErr := queue.Process(ctx, repl, confReader)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return collectAndFinish(), processErr, nil
 }
@@ -3458,7 +3483,7 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 		g.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			processed, err := s.replicaGCQueue.process(ctx, repl, nil)
+			processed, err := s.replicaGCQueue.Process(ctx, repl, nil)
 			if err != nil {
 				return errors.Wrapf(err, "on %s", repl.Desc())
 			}
@@ -3529,6 +3554,62 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
+}
+
+func (s *Store) SpanConfigSubscriber() spanconfig.KVSubscriber {
+	return s.cfg.SpanConfigSubscriber
+}
+
+func (s *Store) ConsistencyQueue() kvqueue.QueueImpl {
+	return s.consistencyQueue
+}
+
+func (s *Store) IntentResolver() *intentresolver.IntentResolver {
+	return s.intentResolver
+}
+
+func (s *Store) KVAdmissionController() kvadmissioncontroller.KVAdmissionController {
+	return s.cfg.KVAdmissionController
+}
+
+func (s *Store) LookupPrecedingReplica(key roachpb.RKey) kvqueue.Replica {
+	return s.lookupPrecedingReplica(key)
+}
+
+func (s *Store) StorePool() *storepool.StorePool {
+	return s.cfg.StorePool
+}
+
+func (s *Store) NodeLiveness() *liveness.NodeLiveness {
+	return s.cfg.NodeLiveness
+}
+
+func (s *Store) GetKVQueueReplica(rangeID roachpb.RangeID) (kvqueue.Replica, error) {
+	return s.GetReplica(rangeID)
+}
+
+// TestingReplicateQueuePurgatoryLength returns the number of replicas in replicate
+// queue purgatory.
+func (s *Store) TestingReplicateQueuePurgatoryLength() int {
+	return s.replicateQueue.PurgatoryLength()
+}
+
+// TestingSetSplitQueueActive enables or disables the split queue.
+func (s *Store) TestingSetSplitQueueActive(active bool) {
+	s.setSplitQueueActive(active)
+}
+
+func (s *Store) TestingFindTargetAndTransferLease(
+	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
+) (bool, error) {
+	transferStatus, err := s.replicateQueue.ShedLease(
+		ctx, repl, desc, conf, allocator.TransferLeaseOptions{ExcludeLeaseRepl: true},
+	)
+	return transferStatus == allocator.TransferOK, err
+}
+
+func (s *Store) TestingTransport() *RaftTransport {
+	return s.cfg.Transport
 }
 
 // Implementation of the storeForTruncator interface.
@@ -3617,188 +3698,4 @@ func min(a, b int) int {
 		return a
 	}
 	return b
-}
-
-// KVAdmissionController provides admission control for the KV layer.
-type KVAdmissionController interface {
-	// AdmitKVWork must be called before performing KV work.
-	// BatchRequest.AdmissionHeader and BatchRequest.Replica.StoreID must be
-	// populated for admission to work correctly. If err is non-nil, the
-	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
-	// called after the KV work is done executing.
-	AdmitKVWork(
-		ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-	) (handle interface{}, err error)
-	// AdmittedKVWorkDone is called after the admitted KV work is done
-	// executing.
-	AdmittedKVWorkDone(handle interface{})
-	// SetTenantWeightProvider is used to set the provider that will be
-	// periodically polled for weights. The stopper should be used to terminate
-	// the periodic polling.
-	SetTenantWeightProvider(provider TenantWeightProvider, stopper *stop.Stopper)
-}
-
-// TenantWeightProvider can be periodically asked to provide the tenant
-// weights.
-type TenantWeightProvider interface {
-	GetTenantWeights() TenantWeights
-}
-
-// TenantWeights contains the various tenant weights.
-type TenantWeights struct {
-	// Node is the node level tenant ID => weight.
-	Node map[uint64]uint32
-	// Stores contains the per-store tenant weights.
-	Stores []TenantWeightsForStore
-}
-
-// TenantWeightsForStore contains the tenant weights for a store.
-type TenantWeightsForStore struct {
-	roachpb.StoreID
-	// Weights is tenant ID => weight.
-	Weights map[uint64]uint32
-}
-
-// KVAdmissionControllerImpl implements KVAdmissionController interface.
-type KVAdmissionControllerImpl struct {
-	// Admission control queues and coordinators. Both should be nil or non-nil.
-	kvAdmissionQ     *admission.WorkQueue
-	storeGrantCoords *admission.StoreGrantCoordinators
-	settings         *cluster.Settings
-}
-
-var _ KVAdmissionController = KVAdmissionControllerImpl{}
-
-type admissionHandle struct {
-	tenantID                           roachpb.TenantID
-	callAdmittedWorkDoneOnKVAdmissionQ bool
-	storeAdmissionQ                    *admission.WorkQueue
-}
-
-// MakeKVAdmissionController returns a KVAdmissionController. Both parameters
-// must together either be nil or non-nil.
-func MakeKVAdmissionController(
-	kvAdmissionQ *admission.WorkQueue,
-	storeGrantCoords *admission.StoreGrantCoordinators,
-	settings *cluster.Settings,
-) KVAdmissionController {
-	return KVAdmissionControllerImpl{
-		kvAdmissionQ:     kvAdmissionQ,
-		storeGrantCoords: storeGrantCoords,
-		settings:         settings,
-	}
-}
-
-// AdmitKVWork implements the KVAdmissionController interface.
-func (n KVAdmissionControllerImpl) AdmitKVWork(
-	ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-) (handle interface{}, err error) {
-	ah := admissionHandle{tenantID: tenantID}
-	if n.kvAdmissionQ != nil {
-		bypassAdmission := ba.IsAdmin()
-		source := ba.AdmissionHeader.Source
-		if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-			// Request is from a SQL node.
-			bypassAdmission = false
-			source = roachpb.AdmissionHeader_FROM_SQL
-		}
-		if source == roachpb.AdmissionHeader_OTHER {
-			bypassAdmission = true
-		}
-		createTime := ba.AdmissionHeader.CreateTime
-		if !bypassAdmission && createTime == 0 {
-			// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
-			// of zero CreateTime needs to be revisited. It should use high priority.
-			createTime = timeutil.Now().UnixNano()
-		}
-		admissionInfo := admission.WorkInfo{
-			TenantID:        tenantID,
-			Priority:        admission.WorkPriority(ba.AdmissionHeader.Priority),
-			CreateTime:      createTime,
-			BypassAdmission: bypassAdmission,
-		}
-		var err error
-		// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
-		// it would bypass admission, it would consume a slot. When writes are
-		// throttled, we start generating more txn heartbeats, which then consume
-		// all the slots, causing no useful work to happen. We do want useful work
-		// to continue even when throttling since there are often significant
-		// number of tokens available.
-		if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
-			ah.storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
-		}
-		admissionEnabled := true
-		if ah.storeAdmissionQ != nil {
-			if admissionEnabled, err = ah.storeAdmissionQ.Admit(ctx, admissionInfo); err != nil {
-				return admissionHandle{}, err
-			}
-			if !admissionEnabled {
-				// Set storeAdmissionQ to nil so that we don't call AdmittedWorkDone
-				// on it. Additionally, the code below will not call
-				// kvAdmissionQ.Admit, and so callAdmittedWorkDoneOnKVAdmissionQ will
-				// stay false.
-				ah.storeAdmissionQ = nil
-			}
-		}
-		if admissionEnabled {
-			ah.callAdmittedWorkDoneOnKVAdmissionQ, err = n.kvAdmissionQ.Admit(ctx, admissionInfo)
-			if err != nil {
-				return admissionHandle{}, err
-			}
-		}
-	}
-	return ah, nil
-}
-
-// AdmittedKVWorkDone implements the KVAdmissionController interface.
-func (n KVAdmissionControllerImpl) AdmittedKVWorkDone(handle interface{}) {
-	ah := handle.(admissionHandle)
-	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
-		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
-	}
-	if ah.storeAdmissionQ != nil {
-		ah.storeAdmissionQ.AdmittedWorkDone(ah.tenantID)
-	}
-}
-
-// SetTenantWeightProvider implements the KVAdmissionController interface.
-func (n KVAdmissionControllerImpl) SetTenantWeightProvider(
-	provider TenantWeightProvider, stopper *stop.Stopper,
-) {
-	go func() {
-		const weightCalculationPeriod = 10 * time.Minute
-		ticker := time.NewTicker(weightCalculationPeriod)
-		// Used for short-circuiting the weights calculation if all weights are
-		// disabled.
-		allWeightsDisabled := false
-		for {
-			select {
-			case <-ticker.C:
-				kvDisabled := !admission.KVTenantWeightsEnabled.Get(&n.settings.SV)
-				kvStoresDisabled := !admission.KVStoresTenantWeightsEnabled.Get(&n.settings.SV)
-				if allWeightsDisabled && kvDisabled && kvStoresDisabled {
-					// Have already transitioned to disabled, so noop.
-					continue
-				}
-				weights := provider.GetTenantWeights()
-				if kvDisabled {
-					weights.Node = nil
-				}
-				n.kvAdmissionQ.SetTenantWeights(weights.Node)
-				for _, storeWeights := range weights.Stores {
-					q := n.storeGrantCoords.TryGetQueueForStore(int32(storeWeights.StoreID))
-					if q != nil {
-						if kvStoresDisabled {
-							storeWeights.Weights = nil
-						}
-						q.SetTenantWeights(storeWeights.Weights)
-					}
-				}
-				allWeightsDisabled = kvDisabled && kvStoresDisabled
-			case <-stopper.ShouldQuiesce():
-				ticker.Stop()
-				return
-			}
-		}
-	}()
 }

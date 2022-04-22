@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicasideload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -226,7 +227,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	}
 
 	ssBase := r.Engine().GetAuxiliaryDir()
-	if r.raftMu.sideloaded, err = newDiskSideloadStorage(
+	if r.raftMu.sideloaded, err = replicasideload.NewDiskSideloadStorage(
 		r.store.cfg.Settings,
 		desc.RangeID,
 		replicaID,
@@ -274,10 +275,10 @@ func (r *Replica) isInitializedRLocked() bool {
 	return r.mu.state.Desc.IsInitialized()
 }
 
-// maybeInitializeRaftGroup check whether the internal Raft group has
+// MaybeInitializeRaftGroup check whether the internal Raft group has
 // not yet been initialized. If not, it is created and set to campaign
 // if this replica is the most recent owner of the range lease.
-func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
+func (r *Replica) MaybeInitializeRaftGroup(ctx context.Context) {
 	r.mu.RLock()
 	// If this replica hasn't initialized the Raft group, create it and
 	// unquiesce and wake the leader to ensure the replica comes up to date.
@@ -357,7 +358,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 				"replica %v: %v", r, err)
 		}
 		r.mu.tenantID = tenantID
-		r.tenantMetricsRef = r.store.metrics.acquireTenant(tenantID)
+		r.tenantMetricsRef = r.store.metrics.AcquireTenant(tenantID)
 		if tenantID != roachpb.SystemTenantID {
 			r.tenantLimiter = r.store.tenantRateLimiters.GetTenant(ctx, tenantID, r.store.stopper.ShouldQuiesce())
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvmergequeue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -28,6 +29,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// TODO(irfansharif): This test could be written to mock out the kvqueue.Replica
+// interface instead of using the real thing, and be moved into the kvmergequeue
+// package instead.
 func TestMergeQueueShouldQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -40,7 +44,7 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 	tsc.SpanConfigsDisabled = true
 	testCtx.StartWithStoreConfig(ctx, t, stopper, tsc)
 
-	mq := newMergeQueue(testCtx.store, testCtx.store.DB())
+	mq := kvmergequeue.NewMergeQueue(testCtx.store, testCtx.store.DB(), testCtx.store.metrics, false, nil)
 	kvserverbase.MergeQueueEnabled.Override(ctx, &testCtx.store.ClusterSettings().SV, true)
 
 	tableKey := func(offset uint32) []byte {
@@ -158,7 +162,7 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 			zoneConfig := zonepb.DefaultZoneConfigRef()
 			zoneConfig.RangeMinBytes = proto.Int64(tc.minBytes)
 			repl.SetSpanConfig(zoneConfig.AsSpanConfig())
-			shouldQ, priority := mq.shouldQueue(ctx, hlc.ClockTimestamp{}, repl, config.NewSystemConfig(zoneConfig))
+			shouldQ, priority := mq.ShouldQueue(ctx, hlc.ClockTimestamp{}, repl, config.NewSystemConfig(zoneConfig))
 			if tc.expShouldQ != shouldQ {
 				t.Errorf("incorrect shouldQ: expected %v but got %v", tc.expShouldQ, shouldQ)
 			}

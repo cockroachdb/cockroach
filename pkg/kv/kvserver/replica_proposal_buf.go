@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -136,7 +137,7 @@ type proposer interface {
 	rlocker() sync.Locker
 	// The following require the proposer to hold (at least) a shared lock.
 	getReplicaID() roachpb.ReplicaID
-	destroyed() destroyStatus
+	destroyed() kvserverbase.DestroyStatus
 	leaseAppliedIndex() uint64
 	enqueueUpdateCheck()
 	closedTimestampTarget() hlc.Timestamp
@@ -281,7 +282,7 @@ func (b *propBuf) allocateIndex(ctx context.Context, wLocked bool) (int, error) 
 		// check and the current acquisition of the read lock. Failure to do so
 		// will leave pending proposals that never get cleared.
 		if status := b.p.destroyed(); !status.IsAlive() {
-			return 0, status.err
+			return 0, status.Err
 		}
 
 		idx := b.incAllocatedIdx()
@@ -335,7 +336,7 @@ func (b *propBuf) flushRLocked(ctx context.Context) error {
 	defer b.p.locker().Unlock()
 	if status := b.p.destroyed(); !status.IsAlive() {
 		b.full.Broadcast()
-		return status.err
+		return status.Err
 	}
 	return b.flushLocked(ctx)
 }
@@ -1002,7 +1003,7 @@ func (rp *replicaProposer) getReplicaID() roachpb.ReplicaID {
 	return rp.replicaID
 }
 
-func (rp *replicaProposer) destroyed() destroyStatus {
+func (rp *replicaProposer) destroyed() kvserverbase.DestroyStatus {
 	return rp.mu.destroyStatus
 }
 

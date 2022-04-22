@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"runtime/debug"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -131,7 +132,7 @@ func (s *Store) MergeRange(
 	//
 	// We ask removeInitializedReplicaRaftMuLocked to install a placeholder which
 	// we'll drop atomically with extending the right-hand side down below.
-	ph, err := s.removeInitializedReplicaRaftMuLocked(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
+	ph, err := s.removeInitializedReplicaRaftMuLocked(ctx, rightRepl, rightDesc.NextReplicaID, kvqueue.RemoveOptions{
 		// The replica was destroyed by the tombstones added to the batch in
 		// runPreApplyTriggersAfterStagingWriteBatch.
 		DestroyData:       false,

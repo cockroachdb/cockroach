@@ -12,8 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
@@ -24,52 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
-
-// DestroyReason indicates if a replica is alive, destroyed, corrupted or pending destruction.
-type DestroyReason int
-
-const (
-	// The replica is alive.
-	destroyReasonAlive DestroyReason = iota
-	// The replica has been GCed or is in the process of being synchronously
-	// removed.
-	destroyReasonRemoved
-	// The replica has been merged into its left-hand neighbor, but its left-hand
-	// neighbor hasn't yet subsumed it.
-	destroyReasonMergePending
-)
-
-type destroyStatus struct {
-	reason DestroyReason
-	err    error
-}
-
-func (s destroyStatus) String() string {
-	return fmt.Sprintf("{%v %d}", s.err, s.reason)
-}
-
-func (s *destroyStatus) Set(err error, reason DestroyReason) {
-	s.err = err
-	s.reason = reason
-}
-
-// IsAlive returns true when a replica is alive.
-func (s destroyStatus) IsAlive() bool {
-	return s.reason == destroyReasonAlive
-}
-
-// Removed returns whether the replica has been removed.
-func (s destroyStatus) Removed() bool {
-	return s.reason == destroyReasonRemoved
-}
-
-// mergedTombstoneReplicaID is the replica ID written into the tombstone
-// for replicas which are part of a range which is known to have been merged.
-// This value should prevent any messages from stale replicas of that range from
-// ever resurrecting merged replicas. Whenever merging or subsuming a replica we
-// know new replicas can never be created so this value is used even if we
-// don't know the current replica ID.
-const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 
 func (r *Replica) preDestroyRaftMuLocked(
 	ctx context.Context,
@@ -126,7 +78,7 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	// Release the reference to this tenant in metrics, we know the tenant ID is
 	// valid if the replica is initialized.
 	if r.tenantMetricsRef != nil {
-		r.store.metrics.releaseTenant(ctx, r.tenantMetricsRef)
+		r.store.metrics.ReleaseTenant(ctx, r.tenantMetricsRef)
 	}
 
 	// Unhook the tenant rate limiter if we have one.

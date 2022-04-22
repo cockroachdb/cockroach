@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvsplitqueue"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,6 +29,10 @@ import (
 
 // TestSplitQueueShouldQueue verifies shouldSplitRange method correctly
 // combines splits in zone configs with the size of the range.
+//
+// TODO(irfansharif): This test can be made to mock out the kvqueue.Replica
+// interface instead of using the real thing, and be moved into the kvsplitqueue
+// package.
 func TestSplitQueueShouldQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -96,7 +101,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// Testing using shouldSplitRange instead of shouldQueue to avoid using the splitFinder
 		// This tests the merge queue behavior too as a result. For splitFinder tests,
 		// see split/split_test.go.
-		shouldQ, priority := shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
+		shouldQ, priority := kvsplitqueue.ShouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
 			repl.GetMaxBytes(), repl.ShouldBackpressureWrites(), cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)

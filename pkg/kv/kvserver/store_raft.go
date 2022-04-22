@@ -15,6 +15,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicagcqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -400,7 +402,7 @@ func (s *Store) HandleRaftResponse(
 
 				repl.mu.Unlock()
 				nextReplicaID := tErr.ReplicaID + 1
-				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, RemoveOptions{
+				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, kvqueue.RemoveOptions{
 					DestroyData: true,
 				})
 			case *roachpb.RaftGroupDeletedError:
@@ -417,7 +419,7 @@ func (s *Store) HandleRaftResponse(
 				// also mean that it is so far behind it no longer knows where any of the
 				// other replicas are (#23994). Add it to the replica GC queue to do a
 				// proper check.
-				s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
+				s.replicaGCQueue.AddAsync(ctx, repl, kvreplicagcqueue.ReplicaGCPriorityDefault)
 			case *roachpb.StoreNotFoundError:
 				log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
 					resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)

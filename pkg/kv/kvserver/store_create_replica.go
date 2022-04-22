@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -105,7 +107,7 @@ func (s *Store) tryGetOrCreateReplica(
 			}
 
 			repl.mu.RUnlock()
-			if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
+			if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, kvqueue.RemoveOptions{
 				DestroyData: true,
 			}); err != nil {
 				log.Fatalf(ctx, "failed to remove replica: %v", err)
@@ -278,7 +280,7 @@ func (s *Store) tryGetOrCreateReplica(
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it.
-		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
+		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), kvserverbase.DestroyReasonRemoved)
 		repl.mu.Unlock()
 		s.mu.Lock()
 		s.unlinkReplicaByRangeIDLocked(ctx, rangeID)

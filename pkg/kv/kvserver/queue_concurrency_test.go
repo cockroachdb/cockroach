@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// XXX: Ideally this file too moves to kvqueue.
 package kvserver
 
 import (
@@ -17,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -31,8 +34,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func constantTimeoutFunc(d time.Duration) func(*cluster.Settings, replicaInQueue) time.Duration {
-	return func(*cluster.Settings, replicaInQueue) time.Duration { return d }
+func constantTimeoutFunc(d time.Duration) func(*cluster.Settings, kvqueue.Replica) time.Duration {
+	return func(*cluster.Settings, kvqueue.Replica) time.Duration { return d }
 }
 
 // TestBaseQueueConcurrent verifies that under concurrent adds/removes of ranges
@@ -52,17 +55,17 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	// queue and maybe removed as well.
 	const num = 1000
 
-	cfg := queueConfig{
-		maxSize:              num / 2,
-		maxConcurrency:       4,
-		acceptsUnsplitRanges: true,
-		processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
+	cfg := kvqueue.Config{
+		MaxSize:              num / 2,
+		MaxConcurrency:       4,
+		AcceptsUnsplitRanges: true,
+		ProcessTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
 		// We don't care about these, but we don't want to crash.
-		successes:       metric.NewCounter(metric.Metadata{Name: "processed"}),
-		failures:        metric.NewCounter(metric.Metadata{Name: "failures"}),
-		pending:         metric.NewGauge(metric.Metadata{Name: "pending"}),
-		processingNanos: metric.NewCounter(metric.Metadata{Name: "processingnanos"}),
-		purgatory:       metric.NewGauge(metric.Metadata{Name: "purgatory"}),
+		Successes:       metric.NewCounter(metric.Metadata{Name: "processed"}),
+		Failures:        metric.NewCounter(metric.Metadata{Name: "failures"}),
+		Pending:         metric.NewGauge(metric.Metadata{Name: "pending"}),
+		ProcessingNanos: metric.NewCounter(metric.Metadata{Name: "processingnanos"}),
+		Purgatory:       metric.NewGauge(metric.Metadata{Name: "purgatory"}),
 	}
 
 	// Set up a fake store with just exactly what the code calls into. Ideally
@@ -85,15 +88,15 @@ func TestBaseQueueConcurrent(t *testing.T) {
 			} else if n == 1 {
 				return false, errors.New("injected regular error")
 			} else if n == 2 {
-				return false, &benignError{errors.New("injected benign error")}
+				return false, &kvqueue.BenignError{errors.New("injected benign error")}
 			}
 			return false, &testPurgatoryError{}
 		},
 	}
-	bq := newBaseQueue("test", impl, store, cfg)
-	bq.getReplica = func(id roachpb.RangeID) (replicaInQueue, error) {
+	bq := kvqueue.NewBaseQueue("test", impl, store, cfg)
+	bq.TestingOverrideGetReplica(func(id roachpb.RangeID) (kvqueue.Replica, error) {
 		return &fakeReplica{rangeID: id}, nil
-	}
+	})
 	bq.Start(stopper)
 
 	var g errgroup.Group
@@ -101,7 +104,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		r := &fakeReplica{rangeID: roachpb.RangeID(i)}
 		for j := 0; j < 5; j++ {
 			g.Go(func() error {
-				_, err := bq.testingAdd(ctx, r, 1.0)
+				_, err := bq.TestingAdd(ctx, r, 1.0)
 				return err
 			})
 		}
@@ -160,10 +163,12 @@ func (fr *fakeReplica) AnnotateCtx(ctx context.Context) context.Context { return
 func (fr *fakeReplica) StoreID() roachpb.StoreID {
 	return 1
 }
-func (fr *fakeReplica) GetRangeID() roachpb.RangeID         { return fr.rangeID }
-func (fr *fakeReplica) ReplicaID() roachpb.ReplicaID        { return fr.replicaID }
-func (fr *fakeReplica) IsInitialized() bool                 { return true }
-func (fr *fakeReplica) IsDestroyed() (DestroyReason, error) { return destroyReasonAlive, nil }
+func (fr *fakeReplica) GetRangeID() roachpb.RangeID  { return fr.rangeID }
+func (fr *fakeReplica) ReplicaID() roachpb.ReplicaID { return fr.replicaID }
+func (fr *fakeReplica) IsInitialized() bool          { return true }
+func (fr *fakeReplica) IsDestroyed() (kvserverbase.DestroyReason, error) {
+	return kvserverbase.DestroyReasonAlive, nil
+}
 func (fr *fakeReplica) Desc() *roachpb.RangeDescriptor {
 	return &roachpb.RangeDescriptor{RangeID: fr.rangeID, EndKey: roachpb.RKey("z")}
 }

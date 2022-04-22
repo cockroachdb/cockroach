@@ -14,20 +14,12 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
-
-// RemoveOptions bundles boolean parameters for Store.RemoveReplica.
-type RemoveOptions struct {
-	// If true, the replica's destroyStatus must be marked as removed.
-	DestroyData bool
-	// InsertPlaceholder can be specified when removing an initialized Replica
-	// and will result in the insertion of a ReplicaPlaceholder covering the
-	// keyspace previously occupied by the (now deleted) Replica.
-	InsertPlaceholder bool
-}
 
 // RemoveReplica removes the replica from the store's replica map and from the
 // sorted replicasByKey btree.
@@ -40,21 +32,25 @@ type RemoveOptions struct {
 //
 // The passed replica must be initialized.
 func (s *Store) RemoveReplica(
-	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
+	ctx context.Context,
+	rep kvqueue.Replica,
+	nextReplicaID roachpb.ReplicaID,
+	opts kvqueue.RemoveOptions,
 ) error {
-	rep.raftMu.Lock()
-	defer rep.raftMu.Unlock()
+	repl := rep.(*Replica)
+	repl.raftMu.Lock()
+	defer repl.raftMu.Unlock()
 	if opts.InsertPlaceholder {
 		return errors.Errorf("InsertPlaceholder not supported in RemoveReplica")
 	}
-	_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, opts)
+	_, err := s.removeInitializedReplicaRaftMuLocked(ctx, repl, nextReplicaID, opts)
 	return err
 }
 
 // removeReplicaRaftMuLocked removes the passed replica. If the replica is
 // initialized the RemoveOptions will be consulted.
 func (s *Store) removeReplicaRaftMuLocked(
-	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
+	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts kvqueue.RemoveOptions,
 ) error {
 	rep.raftMu.AssertHeld()
 	if rep.IsInitialized() {
@@ -73,7 +69,7 @@ func (s *Store) removeReplicaRaftMuLocked(
 // which is sometimes called directly when the necessary lock is already held.
 // It requires that Replica.raftMu is held and that s.mu is not held.
 func (s *Store) removeInitializedReplicaRaftMuLocked(
-	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
+	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts kvqueue.RemoveOptions,
 ) (*ReplicaPlaceholder, error) {
 	rep.raftMu.AssertHeld()
 	if !rep.IsInitialized() {
@@ -130,7 +126,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 		// Mark the replica as removed before deleting data.
 		rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
-			destroyReasonRemoved)
+			kvserverbase.DestroyReasonRemoved)
 		rep.mu.Unlock()
 		rep.readOnlyCmdMu.Unlock()
 	}
@@ -161,7 +157,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
 
-	s.metrics.subtractMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
+	s.metrics.SubtractMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
 	s.metrics.ReplicaCount.Dec(1)
 	s.mu.Unlock()
 
@@ -258,7 +254,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 
 		// Mark the replica as removed before deleting data.
 		rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
-			destroyReasonRemoved)
+			kvserverbase.DestroyReasonRemoved)
 
 		rep.mu.Unlock()
 		rep.readOnlyCmdMu.Unlock()

@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -17,11 +17,11 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
-	"testing/quick"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvmvccgcqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -32,13 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/syncmap"
 )
 
@@ -47,305 +45,6 @@ func makeTS(nanos int64, logical int32) hlc.Timestamp {
 	return hlc.Timestamp{
 		WallTime: nanos,
 		Logical:  logical,
-	}
-}
-
-func TestMVCCGCQueueScoreString(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	for i, c := range []struct {
-		r   mvccGCQueueScore
-		exp string
-	}{
-		{mvccGCQueueScore{}, "(empty)"},
-		{mvccGCQueueScore{
-			ShouldQueue:              true,
-			FuzzFactor:               1.25,
-			FinalScore:               3.45 * 1.25,
-			ValuesScalableScore:      4,
-			DeadFraction:             0.25,
-			IntentScore:              0.45,
-			ExpMinGCByteAgeReduction: 256 * 1024,
-			GCByteAge:                512 * 1024,
-			GCBytes:                  1024 * 3,
-			LastGC:                   5 * time.Second,
-		},
-			`queue=true with 4.31/fuzz(1.25)=3.45=valScaleScore(4.00)*deadFrac(0.25)+intentScore(0.45)
-likely last GC: 5s ago, 3.0 KiB non-live, curr. age 512 KiB*s, min exp. reduction: 256 KiB*s`},
-		// Check case of empty Threshold.
-		{mvccGCQueueScore{ShouldQueue: true}, `queue=true with 0.00/fuzz(0.00)=NaN=valScaleScore(0.00)*deadFrac(0.00)+intentScore(0.00)
-likely last GC: never, 0 B non-live, curr. age 0 B*s, min exp. reduction: 0 B*s`},
-	} {
-		if act := c.r.String(); act != c.exp {
-			t.Errorf("%d: wanted:\n'%s'\ngot:\n'%s'", i, c.exp, act)
-		}
-	}
-}
-
-func TestMVCCGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	rnd, seed := randutil.NewTestRand()
-	cfg := quick.Config{
-		MaxCount: 50000,
-		Rand:     rnd,
-	}
-	initialNow := hlc.Timestamp{}.Add(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano(), 0)
-	ctx := context.Background()
-
-	// Verify that the basic assumption always holds: We won't queue based on
-	// GCByte{s,Age} unless TTL-based deletion would actually delete something.
-	if err := quick.Check(func(
-		seed uint16, uTTLSec uint32, uTimePassed time.Duration, uGCBytes uint32, uGCByteAge uint32,
-	) bool {
-		ttlSec, timePassed := int32(uTTLSec), uTimePassed
-		gcBytes, gcByteAge := int64(uGCBytes), int64(uGCByteAge)
-
-		ms := enginepb.MVCCStats{
-			LastUpdateNanos: initialNow.WallTime,
-			ValBytes:        gcBytes,
-			GCBytesAge:      gcByteAge,
-		}
-		now := initialNow.Add(timePassed.Nanoseconds(), 0)
-		r := makeMVCCGCQueueScoreImpl(
-			ctx, int64(seed), now, ms, time.Duration(ttlSec)*time.Second, hlc.Timestamp{},
-			true /* canAdvanceGCThreshold */)
-		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
-		result := !r.ShouldQueue || wouldHaveToDeleteSomething
-		if !result {
-			log.Warningf(ctx, "failing on ttl=%d, timePassed=%s, gcBytes=%d, gcByteAge=%d:\n%s",
-				ttlSec, timePassed, gcBytes, gcByteAge, r)
-		}
-		return result
-	}, &cfg); err != nil {
-		t.Fatal(errors.Wrapf(err, "with seed %d", seed))
-	}
-}
-
-func TestMVCCGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	if err := quick.Check(func(keyBytes, valBytes, liveBytes int32, containsEstimates int64) bool {
-		r := makeMVCCGCQueueScoreImpl(context.Background(), 0, hlc.Timestamp{}, enginepb.MVCCStats{
-			ContainsEstimates: containsEstimates,
-			LiveBytes:         int64(liveBytes),
-			ValBytes:          int64(valBytes),
-			KeyBytes:          int64(keyBytes),
-		}, 60*time.Second, hlc.Timestamp{}, true /* canAdvanceGCThreshold */)
-		return r.DeadFraction >= 0 && r.DeadFraction <= 1
-	}, &quick.Config{MaxCount: 1000}); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestMVCCGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	const seed = 1
-	var ms enginepb.MVCCStats
-	ms.AbortSpanBytes += largeAbortSpanBytesThreshold
-	ms.SysBytes += largeAbortSpanBytesThreshold
-	ms.SysCount++
-
-	expiration := kvserverbase.TxnCleanupThreshold.Nanoseconds() + 1
-
-	// GC triggered if abort span should all be gc'able and it's large.
-	{
-		r := makeMVCCGCQueueScoreImpl(
-			context.Background(), seed,
-			hlc.Timestamp{WallTime: expiration + 1},
-			ms, 10000*time.Second,
-			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
-		)
-		require.True(t, r.ShouldQueue)
-		require.NotZero(t, r.FinalScore)
-	}
-
-	// GC triggered if abort span bytes count is 0, but the sys bytes
-	// and sys count exceed a certain threshold (likely large abort span).
-	ms.AbortSpanBytes = 0
-	ms.SysCount = probablyLargeAbortSpanSysCountThreshold
-	{
-		r := makeMVCCGCQueueScoreImpl(
-			context.Background(), seed,
-			hlc.Timestamp{WallTime: expiration + 1},
-			ms, 10000*time.Second,
-			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
-		)
-		require.True(t, r.ShouldQueue)
-		require.NotZero(t, r.FinalScore)
-	}
-
-	// Heuristic doesn't fire if last GC within TxnCleanupThreshold.
-	{
-		r := makeMVCCGCQueueScoreImpl(context.Background(), seed,
-			hlc.Timestamp{WallTime: expiration},
-			ms, 10000*time.Second,
-			hlc.Timestamp{WallTime: expiration - 100}, true, /* canAdvanceGCThreshold */
-		)
-		require.False(t, r.ShouldQueue)
-		require.Zero(t, r.FinalScore)
-	}
-}
-
-func TestMVCCGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const seed = 1
-	ctx := context.Background()
-	now := hlc.Timestamp{WallTime: 1e6 * 1e9}
-	gcTTL := time.Second
-
-	testcases := map[string]struct {
-		lastGC   hlc.Timestamp
-		mvccGC   bool
-		expectGC bool
-	}{
-		"never GCed":               {lastGC: hlc.Timestamp{}, expectGC: true},
-		"just GCed":                {lastGC: now.Add(-1, 0), expectGC: false},
-		"future GC":                {lastGC: now.Add(1, 0), expectGC: false},
-		"MVCC GC ignores cooldown": {lastGC: now.Add(-1, 0), mvccGC: true, expectGC: true},
-		"before GC cooldown":       {lastGC: now.Add(-mvccGCQueueIntentCooldownDuration.Nanoseconds()+1, 0), expectGC: false},
-		"at GC cooldown":           {lastGC: now.Add(-mvccGCQueueIntentCooldownDuration.Nanoseconds(), 0), expectGC: true},
-		"after GC cooldown":        {lastGC: now.Add(-mvccGCQueueIntentCooldownDuration.Nanoseconds()-1, 0), expectGC: true},
-	}
-	for name, tc := range testcases {
-		tc := tc
-		t.Run(name, func(t *testing.T) {
-			ms := enginepb.MVCCStats{
-				IntentCount: 1e9,
-			}
-			if tc.mvccGC {
-				ms.ValBytes = 1e9
-			}
-
-			r := makeMVCCGCQueueScoreImpl(
-				ctx, seed, now, ms, gcTTL, tc.lastGC, true /* canAdvanceGCThreshold */)
-			require.Equal(t, tc.expectGC, r.ShouldQueue)
-		})
-	}
-}
-
-const cacheFirstLen = 3
-
-type gcTestCacheKey struct {
-	enginepb.MVCCStats
-	string
-}
-type gcTestCacheVal struct {
-	first [cacheFirstLen]enginepb.MVCCStats
-	last  enginepb.MVCCStats
-}
-
-type cachedWriteSimulator struct {
-	cache map[gcTestCacheKey]gcTestCacheVal
-	t     *testing.T
-}
-
-func newCachedWriteSimulator(t *testing.T) *cachedWriteSimulator {
-	var cws cachedWriteSimulator
-	cws.t = t
-	cws.cache = map[gcTestCacheKey]gcTestCacheVal{
-		{enginepb.MVCCStats{LastUpdateNanos: 946684800000000000}, "1-1m0s-1.0 MiB"}: {
-			first: [cacheFirstLen]enginepb.MVCCStats{
-				{ContainsEstimates: 0, LastUpdateNanos: 946684800000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
-				{ContainsEstimates: 0, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
-				{ContainsEstimates: 0, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
-			},
-			last: enginepb.MVCCStats{ContainsEstimates: 0, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1856009610, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
-		},
-	}
-	return &cws
-}
-
-func (cws *cachedWriteSimulator) value(size int) roachpb.Value {
-	var value roachpb.Value
-	kb := make([]byte, size)
-	if n, err := rand.New(rand.NewSource(int64(size))).Read(kb); err != nil {
-		cws.t.Fatal(err)
-	} else if n != size {
-		cws.t.Fatalf("wrote only %d < %d", n, size)
-	}
-	value.SetBytes(kb)
-	return value
-}
-
-func (cws *cachedWriteSimulator) multiKey(
-	numOps int, size int, txn *roachpb.Transaction, ms *enginepb.MVCCStats,
-) {
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
-	t, ctx := cws.t, context.Background()
-
-	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
-	key, value := []byte("multikey"), cws.value(size)
-	var eachMS enginepb.MVCCStats
-	if err := storage.MVCCPut(ctx, eng, &eachMS, key, ts, value, txn); err != nil {
-		t.Fatal(err)
-	}
-	for i := 1; i < numOps; i++ {
-		ms.Add(eachMS)
-	}
-}
-
-func (cws *cachedWriteSimulator) singleKeySteady(
-	qps int, duration time.Duration, size int, ms *enginepb.MVCCStats,
-) {
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
-	t, ctx := cws.t, context.Background()
-	cacheKey := fmt.Sprintf("%d-%s-%s", qps, duration, humanizeutil.IBytes(int64(size)))
-	cached, ok := cws.cache[gcTestCacheKey{*ms, cacheKey}]
-	if !ok && duration > 0 {
-		t.Fatalf("cache key missing: %s with %s", cacheKey, pretty.Sprint(*ms))
-	}
-	firstSl := make([]enginepb.MVCCStats, 0, cacheFirstLen)
-	// Pick random bytes once; they don't matter for stats but we want reproducability.
-	key, value := []byte("0123456789"), cws.value(size)
-
-	initialNow := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
-
-	for elapsed := time.Duration(0); elapsed <= duration; elapsed += time.Second {
-		for i := 0; i < qps; i++ {
-			now := initialNow.Add(elapsed.Nanoseconds(), int32(i))
-
-			if err := storage.MVCCPut(ctx, eng, ms, key, now, value, nil /* txn */); err != nil {
-				t.Fatal(err)
-			}
-			if len(firstSl) < cacheFirstLen {
-				firstSl = append(firstSl, *ms)
-			} else if len(firstSl) == cacheFirstLen {
-				if ok && reflect.DeepEqual(firstSl, cached.first[:cacheFirstLen]) {
-					*ms = cached.last
-					// Exit both loops.
-					elapsed += duration
-					break
-				} else {
-					ok = false
-				}
-			}
-		}
-	}
-
-	if !ok && duration > 0 {
-		copy(cached.first[:3], firstSl)
-		cached.last = *ms
-		t.Fatalf("missing or incorrect cache entry for %s, should be \n%s", cacheKey, pretty.Sprint(cached))
-	}
-}
-
-func (cws *cachedWriteSimulator) shouldQueue(
-	b bool, prio float64, after time.Duration, ttl time.Duration, ms enginepb.MVCCStats,
-) {
-	cws.t.Helper()
-	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
-	r := makeMVCCGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, ttl,
-		hlc.Timestamp{}, true /* canAdvanceGCThreshold */)
-	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
-		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
-			b, r.ShouldQueue, prio, r.FinalScore, after, ttl, ms, r)
 	}
 }
 
@@ -633,8 +332,8 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 	}
 
 	// Process through a scan queue.
-	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, cfg)
+	mgcq := kvmvccgcqueue.NewMVCCGCQueue(tc.store, tc.store.metrics, nil)
+	processed, err := mgcq.Process(ctx, tc.repl, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -866,13 +565,13 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	}
 
 	// Run GC.
-	mgcq := newMVCCGCQueue(tc.store)
+	mgcq := kvmvccgcqueue.NewMVCCGCQueue(tc.store, tc.store.metrics, nil)
 	cfg := tc.gossip.DeprecatedGetSystemConfig()
 	if cfg == nil {
 		t.Fatal("config not set")
 	}
 
-	processed, err := mgcq.process(ctx, tc.repl, cfg)
+	processed, err := mgcq.Process(ctx, tc.repl, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1005,8 +704,8 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	mgcq := kvmvccgcqueue.NewMVCCGCQueue(tc.store, tc.store.metrics, nil)
+	processed, err := mgcq.Process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1068,8 +767,8 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 	}
 
 	// Process through a scan queue.
-	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	mgcq := kvmvccgcqueue.NewMVCCGCQueue(tc.store, tc.store.metrics, nil)
+	processed, err := mgcq.Process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1176,8 +875,8 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 		t.Fatalf("could not find span config for range %s", err)
 	}
 	tc.manualClock.Increment(conf.TTL().Nanoseconds() + 1)
-	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	mgcq := kvmvccgcqueue.NewMVCCGCQueue(tc.store, tc.store.metrics, nil)
+	processed, err := mgcq.Process(ctx, tc.repl, confReader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1189,5 +888,126 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	// thresholds, making six total batches.
 	if a, e := atomic.LoadInt32(&gcRequests), int32(6); a != e {
 		t.Errorf("expected %d gc requests; got %d", e, a)
+	}
+}
+
+const cacheFirstLen = 3
+
+type gcTestCacheKey struct {
+	enginepb.MVCCStats
+	string
+}
+type gcTestCacheVal struct {
+	first [cacheFirstLen]enginepb.MVCCStats
+	last  enginepb.MVCCStats
+}
+
+type cachedWriteSimulator struct {
+	cache map[gcTestCacheKey]gcTestCacheVal
+	t     *testing.T
+}
+
+func newCachedWriteSimulator(t *testing.T) *cachedWriteSimulator {
+	var cws cachedWriteSimulator
+	cws.t = t
+	cws.cache = map[gcTestCacheKey]gcTestCacheVal{
+		{enginepb.MVCCStats{LastUpdateNanos: 946684800000000000}, "1-1m0s-1.0 MiB"}: {
+			first: [cacheFirstLen]enginepb.MVCCStats{
+				{ContainsEstimates: 0, LastUpdateNanos: 946684800000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+			},
+			last: enginepb.MVCCStats{ContainsEstimates: 0, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1856009610, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+		},
+	}
+	return &cws
+}
+
+func (cws *cachedWriteSimulator) value(size int) roachpb.Value {
+	var value roachpb.Value
+	kb := make([]byte, size)
+	if n, err := rand.New(rand.NewSource(int64(size))).Read(kb); err != nil {
+		cws.t.Fatal(err)
+	} else if n != size {
+		cws.t.Fatalf("wrote only %d < %d", n, size)
+	}
+	value.SetBytes(kb)
+	return value
+}
+
+func (cws *cachedWriteSimulator) multiKey(
+	numOps int, size int, txn *roachpb.Transaction, ms *enginepb.MVCCStats,
+) {
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+	t, ctx := cws.t, context.Background()
+
+	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
+	key, value := []byte("multikey"), cws.value(size)
+	var eachMS enginepb.MVCCStats
+	if err := storage.MVCCPut(ctx, eng, &eachMS, key, ts, value, txn); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < numOps; i++ {
+		ms.Add(eachMS)
+	}
+}
+
+func (cws *cachedWriteSimulator) singleKeySteady(
+	qps int, duration time.Duration, size int, ms *enginepb.MVCCStats,
+) {
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+	t, ctx := cws.t, context.Background()
+	cacheKey := fmt.Sprintf("%d-%s-%s", qps, duration, humanizeutil.IBytes(int64(size)))
+	cached, ok := cws.cache[gcTestCacheKey{*ms, cacheKey}]
+	if !ok && duration > 0 {
+		t.Fatalf("cache key missing: %s with %s", cacheKey, pretty.Sprint(*ms))
+	}
+	firstSl := make([]enginepb.MVCCStats, 0, cacheFirstLen)
+	// Pick random bytes once; they don't matter for stats but we want reproducability.
+	key, value := []byte("0123456789"), cws.value(size)
+
+	initialNow := hlc.Timestamp{}.Add(ms.LastUpdateNanos, 0)
+
+	for elapsed := time.Duration(0); elapsed <= duration; elapsed += time.Second {
+		for i := 0; i < qps; i++ {
+			now := initialNow.Add(elapsed.Nanoseconds(), int32(i))
+
+			if err := storage.MVCCPut(ctx, eng, ms, key, now, value, nil /* txn */); err != nil {
+				t.Fatal(err)
+			}
+			if len(firstSl) < cacheFirstLen {
+				firstSl = append(firstSl, *ms)
+			} else if len(firstSl) == cacheFirstLen {
+				if ok && reflect.DeepEqual(firstSl, cached.first[:cacheFirstLen]) {
+					*ms = cached.last
+					// Exit both loops.
+					elapsed += duration
+					break
+				} else {
+					ok = false
+				}
+			}
+		}
+	}
+
+	if !ok && duration > 0 {
+		copy(cached.first[:3], firstSl)
+		cached.last = *ms
+		t.Fatalf("missing or incorrect cache entry for %s, should be \n%s", cacheKey, pretty.Sprint(cached))
+	}
+}
+
+func (cws *cachedWriteSimulator) shouldQueue(
+	b bool, prio float64, after time.Duration, ttl time.Duration, ms enginepb.MVCCStats,
+) {
+	cws.t.Helper()
+	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
+	r := kvmvccgcqueue.MakeMVCCGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, ttl,
+		hlc.Timestamp{}, true /* canAdvanceGCThreshold */)
+	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
+		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
+			b, r.ShouldQueue, prio, r.FinalScore, after, ttl, ms, r)
 	}
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicatequeue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -504,10 +505,10 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	cfg.Gossip = g
 	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-	rq := newReplicateQueue(s, a)
+	rq := kvreplicatequeue.NewReplicateQueue(s, a, s.metrics, nil)
 	rr := newReplicaRankings()
 
-	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, a, s.metrics, s.StorePool(), rr)
 
 	// Rather than trying to populate every Replica with a real raft group in
 	// order to pass replicaIsBehind checks, fake out the function for getting
@@ -775,9 +776,9 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			cfg := TestStoreConfig(nil)
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-			rq := newReplicateQueue(s, a)
+			rq := kvreplicatequeue.NewReplicateQueue(s, a, s.metrics, nil)
 			rr := newReplicaRankings()
-			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, a, s.metrics, s.StorePool(), rr)
 			// Rather than trying to populate every Replica with a real raft group in
 			// order to pass replicaIsBehind checks, fake out the function for getting
 			// raft status with one that always returns all replicas as up to date.
@@ -1051,10 +1052,10 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			cfg := TestStoreConfig(nil)
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-			rq := newReplicateQueue(s, a)
+			rq := kvreplicatequeue.NewReplicateQueue(s, a, s.metrics, nil)
 			rr := newReplicaRankings()
 
-			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, a, s.metrics, s.StorePool(), rr)
 
 			// Rather than trying to populate every Replica with a real raft group in
 			// order to pass replicaIsBehind checks, fake out the function for getting
@@ -1155,10 +1156,10 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(noLocalityStores, t)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-	rq := newReplicateQueue(s, a)
+	rq := kvreplicatequeue.NewReplicateQueue(s, a, s.metrics, nil)
 	rr := newReplicaRankings()
 
-	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, a, s.metrics, s.StorePool(), rr)
 
 	// Load a fake hot range that's already on the best stores. We want to ensure
 	// that the store rebalancer doesn't attempt to rebalance ranges that it
@@ -1300,10 +1301,10 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 				ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg,
 			)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-			rq := newReplicateQueue(s, a)
+			rq := kvreplicatequeue.NewReplicateQueue(s, a, s.metrics, nil)
 			rr := newReplicaRankings()
 
-			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, a, s.metrics, s.StorePool(), rr)
 
 			// Rather than trying to populate every Replica with a real raft group in
 			// order to pass replicaIsBehind checks, fake out the function for getting
@@ -1377,10 +1378,10 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(noLocalityStores, t)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-	rq := newReplicateQueue(s, a)
+	rq := kvreplicatequeue.NewReplicateQueue(s, a, s.metrics, nil)
 	rr := newReplicaRankings()
 
-	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, a, s.metrics, s.StorePool(), rr)
 
 	// Load in a range with replicas on an overfull node, a slightly underfull
 	// node, and a very underfull node.
@@ -1581,10 +1582,10 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(test.stores, t)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-			rq := newReplicateQueue(s, a)
+			rq := kvreplicatequeue.NewReplicateQueue(s, a, s.metrics, nil)
 			rr := newReplicaRankings()
 
-			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, a, s.metrics, s.StorePool(), rr)
 
 			// Load in a range with replicas on an overfull node, a slightly underfull
 			// node, and a very underfull node.

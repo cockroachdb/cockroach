@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicatequeue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -513,7 +514,7 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	sv := &settings.SV
 	// set min lease transfer high, so we know it does affect the lease movement.
-	kvserver.MinLeaseTransferInterval.Override(ctx, sv, 24*time.Hour)
+	kvreplicatequeue.MinLeaseTransferInterval.Override(ctx, sv, 24*time.Hour)
 	// Place all the leases in us-west.
 	zcfg := zonepb.DefaultZoneConfig()
 	zcfg.LeasePreferences = []zonepb.LeasePreference{

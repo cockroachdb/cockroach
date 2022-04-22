@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,7 +48,7 @@ func (r *Replica) setCorruptRaftMuLocked(
 
 	log.ErrorfDepth(ctx, 1, "stalling replica due to: %s", cErr.ErrorMsg)
 	cErr.Processed = true
-	r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
+	r.mu.destroyStatus.Set(cErr, kvserverbase.DestroyReasonRemoved)
 
 	auxDir := r.store.engine.GetAuxiliaryDir()
 	_ = r.store.engine.MkdirAll(auxDir)

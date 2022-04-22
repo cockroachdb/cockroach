@@ -24,18 +24,6 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// maxRaftMsgType is the maximum value in the raft.MessageType enum.
-const maxRaftMsgType = raftpb.MsgPreVoteResp
-
-func init() {
-	for v := range raftpb.MessageType_name {
-		typ := raftpb.MessageType(v)
-		if typ > maxRaftMsgType {
-			panic(fmt.Sprintf("raft.MessageType (%s) with value larger than maxRaftMsgType", typ))
-		}
-	}
-}
-
 // init installs an adapter to use clog for log messages from raft which
 // don't belong to any range.
 func init() {

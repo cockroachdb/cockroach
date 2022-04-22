@@ -22,8 +22,8 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/kv/kvserver/kvqueue/kvtsmaintenancequeue",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

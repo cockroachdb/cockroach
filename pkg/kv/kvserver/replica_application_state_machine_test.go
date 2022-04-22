@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftlogqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -120,9 +122,9 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		// Check the replica's destroy status.
 		reason, _ := r.IsDestroyed()
 		if add {
-			require.Equal(t, destroyReasonAlive, reason)
+			require.Equal(t, kvserverbase.DestroyReasonAlive, reason)
 		} else {
-			require.Equal(t, destroyReasonRemoved, reason)
+			require.Equal(t, kvserverbase.DestroyReasonRemoved, reason)
 		}
 
 		// Apply the batch to the StateMachine.
@@ -158,7 +160,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		defer stopper.Stop(ctx)
 		tc.Start(ctx, t, stopper)
 		st := tc.store.ClusterSettings()
-		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, false)
+		kvraftlogqueue.LooselyCoupledTruncationEnabled.Override(ctx, &st.SV, false)
 
 		// Lock the replica for the entire test.
 		r := tc.repl
@@ -250,7 +252,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 		defer stopper.Stop(ctx)
 		tc.Start(ctx, t, stopper)
 		st := tc.store.ClusterSettings()
-		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, true)
+		kvraftlogqueue.LooselyCoupledTruncationEnabled.Override(ctx, &st.SV, true)
 		// Remove the flush completed callback since we don't want a
 		// non-deterministic flush to cause the test to fail.
 		tc.store.engine.RegisterFlushCompletedCallback(func() {})

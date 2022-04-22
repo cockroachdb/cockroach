@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftlogqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -416,7 +417,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	require.NoError(t, err)
 	require.NotNil(t, leaseholderRepl)
 
-	time.Sleep(kvserver.RaftLogQueuePendingSnapshotGracePeriod)
+	time.Sleep(kvraftlogqueue.RaftLogQueuePendingSnapshotGracePeriod)
 
 	if drainReceivingNode {
 		// Draining nodes shouldn't reject raft snapshots, so this should have no

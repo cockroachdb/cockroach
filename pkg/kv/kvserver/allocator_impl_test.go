@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -255,7 +256,7 @@ func TestAllocatorThrottled(t *testing.T) {
 
 	// First test to make sure we would send the replica to purgatory.
 	_, _, err := a.AllocateVoter(ctx, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil)
-	if !errors.HasInterface(err, (*purgatoryError)(nil)) {
+	if !errors.HasInterface(err, (*kvqueue.PurgatoryError)(nil)) {
 		t.Fatalf("expected a purgatory error, got: %+v", err)
 	}
 
@@ -279,7 +280,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	storeDetail.ThrottledUntil = timeutil.Now().Add(24 * time.Hour)
 	a.StorePool.DetailsMu.Unlock()
 	_, _, err = a.AllocateVoter(ctx, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil)
-	if errors.HasInterface(err, (*purgatoryError)(nil)) {
+	if errors.HasInterface(err, (*kvqueue.PurgatoryError)(nil)) {
 		t.Fatalf("expected a non purgatory error, got: %+v", err)
 	}
 }

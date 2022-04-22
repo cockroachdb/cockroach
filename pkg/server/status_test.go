@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -332,7 +333,9 @@ func startServer(t *testing.T) *TestServer {
 			Store: &kvserver.StoreTestingKnobs{
 				// Now that we allow same node rebalances, disable it in these tests,
 				// as they dont expect replicas to move.
-				DisableReplicaRebalancing: true,
+				QueueKnobs: kvqueue.TestingKnobs{
+					DisableReplicaRebalancing: true,
+				},
 			},
 		},
 	})

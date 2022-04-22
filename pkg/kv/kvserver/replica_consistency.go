@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvconsistencyqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -774,7 +775,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 		Sem:        sem,
 		WaitForSem: false,
 	}, func(ctx context.Context) {
-		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckAsyncTimeout,
+		if err := contextutil.RunWithTimeout(ctx, taskName, kvconsistencyqueue.CheckAsyncTimeout,
 			func(ctx context.Context) error {
 				defer snap.Close()
 				var snapshot *roachpb.RaftSnapshotData

@@ -1,0 +1,47 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvtsmaintenancequeue",
+    srcs = ["ts_maintenance_queue.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvtsmaintenancequeue",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvserver/kvqueue",
+        "//pkg/kv/kvserver/storemetrics",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/storage",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+    ],
+)
+
+go_test(
+    name = "kvtsmaintenancequeue_test",
+    srcs = ["ts_maintenance_queue_test.go"],
+    deps = [
+        ":kvtsmaintenancequeue",
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/kv/kvserver",
+        "//pkg/roachpb",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/ts",
+        "//pkg/ts/tspb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
+    ],
+)

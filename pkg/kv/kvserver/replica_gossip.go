@@ -72,7 +72,7 @@ func (r *Replica) shouldGossip(ctx context.Context) bool {
 // Note that MaybeGossipSystemConfigRaftMuLocked gossips information only when
 // the lease is actually held. The method does not request a range lease here
 // since RequestLease and applyRaftCommand call the method and we need to avoid
-// deadlocking in redirectOnOrAcquireLease.
+// deadlocking in RedirectOnOrAcquireLease.
 //
 // MaybeGossipSystemConfigRaftMuLocked must only be called from Raft commands
 // while holding the raftMu (which provide the necessary serialization to avoid
@@ -264,7 +264,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 		ctx, "storage.Replica: acquiring lease to gossip",
 		func(ctx context.Context) {
 			// Check for or obtain the lease, if none active.
-			_, pErr = r.redirectOnOrAcquireLease(ctx)
+			_, pErr = r.RedirectOnOrAcquireLease(ctx)
 			hasLease = pErr == nil
 			if pErr != nil {
 				switch e := pErr.GetDetail().(type) {

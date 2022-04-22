@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
@@ -55,8 +56,10 @@ func TestProtectedTimestamps(t *testing.T) {
 
 	args := base.TestClusterArgs{}
 	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		DisableGCQueue:            true,
-		DisableLastProcessedCheck: true,
+		DisableGCQueue: true,
+		QueueKnobs: kvqueue.TestingKnobs{
+			DisableLastProcessedCheck: true,
+		},
 	}
 	tc := testcluster.StartTestCluster(t, 3, args)
 	defer tc.Stopper().Stop(ctx)

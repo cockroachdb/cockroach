@@ -39,6 +39,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvmergequeue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvmvccgcqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvraftlogqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -46,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storemetrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -880,7 +885,7 @@ func TestReplicaRangeMismatchRedirect(t *testing.T) {
 	key := roachpb.RKey("a")
 	firstRepl := tc.store.LookupReplica(key)
 	newRepl := splitTestRange(tc.store, key, t)
-	if _, pErr := newRepl.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+	if _, pErr := newRepl.RedirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -973,7 +978,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 
 	{
-		_, pErr := tc.repl.redirectOnOrAcquireLease(ctx)
+		_, pErr := tc.repl.RedirectOnOrAcquireLease(ctx)
 		if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok || lErr == nil {
 			t.Fatalf("wanted NotLeaseHolderError, got %s", pErr)
 		}
@@ -989,7 +994,7 @@ func TestReplicaLease(t *testing.T) {
 	filterErr.Store(roachpb.NewError(&roachpb.LeaseRejectedError{Message: "replica not found"}))
 
 	{
-		_, err := tc.repl.redirectOnOrAcquireLease(ctx)
+		_, err := tc.repl.RedirectOnOrAcquireLease(ctx)
 		if _, ok := err.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, err)
 		}
@@ -1496,7 +1501,7 @@ func TestReplicaDrainLease(t *testing.T) {
 	require.NoError(t, err)
 	// Check that a draining replica that's not the leader does NOT take the
 	// lease.
-	_, pErr := r2.redirectOnOrAcquireLease(ctx)
+	_, pErr := r2.RedirectOnOrAcquireLease(ctx)
 	require.NotNil(t, pErr)
 	require.IsType(t, &roachpb.NotLeaseHolderError{}, pErr.GetDetail())
 
@@ -1520,7 +1525,7 @@ func TestReplicaDrainLease(t *testing.T) {
 	})
 
 	// Check that r2 can now acquire the lease.
-	_, pErr = r2.redirectOnOrAcquireLease(ctx)
+	_, pErr = r2.RedirectOnOrAcquireLease(ctx)
 	require.NoError(t, pErr.GoError())
 }
 
@@ -6475,7 +6480,7 @@ func TestReplicaSetsEqual(t *testing.T) {
 		{true, createReplicaSets([]roachpb.StoreID{1, 2, 3, 1, 2, 3}), createReplicaSets([]roachpb.StoreID{1, 1, 2, 2, 3, 3})},
 	}
 	for _, test := range testData {
-		if replicasCollocated(test.a, test.b) != test.expected {
+		if kvmergequeue.ReplicasCollocated(test.a, test.b) != test.expected {
 			t.Fatalf("unexpected replica intersection: %+v", test)
 		}
 	}
@@ -7084,7 +7089,7 @@ func TestReplicaDestroy(t *testing.T) {
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()
-		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
+		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, tc.repl, repl.Desc().NextReplicaID, kvqueue.RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			t.Fatal(err)
@@ -7180,7 +7185,7 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()
-		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
+		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, repl, repl.Desc().NextReplicaID, kvqueue.RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			t.Fatal(err)
@@ -7212,7 +7217,7 @@ func TestEntries(t *testing.T) {
 		defer stopper.Stop(ctx)
 		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 		st := tc.store.ClusterSettings()
-		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
+		kvraftlogqueue.LooselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 
 		repl := tc.repl
 		rangeID := repl.RangeID
@@ -7371,7 +7376,7 @@ func TestTerm(t *testing.T) {
 		defer stopper.Stop(ctx)
 		tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 		st := tc.store.ClusterSettings()
-		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
+		kvraftlogqueue.LooselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 
 		repl := tc.repl
 		rangeID := repl.RangeID
@@ -9969,9 +9974,9 @@ func (q *testQuiescer) mergeInProgressRLocked() bool {
 	return q.mergeInProgress
 }
 
-func (q *testQuiescer) isDestroyedRLocked() (DestroyReason, error) {
+func (q *testQuiescer) isDestroyedRLocked() (kvserverbase.DestroyReason, error) {
 	if q.isDestroyed {
-		return destroyReasonRemoved, errors.New("testQuiescer: replica destroyed")
+		return kvserverbase.DestroyReasonRemoved, errors.New("testQuiescer: replica destroyed")
 	}
 	return 0, nil
 }
@@ -10406,7 +10411,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		// Do this twice because it used to deadlock. See #25456.
 		sysCfg := tc.store.Gossip().DeprecatedGetSystemConfig()
-		processed, err := tc.store.consistencyQueue.process(ctx, tc.repl, sysCfg)
+		processed, err := tc.store.consistencyQueue.Process(ctx, tc.repl, sysCfg)
 		if !testutils.IsError(err, "boom") {
 			t.Fatal(err)
 		}
@@ -13393,10 +13398,10 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 
 	errBoom := errors.New("boom")
 	tc.repl.mu.Lock()
-	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
+	tc.repl.mu.destroyStatus.Set(errBoom, kvserverbase.DestroyReasonMergePending)
 	tc.repl.mu.Unlock()
 
-	requeue, err := tc.store.replicateQueue.processOneChange(
+	requeue, err := tc.store.replicateQueue.ProcessOneChange(
 		ctx,
 		tc.repl,
 		func(ctx context.Context, repl *Replica) bool { return false },
@@ -13718,9 +13723,9 @@ func TestRangeInfoReturned(t *testing.T) {
 	}
 }
 
-func tenantsWithMetrics(m *StoreMetrics) map[roachpb.TenantID]struct{} {
+func tenantsWithMetrics(m *storemetrics.StoreMetrics) map[roachpb.TenantID]struct{} {
 	metricsTenants := map[roachpb.TenantID]struct{}{}
-	m.tenants.Range(func(tenID int64, _ unsafe.Pointer) bool {
+	m.Tenants.Range(func(tenID int64, _ unsafe.Pointer) bool {
 		metricsTenants[roachpb.MakeTenantID(uint64(tenID))] = struct{}{}
 		return true // more
 	})

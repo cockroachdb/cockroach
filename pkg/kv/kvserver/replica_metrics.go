@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -314,7 +315,7 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 	// of the bytes in raftLogLastCheckSize are already part of pending
 	// truncations since this comparison is looking at whether the raft log has
 	// grown sufficiently.
-	checkRaftLog := r.mu.raftLogSize-r.mu.raftLogLastCheckSize >= RaftLogQueueStaleSize
+	checkRaftLog := r.mu.raftLogSize-r.mu.raftLogLastCheckSize >= kvqueue.RaftLogQueueStaleSize
 	if checkRaftLog {
 		r.mu.raftLogLastCheckSize = r.mu.raftLogSize
 	}

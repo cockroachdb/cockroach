@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvadmissioncontroller",
+    srcs = ["kvadmission_controller.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmissioncontroller",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/admission",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+    ],
+)

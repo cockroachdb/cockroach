@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -20,13 +21,13 @@ import (
 // Code in this file is for testing usage only. It is exported only because it
 // is called from outside of the package.
 
-func (bq *baseQueue) testingAdd(
-	ctx context.Context, repl replicaInQueue, priority float64,
-) (bool, error) {
-	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
-}
+//func (bq *kvqueue.BaseQueue) testingAdd(
+//	ctx context.Context, repl kvqueue.Replica, priority float64,
+//) (bool, error) {
+//	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
+//}
 
-func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
+func forceScanAndProcess(ctx context.Context, s *Store, q *kvqueue.BaseQueue) error {
 	// Check that the system config is available. It is needed by many queues. If
 	// it's not available, some queues silently fail to process any replicas,
 	// which is undesirable for this method.
@@ -35,7 +36,7 @@ func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		q.maybeAdd(context.Background(), repl, s.cfg.Clock.NowAsClockTimestamp())
+		q.MaybeAdd(context.Background(), repl, s.cfg.Clock.NowAsClockTimestamp())
 		return true
 	})
 
@@ -43,7 +44,7 @@ func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
 	return nil
 }
 
-func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {
+func mustForceScanAndProcess(ctx context.Context, s *Store, q *kvqueue.BaseQueue) {
 	if err := forceScanAndProcess(ctx, s, q); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
@@ -52,51 +53,51 @@ func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {
 // ForceReplicationScanAndProcess iterates over all ranges and
 // enqueues any that need to be replicated.
 func (s *Store) ForceReplicationScanAndProcess() error {
-	return forceScanAndProcess(context.TODO(), s, s.replicateQueue.baseQueue)
+	return forceScanAndProcess(context.TODO(), s, s.replicateQueue.BaseQueue)
 }
 
 // MustForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
 // may need to be GC'd.
 func (s *Store) MustForceReplicaGCScanAndProcess() {
-	mustForceScanAndProcess(context.TODO(), s, s.replicaGCQueue.baseQueue)
+	mustForceScanAndProcess(context.TODO(), s, s.replicaGCQueue.BaseQueue)
 }
 
 // MustForceMergeScanAndProcess iterates over all ranges and enqueues any that
 // may need to be merged.
 func (s *Store) MustForceMergeScanAndProcess() {
-	mustForceScanAndProcess(context.TODO(), s, s.mergeQueue.baseQueue)
+	mustForceScanAndProcess(context.TODO(), s, s.mergeQueue.BaseQueue)
 }
 
 // ForceSplitScanAndProcess iterates over all ranges and enqueues any that
 // may need to be split.
 func (s *Store) ForceSplitScanAndProcess() error {
-	return forceScanAndProcess(context.TODO(), s, s.splitQueue.baseQueue)
+	return forceScanAndProcess(context.TODO(), s, s.splitQueue.BaseQueue)
 }
 
 // MustForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
 // need their raft logs truncated and then process each of them.
 func (s *Store) MustForceRaftLogScanAndProcess() {
-	mustForceScanAndProcess(context.TODO(), s, s.raftLogQueue.baseQueue)
+	mustForceScanAndProcess(context.TODO(), s, s.raftLogQueue.BaseQueue)
 }
 
 // ForceTimeSeriesMaintenanceQueueProcess iterates over all ranges, enqueuing
 // any that need time series maintenance, then processes the time series
 // maintenance queue.
 func (s *Store) ForceTimeSeriesMaintenanceQueueProcess() error {
-	return forceScanAndProcess(context.TODO(), s, s.tsMaintenanceQueue.baseQueue)
+	return forceScanAndProcess(context.TODO(), s, s.tsMaintenanceQueue.BaseQueue)
 }
 
 // ForceRaftSnapshotQueueProcess iterates over all ranges, enqueuing
 // any that need raft snapshots, then processes the raft snapshot
 // queue.
 func (s *Store) ForceRaftSnapshotQueueProcess() error {
-	return forceScanAndProcess(context.TODO(), s, s.raftSnapshotQueue.baseQueue)
+	return forceScanAndProcess(context.TODO(), s, s.raftSnapshotQueue.BaseQueue)
 }
 
 // ForceConsistencyQueueProcess runs all the ranges through the consistency
 // queue.
 func (s *Store) ForceConsistencyQueueProcess() error {
-	return forceScanAndProcess(context.TODO(), s, s.consistencyQueue.baseQueue)
+	return forceScanAndProcess(context.TODO(), s, s.consistencyQueue.BaseQueue)
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

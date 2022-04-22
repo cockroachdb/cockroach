@@ -39,7 +39,7 @@ import (
 type testProposer struct {
 	syncutil.RWMutex
 	clock      *hlc.Clock
-	ds         destroyStatus
+	ds         kvserverbase.destroyStatus
 	lai        uint64
 	enqueued   int
 	registered int
@@ -121,7 +121,7 @@ func (t *testProposer) getReplicaID() roachpb.ReplicaID {
 	return 1
 }
 
-func (t *testProposer) destroyed() destroyStatus {
+func (t *testProposer) destroyed() kvserverbase.destroyStatus {
 	return t.ds
 }
 
@@ -388,7 +388,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 
 	// Destroy the proposer. All producers and consumers should notice.
 	p.Lock()
-	p.ds.Set(dsErr, destroyReasonRemoved)
+	p.ds.Set(dsErr, kvserverbase.destroyReasonRemoved)
 	p.Unlock()
 
 	require.Nil(t, g.Wait())

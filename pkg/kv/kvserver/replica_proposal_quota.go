@@ -158,7 +158,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// for the purposes of releasing quota can have bad consequences (writes
 		// will stall), whereas for quiescing the downside is lower.
 
-		if !r.mu.lastUpdateTimes.isFollowerActiveSince(
+		if !r.mu.lastUpdateTimes.IsFollowerActiveSince(
 			ctx, rep.ReplicaID, now, r.store.cfg.RangeLeaseActiveDuration(),
 		) {
 			return

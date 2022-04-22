@@ -25,7 +25,7 @@ func TestLastUpdateTimesMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	m := make(lastUpdateTimesMap)
+	m := make(LastUpdateTimesMap)
 	t1 := time.Time{}.Add(time.Second)
 	t2 := t1.Add(time.Second)
 	m.update(3, t1)

@@ -1,0 +1,246 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package kvconsistencyqueue
+
+import (
+	"context"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storemetrics"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
+
+var checkInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"server.consistency_check.interval",
+	"the time between range consistency checks; set to 0 to disable consistency checking."+
+		" Note that intervals that are too short can negatively impact performance.",
+	24*time.Hour,
+	settings.NonNegativeDuration,
+)
+
+var CheckRate = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"server.consistency_check.max_rate",
+	"the rate limit (bytes/sec) to use for consistency checks; used in "+
+		"conjunction with server.consistency_check.interval to control the "+
+		"frequency of consistency checks. Note that setting this too high can "+
+		"negatively impact performance.",
+	8<<20, // 8MB
+	settings.PositiveInt,
+).WithPublic()
+
+// CheckRateBurstFactor we use this to set the burst parameter on the
+// quotapool.RateLimiter. It seems overkill to provide a user setting for this,
+// so we use a factor to scale the burst setting based on the rate defined above.
+const CheckRateBurstFactor = 8
+
+// CheckRateMinWait is the minimum time to wait once the rate limit
+// is reached. We check the limit on every key/value pair, which can lead to
+// a lot of nano-second waits because each pair could be very small. Instead we
+// force a larger pause every time the timer is breached to reduce the
+// churn on timers.
+const CheckRateMinWait = 100 * time.Millisecond
+
+// CheckAsyncConcurrency is the maximum number of asynchronous
+// consistency checks to run concurrently per store below Raft. The
+// server.consistency_check.max_rate limit is shared among these, so running too
+// many at the same time will cause them to time out. The rate is multiplied by
+// 10 (permittedRangeScanSlowdown) to obtain the per-check timeout. 7 gives
+// reasonable headroom, and also handles clusters with high replication factor
+// and/or many nodes -- recall that each node runs a separate consistency queue
+// which can schedule checks on other nodes, e.g. a 7-node cluster with a
+// replication factor of 7 could run 7 concurrent checks on every node.
+//
+// Note that checksum calculations below Raft are not tied to the caller's
+// context (especially on followers), and will continue to run even after the
+// caller has given up on them, which may cause them to build up.
+//
+// CHECK_STATS checks do not count towards this limit, as they are cheap and the
+// DistSender will parallelize them across all ranges (notably when calling
+// crdb_internal.check_consistency()).
+const CheckAsyncConcurrency = 7
+
+// CheckAsyncTimeout is a below-Raft timeout for asynchronous
+// consistency check calculations. These are not tied to the caller's context,
+// and thus will continue to run even after the caller has given up on them, so
+// we give them an upper timeout to prevent them from running forever.
+const CheckAsyncTimeout = time.Hour
+
+type ConsistencyQueue struct {
+	*kvqueue.BaseQueue
+	interval       func() time.Duration
+	replicaCountFn func() int
+}
+
+// A data wrapper to allow for the shouldQueue method to be easier to test.
+type ShouldQueueData struct {
+	Desc                      *roachpb.RangeDescriptor
+	GetQueueLastProcessed     func(ctx context.Context) (hlc.Timestamp, error)
+	IsNodeAvailable           func(nodeID roachpb.NodeID) bool
+	DisableLastProcessedCheck bool
+	Interval                  time.Duration
+}
+
+// NewConsistencyQueue returns a new instance of ConsistencyQueue.
+func NewConsistencyQueue(
+	store kvqueue.Store,
+	metrics *storemetrics.StoreMetrics,
+	settings *cluster.Settings,
+	knobs *kvqueue.TestingKnobs,
+) *ConsistencyQueue {
+	q := &ConsistencyQueue{
+		interval: func() time.Duration {
+			return checkInterval.Get(&settings.SV)
+		},
+		replicaCountFn: store.ReplicaCount,
+	}
+	q.BaseQueue = kvqueue.NewBaseQueue(
+		"consistencyChecker", q, store,
+		kvqueue.Config{
+			MaxSize:              kvqueue.DefaultQueueMaxSize,
+			NeedsLease:           true,
+			NeedsSystemConfig:    false,
+			AcceptsUnsplitRanges: true,
+			Successes:            metrics.ConsistencyQueueSuccesses,
+			Failures:             metrics.ConsistencyQueueFailures,
+			Pending:              metrics.ConsistencyQueuePending,
+			ProcessingNanos:      metrics.ConsistencyQueueProcessingNanos,
+			ProcessTimeoutFunc:   kvqueue.MakeRateLimitedTimeoutFunc(CheckRate),
+		},
+		knobs,
+	)
+	return q
+}
+
+func (q *ConsistencyQueue) ShouldQueue(
+	ctx context.Context, now hlc.ClockTimestamp, repl kvqueue.Replica, _ spanconfig.StoreReader,
+) (bool, float64) {
+	return ShouldQueueImpl(ctx, now,
+		ShouldQueueData{
+			Desc: repl.Desc(),
+			GetQueueLastProcessed: func(ctx context.Context) (hlc.Timestamp, error) {
+				return repl.GetQueueLastProcessed(ctx, q.Name())
+			},
+			IsNodeAvailable: func(nodeID roachpb.NodeID) bool {
+				if q.NodeLiveness() != nil {
+					return q.NodeLiveness().IsAvailableNotDraining(nodeID)
+				}
+				// Some tests run without a NodeLiveness configured.
+				return true
+			},
+			DisableLastProcessedCheck: q.Knobs.DisableLastProcessedCheck,
+			Interval:                  q.interval(),
+		})
+}
+
+// ShouldQueueImpl is exposed for testability without having
+// to setup a fully fledged replica.
+func ShouldQueueImpl(
+	ctx context.Context, now hlc.ClockTimestamp, data ShouldQueueData,
+) (bool, float64) {
+	if data.Interval <= 0 {
+		return false, 0
+	}
+
+	shouldQ, priority := true, float64(0)
+	if !data.DisableLastProcessedCheck {
+		lpTS, err := data.GetQueueLastProcessed(ctx)
+		if err != nil {
+			return false, 0
+		}
+		if shouldQ, priority = kvqueue.ShouldQueueAgain(now.ToTimestamp(), lpTS, data.Interval); !shouldQ {
+			return false, 0
+		}
+	}
+	// Check if all replicas are available.
+	for _, rep := range data.Desc.Replicas().Descriptors() {
+		if !data.IsNodeAvailable(rep.NodeID) {
+			return false, 0
+		}
+	}
+	return true, priority
+}
+
+// Process is called on every range for which this node is a lease holder.
+func (q *ConsistencyQueue) Process(
+	ctx context.Context, repl kvqueue.Replica, _ spanconfig.StoreReader,
+) (bool, error) {
+	if q.interval() <= 0 {
+		return false, nil
+	}
+
+	// Call setQueueLastProcessed because the consistency checker targets a much
+	// longer cycle time than other queues. That it ignores errors is likely a
+	// historical accident that should be revisited.
+	if err := repl.SetQueueLastProcessed(ctx, q.Name(), q.Clock.Now()); err != nil {
+		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
+	}
+
+	req := roachpb.CheckConsistencyRequest{
+		// Tell CheckConsistency that the caller is the queue. This triggers
+		// code to handle inconsistencies by recomputing with a diff and
+		// instructing the nodes in the minority to terminate with a fatal
+		// error. It also triggers a stats readjustment if there is no
+		// inconsistency but the persisted stats are found to disagree with
+		// those reflected in the data. All of this really ought to be lifted
+		// into the queue in the future.
+		Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
+	}
+	resp, pErr := repl.CheckConsistency(ctx, req)
+	if pErr != nil {
+		var shouldQuiesce bool
+		select {
+		case <-q.Stopper.ShouldQuiesce():
+			shouldQuiesce = true
+		default:
+		}
+
+		if shouldQuiesce && grpcutil.IsClosedConnection(pErr.GoError()) {
+			// Suppress noisy errors about closed GRPC connections when the
+			// server is quiescing.
+			return false, nil
+		}
+		err := pErr.GoError()
+		log.Errorf(ctx, "%v", err)
+		return false, err
+	}
+	if fn := q.Knobs.ConsistencyQueueResultHook; fn != nil {
+		fn(resp)
+	}
+	return true, nil
+}
+
+func (q *ConsistencyQueue) Timer(duration time.Duration) time.Duration {
+	// An interval between replicas to space consistency checks out over
+	// the check interval.
+	replicaCount := q.replicaCountFn()
+	if replicaCount == 0 {
+		return 0
+	}
+	replInterval := q.interval() / time.Duration(replicaCount)
+	if replInterval < duration {
+		return 0
+	}
+	return replInterval - duration
+}
+
+// PurgatoryChan returns nil.
+func (*ConsistencyQueue) PurgatoryChan() <-chan time.Time {
+	return nil
+}

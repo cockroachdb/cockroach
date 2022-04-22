@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvmvccgcqueue",
+    srcs = ["mvcc_gc_queue.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvmvccgcqueue",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/gc",
+        "//pkg/kv/kvserver/intentresolver",
+        "//pkg/kv/kvserver/kvadmissioncontroller",
+        "//pkg/kv/kvserver/kvqueue",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/storemetrics",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/storage/enginepb",
+        "//pkg/util/admission",
+        "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "kvmvccgcqueue_test",
+    srcs = ["mvcc_gc_queue_test.go"],
+    embed = [":kvmvccgcqueue"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

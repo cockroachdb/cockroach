@@ -25,12 +25,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicasideload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storemetrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -50,12 +53,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 const (
@@ -290,7 +296,7 @@ type Replica struct {
 		// depending on which lock is being held.
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
-		sideloaded SideloadStorage
+		sideloaded replicasideload.SideloadStorage
 		// stateMachine is used to apply committed raft entries.
 		stateMachine replicaStateMachine
 		// decoder is used to decode committed raft entries.
@@ -357,7 +363,7 @@ type Replica struct {
 	// Its purpose is to help track down missing/extraneous release operations
 	// that would not be apparent or easy to resolve when refcounting at the store
 	// level only.
-	tenantMetricsRef *tenantMetricsRef
+	tenantMetricsRef *storemetrics.TenantMetricsRef
 
 	// sideTransportClosedTimestamp encapsulates state related to the closed
 	// timestamp's information about the range. Note that the
@@ -378,7 +384,7 @@ type Replica struct {
 		// scheduled for destruction or has been GCed.
 		// destroyStatus should only be set while also holding the raftMu and
 		// readOnlyCmdMu.
-		destroyStatus
+		destroyStatus kvserverbase.DestroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
 		//
@@ -561,7 +567,7 @@ type Replica struct {
 		// functioning node could fill up the quota pool. We are already taking
 		// this kind of risk though: a replica that gets stuck on an otherwise
 		// live node will not lose leaseholdership.
-		lastUpdateTimes lastUpdateTimesMap
+		lastUpdateTimes LastUpdateTimesMap
 
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]replicaChecksum
@@ -789,14 +795,14 @@ func (r *Replica) IsFirstRange() bool {
 
 // IsDestroyed returns a non-nil error if the replica has been destroyed
 // and the reason if it has.
-func (r *Replica) IsDestroyed() (DestroyReason, error) {
+func (r *Replica) IsDestroyed() (kvserverbase.DestroyReason, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.isDestroyedRLocked()
 }
 
-func (r *Replica) isDestroyedRLocked() (DestroyReason, error) {
-	return r.mu.destroyStatus.reason, r.mu.destroyStatus.err
+func (r *Replica) isDestroyedRLocked() (kvserverbase.DestroyReason, error) {
+	return r.mu.destroyStatus.Reason, r.mu.destroyStatus.Err
 }
 
 // IsQuiescent returns whether the replica is quiescent or not.
@@ -1172,14 +1178,14 @@ func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp,
 	return timestamp, nil
 }
 
-func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
+func (r *Replica) SetLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	return storage.MVCCPutProto(ctx, r.store.Engine(), nil, key, hlc.Timestamp{}, nil, &timestamp)
 }
 
-// getQueueLastProcessed returns the last processed timestamp for the
+// GetQueueLastProcessed returns the last processed timestamp for the
 // specified queue, or the zero timestamp if not available.
-func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.Timestamp, error) {
+func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.Timestamp, error) {
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	var timestamp hlc.Timestamp
 	if r.store != nil {
@@ -1194,9 +1200,9 @@ func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	return timestamp, nil
 }
 
-// setQueueLastProcessed writes the last processed timestamp for the
+// SetQueueLastProcessed writes the last processed timestamp for the
 // specified queue.
-func (r *Replica) setQueueLastProcessed(
+func (r *Replica) SetQueueLastProcessed(
 	ctx context.Context, queue string, timestamp hlc.Timestamp,
 ) error {
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
@@ -1698,6 +1704,20 @@ func (r *Replica) isNewerThanSplitRLocked(split *roachpb.SplitTrigger) bool {
 		r.replicaID > rightDesc.ReplicaID
 }
 
+// maybeSideloadEntriesRaftMuLocked should be called with a slice of "fat"
+// entries before appending them to the Raft log. For those entries which are
+// sideloadable, this is where the actual sideloading happens: in come fat
+// proposals, out go thin proposals. Note that this method is to be called
+// before modifications are persisted to the log. The other way around is
+// incorrect since an ill-timed crash gives you thin proposals and no files.
+//
+// The passed-in slice is not mutated.
+func (r *Replica) maybeSideloadEntriesRaftMuLocked(
+	ctx context.Context, entriesToAppend []raftpb.Entry,
+) (_ []raftpb.Entry, sideloadedEntriesSize int64, _ error) {
+	return replicasideload.MaybeSideloadEntriesImpl(ctx, entriesToAppend, r.raftMu.sideloaded)
+}
+
 // WatchForMerge is like maybeWatchForMergeLocked, except it expects a merge to
 // be in progress and returns an error if one is not.
 //
@@ -1872,7 +1892,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 			// The merge committed but the left-hand replica on this store hasn't
 			// subsumed this replica yet. Mark this replica as destroyed so it
 			// doesn't serve requests when we close the mergeCompleteCh below.
-			r.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), destroyReasonMergePending)
+			r.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), kvserverbase.DestroyReasonMergePending)
 		}
 		// Unblock pending requests. If the merge committed, the requests will
 		// notice that the replica has been destroyed and return an appropriate
@@ -2021,10 +2041,220 @@ func (r *Replica) GetResponseMemoryAccount() *mon.BoundAccount {
 	return nil
 }
 
+// NewTruncateDecision returns a TruncateDecision for the given Replica if no
+// error occurs. If input data to establish a TruncateDecision is missing, a
+// zero decision is returned. When there are pending truncations queued below
+// raft (see raftLogTruncator), this function pretends as if those truncations
+// have already happened, and decides whether another truncation is merited.
+//
+// At a high level, a truncate decision operates based on the Raft log size, the
+// number of entries in the log, and the Raft status of the followers. In an
+// ideal world and most of the time, followers are reasonably up to date, and a
+// decision to truncate to the index acked on all replicas will be made whenever
+// there is at least a little bit of log to truncate (think a hundred records or
+// ~100kb of data). If followers fall behind, are offline, or are waiting for a
+// snapshot, a second strategy is needed to make sure that the Raft log is
+// eventually truncated: when the raft log size exceeds a limit, truncations
+// become willing and able to cut off followers as long as a quorum has acked
+// the truncation index. The quota pool ensures that the delta between "acked by
+// quorum" and "acked by all" is bounded, while Raft limits the size of the
+// uncommitted, i.e. not "acked by quorum", part of the log; thus the "quorum"
+// truncation strategy bounds the absolute size of the log on all followers.
+//
+// Exceptions are made for replicas for which information is missing ("probing
+// state") as long as they are known to have been online recently, and for
+// in-flight snapshots which are not adequately reflected in the Raft status and
+// would otherwise be cut off with regularity. Probing live followers should
+// only remain in this state for a short moment and so we deny a log truncation
+// outright (as there's no safe index to truncate to); for snapshots, we can
+// still truncate, but not past the snapshot's index.
+//
+// A challenge for log truncation is to deal with sideloaded log entries, that
+// is, entries which contain SSTables for direct ingestion into the storage
+// engine. Such log entries are very large, and failing to account for them in
+// the heuristics can trigger overly aggressive truncations.
+//
+// The raft log size used in the decision making process is principally updated
+// in the main Raft command apply loop, and adds a Replica to this queue
+// whenever the log size has increased by a non-negligible amount that would be
+// worth truncating (~100kb).
+//
+// Unfortunately, the size tracking is not very robust as it suffers from two
+// limitations at the time of writing:
+// 1. it may undercount as it is in-memory and incremented only as proposals
+//    are handled; that is, a freshly started node will believe its Raft log to be
+//    zero-sized independent of its actual size, and
+// 2. the addition and corresponding subtraction happen in very different places
+//    and are difficult to keep bug-free, meaning that there is low confidence that
+//    we maintain the delta in a completely accurate manner over time. One example
+//    of potential errors are sideloaded proposals, for which the subtraction needs
+//    to load the size of the file on-disk (i.e. supplied by the fs), whereas
+//    the addition uses the in-memory representation of the file.
+//
+// Ideally, a Raft log that grows large for whichever reason (for instance the
+// queue being stuck on another replica) wouldn't be more than a nuisance on
+// nodes with sufficient disk space. Also, IMPORT/RESTORE's split/scatter
+// phase interacts poorly with overly aggressive truncations and can DDOS the
+// Raft snapshot queue.
+func (r *Replica) NewTruncateDecision(ctx context.Context) (kvqueue.TruncateDecision, error) {
+	rangeID := r.GetRangeID()
+	now := timeutil.Now()
+
+	// NB: we need an exclusive lock due to grabbing the first index.
+	r.mu.Lock()
+	raftLogSize := r.pendingLogTruncations.computePostTruncLogSize(r.mu.raftLogSize)
+	// A "cooperative" truncation (i.e. one that does not cut off followers from
+	// the log) takes place whenever there are more than
+	// RaftLogQueueStaleThreshold entries or the log's estimated size is above
+	// RaftLogQueueStaleSize bytes. This is fairly aggressive, so under normal
+	// conditions, the log is very small.
+	//
+	// If followers start falling behind, at some point the logs still need to
+	// be truncated. We do this either when the size of the log exceeds
+	// RaftLogTruncationThreshold (or, in eccentric configurations, the zone's
+	// RangeMaxBytes). This captures the heuristic that at some point, it's more
+	// efficient to catch up via a snapshot than via applying a long tail of log
+	// entries.
+	targetSize := r.store.cfg.RaftLogTruncationThreshold
+	if targetSize > r.mu.conf.RangeMaxBytes {
+		targetSize = r.mu.conf.RangeMaxBytes
+	}
+	raftStatus := r.raftStatusRLocked()
+
+	const anyRecipientStore roachpb.StoreID = 0
+	pendingSnapshotIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now, anyRecipientStore)
+	lastIndex := r.mu.lastIndex
+	// NB: raftLogSize above adjusts for pending truncations that have already
+	// been successfully replicated via raft, but logSizeTrusted does not see if
+	// those pending truncations would cause a transition from trusted =>
+	// !trusted. This is done since we don't want to trigger a recomputation of
+	// the raft log size while we still have pending truncations. Note that as
+	// soon as those pending truncations are enacted r.mu.raftLogSizeTrusted
+	// will become false and we will recompute the size -- so this cannot cause
+	// an indefinite delay in recomputation.
+	logSizeTrusted := r.mu.raftLogSizeTrusted
+	firstIndex, err := r.raftFirstIndexLocked()
+	r.mu.Unlock()
+	if err != nil {
+		return kvqueue.TruncateDecision{}, errors.Wrapf(err, "error retrieving first index for r%d", rangeID)
+	}
+	firstIndex = r.pendingLogTruncations.computePostTruncFirstIndex(firstIndex)
+
+	if raftStatus == nil {
+		if log.V(6) {
+			log.Infof(ctx, "the raft group doesn't exist for r%d", rangeID)
+		}
+		return kvqueue.TruncateDecision{}, nil
+	}
+
+	// Is this the raft leader? We only propose log truncation on the raft
+	// leader which has the up to date info on followers.
+	if raftStatus.RaftState != raft.StateLeader {
+		return kvqueue.TruncateDecision{}, nil
+	}
+
+	// For all our followers, overwrite the RecentActive field (which is always
+	// true since we don't use CheckQuorum) with our own activity check.
+	r.mu.RLock()
+	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
+	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
+	updateRaftProgressFromActivity(
+		ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
+		func(replicaID roachpb.ReplicaID) bool {
+			return r.mu.lastUpdateTimes.IsFollowerActiveSince(
+				ctx, replicaID, now, r.store.cfg.RangeLeaseActiveDuration())
+		},
+	)
+	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
+	r.mu.RUnlock()
+
+	input := kvqueue.TruncateDecisionInput{
+		RaftStatus:           *raftStatus,
+		LogSize:              raftLogSize,
+		MaxLogSize:           targetSize,
+		LogSizeTrusted:       logSizeTrusted,
+		FirstIndex:           firstIndex,
+		LastIndex:            lastIndex,
+		PendingSnapshotIndex: pendingSnapshotIndex,
+	}
+
+	decision := kvqueue.ComputeTruncateDecision(input)
+	return decision, nil
+}
+
+func updateRaftProgressFromActivity(
+	ctx context.Context,
+	prs map[uint64]tracker.Progress,
+	replicas []roachpb.ReplicaDescriptor,
+	replicaActive func(roachpb.ReplicaID) bool,
+) {
+	for _, replDesc := range replicas {
+		replicaID := replDesc.ReplicaID
+		pr, ok := prs[uint64(replicaID)]
+		if !ok {
+			continue
+		}
+		pr.RecentActive = replicaActive(replicaID)
+		// Override this field for safety since we don't use it. Instead, we use
+		// pendingSnapshotIndex from above.
+		//
+		// NOTE: We don't rely on PendingSnapshot because PendingSnapshot is
+		// initialized by the leader when it realizes the follower needs a snapshot,
+		// and it isn't initialized with the index of the snapshot that is actually
+		// sent by us (out of band), which likely is lower.
+		pr.PendingSnapshot = 0
+		prs[uint64(replicaID)] = pr
+	}
+}
+
+func (r *Replica) UpdateRaftLogSize(size int64) {
+	r.mu.Lock()
+	r.mu.raftLogSize = size
+	r.mu.raftLogLastCheckSize = size
+	r.mu.raftLogSizeTrusted = true
+	r.mu.Unlock()
+}
+
 // GetEngineCapacity returns the store's underlying engine capacity; other
 // StoreCapacity fields not related to engine capacity are not populated.
 func (r *Replica) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 	return r.store.Engine().Capacity()
+}
+
+func (r *Replica) LeaseholderStats() *replicastats.ReplicaStats {
+	return r.leaseholderStats
+}
+
+func (r *Replica) WriteStats() *replicastats.ReplicaStats {
+	return r.writeStats
+}
+
+// SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
+// to RaftLock() or some other guarantee that r.raftMu is held.
+func (r *Replica) SideloadedRaftMuLocked() replicasideload.SideloadStorage {
+	return r.raftMu.sideloaded
+}
+
+// GetRaftLogSize returns the approximate raft log size and whether it is
+// trustworthy. See r.mu.raftLogSize for details.
+func (r *Replica) GetRaftLogSize() (int64, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.raftLogSize, r.mu.raftLogSizeTrusted
+}
+
+// LoadBasedSplitter returns the replica's split.Decider, which is used to
+// assist load-based split (and merge) decisions.
+func (r *Replica) LoadBasedSplitter() *split.Decider {
+	return &r.loadBasedSplitter
+}
+
+func (r *Replica) RaftLock() {
+	r.raftMu.Lock()
+}
+
+func (r *Replica) RaftUnlock() {
+	r.raftMu.Unlock()
 }
 
 func init() {

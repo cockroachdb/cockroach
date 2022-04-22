@@ -16,10 +16,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicagcqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicatequeue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicasideload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -99,7 +104,7 @@ func entries(
 	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	sideloaded SideloadStorage,
+	sideloaded replicasideload.SideloadStorage,
 	lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	if lo > hi {
@@ -135,10 +140,10 @@ func entries(
 		}
 		expectedIndex++
 
-		if sniffSideloadedRaftCommand(ent.Data) {
+		if replicasideload.SniffSideloadedRaftCommand(ent.Data) {
 			canCache = canCache && sideloaded != nil
 			if sideloaded != nil {
-				newEnt, err := maybeInlineSideloadedRaftCommand(
+				newEnt, err := replicasideload.MaybeInlineSideloadedRaftCommand(
 					ctx, rangeID, ent, sideloaded, eCache,
 				)
 				if err != nil {
@@ -473,7 +478,7 @@ func (r *Replica) GetSnapshot(
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
-	withSideloaded := func(fn func(SideloadStorage) error) error {
+	withSideloaded := func(fn func(replicasideload.SideloadStorage) error) error {
 		r.raftMu.Lock()
 		defer r.raftMu.Unlock()
 		return fn(r.raftMu.sideloaded)
@@ -510,7 +515,7 @@ type OutgoingSnapshot struct {
 	// this isn't a snapshot of the sideloaded storage congruent with EngineSnap
 	// or RaftSnap -- a log truncation could have removed files from the
 	// sideloaded storage in the meantime.
-	WithSideloaded func(func(SideloadStorage) error) error
+	WithSideloaded func(func(replicasideload.SideloadStorage) error) error
 	RaftEntryCache *raftentry.Cache
 	snapType       kvserverpb.SnapshotRequest_Type
 	onClose        func()
@@ -569,7 +574,7 @@ func snapshot(
 	snap storage.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	withSideloaded func(func(SideloadStorage) error) error,
+	withSideloaded func(func(replicasideload.SideloadStorage) error) error,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
 	var desc roachpb.RangeDescriptor
@@ -582,7 +587,7 @@ func snapshot(
 		return OutgoingSnapshot{}, errors.Wrap(err, "failed to get desc")
 	}
 	if !ok {
-		return OutgoingSnapshot{}, errors.Mark(errors.Errorf("couldn't find range descriptor"), errMarkSnapshotError)
+		return OutgoingSnapshot{}, errors.Mark(errors.Errorf("couldn't find range descriptor"), kvreplicatequeue.ErrMarkSnapshotError)
 	}
 
 	state, err := rsl.Load(ctx, snap, &desc)
@@ -714,7 +719,7 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	// to different zones.
 	// Load the system config.
 	confReader, err := r.store.GetConfReader(ctx)
-	if errors.Is(err, errSysCfgUnavailable) {
+	if errors.Is(err, kvqueue.ErrSysCfgUnavailable) {
 		// This could be before the system config was ever gossiped, or it
 		// expired. Let the gossip callback set the info.
 		log.Warningf(ctx, "unable to retrieve conf reader, cannot determine range MaxBytes")
@@ -932,7 +937,7 @@ func (r *Replica) applySnapshot(
 	// problematic, as it would prevent this store from ever having a new replica
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
-	if err := r.clearSubsumedReplicaDiskData(ctx, inSnap.SSTStorageScratch, desc, subsumedRepls, mergedTombstoneReplicaID); err != nil {
+	if err := r.clearSubsumedReplicaDiskData(ctx, inSnap.SSTStorageScratch, desc, subsumedRepls, kvreplicagcqueue.MergedTombstoneReplicaID); err != nil {
 		return err
 	}
 	stats.subsumedReplicas = timeutil.Now()
@@ -968,7 +973,7 @@ func (r *Replica) applySnapshot(
 	// has not yet been updated. Any errors past this point must therefore be
 	// treated as fatal.
 
-	subPHs, err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, mergedTombstoneReplicaID)
+	subPHs, err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, kvreplicagcqueue.MergedTombstoneReplicaID)
 	if err != nil {
 		log.Fatalf(ctx, "failed to clear in-memory data of subsumed replicas while applying snapshot: %+v", err)
 	}
@@ -1026,8 +1031,8 @@ func (r *Replica) applySnapshot(
 	r.mu.lastTerm = invalidLastTerm
 	r.mu.raftLogSize = 0
 	// Update the store stats for the data in the snapshot.
-	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.mu.state.Stats)
-	r.store.metrics.addMVCCStats(ctx, r.tenantMetricsRef, *state.Stats)
+	r.store.metrics.SubtractMVCCStats(ctx, r.tenantMetricsRef, *r.mu.state.Stats)
+	r.store.metrics.AddMVCCStats(ctx, r.tenantMetricsRef, *state.Stats)
 	lastKnownLease := r.mu.state.Lease
 	// Update the rest of the Raft state. Changes to r.mu.state.Desc must be
 	// managed by r.setDescRaftMuLocked and changes to r.mu.state.Lease must be handled
@@ -1107,7 +1112,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		sr.mu.Lock()
 		sr.mu.destroyStatus.Set(
 			roachpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
-			destroyReasonRemoved)
+			kvserverbase.DestroyReasonRemoved)
 		sr.mu.Unlock()
 		sr.readOnlyCmdMu.Unlock()
 
@@ -1224,7 +1229,7 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		// consume. Without this, there would be a risk of errant snapshots being
 		// allowed in (perhaps not involving any of the RangeIDs known to the merge
 		// but still touching its keyspace) and causing corruption.
-		ph, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, sr, subsumedNextReplicaID, RemoveOptions{
+		ph, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, sr, subsumedNextReplicaID, kvqueue.RemoveOptions{
 			// The data was already destroyed by clearSubsumedReplicaDiskData.
 			DestroyData:       false,
 			InsertPlaceholder: true,

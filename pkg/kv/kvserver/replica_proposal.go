@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicasideload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -436,7 +437,7 @@ func addSSTablePreApply(
 	ctx context.Context,
 	st *cluster.Settings,
 	eng storage.Engine,
-	sideloaded SideloadStorage,
+	sideloaded replicasideload.SideloadStorage,
 	term, index uint64,
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
 	limiter *rate.Limiter,
@@ -517,7 +518,7 @@ func addSSTablePreApply(
 			}
 		}
 
-		if err := writeFileSyncing(ctx, path, sst.Data, eng, 0600, st, limiter); err != nil {
+		if err := replicasideload.WriteFileSyncing(ctx, path, sst.Data, eng, 0600, st, limiter); err != nil {
 			log.Fatalf(ctx, "while ingesting %s: %+v", path, err)
 		}
 		copied = true
@@ -570,7 +571,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	if lResult.GossipFirstRange {
 		// We need to run the gossip in an async task because gossiping requires
 		// the range lease and we'll deadlock if we try to acquire it while
-		// holding processRaftMu. Specifically, Replica.redirectOnOrAcquireLease
+		// holding processRaftMu. Specifically, Replica.RedirectOnOrAcquireLease
 		// blocks waiting for the lease acquisition to finish but it can't finish
 		// because we're not processing raft messages due to holding
 		// processRaftMu (and running on the processRaft goroutine).
@@ -624,7 +625,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	}
 
 	if lResult.Metrics != nil {
-		r.store.metrics.handleMetricsResult(ctx, *lResult.Metrics)
+		r.store.metrics.HandleMetricsResult(ctx, *lResult.Metrics)
 		lResult.Metrics = nil
 	}
 

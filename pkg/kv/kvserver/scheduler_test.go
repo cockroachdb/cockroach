@@ -17,6 +17,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storemetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -234,7 +235,7 @@ func TestSchedulerLoop(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	m := newStoreMetrics(metric.TestSampleInterval)
+	m := storemetrics.newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
 	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1)
 
@@ -262,7 +263,7 @@ func TestSchedulerBuffering(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	m := newStoreMetrics(metric.TestSampleInterval)
+	m := storemetrics.newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
 	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1)
 	s.Start(stopper)

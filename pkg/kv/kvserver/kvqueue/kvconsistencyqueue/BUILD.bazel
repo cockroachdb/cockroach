@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvconsistencyqueue",
+    srcs = ["consistency_queue.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvconsistencyqueue",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvqueue",
+        "//pkg/kv/kvserver/storemetrics",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/util/grpcutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+    ],
+)
+
+go_test(
+    name = "kvconsistencyqueue_test",
+    srcs = ["consistency_queue_test.go"],
+    deps = [
+        ":kvconsistencyqueue",
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/stateloader",
+        "//pkg/roachpb",
+        "//pkg/server",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/testutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

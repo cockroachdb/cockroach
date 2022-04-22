@@ -117,7 +117,7 @@ func (r *Replica) canUnquiesceRLocked() bool {
 		r.isInitializedRLocked() &&
 		// A replica's Raft group begins in a dormant state and is initialized
 		// lazily in response to any Raft traffic (see stepRaftGroup) or KV request
-		// traffic (see maybeInitializeRaftGroup). If it has yet to be initialized,
+		// traffic (see MaybeInitializeRaftGroup). If it has yet to be initialized,
 		// let it remain quiesced. The Raft group will be initialized soon enough.
 		r.mu.internalRaftGroup != nil
 }
@@ -199,7 +199,7 @@ type quiescer interface {
 	hasPendingProposalQuotaRLocked() bool
 	ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool
 	mergeInProgressRLocked() bool
-	isDestroyedRLocked() (DestroyReason, error)
+	isDestroyedRLocked() (kvserverbase.DestroyReason, error)
 }
 
 // laggingReplicaSet is a set containing liveness information about replicas

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
@@ -1298,7 +1299,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			if tc.splitOngoing {
 				atomic.StoreInt32(&activateSplitFilter, 1)
 				if err := s.Stopper().RunAsyncTask(ctx, "force split", func(_ context.Context) {
-					store.SetSplitQueueActive(true)
+					store.TestingSetSplitQueueActive(true)
 					if err := store.ForceSplitScanAndProcess(); err != nil {
 						log.Fatalf(ctx, "%v", err)
 					}
@@ -1307,7 +1308,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				}
 				<-splitPending
 			} else if tc.splitImpossible {
-				store.SetSplitQueueActive(true)
+				store.TestingSetSplitQueueActive(true)
 				if err := store.ForceSplitScanAndProcess(); err != nil {
 					t.Fatal(err)
 				}
@@ -2507,8 +2508,10 @@ func TestUnsplittableRange(t *testing.T) {
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue:       true,
-				SplitQueuePurgatoryChan: splitQueuePurgatoryChan,
+				DisableMergeQueue: true,
+				QueueKnobs: kvqueue.TestingKnobs{
+					SplitQueuePurgatoryChan: splitQueuePurgatoryChan,
+				},
 			},
 			Server: &server.TestingKnobs{
 				ClockSource:                     manualClock.UnixNano,
@@ -3234,8 +3237,10 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		ReplicaSkipInitialSnapshot: func() bool {
 			return atomic.LoadInt32(&skipSnaps) != 0
 		},
-		RaftSnapshotQueueSkipReplica: func() bool {
-			return atomic.LoadInt32(&skipSnaps) != 0
+		QueueKnobs: kvqueue.TestingKnobs{
+			RaftSnapshotQueueSkipReplica: func() bool {
+				return atomic.LoadInt32(&skipSnaps) != 0
+			},
 		},
 		VoterAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
 			if atomic.LoadInt32(&skipSnaps) != 0 {

@@ -18,9 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvqueue/kvreplicagcqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicasideload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -536,7 +539,7 @@ func (s *Store) canAcceptSnapshotLocked(
 	// If we are not alive then we should not apply a snapshot as our removal
 	// is imminent.
 	if existingDestroyStatus.Removed() {
-		return nil, existingDestroyStatus.err
+		return nil, existingDestroyStatus.Err
 	}
 
 	// We have a key range [desc.StartKey,desc.EndKey) which we want to apply a
@@ -601,9 +604,9 @@ func (s *Store) checkSnapshotOverlapLocked(
 			// We're careful to avoid starving out other replicas in the replica GC
 			// queue by queueing at a low priority unless we can prove that the range
 			// is inactive and thus unlikely to be about to process a split.
-			gcPriority := replicaGCPriorityDefault
+			gcPriority := kvreplicagcqueue.ReplicaGCPriorityDefault
 			if inactive(exReplica) {
-				gcPriority = replicaGCPrioritySuspect
+				gcPriority = kvreplicagcqueue.ReplicaGCPrioritySuspect
 			}
 
 			msg += "; initiated GC:"
@@ -750,62 +753,10 @@ func sendSnapshotError(stream incomingSnapshotStream, err error) error {
 	})
 }
 
-// SnapshotStorePool narrows StorePool to make sendSnapshot easier to test.
+// SnapshotStorePool narrows StorePool to make SendSnapshot easier to test.
 type SnapshotStorePool interface {
 	Throttle(reason storepool.ThrottleReason, why string, toStoreID roachpb.StoreID)
 }
-
-// minSnapshotRate defines the minimum value that the rate limit for rebalance
-// and recovery snapshots can be configured to. Any value below this lower bound
-// is considered unsafe for use, as it can lead to excessively long-running
-// snapshots. The sender of Raft snapshots holds resources (e.g. LSM snapshots,
-// LSM iterators until #75824 is addressed) and blocks Raft log truncation, so
-// it is not safe to let a single snapshot run for an unlimited period of time.
-//
-// The value was chosen based on a maximum range size of 512mb and a desire to
-// prevent a single snapshot for running for more than 10 minutes. With a rate
-// limit of 1mb/s, a 512mb snapshot will take just under 9 minutes to send.
-const minSnapshotRate = 1 << 20 // 1mb/s
-
-// rebalanceSnapshotRate is the rate at which snapshots can be sent in the
-// context of up-replication or rebalancing (i.e. any snapshot that was not
-// requested by raft itself, to which `kv.snapshot_recovery.max_rate` applies).
-var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
-	settings.SystemOnly,
-	"kv.snapshot_rebalance.max_rate",
-	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
-	32<<20, // 32mb/s
-	func(v int64) error {
-		if v < minSnapshotRate {
-			return errors.Errorf("snapshot rate cannot be set to a value below %s: %s",
-				humanizeutil.IBytes(minSnapshotRate), humanizeutil.IBytes(v))
-		}
-		return nil
-	},
-).WithPublic()
-
-// recoverySnapshotRate is the rate at which Raft-initiated snapshot can be
-// sent. Ideally, one would never see a Raft-initiated snapshot; we'd like all
-// replicas to start out as learners or via splits, and to never be cut off from
-// the log. However, it has proved unfeasible to completely get rid of them.
-//
-// TODO(tbg): The existence of this rate, separate from rebalanceSnapshotRate,
-// does not make a whole lot of sense. Both sources of snapshots compete thanks
-// to a semaphore at the receiver, and so the slower one ultimately determines
-// the pace at which things can move along.
-var recoverySnapshotRate = settings.RegisterByteSizeSetting(
-	settings.SystemOnly,
-	"kv.snapshot_recovery.max_rate",
-	"the rate limit (bytes/sec) to use for recovery snapshots",
-	32<<20, // 32mb/s
-	func(v int64) error {
-		if v < minSnapshotRate {
-			return errors.Errorf("snapshot rate cannot be set to a value below %s: %s",
-				humanizeutil.IBytes(minSnapshotRate), humanizeutil.IBytes(v))
-		}
-		return nil
-	},
-).WithPublic()
 
 // snapshotSenderBatchSize is the size that key-value batches are allowed to
 // grow to during Range snapshots before being sent to the receiver. This limit
@@ -930,7 +881,7 @@ var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.snapshot_sst.sync_size",
 	"threshold after which snapshot SST writes must fsync",
-	bulkIOWriteBurst,
+	replicasideload.BulkIOWriteBurst,
 	settings.PositiveInt,
 )
 
@@ -939,9 +890,9 @@ func snapshotRateLimit(
 ) (rate.Limit, error) {
 	switch priority {
 	case kvserverpb.SnapshotRequest_RECOVERY:
-		return rate.Limit(recoverySnapshotRate.Get(&st.SV)), nil
+		return rate.Limit(kvqueue.RecoverySnapshotRate.Get(&st.SV)), nil
 	case kvserverpb.SnapshotRequest_REBALANCE:
-		return rate.Limit(rebalanceSnapshotRate.Get(&st.SV)), nil
+		return rate.Limit(kvqueue.RebalanceSnapshotRate.Get(&st.SV)), nil
 	default:
 		return 0, errors.Errorf("unknown snapshot priority: %s", priority)
 	}
@@ -1037,7 +988,7 @@ func SendEmptySnapshot(
 		eng,
 		desc.RangeID,
 		raftentry.NewCache(1), // cache is not used
-		func(func(SideloadStorage) error) error { return nil }, // this is used for sstables, not needed here as there are no logs
+		func(func(replicasideload.SideloadStorage) error) error { return nil }, // this is used for sstables, not needed here as there are no logs
 		desc.StartKey,
 	)
 	if err != nil {
@@ -1115,7 +1066,7 @@ func sendSnapshot(
 	bytesSentCounter *metric.Counter,
 ) error {
 	if bytesSentCounter == nil {
-		// NB: Some tests and an offline tool (ResetQuorum) call into `sendSnapshot`
+		// NB: Some tests and an offline tool (ResetQuorum) call into `SendSnapshot`
 		// with a nil counter. We pass in a fake metrics counter here that isn't
 		// hooked up to anything.
 		bytesSentCounter = metric.NewCounter(metric.Metadata{Name: "range.snapshots.sent-bytes"})

@@ -212,6 +212,7 @@ go_test(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/kvqueue",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
