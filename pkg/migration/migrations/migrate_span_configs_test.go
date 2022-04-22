@@ -153,7 +153,7 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 					),
 				},
 				SpanConfig: &spanconfig.TestingKnobs{
-					ReconcilerInitialInterceptor: func() {
+					ReconcilerInitialInterceptor: func(hlc.Timestamp) {
 						<-blockReconcilerCh
 					},
 				},
@@ -220,7 +220,7 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 		if i == 0 {
 			spanConfigKnobs.ManagerDisableJobCreation = true
 		} else {
-			spanConfigKnobs.ReconcilerInitialInterceptor = func() {
+			spanConfigKnobs.ReconcilerInitialInterceptor = func(hlc.Timestamp) {
 				<-blockReconcilerCh
 			}
 		}

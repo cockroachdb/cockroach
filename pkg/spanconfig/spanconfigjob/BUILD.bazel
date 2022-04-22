@@ -10,6 +10,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/util",
         "//pkg/util/hlc",
