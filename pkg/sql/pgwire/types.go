@@ -61,8 +61,12 @@ func pgTypeForParserType(t *types.T) pgType {
 	if s, variable := tree.DatumTypeSize(t); !variable {
 		size = int(s)
 	}
+	tOid := t.Oid()
+	if tOid == oid.T_text && t.Width() > 0 {
+		tOid = oid.T_varchar
+	}
 	return pgType{
-		oid:  t.Oid(),
+		oid:  tOid,
 		size: size,
 	}
 }
