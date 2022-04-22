@@ -11,6 +11,7 @@
 package builtins
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/evalhelper"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
@@ -52,7 +53,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				streamID := streaming.StreamID(*args[0].(*tree.DInt))
 				cutoverTime := args[1].(*tree.DTimestampTZ).Time
 				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				err = mgr.CompleteStreamIngestion(evalCtx, evalCtx.Txn, streamID, cutoverTimestamp)
+				err = mgr.CompleteStreamIngestion(evalCtx, streamID, cutoverTimestamp)
 				if err != nil {
 					return nil, err
 				}
@@ -89,7 +90,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				jobID, err := mgr.StartReplicationStream(evalCtx, evalCtx.Txn, uint64(tenantID))
+				jobID, err := mgr.StartReplicationStream(evalCtx, evalhelper.EvalCtxTxnToKVTxn(evalCtx.EvalCtxTxn), uint64(tenantID))
 				if err != nil {
 					return nil, err
 				}
@@ -124,7 +125,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				streamID := streaming.StreamID(int(tree.MustBeDInt(args[0])))
-				sps, err := mgr.UpdateReplicationStreamProgress(evalCtx, streamID, frontier, evalCtx.Txn)
+				sps, err := mgr.UpdateReplicationStreamProgress(evalCtx, streamID, frontier, evalhelper.EvalCtxTxnToKVTxn(evalCtx.EvalCtxTxn))
 				if err != nil {
 					return nil, err
 				}
@@ -188,7 +189,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				}
 
 				streamID := int64(tree.MustBeDInt(args[0]))
-				spec, err := mgr.GetReplicationStreamSpec(evalCtx, evalCtx.Txn, streaming.StreamID(streamID))
+				spec, err := mgr.GetReplicationStreamSpec(evalCtx, evalhelper.EvalCtxTxnToKVTxn(evalCtx.EvalCtxTxn), streaming.StreamID(streamID))
 				if err != nil {
 					return nil, err
 				}
@@ -222,7 +223,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				}
 
 				streamID := int64(tree.MustBeDInt(args[0]))
-				if err := mgr.CompleteReplicationStream(evalCtx, evalCtx.Txn, streaming.StreamID(streamID)); err != nil {
+				if err := mgr.CompleteReplicationStream(evalCtx, evalhelper.EvalCtxTxnToKVTxn(evalCtx.EvalCtxTxn), streaming.StreamID(streamID)); err != nil {
 					return nil, err
 				}
 				return tree.NewDInt(tree.DInt(streamID)), err

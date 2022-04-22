@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/generator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,8 +29,8 @@ func TestConcurrentProcessorsReadEpoch(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLEvalContext: &tree.EvalContextTestingKnobs{
-				CallbackGenerators: map[string]*tree.CallbackValueGenerator{
-					"my_callback": tree.NewCallbackValueGenerator(
+				CallbackGenerators: map[string]interface{}{
+					"my_callback": generator.NewCallbackValueGenerator(
 						func(ctx context.Context, prev int, _ *kv.Txn) (int, error) {
 							if prev < 10 {
 								return prev + 1, nil

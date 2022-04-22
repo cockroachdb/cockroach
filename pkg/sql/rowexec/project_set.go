@@ -166,7 +166,8 @@ func (ps *projectSetProcessor) nextInputRow() (
 			if gen == nil {
 				gen = builtins.EmptyGenerator()
 			}
-			if err := gen.Start(ps.Ctx, ps.FlowCtx.Txn); err != nil {
+
+			if err := gen.Start(ps.Ctx); err != nil {
 				return nil, nil, err
 			}
 			ps.gens[i] = gen

@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "evalhelper",
+    srcs = ["eval_helper.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/evalhelper",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/kv"],
+)

@@ -42,6 +42,15 @@ const (
 	SubstringStringIntInt
 )
 
+// GeneratorFactory is the type of constructor functions for
+// ValueGenerator objects.
+type GeneratorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error)
+
+// GeneratorWithExprsFactory is an alternative constructor function type for
+// ValueGenerators that gives implementations the ability to see the builtin's
+// arguments before evaluation, as Exprs.
+type GeneratorWithExprsFactory func(ctx *EvalContext, args Exprs) (ValueGenerator, error)
+
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {

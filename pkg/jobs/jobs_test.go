@@ -2340,7 +2340,7 @@ func TestJobInTxn(t *testing.T) {
 	// Piggy back on BACKUP to be able to create a succeeding test job.
 	sql.AddPlanHook(
 		"test",
-		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
+		func(_ context.Context, stmt tree.Statement, p sql.PlanHookState,
 		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 			st, ok := stmt.(*tree.Backup)
 			if !ok {
@@ -2348,13 +2348,13 @@ func TestJobInTxn(t *testing.T) {
 			}
 			fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
-				job, err = execCtx.ExtendedEvalContext().QueueJob(
+				job, err = p.ExtendedEvalContext().QueueJob(
 					ctx,
 					jobs.Record{
 						Description: st.String(),
 						Details:     jobspb.BackupDetails{},
 						Progress:    jobspb.BackupProgress{},
-					},
+					}, p.Txn(),
 				)
 				return err
 			}
@@ -2377,7 +2377,7 @@ func TestJobInTxn(t *testing.T) {
 	// Piggy back on RESTORE to be able to create a failing test job.
 	sql.AddPlanHook(
 		"test",
-		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
+		func(_ context.Context, stmt tree.Statement, p sql.PlanHookState,
 		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 			_, ok := stmt.(*tree.Restore)
 			if !ok {
@@ -2385,13 +2385,13 @@ func TestJobInTxn(t *testing.T) {
 			}
 			fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
-				job, err = execCtx.ExtendedEvalContext().QueueJob(
+				job, err = p.ExtendedEvalContext().QueueJob(
 					ctx,
 					jobs.Record{
 						Description: "RESTORE",
 						Details:     jobspb.RestoreDetails{},
 						Progress:    jobspb.RestoreProgress{},
-					},
+					}, p.Txn(),
 				)
 				return err
 			}

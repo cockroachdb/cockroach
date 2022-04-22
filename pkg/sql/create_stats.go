@@ -579,7 +579,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Set the transaction on the EvalContext to this txn. This allows for
 		// use of the txn during processor setup during the execution of the flow.
-		evalCtx.Txn = txn
+		evalCtx.SetTxn(txn)
 
 		if details.AsOf != nil {
 			p.ExtendedEvalContext().AsOfSystemTime = &tree.AsOfSystemTime{Timestamp: *details.AsOf}

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalhelper"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -3326,7 +3327,6 @@ type EvalPlanner interface {
 	QueryRowEx(
 		ctx context.Context,
 		opName string,
-		txn *kv.Txn,
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
 		qargs ...interface{}) (Datums, error)
@@ -3340,7 +3340,6 @@ type EvalPlanner interface {
 	QueryIteratorEx(
 		ctx context.Context,
 		opName string,
-		txn *kv.Txn,
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
 		qargs ...interface{},
@@ -3562,7 +3561,12 @@ type EvalContextTestingKnobs struct {
 	// to use the non-test value.
 	ForceProductionBatchSizes bool
 
-	CallbackGenerators map[string]*CallbackValueGenerator
+	// CallbackGenerators is used for testing generator builtins.
+	// It is only used in crdb_internal.testing_callback.
+	// We map to interface{} instead of
+	// generator.CallbackValueGenerator to avoid having a dependency
+	// on the kv package.
+	CallbackGenerators map[string]ValueGenerator
 }
 
 var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}
@@ -3698,7 +3702,8 @@ type EvalContext struct {
 	PreparedStatementState PreparedStatementState
 
 	// The transaction in which the statement is executing.
-	Txn *kv.Txn
+	EvalCtxTxn interface{}
+
 	// A handle to the database.
 	DB *kv.DB
 
@@ -3763,7 +3768,7 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) EvalContext {
 	ctx := EvalContext{
 		Codec:            keys.SystemSQLCodec,
-		Txn:              &kv.Txn{},
+		EvalCtxTxn:       nil,
 		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 		Settings:         st,
 		NodeID:           base.TestingIDContainer,
@@ -3863,7 +3868,7 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 // GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
-	ts := ctx.Txn.CommitTimestamp()
+	ts := evalhelper.EvalCtxTxnToKVTxn(ctx.EvalCtxTxn).CommitTimestamp()
 	if ts.IsEmpty() {
 		panic(errors.AssertionFailedf("zero cluster timestamp in txn"))
 	}
@@ -4051,6 +4056,10 @@ func (ctx *EvalContext) GetDateStyle() pgdate.DateStyle {
 // Ctx returns the session's context.
 func (ctx *EvalContext) Ctx() context.Context {
 	return ctx.Context
+}
+
+func (ctx *EvalContext) SetTxn(txn interface{}) {
+	ctx.EvalCtxTxn = txn
 }
 
 // Eval implements the TypedExpr interface.
@@ -5773,62 +5782,6 @@ func PickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) 
 	}
 	return g, nil
 }
-
-// CallbackValueGenerator is a ValueGenerator that calls a supplied callback for
-// producing the values. To be used with
-// EvalContextTestingKnobs.CallbackGenerators.
-type CallbackValueGenerator struct {
-	// cb is the callback to be called for producing values. It gets passed in 0
-	// as prev initially, and the value it previously returned for subsequent
-	// invocations. Once it returns -1 or an error, it will not be invoked any
-	// more.
-	cb  func(ctx context.Context, prev int, txn *kv.Txn) (int, error)
-	val int
-	txn *kv.Txn
-}
-
-var _ ValueGenerator = &CallbackValueGenerator{}
-
-// NewCallbackValueGenerator creates a new CallbackValueGenerator.
-func NewCallbackValueGenerator(
-	cb func(ctx context.Context, prev int, txn *kv.Txn) (int, error),
-) *CallbackValueGenerator {
-	return &CallbackValueGenerator{
-		cb: cb,
-	}
-}
-
-// ResolvedType is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) ResolvedType() *types.T {
-	return types.Int
-}
-
-// Start is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Start(_ context.Context, txn *kv.Txn) error {
-	c.txn = txn
-	return nil
-}
-
-// Next is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Next(ctx context.Context) (bool, error) {
-	var err error
-	c.val, err = c.cb(ctx, c.val, c.txn)
-	if err != nil {
-		return false, err
-	}
-	if c.val == -1 {
-		return false, nil
-	}
-	return true, nil
-}
-
-// Values is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Values() (Datums, error) {
-	return Datums{NewDInt(DInt(c.val))}, nil
-}
-
-// Close is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Close(_ context.Context) {}
 
 // Sqrt returns the square root of x.
 func Sqrt(x float64) (*DFloat, error) {

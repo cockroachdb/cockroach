@@ -264,7 +264,9 @@ func (p *planner) createDropSchemaJob(
 		},
 		Progress:      jobspb.SchemaChangeProgress{},
 		NonCancelable: true,
-	})
+	},
+		p.Txn(),
+	)
 	return err
 }
 

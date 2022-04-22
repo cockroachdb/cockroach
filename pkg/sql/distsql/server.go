@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalhelper"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
@@ -301,10 +302,10 @@ func (ds *ServerImpl) setupFlow(
 		// the whole evalContext, but that isn't free, so we choose to restore
 		// the original state in order to avoid performance regressions.
 		origMon := evalCtx.Mon
-		origTxn := evalCtx.Txn
+		origTxn := evalhelper.EvalCtxTxnToKVTxn(evalCtx.EvalCtxTxn)
 		onFlowCleanup = func() {
 			evalCtx.Mon = origMon
-			evalCtx.Txn = origTxn
+			evalCtx.SetTxn(origTxn)
 		}
 		evalCtx.Mon = monitor
 		if localState.HasConcurrency {
@@ -315,7 +316,7 @@ func (ds *ServerImpl) setupFlow(
 			}
 			// Update the Txn field early (before f.SetTxn() below) since some
 			// processors capture the field in their constructor (see #41992).
-			evalCtx.Txn = leafTxn
+			evalCtx.SetTxn(leafTxn)
 		}
 	} else {
 		if localState.IsLocal {
@@ -356,7 +357,7 @@ func (ds *ServerImpl) setupFlow(
 			Sequence:                  &faketreeeval.DummySequenceOperators{},
 			Tenant:                    &faketreeeval.DummyTenantOperator{},
 			Regions:                   &faketreeeval.DummyRegionOperator{},
-			Txn:                       leafTxn,
+			EvalCtxTxn:                leafTxn,
 			SQLLivenessReader:         ds.ServerConfig.SQLLivenessReader,
 			SQLStatsController:        ds.ServerConfig.SQLStatsController,
 			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,
@@ -429,6 +430,7 @@ func (ds *ServerImpl) setupFlow(
 	// this is the gateway, if we're running with the RootTxn, then again it was
 	// set above so it's fine. If we're using a LeafTxn on the gateway, though,
 	// then the processors have erroneously captured the Root. See #41992.
+	flowCtx.Txn = txn
 	f.SetTxn(txn)
 
 	return ctx, f, opChains, nil
@@ -445,13 +447,14 @@ func (ds *ServerImpl) newFlowContext(
 	localState LocalState,
 	isGatewayNode bool,
 ) execinfra.FlowCtx {
+
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		Cfg:            &ds.ServerConfig,
 		ID:             id,
 		EvalCtx:        evalCtx,
-		Txn:            evalCtx.Txn,
+		Txn:            evalhelper.EvalCtxTxnToKVTxn(evalCtx.EvalCtxTxn),
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
 		CollectStats:   collectStats,

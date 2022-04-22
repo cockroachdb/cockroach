@@ -13,7 +13,6 @@ package tree
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -48,7 +47,7 @@ type ValueGenerator interface {
 	//
 	// txn represents the txn that the generator will run inside of. The generator
 	// is expected to hold on to this txn and use it in Next() calls.
-	Start(ctx context.Context, txn *kv.Txn) error
+	Start(ctx context.Context) error
 
 	// Next determines whether there is a row of data available.
 	Next(context.Context) (bool, error)
@@ -61,15 +60,6 @@ type ValueGenerator interface {
 	// been called yet. It must not be called in-between restarts.
 	Close(ctx context.Context)
 }
-
-// GeneratorFactory is the type of constructor functions for
-// ValueGenerator objects.
-type GeneratorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error)
-
-// GeneratorWithExprsFactory is an alternative constructor function type for
-// ValueGenerators that gives implementations the ability to see the builtin's
-// arguments before evaluation, as Exprs.
-type GeneratorWithExprsFactory func(ctx *EvalContext, args Exprs) (ValueGenerator, error)
 
 // streamingValueGenerator is a marker-type indicating that the wrapped
 // generator is of "streaming" nature, thus, projectSet processor must be
