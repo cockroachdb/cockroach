@@ -78,6 +78,7 @@ func (p *planner) RunParams(ctx context.Context) runParams {
 // that gets passed back due to this inversion of roles.
 type PlanHookState interface {
 	resolver.SchemaResolver
+	SpanConstrainer
 	RunParams(ctx context.Context) runParams
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
