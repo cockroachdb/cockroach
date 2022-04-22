@@ -24,12 +24,9 @@ type replicationStreamManagerImpl struct{}
 
 // CompleteStreamIngestion implements ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) CompleteStreamIngestion(
-	evalCtx *tree.EvalContext,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
-	cutoverTimestamp hlc.Timestamp,
+	evalCtx *tree.EvalContext, streamID streaming.StreamID, cutoverTimestamp hlc.Timestamp,
 ) error {
-	return completeStreamIngestion(evalCtx, txn, streamID, cutoverTimestamp)
+	return completeStreamIngestion(evalCtx, streamID, cutoverTimestamp)
 }
 
 // StartReplicationStream implements ReplicationStreamManager interface.

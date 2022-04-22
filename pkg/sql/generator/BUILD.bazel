@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "callbackvaluegenerator",
+    srcs = ["callback_value_generator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/callbackvaluegenerator",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+    ],
+)
+
+go_library(
+    name = "generator",
+    srcs = [
+        "callback_value_generator.go",
+        "generators.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/generator",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+    ],
+)

@@ -53,7 +53,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				streamID := streaming.StreamID(*args[0].(*tree.DInt))
 				cutoverTime := args[1].(*tree.DTimestampTZ).Time
 				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				err = mgr.CompleteStreamIngestion(evalCtx, evalhelper.EvalCtxTxnToKVTxn(evalCtx.EvalCtxTxn), streamID, cutoverTimestamp)
+				err = mgr.CompleteStreamIngestion(evalCtx, streamID, cutoverTimestamp)
 				if err != nil {
 					return nil, err
 				}

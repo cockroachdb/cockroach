@@ -26,6 +26,7 @@ go_library(
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/generator",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",

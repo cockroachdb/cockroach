@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package generator
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -39,6 +40,7 @@ import (
 // able to produce rows of values in a streaming fashion (like Go
 // iterators or generators in Python).
 type ValueGenerator interface {
+	tree.ValueGenerator
 	// ResolvedType returns the type signature of this value generator.
 	ResolvedType() *types.T
 
@@ -54,22 +56,13 @@ type ValueGenerator interface {
 	Next(context.Context) (bool, error)
 
 	// Values retrieves the current row of data.
-	Values() (Datums, error)
+	Values() (tree.Datums, error)
 
 	// Close must be called after Start() before disposing of the
 	// ValueGenerator. It does not need to be called if Start() has not
 	// been called yet. It must not be called in-between restarts.
 	Close(ctx context.Context)
 }
-
-// GeneratorFactory is the type of constructor functions for
-// ValueGenerator objects.
-type GeneratorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error)
-
-// GeneratorWithExprsFactory is an alternative constructor function type for
-// ValueGenerators that gives implementations the ability to see the builtin's
-// arguments before evaluation, as Exprs.
-type GeneratorWithExprsFactory func(ctx *EvalContext, args Exprs) (ValueGenerator, error)
 
 // streamingValueGenerator is a marker-type indicating that the wrapped
 // generator is of "streaming" nature, thus, projectSet processor must be

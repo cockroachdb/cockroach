@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/generator"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,7 +51,7 @@ type projectSetProcessor struct {
 
 	// gens contains the current "active" ValueGenerators for each entry
 	// in `funcs`. They are initialized anew for every new row in the source.
-	gens []tree.ValueGenerator
+	gens []generator.ValueGenerator
 
 	// done indicates for each `Expr` whether the values produced by
 	// either the SRF or the scalar expressions are fully consumed and
@@ -81,7 +82,7 @@ func newProjectSetProcessor(
 		exprHelpers: make([]*execinfrapb.ExprHelper, len(spec.Exprs)),
 		funcs:       make([]*tree.FuncExpr, len(spec.Exprs)),
 		rowBuffer:   make(rowenc.EncDatumRow, len(outputTypes)),
-		gens:        make([]tree.ValueGenerator, len(spec.Exprs)),
+		gens:        make([]generator.ValueGenerator, len(spec.Exprs)),
 		done:        make([]bool, len(spec.Exprs)),
 	}
 	if err := ps.Init(
@@ -124,7 +125,7 @@ func newProjectSetProcessor(
 func (ps *projectSetProcessor) MustBeStreaming() bool {
 	// If we have a single streaming generator, then the processor is such too.
 	for _, gen := range ps.gens {
-		if tree.IsStreamingValueGenerator(gen) {
+		if generator.IsStreamingValueGenerator(gen) {
 			return true
 		}
 	}
@@ -159,13 +160,15 @@ func (ps *projectSetProcessor) nextInputRow() (
 			ps.exprHelpers[i].Row = row
 
 			ps.EvalCtx.IVarContainer = ps.exprHelpers[i]
-			gen, err := fn.EvalArgsAndGetGenerator(ps.EvalCtx)
+			genEval, err := fn.EvalArgsAndGetGenerator(ps.EvalCtx)
 			if err != nil {
 				return nil, nil, err
 			}
-			if gen == nil {
-				gen = builtins.EmptyGenerator()
+			if genEval == nil {
+				genEval = builtins.EmptyGenerator()
 			}
+
+			gen := genEval.(generator.ValueGenerator)
 			if err := gen.Start(ps.Ctx, ps.FlowCtx.Txn); err != nil {
 				return nil, nil, err
 			}

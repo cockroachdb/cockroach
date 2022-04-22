@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/evalhelper"
+	"github.com/cockroachdb/cockroach/pkg/sql/generator"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -40,9 +40,8 @@ import (
 
 // See the comments at the start of generators.go for details about
 // this functionality.
-
-var _ tree.ValueGenerator = &seriesValueGenerator{}
-var _ tree.ValueGenerator = &arrayValueGenerator{}
+var _ generator.ValueGenerator = &seriesValueGenerator{}
+var _ generator.ValueGenerator = &arrayValueGenerator{}
 
 func initGeneratorBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
@@ -156,7 +155,7 @@ var generators = map[string]builtinDefinition{
 				if !ok {
 					return nil, errors.Errorf("callback %q not registered", name)
 				}
-				return gen, nil
+				return gen.(*generator.CallbackValueGenerator), nil
 			},
 			"For internal CRDB testing only. "+
 				"The function calls a callback identified by `name` registered with the server by "+
@@ -478,7 +477,7 @@ type gistPlanGenerator struct {
 	p     tree.EvalPlanner
 }
 
-var _ tree.ValueGenerator = &gistPlanGenerator{}
+var _ generator.ValueGenerator = &gistPlanGenerator{}
 
 func (g *gistPlanGenerator) ResolvedType() *types.T {
 	return types.String
@@ -1613,7 +1612,7 @@ type checkConsistencyGenerator struct {
 	curRow        roachpb.CheckConsistencyResponse_Result
 }
 
-var _ tree.ValueGenerator = &checkConsistencyGenerator{}
+var _ generator.ValueGenerator = &checkConsistencyGenerator{}
 
 func makeCheckConsistencyGenerator(
 	ctx *tree.EvalContext, args tree.Datums,
@@ -1750,7 +1749,7 @@ type rangeKeyIterator struct {
 	endKey roachpb.RKey
 }
 
-var _ tree.ValueGenerator = &rangeKeyIterator{}
+var _ generator.ValueGenerator = &rangeKeyIterator{}
 
 func makeRangeKeyIterator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
@@ -1984,7 +1983,6 @@ func makePayloadsForTraceGenerator(
 	it, err := ctx.Planner.QueryIteratorEx(
 		ctx.Ctx(),
 		"crdb_internal.payloads_for_trace",
-		evalhelper.EvalCtxTxnToKVTxn(ctx),
 		sessiondata.NoSessionDataOverride,
 		query,
 		traceID,
@@ -2043,7 +2041,6 @@ const (
 // crdb_internal.show_create_all_schemas(dbName).
 type showCreateAllSchemasGenerator struct {
 	evalPlanner tree.EvalPlanner
-	txn         *kv.Txn
 	ids         []int64
 	dbName      string
 	acc         mon.BoundAccount
@@ -2061,9 +2058,9 @@ func (s *showCreateAllSchemasGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *showCreateAllSchemasGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *showCreateAllSchemasGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	ids, err := getSchemaIDs(
-		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
+		ctx, s.evalPlanner, s.dbName, &s.acc,
 	)
 	if err != nil {
 		return err
@@ -2071,7 +2068,6 @@ func (s *showCreateAllSchemasGenerator) Start(ctx context.Context, txn *kv.Txn) 
 
 	s.ids = ids
 
-	s.txn = txn
 	s.idx = -1
 	return nil
 }
@@ -2083,7 +2079,7 @@ func (s *showCreateAllSchemasGenerator) Next(ctx context.Context) (bool, error) 
 	}
 
 	createStmt, err := getSchemaCreateStatement(
-		ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName,
+		ctx, s.evalPlanner, s.ids[s.idx], s.dbName,
 	)
 	if err != nil {
 		return false, err
@@ -2123,7 +2119,6 @@ func makeShowCreateAllSchemasGenerator(
 // crdb_internal.show_create_all_tables(dbName).
 type showCreateAllTablesGenerator struct {
 	evalPlanner tree.EvalPlanner
-	txn         *kv.Txn
 	ids         []int64
 	dbName      string
 	acc         mon.BoundAccount
@@ -2146,7 +2141,7 @@ func (s *showCreateAllTablesGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *showCreateAllTablesGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	// Note: All the table ids are accumulated in ram before the generator
 	// starts generating values.
 	// This is reasonable under the assumption that:
@@ -2159,7 +2154,7 @@ func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) e
 	// We also account for the memory in the BoundAccount memory monitor in
 	// showCreateAllTablesGenerator.
 	ids, err := getTopologicallySortedTableIDs(
-		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
+		ctx, s.evalPlanner, s.dbName, &s.acc,
 	)
 	if err != nil {
 		return err
@@ -2167,7 +2162,6 @@ func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) e
 
 	s.ids = ids
 
-	s.txn = txn
 	s.idx = -1
 	s.phase = create
 	return nil
@@ -2185,7 +2179,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 		}
 
 		createStmt, err := getCreateStatement(
-			ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName,
+			ctx, s.evalPlanner, s.ids[s.idx], s.dbName,
 		)
 		if err != nil {
 			return false, err
@@ -2231,7 +2225,7 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 			statementReturnType = alterValidateFKStatements
 		}
 		alterStmt, err := getAlterStatements(
-			ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName, statementReturnType,
+			ctx, s.evalPlanner, s.ids[s.idx], s.dbName, statementReturnType,
 		)
 		if err != nil {
 			return false, err
@@ -2280,7 +2274,6 @@ func makeShowCreateAllTablesGenerator(
 // crdb_internal.show_create_all_types(dbName).
 type showCreateAllTypesGenerator struct {
 	evalPlanner tree.EvalPlanner
-	txn         *kv.Txn
 	ids         []int64
 	dbName      string
 	acc         mon.BoundAccount
@@ -2298,9 +2291,9 @@ func (s *showCreateAllTypesGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (s *showCreateAllTypesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *showCreateAllTypesGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	ids, err := getTypeIDs(
-		ctx, s.evalPlanner, txn, s.dbName, &s.acc,
+		ctx, s.evalPlanner, s.dbName, &s.acc,
 	)
 	if err != nil {
 		return err
@@ -2308,7 +2301,6 @@ func (s *showCreateAllTypesGenerator) Start(ctx context.Context, txn *kv.Txn) er
 
 	s.ids = ids
 
-	s.txn = txn
 	s.idx = -1
 	return nil
 }
@@ -2320,7 +2312,7 @@ func (s *showCreateAllTypesGenerator) Next(ctx context.Context) (bool, error) {
 	}
 
 	createStmt, err := getTypeCreateStatement(
-		ctx, s.evalPlanner, s.txn, s.ids[s.idx], s.dbName,
+		ctx, s.evalPlanner, s.ids[s.idx], s.dbName,
 	)
 	if err != nil {
 		return false, err

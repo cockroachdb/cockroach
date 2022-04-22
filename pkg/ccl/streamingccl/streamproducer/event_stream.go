@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/generator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
@@ -50,7 +51,7 @@ type eventStream struct {
 	sp          *tracing.Span               // Span representing the lifetime of the eventStream.
 }
 
-var _ tree.ValueGenerator = (*eventStream)(nil)
+var _ generator.ValueGenerator = (*eventStream)(nil)
 
 var eventStreamReturnType = types.MakeLabeledTuple(
 	[]*types.T{types.Bytes},
@@ -63,7 +64,7 @@ func (s *eventStream) ResolvedType() *types.T {
 }
 
 // Start implements tree.ValueGenerator interface.
-func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *eventStream) Start(ctx context.Context, _ *kv.Txn) error {
 	// ValueGenerator API indicates that Start maybe called again if Next returned
 	// false.  However, this generator never terminates without an error,
 	// so this method should be called once.  Be defensive and return an error
@@ -430,7 +431,7 @@ func streamPartition(
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
-	return tree.MakeStreamingValueGenerator(&eventStream{
+	return generator.MakeStreamingValueGenerator(&eventStream{
 		streamID: streamID,
 		spec:     spec,
 		execCfg:  execCfg,

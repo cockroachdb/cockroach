@@ -58,6 +58,7 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/generator",
         "//pkg/sql/inverted",
         "//pkg/sql/kvstreamer",
         "//pkg/sql/memsize",
