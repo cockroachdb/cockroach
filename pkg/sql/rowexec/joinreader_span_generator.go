@@ -762,6 +762,9 @@ func (g *multiSpanGenerator) close(ctx context.Context) {
 type localityOptimizedSpanGenerator struct {
 	localSpanGen  multiSpanGenerator
 	remoteSpanGen multiSpanGenerator
+	// localSpanGenUsedLast is true if generateSpans() was called more recently
+	// than generateRemoteSpans().
+	localSpanGenUsedLast bool
 }
 
 // init must be called before the localityOptimizedSpanGenerator can be used to
@@ -814,6 +817,7 @@ func (g *localityOptimizedSpanGenerator) maxLookupCols() int {
 func (g *localityOptimizedSpanGenerator) generateSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
+	g.localSpanGenUsedLast = true
 	return g.localSpanGen.generateSpans(ctx, rows)
 }
 
@@ -822,13 +826,14 @@ func (g *localityOptimizedSpanGenerator) generateSpans(
 func (g *localityOptimizedSpanGenerator) generateRemoteSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
+	g.localSpanGenUsedLast = false
 	return g.remoteSpanGen.generateSpans(ctx, rows)
 }
 
 // getMatchingRowIndices is part of the joinReaderSpanGenerator interface.
 func (g *localityOptimizedSpanGenerator) getMatchingRowIndices(key roachpb.Key) []int {
-	if res := g.localSpanGen.getMatchingRowIndices(key); len(res) > 0 {
-		return res
+	if g.localSpanGenUsedLast {
+		return g.localSpanGen.getMatchingRowIndices(key)
 	}
 	return g.remoteSpanGen.getMatchingRowIndices(key)
 }
