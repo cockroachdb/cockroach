@@ -8,7 +8,7 @@ go_test(
     ],
     data = [
         "//pkg/sql/importer:testdata",
-        "@cockroach//c-deps:libgeos",
+        "@com_github_cockroachdb_cockroach//c-deps:libgeos",
     ],
     deps = [
         "//pkg/base",

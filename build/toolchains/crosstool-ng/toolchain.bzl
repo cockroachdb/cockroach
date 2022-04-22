@@ -13,7 +13,7 @@ def _impl(rctx):
 
     rctx.template(
         "BUILD",
-        Label("@cockroach//build:toolchains/crosstool-ng/BUILD.tmpl"),
+        Label("@com_github_cockroachdb_cockroach//build:toolchains/crosstool-ng/BUILD.tmpl"),
         substitutions = {
             "%{host}": rctx.attr.host,
             "%{target}": rctx.attr.target,
@@ -22,7 +22,7 @@ def _impl(rctx):
     )
     rctx.template(
         "cc_toolchain_config.bzl",
-        Label("@cockroach//build:toolchains/crosstool-ng/cc_toolchain_config.bzl.tmpl"),
+        Label("@com_github_cockroachdb_cockroach//build:toolchains/crosstool-ng/cc_toolchain_config.bzl.tmpl"),
         substitutions = {
             "%{target}": rctx.attr.target,
             "%{host}": rctx.attr.host,

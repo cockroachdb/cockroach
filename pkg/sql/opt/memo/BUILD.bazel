@@ -67,7 +67,7 @@ go_test(
         "typing_test.go",
     ],
     data = glob(["testdata/**"]) + [
-        "@cockroach//c-deps:libgeos",
+        "@com_github_cockroachdb_cockroach//c-deps:libgeos",
         "//pkg/sql/opt/testutils/opttester:testfixtures",
     ],
     embed = [":memo"],

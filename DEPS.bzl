@@ -896,7 +896,7 @@ def go_deps():
         importpath = "github.com/buchgr/bazel-remote",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:com_github_buchgr_bazel_remote.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_buchgr_bazel_remote.patch",
         ],
         sha256 = "7ab70784fddbc59e956501b2bc15a30c36baedb34df0d26009607d80c9e129e2",
         strip_prefix = "github.com/buchgr/bazel-remote@v1.3.3",
@@ -1300,7 +1300,7 @@ def go_deps():
         importpath = "github.com/cockroachdb/errors",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:com_github_cockroachdb_errors.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_errors.patch",
         ],
         sha256 = "ff3814544271799c80da14dadfe408efc4f66e02cbdf17b73e81614ed9f7ae43",
         strip_prefix = "github.com/cockroachdb/errors@v1.9.0",
@@ -1345,7 +1345,7 @@ def go_deps():
         importpath = "github.com/cockroachdb/pebble",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:com_github_cockroachdb_pebble.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
         sha256 = "5b3237c6bcbfc1085831ddf636ce4b4243211f754ceabe9b8fd9bf8962629a12",
         strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220322040433-6164579cf2cb",
@@ -3240,7 +3240,7 @@ def go_deps():
         importpath = "github.com/gogo/protobuf",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:com_github_gogo_protobuf.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_gogo_protobuf.patch",
         ],
         sha256 = "dd2b73f163c8183941626360196c8f844addd95423d341a0412e1b22d0104ff7",
         strip_prefix = "github.com/gogo/protobuf@v1.3.2",
@@ -3384,7 +3384,7 @@ def go_deps():
         importpath = "github.com/golang/protobuf",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:com_github_golang_protobuf.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_golang_protobuf.patch",
         ],
         sha256 = "5d1c817bebc1202ab3b42a418e584e0008e8027baf212ce69c2ae3e9e7b8c64b",
         strip_prefix = "github.com/golang/protobuf@v1.5.2",
@@ -3749,7 +3749,7 @@ def go_deps():
         importpath = "github.com/grpc-ecosystem/grpc-gateway",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:com_github_grpc_ecosystem_grpc_gateway.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_grpc_ecosystem_grpc_gateway.patch",
         ],
         sha256 = "377b03aef288b34ed894449d3ddba40d525dd7fb55de6e79045cdf499e7fe565",
         strip_prefix = "github.com/grpc-ecosystem/grpc-gateway@v1.16.0",
@@ -4873,7 +4873,7 @@ def go_deps():
         importpath = "github.com/kisielk/errcheck",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:com_github_kisielk_errcheck.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_kisielk_errcheck.patch",
         ],
         sha256 = "99d3220891162cb684f8e05d54f3d0dc58abdd496a2f0cfda7fd4a28917a719e",
         strip_prefix = "github.com/kisielk/errcheck@v1.6.1-0.20210625163953-8ddee489636a",
@@ -4957,7 +4957,7 @@ def go_deps():
         importpath = "github.com/knz/go-libedit",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:com_github_knz_go_libedit.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_knz_go_libedit.patch",
         ],
         sha256 = "d2ae0f8e43c49f917a2cadf52178c0efe1336fda5b8410a3d0f1270ae05d2532",
         strip_prefix = "github.com/otan-cockroach/go-libedit@v1.10.2-0.20201030151939-7cced08450e7",
@@ -6651,7 +6651,7 @@ def go_deps():
         importpath = "github.com/prometheus/client_model",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:com_github_prometheus_client_model.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_prometheus_client_model.patch",
         ],
         sha256 = "44fc58fe25ed9b122b6755e8d356d5f199592f959af3b87a3b636c6eb82b43c5",
         strip_prefix = "github.com/prometheus/client_model@v0.2.1-0.20210607210712-147c58e9608a",
@@ -6735,7 +6735,7 @@ def go_deps():
         importpath = "github.com/pseudomuto/protoc-gen-doc",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:com_github_pseudomuto_protoc_gen_doc.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_pseudomuto_protoc_gen_doc.patch",
         ],
         sha256 = "ecf627d6f5b4e55d4844dda45612cbd152f0bc4dbe2ba182c7bc3ad1dc63ce5f",
         strip_prefix = "github.com/pseudomuto/protoc-gen-doc@v1.3.2",
@@ -8579,7 +8579,7 @@ def go_deps():
         importpath = "go.etcd.io/etcd/raft/v3",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:io_etcd_go_etcd_raft_v3.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:io_etcd_go_etcd_raft_v3.patch",
         ],
         sha256 = "62faedd81e10061a4e0d7476865a62b84121ea462514afeaa1b9d66cc53b5a4b",
         strip_prefix = "go.etcd.io/etcd/raft/v3@v3.0.0-20210320072418-e51c697ec6e8",
@@ -8913,7 +8913,7 @@ def go_deps():
         importpath = "go.opentelemetry.io/proto/otlp",
         patch_args = ["-p1"],
         patches = [
-            "@cockroach//build/patches:io_opentelemetry_go_proto_otlp.patch",
+            "@com_github_cockroachdb_cockroach//build/patches:io_opentelemetry_go_proto_otlp.patch",
         ],
         sha256 = "1a91376c923da07bee23439e8430c32736f6330532df85d3bd1ada90305097d7",
         strip_prefix = "go.opentelemetry.io/proto/otlp@v0.9.0",
