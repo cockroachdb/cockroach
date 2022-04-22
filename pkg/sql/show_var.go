@@ -39,7 +39,7 @@ func (s *showVarNode) Next(params runParams) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	s.val, err = v.Get(params.extendedEvalCtx)
+	s.val, err = v.Get(params.extendedEvalCtx, params.p.Txn())
 	return true, err
 }
 

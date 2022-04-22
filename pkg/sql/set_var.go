@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -136,7 +137,7 @@ func (n *setVarNode) startExec(params runParams) error {
 		}
 		var err error
 		if n.v.GetStringVal != nil {
-			strVal, err = n.v.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues)
+			strVal, err = n.v.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues, params.p.Txn())
 		} else {
 			// No string converter defined, use the default one.
 			strVal, err = getStringVal(params.EvalContext(), n.name, n.typedValues)
@@ -262,7 +263,7 @@ func getFloatVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr
 }
 
 func timeZoneVarGetStringVal(
-	_ context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+	_ context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn,
 ) (string, error) {
 	if len(values) != 1 {
 		return "", newSingleArgVarError("timezone")
@@ -334,9 +335,9 @@ func timeZoneVarSet(_ context.Context, m sessionDataMutator, s string) error {
 func makeTimeoutVarGetter(
 	varName string,
 ) func(
-	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr) (string, error) {
+	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn) (string, error) {
 	return func(
-		ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn,
 	) (string, error) {
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
