@@ -1,0 +1,1588 @@
+exec-ddl
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+----
+
+exec-ddl
+CREATE TABLE u (a INT PRIMARY KEY, c INT)
+----
+
+exec-ddl
+CREATE VIEW v AS SELECT a FROM t AS t2
+----
+
+# ------------------------------------------------------------------------------
+# Basic tests.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM t FOR UPDATE
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+
+opt
+SELECT * FROM t FOR NO KEY UPDATE
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-no-key-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR SHARE
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-share
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR KEY SHARE
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-key-share
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR KEY SHARE FOR SHARE
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-share
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-no-key-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR UPDATE OF t
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT 1 FROM t FOR UPDATE OF t
+----
+project
+ ├── columns: "?column?":5!null
+ ├── volatile
+ ├── fd: ()-->(5)
+ ├── scan t
+ │    ├── locking: for-update
+ │    └── volatile
+ └── projections
+      └── 1 [as="?column?":5]
+
+# ------------------------------------------------------------------------------
+# Tests with table aliases.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM t AS t2 FOR UPDATE
+----
+scan t [as=t2]
+ ├── columns: a:1!null b:2
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t AS t2 FOR UPDATE OF t2
+----
+scan t [as=t2]
+ ├── columns: a:1!null b:2
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# ------------------------------------------------------------------------------
+# Tests with numeric table references.
+# Cockroach numeric references start after 53 for user tables.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM [53 AS t] FOR UPDATE
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM [53 AS t] FOR UPDATE OF t
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+# ------------------------------------------------------------------------------
+# Tests with views.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM v FOR UPDATE
+----
+scan t [as=t2]
+ ├── columns: a:1!null
+ ├── locking: for-update
+ ├── volatile
+ └── key: (1)
+
+opt
+SELECT * FROM v FOR UPDATE OF v
+----
+scan t [as=t2]
+ ├── columns: a:1!null
+ ├── locking: for-update
+ ├── volatile
+ └── key: (1)
+
+# ------------------------------------------------------------------------------
+# Tests with aliased views.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM v AS v2 FOR UPDATE
+----
+scan t [as=v2]
+ ├── columns: a:1!null
+ ├── locking: for-update
+ ├── volatile
+ └── key: (1)
+
+opt
+SELECT * FROM v AS v2 FOR UPDATE OF v2
+----
+scan t [as=v2]
+ ├── columns: a:1!null
+ ├── locking: for-update
+ ├── volatile
+ └── key: (1)
+
+# ------------------------------------------------------------------------------
+# Tests with subqueries.
+#
+# Row-level locking clauses only apply to subqueries in the FROM clause of a
+# SELECT statement. They don't apply to subqueries in the projection or in
+# the filter.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM (SELECT a FROM t) FOR UPDATE
+----
+scan t
+ ├── columns: a:1!null
+ ├── locking: for-update
+ ├── volatile
+ └── key: (1)
+
+opt
+SELECT * FROM (SELECT a FROM t FOR UPDATE)
+----
+scan t
+ ├── columns: a:1!null
+ ├── locking: for-update
+ ├── volatile
+ └── key: (1)
+
+opt
+SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
+----
+scan t
+ ├── columns: a:1!null
+ ├── locking: for-no-key-update
+ ├── volatile
+ └── key: (1)
+
+opt
+SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
+----
+scan t
+ ├── columns: a:1!null
+ ├── locking: for-no-key-update
+ ├── volatile
+ └── key: (1)
+
+opt
+SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
+----
+scan t
+ ├── columns: a:1!null
+ ├── locking: for-update
+ ├── volatile
+ └── key: (1)
+
+opt
+SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
+----
+scan t [as=r]
+ ├── columns: a:1!null
+ ├── locking: for-update
+ ├── volatile
+ └── key: (1)
+
+opt
+SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
+----
+scan t [as=r]
+ ├── columns: a:1!null
+ ├── locking: for-update
+ ├── volatile
+ └── key: (1)
+
+opt
+SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
+----
+scan t [as=r]
+ ├── columns: a:1!null
+ ├── locking: for-update
+ ├── volatile
+ └── key: (1)
+
+opt
+SELECT (SELECT a FROM t) FOR UPDATE
+----
+values
+ ├── columns: a:5
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: t.a:1!null
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── scan t
+                     ├── columns: t.a:1!null
+                     └── key: (1)
+
+opt
+SELECT (SELECT a FROM t FOR UPDATE)
+----
+values
+ ├── columns: a:5
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(5)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: t.a:1!null
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [0 - 1]
+                ├── volatile
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── scan t
+                     ├── columns: t.a:1!null
+                     ├── locking: for-update
+                     ├── volatile
+                     └── key: (1)
+
+opt
+SELECT (SELECT a FROM t FOR UPDATE OF t)
+----
+values
+ ├── columns: a:5
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(5)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: t.a:1!null
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [0 - 1]
+                ├── volatile
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── scan t
+                     ├── columns: t.a:1!null
+                     ├── locking: for-update
+                     ├── volatile
+                     └── key: (1)
+
+opt
+SELECT (SELECT a FROM t) AS r FOR UPDATE
+----
+values
+ ├── columns: r:5
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: a:1!null
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── scan t
+                     ├── columns: a:1!null
+                     └── key: (1)
+
+opt
+SELECT (SELECT a FROM t FOR UPDATE) AS r
+----
+values
+ ├── columns: r:5
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(5)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: a:1!null
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [0 - 1]
+                ├── volatile
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── scan t
+                     ├── columns: a:1!null
+                     ├── locking: for-update
+                     ├── volatile
+                     └── key: (1)
+
+opt
+SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
+----
+values
+ ├── columns: r:5
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(5)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: a:1!null
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [0 - 1]
+                ├── volatile
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── scan t
+                     ├── columns: a:1!null
+                     ├── locking: for-update
+                     ├── volatile
+                     └── key: (1)
+
+opt
+SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inner-join (lookup t)
+      ├── columns: a:1!null b:2 b:6!null
+      ├── key columns: [6] = [1]
+      ├── lookup columns are key
+      ├── locking: for-update
+      ├── volatile
+      ├── key: (6)
+      ├── fd: (1)-->(2), (1)==(6), (6)==(1)
+      ├── distinct-on
+      │    ├── columns: b:6
+      │    ├── grouping columns: b:6
+      │    ├── key: (6)
+      │    └── scan t
+      │         └── columns: b:6
+      └── filters (true)
+
+opt
+SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
+----
+project
+ ├── columns: a:1!null b:2
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inner-join (lookup t)
+      ├── columns: a:1!null b:2 b:6!null
+      ├── key columns: [6] = [1]
+      ├── lookup columns are key
+      ├── volatile
+      ├── key: (6)
+      ├── fd: (1)-->(2), (1)==(6), (6)==(1)
+      ├── distinct-on
+      │    ├── columns: b:6
+      │    ├── grouping columns: b:6
+      │    ├── volatile
+      │    ├── key: (6)
+      │    └── scan t
+      │         ├── columns: b:6
+      │         ├── locking: for-update
+      │         └── volatile
+      └── filters (true)
+
+opt
+SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
+----
+project
+ ├── columns: a:1!null b:2
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inner-join (lookup t)
+      ├── columns: a:1!null b:2 b:6!null
+      ├── key columns: [6] = [1]
+      ├── lookup columns are key
+      ├── locking: for-update
+      ├── volatile
+      ├── key: (6)
+      ├── fd: (1)-->(2), (1)==(6), (6)==(1)
+      ├── distinct-on
+      │    ├── columns: b:6
+      │    ├── grouping columns: b:6
+      │    ├── key: (6)
+      │    └── scan t
+      │         └── columns: b:6
+      └── filters (true)
+
+opt
+SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
+----
+project
+ ├── columns: a:1!null b:2
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inner-join (lookup t)
+      ├── columns: a:1!null b:2 b:6!null
+      ├── key columns: [6] = [1]
+      ├── lookup columns are key
+      ├── volatile
+      ├── key: (6)
+      ├── fd: (1)-->(2), (1)==(6), (6)==(1)
+      ├── distinct-on
+      │    ├── columns: b:6
+      │    ├── grouping columns: b:6
+      │    ├── volatile
+      │    ├── key: (6)
+      │    └── scan t
+      │         ├── columns: b:6
+      │         ├── locking: for-update
+      │         └── volatile
+      └── filters (true)
+
+# ------------------------------------------------------------------------------
+# Tests with common-table expressions.
+#
+# Unlike with FROM subqueries, row-level locking clauses do not apply to WITH
+# queries referenced by the primary query. To achieve row locking within a WITH
+# query, a locking clause should be specified within the WITH query.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM [SELECT a FROM t] FOR UPDATE
+----
+project
+ ├── columns: a:5!null
+ ├── key: (5)
+ ├── scan t
+ │    ├── columns: t.a:1!null
+ │    └── key: (1)
+ └── projections
+      └── t.a:1 [as=a:5, outer=(1)]
+
+opt
+WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
+----
+project
+ ├── columns: a:5!null
+ ├── key: (5)
+ ├── scan t
+ │    ├── columns: t.a:1!null
+ │    └── key: (1)
+ └── projections
+      └── t.a:1 [as=a:5, outer=(1)]
+
+opt
+SELECT * FROM [SELECT a FROM t FOR UPDATE]
+----
+with &1
+ ├── columns: a:5!null
+ ├── volatile
+ ├── key: (5)
+ ├── scan t
+ │    ├── columns: t.a:1!null
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    └── key: (1)
+ └── with-scan &1
+      ├── columns: a:5!null
+      ├── mapping:
+      │    └──  t.a:1 => a:5
+      └── key: (5)
+
+opt
+WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: a:5!null
+ ├── volatile
+ ├── key: (5)
+ ├── scan t
+ │    ├── columns: t.a:1!null
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    └── key: (1)
+ └── with-scan &1 (cte)
+      ├── columns: a:5!null
+      ├── mapping:
+      │    └──  t.a:1 => a:5
+      └── key: (5)
+
+# ------------------------------------------------------------------------------
+# Tests with joins.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM t JOIN u USING (a) FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u
+      │    ├── columns: u.a:5!null c:6
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u
+      │    ├── columns: u.a:5!null c:6
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u
+      │    ├── columns: u.a:5!null c:6
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u
+      │    ├── columns: u.a:5!null c:6
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u
+      │    ├── columns: u.a:5!null c:6
+      │    ├── locking: for-share
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t [as=t2]
+      │    ├── columns: t2.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u [as=u2]
+      │    ├── columns: u2.a:5!null c:6
+      │    ├── locking: for-share
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u
+      │    ├── columns: u.a:5!null c:6
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── locking: for-no-key-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u
+      │    ├── columns: u.a:5!null c:6
+      │    ├── locking: for-key-share
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── locking: for-no-key-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u
+      │    ├── columns: u.a:5!null c:6
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+# ------------------------------------------------------------------------------
+# Tests with joins of aliased tables and aliased joins.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t [as=t2]
+      │    ├── columns: t2.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u [as=u2]
+      │    ├── columns: u2.a:5!null c:6
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t [as=t2]
+      │    ├── columns: t2.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u [as=u2]
+      │    ├── columns: u2.a:5!null c:6
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t [as=t2]
+      │    ├── columns: t2.a:1!null b:2
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u [as=u2]
+      │    ├── columns: u2.a:5!null c:6
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t [as=t2]
+      │    ├── columns: t2.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u [as=u2]
+      │    ├── columns: u2.a:5!null c:6
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+
+# Postgres doesn't support applying locking clauses to joins. The following
+# queries all return the error: "FOR UPDATE cannot be applied to a join".
+# We could do the same, but it's not hard to support these, so we do.
+
+opt
+SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t.a:1!null b:2 u2.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u [as=u2]
+      │    ├── columns: u2.a:5!null c:6
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+opt
+SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
+----
+project
+ ├── columns: a:1!null b:2 c:6
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,6)
+ └── inner-join (merge)
+      ├── columns: t.a:1!null b:2 u2.a:5!null c:6
+      ├── left ordering: +1
+      ├── right ordering: +5
+      ├── volatile
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
+      ├── scan u [as=u2]
+      │    ├── columns: u2.a:5!null c:6
+      │    ├── locking: for-update
+      │    ├── volatile
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── filters (true)
+
+# ------------------------------------------------------------------------------
+# Tests with lateral joins.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM t, u FOR UPDATE
+----
+inner-join (cross)
+ ├── columns: a:1!null b:2 a:5!null c:6
+ ├── volatile
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ ├── scan t
+ │    ├── columns: t.a:1!null b:2
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan u
+ │    ├── columns: u.a:5!null c:6
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters (true)
+
+opt
+SELECT * FROM t, u FOR UPDATE OF t
+----
+inner-join (cross)
+ ├── columns: a:1!null b:2 a:5!null c:6
+ ├── volatile
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ ├── scan t
+ │    ├── columns: t.a:1!null b:2
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan u
+ │    ├── columns: u.a:5!null c:6
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters (true)
+
+opt
+SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
+----
+inner-join (cross)
+ ├── columns: a:1!null b:2 a:5!null c:6
+ ├── volatile
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ ├── scan t
+ │    ├── columns: t.a:1!null b:2
+ │    ├── locking: for-share
+ │    ├── volatile
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan u
+ │    ├── columns: u.a:5!null c:6
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters (true)
+
+opt
+SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
+----
+inner-join (cross)
+ ├── columns: a:1!null b:2 a:5!null c:6
+ ├── volatile
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ ├── scan t
+ │    ├── columns: t.a:1!null b:2
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan u [as=sub]
+ │    ├── columns: sub.a:5!null c:6
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters (true)
+
+opt
+SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
+----
+inner-join (cross)
+ ├── columns: a:1!null b:2 a:5!null c:6
+ ├── volatile
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
+ ├── scan t
+ │    ├── columns: t.a:1!null b:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan u [as=sub]
+ │    ├── columns: sub.a:5!null c:6
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters (true)
+
+# ------------------------------------------------------------------------------
+# Tests with index joins.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX b_idx(b)
+)
+----
+
+opt
+SELECT * FROM indexed WHERE b = 2 FOR UPDATE
+----
+index-join indexed
+ ├── columns: a:1!null b:2!null c:3
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ └── scan indexed@b_idx
+      ├── columns: a:1!null b:2!null
+      ├── constraint: /2/1: [/2 - /2]
+      ├── locking: for-update
+      ├── volatile
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+opt
+SELECT * FROM indexed WHERE b BETWEEN 2 AND 10 FOR UPDATE
+----
+index-join indexed
+ ├── columns: a:1!null b:2!null c:3
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan indexed@b_idx
+      ├── columns: a:1!null b:2!null
+      ├── constraint: /2/1: [/2 - /10]
+      ├── locking: for-update
+      ├── volatile
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+# ------------------------------------------------------------------------------
+# Tests with lookup joins.
+# ------------------------------------------------------------------------------
+
+opt expect=GenerateLookupJoins
+SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a = 2 FOR UPDATE
+----
+project
+ ├── columns: c:6
+ ├── cardinality: [0 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(6)
+ └── inner-join (lookup u)
+      ├── columns: t.a:1!null b:2!null u.a:5!null c:6
+      ├── key columns: [2] = [5]
+      ├── lookup columns are key
+      ├── locking: for-update
+      ├── cardinality: [0 - 1]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(1,2,5,6), (5)==(2), (2)==(5)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── constraint: /1: [/2 - /2]
+      │    ├── locking: for-update
+      │    ├── cardinality: [0 - 1]
+      │    ├── volatile
+      │    ├── key: ()
+      │    └── fd: ()-->(1,2)
+      └── filters (true)
+
+opt expect=GenerateLookupJoins
+SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a BETWEEN 2 AND 10 FOR UPDATE
+----
+project
+ ├── columns: c:6
+ ├── cardinality: [0 - 9]
+ ├── volatile
+ └── inner-join (lookup u)
+      ├── columns: t.a:1!null b:2!null u.a:5!null c:6
+      ├── key columns: [2] = [5]
+      ├── lookup columns are key
+      ├── locking: for-update
+      ├── cardinality: [0 - 9]
+      ├── volatile
+      ├── key: (1)
+      ├── fd: (1)-->(2), (5)-->(6), (2)==(5), (5)==(2)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── constraint: /1: [/2 - /10]
+      │    ├── locking: for-update
+      │    ├── cardinality: [0 - 9]
+      │    ├── volatile
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters (true)
+
+opt expect=GenerateLookupJoins
+SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
+----
+inner-join (lookup indexed)
+ ├── columns: a:1!null b:2!null a:5!null b:6!null c:7
+ ├── key columns: [5] = [5]
+ ├── lookup columns are key
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (5)
+ ├── fd: ()-->(1,2,6), (5)-->(7), (2)==(6), (6)==(2)
+ ├── inner-join (lookup indexed@b_idx)
+ │    ├── columns: t.a:1!null t.b:2!null indexed.a:5!null indexed.b:6!null
+ │    ├── key columns: [2] = [6]
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (5)
+ │    ├── fd: ()-->(1,2,6), (2)==(6), (6)==(2)
+ │    ├── scan t
+ │    │    ├── columns: t.a:1!null t.b:2
+ │    │    ├── constraint: /1: [/2 - /2]
+ │    │    ├── locking: for-update
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── volatile
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(1,2)
+ │    └── filters (true)
+ └── filters (true)
+
+# ------------------------------------------------------------------------------
+# Tests with inverted filters and joins.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE inverted (
+  a INT PRIMARY KEY,
+  b INT[],
+  c INT,
+  INVERTED INDEX b_inv(b)
+)
+----
+
+opt expect=(GenerateInvertedIndexScans,GenerateInvertedIndexZigzagJoins)
+SELECT * FROM inverted WHERE b @> '{1, 2}' FOR UPDATE
+----
+inner-join (lookup inverted)
+ ├── columns: a:1!null b:2!null c:3
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── inner-join (zigzag inverted@b_inv inverted@b_inv)
+ │    ├── columns: a:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [6] = ['\x89']
+ │    ├── right fixed columns: [6] = ['\x8a']
+ │    ├── left locking: for-update
+ │    ├── right locking: for-update
+ │    └── filters (true)
+ └── filters
+      └── b:2 @> ARRAY[1,2] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join inverted
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── inverted-filter
+ │         ├── columns: a:1!null
+ │         ├── inverted expression: /6
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["C", "C"]
+ │         │         └── ["\x89", "\x8b")
+ │         ├── volatile
+ │         ├── key: (1)
+ │         └── scan inverted@b_inv
+ │              ├── columns: a:1!null b_inverted_key:6!null
+ │              ├── inverted constraint: /6/1
+ │              │    └── spans
+ │              │         ├── ["C", "C"]
+ │              │         └── ["\x89", "\x8b")
+ │              ├── locking: for-update
+ │              ├── volatile
+ │              ├── key: (1)
+ │              └── fd: (1)-->(6)
+ └── filters
+      └── b:2 <@ ARRAY[1,2] [outer=(2), immutable]
+
+opt expect=GenerateInvertedJoins
+SELECT * FROM inverted@b_inv AS i1, inverted AS i2 WHERE i1.b @> i2.b FOR UPDATE
+----
+inner-join (lookup inverted [as=i1])
+ ├── columns: a:1!null b:2 c:3 a:7!null b:8 c:9
+ ├── key columns: [19] = [1]
+ ├── lookup columns are key
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1,7)
+ ├── fd: (1)-->(2,3), (7)-->(8,9)
+ ├── inner-join (inverted inverted@b_inv [as=i1])
+ │    ├── columns: i2.a:7!null i2.b:8 i2.c:9 i1.a:19!null
+ │    ├── inverted-expr
+ │    │    └── i1.b:20 @> i2.b:8
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (7,19)
+ │    ├── fd: (7)-->(8,9)
+ │    ├── scan inverted [as=i2]
+ │    │    ├── columns: i2.a:7!null i2.b:8 i2.c:9
+ │    │    ├── locking: for-update
+ │    │    ├── volatile
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8,9)
+ │    └── filters (true)
+ └── filters
+      └── i1.b:2 @> i2.b:8 [outer=(2,8), immutable]
+
+# ------------------------------------------------------------------------------
+# Tests with zigzag joins.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE zigzag (
+  a INT PRIMARY KEY,
+  b INT,
+  c FLOAT,
+  d JSONB,
+  INDEX b_idx(b),
+  INDEX c_idx(c),
+  INVERTED INDEX d_idx(d)
+)
+----
+
+opt expect=GenerateZigzagJoins
+SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0 FOR UPDATE
+----
+inner-join (zigzag zigzag@b_idx zigzag@c_idx)
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [5]
+ ├── right fixed columns: [3] = [6.0]
+ ├── left locking: for-update
+ ├── right locking: for-update
+ ├── volatile
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── b:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      └── c:3 = 6.0 [outer=(3), constraints=(/3: [/6.0 - /6.0]; tight), fd=()-->(3)]
+
+opt expect=(GenerateInvertedIndexScans,GenerateInvertedIndexZigzagJoins)
+SELECT * from zigzag where d @> '{"a": {"b": "c"}, "f": "g"}' FOR UPDATE
+----
+inner-join (lookup zigzag)
+ ├── columns: a:1!null b:2 c:3 d:4!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── inner-join (zigzag zigzag@d_idx zigzag@d_idx)
+ │    ├── columns: a:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [7] = ['\x3761000262000112630001']
+ │    ├── right fixed columns: [7] = ['\x3766000112670001']
+ │    ├── left locking: for-update
+ │    ├── right locking: for-update
+ │    └── filters (true)
+ └── filters
+      └── d:4 @> '{"a": {"b": "c"}, "f": "g"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# ------------------------------------------------------------------------------
+# Tests with the NOWAIT lock wait policy.
+# ------------------------------------------------------------------------------
+
+opt
+SELECT * FROM t FOR UPDATE NOWAIT
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-update,nowait
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR NO KEY UPDATE NOWAIT
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-no-key-update,nowait
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR SHARE NOWAIT
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-share,nowait
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR KEY SHARE NOWAIT
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-key-share,nowait
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-share,nowait
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-no-key-update,nowait
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-update,nowait
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t FOR UPDATE OF t NOWAIT
+----
+scan t
+ ├── columns: a:1!null b:2
+ ├── locking: for-update,nowait
+ ├── volatile
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT 1 FROM t FOR UPDATE OF t NOWAIT
+----
+project
+ ├── columns: "?column?":5!null
+ ├── volatile
+ ├── fd: ()-->(5)
+ ├── scan t
+ │    ├── locking: for-update,nowait
+ │    └── volatile
+ └── projections
+      └── 1 [as="?column?":5]
