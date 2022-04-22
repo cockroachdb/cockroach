@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalhelper"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -3698,7 +3699,8 @@ type EvalContext struct {
 	PreparedStatementState PreparedStatementState
 
 	// The transaction in which the statement is executing.
-	Txn *kv.Txn
+	EvalCtxTxn interface{}
+
 	// A handle to the database.
 	DB *kv.DB
 
@@ -3763,7 +3765,7 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) EvalContext {
 	ctx := EvalContext{
 		Codec:            keys.SystemSQLCodec,
-		Txn:              &kv.Txn{},
+		EvalCtxTxn:       &kv.Txn{},
 		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 		Settings:         st,
 		NodeID:           base.TestingIDContainer,
@@ -3863,7 +3865,7 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 // GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
-	ts := ctx.Txn.CommitTimestamp()
+	ts := evalhelper.EvalCtxTxnToKVTxn(ctx.EvalCtxTxn).CommitTimestamp()
 	if ts.IsEmpty() {
 		panic(errors.AssertionFailedf("zero cluster timestamp in txn"))
 	}
@@ -4051,6 +4053,10 @@ func (ctx *EvalContext) GetDateStyle() pgdate.DateStyle {
 // Ctx returns the session's context.
 func (ctx *EvalContext) Ctx() context.Context {
 	return ctx.Context
+}
+
+func (ctx *EvalContext) SetTxn(txn interface{}) {
+	ctx.EvalCtxTxn = txn
 }
 
 // Eval implements the TypedExpr interface.

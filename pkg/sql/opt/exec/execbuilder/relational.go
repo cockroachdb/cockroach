@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalhelper"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -162,7 +163,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		if !b.evalCtx.Settings.Version.IsActive(
 			b.evalCtx.Ctx(), clusterversion.DisableSystemConfigGossipTrigger,
 		) {
-			if err := b.evalCtx.Txn.DeprecatedSetSystemConfigTrigger(b.evalCtx.Codec.ForSystemTenant()); err != nil {
+			if err := evalhelper.EvalCtxTxnToKVTxn(b.evalCtx.EvalCtxTxn).DeprecatedSetSystemConfigTrigger(b.evalCtx.Codec.ForSystemTenant()); err != nil {
 				return execPlan{}, errors.WithSecondaryError(
 					unimplemented.NewWithIssuef(26508,
 						"the first schema change statement in a transaction must precede any writes"),

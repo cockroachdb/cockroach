@@ -717,7 +717,7 @@ func (sc *SchemaChanger) validateConstraints(
 				// If the constraint is a check constraint that fails validation, we
 				// need a semaContext set up that can resolve types in order to pretty
 				// print the check expression back to the user.
-				evalCtx.Txn = txn
+				evalCtx.SetTxn(txn)
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
 				collection := evalCtx.Descs
 				resolver := descs.NewDistSQLTypeResolver(collection, txn)
