@@ -5672,6 +5672,9 @@ true
 statement error st_minimumboundingcircle\(\): value out of range: overflow
 select st_minimumboundingcircle(st_makepoint(((-0.27013513189303495):::FLOAT8::FLOAT8 // 5e-324:::FLOAT8::FLOAT8)::FLOAT8::FLOAT8, (-0.4968052087960828):::FLOAT8::FLOAT8)::GEOMETRY::GEOMETRY)::GEOMETRY
 
+statement error st_minimumboundingcircle\(\): value out of range: overflow
+select st_minimumboundingcircle(st_makepoint(((-0.27013513189303495):::FLOAT8::FLOAT8 // 5e-324:::FLOAT8::FLOAT8)::FLOAT8::FLOAT8, (-0.4968052087960828):::FLOAT8::FLOAT8)::GEOMETRY::GEOMETRY, 10)::GEOMETRY
+
 subtest st_unaryunion
 
 query T
