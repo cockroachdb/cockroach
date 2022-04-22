@@ -316,7 +316,7 @@ func TestGeoBuiltinsCoordsMinMax(t *testing.T) {
 		testcase := toPin
 
 		t.Run(testcase.Title, func(t *testing.T) {
-			t.Parallel()
+			t.Parallel() // SAFE FOR TESTING
 
 			overload := testcase.Builtin
 			datums := tree.Datums{testcase.Arg}
