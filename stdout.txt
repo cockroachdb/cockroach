@@ -1,0 +1,21 @@
+local: stopping and waiting.
+local: wiping
+13:35:14 local.go:80: Deleting local cluster local
+13:35:14 roachprod.go:1117: OK
+13:35:15 roachprod.go:1240: Creating cluster local with 3 nodes
+13:35:15 cluster_synced.go:1212: [31mWARNING: Source file is a symlink.[0m
+13:35:15 cluster_synced.go:1213: [31mWARNING: Remote file will inherit the target permissions '-rwxr-xr-x'.[0m
+13:35:15 cluster_synced.go:1228: local: putting ./cockroach cockroach
+13:35:15 cockroach.go:166: local: starting nodes
+13:35:15 cockroach.go:204: local: initializing cluster
+13:35:15 cockroach.go:211: warning: --url specifies user/password, but command "init" does not accept user/password details - details ignored
+Cluster successfully initialized
+13:35:15 cockroach.go:218: local: setting cluster settings
+13:35:16 cockroach.go:224: SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+crdb_internal.force_retry
+count
+44
+PASS
