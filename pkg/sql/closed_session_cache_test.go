@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -40,15 +42,24 @@ func TestSessionCacheBasic(t *testing.T) {
 
 	datadriven.Walk(t, testutils.TestDataPath(t, "closed_session_cache"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			ctx := context.Background()
 			switch d.Cmd {
 			case "init":
 				var capacity, timeToLive int
 				d.ScanArgs(t, "capacity", &capacity)
 				d.ScanArgs(t, "timeToLive", &timeToLive)
 
-				ctx := context.Background()
 				st := &cluster.Settings{}
-				cache = NewClosedSessionCache(st, time.Now)
+				monitor := mon.NewUnlimitedMonitor(
+					ctx,
+					"test",
+					mon.MemoryResource,
+					nil, /* currCount */
+					nil, /* maxHist */
+					math.MaxInt64,
+					st,
+				)
+				cache = NewClosedSessionCache(st, monitor, time.Now)
 
 				ClosedSessionCacheCapacity.Override(ctx, &st.SV, int64(capacity))
 				ClosedSessionCacheTimeToLive.Override(ctx, &st.SV, int64(timeToLive))
@@ -62,7 +73,8 @@ func TestSessionCacheBasic(t *testing.T) {
 
 				session := serverpb.Session{}
 				sessionID := ClusterWideID{id}
-				cache.Add(sessionID, session)
+				err = cache.add(ctx, sessionID, session)
+				require.NoError(t, err)
 
 				return fmt.Sprintf("cache_size: %d", cache.size())
 			case "addSessionBatch":
@@ -79,7 +91,8 @@ func TestSessionCacheBasic(t *testing.T) {
 					cache.timeSrc = addSeconds(cache.timeSrc, seconds)
 					session := serverpb.Session{}
 					sessionID := ClusterWideID{id}
-					cache.Add(sessionID, session)
+					err := cache.add(ctx, sessionID, session)
+					require.NoError(t, err)
 					id = id.Add(1)
 				}
 

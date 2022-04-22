@@ -287,7 +287,9 @@ CREATE TABLE crdb_internal.cluster_sessions (
    oldest_query_start TIMESTAMP NULL,
    kv_txn STRING NULL,
    alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
 )  CREATE TABLE crdb_internal.cluster_sessions (
    node_id INT8 NOT NULL,
    session_id STRING NULL,
@@ -300,7 +302,9 @@ CREATE TABLE crdb_internal.cluster_sessions (
    oldest_query_start TIMESTAMP NULL,
    kv_txn STRING NULL,
    alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_settings (
    variable STRING NOT NULL,
@@ -906,7 +910,9 @@ CREATE TABLE crdb_internal.node_sessions (
    oldest_query_start TIMESTAMP NULL,
    kv_txn STRING NULL,
    alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
 )  CREATE TABLE crdb_internal.node_sessions (
    node_id INT8 NOT NULL,
    session_id STRING NULL,
@@ -919,7 +925,9 @@ CREATE TABLE crdb_internal.node_sessions (
    oldest_query_start TIMESTAMP NULL,
    kv_txn STRING NULL,
    alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,

@@ -1178,6 +1178,7 @@ type ExecutorConfig struct {
 	RegionsServer      serverpb.RegionsServer
 	MetricsRecorder    nodeStatusGenerator
 	SessionRegistry    *SessionRegistry
+	ClosedSessionCache *ClosedSessionCache
 	SQLLiveness        sqlliveness.Liveness
 	JobRegistry        *jobs.Registry
 	VirtualSchemas     *VirtualSchemaHolder
@@ -2032,6 +2033,11 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	r.Lock()
 	defer r.Unlock()
 
+	return r.SerializeAllLocked()
+}
+
+// SerializeAllLocked is like SerializeAll but assumes SessionRegistry's mutex is locked.
+func (r *SessionRegistry) SerializeAllLocked() []serverpb.Session {
 	response := make([]serverpb.Session, 0, len(r.sessions))
 
 	for _, s := range r.sessions {

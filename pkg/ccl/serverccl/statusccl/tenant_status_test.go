@@ -806,7 +806,8 @@ WHERE
 
 func selectClusterSessionIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
 	var sessionIDs []string
-	rows := conn.QueryStr(t, "SELECT session_id FROM crdb_internal.cluster_sessions")
+	rows := conn.QueryStr(t,
+		"SELECT session_id FROM crdb_internal.cluster_sessions WHERE status = 'ACTIVE' OR status = 'IDLE'")
 	for _, row := range rows {
 		sessionIDs = append(sessionIDs, row[0])
 	}
@@ -822,7 +823,7 @@ func testTenantStatusCancelSession(t *testing.T, helper *tenantTestHelper) {
 	httpPod1 := helper.testCluster().tenantAdminHTTPClient(t, 1)
 	defer httpPod1.Close()
 	listSessionsResp := serverpb.ListSessionsResponse{}
-	httpPod1.GetJSON("/_status/sessions", &listSessionsResp)
+	httpPod1.GetJSON("/_status/sessions?exclude_closed_sessions=true", &listSessionsResp)
 	var session serverpb.Session
 	for _, s := range listSessionsResp.Sessions {
 		if s.LastActiveQuery == "SELECT 1" {

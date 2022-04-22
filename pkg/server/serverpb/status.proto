@@ -907,6 +907,9 @@ message ListSessionsRequest {
   // The caller is responsible to normalize the username
   // (= case fold and perform unicode NFC normalization).
   string username = 1;
+  // Boolean to exclude closed sessions; if unspecified, defaults
+  // to false and closed sessions are included in the response.
+  bool exclude_closed_sessions = 2;
 }
 
 // Session represents one SQL session.
@@ -944,6 +947,17 @@ message Session {
   // The SQL statement fingerprint of the last query executed on this session,
   // compatible with StatementStatisticsKey.
   string last_active_query_no_constants = 13;
+  // Enum for sessions status.
+  enum Status {
+    ACTIVE = 0;
+    CLOSED = 1;
+    IDLE = 2;
+  }
+  // The session's status.
+  Status status = 14;
+  // Timestamp of session's end.
+  google.protobuf.Timestamp end = 15
+      [ (gogoproto.nullable) = true, (gogoproto.stdtime) = true ];
 }
 
 // An error wrapper object for ListSessionsResponse.

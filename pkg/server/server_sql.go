@@ -135,6 +135,7 @@ type SQLServer struct {
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
+	closedSessionCache     *sql.ClosedSessionCache
 	jobRegistry            *jobs.Registry
 	startupMigrationsMgr   *startupmigrations.Manager
 	statsRefresher         *stats.Refresher
@@ -272,6 +273,9 @@ type sqlServerArgs struct {
 
 	// Used for SHOW/CANCEL QUERIE(S)/SESSION(S).
 	sessionRegistry *sql.SessionRegistry
+
+	// Used to store closed sessions.
+	closedSessionCache *sql.ClosedSessionCache
 
 	// Used to track the DistSQL flows scheduled on this node but initiated on
 	// behalf of other nodes.
@@ -728,6 +732,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SQLStatusServer:         cfg.sqlStatusServer,
 		RegionsServer:           cfg.regionsServer,
 		SessionRegistry:         cfg.sessionRegistry,
+		ClosedSessionCache:      cfg.closedSessionCache,
 		ContentionRegistry:      contentionRegistry,
 		SQLLiveness:             cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
@@ -1061,6 +1066,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		tracingService:                 tracingService,
 		tenantConnect:                  cfg.tenantConnect,
 		sessionRegistry:                cfg.sessionRegistry,
+		closedSessionCache:             cfg.closedSessionCache,
 		jobRegistry:                    jobRegistry,
 		statsRefresher:                 statsRefresher,
 		temporaryObjectCleaner:         temporaryObjectCleaner,
