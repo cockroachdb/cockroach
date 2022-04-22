@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -431,6 +432,11 @@ func makeStmtEnvCollector(ctx context.Context, ie *InternalExecutor) stmtEnvColl
 	return stmtEnvCollector{ctx: ctx, ie: ie}
 }
 
+// explainBundleUserSessionsDataOverride is an InternalExecutorOverride which
+// overrides the users to the RootUser.
+var explainBundleUserSessionDataOverride = sessiondata.InternalExecutorOverride{
+	User: security.MakeSQLUsernameFromPreNormalizedString(security.RootUser)}
+
 // environmentQuery is a helper to run a query that returns a single string
 // value.
 func (c *stmtEnvCollector) query(query string) (string, error) {
@@ -438,7 +444,7 @@ func (c *stmtEnvCollector) query(query string) (string, error) {
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
-		sessiondata.NoSessionDataOverride,
+		explainBundleUserSessionDataOverride,
 		query,
 	)
 	if err != nil {
@@ -574,7 +580,7 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer) error {
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
-		sessiondata.NoSessionDataOverride,
+		explainBundleUserSessionDataOverride,
 		"SELECT variable, value, description FROM [ SHOW ALL CLUSTER SETTINGS ]",
 	)
 	if err != nil {
