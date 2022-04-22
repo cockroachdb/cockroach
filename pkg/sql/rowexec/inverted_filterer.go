@@ -127,7 +127,7 @@ func newInvertedFilterer(
 	}
 
 	if spec.PreFiltererSpec != nil {
-		semaCtx := flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
+		semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
 		var exprHelper execinfrapb.ExprHelper
 		colTypes := []*types.T{spec.PreFiltererSpec.Type}
 		if err := exprHelper.Init(spec.PreFiltererSpec.Expression, colTypes, semaCtx, ifr.EvalCtx); err != nil {

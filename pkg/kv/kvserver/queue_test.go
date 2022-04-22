@@ -768,7 +768,7 @@ func (*testPurgatoryError) Error() string {
 	return "test purgatory error"
 }
 
-func (*testPurgatoryError) purgatoryErrorMarker() {
+func (*testPurgatoryError) PurgatoryErrorMarker() {
 }
 
 // TestBaseQueuePurgatory verifies that if error is set on the test

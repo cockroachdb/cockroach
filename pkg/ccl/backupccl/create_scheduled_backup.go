@@ -458,7 +458,7 @@ func doCreateBackupSchedules(
 		inc.Pause()
 		inc.SetScheduleStatus("Waiting for initial backup to complete")
 
-		if err := inc.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
+		if err := inc.Create(ctx, ex, p.Txn()); err != nil {
 			return err
 		}
 		if err := emitSchedule(inc, backupNode, destinations, nil, /* incrementalFrom */
@@ -491,7 +491,7 @@ func doCreateBackupSchedules(
 	}
 
 	// Create the schedule (we need its ID to link dependent schedules below).
-	if err := full.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
+	if err := full.Create(ctx, ex, p.Txn()); err != nil {
 		return err
 	}
 
@@ -499,12 +499,12 @@ func doCreateBackupSchedules(
 	// we update both the schedules with the ID of the other "dependent" schedule.
 	if incRecurrence != nil {
 		if err := setDependentSchedule(ctx, ex, fullScheduledBackupArgs, full, inc.ScheduleID(),
-			p.ExtendedEvalContext().Txn); err != nil {
+			p.Txn()); err != nil {
 			return errors.Wrap(err,
 				"failed to update full schedule with dependent incremental schedule id")
 		}
 		if err := setDependentSchedule(ctx, ex, incScheduledBackupArgs, inc, full.ScheduleID(),
-			p.ExtendedEvalContext().Txn); err != nil {
+			p.Txn()); err != nil {
 			return errors.Wrap(err,
 				"failed to update incremental schedule with dependent full schedule id")
 		}
@@ -664,7 +664,7 @@ func checkScheduleAlreadyExists(
 ) (bool, error) {
 
 	row, err := p.ExecCfg().InternalExecutor.QueryRowEx(ctx, "check-sched",
-		p.ExtendedEvalContext().Txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		p.Txn(), sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf("SELECT count(schedule_name) FROM %s WHERE schedule_name = '%s'",
 			scheduledjobs.ProdJobSchedulerEnv.ScheduledJobsTableName(), scheduleLabel))
 
@@ -677,12 +677,12 @@ func checkScheduleAlreadyExists(
 // dryRunBackup executes backup in dry-run mode: we simply execute backup
 // under transaction savepoint, and then rollback to that save point.
 func dryRunBackup(ctx context.Context, p sql.PlanHookState, backupNode *tree.Backup) error {
-	sp, err := p.ExtendedEvalContext().Txn.CreateSavepoint(ctx)
+	sp, err := p.Txn().CreateSavepoint(ctx)
 	if err != nil {
 		return err
 	}
 	err = dryRunInvokeBackup(ctx, p, backupNode)
-	if rollbackErr := p.ExtendedEvalContext().Txn.RollbackToSavepoint(ctx, sp); rollbackErr != nil {
+	if rollbackErr := p.Txn().RollbackToSavepoint(ctx, sp); rollbackErr != nil {
 		return rollbackErr
 	}
 	return err

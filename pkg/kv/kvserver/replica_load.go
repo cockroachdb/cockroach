@@ -10,57 +10,60 @@
 
 package kvserver
 
-import "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 // ReplicaLoad tracks a sliding window of throughput on a replica. By default,
 // there are 6, 5 minute sliding windows.
 type ReplicaLoad struct {
-	batchRequests *replicaStats
-	requests      *replicaStats
-	writeKeys     *replicaStats
-	readKeys      *replicaStats
-	writeBytes    *replicaStats
-	readBytes     *replicaStats
+	batchRequests *replicastats.ReplicaStats
+	requests      *replicastats.ReplicaStats
+	writeKeys     *replicastats.ReplicaStats
+	readKeys      *replicastats.ReplicaStats
+	writeBytes    *replicastats.ReplicaStats
+	readBytes     *replicastats.ReplicaStats
 }
 
-func newReplicaLoad(clock *hlc.Clock, getNodeLocality localityOracle) *ReplicaLoad {
+func newReplicaLoad(clock *hlc.Clock, getNodeLocality replicastats.LocalityOracle) *ReplicaLoad {
 	return &ReplicaLoad{
-		batchRequests: newReplicaStats(clock, getNodeLocality),
-		requests:      newReplicaStats(clock, getNodeLocality),
-		writeKeys:     newReplicaStats(clock, getNodeLocality),
-		readKeys:      newReplicaStats(clock, getNodeLocality),
-		writeBytes:    newReplicaStats(clock, getNodeLocality),
-		readBytes:     newReplicaStats(clock, getNodeLocality),
+		batchRequests: replicastats.NewReplicaStats(clock, getNodeLocality),
+		requests:      replicastats.NewReplicaStats(clock, getNodeLocality),
+		writeKeys:     replicastats.NewReplicaStats(clock, getNodeLocality),
+		readKeys:      replicastats.NewReplicaStats(clock, getNodeLocality),
+		writeBytes:    replicastats.NewReplicaStats(clock, getNodeLocality),
+		readBytes:     replicastats.NewReplicaStats(clock, getNodeLocality),
 	}
 }
 
 // split will distribute the load in the calling struct, evenly between itself
 // and other.
 func (rl *ReplicaLoad) split(other *ReplicaLoad) {
-	rl.batchRequests.splitRequestCounts(other.batchRequests)
-	rl.requests.splitRequestCounts(other.requests)
-	rl.writeKeys.splitRequestCounts(other.writeKeys)
-	rl.readKeys.splitRequestCounts(other.readKeys)
-	rl.writeBytes.splitRequestCounts(other.writeBytes)
-	rl.readBytes.splitRequestCounts(other.readBytes)
+	rl.batchRequests.SplitRequestCounts(other.batchRequests)
+	rl.requests.SplitRequestCounts(other.requests)
+	rl.writeKeys.SplitRequestCounts(other.writeKeys)
+	rl.readKeys.SplitRequestCounts(other.readKeys)
+	rl.writeBytes.SplitRequestCounts(other.writeBytes)
+	rl.readBytes.SplitRequestCounts(other.readBytes)
 }
 
 // merge will combine the tracked load in other, into the calling struct.
 func (rl *ReplicaLoad) merge(other *ReplicaLoad) {
-	rl.batchRequests.mergeRequestCounts(other.batchRequests)
-	rl.requests.mergeRequestCounts(other.requests)
-	rl.writeKeys.mergeRequestCounts(other.writeKeys)
-	rl.readKeys.mergeRequestCounts(other.readKeys)
-	rl.writeBytes.mergeRequestCounts(other.writeBytes)
-	rl.readBytes.mergeRequestCounts(other.readBytes)
+	rl.batchRequests.MergeRequestCounts(other.batchRequests)
+	rl.requests.MergeRequestCounts(other.requests)
+	rl.writeKeys.MergeRequestCounts(other.writeKeys)
+	rl.readKeys.MergeRequestCounts(other.readKeys)
+	rl.writeBytes.MergeRequestCounts(other.writeBytes)
+	rl.readBytes.MergeRequestCounts(other.readBytes)
 }
 
 // reset will clear all recorded history.
 func (rl *ReplicaLoad) reset() {
-	rl.batchRequests.resetRequestCounts()
-	rl.requests.resetRequestCounts()
-	rl.writeKeys.resetRequestCounts()
-	rl.readKeys.resetRequestCounts()
-	rl.writeBytes.resetRequestCounts()
-	rl.readBytes.resetRequestCounts()
+	rl.batchRequests.ResetRequestCounts()
+	rl.requests.ResetRequestCounts()
+	rl.writeKeys.ResetRequestCounts()
+	rl.readKeys.ResetRequestCounts()
+	rl.writeBytes.ResetRequestCounts()
+	rl.readBytes.ResetRequestCounts()
 }

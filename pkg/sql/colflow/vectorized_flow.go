@@ -212,7 +212,7 @@ func (f *vectorizedFlow) Setup(
 		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
-		flowCtx.NewTypeResolver(flowCtx.EvalCtx.Txn),
+		flowCtx.NewTypeResolver(flowCtx.Txn),
 		f.FlowBase.GetAdmissionInfo(),
 	)
 	if f.testingKnobs.onSetupFlow != nil {
@@ -1123,7 +1123,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 			numOldMonitors := len(s.monitorRegistry.GetMonitors())
 			if args.ExprHelper.SemaCtx == nil {
-				args.ExprHelper.SemaCtx = flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
+				args.ExprHelper.SemaCtx = flowCtx.NewSemaContext(flowCtx.Txn)
 			}
 			var result *colexecargs.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)

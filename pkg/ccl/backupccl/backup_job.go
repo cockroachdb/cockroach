@@ -407,7 +407,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if details.URI == "" {
 		initialDetails := details
 		backupDetails, m, err := getBackupDetailAndManifest(
-			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, details, p.User(),
+			ctx, p.ExecCfg(), p.Txn(), details, p.User(),
 		)
 		if err != nil {
 			return err

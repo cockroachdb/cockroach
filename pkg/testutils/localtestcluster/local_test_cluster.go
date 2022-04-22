@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -191,14 +192,14 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		Settings:                cfg.Settings,
 		HistogramWindowInterval: cfg.HistogramWindowInterval,
 	})
-	kvserver.TimeUntilStoreDead.Override(ctx, &cfg.Settings.SV, kvserver.TestTimeUntilStoreDead)
-	cfg.StorePool = kvserver.NewStorePool(
+	storepool.TimeUntilStoreDead.Override(ctx, &cfg.Settings.SV, storepool.TestTimeUntilStoreDead)
+	cfg.StorePool = storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,
 		cfg.Gossip,
 		cfg.Clock,
 		cfg.NodeLiveness.GetNodeCount,
-		kvserver.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
+		storepool.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
 		/* deterministic */ false,
 	)
 	cfg.Transport = transport

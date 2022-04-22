@@ -33,6 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
@@ -42,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -704,9 +708,9 @@ type Store struct {
 	Ident           *roachpb.StoreIdent // pointer to catch access before Start() is called
 	cfg             StoreConfig
 	db              *kv.DB
-	engine          storage.Engine // The underlying key-value store
-	tsCache         tscache.Cache  // Most recent timestamps for keys / key ranges
-	allocator       Allocator      // Makes allocation decisions
+	engine          storage.Engine          // The underlying key-value store
+	tsCache         tscache.Cache           // Most recent timestamps for keys / key ranges
+	allocator       allocatorimpl.Allocator // Makes allocation decisions
 	replRankings    *replicaRankings
 	storeRebalancer *StoreRebalancer
 	rangeIDAlloc    *idalloc.Allocator // Range ID allocator
@@ -967,7 +971,7 @@ type StoreConfig struct {
 	DB                   *kv.DB
 	Gossip               *gossip.Gossip
 	NodeLiveness         *liveness.NodeLiveness
-	StorePool            *StorePool
+	StorePool            *storepool.StorePool
 	Transport            *RaftTransport
 	NodeDialer           *nodedialer.Dialer
 	RPCContext           *rpc.Context
@@ -1152,18 +1156,15 @@ func NewStore(
 		ctSender: cfg.ClosedTimestampSender,
 	}
 	if cfg.RPCContext != nil {
-		s.allocator = MakeAllocator(
-			cfg.StorePool,
-			cfg.RPCContext.RemoteClocks.Latency,
-			cfg.TestingKnobs.AllocatorKnobs,
-			s.metrics,
-		)
+		s.allocator = allocatorimpl.MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency, cfg.TestingKnobs.AllocatorKnobs)
 	} else {
-		s.allocator = MakeAllocator(
-			cfg.StorePool, func(string) (time.Duration, bool) {
-				return 0, false
-			}, cfg.TestingKnobs.AllocatorKnobs, s.metrics,
-		)
+		s.allocator = allocatorimpl.MakeAllocator(cfg.StorePool, func(string) (time.Duration, bool) {
+			return 0, false
+		}, cfg.TestingKnobs.AllocatorKnobs)
+	}
+	if s.metrics != nil {
+		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedLeaseTransferMetrics)
+		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedReplicaRebalanceMetrics)
 	}
 	s.replRankings = newReplicaRankings()
 
@@ -1510,11 +1511,11 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						r,
 						desc,
 						conf,
-						transferLeaseOptions{excludeLeaseRepl: true},
+						allocator.TransferLeaseOptions{ExcludeLeaseRepl: true},
 					)
 					duration := timeutil.Since(start).Microseconds()
 
-					if transferStatus != transferOK {
+					if transferStatus != allocator.TransferOK {
 						const failFormat = "failed to transfer lease %s for range %s when draining: %v"
 						const durationFailFormat = "blocked for %d microseconds on transfer attempt"
 
@@ -2946,12 +2947,12 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		// starts? We can't easily have a countdown as its value changes like for
 		// leases/replicas.
 		var qps float64
-		if avgQPS, dur := r.leaseholderStats.averageRatePerSecond(); dur >= MinStatsDuration {
+		if avgQPS, dur := r.leaseholderStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			qps = avgQPS
 			totalQueriesPerSecond += avgQPS
 			// TODO(a-robinson): Calculate percentiles for qps? Get rid of other percentiles?
 		}
-		if wps, dur := r.writeStats.averageRatePerSecond(); dur >= MinStatsDuration {
+		if wps, dur := r.writeStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			totalWritesPerSecond += wps
 			writesPerReplica = append(writesPerReplica, wps)
 		}
@@ -3142,16 +3143,16 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		behindCount += metrics.BehindCount
-		if qps, dur := rep.leaseholderStats.averageRatePerSecond(); dur >= MinStatsDuration {
+		if qps, dur := rep.leaseholderStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageQueriesPerSecond += qps
 		}
-		if rqps, dur := rep.loadStats.requests.averageRatePerSecond(); dur >= MinStatsDuration {
+		if rqps, dur := rep.loadStats.requests.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageRequestsPerSecond += rqps
 		}
-		if wps, dur := rep.writeStats.averageRatePerSecond(); dur >= MinStatsDuration {
+		if wps, dur := rep.writeStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageWritesPerSecond += wps
 		}
-		if rps, dur := rep.loadStats.readKeys.averageRatePerSecond(); dur >= MinStatsDuration {
+		if rps, dur := rep.loadStats.readKeys.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageReadsPerSecond += rps
 		}
 		locks += metrics.LockTableMetrics.Locks

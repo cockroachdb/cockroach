@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -108,6 +109,7 @@ type PlanHookState interface {
 	MigrationJobDeps() migration.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
+	Txn() *kv.Txn
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

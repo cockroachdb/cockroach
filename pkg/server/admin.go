@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -1936,11 +1937,11 @@ func getLivenessStatusMap(
 	nl *liveness.NodeLiveness, now time.Time, st *cluster.Settings,
 ) map[roachpb.NodeID]livenesspb.NodeLivenessStatus {
 	livenesses := nl.GetLivenesses()
-	threshold := kvserver.TimeUntilStoreDead.Get(&st.SV)
+	threshold := storepool.TimeUntilStoreDead.Get(&st.SV)
 
 	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
-		status := kvserver.LivenessStatus(liveness, now, threshold)
+		status := storepool.LivenessStatus(liveness, now, threshold)
 		statusMap[liveness.NodeID] = status
 	}
 	return statusMap

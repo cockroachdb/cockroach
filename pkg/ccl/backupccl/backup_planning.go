@@ -753,7 +753,7 @@ func backupPlanHook(
 					return sqlDescIDs
 				}(),
 			}
-			plannerTxn := p.ExtendedEvalContext().Txn
+			plannerTxn := p.Txn()
 
 			if backupStmt.Options.Detached {
 				// When running inside an explicit transaction, we simply create the job
@@ -798,7 +798,7 @@ func backupPlanHook(
 
 		// TODO(dt): delete this in 22.2.
 		backupDetails, backupManifest, err := getBackupDetailAndManifest(
-			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, initialDetails, p.User(),
+			ctx, p.ExecCfg(), p.Txn(), initialDetails, p.User(),
 		)
 		if err != nil {
 			return err
@@ -811,7 +811,7 @@ func backupPlanHook(
 
 		// We create the job record in the planner's transaction to ensure that
 		// the job record creation happens transactionally.
-		plannerTxn := p.ExtendedEvalContext().Txn
+		plannerTxn := p.Txn()
 
 		// Write backup manifest into a temporary checkpoint file.
 		// This accomplishes 2 purposes:

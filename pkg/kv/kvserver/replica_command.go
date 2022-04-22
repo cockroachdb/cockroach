@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1048,7 +1050,7 @@ func (r *Replica) changeReplicasImpl(
 	if len(swaps) > 0 {
 		desc, err = execChangeReplicasTxn(ctx, desc, reason, details, swaps, changeReplicasTxnArgs{
 			db:                                   r.store.DB(),
-			liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+			liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 			logChange:                            r.store.logChange,
 			testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 			testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1129,7 +1131,7 @@ func (r *Replica) changeReplicasImpl(
 			desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs,
 				changeReplicasTxnArgs{
 					db:                                   r.store.DB(),
-					liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+					liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 					logChange:                            r.store.logChange,
 					testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 					testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1271,7 +1273,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 		ctx, desc, kvserverpb.ReasonUnknown /* unused */, "", nil, /* iChgs */
 		changeReplicasTxnArgs{
 			db:                                   s.DB(),
-			liveAndDeadReplicas:                  s.allocator.storePool.liveAndDeadReplicas,
+			liveAndDeadReplicas:                  s.cfg.StorePool.LiveAndDeadReplicas,
 			logChange:                            s.logChange,
 			testForceJointConfig:                 s.TestingKnobs().ReplicationAlwaysUseJointConfig,
 			testAllowDangerousReplicationChanges: s.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1287,7 +1289,7 @@ func (r *Replica) TestingRemoveLearner(
 		[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
 		changeReplicasTxnArgs{
 			db:                                   r.store.DB(),
-			liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+			liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 			logChange:                            r.store.logChange,
 			testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 			testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1337,7 +1339,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 			ctx, desc, kvserverpb.ReasonAbandonedLearner, "",
 			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
 			changeReplicasTxnArgs{db: store.DB(),
-				liveAndDeadReplicas:                  store.allocator.storePool.liveAndDeadReplicas,
+				liveAndDeadReplicas:                  store.cfg.StorePool.LiveAndDeadReplicas,
 				logChange:                            store.logChange,
 				testForceJointConfig:                 store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 				testAllowDangerousReplicationChanges: store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1710,7 +1712,7 @@ func (r *Replica) initializeRaftLearners(
 		desc, err = execChangeReplicasTxn(
 			ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
 				db:                                   r.store.DB(),
-				liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+				liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 				logChange:                            r.store.logChange,
 				testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 				testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1864,7 +1866,7 @@ func (r *Replica) execReplicationChangesForVoters(
 
 	desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
 		db:                                   r.store.DB(),
-		liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+		liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 		logChange:                            r.store.logChange,
 		testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 		testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -1922,7 +1924,7 @@ func (r *Replica) tryRollbackRaftLearner(
 			[]internalReplicationChange{{target: target, typ: removeChgType}},
 			changeReplicasTxnArgs{
 				db:                                   r.store.DB(),
-				liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+				liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
 				logChange:                            r.store.logChange,
 				testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 				testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -2643,7 +2645,7 @@ func (r *Replica) sendSnapshot(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			return r.store.cfg.Transport.SendSnapshot(
 				ctx,
-				r.store.allocator.storePool,
+				r.store.cfg.StorePool,
 				req,
 				snap,
 				newBatchFn,
@@ -2955,14 +2957,14 @@ type relocationArgs struct {
 	votersToAdd, votersToRemove             []roachpb.ReplicationTarget
 	nonVotersToAdd, nonVotersToRemove       []roachpb.ReplicationTarget
 	finalVoterTargets, finalNonVoterTargets []roachpb.ReplicationTarget
-	targetType                              targetReplicaType
+	targetType                              allocatorimpl.TargetReplicaType
 }
 
 func (r *relocationArgs) targetsToAdd() []roachpb.ReplicationTarget {
 	switch r.targetType {
-	case voterTarget:
+	case allocatorimpl.VoterTarget:
 		return r.votersToAdd
-	case nonVoterTarget:
+	case allocatorimpl.NonVoterTarget:
 		return r.nonVotersToAdd
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType: %s", r.targetType))
@@ -2971,9 +2973,9 @@ func (r *relocationArgs) targetsToAdd() []roachpb.ReplicationTarget {
 
 func (r *relocationArgs) targetsToRemove() []roachpb.ReplicationTarget {
 	switch r.targetType {
-	case voterTarget:
+	case allocatorimpl.VoterTarget:
 		return r.votersToRemove
-	case nonVoterTarget:
+	case allocatorimpl.NonVoterTarget:
 		return r.nonVotersToRemove
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType: %s", r.targetType))
@@ -2982,9 +2984,9 @@ func (r *relocationArgs) targetsToRemove() []roachpb.ReplicationTarget {
 
 func (r *relocationArgs) finalRelocationTargets() []roachpb.ReplicationTarget {
 	switch r.targetType {
-	case voterTarget:
+	case allocatorimpl.VoterTarget:
 		return r.finalVoterTargets
-	case nonVoterTarget:
+	case allocatorimpl.NonVoterTarget:
 		return r.finalNonVoterTargets
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType: %s", r.targetType))
@@ -3013,8 +3015,8 @@ func (r *Replica) relocateOne(
 		return nil, nil, err
 	}
 
-	storeList, _, _ := r.store.allocator.storePool.getStoreList(storeFilterNone)
-	storeMap := storeListToMap(storeList)
+	storeList, _, _ := r.store.cfg.StorePool.GetStoreList(storepool.StoreFilterNone)
+	storeMap := storeList.ToMap()
 
 	// Compute which replica to add and/or remove, respectively. We then ask the
 	// allocator about this because we want to respect the constraints. For
@@ -3033,8 +3035,8 @@ func (r *Replica) relocateOne(
 		// lease in the end; it helps to add it early so that the lease doesn't
 		// have to move too much.
 		candidateTargets := args.targetsToAdd()
-		if args.targetType == voterTarget &&
-			storeHasReplica(args.finalRelocationTargets()[0].StoreID, candidateTargets) {
+		if args.targetType == allocatorimpl.VoterTarget &&
+			allocatorimpl.StoreHasReplica(args.finalRelocationTargets()[0].StoreID, candidateTargets) {
 			candidateTargets = []roachpb.ReplicationTarget{args.finalRelocationTargets()[0]}
 		}
 
@@ -3052,15 +3054,15 @@ func (r *Replica) relocateOne(
 			}
 			candidateDescs = append(candidateDescs, *store)
 		}
-		candidateStoreList := makeStoreList(candidateDescs)
+		candidateStoreList := storepool.MakeStoreList(candidateDescs)
 
-		additionTarget, _ = r.store.allocator.allocateTargetFromList(
+		additionTarget, _ = r.store.allocator.AllocateTargetFromList(
 			ctx,
 			candidateStoreList,
 			conf,
 			existingVoters,
 			existingNonVoters,
-			r.store.allocator.scorerOptions(ctx),
+			r.store.allocator.ScorerOptions(ctx),
 			// NB: Allow the allocator to return target stores that might be on the
 			// same node as an existing replica. This is to ensure that relocations
 			// that require "lateral" movement of replicas within a node can succeed.
@@ -3076,7 +3078,7 @@ func (r *Replica) relocateOne(
 
 		// Pretend the new replica is already there so that the removal logic below
 		// will take it into account when deciding which replica to remove.
-		if args.targetType == voterTarget {
+		if args.targetType == allocatorimpl.VoterTarget {
 			existingVoters = append(
 				existingVoters, roachpb.ReplicaDescriptor{
 					NodeID:    additionTarget.NodeID,
@@ -3123,14 +3125,14 @@ func (r *Replica) relocateOne(
 		// (s1,s2,s3,s4) which is a reasonable request; that replica set is
 		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
 		// may not want to do that due to constraints.
-		targetStore, _, err := r.store.allocator.removeTarget(
+		targetStore, _, err := r.store.allocator.RemoveTarget(
 			ctx,
 			conf,
-			r.store.allocator.storeListForTargets(args.targetsToRemove()),
+			r.store.allocator.StoreListForTargets(args.targetsToRemove()),
 			existingVoters,
 			existingNonVoters,
 			args.targetType,
-			r.store.allocator.scorerOptions(ctx),
+			r.store.allocator.ScorerOptions(ctx),
 		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(
@@ -3160,7 +3162,7 @@ func (r *Replica) relocateOne(
 			r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
 		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
 		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) || lhRemovalAllowed
-		if args.targetType == voterTarget {
+		if args.targetType == allocatorimpl.VoterTarget {
 			// If the voter being removed is about to be added as a non-voter, then we
 			// can just demote it.
 			for _, target := range args.nonVotersToAdd {
@@ -3258,7 +3260,7 @@ func getRelocationArgs(
 		),
 		finalVoterTargets:    voterTargets,
 		finalNonVoterTargets: nonVoterTargets,
-		targetType:           voterTarget,
+		targetType:           allocatorimpl.VoterTarget,
 	}
 
 	// If there are no voters to relocate, we relocate the non-voters.
@@ -3267,7 +3269,7 @@ func getRelocationArgs(
 	// relocated since relocateOne is expected to be called repeatedly until
 	// there are no more replicas to relocate.
 	if len(args.votersToAdd) == 0 && len(args.votersToRemove) == 0 {
-		args.targetType = nonVoterTarget
+		args.targetType = allocatorimpl.NonVoterTarget
 	}
 	return args
 }

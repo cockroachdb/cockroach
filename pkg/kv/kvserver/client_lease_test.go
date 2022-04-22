@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -802,7 +803,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		}
 	}
 	// We need to wait until 2 and 3 are considered to be dead.
-	timeUntilStoreDead := kvserver.TimeUntilStoreDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	timeUntilStoreDead := storepool.TimeUntilStoreDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
 	wait(timeUntilStoreDead.Nanoseconds())
 
 	checkDead := func(store *kvserver.Store, storeIdx int) error {
@@ -822,10 +823,10 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		store := tc.GetFirstStoreFromServer(t, 0)
-		sl, _, _ := store.GetStoreConfig().StorePool.GetStoreList()
-		if len(sl.Stores()) != 3 {
+		sl, _, _ := store.GetStoreConfig().StorePool.TestingGetStoreList()
+		if len(sl.TestingStores()) != 3 {
 			return errors.Errorf("expected all 3 remaining stores to be live, but only got %v",
-				sl.Stores())
+				sl.TestingStores())
 		}
 		if err := checkDead(store, 1); err != nil {
 			return err
@@ -1058,7 +1059,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	}
 	testutils.SucceedsSoon(t, allLeasesOnNonSuspectStores)
 	// Wait out the suspect time.
-	suspectDuration := kvserver.TimeAfterStoreSuspect.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	suspectDuration := storepool.TimeAfterStoreSuspect.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
 	for i := 0; i < int(math.Ceil(suspectDuration.Seconds())); i++ {
 		manualClock.Increment(time.Second.Nanoseconds())
 		heartbeat(0, 1, 2, 3)

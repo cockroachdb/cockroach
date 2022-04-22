@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "allocator",
+    srcs = [
+        "base.go",
+        "range_usage_info.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/constraint",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

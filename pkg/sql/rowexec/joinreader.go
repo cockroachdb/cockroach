@@ -410,7 +410,7 @@ func newJoinReader(
 		lookupExprTypes = append(lookupExprTypes, leftTypes...)
 		lookupExprTypes = append(lookupExprTypes, rightTypes...)
 
-		semaCtx := flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
+		semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
 		if err := jr.lookupExpr.Init(spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
 			return nil, err
 		}

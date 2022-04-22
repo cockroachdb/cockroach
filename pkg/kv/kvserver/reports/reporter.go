@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -71,7 +72,7 @@ type Reporter struct {
 	db        *kv.DB
 	liveness  *liveness.NodeLiveness
 	settings  *cluster.Settings
-	storePool *kvserver.StorePool
+	storePool *storepool.StorePool
 	executor  sqlutil.InternalExecutor
 	cfgs      config.SystemConfigProvider
 
@@ -86,7 +87,7 @@ type Reporter struct {
 func NewReporter(
 	db *kv.DB,
 	localStores *kvserver.Stores,
-	storePool *kvserver.StorePool,
+	storePool *storepool.StorePool,
 	st *cluster.Settings,
 	liveness *liveness.NodeLiveness,
 	executor sqlutil.InternalExecutor,

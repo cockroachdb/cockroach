@@ -13098,6 +13098,16 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	replicas := func(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
+		res := make([]roachpb.ReplicaDescriptor, len(storeIDs))
+		for i, storeID := range storeIDs {
+			res[i].NodeID = roachpb.NodeID(storeID)
+			res[i].StoreID = storeID
+			res[i].ReplicaID = roachpb.ReplicaID(i + 1)
+		}
+		return res
+	}
+
 	status := upToDateRaftStatus(replicas(1, 3, 5))
 	assert.Equal(t, "", splitSnapshotWarningStr(12, status))
 

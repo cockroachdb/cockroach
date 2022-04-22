@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -2760,7 +2761,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	}
 
 	// Increment the manual clock and do a write to increase the qps above zero.
-	manualClock.Increment(int64(kvserver.MinStatsDuration))
+	manualClock.Increment(int64(replicastats.MinStatsDuration))
 	pArgs := incrementArgs(key, 10)
 	if _, pErr := kv.SendWrapped(ctx, s.TestSender(), pArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -2787,7 +2788,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	if e, a := int32(1), cap.LeaseCount; e != a {
 		t.Errorf("expected cap.LeaseCount=%d, got %d", e, a)
 	}
-	if minExpected, a := 1/float64(kvserver.MinStatsDuration/time.Second), cap.WritesPerSecond; minExpected > a {
+	if minExpected, a := 1/float64(replicastats.MinStatsDuration/time.Second), cap.WritesPerSecond; minExpected > a {
 		t.Errorf("expected cap.WritesPerSecond >= %f, got %f", minExpected, a)
 	}
 	bpr2 := cap.BytesPerReplica

@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "storepool",
+    srcs = [
+        "store_pool.go",
+        "test_helpers.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/config/zonepb",
+        "//pkg/gossip",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/shuffle",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "storepool_test",
+    srcs = ["store_pool_test.go"],
+    embed = [":storepool"],
+    deps = [
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/testutils/gossiputil",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
+    ],
+)
