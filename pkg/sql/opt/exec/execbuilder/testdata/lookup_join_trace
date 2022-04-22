@@ -1,0 +1,291 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b), FAMILY (a, b, c));
+INSERT INTO abc VALUES (1, 2, 1), (2, 1, 1), (2, 2, NULL);
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (d, e), FAMILY (d, e, f));
+INSERT INTO def VALUES (2, 1, 1), (1, 1, 2), (1, 2, NULL);
+
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+statement ok
+SET tracing = on, kv; SELECT * FROM abc JOIN def ON d = c WHERE a > 1 AND e > 1; SET tracing = off
+
+# We should not be fetching /def/def_pkey/1/1 key because it fails 'e > 1'
+# filter.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
+----
+Scan /Table/107/1/{1/2-2}
+fetched: /def/def_pkey/1/2 -> <undecoded>
+
+statement ok
+CREATE TABLE metrics (
+  id       SERIAL PRIMARY KEY,
+  nullable INT,
+  name     STRING,
+  INDEX    name_index (name),
+  FAMILY (id, nullable, name)
+);
+INSERT INTO metrics (id,nullable,name) VALUES (1, NULL, 'cpu'), (2, 1, 'cpu'), (3, NULL, 'mem'), (4, 2, 'disk');
+CREATE TABLE metric_values (
+  metric_id INT8,
+  time      TIMESTAMPTZ,
+  nullable  INT,
+  value     INT8,
+  PRIMARY KEY (metric_id, time),
+  INDEX secondary (metric_id, nullable, time),
+  FAMILY (metric_id, time, nullable, value)
+);
+INSERT INTO metric_values (metric_id, time, nullable, value) VALUES
+ (1,'2020-01-01 00:00:00+00:00',NULL,0),
+ (1,'2020-01-01 00:00:01+00:00',1,1),
+ (2,'2020-01-01 00:00:00+00:00',NULL,2),
+ (2,'2020-01-01 00:00:01+00:00',2,3),
+ (2,'2020-01-01 00:01:01+00:00',-11,4),
+ (2,'2020-01-01 00:01:02+00:00',-10,5),
+ (3,'2020-01-01 00:01:00+00:00',NULL,6),
+ (3,'2020-01-01 00:01:01+00:00',3,7);
+CREATE TABLE metric_values_desc (
+  metric_id INT8,
+  time      TIMESTAMPTZ,
+  nullable  INT,
+  value     INT8,
+  PRIMARY KEY (metric_id, time DESC),
+  INDEX secondary (metric_id, nullable DESC, time DESC),
+  FAMILY (metric_id, time, nullable, value)
+);
+INSERT INTO metric_values_desc SELECT * FROM metric_values;
+
+statement ok
+ALTER TABLE metric_values INJECT STATISTICS
+'[
+ {
+   "columns": ["metric_id"],
+   "created_at": "2018-01-01 1:00:00.00000+00:00",
+   "row_count": 1000,
+   "distinct_count": 10
+ },
+ {
+   "columns": ["time"],
+   "created_at": "2018-01-01 1:30:00.00000+00:00",
+   "row_count": 1000,
+   "distinct_count": 1000
+ },
+ {
+   "columns": ["nullable"],
+   "created_at": "2018-01-01 1:30:00.00000+00:00",
+   "row_count": 1000,
+   "distinct_count": 10,
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "-10"},
+      {"num_eq": 0, "num_range": 1000, "distinct_range": 10, "upper_bound": "0"}
+    ],
+    "histo_col_type": "INT"
+ },
+ {
+    "columns": ["value"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+
+statement ok
+ALTER TABLE metrics INJECT STATISTICS
+'[
+ {
+   "columns": ["id"],
+   "created_at": "2018-01-01 1:00:00.00000+00:00",
+   "row_count": 10,
+   "distinct_count": 10
+ },
+ {
+   "columns": ["nullable"],
+   "created_at": "2018-01-01 1:30:00.00000+00:00",
+   "row_count": 10,
+   "distinct_count": 10
+ },
+ {
+   "columns": ["name"],
+   "created_at": "2018-01-01 1:30:00.00000+00:00",
+   "row_count": 10,
+   "distinct_count": 10
+ }
+]'
+
+statement ok
+SET tracing = on, kv;
+SELECT *
+FROM metric_values as v
+INNER JOIN metrics as m
+ON metric_id=id
+WHERE
+  time > '2020-01-01 00:00:00+00:00' AND
+  name='cpu'
+ORDER BY value;
+SET tracing = off;
+
+# We should not be fetching the key with '2020-01-01 00:00:00+00:00' value for
+# the 'time' column since it doesn't satisfy the filter on 'time'.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
+----
+Scan /Table/109/1/{1/2020-01-01T00:00:00.000001Z-2}, /Table/109/1/{2/2020-01-01T00:00:00.000001Z-3}
+fetched: /metric_values/metric_values_pkey/1/'2020-01-01 00:00:01+00:00'/nullable/value -> /1/1
+fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:00:01+00:00'/nullable/value -> /2/3
+fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:01:01+00:00'/nullable/value -> /-11/4
+fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:01:02+00:00'/nullable/value -> /-10/5
+
+statement ok
+SET tracing = on, kv;
+SELECT *
+FROM metric_values
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:00+00:00' AND
+  name='cpu';
+SET tracing = off;
+
+# The start boundary of the spans should exclude NULL values.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
+----
+Scan /Table/109/1/1/{!NULL-2020-01-01T00:00:00Z}, /Table/109/1/2/{!NULL-2020-01-01T00:00:00Z}
+
+statement ok
+SET tracing = on, kv;
+SELECT *
+FROM metric_values_desc
+INNER JOIN metrics
+ON metric_id=id
+WHERE
+  time < '2020-01-01 00:00:00+00:00' AND
+  name='cpu';
+SET tracing = off;
+
+# We should not be fetching two keys with '2020-01-01 00:00:00+00:00' value for
+# the 'time' column since they don't satisfy the filter on 'time'.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
+----
+Scan /Table/110/1/1/{1920-01-01T23:59:59.000000999Z-!NULL}, /Table/110/1/2/{1920-01-01T23:59:59.000000999Z-!NULL}
+
+statement ok
+SET tracing = on, kv;
+SELECT *
+FROM metric_values as v
+INNER JOIN metrics as m
+ON metric_id=id
+WHERE
+  v.nullable > 1 AND
+  name='cpu'
+ORDER BY value;
+SET tracing = off;
+
+# We should not be fetching /metric_values/secondary/1/1 key because it fails
+# 'nullable > 1' filter.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
+----
+Scan /Table/109/2/{1/2-2}, /Table/109/2/{2/2-3}
+fetched: /metric_values/secondary/2/2/'2020-01-01 00:00:01+00:00' -> <undecoded>
+Scan /Table/109/1/2/2020-01-01T00:00:01Z/0
+fetched: /metric_values/metric_values_pkey/?/?/value -> /3
+Scan /Table/108/1/2/0
+fetched: /metrics/metrics_pkey/?/nullable -> /1
+
+statement ok
+SET tracing = on, kv;
+SELECT *
+FROM metric_values as v
+INNER JOIN metrics as m
+ON metric_id=id
+WHERE
+  v.nullable < -10 AND
+  name='cpu'
+ORDER BY value;
+SET tracing = off;
+
+# We should not be fetching two keys with NULL values for the 'nullable' column
+# since they don't satisfy the filter on 'nullable'.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
+----
+Scan /Table/109/2/1/{!NULL--10}, /Table/109/2/2/{!NULL--10}
+fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00:00' -> <undecoded>
+Scan /Table/109/1/2/2020-01-01T00:01:01Z/0
+fetched: /metric_values/metric_values_pkey/?/?/value -> /4
+Scan /Table/108/1/2/0
+fetched: /metrics/metrics_pkey/?/nullable -> /1
+
+statement ok
+SET tracing = on, kv;
+SELECT *
+FROM metric_values as v
+INNER JOIN metrics as m
+ON metric_id=id
+WHERE
+  v.nullable <= -10 AND
+  name='cpu'
+ORDER BY value;
+SET tracing = off;
+
+# We should not be fetching two keys with NULL values for the 'nullable' column
+# since they don't satisfy the filter on 'nullable'.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
+----
+Scan /Table/109/2/1/{!NULL--9}, /Table/109/2/2/{!NULL--9}
+fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00:00' -> <undecoded>
+fetched: /metric_values/secondary/2/-10/'2020-01-01 00:01:02+00:00' -> <undecoded>
+Scan /Table/109/1/2/2020-01-01T00:01:01Z/0, /Table/109/1/2/2020-01-01T00:01:02Z/0
+fetched: /metric_values/metric_values_pkey/?/?/value -> /4
+fetched: /metric_values/metric_values_pkey/?/?/value -> /5
+Scan /Table/108/1/2/0
+fetched: /metrics/metrics_pkey/?/nullable -> /1
+
+statement ok
+SET tracing = on, kv;
+SELECT *
+FROM metric_values as v
+INNER JOIN metrics as m
+ON metric_id=id
+WHERE
+  v.nullable <= -10 AND
+  name='cpu'
+ORDER BY value;
+SET tracing = off;
+
+# We should not be fetching two keys with NULL values for the 'nullable' column
+# since they don't satisfy the filter on 'nullable'.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE operation = 'join reader'
+----
+Scan /Table/109/2/1/{!NULL--9}, /Table/109/2/2/{!NULL--9}
+fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00:00' -> <undecoded>
+fetched: /metric_values/secondary/2/-10/'2020-01-01 00:01:02+00:00' -> <undecoded>
+Scan /Table/109/1/2/2020-01-01T00:01:01Z/0, /Table/109/1/2/2020-01-01T00:01:02Z/0
+fetched: /metric_values/metric_values_pkey/?/?/value -> /4
+fetched: /metric_values/metric_values_pkey/?/?/value -> /5
+Scan /Table/108/1/2/0
+fetched: /metrics/metrics_pkey/?/nullable -> /1

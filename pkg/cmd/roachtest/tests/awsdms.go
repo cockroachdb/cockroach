@@ -100,7 +100,7 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal("cannot be run in local mode")
 	}
 
-	awsCfg, err := config.LoadDefaultConfig(ctx)
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithDefaultRegion("us-east-1"))
 	if err != nil {
 		t.Fatal(err)
 	}
