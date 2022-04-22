@@ -79,6 +79,8 @@ go_deps()
 # For those rules_go dependencies that are NOT handled in DEPS.bzl, we point to
 # CRDB mirrors.
 
+# Ref: https://github.com/bazelbuild/rules_go/blob/master/go/private/repositories.bzl
+
 http_archive(
     name = "platforms",
     sha256 = "079945598e4b6cc075846f7fd6a9d0857c33a7afc0de868c2ccb96405225135d",
@@ -147,6 +149,21 @@ load(
 #
 go_download_sdk(
     name = "go_sdk",
+    sdks = {
+        "darwin_amd64": ("go1.17.6.darwin-amd64.tar.gz", "874bc6f95e07697380069a394a21e05576a18d60f4ba178646e1ebed8f8b1f89"),
+        "darwin_arm64": ("go1.17.6.darwin-arm64.tar.gz", "dc54f3f4099e2be9e9c33bf926a7dc3ad64f34717142f7abcaff9ae44bc03d0c"),
+        "freebsd_386": ("go1.17.6.freebsd-386.tar.gz", "d5fbe0292fc0ae734041d54a5614712fa50337c76927df7bc749c27a543ed6a2"),
+        "freebsd_amd64": ("go1.17.6.freebsd-amd64.tar.gz", "2b759b0eb1fc25bc1da5612ac13f60c4bf4cd6f3c7e4f3fe3476f454d08de318"),
+        "linux_386": ("go1.17.6.linux-386.tar.gz", "06c50fb0d44bb03dd4ea8795f9448379c5825d2765307b51f66905084c3ba541"),
+        "linux_amd64": ("go1.17.6.linux-amd64.tar.gz", "231654bbf2dab3d86c1619ce799e77b03d96f9b50770297c8f4dff8836fc8ca2"),
+        "linux_arm64": ("go1.17.6.linux-arm64.tar.gz", "82c1a033cce9bc1b47073fd6285233133040f0378439f3c4659fe77cc534622a"),
+        "linux_armv6l": ("go1.17.6.linux-armv6l.tar.gz", "9ac723e6b41cb7c3651099a09332a8a778b69aa63a5e6baaa47caf0d818e2d6d"),
+        "linux_ppc64le": ("go1.17.6.linux-ppc64le.tar.gz", "adc35c920b8c0253d4dd001f8979e0db4c6111a60cd5e0785a8bee95dba1fcaa"),
+        "linux_s390x": ("go1.17.6.linux-s390x.tar.gz", "ccb2d4509db846be7055d1105b28154e72cd43162c4ef79c38a936a3e6f26e1d"),
+        "windows_386": ("go1.17.6.windows-386.zip", "3809c4e40482ff047200c8b1e22a43a2c9c79b53ef540668d2b00f7228f093aa"),
+        "windows_amd64": ("go1.17.6.windows-amd64.zip", "5bf8f87aec7edfc08e6bc845f1c30dba6de32b863f89ae46553ff4bbcc1d4954"),
+        "windows_arm64": ("go1.17.6.windows-arm64.zip", "c794af7c7fe32207df2c30a39cad1cca2e382c82a4e9493499fc2feab5967ca0"),
+    },
     urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/{}"],
     version = "1.17.6",
 )
@@ -182,11 +199,21 @@ go_register_toolchains(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "yarn_install")
 
 node_repositories(
+    node_repositories = {
+        "16.13.0-darwin_arm64": ("node-v16.13.0-darwin-arm64.tar.gz", "node-v16.13.0-darwin-arm64", "46d83fc0bd971db5050ef1b15afc44a6665dee40bd6c1cbaec23e1b40fa49e6d"),
+        "16.13.0-darwin_amd64": ("node-v16.13.0-darwin-x64.tar.gz", "node-v16.13.0-darwin-x64", "37e09a8cf2352f340d1204c6154058d81362fef4ec488b0197b2ce36b3f0367a"),
+        "16.13.0-linux_arm64": ("node-v16.13.0-linux-arm64.tar.xz", "node-v16.13.0-linux-arm64", "93a0d03f9f802353cb7052bc97a02cd9642b49fa985671cdc16c99936c86d7d2"),
+        "16.13.0-linux_amd64": ("node-v16.13.0-linux-x64.tar.xz", "node-v16.13.0-linux-x64", "a876ce787133149abd1696afa54b0b5bc5ce3d5ae359081d407ff776e39b7ba8"),
+        "16.13.0-windows_amd64": ("node-v16.13.0-win-x64.zip", "node-v16.13.0-win-x64", "5a39ec5d4786c2814a6c04488bebac6423c2aaa12832b24f0882456f2e4674e1"),
+    },
     node_urls = [
         "https://storage.googleapis.com/public-bazel-artifacts/js/node/v{version}/{filename}",
     ],
     node_version = "16.13.0",
     package_json = ["//pkg/ui:package.json"],
+    yarn_repositories = {
+        "1.22.11": ("yarn-v1.22.11.tar.gz", "yarn-v1.22.11", "2c320de14a6014f62d29c34fec78fdbb0bc71c9ccba48ed0668de452c1f5fe6c"),
+    },
     yarn_urls = [
         "https://storage.googleapis.com/public-bazel-artifacts/js/yarn/v{version}/{filename}",
     ],
@@ -223,6 +250,8 @@ load(
     "gazelle_dependencies",
     "go_repository",
 )
+
+# Ref: https://github.com/bazelbuild/bazel-gazelle/blob/master/deps.bzl
 
 # bazel_skylib handled above.
 
@@ -284,6 +313,7 @@ gazelle_dependencies()
 #
 # Ref: https://github.com/bazelbuild/rules_go/blob/0.19.0/go/workspace.rst#proto-dependencies
 #      https://github.com/bazelbuild/bazel-gazelle/issues/591
+#      https://github.com/protocolbuffers/protobuf/blob/main/protobuf_deps.bzl
 http_archive(
     name = "com_google_protobuf",
     sha256 = "071ccf561d127d5702910340cf038cb869aa239683544e1cca68a78ea865099e",
@@ -292,8 +322,6 @@ http_archive(
         "https://storage.googleapis.com/public-bazel-artifacts/bazel/protobuf-e809d75ecb5770fdc531081eef306b3e672bcdd2.tar.gz",
     ],
 )
-
-load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
 http_archive(
     name = "zlib",
@@ -338,6 +366,8 @@ http_archive(
     ],
 )
 
+load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
+
 protobuf_deps()
 
 #############################
@@ -360,6 +390,8 @@ c_deps()
 #
 # TODO(irfansharif): Point to an upstream SHA once maintainers pick up the
 # aforementioned PRs.
+#
+# Ref: https://github.com/bazelbuild/rules_foreign_cc/blob/main/foreign_cc/repositories.bzl
 http_archive(
     name = "rules_foreign_cc",
     sha256 = "272ac2cde4efd316c8d7c0140dee411c89da104466701ac179286ef5a89c7b58",
@@ -383,6 +415,40 @@ rules_foreign_cc_dependencies(
 #####################################
 # end rules_foreign_cc dependencies #
 #####################################
+
+################################
+# begin rules_pkg dependencies #
+################################
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+http_archive(
+    name = "rules_pkg",
+    urls = [
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_pkg-0.7.0.tar.gz",
+    ],
+    sha256 = "8a298e832762eda1830597d64fe7db58178aa84cd5926d76d5b744d6558941c2",
+)
+# Ref: https://github.com/bazelbuild/rules_pkg/blob/main/pkg/deps.bzl
+
+# bazel_skylib handled above.
+http_archive(
+    name = "rules_python",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_python-0.1.0.tar.gz"],
+    sha256 = "b6d46438523a3ec0f3cead544190ee13223a52f6a6765a29eae7b7cc24cc83a0",
+)
+http_archive(
+    name = "rules_license",
+    urls = [
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_license-0.0.1.tar.gz",
+    ],
+    sha256 = "4865059254da674e3d18ab242e21c17f7e3e8c6b1f1421fffa4c5070f82e98b5",
+)
+load("@rules_pkg//pkg:deps.bzl", "rules_pkg_dependencies")
+rules_pkg_dependencies()
+
+##############################
+# end rules_pkg dependencies #
+##############################
 
 # Load custom toolchains.
 load("//build/toolchains:REPOSITORIES.bzl", "toolchain_dependencies")
@@ -435,3 +501,6 @@ http_archive(
         "https://storage.googleapis.com/public-bazel-artifacts/java/railroad/rr-1.63-java8.zip",
     ],
 )
+
+load("//build/bazelutil:repositories.bzl", "distdir_repositories")
+distdir_repositories()

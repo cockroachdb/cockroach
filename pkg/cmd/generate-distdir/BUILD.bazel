@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "generate-distdir_lib",
+    srcs = ["main.go"],
+    data = [
+        "//:DEPS.bzl",
+        "//:WORKSPACE",
+        "//c-deps:REPOSITORIES.bzl",
+        "//c-deps:archived.bzl",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-distdir",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/build/starlarkutil",
+        "@com_github_google_skylark//syntax",
+    ],
+)
+
+go_binary(
+    name = "generate-distdir",
+    embed = [":generate-distdir_lib"],
+    visibility = ["//visibility:public"],
+)
