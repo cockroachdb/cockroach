@@ -189,16 +189,25 @@ func checkBundle(t *testing.T, text, tableName string, expectedFiles ...string) 
 		}
 		files = append(files, f.Name)
 
+		r, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Close()
+		contents, err := ioutil.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if strings.Contains(string(contents), "-- error") {
+			t.Errorf(
+				"expected no errors in %s, file contents:\n%s",
+				f.Name,
+				string(contents),
+			)
+		}
+
 		if f.Name == "schema.sql" {
-			r, err := f.Open()
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer r.Close()
-			contents, err := ioutil.ReadAll(r)
-			if err != nil {
-				t.Fatal(err)
-			}
 			if !strings.Contains(string(contents), tableName) {
 				t.Errorf(
 					"expected table name to appear in schema.sql. tableName: %s\nfile contents:\n%s",
