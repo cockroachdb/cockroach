@@ -1493,7 +1493,7 @@ func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
 	return p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
 		ctx,
 		"select-comments",
-		p.EvalContext().Txn,
+		p.Txn(),
 		`SELECT COALESCE(pc.object_id, sc.object_id) AS object_id,
               COALESCE(pc.sub_id, sc.sub_id) AS sub_id,
               COALESCE(pc.comment, sc.comment) AS comment,
@@ -2505,7 +2505,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 			if gen.Hidden {
 				continue
 			}
-			value, err := gen.Get(&p.extendedEvalCtx)
+			value, err := gen.Get(&p.extendedEvalCtx, p.Txn())
 			if err != nil {
 				return err
 			}
@@ -3160,7 +3160,7 @@ https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html`,
 		rows, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBufferedEx(
 			ctx,
 			"select-db-role-settings",
-			p.EvalContext().Txn,
+			p.Txn(),
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			`SELECT database_id, role_name, settings FROM system.public.database_role_settings`,
 		)
