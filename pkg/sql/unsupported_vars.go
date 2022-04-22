@@ -10,7 +10,10 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/settings"
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+)
 
 // DummyVars contains a list of dummy vars we do not support that
 // PostgreSQL does, but are required as an easy fix to make certain
@@ -19,7 +22,7 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 var DummyVars = map[string]sessionVar{
 	"enable_seqscan": makeDummyBooleanSessionVar(
 		"enable_seqscan",
-		func(evalCtx *extendedEvalContext) (string, error) {
+		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSeqScan), nil
 		},
 		func(m sessionDataMutator, v bool) {
@@ -29,7 +32,7 @@ var DummyVars = map[string]sessionVar{
 	),
 	"synchronous_commit": makeDummyBooleanSessionVar(
 		"synchronous_commit",
-		func(evalCtx *extendedEvalContext) (string, error) {
+		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().SynchronousCommit), nil
 		},
 		func(m sessionDataMutator, v bool) {
