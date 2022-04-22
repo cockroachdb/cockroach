@@ -36,9 +36,13 @@ interface QueryFilter {
   activeFilters: number;
   filters: Filters;
   dbNames?: string[];
+  usernames?: string[];
+  sessionStatuses?: string[];
   regions?: string[];
   nodes?: string[];
   showDB?: boolean;
+  showUsername?: boolean;
+  showSessionStatus?: boolean;
   showSqlType?: boolean;
   showScan?: boolean;
   showRegions?: boolean;
@@ -64,6 +68,8 @@ export interface Filters extends Record<string, string | boolean> {
   fullScan?: boolean;
   regions?: string;
   nodes?: string;
+  username?: string;
+  sessionStatus?: string;
 }
 
 const timeUnit = [
@@ -81,6 +87,8 @@ export const defaultFilters: Required<Filters> = {
   database: "",
   regions: "",
   nodes: "",
+  username: "",
+  sessionStatus: "",
 };
 
 // getFullFiltersObject returns Filters with every field defined as
@@ -372,6 +380,8 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     const {
       appNames,
       dbNames,
+      usernames,
+      sessionStatuses,
       regions,
       nodes,
       activeFilters,
@@ -381,6 +391,8 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       showRegions,
       showNodes,
       timeLabel,
+      showUsername,
+      showSessionStatus,
     } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
     const customStyles = {
@@ -456,6 +468,55 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           field="database"
           parent={this}
           value={databaseValue}
+        />
+      </div>
+    );
+
+    const usernameOptions = showUsername
+      ? usernames.map(username => ({
+          label: username,
+          value: username,
+          isSelected: this.isOptionSelected(username, filters.username),
+        }))
+      : [];
+    const usernameValue = usernameOptions.filter(option => {
+      return filters.username.split(",").includes(option.label);
+    });
+    const usernameFilter = (
+      <div>
+        <div className={filterLabel.margin}>Username</div>
+        <MultiSelectCheckbox
+          options={usernameOptions}
+          placeholder="All"
+          field="username"
+          parent={this}
+          value={usernameValue}
+        />
+      </div>
+    );
+
+    const sessionStatusOptions = showSessionStatus
+      ? sessionStatuses.map(sessionStatus => ({
+          label: sessionStatus,
+          value: sessionStatus,
+          isSelected: this.isOptionSelected(
+            sessionStatus,
+            filters.sessionStatus,
+          ),
+        }))
+      : [];
+    const sessionStatusValue = sessionStatusOptions.filter(option => {
+      return filters.sessionStatus.split(",").includes(option.label);
+    });
+    const sessionStatusFilter = (
+      <div>
+        <div className={filterLabel.margin}>Session Status</div>
+        <MultiSelectCheckbox
+          options={sessionStatusOptions}
+          placeholder="All"
+          field="sessionStatus"
+          parent={this}
+          value={sessionStatusValue}
         />
       </div>
     );
@@ -573,6 +634,8 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           <div className={dropdownContentWrapper}>
             {appFilter}
             {showDB ? dbFilter : ""}
+            {showUsername ? usernameFilter : ""}
+            {showSessionStatus ? sessionStatusFilter : ""}
             {showSqlType ? sqlTypeFilter : ""}
             {showRegions ? regionsFilter : ""}
             {showNodes ? nodesFilter : ""}
