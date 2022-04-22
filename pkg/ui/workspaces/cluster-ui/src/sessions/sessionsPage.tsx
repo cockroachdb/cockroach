@@ -13,6 +13,7 @@ import { isNil, merge } from "lodash";
 
 import { syncHistory } from "src/util/query";
 import {
+  getStatusString,
   makeSessionsColumns,
   SessionInfo,
   SessionsSortedTable,
@@ -104,12 +105,31 @@ export type SessionsPageProps = OwnProps & RouteComponentProps;
 
 function getSessionAppFilterOptions(sessions: SessionInfo[]): string[] {
   const uniqueAppNames = new Set(
-    sessions.map(s =>
-      s.session.application_name ? s.session.application_name : "(unset)",
-    ),
+    sessions.map(s => {
+      if (s.session.application_name.startsWith("$ internal")) {
+        return "$ internal";
+      }
+      return s.session.application_name
+        ? s.session.application_name
+        : "(unset)";
+    }),
   );
 
   return Array.from(uniqueAppNames).sort();
+}
+
+function getSessionUsernameFilterOptions(sessions: SessionInfo[]): string[] {
+  const uniqueUsernames = new Set(sessions.map(s => s.session.username));
+
+  return Array.from(uniqueUsernames).sort();
+}
+
+function getSessionStatusFilterOptions(sessions: SessionInfo[]): string[] {
+  const uniqueStatuses = new Set(
+    sessions.map(s => getStatusString(s.session.status)),
+  );
+
+  return Array.from(uniqueStatuses).sort();
 }
 
 export class SessionsPage extends React.Component<
@@ -298,6 +318,20 @@ export class SessionsPage extends React.Component<
           "seconds",
         );
         return sessionTime >= timeValue || timeValue === "empty";
+      })
+      .filter((s: SessionInfo) => {
+        if (filters.username && filters.username != "All") {
+          const usernames = filters.username.split(",");
+          return usernames.includes(s.session.username);
+        }
+        return true;
+      })
+      .filter((s: SessionInfo) => {
+        if (filters.sessionStatus && filters.sessionStatus != "All") {
+          const statuses = filters.sessionStatus.split(",");
+          return statuses.includes(getStatusString(s.session.status));
+        }
+        return true;
       });
 
     return {
@@ -317,6 +351,8 @@ export class SessionsPage extends React.Component<
     } = this.getFilteredSessionsData();
 
     const appNames = getSessionAppFilterOptions(sessionsData);
+    const usernames = getSessionUsernameFilterOptions(sessionsData);
+    const sessionStatuses = getSessionStatusFilterOptions(sessionsData);
     const columns = makeSessionsColumns(
       "session",
       this.terminateSessionRef,
@@ -354,6 +390,10 @@ export class SessionsPage extends React.Component<
           <Filter
             onSubmitFilters={this.onSubmitFilters}
             appNames={appNames}
+            usernames={usernames}
+            showUsername={true}
+            showSessionStatus={true}
+            sessionStatuses={sessionStatuses}
             activeFilters={activeFilters}
             filters={filters}
             timeLabel={timeLabel}
@@ -399,7 +439,7 @@ export class SessionsPage extends React.Component<
         <Pagination
           pageSize={pagination.pageSize}
           current={pagination.current}
-          total={sessionsData.length}
+          total={sessionsToDisplay.length}
           onChange={this.onChangePage}
         />
       </>

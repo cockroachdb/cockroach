@@ -16,7 +16,11 @@ import { Loading } from "../loading";
 import _ from "lodash";
 import { Link, RouteComponentProps } from "react-router-dom";
 
-import { SessionInfo } from "./sessionsTable";
+import {
+  getStatusClassname,
+  getStatusString,
+  SessionInfo,
+} from "./sessionsTable";
 
 import { SummaryCard, SummaryCardItem } from "../summaryCard";
 import SQLActivityError from "../sqlActivity/errorComponent";
@@ -394,15 +398,9 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 value={
                   <div>
                     <CircleFilled
-                      className={cx(
-                        session.active_queries.length > 0
-                          ? "session-status-icon__active"
-                          : "session-status-icon__idle",
-                      )}
+                      className={cx(getStatusClassname(session.status))}
                     />
-                    <span>
-                      {session.active_queries.length > 0 ? "Active" : "Idle"}
-                    </span>
+                    <span>{getStatusString(session.status)}</span>
                   </div>
                 }
                 className={cx("details-item")}

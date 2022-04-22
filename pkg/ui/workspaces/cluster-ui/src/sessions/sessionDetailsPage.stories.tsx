@@ -16,6 +16,7 @@ import { SessionDetails } from "./sessionDetails";
 import {
   sessionDetailsActiveStmtPropsFixture,
   sessionDetailsActiveTxnPropsFixture,
+  sessionDetailsClosedPropsFixture,
   sessionDetailsIdlePropsFixture,
   sessionDetailsNotFound,
 } from "./sessionDetailsPage.fixture";
@@ -31,6 +32,9 @@ storiesOf("Session Details Page", module)
   ))
   .add("Session", () => (
     <SessionDetails {...sessionDetailsActiveStmtPropsFixture} />
+  ))
+  .add("Closed Session", () => (
+    <SessionDetails {...sessionDetailsClosedPropsFixture} />
   ))
   .add("Session Not Found", () => (
     <SessionDetails {...sessionDetailsNotFound} />
