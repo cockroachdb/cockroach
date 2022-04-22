@@ -18,7 +18,6 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -83,47 +82,6 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 		return invalidFlagErr(err, cliflags.ListenHTTPAddr)
 	}
 	cfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
-	return nil
-}
-
-// UpdateAddrs updates the listen and advertise port numbers with
-// those found during the call to net.Listen().
-//
-// After ValidateAddrs() the actual listen addr should be equal to the
-// one requested; only the port number can change because of
-// auto-allocation. We do check this equality here and report a
-// warning if any discrepancy is found.
-func UpdateAddrs(ctx context.Context, addr, advAddr *string, ln net.Addr) error {
-	desiredHost, _, err := net.SplitHostPort(*addr)
-	if err != nil {
-		return err
-	}
-
-	// Update the listen port number and check the actual listen addr is
-	// the one requested.
-	lnAddr := ln.String()
-	lnHost, lnPort, err := net.SplitHostPort(lnAddr)
-	if err != nil {
-		return err
-	}
-	requestedAll := (desiredHost == "" || desiredHost == "0.0.0.0" || desiredHost == "::")
-	listenedAll := (lnHost == "" || lnHost == "0.0.0.0" || lnHost == "::")
-	if (requestedAll && !listenedAll) || (!requestedAll && desiredHost != lnHost) {
-		log.Warningf(ctx, "requested to listen on %q, actually listening on %q", desiredHost, lnHost)
-	}
-	*addr = net.JoinHostPort(lnHost, lnPort)
-
-	// Update the advertised port number if it wasn't set to start
-	// with. We don't touch the advertised host, as this may have
-	// nothing to do with the listen address.
-	advHost, advPort, err := net.SplitHostPort(*advAddr)
-	if err != nil {
-		return err
-	}
-	if advPort == "" || advPort == "0" {
-		advPort = lnPort
-	}
-	*advAddr = net.JoinHostPort(advHost, advPort)
 	return nil
 }
 
