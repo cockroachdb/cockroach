@@ -60,9 +60,7 @@ go_test(
         "main_test.go",
         "mutation_test.go",
     ],
-    data = glob(["testdata/**"]) + [
-        "@com_github_cockroachdb_cockroach//c-deps:libgeos",
-    ],
+    data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":execbuilder"],
     shard_count = 16,
     deps = [

@@ -13,7 +13,7 @@ go_library(
     # autogenerating them.
     #
     # keep
-    cdeps = ["@com_github_cockroachdb_cockroach//c-deps:libproj"],
+    cdeps = ["//c-deps:libproj"],
     cgo = True,
     # keep
     clinkopts = select({

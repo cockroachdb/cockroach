@@ -179,7 +179,7 @@ go_test(
         "split_and_scatter_processor_test.go",
         "system_schema_test.go",
     ],
-    data = glob(["testdata/**"]) + ["@com_github_cockroachdb_cockroach//c-deps:libgeos"],
+    data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":backupccl"],
     shard_count = 16,
     deps = [
