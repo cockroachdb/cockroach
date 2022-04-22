@@ -1,0 +1,21 @@
+1,2c1
+< Copyright (c) 2015, Dave Cheney <dave@cheney.net>
+< All rights reserved.
+---
+> Copyright (c) 2013 The Gorilla WebSocket Authors. All rights reserved.
+7c6
+< * Redistributions of source code must retain the above copyright notice, this
+---
+>   Redistributions of source code must retain the above copyright notice, this
+10c9
+< * Redistributions in binary form must reproduce the above copyright notice,
+---
+>   Redistributions in binary form must reproduce the above copyright notice,
+14,16c13,15
+< THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+< AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+< IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+---
+> THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+> ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+> WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE

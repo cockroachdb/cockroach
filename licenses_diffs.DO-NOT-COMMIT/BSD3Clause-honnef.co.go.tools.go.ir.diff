@@ -1,0 +1,5 @@
+1c1,2
+< Copyright (c) 2018 The Go Authors. All rights reserved.
+---
+> Copyright (c) 2009 The Go Authors. All rights reserved.
+> Copyright (c) 2016 Dominik Honnef. All rights reserved.

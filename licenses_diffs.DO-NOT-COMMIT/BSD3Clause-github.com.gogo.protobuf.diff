@@ -1,0 +1,25 @@
+1c1,8
+< Copyright (c) 2018 The Go Authors. All rights reserved.
+---
+> Copyright (c) 2013, The GoGo Authors. All rights reserved.
+> 
+> Protocol Buffers for Go with Gadgets
+> 
+> Go support for Protocol Buffers - Google's data interchange format
+> 
+> Copyright 2010 The Go Authors.  All rights reserved.
+> https://github.com/golang/protobuf
+7c14
+<    * Redistributions of source code must retain the above copyright
+---
+>     * Redistributions of source code must retain the above copyright
+9c16
+<    * Redistributions in binary form must reproduce the above
+---
+>     * Redistributions in binary form must reproduce the above
+13c20
+<    * Neither the name of Google Inc. nor the names of its
+---
+>     * Neither the name of Google Inc. nor the names of its
+27a35
+> 

@@ -1,0 +1,69 @@
+1c1,12
+< Copyright (c) 2018 The Go Authors. All rights reserved.
+---
+> PACKAGE
+> 
+> package goautoneg
+> import "bitbucket.org/ww/goautoneg"
+> 
+> HTTP Content-Type Autonegotiation.
+> 
+> The functions in this package implement the behaviour specified in
+> http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html
+> 
+> Copyright (c) 2011, Open Knowledge Foundation Ltd.
+> All rights reserved.
+7,15c18,29
+<    * Redistributions of source code must retain the above copyright
+< notice, this list of conditions and the following disclaimer.
+<    * Redistributions in binary form must reproduce the above
+< copyright notice, this list of conditions and the following disclaimer
+< in the documentation and/or other materials provided with the
+< distribution.
+<    * Neither the name of Google Inc. nor the names of its
+< contributors may be used to endorse or promote products derived from
+< this software without specific prior written permission.
+---
+>     Redistributions of source code must retain the above copyright
+>     notice, this list of conditions and the following disclaimer.
+> 
+>     Redistributions in binary form must reproduce the above copyright
+>     notice, this list of conditions and the following disclaimer in
+>     the documentation and/or other materials provided with the
+>     distribution.
+> 
+>     Neither the name of the Open Knowledge Foundation Ltd. nor the
+>     names of its contributors may be used to endorse or promote
+>     products derived from this software without specific prior written
+>     permission.
+21c35
+< OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+---
+> HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+27a42,67
+> 
+> 
+> FUNCTIONS
+> 
+> func Negotiate(header string, alternatives []string) (content_type string)
+> Negotiate the most appropriate content_type given the accept header
+> and a list of alternatives.
+> 
+> func ParseAccept(header string) (accept []Accept)
+> Parse an Accept Header string returning a sorted list
+> of clauses
+> 
+> 
+> TYPES
+> 
+> type Accept struct {
+>     Type, SubType string
+>     Q             float32
+>     Params        map[string]string
+> }
+> Structure to represent a clause in an HTTP Accept Header
+> 
+> 
+> SUBDIRECTORIES
+> 
+> 	.hg

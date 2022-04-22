@@ -1,0 +1,10 @@
+1d0
+< 
+182c181
+<       boilerplate notice, with the fields enclosed by brackets "[]"
+---
+>       boilerplate notice, with the fields enclosed by brackets "{}"
+190c189
+<    Copyright [yyyy] [name of copyright owner]
+---
+>    Copyright (c) 2018-2020, Dmitrij Koniajev (dimchansky@gmail.com)

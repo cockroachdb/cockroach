@@ -1,0 +1,16 @@
+1,2c1
+< 
+<                                  Apache License
+---
+> Apache License
+182c181
+<       boilerplate notice, with the fields enclosed by brackets "[]"
+---
+>       boilerplate notice, with the fields enclosed by brackets "{}"
+190c189,190
+<    Copyright [yyyy] [name of copyright owner]
+---
+>    Copyright 2015, Google Inc
+>    Copyright 2018, GoGo Authors
+202a203
+> 
