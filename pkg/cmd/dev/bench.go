@@ -30,7 +30,8 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 		Long:  `Run the specified benchmarks.`,
 		Example: `
 	dev bench pkg/sql/parser --filter=BenchmarkParse
-	dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --count=2 --bench-time=10x --bench-mem`,
+	dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --count=2 --bench-time=10x --bench-mem
+	dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --ignore-cache --test-args='-test.cpuprofile=cpu.out -test.memprofile=mem.out'`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
