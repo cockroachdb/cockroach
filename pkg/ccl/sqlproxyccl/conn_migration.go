@@ -74,6 +74,11 @@ func (f *forwarder) tryBeginTransfer() (started bool, cleanupFn func()) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	// Forwarder hasn't been initialized.
+	if !f.isInitializedLocked() {
+		return false, nil
+	}
+
 	// Transfer is already in progress. No concurrent transfers are allowed.
 	if f.mu.isTransferring {
 		return false, nil
