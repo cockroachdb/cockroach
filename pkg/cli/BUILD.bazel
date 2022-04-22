@@ -68,7 +68,7 @@ go_library(
     ],
     # keep
     cdeps = [
-        "@cockroach//c-deps:libjemalloc",
+        "@com_github_cockroachdb_cockroach//c-deps:libjemalloc",
     ],
     cgo = True,
     # keep

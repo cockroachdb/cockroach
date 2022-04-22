@@ -27,12 +27,12 @@ def _impl(rctx):
 
     rctx.template(
         "BUILD",
-        Label("@cockroach//build:toolchains/dev/darwin-x86_64/BUILD.darwin-x86_64"),
+        Label("@com_github_cockroachdb_cockroach//build:toolchains/dev/darwin-x86_64/BUILD.darwin-x86_64"),
         executable = False,
     )
     rctx.template(
         "cc_toolchain_config.bzl",
-        Label("@cockroach//build:toolchains/dev/darwin-x86_64/cc_toolchain_config.bzl.tmpl"),
+        Label("@com_github_cockroachdb_cockroach//build:toolchains/dev/darwin-x86_64/cc_toolchain_config.bzl.tmpl"),
         substitutions = {
             "%{repo_path}": repo_path,
             "%{sdk_path}": sdk_path,
