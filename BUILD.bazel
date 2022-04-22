@@ -9,6 +9,7 @@ load("//build/bazelutil/staticcheckanalyzers:def.bzl", "STATICCHECK_CHECKS")
 exports_files([
     "DEPS.bzl",
     "TEAMS.yaml",
+    "WORKSPACE",
     "go.mod",
     "go.sum",
 ])
