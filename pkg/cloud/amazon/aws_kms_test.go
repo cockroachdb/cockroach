@@ -10,6 +10,7 @@
 package amazon
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -33,6 +34,8 @@ func init() {
 
 func TestEncryptDecryptAWS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	// If environment credentials are not present, we want to
 	// skip all AWS KMS tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
@@ -78,7 +81,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 			params.Add(KMSRegionParam, kmsRegion)
 
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
-			_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
+			_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
 			require.EqualError(t, err, fmt.Sprintf(
 				`%s is set to '%s', but %s is not set`,
 				cloud.AuthParam,
@@ -104,7 +107,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 			params.Add(KMSRegionParam, kmsRegion)
 
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
-			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+			cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
 				Settings:         cluster.NoSettings,
 				ExternalIOConfig: &base.ExternalIODirConfig{},
 			})
@@ -115,7 +118,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 			q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 
-			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+			cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
 				Settings:         cluster.NoSettings,
 				ExternalIOConfig: &base.ExternalIODirConfig{},
 			})
@@ -179,7 +182,7 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 			params.Add(KMSRegionParam, kmsRegion)
 
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
-			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+			cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
 				Settings:         cluster.NoSettings,
 				ExternalIOConfig: &base.ExternalIODirConfig{},
 			})
@@ -187,7 +190,7 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 
 		t.Run(fmt.Sprintf("specified-%s", id), func(t *testing.T) {
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
-			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+			cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
 				Settings:         cluster.NoSettings,
 				ExternalIOConfig: &base.ExternalIODirConfig{},
 			})
@@ -197,6 +200,7 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 
 func TestPutAWSKMSEndpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	q := make(url.Values)
 	expect := map[string]string{
@@ -220,7 +224,7 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 
 	t.Run("allow-endpoints", func(t *testing.T) {
 		uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
-		cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
 			Settings:         awsKMSTestSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
@@ -228,7 +232,7 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 
 	t.Run("disallow-endpoints", func(t *testing.T) {
 		uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
-		_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{
+		_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{
 			Settings:         awsKMSTestSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{DisableHTTP: true}})
 		require.True(t, testutils.IsError(err, "custom endpoints disallowed"))
@@ -237,6 +241,7 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 
 func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	q := make(url.Values)
 	q.Add(KMSRegionParam, "region")
 
@@ -248,7 +253,7 @@ func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN_A env var must be set")
 	}
 	uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
-	_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{
+	_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{
 		Settings:         cluster.NoSettings,
 		ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
 	require.True(t, testutils.IsError(err, "implicit credentials disallowed"))
