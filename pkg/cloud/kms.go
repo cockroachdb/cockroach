@@ -42,7 +42,7 @@ type KMSEnv interface {
 }
 
 // KMSFromURIFactory describes a factory function for KMS given a URI.
-type KMSFromURIFactory func(uri string, env KMSEnv) (KMS, error)
+type KMSFromURIFactory func(ctx context.Context, uri string, env KMSEnv) (KMS, error)
 
 // Mapping from KMS scheme to its registered factory method.
 var kmsFactoryMap = make(map[string]KMSFromURIFactory)
@@ -57,7 +57,7 @@ func RegisterKMSFromURIFactory(factory KMSFromURIFactory, scheme string) {
 }
 
 // KMSFromURI is the method used to create a KMS instance from the provided URI.
-func KMSFromURI(uri string, env KMSEnv) (KMS, error) {
+func KMSFromURI(ctx context.Context, uri string, env KMSEnv) (KMS, error) {
 	var kmsURL *url.URL
 	var err error
 	if kmsURL, err = url.ParseRequestURI(uri); err != nil {
@@ -71,5 +71,5 @@ func KMSFromURI(uri string, env KMSEnv) (KMS, error) {
 		return nil, errors.Newf("no factory method found for scheme %s", kmsURL.Scheme)
 	}
 
-	return factory(uri, env)
+	return factory(ctx, uri, env)
 }
