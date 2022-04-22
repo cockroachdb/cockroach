@@ -139,6 +139,33 @@ func TestSingleNodeDocker(t *testing.T) {
 				{"SELECT * FROM bello", "id,name\n1,a\n2,b\n3,c"},
 			},
 		},
+		{
+			testName:      "single-node-insecure-mem-mode",
+			containerName: "roach3",
+			runContainerArgs: runContainerArgs{
+				envSetting: []string{
+					"COCKROACH_DATABASE=mydb",
+				},
+				volSetting: []string{
+					fmt.Sprintf("%s/testdata/single-node-test/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d", pwd),
+					fmt.Sprintf("%s/docker-fsnotify-bin:/cockroach/docker-fsnotify", fsnotifyPath),
+				},
+				cmd: []string{"start-single-node", "--insecure", "--store=type=mem,size=0.25"},
+			},
+			sqlOpts: []string{
+				"--format=csv",
+				"--insecure",
+				"--database=mydb",
+			},
+			sqlQueries: []sqlQuery{
+				{"SELECT current_user", "current_user\nroot"},
+				{"SELECT current_database()", "current_database\nmydb"},
+				{"CREATE TABLE hello (X INT)", "CREATE TABLE"},
+				{"INSERT INTO hello VALUES (1), (2), (3)", "INSERT 3"},
+				{"SELECT * FROM hello", "x\n1\n2\n3"},
+				{"SELECT * FROM bello", "id,name\n1,a\n2,b\n3,c"},
+			},
+		},
 	}
 
 	cl, err := client.NewClientWithOpts(client.FromEnv)
@@ -187,10 +214,10 @@ func TestSingleNodeDocker(t *testing.T) {
 
 			if err := contextutil.RunWithTimeout(
 				ctx,
-				"wait for the server to fully start up",
-				serverStartTimeout,
+				"wait for the server to finish the initialization",
+				waitInitTimeout,
 				func(ctx context.Context) error {
-					return dn.waitServerStarts(ctx)
+					return dn.waitInitFinishes(ctx)
 				},
 			); err != nil {
 				t.Fatal(err)
@@ -253,8 +280,8 @@ func TestSingleNodeDocker(t *testing.T) {
 const (
 	imageName           = "cockroachdb/cockroach-ci:latest"
 	defaultTimeout      = 10 * time.Second
-	serverStartTimeout  = 80 * time.Second
-	listenURLFile       = "demoFile"
+	waitInitTimeout     = 80 * time.Second
+	initSuccessFile     = "init_success"
 	cockroachEntrypoint = "./cockroach"
 	hostPort            = "8080"
 	cockroachPort       = "26257"
@@ -328,7 +355,7 @@ func (dn *dockerNode) startContainer(
 		Image:        imageName,
 		Env:          envSetting,
 		ExposedPorts: nat.PortSet{hostPort: struct{}{}, cockroachPort: struct{}{}},
-		Cmd:          append(cmd, fmt.Sprintf("--listening-url-file=%s", listenURLFile)),
+		Cmd:          cmd,
 	}
 
 	hostConfig := container.HostConfig{
@@ -484,13 +511,10 @@ func (dn *dockerNode) execCommand(
 	return &res, nil
 }
 
-// waitServerStarts waits till the server truly starts or timeout, whichever
-// earlier. It keeps listening to the listenURLFile till it is closed and
-// written. This is because in #70238, the improved init process for single-node
-// server is to start the server, run the init process, and then restart the
-// server. We mark it as fully started until the server is successfully
-// restarted, and hence write the url to listenURLFile.
-func (dn *dockerNode) waitServerStarts(ctx context.Context) error {
+// waitInitFinishes waits till the server finishes all init steps or timeout,
+// whichever earlier. It keeps listening to the initSuccessFile till it is closed and
+// written.
+func (dn *dockerNode) waitInitFinishes(ctx context.Context) error {
 	var res *execResult
 	var err error
 
@@ -499,17 +523,17 @@ func (dn *dockerNode) waitServerStarts(ctx context.Context) error {
 	res, err = dn.execCommand(ctx, []string{
 		"./docker-fsnotify",
 		"/cockroach",
-		listenURLFile,
-		strconv.Itoa(int(serverStartTimeout.Seconds())),
+		initSuccessFile,
+		strconv.Itoa(int(waitInitTimeout.Seconds())),
 	}, "/cockroach")
 	if err != nil {
-		return errors.Wrapf(err, "cannot run fsnotify to listen to %s:\nres:%#v", listenURLFile, res)
+		return errors.Wrapf(err, "cannot run fsnotify to listen to %s:\nres:%#v\n", initSuccessFile, res)
 	}
 
 	if strings.Contains(res.stdOut, "finished\r\n") {
 		return nil
 	}
-	return errors.Wrap(errors.Newf("%s", res), "error in waiting the server to start")
+	return errors.Wrap(errors.Newf("%#v", res), "error waiting the initialization to finish")
 }
 
 // execSQLQuery executes the sql query and returns the server's output and
