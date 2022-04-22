@@ -1,0 +1,296 @@
+exec-ddl
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+----
+
+exec-ddl
+CREATE TABLE u (a INT PRIMARY KEY, c INT)
+----
+
+# ------------------------------------------------------------------------------
+# Tests with index joins.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX b_idx(b)
+)
+----
+
+opt
+SELECT * FROM indexed WHERE b = 2 FOR UPDATE
+----
+index-join indexed
+ ├── columns: a:1!null b:2!null c:3
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ └── scan indexed@b_idx
+      ├── columns: a:1!null b:2!null
+      ├── constraint: /2/1: [/2 - /2]
+      ├── locking: for-update
+      ├── volatile
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+opt
+SELECT * FROM indexed WHERE b BETWEEN 2 AND 10 FOR UPDATE
+----
+index-join indexed
+ ├── columns: a:1!null b:2!null c:3
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan indexed@b_idx
+      ├── columns: a:1!null b:2!null
+      ├── constraint: /2/1: [/2 - /10]
+      ├── locking: for-update
+      ├── volatile
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+# ------------------------------------------------------------------------------
+# Tests with lookup joins.
+# ------------------------------------------------------------------------------
+
+opt expect=GenerateLookupJoins
+SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a = 2 FOR UPDATE
+----
+project
+ ├── columns: c:6
+ ├── cardinality: [0 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(6)
+ └── inner-join (lookup u)
+      ├── columns: t.a:1!null b:2!null u.a:5!null c:6
+      ├── key columns: [2] = [5]
+      ├── lookup columns are key
+      ├── locking: for-update
+      ├── cardinality: [0 - 1]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(1,2,5,6), (5)==(2), (2)==(5)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── constraint: /1: [/2 - /2]
+      │    ├── locking: for-update
+      │    ├── cardinality: [0 - 1]
+      │    ├── volatile
+      │    ├── key: ()
+      │    └── fd: ()-->(1,2)
+      └── filters (true)
+
+opt expect=GenerateLookupJoins
+SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a BETWEEN 2 AND 10 FOR UPDATE
+----
+project
+ ├── columns: c:6
+ ├── cardinality: [0 - 9]
+ ├── volatile
+ └── inner-join (lookup u)
+      ├── columns: t.a:1!null b:2!null u.a:5!null c:6
+      ├── key columns: [2] = [5]
+      ├── lookup columns are key
+      ├── locking: for-update
+      ├── cardinality: [0 - 9]
+      ├── volatile
+      ├── key: (1)
+      ├── fd: (1)-->(2), (5)-->(6), (2)==(5), (5)==(2)
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2
+      │    ├── constraint: /1: [/2 - /10]
+      │    ├── locking: for-update
+      │    ├── cardinality: [0 - 9]
+      │    ├── volatile
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters (true)
+
+opt expect=GenerateLookupJoins
+SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
+----
+inner-join (lookup indexed)
+ ├── columns: a:1!null b:2!null a:5!null b:6!null c:7
+ ├── key columns: [5] = [5]
+ ├── lookup columns are key
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (5)
+ ├── fd: ()-->(1,2,6), (5)-->(7), (2)==(6), (6)==(2)
+ ├── inner-join (lookup indexed@b_idx)
+ │    ├── columns: t.a:1!null t.b:2!null indexed.a:5!null indexed.b:6!null
+ │    ├── key columns: [2] = [6]
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (5)
+ │    ├── fd: ()-->(1,2,6), (2)==(6), (6)==(2)
+ │    ├── scan t
+ │    │    ├── columns: t.a:1!null t.b:2
+ │    │    ├── constraint: /1: [/2 - /2]
+ │    │    ├── locking: for-update
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── volatile
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(1,2)
+ │    └── filters (true)
+ └── filters (true)
+
+# ------------------------------------------------------------------------------
+# Tests with inverted filters and joins.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE inverted (
+  a INT PRIMARY KEY,
+  b INT[],
+  c INT,
+  INVERTED INDEX b_inv(b)
+)
+----
+
+opt expect=(GenerateInvertedIndexScans,GenerateInvertedIndexZigzagJoins)
+SELECT * FROM inverted WHERE b @> '{1, 2}' FOR UPDATE
+----
+inner-join (lookup inverted)
+ ├── columns: a:1!null b:2!null c:3
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── inner-join (zigzag inverted@b_inv inverted@b_inv)
+ │    ├── columns: a:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [6] = ['\x89']
+ │    ├── right fixed columns: [6] = ['\x8a']
+ │    ├── left locking: for-update
+ │    ├── right locking: for-update
+ │    └── filters (true)
+ └── filters
+      └── b:2 @> ARRAY[1,2] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join inverted
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── inverted-filter
+ │         ├── columns: a:1!null
+ │         ├── inverted expression: /6
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["C", "C"]
+ │         │         └── ["\x89", "\x8b")
+ │         ├── volatile
+ │         ├── key: (1)
+ │         └── scan inverted@b_inv
+ │              ├── columns: a:1!null b_inverted_key:6!null
+ │              ├── inverted constraint: /6/1
+ │              │    └── spans
+ │              │         ├── ["C", "C"]
+ │              │         └── ["\x89", "\x8b")
+ │              ├── locking: for-update
+ │              ├── volatile
+ │              ├── key: (1)
+ │              └── fd: (1)-->(6)
+ └── filters
+      └── b:2 <@ ARRAY[1,2] [outer=(2), immutable]
+
+opt expect=GenerateInvertedJoins
+SELECT * FROM inverted@b_inv AS i1, inverted AS i2 WHERE i1.b @> i2.b FOR UPDATE
+----
+inner-join (lookup inverted [as=i1])
+ ├── columns: a:1!null b:2 c:3 a:7!null b:8 c:9
+ ├── key columns: [19] = [1]
+ ├── lookup columns are key
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1,7)
+ ├── fd: (1)-->(2,3), (7)-->(8,9)
+ ├── inner-join (inverted inverted@b_inv [as=i1])
+ │    ├── columns: i2.a:7!null i2.b:8 i2.c:9 i1.a:19!null
+ │    ├── inverted-expr
+ │    │    └── i1.b:20 @> i2.b:8
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (7,19)
+ │    ├── fd: (7)-->(8,9)
+ │    ├── scan inverted [as=i2]
+ │    │    ├── columns: i2.a:7!null i2.b:8 i2.c:9
+ │    │    ├── locking: for-update
+ │    │    ├── volatile
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8,9)
+ │    └── filters (true)
+ └── filters
+      └── i1.b:2 @> i2.b:8 [outer=(2,8), immutable]
+
+# ------------------------------------------------------------------------------
+# Tests with zigzag joins.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE zigzag (
+  a INT PRIMARY KEY,
+  b INT,
+  c FLOAT,
+  d JSONB,
+  INDEX b_idx(b),
+  INDEX c_idx(c),
+  INVERTED INDEX d_idx(d)
+)
+----
+
+opt expect=GenerateZigzagJoins
+SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0 FOR UPDATE
+----
+inner-join (zigzag zigzag@b_idx zigzag@c_idx)
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [5]
+ ├── right fixed columns: [3] = [6.0]
+ ├── left locking: for-update
+ ├── right locking: for-update
+ ├── volatile
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── b:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      └── c:3 = 6.0 [outer=(3), constraints=(/3: [/6.0 - /6.0]; tight), fd=()-->(3)]
+
+opt expect=(GenerateInvertedIndexScans,GenerateInvertedIndexZigzagJoins)
+SELECT * from zigzag where d @> '{"a": {"b": "c"}, "f": "g"}' FOR UPDATE
+----
+inner-join (lookup zigzag)
+ ├── columns: a:1!null b:2 c:3 d:4!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── locking: for-update
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── inner-join (zigzag zigzag@d_idx zigzag@d_idx)
+ │    ├── columns: a:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [7] = ['\x3761000262000112630001']
+ │    ├── right fixed columns: [7] = ['\x3766000112670001']
+ │    ├── left locking: for-update
+ │    ├── right locking: for-update
+ │    └── filters (true)
+ └── filters
+      └── d:4 @> '{"a": {"b": "c"}, "f": "g"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
