@@ -15,10 +15,14 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
+	"math/rand"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
 const rowsPerInsert = 100
@@ -105,6 +109,31 @@ func RowIdxFn(row int) tree.Datum {
 func RowModuloFn(modulo int) GenValueFn {
 	return func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row % modulo))
+	}
+}
+
+func RowReciprocalFn() GenValueFn {
+	return func(row int) tree.Datum {
+		return tree.NewDFloat(tree.DFloat(1.0 / float64(row)))
+	}
+}
+
+const letters = "abcdefghijklmnopqrstuvwxyz"
+
+func RowRandStr(rng *rand.Rand, length int) GenValueFn {
+	return func(row int) tree.Datum {
+		str := randgen.RandString(rng, length, letters)
+		return tree.NewDString(str)
+	}
+}
+
+func RowDateFn() GenValueFn {
+	return func(row int) tree.Datum {
+		date, err := pgdate.MakeDateFromTime(time.Unix(int64(row), 0))
+		if err != nil {
+			panic(err)
+		}
+		return tree.NewDDate(date)
 	}
 }
 
