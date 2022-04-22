@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2/google"
 )
 
 func TestPutGoogleCloud(t *testing.T) {
@@ -97,6 +98,83 @@ func TestPutGoogleCloud(t *testing.T) {
 func isImplicitAuthConfigured() bool {
 	credentials := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	return credentials != ""
+}
+
+func TestGCSAssumeRole(t *testing.T) {
+	user := username.RootUserName()
+	testSettings := cluster.MakeTestingClusterSettings()
+
+	limitedBucket := os.Getenv("GS_LIMITED_BUCKET")
+	if limitedBucket == "" {
+		skip.IgnoreLint(t, "GS_LIMITED_BUCKET env var must be set")
+	}
+	serviceAccount := os.Getenv("GCP_SERVICE_ACCOUNT")
+	if serviceAccount == "" {
+		skip.IgnoreLint(t, "GCP_SERVICE_ACCOUNT env var must be set")
+	}
+
+	t.Run("specified", func(t *testing.T) {
+		credentials := os.Getenv("CREDENTIALS")
+		if credentials == "" {
+			skip.IgnoreLint(t, "CREDENTIALS env var must be set")
+		}
+
+		// Verify that specified permissions with the credentials do not give us
+		// access to the bucket.
+		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, "backup-test-assume-role",
+			CredentialsParam, url.QueryEscape(credentials)), user, nil, nil, testSettings)
+
+		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s&%s=%s",
+			limitedBucket,
+			"backup-test-assume-role",
+			cloud.AuthParam,
+			cloud.AuthParamAssume,
+			ServiceAccountParam,
+			serviceAccount, CredentialsParam,
+			url.QueryEscape(credentials),
+		),
+			false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t,
+			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s&%s=%s",
+				limitedBucket,
+				"backup-test-assume-role",
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamAssume,
+				ServiceAccountParam,
+				serviceAccount,
+				CredentialsParam,
+				url.QueryEscape(credentials),
+			),
+			username.RootUserName(), nil, nil, testSettings,
+		)
+	})
+
+	t.Run("implicit", func(t *testing.T) {
+		if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
+			skip.IgnoreLint(t, err)
+		}
+
+		// Verify that implicit permissions with the credentials do not give us
+		// access to the bucket.
+		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, "backup-test-assume-role",
+			cloud.AuthParam, cloud.AuthParamImplicit), user, nil, nil, testSettings)
+
+		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role",
+			cloud.AuthParam, cloud.AuthParamAssume, ServiceAccountParam, serviceAccount), false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t,
+			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
+				limitedBucket,
+				"backup-test-assume-role",
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamAssume,
+				ServiceAccountParam,
+				serviceAccount,
+			),
+			username.RootUserName(), nil, nil, testSettings,
+		)
+	})
 }
 
 func TestAntagonisticGCSRead(t *testing.T) {

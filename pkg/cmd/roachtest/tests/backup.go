@@ -50,13 +50,19 @@ import (
 // configuration for the nightly roachtests. Any changes must be made to both
 // references of the name.
 const (
-	KMSRegionAEnvVar  = "AWS_KMS_REGION_A"
-	KMSRegionBEnvVar  = "AWS_KMS_REGION_B"
-	KMSKeyARNAEnvVar  = "AWS_KMS_KEY_ARN_A"
-	KMSKeyARNBEnvVar  = "AWS_KMS_KEY_ARN_B"
-	KMSKeyNameAEnvVar = "GOOGLE_KMS_KEY_A"
-	KMSKeyNameBEnvVar = "GOOGLE_KMS_KEY_B"
-	KMSGCSCredentials = "GOOGLE_EPHEMERAL_CREDENTIALS"
+	KMSRegionAEnvVar             = "AWS_KMS_REGION_A"
+	KMSRegionBEnvVar             = "AWS_KMS_REGION_B"
+	KMSKeyARNAEnvVar             = "AWS_KMS_KEY_ARN_A"
+	KMSKeyARNBEnvVar             = "AWS_KMS_KEY_ARN_B"
+	AssumeRoleAWSKeyIDEnvVar     = "AWS_ACCESS_KEY_ID_ASSUME_ROLE"
+	AssumeRoleAWSSecretKeyEnvVar = "AWS_SECRET_ACCESS_KEY_ASSUME_ROLE"
+	AssumeRoleAWSRoleEnvVar      = "AWS_ROLE_ARN"
+
+	KMSKeyNameAEnvVar           = "GOOGLE_KMS_KEY_A"
+	KMSKeyNameBEnvVar           = "GOOGLE_KMS_KEY_B"
+	KMSGCSCredentials           = "GOOGLE_EPHEMERAL_CREDENTIALS"
+	AssumeRoleGCSCredentials    = "GOOGLE_CREDENTIALS_ASSUME_ROLE"
+	AssumeRoleGCSServiceAccount = "GOOGLE_SERVICE_ACCOUNT"
 
 	// rows2TiB is the number of rows to import to load 2TB of data (when
 	// replicated).
@@ -639,51 +645,60 @@ func registerBackup(r registry.Registry) {
 		},
 	})
 
-	r.Add(registry.TestSpec{
-		Name:            "backup/assume-role/AWS",
-		Owner:           registry.OwnerBulkIO,
-		Cluster:         r.MakeClusterSpec(3),
-		EncryptAtRandom: true,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.AWS {
-				t.Skip("backup assumeRole is only configured to run on "+spec.AWS, "")
-			}
-
-			q := make(url.Values)
-			expect := map[string]string{
-				"AWS_ACCESS_KEY_ID_ASSUME_ROLE":     amazon.AWSAccessKeyParam,
-				"AWS_SECRET_ACCESS_KEY_ASSUME_ROLE": amazon.AWSSecretParam,
-				"AWS_ROLE_ARN":                      amazon.AWSRoleArnParam,
-				KMSRegionAEnvVar:                    amazon.KMSRegionParam,
-			}
-			for env, param := range expect {
-				v := os.Getenv(env)
-				if v == "" {
-					t.Errorf("env variable %s must be present to run the KMS test", env)
+	for _, item := range []struct {
+		cloudProvider string
+		machine       string
+	}{
+		{cloudProvider: "GCS", machine: spec.GCE},
+		{cloudProvider: "AWS", machine: spec.AWS},
+	} {
+		item := item
+		r.Add(registry.TestSpec{
+			Name:            fmt.Sprintf("backup/assume-role/%s", item.cloudProvider),
+			Owner:           registry.OwnerBulkIO,
+			Cluster:         r.MakeClusterSpec(3),
+			EncryptAtRandom: true,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.Spec().Cloud != item.machine {
+					t.Skip("backup assumeRole is only configured to run on "+item.machine, "")
 				}
-				q.Add(param, v)
-			}
-			q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
 
-			rows := 100
-			dest := importBankData(ctx, rows, t, c)
+				rows := 100
 
-			m := c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`running backup`)
-				kmsURI, err := getAWSKMSAssumeRoleURI(KMSRegionAEnvVar, KMSKeyARNAEnvVar)
-				if err != nil {
-					return err
+				dest := importBankData(ctx, rows, t, c)
+
+				var backupPath, kmsURI string
+				var err error
+				switch item.cloudProvider {
+				case "AWS":
+					if backupPath, err = getAWSBackupPath(dest); err != nil {
+						t.Fatal(err)
+					}
+					if kmsURI, err = getAWSKMSAssumeRoleURI(); err != nil {
+						t.Fatal(err)
+					}
+				case "GCS":
+					if backupPath, err = getGCSBackupPath(dest); err != nil {
+						t.Fatal(err)
+					}
+					if kmsURI, err = getGCSKMSAssumeRoleURI(); err != nil {
+						t.Fatal(err)
+					}
 				}
-				c.Run(ctx, c.Node(1), fmt.Sprintf(
-					"./cockroach sql --insecure -e \"BACKUP bank.bank TO 's3://cockroachdb-backup-testing/%s?%s' WITH KMS='%s'\"",
-					dest, q.Encode(), kmsURI))
-				return nil
-			})
-			m.Wait()
-		},
-	})
 
+				m := c.NewMonitor(ctx)
+				m.Go(func(ctx context.Context) error {
+					t.Status(`running backup`)
+					c.Run(ctx, c.Node(1), fmt.Sprintf(
+						"./cockroach sql --insecure -e \"BACKUP bank.bank TO '%s' WITH KMS='%s'\"",
+						backupPath, kmsURI))
+					return nil
+				})
+				m.Wait()
+
+			},
+		})
+	}
 	KMSSpec := r.MakeClusterSpec(3)
 	for _, item := range []struct {
 		kmsProvider string
@@ -1061,13 +1076,13 @@ func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
 	return correctURI, nil
 }
 
-func getAWSKMSAssumeRoleURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
+func getAWSKMSAssumeRoleURI() (string, error) {
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_ACCESS_KEY_ID_ASSUME_ROLE":     amazon.AWSAccessKeyParam,
+		AssumeRoleAWSKeyIDEnvVar:            amazon.AWSAccessKeyParam,
 		"AWS_SECRET_ACCESS_KEY_ASSUME_ROLE": amazon.AWSSecretParam,
 		"AWS_ROLE_ARN":                      amazon.AWSRoleArnParam,
-		regionEnvVariable:                   amazon.KMSRegionParam,
+		KMSRegionAEnvVar:                    amazon.KMSRegionParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -1078,9 +1093,9 @@ func getAWSKMSAssumeRoleURI(regionEnvVariable, keyIDEnvVariable string) (string,
 	}
 
 	// Get AWS Key ARN from env variable.
-	keyARN := os.Getenv(keyIDEnvVariable)
+	keyARN := os.Getenv(KMSKeyARNAEnvVar)
 	if keyARN == "" {
-		return "", errors.Newf("env variable %s must be present to run the KMS test", keyIDEnvVariable)
+		return "", errors.Newf("env variable %s must be present to run the KMS test", KMSKeyARNAEnvVar)
 	}
 
 	// Set AUTH to assume role
@@ -1114,4 +1129,81 @@ func getGCSKMSURI(keyIDEnvVariable string) (string, error) {
 	correctURI := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 
 	return correctURI, nil
+}
+
+func getGCSKMSAssumeRoleURI() (string, error) {
+	q := make(url.Values)
+	expect := map[string]string{
+		AssumeRoleGCSCredentials:    gcp.CredentialsParam,
+		AssumeRoleGCSServiceAccount: gcp.ServiceAccountParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			return "", errors.Newf("env variable %s must be present to run the KMS test", env)
+		}
+		// Nightly env uses JSON credentials, which have to be base64 encoded.
+		if param == gcp.CredentialsParam {
+			v = base64.StdEncoding.EncodeToString([]byte(v))
+		}
+		q.Add(param, v)
+	}
+
+	// Get AWS Key ARN from env variable.
+	keyName := os.Getenv(KMSKeyNameAEnvVar)
+	if keyName == "" {
+		return "", errors.Newf("env variable %s must be present to run the KMS test", KMSKeyNameAEnvVar)
+	}
+
+	// Set AUTH to assume role
+	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
+	correctURI := fmt.Sprintf("gs:///%s?%s", keyName, q.Encode())
+
+	return correctURI, nil
+}
+
+func getGCSBackupPath(dest string) (string, error) {
+	q := make(url.Values)
+	expect := map[string]string{
+		AssumeRoleGCSCredentials:    gcp.CredentialsParam,
+		AssumeRoleGCSServiceAccount: gcp.ServiceAccountParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			return "", errors.Errorf("env variable %s must be present to run the assume role test", env)
+		}
+
+		// Nightly env uses JSON credentials, which have to be base64 encoded.
+		if param == gcp.CredentialsParam {
+			v = base64.StdEncoding.EncodeToString([]byte(v))
+		}
+		q.Add(param, v)
+	}
+
+	// Set AUTH to assume role
+	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
+	uri := fmt.Sprintf("gs://cockroachdb-backup-testing/gcs/%s?%s", dest, q.Encode())
+
+	return uri, nil
+}
+
+func getAWSBackupPath(dest string) (string, error) {
+	q := make(url.Values)
+	expect := map[string]string{
+		AssumeRoleAWSKeyIDEnvVar:     amazon.AWSAccessKeyParam,
+		AssumeRoleAWSSecretKeyEnvVar: amazon.AWSSecretParam,
+		AssumeRoleAWSRoleEnvVar:      amazon.AWSRoleArnParam,
+		KMSRegionAEnvVar:             amazon.KMSRegionParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			return "", errors.Errorf("env variable %s must be present to run the KMS test", env)
+		}
+		q.Add(param, v)
+	}
+	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
+
+	return fmt.Sprintf("s3://cockroachdb-backup-testing/%s?%s", dest, q.Encode()), nil
 }

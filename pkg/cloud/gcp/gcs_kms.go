@@ -39,14 +39,16 @@ func init() {
 }
 
 type kmsURIParams struct {
-	credentials string
-	auth        string
+	credentials    string
+	auth           string
+	serviceAccount string
 }
 
 func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 	params := kmsURIParams{
-		credentials: kmsURI.Query().Get(CredentialsParam),
-		auth:        kmsURI.Query().Get(cloud.AuthParam),
+		credentials:    kmsURI.Query().Get(CredentialsParam),
+		auth:           kmsURI.Query().Get(cloud.AuthParam),
+		serviceAccount: kmsURI.Query().Get(ServiceAccountParam),
 	}
 
 	return params
@@ -54,7 +56,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 
 // MakeGCSKMS is the factory method which returns a configured, ready-to-use
 // GCS KMS object.
-func MakeGCSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
+func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	if env.KMSConfig().DisableOutbound {
 		return nil, errors.New("external IO must be enabled to use GCS KMS")
 	}
@@ -94,11 +96,28 @@ func MakeGCSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 				"implicit credentials disallowed for gcs due to --external-io-implicit-credentials flag")
 		}
 		// If implicit credentials used, no client options needed.
+	case cloud.AuthParamAssume:
+		if kmsURIParams.serviceAccount == "" {
+			return nil, errors.Errorf(
+				"%s is set to '%s', but %s is not set",
+				cloud.AuthParam,
+				cloud.AuthParamAssume,
+				ServiceAccountParam,
+			)
+		}
+		impersonateOpt, err := createImpersonateCredentials(ctx, kmsURIParams.serviceAccount, kms.DefaultAuthScopes(), kmsURIParams.credentials)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error impersonating %s", kmsURIParams.serviceAccount)
+		}
+
+		credentialsOpt = append(
+			credentialsOpt,
+			impersonateOpt,
+			option.WithScopes(kms.DefaultAuthScopes()...),
+		)
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
-
-	ctx := context.Background()
 
 	kmc, err := kms.NewKeyManagementClient(ctx, credentialsOpt...)
 
