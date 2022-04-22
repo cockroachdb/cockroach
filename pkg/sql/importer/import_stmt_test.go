@@ -3793,6 +3793,9 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+
+	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
+
 	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
 	semaCtx := tree.MakeSemaContext()
@@ -3816,6 +3819,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 		tableDesc:  tableDesc.ImmutableCopy().(catalog.TableDescriptor),
 		kvCh:       kvCh,
 		numWorkers: 1,
+		db:         db,
 	}
 
 	producer := &csvBenchmarkStream{
@@ -4691,6 +4695,7 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 // BenchmarkDelimitedConvertRecord-16    	  500000	      2966 ns/op	  40.45 MB/s
 func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	ctx := context.Background()
+	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
 
 	tpchLineItemDataRows := [][]string{
 		{"1", "155190", "7706", "1", "17", "21168.23", "0.04", "0.02", "N", "O", "1996-03-13", "1996-02-12", "1996-03-22", "DELIVER IN PERSON", "TRUCK", "egular courts above the"},
@@ -4761,7 +4766,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
 	}, kvCh, 0, 1,
-		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx)
+		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx, db)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -4792,6 +4797,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 // BenchmarkPgCopyConvertRecord-16    	  307701	      3833 ns/op	  31.30 MB/s
 func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	ctx := context.Background()
+	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
 
 	tpchLineItemDataRows := [][]string{
 		{"1", "155190", "7706", "1", "17", "21168.23", "0.04", "0.02", "N", "O", "1996-03-13", "1996-02-12", "1996-03-22", "DELIVER IN PERSON", "TRUCK", "egular courts above the"},
@@ -4864,7 +4870,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		Null:       `\N`,
 		MaxRowSize: 4096,
 	}, kvCh, 0, 1,
-		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx)
+		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx, db)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{

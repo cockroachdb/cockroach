@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -112,13 +111,13 @@ type probeRangeRow struct {
 }
 
 type probeRangeGenerator struct {
-	db      *kv.DB
-	timeout time.Duration
-	isWrite bool
-	tracer  *tracing.Tracer
+	rangeProber eval.RangeProber
+	timeout     time.Duration
+	isWrite     bool
+	tracer      *tracing.Tracer
+
 	// The below are updated during calls to Next() throughout the lifecycle of
 	// probeRangeGenerator.
-	ops    kvprober.ProberOps
 	curr   probeRangeRow
 	ranges []kv.KeyValue
 }
@@ -146,11 +145,11 @@ func makeProbeRangeGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGen
 		return nil, err
 	}
 	return &probeRangeGenerator{
-		db:      ctx.DB,
-		timeout: timeout,
-		isWrite: isWrite == "write",
-		tracer:  ctx.Tracer,
-		ranges:  ranges,
+		rangeProber: ctx.RangeProber,
+		timeout:     timeout,
+		isWrite:     isWrite == "write",
+		tracer:      ctx.Tracer,
+		ranges:      ranges,
 	}, nil
 }
 
@@ -196,20 +195,13 @@ func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 			return err
 		}
 		p.curr.rangeID = int64(desc.RangeID)
-
-		op := p.ops.Read
-		if p.isWrite {
-			op = p.ops.Write
-		}
-
 		key := desc.StartKey.AsRawKey()
 		if desc.RangeID == 1 {
 			// The first range starts at KeyMin, but the replicated keyspace starts only at keys.LocalMax,
 			// so there is a special case here.
 			key = keys.LocalMax
 		}
-		// NB: intentionally using a separate txn per probe to avoid undesirable cross-probe effects.
-		return p.db.Txn(ctx, op(key))
+		return p.rangeProber.RunProbe(ctx, key, p.isWrite)
 	})
 
 	p.curr.latency = timeutil.Since(tBegin)
