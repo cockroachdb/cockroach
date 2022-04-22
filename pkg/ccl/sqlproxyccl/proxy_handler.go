@@ -403,14 +403,15 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
+	f := newForwarder(ctx, connector, handler.metrics, nil /* timeSource */)
+	defer f.Close()
+
 	// Pass ownership of conn and crdbConn to the forwarder.
-	f, err := forward(ctx, connector, handler.metrics, fe.conn, crdbConn, nil /* timeSource */)
-	if err != nil {
+	if err := f.run(fe.conn, crdbConn); err != nil {
 		// Don't send to the client here for the same reason below.
 		handler.metrics.updateForError(err)
 		return err
 	}
-	defer f.Close()
 
 	// Register the forwarder with the connection tracker.
 	handler.connTracker.OnConnect(tenID, f)

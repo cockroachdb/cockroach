@@ -57,6 +57,20 @@ func TestTransferContext(t *testing.T) {
 func TestForwarder_tryBeginTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Run("not_initialized", func(t *testing.T) {
+		defer testutils.TestingHook(&isSafeTransferPointLocked,
+			func(req *processor, res *processor) bool {
+				return false
+			},
+		)()
+
+		f := &forwarder{}
+
+		started, cleanupFn := f.tryBeginTransfer()
+		require.False(t, started)
+		require.Nil(t, cleanupFn)
+	})
+
 	t.Run("isTransferring=true", func(t *testing.T) {
 		f := &forwarder{}
 		f.mu.isTransferring = true
