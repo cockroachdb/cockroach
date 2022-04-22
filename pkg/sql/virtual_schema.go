@@ -526,7 +526,9 @@ func (e *virtualDefEntry) getPlanInfo(
 				return nil, newInvalidVirtualSchemaError()
 			}
 
-			if def.generator != nil {
+			constrainedScan := idxConstraint != nil && !idxConstraint.IsUnconstrained()
+
+			if def.generator != nil && !constrainedScan {
 				next, cleanup, err := def.generator(ctx, p, dbDesc, stopper)
 				if err != nil {
 					return nil, err
@@ -534,7 +536,6 @@ func (e *virtualDefEntry) getPlanInfo(
 				return p.newVirtualTableNode(columns, next, cleanup), nil
 			}
 
-			constrainedScan := idxConstraint != nil && !idxConstraint.IsUnconstrained()
 			if !constrainedScan {
 				generator, cleanup, setupError := setupGenerator(ctx, func(ctx context.Context, pusher rowPusher) error {
 					return def.populate(ctx, p, dbDesc, func(row ...tree.Datum) error {
@@ -665,6 +666,8 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 		for ; currentSpan < idxConstraint.Spans.Count(); currentSpan++ {
 			newConstraint.Spans.Append(idxConstraint.Spans.Get(currentSpan))
 		}
+		// TODO(sarkesian): if we allow virtualSchemaTables with generator to perform a constrained scan,
+		// we then need to ensure that we don't call populate without checking, as it may be nil.
 		return def.populate(ctx, p, dbDesc, addRowIfPassesFilter(&newConstraint))
 	}
 }
