@@ -4,6 +4,9 @@ CREATE TABLE tbl (
   id INT PRIMARY KEY,
   cexpr INT DEFAULT (nextval('seq')) ON UPDATE (123)
 );
+COMMENT ON TABLE tbl IS 'tbl is good table';
+COMMENT ON INDEX tbl@tbl_pkey IS 'tbl_pkey is a primary key';
+COMMENT ON COLUMN tbl.id IS 'id is a identifier';
 ----
 
 decompose
@@ -15,10 +18,6 @@ ElementState:
 - Sequence:
     isTemporary: false
     sequenceId: 104
-  Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 104
   Status: PUBLIC
 - Namespace:
     databaseId: 100
@@ -58,10 +57,6 @@ ElementState:
 - Sequence:
     isTemporary: false
     sequenceId: 106
-  Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 106
   Status: PUBLIC
 - Namespace:
     databaseId: 100
@@ -142,7 +137,7 @@ ElementState:
       temporaryIndexId: 0
   Status: PUBLIC
 - TableComment:
-    comment: __placeholder_comment__
+    comment: tbl is good table
     tableId: 105
   Status: PUBLIC
 - ColumnName:
@@ -233,14 +228,8 @@ ElementState:
   Status: PUBLIC
 - ColumnComment:
     columnId: 1
-    comment: __placeholder_comment__
+    comment: id is a identifier
     pgAttributeNum: 1
-    tableId: 105
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
 - IndexName:
@@ -249,7 +238,7 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - IndexComment:
-    comment: __placeholder_comment__
+    comment: tbl_pkey is a primary key
     indexId: 1
     tableId: 105
   Status: PUBLIC
@@ -338,7 +327,7 @@ ElementState:
       temporaryIndexId: 0
   Status: PUBLIC
 - TableComment:
-    comment: __placeholder_comment__
+    comment: tbl is good table
     tableId: 105
   Status: PUBLIC
 - ColumnName:
@@ -407,14 +396,8 @@ ElementState:
   Status: PUBLIC
 - ColumnComment:
     columnId: 1
-    comment: __placeholder_comment__
+    comment: id is a identifier
     pgAttributeNum: 1
-    tableId: 105
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
 - IndexName:
@@ -423,7 +406,7 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - IndexComment:
-    comment: __placeholder_comment__
+    comment: tbl_pkey is a primary key
     indexId: 1
     tableId: 105
   Status: PUBLIC
@@ -460,10 +443,6 @@ ElementState:
 - Sequence:
     isTemporary: false
     sequenceId: 104
-  Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 104
   Status: PUBLIC
 - Namespace:
     databaseId: 100
