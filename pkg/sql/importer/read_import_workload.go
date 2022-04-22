@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -41,6 +42,7 @@ type workloadReader struct {
 	table       catalog.TableDescriptor
 	kvCh        chan row.KVBatch
 	parallelism int
+	db          *kv.DB
 }
 
 var _ inputConverter = &workloadReader{}
@@ -51,8 +53,9 @@ func newWorkloadReader(
 	table catalog.TableDescriptor,
 	kvCh chan row.KVBatch,
 	parallelism int,
+	db *kv.DB,
 ) *workloadReader {
-	return &workloadReader{semaCtx: semaCtx, evalCtx: evalCtx, table: table, kvCh: kvCh, parallelism: parallelism}
+	return &workloadReader{semaCtx: semaCtx, evalCtx: evalCtx, table: table, kvCh: kvCh, parallelism: parallelism, db: db}
 }
 
 func (w *workloadReader) start(ctx ctxgroup.Group) {
@@ -164,7 +167,7 @@ func (w *workloadReader) readFiles(
 		}
 
 		wc := NewWorkloadKVConverter(
-			fileID, w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh)
+			fileID, w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh, w.db)
 		wcs = append(wcs, wc)
 	}
 
@@ -186,6 +189,7 @@ type WorkloadKVConverter struct {
 	batchIdxAtomic int64
 	batchEnd       int
 	kvCh           chan row.KVBatch
+	db             *kv.DB
 
 	// For progress reporting
 	fileID                int32
@@ -201,6 +205,7 @@ func NewWorkloadKVConverter(
 	rows workload.BatchedTuples,
 	batchStart, batchEnd int,
 	kvCh chan row.KVBatch,
+	db *kv.DB,
 ) *WorkloadKVConverter {
 	return &WorkloadKVConverter{
 		tableDesc:      tableDesc,
@@ -210,6 +215,7 @@ func NewWorkloadKVConverter(
 		kvCh:           kvCh,
 		totalBatches:   float32(batchEnd - batchStart),
 		fileID:         fileID,
+		db:             db,
 	}
 }
 
@@ -227,7 +233,7 @@ func (w *WorkloadKVConverter) Worker(
 	ctx context.Context, evalCtx *tree.EvalContext, semaCtx *tree.SemaContext,
 ) error {
 	conv, err := row.NewDatumRowConverter(ctx, semaCtx, w.tableDesc, nil, /* targetColNames */
-		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */)
+		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */, w.db)
 	if err != nil {
 		return err
 	}

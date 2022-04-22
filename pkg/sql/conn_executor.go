@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/consistencychecker"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
@@ -2658,6 +2659,7 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
+	consistencyChecker := consistencychecker.NewConsistencyChecker(p.execCfg.DB)
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Planner:                   p,
@@ -2674,6 +2676,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ReCache:                   ex.server.reCache,
 			SQLStatsController:        ex.server.sqlStatsController,
 			IndexUsageStatsController: ex.server.indexUsageStatsController,
+			ConsistencyChecker:        consistencyChecker,
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,

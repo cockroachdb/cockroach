@@ -315,6 +315,7 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/colexec",
         "//pkg/sql/colflow",
+        "//pkg/sql/consistencychecker",
         "//pkg/sql/contention",
         "//pkg/sql/contention/txnidcache",
         "//pkg/sql/contentionpb",
