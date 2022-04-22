@@ -545,7 +545,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				if err := validateCheckInTxn(
 					params.ctx, &params.p.semaCtx, params.ExecCfg().InternalExecutorFactory,
-					params.SessionData(), n.tableDesc, params.EvalContext().Txn, ck.Expr,
+					params.SessionData(), n.tableDesc, params.p.Txn(), ck.Expr,
 				); err != nil {
 					return err
 				}
@@ -571,7 +571,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					params.ExecCfg().InternalExecutorFactory,
 					params.p.SessionData(),
 					n.tableDesc,
-					params.EvalContext().Txn,
+					params.p.Txn(),
 					params.p.Descriptors(),
 					name,
 				); err != nil {
@@ -598,7 +598,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					if err := validateUniqueWithoutIndexConstraintInTxn(
 						params.ctx, params.ExecCfg().InternalExecutorFactory(
 							params.ctx, params.SessionData(),
-						), n.tableDesc, params.EvalContext().Txn, name,
+						), n.tableDesc, params.p.Txn(), name,
 					); err != nil {
 						return err
 					}
@@ -1228,7 +1228,7 @@ func injectTableStats(
 	if _ /* rows */, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		"delete-stats",
-		params.EvalContext().Txn,
+		params.p.Txn(),
 		`DELETE FROM system.table_statistics WHERE "tableID" = $1`, desc.GetID(),
 	); err != nil {
 		return errors.Wrapf(err, "failed to delete old stats")
@@ -1290,7 +1290,7 @@ func insertJSONStatistic(
 	var (
 		ctx      = params.ctx
 		ie       = params.ExecCfg().InternalExecutor
-		txn      = params.EvalContext().Txn
+		txn      = params.p.Txn()
 		settings = params.ExecCfg().Settings
 	)
 

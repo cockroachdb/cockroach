@@ -978,7 +978,7 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 	for _, record := range ex.extraTxnState.schemaChangeJobRecords {
 		records = append(records, record)
 	}
-	jobIDs, err := ex.server.cfg.JobRegistry.CreateJobsWithTxn(ctx, ex.planner.extendedEvalCtx.Txn, records)
+	jobIDs, err := ex.server.cfg.JobRegistry.CreateJobsWithTxn(ctx, ex.planner.Txn(), records)
 	if err != nil {
 		return err
 	}
