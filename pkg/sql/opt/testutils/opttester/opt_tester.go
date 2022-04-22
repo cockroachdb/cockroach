@@ -2269,7 +2269,7 @@ func (ot *OptTester) ExecBuild(f exec.Factory, mem *memo.Memo, expr opt.Expr) (e
 		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 		stopper := stop.NewStopper()
 		db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
-		ot.evalCtx.Txn = kv.NewTxn(context.Background(), db, 1)
+		ot.evalhelper.EvalCtxTxnToKvTxn(evalCtx.EvalCtxTxn) = kv.NewTxn(context.Background(), db, 1)
 	}
 	bld := execbuilder.New(f, ot.makeOptimizer(), mem, ot.catalog, expr, &ot.evalCtx, true)
 	return bld.Build()

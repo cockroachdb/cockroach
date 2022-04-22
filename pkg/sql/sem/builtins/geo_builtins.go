@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geotransform"
 	"github.com/cockroachdb/cockroach/pkg/geo/twkb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -401,7 +400,7 @@ func (m *minimumBoundRadiusGen) ResolvedType() *types.T {
 	return minimumBoundingRadiusReturnType
 }
 
-func (m *minimumBoundRadiusGen) Start(ctx context.Context, txn *kv.Txn) error {
+func (m *minimumBoundRadiusGen) Start(ctx context.Context) error {
 	return nil
 }
 
@@ -452,7 +451,7 @@ func (s *subdividedGeometriesGen) ResolvedType() *types.T { return types.Geometr
 
 func (s *subdividedGeometriesGen) Close(_ context.Context) {}
 
-func (s *subdividedGeometriesGen) Start(_ context.Context, _ *kv.Txn) error {
+func (s *subdividedGeometriesGen) Start(ctx context.Context) error {
 	s.curr = -1
 	return nil
 }

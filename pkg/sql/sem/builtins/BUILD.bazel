@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/colexecerror",
+        "//pkg/sql/evalhelper",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/memsize",
@@ -131,7 +132,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/keys",
-        "//pkg/kv",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

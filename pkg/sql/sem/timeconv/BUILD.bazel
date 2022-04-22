@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "timeconv_test",
+    srcs = ["timeconv_test.go"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+    ],
+)

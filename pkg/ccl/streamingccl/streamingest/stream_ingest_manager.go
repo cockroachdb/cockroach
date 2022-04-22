@@ -10,7 +10,6 @@ package streamingest
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -23,12 +22,9 @@ type streamIngestManagerImpl struct{}
 
 // CompleteStreamIngestion implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) CompleteStreamIngestion(
-	evalCtx *tree.EvalContext,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
-	cutoverTimestamp hlc.Timestamp,
+	evalCtx *tree.EvalContext, streamID streaming.StreamID, cutoverTimestamp hlc.Timestamp,
 ) error {
-	return completeStreamIngestion(evalCtx, txn, streamID, cutoverTimestamp)
+	return completeStreamIngestion(evalCtx, streamID, cutoverTimestamp)
 }
 
 func newStreamIngestManagerWithPrivilegesCheck(

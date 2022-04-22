@@ -13,6 +13,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/colflow",
+        "//pkg/sql/evalhelper",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",

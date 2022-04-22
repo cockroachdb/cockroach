@@ -136,14 +136,14 @@ func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 // QueueJob creates a new job from record and queues it for execution after
 // the transaction commits.
 func (evalCtx *extendedEvalContext) QueueJob(
-	ctx context.Context, record jobs.Record,
+	ctx context.Context, record jobs.Record, txn *kv.Txn,
 ) (*jobs.Job, error) {
 	jobID := evalCtx.ExecCfg.JobRegistry.MakeJobID()
 	job, err := evalCtx.ExecCfg.JobRegistry.CreateJobWithTxn(
 		ctx,
 		record,
 		jobID,
-		evalCtx.Txn,
+		txn,
 	)
 	if err != nil {
 		return nil, err
@@ -470,7 +470,7 @@ func internalExtendedEvalCtx(
 	}
 	ret := extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Txn:                       txn,
+			EvalCtxTxn:                txn,
 			SessionDataStack:          sds,
 			TxnReadOnly:               false,
 			TxnImplicit:               true,
@@ -870,13 +870,12 @@ func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Desc
 func (p *planner) QueryRowEx(
 	ctx context.Context,
 	opName string,
-	txn *kv.Txn,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	return ie.QueryRowEx(ctx, opName, txn, override, stmt, qargs...)
+	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
 // QueryIteratorEx executes the query, returning an iterator that can be used
@@ -888,12 +887,11 @@ func (p *planner) QueryRowEx(
 func (p *planner) QueryIteratorEx(
 	ctx context.Context,
 	opName string,
-	txn *kv.Txn,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (tree.InternalRows, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
+	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 	return rows.(tree.InternalRows), err
 }

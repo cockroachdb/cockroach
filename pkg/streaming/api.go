@@ -80,7 +80,6 @@ type StreamIngestManager interface {
 	// CompleteStreamIngestion signals a running stream ingestion job to complete on the consumer side.
 	CompleteStreamIngestion(
 		evalCtx *tree.EvalContext,
-		txn *kv.Txn,
 		streamID StreamID,
 		cutoverTimestamp hlc.Timestamp,
 	) error

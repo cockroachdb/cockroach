@@ -30,16 +30,12 @@ import (
 
 // completeStreamIngestion terminates the stream as of specified time.
 func completeStreamIngestion(
-	evalCtx *tree.EvalContext,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
-	cutoverTimestamp hlc.Timestamp,
+	evalCtx *tree.EvalContext, streamID streaming.StreamID, cutoverTimestamp hlc.Timestamp,
 ) error {
 	// Get the job payload for job_id.
 	const jobsQuery = `SELECT progress FROM system.jobs WHERE id=$1 FOR UPDATE`
 	row, err := evalCtx.Planner.QueryRowEx(evalCtx.Context,
-		"get-stream-ingestion-job-metadata",
-		txn, sessiondata.NodeUserSessionDataOverride, jobsQuery, streamID)
+		"get-stream-ingestion-job-metadata", sessiondata.NodeUserSessionDataOverride, jobsQuery, streamID)
 	if err != nil {
 		return err
 	}
@@ -85,14 +81,14 @@ func completeStreamIngestion(
 	// Update the sentinel being polled by the stream ingestion job to
 	// check if a complete has been signaled.
 	sp.StreamIngest.CutoverTime = cutoverTimestamp
-	progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
+	progress.ModifiedMicros = timeutil.ToUnixMicros(evalCtx.TxnTimestamp)
 	progressBytes, err := protoutil.Marshal(progress)
 	if err != nil {
 		return err
 	}
 	updateJobQuery := `UPDATE system.jobs SET progress=$1 WHERE id=$2`
 	_, err = evalCtx.Planner.QueryRowEx(evalCtx.Context,
-		"set-stream-ingestion-job-metadata", txn,
+		"set-stream-ingestion-job-metadata",
 		sessiondata.NodeUserSessionDataOverride, updateJobQuery, progressBytes, streamID)
 	return err
 }

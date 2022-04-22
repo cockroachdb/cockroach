@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree_test
+package timeconv_test
 
 import (
 	"context"
@@ -66,7 +66,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		)
 
 		ctx := tree.EvalContext{
-			Txn: kv.NewTxnFromProto(
+			EvalCtxTxn: kv.NewTxnFromProto(
 				context.Background(),
 				db,
 				1, /* gatewayNodeID */

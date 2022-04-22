@@ -2696,7 +2696,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 // statement is supposed to have a different timestamp, the evalCtx generally
 // shouldn't be reused across statements.
 func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, stmtTS time.Time) {
-	newTxn := txn == nil || evalCtx.Txn != txn
+	newTxn := txn == nil || evalCtx.EvalCtxTxn != txn
 	evalCtx.TxnState = ex.getTransactionState()
 	evalCtx.TxnReadOnly = ex.state.readOnly
 	evalCtx.TxnImplicit = ex.implicitTxn()
@@ -2712,11 +2712,11 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil
 	evalCtx.Context = ex.Ctx()
-	evalCtx.Txn = txn
 	evalCtx.Mon = ex.state.mon
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = &ex.extraTxnState.schemaChangerState
+	evalCtx.SetTxn(txn)
 
 	// If we are retrying due to an unsatisfiable timestamp bound which is
 	// retriable, it means we were unable to serve the previous minimum timestamp
