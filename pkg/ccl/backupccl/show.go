@@ -352,7 +352,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			env := &backupKMSEnv{p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig}
 			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 			for _, encFile := range opts {
-				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup([]string{kms},
+				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(ctx, []string{kms},
 					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), env)
 				if err == nil {
 					break
