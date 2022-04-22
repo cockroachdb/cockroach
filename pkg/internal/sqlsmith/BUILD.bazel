@@ -44,7 +44,7 @@ go_test(
         "main_test.go",
         "sqlsmith_test.go",
     ],
-    data = ["@com_github_cockroachdb_cockroach//c-deps:libgeos"],
+    data = ["//c-deps:libgeos"],
     embed = [":sqlsmith"],
     deps = [
         "//pkg/base",

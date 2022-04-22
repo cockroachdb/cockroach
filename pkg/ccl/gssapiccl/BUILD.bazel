@@ -8,7 +8,7 @@ go_library(
         "//conditions:default": ["empty.go"],
     }),
     cdeps = select({
-        "@io_bazel_rules_go//go/platform:linux_amd64": ["@com_github_cockroachdb_cockroach//c-deps:libkrb5"],
+        "@io_bazel_rules_go//go/platform:linux_amd64": ["//c-deps:libkrb5"],
         "//conditions:default": [],
     }),
     cgo = True,

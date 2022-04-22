@@ -64,7 +64,7 @@ go_test(
     ],
     data = [
         ":testdata",
-        "@com_github_cockroachdb_cockroach//c-deps:libgeos",
+        "//c-deps:libgeos",
         "@com_github_cockroachdb_sqllogictest//:testfiles",
     ],
     embed = [":logictest"],

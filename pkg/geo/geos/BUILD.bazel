@@ -67,7 +67,7 @@ go_test(
     name = "geos_test",
     size = "small",
     srcs = ["geos_test.go"],
-    data = ["@com_github_cockroachdb_cockroach//c-deps:libgeos"],
+    data = ["//c-deps:libgeos"],
     embed = [":geos"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
