@@ -1515,6 +1515,13 @@ func getBackupDetailAndManifest(
 		if err := requireEnterprise(execCfg, "incremental"); err != nil {
 			return jobspb.BackupDetails{}, BackupManifest{}, err
 		}
+		lastEndTime := prevBackups[len(prevBackups)-1].EndTime
+		if initialDetails.EndTime.Less(lastEndTime) {
+			return jobspb.BackupDetails{}, BackupManifest{},
+				errors.Newf("`AS OF SYSTEM TIME` %s must be greater than "+
+					"the previous backup's end time of %s.",
+					initialDetails.EndTime.GoTime(), lastEndTime.GoTime())
+		}
 		startTime = prevBackups[len(prevBackups)-1].EndTime
 	}
 
