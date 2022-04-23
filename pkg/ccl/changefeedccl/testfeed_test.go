@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
@@ -337,6 +338,40 @@ func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
 		return nil, err
 	}
 	return payload.GetChangefeed(), nil
+}
+
+// HighWaterMark implements FeedJob interface.
+func (f *jobFeed) HighWaterMark() (hlc.Timestamp, error) {
+	var details []byte
+	if err := f.db.QueryRow(
+		`SELECT progress FROM system.jobs WHERE id=$1`, f.jobID,
+	).Scan(&details); err != nil {
+		return hlc.Timestamp{}, err
+	}
+	var progress jobspb.Progress
+	if err := protoutil.Unmarshal(details, &progress); err != nil {
+		return hlc.Timestamp{}, err
+	}
+	h := progress.GetHighWater()
+	var hwm hlc.Timestamp
+	if h != nil {
+		hwm = *h
+	}
+	return hwm, nil
+}
+
+// TickHighWaterMark implements the TestFeed interface.
+func (f *jobFeed) TickHighWaterMark(minHWM hlc.Timestamp) error {
+	return testutils.SucceedsWithinError(func() error {
+		current, err := f.HighWaterMark()
+		if err != nil {
+			return err
+		}
+		if minHWM.Less(current) {
+			return nil
+		}
+		return errors.New("waiting to tick")
+	}, 10*time.Second)
 }
 
 // FetchTerminalJobErr retrieves the error message from changefeed job.

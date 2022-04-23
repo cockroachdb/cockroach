@@ -71,6 +71,7 @@ const (
 	OptOnError                  = `on_error`
 	OptMetricsScope             = `metrics_label`
 	OptVirtualColumns           = `virtual_columns`
+	OptPrimaryKeyFilter         = `primary_key_filter`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -210,6 +211,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptOnError:                  sql.KVStringOptRequireValue,
 	OptMetricsScope:             sql.KVStringOptRequireValue,
 	OptVirtualColumns:           sql.KVStringOptRequireValue,
+	OptPrimaryKeyFilter:         sql.KVStringOptRequireValue,
 }
 
 func makeStringSet(opts ...string) map[string]struct{} {
@@ -229,7 +231,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly,
-	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics)
+	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptPrimaryKeyFilter)
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil
