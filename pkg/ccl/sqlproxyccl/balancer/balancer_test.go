@@ -86,7 +86,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 	syncReq := &rebalanceRequest{
 		createdAt: timeSource.Now(),
 		conn: &testBalancerConnHandle{
-			onTransferConnection: func(dstAddr string) error {
+			onTransferConnection: func() error {
 				syncCh <- struct{}{}
 				return nil
 			},
@@ -111,8 +111,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 		req := &rebalanceRequest{
 			createdAt: timeSource.Now(),
 			conn: &testBalancerConnHandle{
-				onTransferConnection: func(dstAddr string) error {
-					require.Equal(t, "foo", dstAddr)
+				onTransferConnection: func() error {
 					count++
 					require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
 					return errors.New("cannot transfer")
@@ -135,8 +134,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 	t.Run("conn_was_transferred_by_other", func(t *testing.T) {
 		count := 0
 		conn := &testBalancerConnHandle{}
-		conn.onTransferConnection = func(dstAddr string) error {
-			require.Equal(t, "foo", dstAddr)
+		conn.onTransferConnection = func() error {
 			count++
 			// Simulate that connection was transferred by someone else.
 			conn.remoteAddr = "foo"
@@ -163,8 +161,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 	t.Run("conn_was_transferred", func(t *testing.T) {
 		count := 0
 		conn := &testBalancerConnHandle{}
-		conn.onTransferConnection = func(dstAddr string) error {
-			require.Equal(t, "foo", dstAddr)
+		conn.onTransferConnection = func() error {
 			count++
 			conn.remoteAddr = "foo"
 			require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
@@ -190,8 +187,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 	t.Run("conn_was_closed", func(t *testing.T) {
 		count := 0
 		conn := &testBalancerConnHandle{}
-		conn.onTransferConnection = func(dstAddr string) error {
-			require.Equal(t, "foo", dstAddr)
+		conn.onTransferConnection = func() error {
 			count++
 			require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
 			return context.Canceled
@@ -236,9 +232,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 			req := &rebalanceRequest{
 				createdAt: timeSource.Now(),
 				conn: &testBalancerConnHandle{
-					onTransferConnection: func(dstAddr string) error {
-						require.Equal(t, "foo", dstAddr)
-
+					onTransferConnection: func() error {
 						// Block until all requests are enqueued.
 						<-waitCh
 
@@ -628,14 +622,14 @@ func TestRebalancerQueueBlocking(t *testing.T) {
 type testBalancerConnHandle struct {
 	ConnectionHandle
 	remoteAddr           string
-	onTransferConnection func(dstAddr string) error
+	onTransferConnection func() error
 }
 
 var _ ConnectionHandle = &testBalancerConnHandle{}
 
 // TransferConnection implements the ConnectionHandle interface.
-func (h *testBalancerConnHandle) TransferConnection(dstAddr string) error {
-	return h.onTransferConnection(dstAddr)
+func (h *testBalancerConnHandle) TransferConnection() error {
+	return h.onTransferConnection()
 }
 
 // ServerRemoteAddr implements the ConnectionHandle interface.

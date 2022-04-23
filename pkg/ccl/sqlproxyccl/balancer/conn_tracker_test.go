@@ -312,7 +312,7 @@ func (h *testTrackerConnHandle) ServerRemoteAddr() string {
 }
 
 // TransferConnection implements the ConnectionHandle interface.
-func (h *testTrackerConnHandle) TransferConnection(dstAddr string) error {
+func (h *testTrackerConnHandle) TransferConnection() error {
 	if h.ctx != nil && h.ctx.Err() != nil {
 		return h.ctx.Err()
 	}
