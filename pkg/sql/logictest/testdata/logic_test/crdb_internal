@@ -24,6 +24,7 @@ crdb_internal  cluster_contention_events        table  NULL  NULL  NULL
 crdb_internal  cluster_database_privileges      table  NULL  NULL  NULL
 crdb_internal  cluster_distsql_flows            table  NULL  NULL  NULL
 crdb_internal  cluster_inflight_traces          table  NULL  NULL  NULL
+crdb_internal  cluster_locks                    table  NULL  NULL  NULL
 crdb_internal  cluster_queries                  table  NULL  NULL  NULL
 crdb_internal  cluster_sessions                 table  NULL  NULL  NULL
 crdb_internal  cluster_settings                 table  NULL  NULL  NULL
