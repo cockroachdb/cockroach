@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "balancer",
     srcs = [
+        "assignment.go",
         "balancer.go",
         "conn.go",
         "conn_tracker.go",
@@ -29,6 +30,7 @@ go_library(
 go_test(
     name = "balancer_test",
     srcs = [
+        "assignment_test.go",
         "balancer_test.go",
         "conn_tracker_test.go",
         "pod_test.go",
