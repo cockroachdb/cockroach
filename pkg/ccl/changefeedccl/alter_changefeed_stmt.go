@@ -390,11 +390,7 @@ func generateNewTargets(
 			for _, targetDesc := range newTableDescs {
 				existingTargetDescs = append(existingTargetDescs, targetDesc)
 			}
-			existingTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, existingTargetDescs)
-			if err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
-			}
-
+			existingTargetSpans := fetchSpansForDescs(ctx, p, opts, statementTime, existingTargetDescs)
 			var newTargetDescs []catalog.Descriptor
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
@@ -414,10 +410,7 @@ func generateNewTargets(
 				newTargetDescs = append(newTargetDescs, desc)
 			}
 
-			addedTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, newTargetDescs)
-			if err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
-			}
+			addedTargetSpans := fetchSpansForDescs(ctx, p, opts, statementTime, newTargetDescs)
 
 			// By default, we will not perform an initial scan on newly added
 			// targets. Hence, the user must explicitly state that they want an
@@ -483,10 +476,7 @@ func generateNewTargets(
 			}
 		}
 		if len(droppedTargetDescs) > 0 {
-			droppedTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, droppedTargetDescs)
-			if err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
-			}
+			droppedTargetSpans := fetchSpansForDescs(ctx, p, opts, statementTime, droppedTargetDescs)
 			removeSpansFromProgress(newJobProgress, droppedTargetSpans)
 		}
 	}
@@ -674,15 +664,16 @@ func fetchSpansForDescs(
 	opts map[string]string,
 	statementTime hlc.Timestamp,
 	descs []catalog.Descriptor,
-) ([]roachpb.Span, error) {
+) (primarySpans []roachpb.Span) {
 	targets := make([]jobspb.ChangefeedTargetSpecification, len(descs))
 	for i, d := range descs {
 		targets[i] = jobspb.ChangefeedTargetSpecification{TableID: d.GetID()}
 	}
 
-	spans, err := fetchSpansForTargets(ctx, p.ExecCfg(), targets, statementTime)
-
-	return spans, err
+	for _, d := range descs {
+		primarySpans = append(primarySpans, d.(catalog.TableDescriptor).PrimaryIndexSpan(p.ExtendedEvalContext().Codec))
+	}
+	return primarySpans
 }
 
 func getPrevOpts(prevDescription string, opts map[string]string) (map[string]string, error) {
