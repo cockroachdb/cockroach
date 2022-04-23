@@ -17,8 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -110,9 +114,27 @@ func distChangefeedFlow(
 			spansTS = spansTS.Next()
 		}
 		var err error
-		trackedSpans, err = fetchSpansForTargets(ctx, execCfg, AllTargets(details), spansTS)
+		var tableDescs []catalog.TableDescriptor
+		tableDescs, err = fetchTableDescriptors(ctx, execCfg, AllTargets(details), spansTS)
 		if err != nil {
 			return err
+		}
+
+		if filterExpr, isSet := details.Opts[changefeedbase.OptPrimaryKeyFilter]; isSet {
+			if len(tableDescs) > 1 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"option %s can only be used with 1 changefeed target (found %d)",
+					changefeedbase.OptPrimaryKeyFilter, len(tableDescs),
+				)
+			}
+			trackedSpans, err = constrainSpansByExpression(ctx, execCtx, filterExpr, tableDescs[0])
+			if err != nil {
+				return err
+			}
+		} else {
+			for _, d := range tableDescs {
+				trackedSpans = append(trackedSpans, d.PrimaryIndexSpan(execCfg.Codec))
+			}
 		}
 	}
 
@@ -130,17 +152,18 @@ func distChangefeedFlow(
 		ctx, execCtx, jobID, details, trackedSpans, initialHighWater, checkpoint, resultsCh, distflowKnobs)
 }
 
-func fetchSpansForTargets(
+func fetchTableDescriptors(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	targets []jobspb.ChangefeedTargetSpecification,
 	ts hlc.Timestamp,
-) ([]roachpb.Span, error) {
-	var spans []roachpb.Span
+) ([]catalog.TableDescriptor, error) {
+	var targetDescs []catalog.TableDescriptor
+
 	fetchSpans := func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		spans = nil
+		targetDescs = nil
 		if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
 			return err
 		}
@@ -159,12 +182,32 @@ func fetchSpansForTargets(
 			if err != nil {
 				return err
 			}
-			spans = append(spans, tableDesc.PrimaryIndexSpan(execCfg.Codec))
+			targetDescs = append(targetDescs, tableDesc)
 		}
 		return nil
 	}
 	if err := sql.DescsTxn(ctx, execCfg, fetchSpans); err != nil {
 		return nil, err
 	}
-	return spans, nil
+	return targetDescs, nil
+}
+
+func constrainSpansByExpression(
+	ctx context.Context, execCtx sql.JobExecContext, filterStr string, descr catalog.TableDescriptor,
+) ([]roachpb.Span, error) {
+	if filterStr == "" {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"option %s must not be empty", changefeedbase.OptPrimaryKeyFilter,
+		)
+	}
+
+	filterExpr, err := parser.ParseExpr(filterStr)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
+			"filter expression %s must be a valid SQL expression", changefeedbase.OptPrimaryKeyFilter)
+	}
+
+	semaCtx := tree.MakeSemaContext()
+	return execCtx.ConstrainPrimaryIndexSpanByExpr(
+		ctx, descr, &execCtx.ExtendedEvalContext().EvalContext, &semaCtx, filterExpr)
 }
