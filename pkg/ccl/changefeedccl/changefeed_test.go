@@ -5998,6 +5998,52 @@ func TestChangefeedOnlyInitialScanCSVSinkless(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 }
 
+func TestChangefeedPrimaryKeyFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b string)")
+		sqlDB.Exec(t, "CREATE TABLE bar (a INT PRIMARY KEY, b string)")
+		sqlDB.Exec(t, "INSERT INTO foo SELECT * FROM generate_series(1, 20)")
+
+		sqlDB.ExpectErr(t, `option primary_key_filter can only be used with 1 changefeed target`,
+			`CREATE CHANGEFEED FOR foo, bar WITH primary_key_filter='a < 5 OR a > 18'`)
+
+		feed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH primary_key_filter='a < 5 OR a > 18'`)
+		defer closeFeed(t, feed)
+
+		assertPayloads(t, feed, []string{
+			`foo: [1]->{"after": {"a": 1, "b": null}}`,
+			`foo: [2]->{"after": {"a": 2, "b": null}}`,
+			`foo: [3]->{"after": {"a": 3, "b": null}}`,
+			`foo: [4]->{"after": {"a": 4, "b": null}}`,
+			`foo: [19]->{"after": {"a": 19, "b": null}}`,
+			`foo: [20]->{"after": {"a": 20, "b": null}}`,
+		})
+
+		for i := 0; i < 22; i++ {
+			sqlDB.Exec(t, "UPSERT INTO foo VALUES ($1, $2)", i, strconv.Itoa(i))
+		}
+
+		assertPayloads(t, feed, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "0"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "1"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "2"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "3"}}`,
+			`foo: [4]->{"after": {"a": 4, "b": "4"}}`,
+			`foo: [19]->{"after": {"a": 19, "b": "19"}}`,
+			`foo: [20]->{"after": {"a": 20, "b": "20"}}`,
+			`foo: [21]->{"after": {"a": 21, "b": "21"}}`,
+		})
+	}
+
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
 func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
 	mm := mon.NewMonitorWithLimit(
 		"test-mm", mon.MemoryResource, budget,
