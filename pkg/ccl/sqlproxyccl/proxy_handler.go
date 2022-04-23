@@ -346,6 +346,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		ClusterName:    clusterName,
 		TenantID:       tenID,
 		DirectoryCache: handler.directoryCache,
+		ConnTracker:    handler.connTracker,
 		Balancer:       handler.balancer,
 		StartupMsg:     backendStartupMsg,
 	}
@@ -373,7 +374,10 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		}
 	}
 
-	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, fe.conn,
+	f := newForwarder(ctx, connector, handler.metrics, nil /* timeSource */)
+	defer f.Close()
+
+	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, f, fe.conn,
 		func(status throttler.AttemptStatus) error {
 			if err := handler.throttleService.ReportAttempt(
 				ctx, throttleTags, throttleTime, status,
@@ -402,9 +406,6 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	defer func() {
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
-
-	f := newForwarder(ctx, connector, handler.metrics, nil /* timeSource */)
-	defer f.Close()
 
 	// Pass ownership of conn and crdbConn to the forwarder.
 	if err := f.run(fe.conn, crdbConn); err != nil {

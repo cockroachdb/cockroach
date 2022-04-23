@@ -104,6 +104,18 @@ func (t *ConnTracker) GetTenantIDs() []roachpb.TenantID {
 	return tenants
 }
 
+// registerAssignment registers the server assignment for tracking under the
+// given tenant. If the assignment has already been registered, this is a no-op.
+func (t *ConnTracker) registerAssignment(tenantID roachpb.TenantID, sa *ServerAssignment) {
+	// TODO(jaylim-crl): implementation.
+}
+
+// unregisterAssignment unregisters the server assignment under the given
+// tenant. If the assignment cannot be found, this is a no-op.
+func (t *ConnTracker) unregisterAssignment(tenantID roachpb.TenantID, sa *ServerAssignment) {
+	// TODO(jaylim-crl): implementation.
+}
+
 // getEntry retrieves the tenantEntry instance for the given tenant. If
 // allowCreate is set to false, getEntry returns nil if the entry does not
 // exist for the given tenant. On the other hand, if allowCreate is set to
