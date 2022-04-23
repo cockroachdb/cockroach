@@ -1572,6 +1572,10 @@ func (p *fakePubsubSink) Flush(ctx context.Context) error {
 	return p.Sink.Flush(ctx)
 }
 
+func (p *fakePubsubClient) connectivityError() error {
+	return nil
+}
+
 type pubsubFeedFactory struct {
 	enterpriseFeedFactory
 }
