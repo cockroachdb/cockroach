@@ -424,6 +424,12 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
+	if filterExpr, isSet := details.Opts[changefeedbase.OptPrimaryKeyFilter]; isSet {
+		if err := validatePrimaryKeyFilterExpression(ctx, p, filterExpr, targetDescs); err != nil {
+			return nil, err
+		}
+	}
+
 	if _, err := getEncoder(details.Opts, AllTargets(details)); err != nil {
 		return nil, err
 	}
@@ -877,6 +883,28 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	return details, nil
+}
+
+func validatePrimaryKeyFilterExpression(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	filterExpr string,
+	descriptors map[tree.TablePattern]catalog.Descriptor,
+) error {
+	if len(descriptors) > 1 {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"option %s can only be used with 1 changefeed target (found %d)",
+			changefeedbase.OptPrimaryKeyFilter, len(descriptors),
+		)
+	}
+
+	var tableDescr catalog.TableDescriptor
+	for _, d := range descriptors {
+		tableDescr = d.(catalog.TableDescriptor)
+	}
+
+	_, err := constrainSpansByExpression(ctx, execCtx, filterExpr, tableDescr)
+	return err
 }
 
 type changefeedResumer struct {
