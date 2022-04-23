@@ -390,11 +390,7 @@ func generateNewTargets(
 			for _, targetDesc := range newTableDescs {
 				existingTargetDescs = append(existingTargetDescs, targetDesc)
 			}
-			existingTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, existingTargetDescs)
-			if err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
-			}
-
+			existingTargetSpans := fetchSpansForDescs(p, existingTargetDescs)
 			var newTargetDescs []catalog.Descriptor
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
@@ -414,10 +410,7 @@ func generateNewTargets(
 				newTargetDescs = append(newTargetDescs, desc)
 			}
 
-			addedTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, newTargetDescs)
-			if err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
-			}
+			addedTargetSpans := fetchSpansForDescs(p, newTargetDescs)
 
 			// By default, we will not perform an initial scan on newly added
 			// targets. Hence, the user must explicitly state that they want an
@@ -483,10 +476,7 @@ func generateNewTargets(
 			}
 		}
 		if len(droppedTargetDescs) > 0 {
-			droppedTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, droppedTargetDescs)
-			if err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
-			}
+			droppedTargetSpans := fetchSpansForDescs(p, droppedTargetDescs)
 			removeSpansFromProgress(newJobProgress, droppedTargetSpans)
 		}
 	}
@@ -669,20 +659,17 @@ func removeSpansFromProgress(prevProgress jobspb.Progress, spansToRemove []roach
 }
 
 func fetchSpansForDescs(
-	ctx context.Context,
-	p sql.PlanHookState,
-	opts map[string]string,
-	statementTime hlc.Timestamp,
-	descs []catalog.Descriptor,
-) ([]roachpb.Span, error) {
-	targets := make([]jobspb.ChangefeedTargetSpecification, len(descs))
-	for i, d := range descs {
-		targets[i] = jobspb.ChangefeedTargetSpecification{TableID: d.GetID()}
+	p sql.PlanHookState, descs []catalog.Descriptor,
+) (primarySpans []roachpb.Span) {
+	seen := make(map[descpb.ID]struct{})
+	for _, d := range descs {
+		if _, isDup := seen[d.GetID()]; isDup {
+			continue
+		}
+		seen[d.GetID()] = struct{}{}
+		primarySpans = append(primarySpans, d.(catalog.TableDescriptor).PrimaryIndexSpan(p.ExtendedEvalContext().Codec))
 	}
-
-	spans, err := fetchSpansForTargets(ctx, p.ExecCfg(), targets, statementTime)
-
-	return spans, err
+	return primarySpans
 }
 
 func getPrevOpts(prevDescription string, opts map[string]string) (map[string]string, error) {

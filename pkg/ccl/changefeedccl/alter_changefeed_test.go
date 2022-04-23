@@ -1277,3 +1277,70 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
 }
+
+func TestAlterChangefeedUpdateFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, testFeed)
+
+		sqlDB.Exec(t, `INSERT INTO foo  SELECT *, 'initial' FROM generate_series(1, 5)`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "initial"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "initial"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "initial"}}`,
+			`foo: [4]->{"after": {"a": 4, "b": "initial"}}`,
+			`foo: [5]->{"after": {"a": 5, "b": "initial"}}`,
+		})
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		require.NoError(t, feed.TickHighWaterMark(f.Server().Clock().Now()))
+		require.NoError(t, feed.Pause())
+
+		// Set filter to emit a > 4.  We expect to see update row 5, and onward.
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET primary_key_filter='a > 4'`, feed.JobID()))
+		require.NoError(t, feed.Resume())
+
+		// Upsert 10 new values -- we expect to see only 5-10
+		sqlDB.Exec(t, `UPSERT INTO foo  SELECT *, 'updated' FROM generate_series(1, 10)`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [5]->{"after": {"a": 5, "b": "updated"}}`,
+			`foo: [6]->{"after": {"a": 6, "b": "updated"}}`,
+			`foo: [7]->{"after": {"a": 7, "b": "updated"}}`,
+			`foo: [8]->{"after": {"a": 8, "b": "updated"}}`,
+			`foo: [9]->{"after": {"a": 9, "b": "updated"}}`,
+			`foo: [10]->{"after": {"a": 10, "b": "updated"}}`,
+		})
+
+		// Pause again, clear out filter and verify we get expected values.
+		require.NoError(t, feed.TickHighWaterMark(f.Server().Clock().Now()))
+		require.NoError(t, feed.Pause())
+
+		// Set filter to emit a > 4.  We expect to see update row 5, and onward.
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d UNSET primary_key_filter`, feed.JobID()))
+		require.NoError(t, feed.Resume())
+
+		sqlDB.Exec(t, `UPSERT INTO foo  SELECT *, 'new value' FROM generate_series(1, 10)`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "new value"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "new value"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "new value"}}`,
+			`foo: [4]->{"after": {"a": 4, "b": "new value"}}`,
+			`foo: [5]->{"after": {"a": 5, "b": "new value"}}`,
+			`foo: [6]->{"after": {"a": 6, "b": "new value"}}`,
+			`foo: [7]->{"after": {"a": 7, "b": "new value"}}`,
+			`foo: [8]->{"after": {"a": 8, "b": "new value"}}`,
+			`foo: [9]->{"after": {"a": 9, "b": "new value"}}`,
+			`foo: [10]->{"after": {"a": 10, "b": "new value"}}`,
+		})
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
+}
