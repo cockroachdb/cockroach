@@ -16,6 +16,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,7 +36,9 @@ import (
 var defaultTransferTimeout = 15 * time.Second
 
 // Used in testing.
-var transferConnectionConnectorTestHook func(context.Context, string) (net.Conn, error) = nil
+var transferConnectionConnectorTestHook func(
+	context.Context, balancer.ConnectionHandle, string,
+) (net.Conn, error) = nil
 
 type transferContext struct {
 	context.Context
@@ -207,7 +210,7 @@ func (f *forwarder) TransferConnection() (retErr error) {
 
 	// Transfer the connection.
 	clientConn, serverConn := f.getConns()
-	newServerConn, err := transferConnection(ctx, f.connector, f.metrics, clientConn, serverConn)
+	newServerConn, err := transferConnection(ctx, f, f.connector, f.metrics, clientConn, serverConn)
 	if err != nil {
 		return errors.Wrap(err, "transferring connection")
 	}
@@ -222,6 +225,7 @@ func (f *forwarder) TransferConnection() (retErr error) {
 // connection got transferred to.
 func transferConnection(
 	ctx *transferContext,
+	requester balancer.ConnectionHandle,
 	connector *connector,
 	metrics *metrics,
 	clientConn, serverConn *interceptor.PGConn,
@@ -267,7 +271,7 @@ func transferConnection(
 	if transferConnectionConnectorTestHook != nil {
 		connectFn = transferConnectionConnectorTestHook
 	}
-	netConn, err := connectFn(ctx, revivalToken)
+	netConn, err := connectFn(ctx, requester, revivalToken)
 	if err != nil {
 		return nil, errors.Wrap(err, "opening connection")
 	}
