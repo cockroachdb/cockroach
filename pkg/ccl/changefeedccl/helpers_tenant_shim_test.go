@@ -66,7 +66,6 @@ func (t *testServerShim) ExecutorConfig() interface{}           { panic(unsuppor
 func (t *testServerShim) TracerI() interface{}                  { panic(unsupportedShimMethod) }
 func (t *testServerShim) GossipI() interface{}                  { panic(unsupportedShimMethod) }
 func (t *testServerShim) RangeFeedFactory() interface{}         { panic(unsupportedShimMethod) }
-func (t *testServerShim) Clock() *hlc.Clock                     { panic(unsupportedShimMethod) }
 func (t *testServerShim) DistSenderI() interface{}              { panic(unsupportedShimMethod) }
 func (t *testServerShim) MigrationServer() interface{}          { panic(unsupportedShimMethod) }
 func (t *testServerShim) SQLServer() interface{}                { panic(unsupportedShimMethod) }
