@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -128,7 +129,7 @@ func TestTransferConnection(t *testing.T) {
 		ctx, cancel := newTransferContext(context.Background())
 		cancel()
 
-		conn, err := transferConnection(ctx, nil, nil, nil, nil)
+		conn, err := transferConnection(ctx, nil, nil, nil, nil, nil)
 		require.EqualError(t, err, context.Canceled.Error())
 		require.Nil(t, conn)
 		require.True(t, ctx.isRecoverable())
@@ -148,6 +149,7 @@ func TestTransferConnection(t *testing.T) {
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			nil,
 			nil,
 			interceptor.NewPGConn(p1),
@@ -190,6 +192,7 @@ func TestTransferConnection(t *testing.T) {
 			ctx,
 			nil,
 			nil,
+			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
 		)
@@ -228,6 +231,7 @@ func TestTransferConnection(t *testing.T) {
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			nil,
 			nil,
 			interceptor.NewPGConn(p1),
@@ -269,6 +273,7 @@ func TestTransferConnection(t *testing.T) {
 		defer testutils.TestingHook(&transferConnectionConnectorTestHook,
 			func(
 				tCtx context.Context,
+				requestor balancer.ConnectionHandle,
 				token string,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
@@ -279,6 +284,7 @@ func TestTransferConnection(t *testing.T) {
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			&connector{},
 			nil,
 			interceptor.NewPGConn(p1),
@@ -323,6 +329,7 @@ func TestTransferConnection(t *testing.T) {
 		defer testutils.TestingHook(&transferConnectionConnectorTestHook,
 			func(
 				tCtx context.Context,
+				requestor balancer.ConnectionHandle,
 				token string,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
@@ -346,6 +353,7 @@ func TestTransferConnection(t *testing.T) {
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			&connector{},
 			nil,
 			interceptor.NewPGConn(p1),
@@ -394,6 +402,7 @@ func TestTransferConnection(t *testing.T) {
 		defer testutils.TestingHook(&transferConnectionConnectorTestHook,
 			func(
 				tCtx context.Context,
+				requestor balancer.ConnectionHandle,
 				token string,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
@@ -417,6 +426,7 @@ func TestTransferConnection(t *testing.T) {
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			&connector{},
 			nil,
 			interceptor.NewPGConn(p1),
