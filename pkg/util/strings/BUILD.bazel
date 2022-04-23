@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "strings",
+    srcs = ["string_util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/strings",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "stringutil_test",
+    size = "small",
+    srcs = ["string_util_test.go"],
+    embed = [":stringutil"],
+)
+
+go_test(
+    name = "strings_test",
+    srcs = ["string_util_test.go"],
+    embed = [":strings"],
+)
