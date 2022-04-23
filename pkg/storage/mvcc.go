@@ -430,7 +430,7 @@ func updateStatsOnResolve(
 	// the new intent/value.
 	if !meta.Deleted {
 		ms.LiveBytes -= origMetaKeySize + origMetaValSize
-		ms.LiveBytes -= orig.KeyBytes + meta.ValBytes
+		ms.LiveBytes -= orig.KeyBytes + orig.ValBytes
 	}
 
 	// IntentAge is always accrued from the intent's own timestamp on.
