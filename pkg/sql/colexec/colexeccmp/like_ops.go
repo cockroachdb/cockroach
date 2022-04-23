@@ -13,6 +13,8 @@ package colexeccmp
 import (
 	"bytes"
 	"strings"
+
+	string_util "github.com/cockroachdb/cockroach/pkg/util/strings"
 )
 
 // LikeOpType is an enum that describes all of the different variants of LIKE
@@ -65,6 +67,7 @@ const (
 // The second return parameter always contains a single []byte, unless
 // "skeleton" LikeOpType is returned.
 func GetLikeOperatorType(pattern string, negate bool) (LikeOpType, [][]byte, error) {
+	pattern = string_util.CollapseDupeChar(pattern, '%')
 	if pattern == "" {
 		if negate {
 			return LikeConstantNegate, [][]byte{{}}, nil
