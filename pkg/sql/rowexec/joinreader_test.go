@@ -1712,33 +1712,27 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 	createRightSideTable := func(sz int) {
 		colDefs := make([]string, 0, len(rightSideColumnDefs))
 		indexDefs := make([]string, 0, len(rightSideColumnDefs))
-		genValueFns := make([]sqlutils.GenValueFn, 0, len(rightSideColumnDefs))
-		for _, columnDef := range rightSideColumnDefs {
+		// Instead of using sqlutils.CreateTable with value-generator functions,
+		// we will build a single large INSERT statement that adds all desired
+		// rows into the newly-created table. Empirically, this approach has
+		// shown to be faster.
+		var insertStmt string
+		for col, columnDef := range rightSideColumnDefs {
 			if columnDef.matchesPerLookupRow > sz {
 				continue
 			}
 			colDefs = append(colDefs, fmt.Sprintf("%s INT", columnDef.name))
 			indexDefs = append(indexDefs, fmt.Sprintf("INDEX (%s)", columnDef.name))
-
-			curValue := -1
-			// Capture matchesPerLookupRow for use in the generating function later
-			// on.
-			matchesPerLookupRow := columnDef.matchesPerLookupRow
-			genValueFns = append(genValueFns, func(row int) tree.Datum {
-				idx := row - 1
-				if idx%matchesPerLookupRow == 0 {
-					// Increment curValue every columnDef.matchesPerLookupRow values. The
-					// first value will be 0.
-					curValue++
-				}
-				return tree.NewDInt(tree.DInt(curValue))
-			})
+			if col > 0 {
+				insertStmt += ", "
+			}
+			insertStmt += fmt.Sprintf("i // %d", columnDef.matchesPerLookupRow)
 		}
 		tableName := tableSizeToName(sz)
-
-		sqlutils.CreateTable(
-			b, sqlDB, tableName, strings.Join(append(colDefs, indexDefs...), ", "), sz,
-			sqlutils.ToRowFn(genValueFns...))
+		r := sqlutils.MakeSQLRunner(sqlDB)
+		r.Exec(b, "CREATE DATABASE IF NOT EXISTS test")
+		r.Exec(b, fmt.Sprintf("CREATE TABLE test.%s (%s)", tableName, strings.Join(append(colDefs, indexDefs...), ", ")))
+		r.Exec(b, fmt.Sprintf("INSERT INTO test.%s SELECT %s FROM generate_series(0, %d) AS g(i)", tableName, insertStmt, sz-1))
 	}
 
 	createRightSideTable(bc.rightSz)
