@@ -123,11 +123,6 @@ var errTransferCannotStart = errors.New("transfer cannot be started")
 // re-resumed, or the forwarder will be closed (in the case of a non-recoverable
 // error).
 //
-// TODO(jaylim-crl): It would be nice to introduce transfer policies in the
-// future. That way, we could either transfer to another random SQL pod, or to
-// a specific SQL pod. If we do that, TransferConnection would take in some kind
-// of policy parameter(s).
-//
 // TransferConnection implements the balancer.ConnectionHandle interface.
 func (f *forwarder) TransferConnection() (retErr error) {
 	// A previous non-recoverable transfer would have closed the forwarder, so
@@ -268,13 +263,6 @@ func transferConnection(
 	}
 
 	// Connect to a new SQL pod.
-	//
-	// TODO(jaylim-crl): There is a possibility where the same pod will get
-	// selected. Some ideas to solve this: pass in the remote address of
-	// serverConn to avoid choosing that pod, or maybe a filter callback?
-	// We can also consider adding a target pod as an argument to
-	// TransferConnection. That way a central component gets to choose where the
-	// connections go.
 	connectFn := connector.OpenTenantConnWithToken
 	if transferConnectionConnectorTestHook != nil {
 		connectFn = transferConnectionConnectorTestHook
