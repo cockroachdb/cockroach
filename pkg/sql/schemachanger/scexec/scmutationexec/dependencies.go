@@ -86,6 +86,9 @@ type MutationVisitorStateUpdater interface {
 		constraintID descpb.ConstraintID,
 	) error
 
+	// AddComment adds comments for a descriptor
+	AddComment(id descpb.ID, subID int, commentType keys.CommentType, comment string)
+
 	// DeleteDatabaseRoleSettings removes a database role setting
 	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
 

@@ -300,6 +300,19 @@ func (desc *wrapper) GetConstraintInfo() (map[string]descpb.ConstraintDetail, er
 	return desc.collectConstraintInfo(nil)
 }
 
+func (desc *wrapper) FindConstraintWithID(id descpb.ConstraintID) (descpb.ConstraintDetail, error) {
+	constraintInfo, err := desc.GetConstraintInfo()
+	if err != nil {
+		return descpb.ConstraintDetail{}, err
+	}
+	for _, info := range constraintInfo {
+		if info.ConstraintID == id {
+			return info, nil
+		}
+	}
+	return descpb.ConstraintDetail{}, nil
+}
+
 // GetConstraintInfoWithLookup implements the TableDescriptor interface.
 func (desc *wrapper) GetConstraintInfoWithLookup(
 	tableLookup catalog.TableLookupFn,

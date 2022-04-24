@@ -184,23 +184,10 @@ func init() {
 			(*scpb.ColumnName)(nil),
 			(*scpb.ColumnDefaultExpression)(nil),
 			(*scpb.ColumnOnUpdateExpression)(nil),
-		),
-		screl.DescID,
-		screl.ColumnID,
-	).register()
-
-	depRule(
-		"column existence precedes column comment",
-		scgraph.Precedence,
-		scpb.ToPublic,
-		element(scpb.Status_DELETE_ONLY,
-			(*scpb.Column)(nil),
-		),
-		element(scpb.Status_PUBLIC,
 			(*scpb.ColumnComment)(nil),
 		),
 		screl.DescID,
-		screl.PgAttributeNum,
+		screl.ColumnID,
 	).register()
 
 	depRule(
@@ -245,7 +232,7 @@ func init() {
 			(*scpb.Column)(nil),
 		),
 		screl.DescID,
-		screl.PgAttributeNum,
+		screl.ColumnID,
 	).register()
 
 	depRule(
@@ -258,23 +245,10 @@ func init() {
 		element(scpb.Status_ABSENT,
 			(*scpb.ColumnType)(nil),
 			(*scpb.ColumnName)(nil),
-		),
-		screl.DescID,
-		screl.ColumnID,
-	).register()
-
-	depRule(
-		"column comments removed after column no longer public",
-		scgraph.Precedence,
-		scpb.ToAbsent,
-		element(scpb.Status_WRITE_ONLY,
-			(*scpb.Column)(nil),
-		),
-		element(scpb.Status_ABSENT,
 			(*scpb.ColumnComment)(nil),
 		),
 		screl.DescID,
-		screl.PgAttributeNum,
+		screl.ColumnID,
 	).register()
 
 	depRule(
@@ -300,26 +274,13 @@ func init() {
 		element(scpb.Status_ABSENT,
 			(*scpb.ColumnName)(nil),
 			(*scpb.ColumnType)(nil),
-		),
-		element(scpb.Status_ABSENT,
-			(*scpb.Column)(nil),
-		),
-		screl.DescID,
-		screl.ColumnID,
-	).register()
-
-	depRule(
-		"column comment removed before column",
-		scgraph.Precedence,
-		scpb.ToAbsent,
-		element(scpb.Status_ABSENT,
 			(*scpb.ColumnComment)(nil),
 		),
 		element(scpb.Status_ABSENT,
 			(*scpb.Column)(nil),
 		),
 		screl.DescID,
-		screl.PgAttributeNum,
+		screl.ColumnID,
 	).register()
 }
 

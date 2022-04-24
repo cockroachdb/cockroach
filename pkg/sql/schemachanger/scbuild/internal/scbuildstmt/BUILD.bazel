@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "alter_table.go",
         "alter_table_add_column.go",
+        "comment_on.go",
         "create_index.go",
         "dependencies.go",
         "drop_database.go",

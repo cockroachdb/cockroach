@@ -21,8 +21,13 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.SchemaComment) scop.Op {
-					return notImplemented(this)
+					return &scop.UpsertSchemaComment{
+						SchemaID: this.SchemaID,
+						Comment:  this.Comment,
+					}
 				}),
+				// TODO(Chengxiong): add schema event log (need to add proto for schema
+				// comment)
 			),
 		),
 		toAbsent(
