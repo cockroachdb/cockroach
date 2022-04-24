@@ -46,6 +46,14 @@ create-view
 CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
 ----
 
+setup
+COMMENT ON DATABASE db1 IS 'db1 is good';
+COMMENT ON SCHEMA db1.sc1 IS 'sc1 is good';
+COMMENT ON TABLE db1.sc1.t1 IS 't1 is good';
+COMMENT ON COLUMN db1.sc1.t1.id IS 'id is good';
+COMMENT ON INDEX db1.sc1.t1@t1_pkey IS 't1_pkey is good';
+----
+
 build
 DROP DATABASE db1 CASCADE
 ----
@@ -145,102 +153,12 @@ DROP DATABASE db1 CASCADE
     columnId: 3
     pgAttributeNum: 3
     tableId: 117
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 109, PgAttributeNum: 1, Comment: id is good}, ABSENT], PUBLIC]
   details:
     columnId: 1
-    comment: __placeholder_comment__
+    comment: id is good
     pgAttributeNum: 1
     tableId: 109
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 109
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 3}, ABSENT], PUBLIC]
-  details:
-    columnId: 3
-    comment: __placeholder_comment__
-    pgAttributeNum: 3
-    tableId: 109
-- [[ColumnComment:{DescID: 110, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 110
-- [[ColumnComment:{DescID: 110, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 110
-- [[ColumnComment:{DescID: 110, PgAttributeNum: 3}, ABSENT], PUBLIC]
-  details:
-    columnId: 3
-    comment: __placeholder_comment__
-    pgAttributeNum: 3
-    tableId: 110
-- [[ColumnComment:{DescID: 111, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 111
-- [[ColumnComment:{DescID: 112, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 112
-- [[ColumnComment:{DescID: 112, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 112
-- [[ColumnComment:{DescID: 113, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 113
-- [[ColumnComment:{DescID: 113, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 113
-- [[ColumnComment:{DescID: 114, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 114
-- [[ColumnComment:{DescID: 114, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 114
-- [[ColumnComment:{DescID: 117, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 117
-- [[ColumnComment:{DescID: 117, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 117
-- [[ColumnComment:{DescID: 117, PgAttributeNum: 3}, ABSENT], PUBLIC]
-  details:
-    columnId: 3
-    comment: __placeholder_comment__
-    pgAttributeNum: 3
-    tableId: 117
 - [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
@@ -532,9 +450,9 @@ DROP DATABASE db1 CASCADE
 - [[Database:{DescID: 104}, ABSENT], PUBLIC]
   details:
     databaseId: 104
-- [[DatabaseComment:{DescID: 104}, ABSENT], PUBLIC]
+- [[DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT], PUBLIC]
   details:
-    comment: __placeholder_comment__
+    comment: db1 is good
     databaseId: 104
 - [[DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, ABSENT], PUBLIC]
   details:
@@ -544,16 +462,11 @@ DROP DATABASE db1 CASCADE
   details:
     arrayTypeId: 116
     typeId: 115
-- [[IndexComment:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC]
+- [[IndexComment:{DescID: 109, IndexID: 1, Comment: t1_pkey is good}, ABSENT], PUBLIC]
   details:
-    comment: __placeholder_comment__
+    comment: t1_pkey is good
     indexId: 1
     tableId: 109
-- [[IndexComment:{DescID: 110, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    indexId: 1
-    tableId: 110
 - [[IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
@@ -779,13 +692,9 @@ DROP DATABASE db1 CASCADE
 - [[Schema:{DescID: 106}, ABSENT], PUBLIC]
   details:
     schemaId: 106
-- [[SchemaComment:{DescID: 105}, ABSENT], PUBLIC]
+- [[SchemaComment:{DescID: 106, Comment: sc1 is good}, ABSENT], PUBLIC]
   details:
-    comment: __placeholder_comment__
-    schemaId: 105
-- [[SchemaComment:{DescID: 106}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
+    comment: sc1 is good
     schemaId: 106
 - [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
@@ -807,42 +716,10 @@ DROP DATABASE db1 CASCADE
 - [[Table:{DescID: 110}, ABSENT], PUBLIC]
   details:
     tableId: 110
-- [[TableComment:{DescID: 107}, ABSENT], PUBLIC]
+- [[TableComment:{DescID: 109, Comment: t1 is good}, ABSENT], PUBLIC]
   details:
-    comment: __placeholder_comment__
-    tableId: 107
-- [[TableComment:{DescID: 108}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 108
-- [[TableComment:{DescID: 109}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
+    comment: t1 is good
     tableId: 109
-- [[TableComment:{DescID: 110}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 110
-- [[TableComment:{DescID: 111}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 111
-- [[TableComment:{DescID: 112}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 112
-- [[TableComment:{DescID: 113}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 113
-- [[TableComment:{DescID: 114}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 114
-- [[TableComment:{DescID: 117}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 117
 - [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 104

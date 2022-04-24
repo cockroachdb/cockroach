@@ -120,7 +120,9 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 							return nil
 						},
 					}),
-					sctestdeps.WithStatements(stmt.SQL))
+					sctestdeps.WithStatements(stmt.SQL),
+					sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
+				)
 				execStatementWithTestDeps(ctx, t, deps, stmt)
 				return replaceNonDeterministicOutput(deps.SideEffectLog())
 

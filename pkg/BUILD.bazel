@@ -282,6 +282,7 @@ ALL_TESTS = [
     "//pkg/sql/contentionpb:contentionpb_test",
     "//pkg/sql/covering:covering_test",
     "//pkg/sql/delegate:delegate_test",
+    "//pkg/sql/descmetadata:descmetadata_test",
     "//pkg/sql/distsql:distsql_test",
     "//pkg/sql/doctor:doctor_test",
     "//pkg/sql/enum:enum_test",

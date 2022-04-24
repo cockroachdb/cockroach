@@ -54,30 +54,38 @@ func TestBuildDataDriven(t *testing.T) {
 			dependenciesWrapper func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuild.Dependencies))
 		}{
 			{
-				"sql_dependencies",
-				func(t *testing.T, s serverutils.TestServerInterface, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
+				name: "sql_dependencies",
+				dependenciesWrapper: func(t *testing.T, s serverutils.TestServerInterface, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
 					sctestutils.WithBuilderDependenciesFromTestServer(s, fn)
 				},
 			},
 			{
-				"test_dependencies",
-				func(t *testing.T, s serverutils.TestServerInterface, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
+				name: "test_dependencies",
+				dependenciesWrapper: func(t *testing.T, s serverutils.TestServerInterface, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
 					// Create test dependencies and execute the schema changer.
 					// The schema changer test dependencies do not hold any reference to the
 					// test cluster, here the SQLRunner is only used to populate the mocked
 					// catalog state.
-					fn(sctestdeps.NewTestDependencies(
-						sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog),
-						sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
-						sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
-						sctestdeps.WithSessionData(sctestdeps.ReadSessionDataFromDB(t, tdb, func(
-							sd *sessiondata.SessionData,
-						) {
-							// For setting up a builder inside tests we will ensure that the new schema
-							// changer will allow non-fully implemented operations.
-							sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
-							sd.ApplicationName = ""
-						}))))
+					fn(
+						sctestdeps.NewTestDependencies(
+							sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog),
+							sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
+							sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
+							sctestdeps.WithSessionData(
+								sctestdeps.ReadSessionDataFromDB(
+									t,
+									tdb,
+									func(sd *sessiondata.SessionData) {
+										// For setting up a builder inside tests we will ensure that the new schema
+										// changer will allow non-fully implemented operations.
+										sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+										sd.ApplicationName = ""
+									},
+								),
+							),
+							sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
+						),
+					)
 				},
 			},
 		} {
@@ -102,6 +110,8 @@ func run(
 	tdb *sqlutils.SQLRunner,
 	withDependencies func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuild.Dependencies)),
 ) string {
+	// TODO (Chengxiong): try to make this switch block to only have "setup" and
+	// "build" sections.
 	switch d.Cmd {
 	case "create-table", "create-view", "create-type", "create-sequence", "create-schema", "create-database":
 		stmts, err := parser.Parse(d.Input)
@@ -135,6 +145,13 @@ func run(
 			t.Logf("created relation with id %d", tableID)
 		}
 
+		return ""
+	case "setup":
+		stmts, err := parser.Parse(d.Input)
+		require.NoError(t, err)
+		for _, stmt := range stmts {
+			tdb.Exec(t, stmt.SQL)
+		}
 		return ""
 	case "build":
 		if a := d.CmdArgs; len(a) > 0 && a[0].Key == "skip" {
