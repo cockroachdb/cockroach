@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -56,7 +56,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	st := s.ClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
@@ -153,7 +153,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 				ResultTypes: types.TwoIntCols,
 			}
 
-			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+			evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
 			var monitorRegistry colexecargs.MonitorRegistry
 			defer monitorRegistry.Close(ctx)

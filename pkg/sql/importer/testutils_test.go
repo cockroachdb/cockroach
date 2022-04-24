@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -94,7 +95,7 @@ func descForTable(
 	return table
 }
 
-var testEvalCtx = &tree.EvalContext{
+var testEvalCtx = &eval.Context{
 	SessionDataStack: sessiondata.NewStack(
 		&sessiondata.SessionData{
 			Location: time.UTC,

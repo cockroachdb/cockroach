@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -568,7 +569,7 @@ func EncodeInvertedIndexTableKeys(
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := tree.UnwrapDatum(nil, val)
+	datum := eval.UnwrapDatum(nil, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
 		// We do not need to pass the version for JSON types, since all prior
@@ -593,12 +594,12 @@ func EncodeInvertedIndexTableKeys(
 // set operations that must be applied on the spans read during execution. See
 // comments in the SpanExpression definition for details.
 func EncodeContainingInvertedIndexSpans(
-	evalCtx *tree.EvalContext, val tree.Datum,
+	evalCtx *eval.Context, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := tree.UnwrapDatum(evalCtx, val)
+	datum := eval.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
 		return json.EncodeContainingInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON)
@@ -624,12 +625,12 @@ func EncodeContainingInvertedIndexSpans(
 // span expression returned will never be tight. See comments in the
 // SpanExpression definition for details.
 func EncodeContainedInvertedIndexSpans(
-	evalCtx *tree.EvalContext, val tree.Datum,
+	evalCtx *eval.Context, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := tree.UnwrapDatum(evalCtx, val)
+	datum := eval.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.ArrayFamily:
 		return encodeContainedArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
@@ -654,12 +655,12 @@ func EncodeContainedInvertedIndexSpans(
 // span expression returned will be tight. See comments in the
 // SpanExpression definition for details.
 func EncodeOverlapsInvertedIndexSpans(
-	evalCtx *tree.EvalContext, val tree.Datum,
+	evalCtx *eval.Context, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := tree.UnwrapDatum(evalCtx, val)
+	datum := eval.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.ArrayFamily:
 		return encodeOverlapsArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)

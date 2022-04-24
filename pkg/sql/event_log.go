@@ -190,7 +190,7 @@ var defaultRedactionOptions = redactionOptions{
 func (p *planner) getCommonSQLEventDetails(opt redactionOptions) eventpb.CommonSQLEventDetails {
 	redactableStmt := formatStmtKeyAsRedactableString(
 		p.extendedEvalCtx.VirtualSchemas, p.stmt.AST,
-		p.extendedEvalCtx.EvalContext.Annotations, opt.toFlags(),
+		p.extendedEvalCtx.Context.Annotations, opt.toFlags(),
 	)
 	commonSQLEventDetails := eventpb.CommonSQLEventDetails{
 		Statement:       redactableStmt,
@@ -198,7 +198,7 @@ func (p *planner) getCommonSQLEventDetails(opt redactionOptions) eventpb.CommonS
 		User:            p.User().Normalized(),
 		ApplicationName: p.SessionData().ApplicationName,
 	}
-	if pls := p.extendedEvalCtx.EvalContext.Placeholders.Values; len(pls) > 0 {
+	if pls := p.extendedEvalCtx.Context.Placeholders.Values; len(pls) > 0 {
 		commonSQLEventDetails.PlaceholderValues = make([]string, len(pls))
 		for idx, val := range pls {
 			commonSQLEventDetails.PlaceholderValues[idx] = val.String()

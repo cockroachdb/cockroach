@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/memsize",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
@@ -28,6 +29,7 @@ go_test(
     embed = [":coldataext"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/json",

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -38,7 +39,7 @@ var fdAnnID = opt.NewTableAnnID()
 //       to children, but certain properties on it are not yet defined (like
 //       its logical properties!).
 type logicalPropsBuilder struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 	mem     *Memo
 	sb      statisticsBuilder
 
@@ -50,7 +51,7 @@ type logicalPropsBuilder struct {
 	disableStats bool
 }
 
-func (b *logicalPropsBuilder) init(evalCtx *tree.EvalContext, mem *Memo) {
+func (b *logicalPropsBuilder) init(evalCtx *eval.Context, mem *Memo) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*b = logicalPropsBuilder{
@@ -1571,7 +1572,7 @@ func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Sca
 // to be partially filled in already. Boolean fields such as HasPlaceholder,
 // HasCorrelatedSubquery should never be reset to false once set to true;
 // VolatilitySet should never be re-initialized.
-func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *tree.EvalContext) {
+func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 	switch t := e.(type) {
 	case *VariableExpr:
 		// Variable introduces outer column.
@@ -1913,7 +1914,7 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 // NullColsRejectedByFilter returns a set of columns that are "null rejected"
 // by the filters. An input row with a NULL value on any of these columns will
 // not pass the filter.
-func NullColsRejectedByFilter(evalCtx *tree.EvalContext, filters FiltersExpr) opt.ColSet {
+func NullColsRejectedByFilter(evalCtx *eval.Context, filters FiltersExpr) opt.ColSet {
 	var notNullCols opt.ColSet
 	for i := range filters {
 		filterProps := filters[i].ScalarProps()

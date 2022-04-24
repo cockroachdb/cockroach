@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -212,7 +213,7 @@ var _ HashRowContainer = &HashMemRowContainer{}
 // MakeHashMemRowContainer creates a HashMemRowContainer. This rowContainer
 // must still be Close()d by the caller.
 func MakeHashMemRowContainer(
-	evalCtx *tree.EvalContext, memMonitor *mon.BytesMonitor, typs []*types.T, storedEqCols columns,
+	evalCtx *eval.Context, memMonitor *mon.BytesMonitor, typs []*types.T, storedEqCols columns,
 ) HashMemRowContainer {
 	mrc := &MemRowContainer{}
 	mrc.InitWithMon(storedEqColsToOrdering(storedEqCols), typs, evalCtx, memMonitor)
@@ -754,7 +755,7 @@ type HashDiskBackedRowContainer struct {
 	storedEqCols columns
 	encodeNull   bool
 
-	evalCtx       *tree.EvalContext
+	evalCtx       *eval.Context
 	memoryMonitor *mon.BytesMonitor
 	diskMonitor   *mon.BytesMonitor
 	engine        diskmap.Factory
@@ -771,7 +772,7 @@ var _ HashRowContainer = &HashDiskBackedRowContainer{}
 
 // NewHashDiskBackedRowContainer makes a HashDiskBackedRowContainer.
 func NewHashDiskBackedRowContainer(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 	engine diskmap.Factory,

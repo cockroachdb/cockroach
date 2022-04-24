@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/errors"
 )
 
@@ -51,7 +51,7 @@ const (
 // scanIndexIter is a helper struct that facilitates iteration over the indexes
 // of a Scan operator table.
 type scanIndexIter struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 	f       *norm.Factory
 	im      *partialidx.Implicator
 	tabMeta *opt.TableMeta
@@ -86,7 +86,7 @@ type scanIndexIter struct {
 
 // Init initializes a new scanIndexIter.
 func (it *scanIndexIter) Init(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	f *norm.Factory,
 	mem *memo.Memo,
 	im *partialidx.Implicator,
