@@ -11,8 +11,6 @@
 package scpb
 
 const (
-	// PlaceHolderComment placeholder string for non-fetched comments.
-	PlaceHolderComment string = "__placeholder_comment__"
 	// PlaceHolderRoleName placeholder string for non-fetched role names.
 	PlaceHolderRoleName string = "__placeholder_role_name__"
 )
