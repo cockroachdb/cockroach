@@ -227,23 +227,6 @@ func (f *forwarder) Close() {
 	}
 }
 
-// ServerRemoteAddr returns the remote address associated with serverConn, i.e.
-// the address of the SQL pod.
-//
-// ServerRemoteAddr implements the balancer.ConnectionHandle interface.
-func (f *forwarder) ServerRemoteAddr() string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// TODO(jaylim-crl): Remove ServerRemoteAddr. Note that this case will never
-	// run since we only add the forwarder to the connection tracker once it
-	// has been started.
-	if !f.isInitializedLocked() {
-		return ""
-	}
-	return f.mu.serverConn.RemoteAddr().String()
-}
-
 // IsIdle returns true if the forwarder is idle, and false otherwise.
 //
 // IsIdle implements the balancer.ConnectionHandle interface.
