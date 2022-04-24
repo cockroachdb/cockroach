@@ -12,6 +12,7 @@ package valueside
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -35,7 +36,7 @@ func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte
 	if val == tree.DNull {
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
 	}
-	switch t := tree.UnwrapDatum(nil, val).(type) {
+	switch t := eval.UnwrapDatum(nil, val).(type) {
 	case *tree.DBitArray:
 		return encoding.EncodeBitArrayValue(appendTo, uint32(colID), t.BitArray), nil
 	case *tree.DBool:

@@ -31,6 +31,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/util/bitarray",

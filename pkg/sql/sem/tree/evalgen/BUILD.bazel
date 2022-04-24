@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "evalgen_lib",
+    srcs = [
+        "eval_gen.go",
+        "expr.go",
+        "op.go",
+        "string_set.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/evalgen",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_tools//go/ast/inspector",
+    ],
+)
+
+go_binary(
+    name = "evalgen",
+    embed = [":evalgen_lib"],
+    visibility = ["//visibility:public"],
+)

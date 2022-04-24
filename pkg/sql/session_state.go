@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -52,7 +53,7 @@ func (p *planner) SerializeSessionState() (*tree.DBytes, error) {
 // on the planner because those statements do not get planned.
 func serializeSessionState(
 	inExplicitTxn bool,
-	prepStmtsState tree.PreparedStatementState,
+	prepStmtsState eval.PreparedStatementState,
 	sd *sessiondata.SessionData,
 	execCfg *ExecutorConfig,
 ) (*tree.DBytes, error) {
@@ -135,7 +136,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 			"can only deserialize matching session users",
 		)
 	}
-	if err := p.checkCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
+	if err := p.checkCanBecomeUser(evalCtx.Ctx(), sd.User()); err != nil {
 		return nil, err
 	}
 
@@ -172,7 +173,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 		}
 
 		_, err = evalCtx.statementPreparer.addPreparedStmt(
-			evalCtx.Context,
+			evalCtx.Ctx(),
 			prepStmt.Name, stmt, placeholderTypes, prepStmt.PlaceholderTypeHints,
 			PreparedStatementOriginSessionMigration,
 		)

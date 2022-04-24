@@ -194,7 +194,7 @@ func (s *subquery) ResolvedType() *types.T {
 }
 
 // Eval is part of the tree.TypedExpr interface.
-func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+func (s *subquery) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("subquery must be replaced before evaluation"))
 }
 

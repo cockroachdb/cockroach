@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -82,7 +83,7 @@ type windowFramer interface {
 }
 
 func newWindowFramer(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
 	inputTypes []*types.T,
@@ -1255,7 +1256,7 @@ func (b *windowFramerBase) isFirstPeer(ctx context.Context, idx int) bool {
 // handleOffsets populates the offset fields of the window framer operator, if
 // one or both bounds are OFFSET PRECEDING or OFFSET FOLLOWING.
 func (b *windowFramerBase) handleOffsets(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
 	inputTypes []*types.T,

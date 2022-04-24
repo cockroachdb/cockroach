@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -507,7 +508,7 @@ func (n *createIndexNode) ReadingOwnWrites() {}
 // (2) a column mutation is added to tableDesc if the table is not new.
 func setupShardedIndex(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	columns tree.IndexElemList,
 	bucketsExpr tree.Expr,

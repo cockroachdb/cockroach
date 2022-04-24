@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -26,7 +27,7 @@ import (
 // expression. A "tight" boolean is also returned which is true if the
 // constraint is exactly equivalent to the expression.
 func BuildConstraints(
-	e opt.ScalarExpr, md *opt.Metadata, evalCtx *tree.EvalContext,
+	e opt.ScalarExpr, md *opt.Metadata, evalCtx *eval.Context,
 ) (_ *constraint.Set, tight bool) {
 	cb := constraintsBuilder{md: md, evalCtx: evalCtx}
 	return cb.buildConstraints(e)
@@ -50,7 +51,7 @@ var contradiction = constraint.Contradiction
 // constraint that is not tight is weaker than the expression.
 type constraintsBuilder struct {
 	md      *opt.Metadata
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 }
 
 // buildSingleColumnConstraint creates a constraint set implied by
@@ -177,7 +178,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 	case opt.LikeOp:
 		if s, ok := tree.AsDString(datum); ok {
 			// Normalize the like pattern to a RE
-			if pattern, err := tree.LikeEscape(string(s)); err == nil {
+			if pattern, err := eval.LikeEscape(string(s)); err == nil {
 				if re, err := regexp.Compile(pattern); err == nil {
 					prefix, complete := re.LiteralPrefix()
 					if complete {
@@ -191,7 +192,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 					// If pattern is simply prefix + .* the span is tight. Also pattern
 					// will have regexp special chars escaped and so prefix needs to be
 					// escaped too. The original string may have superfluous escape
-					if prefixEscape, err := tree.LikeEscape(prefix); err == nil {
+					if prefixEscape, err := eval.LikeEscape(prefix); err == nil {
 						return c, strings.HasSuffix(pattern, ".*") && strings.TrimSuffix(pattern, ".*") == prefixEscape
 					}
 				}
@@ -201,7 +202,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 	case opt.SimilarToOp:
 		// a SIMILAR TO 'foo_*' -> prefix "foo"
 		if s, ok := tree.AsDString(datum); ok {
-			pattern := tree.SimilarEscape(string(s))
+			pattern := eval.SimilarEscape(string(s))
 			if re, err := regexp.Compile(pattern); err == nil {
 				prefix, complete := re.LiteralPrefix()
 				if complete {

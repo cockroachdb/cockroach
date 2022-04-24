@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -226,7 +227,7 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 	}, nil
 }
 
-func injectTimeIntoEvalCtx(ctx *tree.EvalContext, walltime int64) {
+func injectTimeIntoEvalCtx(ctx *eval.Context, walltime int64) {
 	sec := walltime / int64(time.Second)
 	nsec := walltime % int64(time.Second)
 	unixtime := timeutil.Unix(sec, nsec)
@@ -238,7 +239,7 @@ func makeInputConverter(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	spec *execinfrapb.ReadImportDataSpec,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	kvCh chan row.KVBatch,
 	seqChunkProvider *row.SeqChunkProvider,
 ) (inputConverter, error) {

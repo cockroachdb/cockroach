@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -78,7 +79,7 @@ func newOnDeleteCascadeBuilder(
 func (cb *onDeleteCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
 	binding opt.WithID,
@@ -262,7 +263,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 func (cb *onDeleteFastCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
 	_ opt.WithID,
@@ -411,7 +412,7 @@ func newOnDeleteSetBuilder(
 func (cb *onDeleteSetBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
 	binding opt.WithID,
@@ -625,7 +626,7 @@ func newOnUpdateCascadeBuilder(
 func (cb *onUpdateCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
 	binding opt.WithID,
@@ -879,7 +880,7 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 func buildCascadeHelper(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
 	fn func(b *Builder) memo.RelExpr,

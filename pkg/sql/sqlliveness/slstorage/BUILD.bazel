@@ -17,6 +17,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlliveness",
         "//pkg/util/cache",

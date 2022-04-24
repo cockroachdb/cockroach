@@ -23,7 +23,6 @@ import (
 // IndexedVarContainer provides the implementation of TypeCheck, Eval, and
 // String for IndexedVars.
 type IndexedVarContainer interface {
-	IndexedVarEval(idx int, ctx *EvalContext) (Datum, error)
 	IndexedVarResolvedType(idx int) *types.T
 	// IndexedVarNodeFormatter returns a NodeFormatter; if an object that
 	// wishes to implement this interface has lost the textual name that an
@@ -58,7 +57,7 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 func (v *IndexedVar) TypeCheck(
 	_ context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	if semaCtx.IVarContainer == nil || semaCtx.IVarContainer == unboundContainer {
+	if semaCtx.IVarContainer == nil {
 		// A more technically correct message would be to say that the
 		// reference is unbound and thus cannot be typed. However this is
 		// a tad bit too technical for the average SQL use case and
@@ -70,15 +69,6 @@ func (v *IndexedVar) TypeCheck(
 	}
 	v.typ = semaCtx.IVarContainer.IndexedVarResolvedType(v.Idx)
 	return v, nil
-}
-
-// Eval is part of the TypedExpr interface.
-func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
-	if ctx.IVarContainer == nil || ctx.IVarContainer == unboundContainer {
-		return nil, errors.AssertionFailedf(
-			"indexed var must be bound to a container before evaluation")
-	}
-	return ctx.IVarContainer.IndexedVarEval(v.Idx, ctx)
 }
 
 // ResolvedType is part of the TypedExpr interface.
@@ -233,31 +223,6 @@ func (h *IndexedVarHelper) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 // VisitPost implements the Visitor interface.
 func (*IndexedVarHelper) VisitPost(expr Expr) Expr { return expr }
 
-type unboundContainerType struct{}
-
-// unboundContainer is the marker used by ordinal references (@N) in
-// the input syntax. It differs from `nil` in that calling
-// BindIfUnbound on an indexed var that uses unboundContainer will
-// cause a new IndexedVar object to be returned, to ensure that the
-// original is left unchanged (to preserve the invariant that the AST
-// is constant after parse).
-var unboundContainer = &unboundContainerType{}
-
-// IndexedVarEval is part of the IndexedVarContainer interface.
-func (*unboundContainerType) IndexedVarEval(idx int, _ *EvalContext) (Datum, error) {
-	return nil, errors.AssertionFailedf("unbound ordinal reference @%d", redact.Safe(idx+1))
-}
-
-// IndexedVarResolvedType is part of the IndexedVarContainer interface.
-func (*unboundContainerType) IndexedVarResolvedType(idx int) *types.T {
-	panic(errors.AssertionFailedf("unbound ordinal reference @%d", redact.Safe(idx+1)))
-}
-
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (*unboundContainerType) IndexedVarNodeFormatter(idx int) NodeFormatter {
-	panic(errors.AssertionFailedf("unbound ordinal reference @%d", redact.Safe(idx+1)))
-}
-
 type typeContainer struct {
 	types []*types.T
 }
@@ -265,7 +230,7 @@ type typeContainer struct {
 var _ IndexedVarContainer = &typeContainer{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
-func (tc *typeContainer) IndexedVarEval(idx int, ctx *EvalContext) (Datum, error) {
+func (tc *typeContainer) IndexedVarEval(idx int, e ExprEvaluator) (Datum, error) {
 	return nil, errors.AssertionFailedf("no eval allowed in typeContainer")
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
@@ -50,7 +51,7 @@ type eventStream struct {
 	sp          *tracing.Span               // Span representing the lifetime of the eventStream.
 }
 
-var _ tree.ValueGenerator = (*eventStream)(nil)
+var _ eval.ValueGenerator = (*eventStream)(nil)
 
 var eventStreamReturnType = types.MakeLabeledTuple(
 	[]*types.T{types.Bytes},
@@ -411,8 +412,8 @@ func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
 }
 
 func streamPartition(
-	evalCtx *tree.EvalContext, streamID streaming.StreamID, opaqueSpec []byte,
-) (tree.ValueGenerator, error) {
+	evalCtx *eval.Context, streamID streaming.StreamID, opaqueSpec []byte,
+) (eval.ValueGenerator, error) {
 	if !evalCtx.SessionData().AvoidBuffering {
 		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
 	}
@@ -430,7 +431,7 @@ func streamPartition(
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
-	return tree.MakeStreamingValueGenerator(&eventStream{
+	return eval.MakeStreamingValueGenerator(&eventStream{
 		streamID: streamID,
 		spec:     spec,
 		execCfg:  execCfg,

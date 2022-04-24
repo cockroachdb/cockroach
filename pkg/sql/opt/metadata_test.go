@@ -23,12 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestMetadata(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	var f norm.Factory
 	f.Init(&evalCtx, nil /* catalog */)
 	md := f.Metadata()

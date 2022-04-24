@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -38,7 +38,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := execinfra.FlowCtx{
@@ -73,7 +73,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := execinfra.FlowCtx{

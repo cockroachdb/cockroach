@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -880,7 +881,7 @@ func TestJoinReader(t *testing.T) {
 						}
 						t.Run(fmt.Sprintf("%d/reqOrdering=%t/%s/smallBatch=%t/cont=%t",
 							i, reqOrdering, c.description, smallBatch, outputContinuation), func(t *testing.T) {
-							evalCtx := tree.MakeTestingEvalContext(st)
+							evalCtx := eval.MakeTestingEvalContext(st)
 							defer evalCtx.Stop(ctx)
 							flowCtx := execinfra.FlowCtx{
 								EvalCtx: &evalCtx,
@@ -1048,7 +1049,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	}
 	defer tempEngine.Close()
 
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := mon.NewMonitor(
 		"test-disk",
@@ -1164,7 +1165,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracing.RecordingVerbose))
 	defer sp.Finish()
 
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
@@ -1454,7 +1455,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 			StoreSpecs: []base.StoreSpec{storeSpec},
 		})
 		st          = s.ClusterSettings()
-		evalCtx     = tree.MakeTestingEvalContext(st)
+		evalCtx     = eval.MakeTestingEvalContext(st)
 		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
 		flowCtx     = execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
@@ -1718,7 +1719,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 			StoreSpecs: []base.StoreSpec{storeSpec},
 		})
 		st          = s.ClusterSettings()
-		evalCtx     = tree.MakeTestingEvalContext(st)
+		evalCtx     = eval.MakeTestingEvalContext(st)
 		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
 		flowCtx     = execinfra.FlowCtx{
 			EvalCtx: &evalCtx,

@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -31,7 +32,7 @@ import (
 // of a given size and verifies the results are correct.
 func runSampleTest(
 	t *testing.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	numSamples, expectedNumSamples int,
 	ranks []int,
 	memAcc *mon.BoundAccount,
@@ -93,7 +94,7 @@ func runSampleTest(
 func TestSampleReservoir(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	for _, n := range []int{10, 100, 1000, 10000} {
 		rng, _ := randutil.NewTestRand()
@@ -135,7 +136,7 @@ func TestSampleReservoir(t *testing.T) {
 }
 
 func TestTruncateDatum(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	runTest := func(d, expected tree.Datum) {
 		actual := truncateDatum(&evalCtx, d, 10 /* maxBytes */)
 		if actual.Compare(&evalCtx, expected) != 0 {

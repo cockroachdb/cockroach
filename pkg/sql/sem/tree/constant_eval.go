@@ -10,66 +10,84 @@
 
 package tree
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+)
 
-// ConstantEvalVisitor replaces constant TypedExprs with the result of Eval.
-type ConstantEvalVisitor struct {
-	ctx *EvalContext
-	err error
+// OperatorIsImmutable returns true if the given expression corresponds to a
+// constant operator. Note importantly that this will return true for all
+// expr types other than FuncExpr, CastExpr, UnaryExpr, BinaryExpr, and
+// ComparisonExpr. It does not do any recursive searching.
+func OperatorIsImmutable(expr Expr, sd *sessiondata.SessionData) bool {
+	switch t := expr.(type) {
+	case *FuncExpr:
+		return t.fnProps.Class == NormalClass && t.fn.Volatility <= volatility.Immutable
 
-	fastIsConstVisitor fastIsConstVisitor
+	case *CastExpr:
+		v, ok := LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ, sd)
+		return ok && v <= volatility.Immutable
+
+	case *UnaryExpr:
+		return t.op.Volatility <= volatility.Immutable
+
+	case *BinaryExpr:
+		return t.Op.Volatility <= volatility.Immutable
+
+	case *ComparisonExpr:
+		return t.Op.Volatility <= volatility.Immutable
+
+	default:
+		return true
+	}
 }
 
-var _ Visitor = &ConstantEvalVisitor{}
-
-// MakeConstantEvalVisitor creates a ConstantEvalVisitor instance.
-func MakeConstantEvalVisitor(ctx *EvalContext) ConstantEvalVisitor {
-	return ConstantEvalVisitor{ctx: ctx, fastIsConstVisitor: fastIsConstVisitor{ctx: ctx}}
-}
-
-// Err retrieves the error field in the ConstantEvalVisitor.
-func (v *ConstantEvalVisitor) Err() error { return v.err }
-
-// VisitPre implements the Visitor interface.
-func (v *ConstantEvalVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if v.err != nil {
-		return false, expr
+// LookupCastVolatility returns the Volatility of a valid cast.
+func LookupCastVolatility(
+	from, to *types.T, sd *sessiondata.SessionData,
+) (_ volatility.Volatility, ok bool) {
+	fromFamily := from.Family()
+	toFamily := to.Family()
+	// Special case for casting between arrays.
+	if fromFamily == types.ArrayFamily && toFamily == types.ArrayFamily {
+		return LookupCastVolatility(from.ArrayContents(), to.ArrayContents(), sd)
 	}
-	return true, expr
-}
-
-// VisitPost implements the Visitor interface.
-func (v *ConstantEvalVisitor) VisitPost(expr Expr) Expr {
-	if v.err != nil {
-		return expr
-	}
-
-	typedExpr, ok := expr.(TypedExpr)
-	if !ok || !v.isConst(expr) {
-		return expr
-	}
-
-	value, err := typedExpr.Eval(v.ctx)
-	if err != nil {
-		// Ignore any errors here (e.g. division by zero), so they can happen
-		// during execution where they are correctly handled. Note that in some
-		// cases we might not even get an error (if this particular expression
-		// does not get evaluated when the query runs, e.g. it's inside a CASE).
-		return expr
-	}
-	if value == DNull {
-		// We don't want to return an expression that has a different type; cast
-		// the NULL if necessary.
-		retypedNull, ok := ReType(DNull, typedExpr.ResolvedType())
-		if !ok {
-			v.err = errors.AssertionFailedf("failed to retype NULL to %s", typedExpr.ResolvedType())
-			return expr
+	// Special case for casting between tuples.
+	if fromFamily == types.TupleFamily && toFamily == types.TupleFamily {
+		fromTypes := from.TupleContents()
+		toTypes := to.TupleContents()
+		// Handle case where an overload makes a tuple get casted to tuple{}.
+		if len(toTypes) == 1 && toTypes[0].Family() == types.AnyFamily {
+			return volatility.Stable, true
 		}
-		return retypedNull
+		if len(fromTypes) != len(toTypes) {
+			return 0, false
+		}
+		maxVolatility := volatility.LeakProof
+		for i := range fromTypes {
+			v, lookupOk := LookupCastVolatility(fromTypes[i], toTypes[i], sd)
+			if !lookupOk {
+				return 0, false
+			}
+			if v > maxVolatility {
+				maxVolatility = v
+			}
+		}
+		return maxVolatility, true
 	}
-	return value
-}
 
-func (v *ConstantEvalVisitor) isConst(expr Expr) bool {
-	return v.fastIsConstVisitor.run(expr)
+	intervalStyleEnabled := false
+	dateStyleEnabled := false
+	if sd != nil {
+		intervalStyleEnabled = sd.IntervalStyleEnabled
+		dateStyleEnabled = sd.DateStyleEnabled
+	}
+
+	cast, ok := cast.LookupCast(from, to, intervalStyleEnabled, dateStyleEnabled)
+	if !ok {
+		return 0, false
+	}
+	return cast.Volatility, true
 }

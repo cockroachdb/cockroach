@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -121,7 +122,7 @@ type builderState struct {
 	// Dependencies
 	ctx             context.Context
 	clusterSettings *cluster.Settings
-	evalCtx         *tree.EvalContext
+	evalCtx         *eval.Context
 	semaCtx         *tree.SemaContext
 	cr              CatalogReader
 	auth            AuthorizationAccessor

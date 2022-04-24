@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -901,7 +902,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// on a per row basis since each row can be modified at a different
 			// time.
 			if cf.table.timestampOutputIdx != noOutputColumn {
-				cf.machine.timestampCol[cf.machine.rowIdx] = tree.TimestampToDecimal(cf.table.rowLastModified)
+				cf.machine.timestampCol[cf.machine.rowIdx] = eval.TimestampToDecimal(cf.table.rowLastModified)
 			}
 
 			// We're finished with a row. Fill the row in with nulls if

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -442,7 +443,7 @@ type aggAllocBase struct {
 //
 // evalCtx will not be mutated.
 func ProcessAggregations(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	aggregations []execinfrapb.AggregatorSpec_Aggregation,
 	inputTypes []*types.T,

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -114,7 +115,7 @@ func (b *Builder) buildTypedExpr(
 }
 
 func (b *Builder) buildNull(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
-	retypedNull, ok := tree.ReType(tree.DNull, scalar.DataType())
+	retypedNull, ok := eval.ReType(tree.DNull, scalar.DataType())
 	if !ok {
 		return nil, errors.AssertionFailedf("failed to retype NULL to %s", scalar.DataType())
 	}

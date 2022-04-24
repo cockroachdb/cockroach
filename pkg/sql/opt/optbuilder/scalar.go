@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -239,7 +240,7 @@ func (b *Builder) buildScalar(
 		for i := range t.Whens {
 			condExpr := t.Whens[i].Cond.(tree.TypedExpr)
 			cond := b.buildScalar(condExpr, inScope, nil, nil, colRefs)
-			valExpr, ok := tree.ReType(t.Whens[i].Val.(tree.TypedExpr), valType)
+			valExpr, ok := eval.ReType(t.Whens[i].Val.(tree.TypedExpr), valType)
 			if !ok {
 				panic(pgerror.Newf(
 					pgcode.DatatypeMismatch,
@@ -253,7 +254,7 @@ func (b *Builder) buildScalar(
 		// Add the ELSE expression to the end of whens as a raw scalar expression.
 		var orElse opt.ScalarExpr
 		if t.Else != nil {
-			elseExpr, ok := tree.ReType(t.Else.(tree.TypedExpr), valType)
+			elseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType)
 			if !ok {
 				panic(pgerror.Newf(
 					pgcode.DatatypeMismatch,
@@ -279,7 +280,7 @@ func (b *Builder) buildScalar(
 			// The type of the CoalesceExpr might be different than the inputs (e.g.
 			// when they are NULL). Force all inputs to be the same type, so that we
 			// build coalesce operator with the correct type.
-			expr, ok := tree.ReType(t.TypedExprAt(i), typ)
+			expr, ok := eval.ReType(t.TypedExprAt(i), typ)
 			if !ok {
 				panic(pgerror.Newf(
 					pgcode.DatatypeMismatch,
@@ -329,7 +330,7 @@ func (b *Builder) buildScalar(
 		ifTrueExpr := reType(t.True.(tree.TypedExpr), valType)
 		ifTrue := b.buildScalar(ifTrueExpr, inScope, nil, nil, colRefs)
 		whens := memo.ScalarListExpr{b.factory.ConstructWhen(memo.TrueSingleton, ifTrue)}
-		orElseExpr, ok := tree.ReType(t.Else.(tree.TypedExpr), valType)
+		orElseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType)
 		if !ok {
 			panic(pgerror.Newf(
 				pgcode.DatatypeMismatch,
@@ -394,7 +395,7 @@ func (b *Builder) buildScalar(
 		if !b.KeepPlaceholders && b.evalCtx.HasPlaceholders() {
 			b.HadPlaceholders = true
 			// Replace placeholders with their value.
-			d, err := t.Eval(b.evalCtx)
+			d, err := eval.Expr(b.evalCtx, t)
 			if err != nil {
 				panic(err)
 			}
@@ -715,7 +716,7 @@ func (b *Builder) constructComparison(
 	case treecmp.NotSimilarTo:
 		return b.factory.ConstructNotSimilarTo(left, right)
 	case treecmp.RegMatch:
-		leftFam, rightFam := cmp.Fn.LeftType.Family(), cmp.Fn.RightType.Family()
+		leftFam, rightFam := cmp.Op.LeftType.Family(), cmp.Op.RightType.Family()
 		if (leftFam == types.GeometryFamily || leftFam == types.Box2DFamily) &&
 			(rightFam == types.GeometryFamily || rightFam == types.Box2DFamily) {
 			// The ~ operator means "covers" when used with geometry or bounding box
@@ -744,7 +745,7 @@ func (b *Builder) constructComparison(
 	case treecmp.JSONSomeExists:
 		return b.factory.ConstructJsonSomeExists(left, right)
 	case treecmp.Overlaps:
-		leftFam, rightFam := cmp.Fn.LeftType.Family(), cmp.Fn.RightType.Family()
+		leftFam, rightFam := cmp.Op.LeftType.Family(), cmp.Op.RightType.Family()
 		if (leftFam == types.GeometryFamily || leftFam == types.Box2DFamily) &&
 			(rightFam == types.GeometryFamily || rightFam == types.Box2DFamily) {
 			// The && operator means "intersects" when used with geometry or bounding
@@ -831,7 +832,7 @@ type ScalarBuilder struct {
 // NewScalar creates a new ScalarBuilder. The columns in the metadata are accessible
 // from scalar expressions via IndexedVars.
 func NewScalar(
-	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, factory *norm.Factory,
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, factory *norm.Factory,
 ) *ScalarBuilder {
 	md := factory.Metadata()
 	sb := &ScalarBuilder{
@@ -888,7 +889,7 @@ func (sb *ScalarBuilder) Build(expr tree.Expr) (err error) {
 // always succeed during the optbuild phase because type-checking has already
 // validated the types of the children.
 func reType(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
-	retypedExpr, ok := tree.ReType(expr, typ)
+	retypedExpr, ok := eval.ReType(expr, typ)
 	if !ok {
 		panic(errors.AssertionFailedf(
 			"expected successful retype from %s to %s",

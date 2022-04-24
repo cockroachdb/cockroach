@@ -8,14 +8,35 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package eval
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
+
+// GetGenerator is used to construct a ValueGenerator from a FuncExpr.
+func GetGenerator(ctx *Context, expr *tree.FuncExpr) (ValueGenerator, error) {
+	if !expr.IsGeneratorClass() {
+		return nil, errors.AssertionFailedf(
+			"cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q",
+			tree.ErrString(expr),
+		)
+	}
+	ol := expr.ResolvedOverload()
+	if ol.GeneratorWithExprs != nil {
+		return ol.GeneratorWithExprs.(GeneratorWithExprsOverload)(ctx, expr.Exprs)
+	}
+	nullArg, args, err := (*evaluator)(ctx).evalFuncArgs(expr)
+	if err != nil || nullArg {
+		return nil, err
+	}
+	return ol.Generator.(GeneratorOverload)(ctx, args)
+}
 
 // Table generators, also called "set-generating functions", are
 // special functions that return an entire table.
@@ -54,22 +75,13 @@ type ValueGenerator interface {
 	Next(context.Context) (bool, error)
 
 	// Values retrieves the current row of data.
-	Values() (Datums, error)
+	Values() (tree.Datums, error)
 
 	// Close must be called after Start() before disposing of the
 	// ValueGenerator. It does not need to be called if Start() has not
 	// been called yet. It must not be called in-between restarts.
 	Close(ctx context.Context)
 }
-
-// GeneratorFactory is the type of constructor functions for
-// ValueGenerator objects.
-type GeneratorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error)
-
-// GeneratorWithExprsFactory is an alternative constructor function type for
-// ValueGenerators that gives implementations the ability to see the builtin's
-// arguments before evaluation, as Exprs.
-type GeneratorWithExprsFactory func(ctx *EvalContext, args Exprs) (ValueGenerator, error)
 
 // streamingValueGenerator is a marker-type indicating that the wrapped
 // generator is of "streaming" nature, thus, projectSet processor must be
@@ -89,3 +101,59 @@ func IsStreamingValueGenerator(gen ValueGenerator) bool {
 	_, ok := gen.(streamingValueGenerator)
 	return ok
 }
+
+// CallbackValueGenerator is a ValueGenerator that calls a supplied callback for
+// producing the values. To be used with
+// eval.TestingKnobs.CallbackGenerators.
+type CallbackValueGenerator struct {
+	// cb is the callback to be called for producing values. It gets passed in 0
+	// as prev initially, and the value it previously returned for subsequent
+	// invocations. Once it returns -1 or an error, it will not be invoked any
+	// more.
+	cb  func(ctx context.Context, prev int, txn *kv.Txn) (int, error)
+	val int
+	txn *kv.Txn
+}
+
+var _ ValueGenerator = &CallbackValueGenerator{}
+
+// NewCallbackValueGenerator creates a new CallbackValueGenerator.
+func NewCallbackValueGenerator(
+	cb func(ctx context.Context, prev int, txn *kv.Txn) (int, error),
+) *CallbackValueGenerator {
+	return &CallbackValueGenerator{
+		cb: cb,
+	}
+}
+
+// ResolvedType is part of the ValueGenerator interface.
+func (c *CallbackValueGenerator) ResolvedType() *types.T {
+	return types.Int
+}
+
+// Start is part of the ValueGenerator interface.
+func (c *CallbackValueGenerator) Start(_ context.Context, txn *kv.Txn) error {
+	c.txn = txn
+	return nil
+}
+
+// Next is part of the ValueGenerator interface.
+func (c *CallbackValueGenerator) Next(ctx context.Context) (bool, error) {
+	var err error
+	c.val, err = c.cb(ctx, c.val, c.txn)
+	if err != nil {
+		return false, err
+	}
+	if c.val == -1 {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Values is part of the ValueGenerator interface.
+func (c *CallbackValueGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{tree.NewDInt(tree.DInt(c.val))}, nil
+}
+
+// Close is part of the ValueGenerator interface.
+func (c *CallbackValueGenerator) Close(_ context.Context) {}

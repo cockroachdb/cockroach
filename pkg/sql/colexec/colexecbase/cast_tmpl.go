@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -104,7 +105,7 @@ func GetCastOperator(
 	resultIdx int,
 	fromType *types.T,
 	toType *types.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	base := castOpBase{
@@ -227,7 +228,7 @@ type castOpBase struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
-	evalCtx   *tree.EvalContext
+	evalCtx   *eval.Context
 }
 
 func (c *castOpBase) Reset(ctx context.Context) {
@@ -384,7 +385,7 @@ func setNativeToDatumCast(
 	scratchIdx int,
 	outputIdx int,
 	toType *types.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	hasNulls bool,
 	scratchBCE bool,
 ) {
@@ -396,7 +397,7 @@ func setNativeToDatumCast(
 		outputNulls.SetNull(outputIdx)
 		continue
 	}
-	res, err := tree.PerformCast(evalCtx, converted, toType)
+	res, err := eval.PerformCast(evalCtx, converted, toType)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -508,7 +509,7 @@ func castTuples(
 	toType *types.T,
 	n int,
 	sel []int,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	hasNulls bool,
 	hasSel bool,
 ) {

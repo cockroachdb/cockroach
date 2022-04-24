@@ -102,7 +102,7 @@ type PlaceholderTypesInfo struct {
 // but there is a type hint, returns the type hint.
 func (p *PlaceholderTypesInfo) Type(idx PlaceholderIdx) (_ *types.T, ok bool, _ error) {
 	if len(p.Types) <= int(idx) {
-		return nil, false, makeNoValueProvidedForPlaceholderErr(idx)
+		return nil, false, NewNoValueProvidedForPlaceholderErr(idx)
 	}
 	t := p.Types[idx]
 	if t == nil && len(p.TypeHints) > int(idx) {
@@ -209,4 +209,12 @@ func (p *PlaceholderInfo) IsUnresolvedPlaceholder(expr Expr) bool {
 		return !(err == nil && res)
 	}
 	return false
+}
+
+// NewNoValueProvidedForPlaceholderErr constructs an error indicating a missing
+// placeholder value.
+func NewNoValueProvidedForPlaceholderErr(pIdx PlaceholderIdx) error {
+	return pgerror.Newf(pgcode.UndefinedParameter,
+		"no value provided for placeholder: $%d", pIdx+1,
+	)
 }
