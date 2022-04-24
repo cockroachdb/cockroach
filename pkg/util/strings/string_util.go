@@ -17,13 +17,21 @@
 
 package strings
 
-import "strings"
+import (
+	"strings"
+)
 
 // CollapseDupeChar will take the given string and given character
 // and collapse any repeating instances of this character to a
 // single instance.
 // E.g. CollapseDupeChar("wwwhy hello there", 'w') returns "why hello there"
 func CollapseDupeChar(toCollapse string, collapseChar rune) string {
+
+	// There are no repeating characters
+	if strings.Index(toCollapse, string([]rune{collapseChar, collapseChar})) == -1 {
+		return toCollapse
+	}
+
 	var builder strings.Builder
 	hadPrevious := false
 	for _, r := range toCollapse {
