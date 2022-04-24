@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -72,7 +73,7 @@ func (n *valuesNode) startExec(params runParams) error {
 	for _, tupleRow := range n.tuples {
 		for i, typedExpr := range tupleRow {
 			var err error
-			row[i], err = typedExpr.Eval(params.EvalContext())
+			row[i], err = eval.Expr(params.EvalContext(), typedExpr)
 			if err != nil {
 				return err
 			}

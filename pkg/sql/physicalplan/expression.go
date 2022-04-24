@@ -15,6 +15,7 @@ package physicalplan
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -23,8 +24,8 @@ import (
 // ExprContext is an interface containing objects necessary for creating
 // execinfrapb.Expressions.
 type ExprContext interface {
-	// EvalContext returns the tree.EvalContext for planning.
-	EvalContext() *tree.EvalContext
+	// EvalContext returns the eval.Context for planning.
+	EvalContext() *eval.Context
 
 	// IsLocal returns true if the current plan is local.
 	IsLocal() bool
@@ -36,8 +37,8 @@ type fakeExprContext struct{}
 
 var _ ExprContext = fakeExprContext{}
 
-func (fakeExprContext) EvalContext() *tree.EvalContext {
-	return &tree.EvalContext{}
+func (fakeExprContext) EvalContext() *eval.Context {
+	return &eval.Context{}
 }
 
 func (fakeExprContext) IsLocal() bool {
@@ -96,7 +97,7 @@ func MakeExpression(
 }
 
 type evalAndReplaceSubqueryVisitor struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 	err     error
 }
 

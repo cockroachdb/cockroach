@@ -20,8 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -98,7 +100,7 @@ func ValidateComputedColumnExpression(
 		defType,
 		context,
 		semaCtx,
-		tree.VolatilityImmutable,
+		volatility.Immutable,
 		tn,
 	)
 	if err != nil {
@@ -196,7 +198,7 @@ func MakeComputedExprs(
 	input, sourceColumns []catalog.Column,
 	tableDesc catalog.TableDescriptor,
 	tn *tree.TableName,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 ) (_ []tree.TypedExpr, refColIDs catalog.TableColSet, _ error) {
 	// Check to see if any of the columns have computed expressions. If there

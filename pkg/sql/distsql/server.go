@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -293,7 +294,7 @@ func (ds *ServerImpl) setupFlow(
 		return kv.NewLeafTxn(ctx, ds.DB, roachpb.NodeID(req.Flow.Gateway), tis), nil
 	}
 
-	var evalCtx *tree.EvalContext
+	var evalCtx *eval.Context
 	var leafTxn *kv.Txn
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
@@ -336,7 +337,7 @@ func (ds *ServerImpl) setupFlow(
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		evalCtx = &tree.EvalContext{
+		evalCtx = &eval.Context{
 			Settings:         ds.ServerConfig.Settings,
 			SessionDataStack: sessiondata.NewStack(sd),
 			ClusterID:        ds.ServerConfig.LogicalClusterID.Get(),
@@ -440,7 +441,7 @@ func (ds *ServerImpl) setupFlow(
 func (ds *ServerImpl) newFlowContext(
 	ctx context.Context,
 	id execinfrapb.FlowID,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	traceKV bool,
 	collectStats bool,
 	localState LocalState,
@@ -502,7 +503,7 @@ func newFlow(
 // LocalState carries information that is required to set up a flow with wrapped
 // planNodes.
 type LocalState struct {
-	EvalContext *tree.EvalContext
+	EvalContext *eval.Context
 
 	// Collection is set if this flow is running on the gateway as part of user
 	// SQL session. It is the current descs.Collection of the planner executing

@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -53,7 +54,7 @@ func (pr Prefix) String() string {
 // that longer prefixes are ordered first and within each group of equal-length
 // prefixes so that they are ordered by value.
 type PrefixSorter struct {
-	EvalCtx *tree.EvalContext
+	EvalCtx *eval.Context
 	Entry   []Prefix
 
 	// A slice of indices of the last element of each equal-length group of
@@ -143,7 +144,7 @@ func PrefixesToString(prefixes []Prefix) string {
 // partitions in the index is 2 or greater and the local gateway region can be
 // determined.
 func HasMixOfLocalAndRemotePartitions(
-	evalCtx *tree.EvalContext, index cat.Index,
+	evalCtx *eval.Context, index cat.Index,
 ) (localPartitions *util.FastIntSet, ok bool) {
 	if index.PartitionCount() < 2 {
 		return nil, false
@@ -172,7 +173,7 @@ func HasMixOfLocalAndRemotePartitions(
 // group of equal-length prefixes they are ordered by value.
 // This is the main function for building a PrefixSorter.
 func GetSortedPrefixes(
-	index cat.Index, localPartitions util.FastIntSet, evalCtx *tree.EvalContext,
+	index cat.Index, localPartitions util.FastIntSet, evalCtx *eval.Context,
 ) *PrefixSorter {
 	if index == nil || index.PartitionCount() < 2 {
 		return nil

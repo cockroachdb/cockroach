@@ -35,7 +35,7 @@ func ParseAndRequireString(
 		if err != nil {
 			return nil, false, err
 		}
-		d = formatBitArrayToType(r, t)
+		d = FormatBitArrayToType(r, t)
 	case types.BoolFamily:
 		d, err = ParseDBool(strings.TrimSpace(s))
 	case types.BytesFamily:
@@ -66,7 +66,7 @@ func ParseAndRequireString(
 		d, err = ParseDJSON(s)
 	case types.OidFamily:
 		if t.Oid() != oid.T_oid && s == ZeroOidValue {
-			d = wrapAsZeroOid(t)
+			d = WrapAsZeroOid(t)
 		} else {
 			i, err := ParseDInt(s)
 			if err != nil {
@@ -106,4 +106,23 @@ func ParseAndRequireString(
 	}
 	d, err = AdjustValueToType(t, d)
 	return d, dependsOnContext, err
+}
+
+// FormatBitArrayToType formats bit arrays such that they fill the total width
+// if too short, or truncate if too long.
+func FormatBitArrayToType(d *DBitArray, t *types.T) *DBitArray {
+	if t.Width() == 0 || d.BitLen() == uint(t.Width()) {
+		return d
+	}
+	a := d.BitArray.Clone()
+	switch t.Oid() {
+	case oid.T_varbit:
+		// VARBITs do not have padding attached, so only truncate.
+		if uint(t.Width()) < a.BitLen() {
+			a = a.ToWidth(uint(t.Width()))
+		}
+	default:
+		a = a.ToWidth(uint(t.Width()))
+	}
+	return &DBitArray{a}
 }

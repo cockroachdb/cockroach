@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package cast
 
 import (
 	"encoding/csv"
@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,7 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCastsMatchPostgres checks that the Volatility and CastContext of our
+// TestCastsMatchPostgres checks that the Volatility and Context of our
 // defined casts match Postgres' casts.
 //
 // The command for generating pg_cast_dump.csv from psql is below. We ignore
@@ -87,8 +87,8 @@ func TestCastsMatchPostgres(t *testing.T) {
 	}
 
 	type pgCastValue struct {
-		volatility Volatility
-		context    CastContext
+		volatility volatility.Volatility
+		context    Context
 	}
 
 	pgCastMap := make(map[pgCastKey]pgCastValue)
@@ -114,7 +114,7 @@ func TestCastsMatchPostgres(t *testing.T) {
 		castcontext := line[4]
 		require.Len(t, castcontext, 1)
 
-		v, err := VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
+		v, err := volatility.FromPostgres(provolatile, proleakproof[0] == 't')
 		require.NoError(t, err)
 
 		c, err := castContextFromPostgres(castcontext)
@@ -130,102 +130,32 @@ func TestCastsMatchPostgres(t *testing.T) {
 			if !ok && testing.Verbose() {
 				t.Logf("cast %s::%s has no corresponding pg cast", oidStr(src), oidStr(tgt))
 			}
-			if ok && c.volatility != pgCast.volatility {
-				t.Errorf("cast %s::%s has volatility %s; corresponding pg cast has volatility %s",
-					oidStr(src), oidStr(tgt), c.volatility, pgCast.volatility,
+			if ok && c.Volatility != pgCast.volatility {
+				t.Errorf("cast %s::%s has Volatility %s; corresponding pg cast has Volatility %s",
+					oidStr(src), oidStr(tgt), c.Volatility, pgCast.volatility,
 				)
 			}
-			if ok && c.maxContext != pgCast.context {
-				t.Errorf("cast %s::%s has maxContext %s; corresponding pg cast has context %s",
-					oidStr(src), oidStr(tgt), c.maxContext, pgCast.context,
+			if ok && c.MaxContext != pgCast.context {
+				t.Errorf("cast %s::%s has MaxContext %s; corresponding pg cast has context %s",
+					oidStr(src), oidStr(tgt), c.MaxContext, pgCast.context,
 				)
 			}
 		}
 	}
 }
 
-// castContextFromPostgres returns a CastContext that matches the castcontext
+// castContextFromPostgres returns a Context that matches the castcontext
 // setting in Postgres's pg_cast table.
-func castContextFromPostgres(castcontext string) (CastContext, error) {
+func castContextFromPostgres(castcontext string) (Context, error) {
 	switch castcontext {
 	case "e":
-		return CastContextExplicit, nil
+		return ContextExplicit, nil
 	case "a":
-		return CastContextAssignment, nil
+		return ContextAssignment, nil
 	case "i":
-		return CastContextImplicit, nil
+		return ContextImplicit, nil
 	default:
 		return 0, errors.AssertionFailedf("invalid castcontext %s", castcontext)
-	}
-}
-
-// TestCastsFromUnknown verifies that there is a cast from Unknown defined for
-// all types.
-func TestCastsFromUnknown(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for _, typ := range types.OidToType {
-		_, ok := lookupCast(types.Unknown, typ, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
-		if !ok {
-			t.Errorf("cast from Unknown to %s does not exist", typ.String())
-		}
-	}
-}
-
-func TestTupleCastVolatility(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testCases := []struct {
-		from, to []*types.T
-		exp      string
-	}{
-		{
-			from: nil,
-			to:   nil,
-			exp:  "leak-proof",
-		},
-		{
-			from: nil,
-			to:   []*types.T{types.Int},
-			exp:  "error",
-		},
-		{
-			from: []*types.T{types.Int},
-			to:   []*types.T{types.Int},
-			exp:  "immutable",
-		},
-		{
-			from: []*types.T{types.Int, types.Int},
-			to:   []*types.T{types.Any},
-			exp:  "stable",
-		},
-		{
-			from: []*types.T{types.TimestampTZ},
-			to:   []*types.T{types.Date},
-			exp:  "stable",
-		},
-		{
-			from: []*types.T{types.Int, types.TimestampTZ},
-			to:   []*types.T{types.Int, types.Date},
-			exp:  "stable",
-		},
-	}
-
-	for _, tc := range testCases {
-		from := *types.EmptyTuple
-		from.InternalType.TupleContents = tc.from
-		to := *types.EmptyTuple
-		to.InternalType.TupleContents = tc.to
-		v, ok := LookupCastVolatility(&from, &to, nil /* sessionData */)
-		res := "error"
-		if ok {
-			res = v.String()
-		}
-		if res != tc.exp {
-			t.Errorf("from: %s  to: %s  expected: %s  got: %s", &from, &to, tc.exp, res)
-		}
 	}
 }
 

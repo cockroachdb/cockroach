@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -229,11 +230,11 @@ const (
 //
 // See props/statistics.go for more details.
 type statisticsBuilder struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 	md      *opt.Metadata
 }
 
-func (sb *statisticsBuilder) init(evalCtx *tree.EvalContext, md *opt.Metadata) {
+func (sb *statisticsBuilder) init(evalCtx *eval.Context, md *opt.Metadata) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*sb = statisticsBuilder{
@@ -4490,7 +4491,7 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 
 // RequestColStat causes a column statistic to be calculated on the relational
 // expression. This is used for testing.
-func RequestColStat(evalCtx *tree.EvalContext, e RelExpr, cols opt.ColSet) {
+func RequestColStat(evalCtx *eval.Context, e RelExpr, cols opt.ColSet) {
 	var sb statisticsBuilder
 	sb.init(evalCtx, e.Memo().Metadata())
 	sb.colStat(cols, e)

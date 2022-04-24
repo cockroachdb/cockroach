@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props/physical",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/eval",
         "//pkg/util/buildutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -26,6 +26,6 @@ go_test(
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/opt/testutils/testexpr",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/eval",
     ],
 )

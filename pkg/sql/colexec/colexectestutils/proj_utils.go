@@ -32,8 +32,8 @@ type MockTypeContext struct {
 var _ tree.IndexedVarContainer = &MockTypeContext{}
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (p *MockTypeContext) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	return tree.DNull.Eval(ctx)
+func (p *MockTypeContext) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+	return tree.DNull.Eval(e)
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.

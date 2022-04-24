@@ -16,8 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -47,7 +49,7 @@ func ValidatePartialIndexPredicate(
 		types.Bool,
 		"index predicate",
 		semaCtx,
-		tree.VolatilityImmutable,
+		volatility.Immutable,
 		tn,
 	)
 	if err != nil {
@@ -70,7 +72,7 @@ func MakePartialIndexExprs(
 	indexes []catalog.Index,
 	cols []catalog.Column,
 	tableDesc catalog.TableDescriptor,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 ) (_ map[descpb.IndexID]tree.TypedExpr, refColIDs catalog.TableColSet, _ error) {
 	// If none of the indexes are partial indexes, return early.

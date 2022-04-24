@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -102,7 +103,7 @@ type copyMachine struct {
 	// parsingEvalCtx is an EvalContext used for the very limited needs to strings
 	// parsing. Is it not correctly initialized with timestamps, transactions and
 	// other things that statements more generally need.
-	parsingEvalCtx *tree.EvalContext
+	parsingEvalCtx *eval.Context
 
 	processRows func(ctx context.Context) error
 }

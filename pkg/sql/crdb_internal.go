@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -475,8 +476,8 @@ CREATE TABLE crdb_internal.tables (
 					tree.NewDString(table.GetName()),
 					dbName,
 					tree.NewDInt(tree.DInt(int64(table.GetVersion()))),
-					tree.TimestampToInexactDTimestamp(table.GetModificationTime()),
-					tree.TimestampToDecimalDatum(table.GetModificationTime()),
+					eval.TimestampToInexactDTimestamp(table.GetModificationTime()),
+					eval.TimestampToDecimalDatum(table.GetModificationTime()),
 					tree.NewDString(table.GetFormatVersion().String()),
 					tree.NewDString(table.GetState().String()),
 					leaseNodeDatum,
@@ -858,7 +859,7 @@ CREATE TABLE crdb_internal.jobs (
 					// marshalled.
 					id = tree.NewDInt(tree.DInt(job.JobID))
 					status = tree.NewDString(string(jobs.StatusPending))
-					created = tree.TimestampToInexactDTimestamp(p.txn.ReadTimestamp())
+					created = eval.TimestampToInexactDTimestamp(p.txn.ReadTimestamp())
 					progressBytes, payloadBytes, err = getPayloadAndProgressFromJobsRecord(p, job)
 					if err != nil {
 						return nil, err
@@ -948,7 +949,7 @@ CREATE TABLE crdb_internal.jobs (
 						// Progress contains either fractionCompleted for traditional jobs,
 						// or the highWaterTimestamp for change feeds.
 						if highwater := progress.GetHighWater(); highwater != nil {
-							highWaterTimestamp = tree.TimestampToDecimalDatum(*highwater)
+							highWaterTimestamp = eval.TimestampToDecimalDatum(*highwater)
 						} else {
 							fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
 						}
@@ -3324,7 +3325,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 
 			splitEnforcedUntil := tree.DNull
 			if !desc.GetStickyBit().IsEmpty() {
-				splitEnforcedUntil = tree.TimestampToInexactDTimestamp(*desc.StickyBit)
+				splitEnforcedUntil = eval.TimestampToInexactDTimestamp(*desc.StickyBit)
 			}
 
 			return tree.Datums{

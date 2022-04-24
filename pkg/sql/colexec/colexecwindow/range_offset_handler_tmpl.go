@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -93,7 +94,7 @@ type rangeOffsetHandler interface {
 }
 
 func newRangeOffsetHandler(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	datumAlloc *tree.DatumAlloc,
 	bound *execinfrapb.WindowerSpec_Frame_Bound,
 	ordColType *types.T,
@@ -119,13 +120,13 @@ func newRangeOffsetHandler(
 						}
 						// {{if eq .VecMethod "Datum"}}
 						// {{if .BinOpIsPlus}}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
+						binOp, _, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
 						// {{else}}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
+						_, binOp, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
 						// {{end}}
-						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp.EvalOp, EvalCtx: evalCtx}
 						// {{end}}
 						return op
 						// {{end}}

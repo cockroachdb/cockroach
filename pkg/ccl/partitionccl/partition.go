@@ -26,8 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -43,7 +46,7 @@ import (
 // TODO(dan): The typechecking here should be run during plan construction, so
 // we can support placeholders.
 func valueEncodePartitionTuple(
-	typ tree.PartitionByType, evalCtx *tree.EvalContext, maybeTuple tree.Expr, cols []catalog.Column,
+	typ tree.PartitionByType, evalCtx *eval.Context, maybeTuple tree.Expr, cols []catalog.Column,
 ) ([]byte, error) {
 	// Replace any occurrences of the MINVALUE/MAXVALUE pseudo-names
 	// into MinVal and MaxVal, to be recognized below.
@@ -101,16 +104,16 @@ func valueEncodePartitionTuple(
 		var semaCtx tree.SemaContext
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(evalCtx.Context, expr, cols[i].GetType(), "partition",
 			&semaCtx,
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		)
 		if err != nil {
 			return nil, err
 		}
-		if !tree.IsConst(evalCtx, typedExpr) {
+		if !eval.IsConst(evalCtx, typedExpr) {
 			return nil, pgerror.Newf(pgcode.Syntax,
 				"%s: partition values must be constant", typedExpr)
 		}
-		datum, err := typedExpr.Eval(evalCtx)
+		datum, err := eval.Expr(evalCtx, typedExpr)
 		if err != nil {
 			return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 		}
@@ -149,7 +152,7 @@ func (replaceMinMaxValVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr
 
 func createPartitioningImpl(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	columnLookupFn func(tree.Name) (catalog.Column, error),
 	newIdxColumnNames []string,
 	partBy *tree.PartitionBy,
@@ -333,7 +336,7 @@ func findColumnByNameOnTable(
 func createPartitioning(
 	ctx context.Context,
 	st *cluster.Settings,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	columnLookupFn func(tree.Name) (catalog.Column, error),
 	oldNumImplicitColumns int,
 	oldKeyColumnNames []string,
@@ -407,7 +410,7 @@ func createPartitioning(
 // selectPartitionExprs constructs an expression for selecting all rows in the
 // given partitions.
 func selectPartitionExprs(
-	evalCtx *tree.EvalContext, tableDesc catalog.TableDescriptor, partNames tree.NameList,
+	evalCtx *eval.Context, tableDesc catalog.TableDescriptor, partNames tree.NameList,
 ) (tree.Expr, error) {
 	exprsByPartName := make(map[string]tree.TypedExpr)
 	for _, partName := range partNames {
@@ -435,7 +438,7 @@ func selectPartitionExprs(
 	}
 
 	var err error
-	expr, err = evalCtx.NormalizeExpr(expr)
+	expr, err = normalize.Expr(evalCtx, expr)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +474,7 @@ func selectPartitionExprs(
 // that the requested partitions are all valid).
 func selectPartitionExprsByName(
 	a *tree.DatumAlloc,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
 	part catalog.Partitioning,

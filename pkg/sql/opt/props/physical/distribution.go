@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
 // Distribution represents the physical distribution of data for a relational
@@ -107,7 +107,7 @@ func (d *Distribution) FromLocality(locality roachpb.Locality) {
 // FromIndexScan sets the Distribution that results from scanning the given
 // index with the given constraint c (c can be nil).
 func (d *Distribution) FromIndexScan(
-	evalCtx *tree.EvalContext, index cat.Index, c *constraint.Constraint,
+	evalCtx *eval.Context, index cat.Index, c *constraint.Constraint,
 ) {
 	if index.Table().IsVirtualTable() {
 		// Virtual tables do not have zone configurations.

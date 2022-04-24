@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -42,8 +43,8 @@ type runParams struct {
 }
 
 // EvalContext() gives convenient access to the runParam's EvalContext().
-func (r *runParams) EvalContext() *tree.EvalContext {
-	return &r.extendedEvalCtx.EvalContext
+func (r *runParams) EvalContext() *eval.Context {
+	return &r.extendedEvalCtx.Context
 }
 
 // SessionData gives convenient access to the runParam's SessionData.
@@ -58,7 +59,7 @@ func (r *runParams) ExecCfg() *ExecutorConfig {
 
 // Ann is a shortcut for the Annotations from the eval context.
 func (r *runParams) Ann() *tree.Annotations {
-	return r.extendedEvalCtx.EvalContext.Annotations
+	return r.extendedEvalCtx.Context.Annotations
 }
 
 // planNode defines the interface for executing a query or portion of a query.

@@ -13,7 +13,7 @@ package props
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +30,7 @@ func TestVolatilitySet(t *testing.T) {
 	}
 	check("leak-proof", true, false, false)
 
-	v.Add(tree.VolatilityLeakProof)
+	v.Add(volatility.LeakProof)
 	check("leak-proof", true, false, false)
 
 	v.AddImmutable()

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -131,7 +132,7 @@ func TestArrayEncoding(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			evalContext := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			if d.Compare(evalContext, &test.datum) != 0 {
 				t.Fatalf("expected %v to decode to %s, got %s", test.encoding, test.datum.String(), d.String())
 			}

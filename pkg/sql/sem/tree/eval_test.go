@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,7 +42,7 @@ func TestEval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 
 	walk := func(t *testing.T, getExpr func(*testing.T, *datadriven.TestData) string) {
@@ -64,7 +66,7 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				return fmt.Sprint(err)
 			}
-			r, err := e.Eval(evalCtx)
+			r, err := eval.Expr(evalCtx, e)
 			if err != nil {
 				return fmt.Sprint(err)
 			}
@@ -86,12 +88,12 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return evalCtx.NormalizeExpr(typedExpr)
+			return normalize.Expr(evalCtx, typedExpr)
 		})
 	})
 }
 
-func optBuildScalar(evalCtx *tree.EvalContext, e tree.Expr) (tree.TypedExpr, error) {
+func optBuildScalar(evalCtx *eval.Context, e tree.Expr) (tree.TypedExpr, error) {
 	var o xform.Optimizer
 	o.Init(evalCtx, nil /* catalog */)
 	ctx := context.Background()
@@ -190,7 +192,7 @@ func TestTimeConversion(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer ctx.Mon.Stop(context.Background())
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
 		expr, err := parser.ParseExpr(exprStr)
@@ -204,7 +206,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		r, err := typedExpr.Eval(ctx)
+		r, err := eval.Expr(ctx, typedExpr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -243,7 +245,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		r, err = typedExpr.Eval(ctx)
+		r, err = eval.Expr(ctx, typedExpr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -362,9 +364,9 @@ func TestEvalError(t *testing.T) {
 		semaCtx := tree.MakeSemaContext()
 		typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 		if err == nil {
-			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
-			_, err = typedExpr.Eval(evalCtx)
+			_, err = eval.Expr(evalCtx, typedExpr)
 		}
 		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
@@ -379,8 +381,8 @@ func TestHLCTimestampDecimalRoundTrip(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		ts := hlc.Timestamp{WallTime: rng.Int63(), Logical: rng.Int31()}
-		dec := tree.TimestampToDecimalDatum(ts)
-		approx, err := tree.DecimalToInexactDTimestamp(dec)
+		dec := eval.TimestampToDecimalDatum(ts)
+		approx, err := eval.DecimalToInexactDTimestamp(dec)
 		require.NoError(t, err)
 		// The expected timestamp is at the microsecond precision.
 		expectedTsDatum := tree.MustMakeDTimestamp(timeutil.Unix(0, ts.WallTime), time.Microsecond)

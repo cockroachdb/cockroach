@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -371,7 +372,7 @@ func makeViewTableDesc(
 	creationTime hlc.Timestamp,
 	privileges *catpb.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	st *cluster.Settings,
 	persistence tree.Persistence,
 	isMultiRegion bool,
@@ -596,7 +597,7 @@ func (p *planner) replaceViewDesc(
 func addResultColumns(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	st *cluster.Settings,
 	desc *tabledesc.Mutable,
 	resultColumns colinfo.ResultColumns,

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -98,7 +99,7 @@ type serialOrderedSynchronizer struct {
 	// ordering dictates the way in which rows compare. This can't be nil.
 	ordering colinfo.ColumnOrdering
 
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 	// heap of source indexes. In state notInitialized, heap holds all source
 	// indexes. Once initialized (initHeap is called), heap will be ordered by the
 	// current row from each source and will only contain source indexes of
@@ -430,7 +431,7 @@ func (u *serialUnorderedSynchronizer) ConsumerClosed() {
 // sources should be consumed in index order (which is useful when you intend to
 // fuse the synchronizer and its inputs later; see FuseAggressively).
 func makeSerialSync(
-	ordering colinfo.ColumnOrdering, evalCtx *tree.EvalContext, sources []execinfra.RowSource,
+	ordering colinfo.ColumnOrdering, evalCtx *eval.Context, sources []execinfra.RowSource,
 ) (execinfra.RowSource, error) {
 	if len(sources) < 2 {
 		return nil, errors.Errorf("only %d sources for serial synchronizer", len(sources))
