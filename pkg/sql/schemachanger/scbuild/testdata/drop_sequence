@@ -22,10 +22,6 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - [[Sequence:{DescID: 104}, ABSENT], PUBLIC]
   details:
     sequenceId: 104
-- [[TableComment:{DescID: 104}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 104
 - [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
@@ -100,10 +96,6 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - [[Sequence:{DescID: 104}, ABSENT], PUBLIC]
   details:
     sequenceId: 104
-- [[TableComment:{DescID: 104}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 104
 - [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
@@ -148,10 +140,6 @@ DROP SEQUENCE defaultdb.ownedseq CASCADE
     columnId: 1
     sequenceId: 111
     tableId: 110
-- [[TableComment:{DescID: 111}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 111
 - [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 111

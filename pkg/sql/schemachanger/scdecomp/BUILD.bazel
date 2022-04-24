@@ -4,6 +4,7 @@ go_library(
     name = "scdecomp",
     srcs = [
         "decomp.go",
+        "dependencies.go",
         "helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp",

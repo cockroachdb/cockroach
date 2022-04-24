@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
@@ -58,6 +59,10 @@ type Dependencies interface {
 	// IndexPartitioningCCLCallback returns the CCL callback for creating
 	// partitioning descriptors for indexes.
 	IndexPartitioningCCLCallback() CreatePartitioningCCLCallback
+
+	// DescriptorCommentCache returns a CommentCache
+	// Implementation.
+	DescriptorCommentCache() CommentCache
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
@@ -134,4 +139,14 @@ type AstFormatter interface {
 	// FormatAstAsRedactableString formats a tree.Statement into SQL with fully
 	// qualified names, where parts can be redacted.
 	FormatAstAsRedactableString(statement tree.Statement, annotations *tree.Annotations) redact.RedactableString
+}
+
+// CommentCache represent an interface to fetch and cache comments for
+// descriptors.
+type CommentCache interface {
+	scdecomp.CommentGetter
+
+	// LoadCommentsForObjects explicitly loads commentCache into the cache give a list
+	// of object id of a descriptor type.
+	LoadCommentsForObjects(ctx context.Context, objIDs []descpb.ID) error
 }

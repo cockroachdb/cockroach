@@ -421,6 +421,18 @@ func (b *builderState) BackReferences(id catid.DescID) scbuildstmt.ElementResult
 	{
 		b.ensureDescriptor(id)
 		c := b.descCache[id]
+		// Eagerly load comments of backref schemas of db or backrefs tables of
+		// schema into comment cache before element walking.
+		switch c.desc.DescriptorType() {
+		case catalog.Database:
+			if err := b.commentCache.LoadCommentsForObjects(b.ctx, c.backrefs.Ordered()); err != nil {
+				panic(err)
+			}
+		case catalog.Schema:
+			if err := b.commentCache.LoadCommentsForObjects(b.ctx, c.backrefs.Ordered()); err != nil {
+				panic(err)
+			}
+		}
 		c.backrefs.ForEach(ids.Add)
 		c.backrefs.ForEach(b.ensureDescriptor)
 		for i := range b.output {
@@ -736,7 +748,11 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 			current: status,
 		})
 	}
-	c.backrefs = scdecomp.WalkDescriptor(c.desc, crossRefLookupFn, visitorFn)
+
+	if err := b.commentCache.LoadCommentsForObjects(b.ctx, []descpb.ID{c.desc.GetID()}); err != nil {
+		panic(err)
+	}
+	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn, b.commentCache)
 	// Name prefix and namespace lookups.
 	switch d := c.desc.(type) {
 	case catalog.DatabaseDescriptor:

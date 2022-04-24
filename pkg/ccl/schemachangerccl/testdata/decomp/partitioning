@@ -19,6 +19,9 @@ CREATE TABLE table_partitioned_index (
     ),
     FAMILY "primary" (a, b)
 );
+COMMENT ON TABLE public.table_implicit IS 'implicit partitioning is good';
+COMMENT ON COLUMN public.table_implicit.a IS 'a is good';
+COMMENT ON INDEX public.table_implicit@table_implicit_pkey IS 'pkey is good';
 ----
 
 decompose
@@ -109,7 +112,7 @@ ElementState:
       temporaryIndexId: 0
   Status: PUBLIC
 - TableComment:
-    comment: __placeholder_comment__
+    comment: implicit partitioning is good
     tableId: 104
   Status: PUBLIC
 - ColumnName:
@@ -209,21 +212,9 @@ ElementState:
     tableId: 104
   Status: PUBLIC
 - ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 104
-  Status: PUBLIC
-- ColumnComment:
     columnId: 2
-    comment: __placeholder_comment__
+    comment: a is good
     pgAttributeNum: 2
-    tableId: 104
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 3
-    comment: __placeholder_comment__
-    pgAttributeNum: 3
     tableId: 104
   Status: PUBLIC
 - IndexName:
@@ -271,13 +262,8 @@ ElementState:
     tableId: 104
   Status: PUBLIC
 - IndexComment:
-    comment: __placeholder_comment__
+    comment: pkey is good
     indexId: 1
-    tableId: 104
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 2
     tableId: 104
   Status: PUBLIC
 - Namespace:
@@ -379,10 +365,6 @@ ElementState:
       tableId: 105
       temporaryIndexId: 0
   Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 105
-  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: a
@@ -447,18 +429,6 @@ ElementState:
     isVirtual: false
     tableId: 105
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 105
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 105
-  Status: PUBLIC
 - IndexName:
     indexId: 1
     name: table_partitioned_index_pkey
@@ -484,16 +454,6 @@ ElementState:
       numColumns: 1
       numImplicitColumns: 0
       range: []
-    tableId: 105
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 1
-    tableId: 105
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 2
     tableId: 105
   Status: PUBLIC
 - Namespace:
