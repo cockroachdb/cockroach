@@ -25,6 +25,8 @@ type testConnHandle struct {
 
 	mu struct {
 		syncutil.Mutex
+		// Connection handles are active by default (i.e. idle = false).
+		idle                      bool
 		onTransferConnectionCount int
 	}
 }
@@ -54,6 +56,20 @@ func (h *testConnHandle) TransferConnection() error {
 		return h.ctx.Err()
 	}
 	return h.onTransferConnection()
+}
+
+// IsIdle implements the ConnectionHandle interface.
+func (h *testConnHandle) IsIdle() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.mu.idle
+}
+
+// setIdle updates the idle state of the connection handle.
+func (h *testConnHandle) setIdle(idle bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.mu.idle = idle
 }
 
 // transferConnectionCount returns the number of times TransferConnection is

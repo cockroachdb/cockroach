@@ -31,6 +31,9 @@ func NewServerAssignment(
 ) *ServerAssignment {
 	sa := &ServerAssignment{owner: owner, addr: addr}
 	sa.onClose.closerFn = func() {
+		// Since closerFn is used within Close, operations in closerFn should
+		// not invoke Close on the server assignment, or else a cyclic call may
+		// occur, which will result in a deadlock.
 		tracker.unregisterAssignment(tenantID, sa)
 	}
 	tracker.registerAssignment(tenantID, sa)
