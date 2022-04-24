@@ -100,7 +100,7 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
       DescID: 116
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 117
-PreCommitPhase stage 1 of 1 with 83 MutationType ops
+PreCommitPhase stage 1 of 1 with 84 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -258,6 +258,19 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
       DatabaseID: 104
     *scop.RemoveDatabaseComment
       DatabaseID: 104
+    *scop.LogEvent
+      Authorization:
+        UserName: root
+      Element:
+        DatabaseComment:
+          comment: db1 is good
+          databaseId: 104
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      TargetStatus: 1
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104

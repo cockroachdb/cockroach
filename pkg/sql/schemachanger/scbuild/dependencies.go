@@ -101,6 +101,10 @@ type CatalogReader interface {
 	// MayResolveTable looks up a table by name.
 	MayResolveTable(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor)
 
+	// MayResolveIndex looks up an index using a naked index name with database
+	// and schema prefix. Resolved prefix, index and the owner table are returned.
+	MayResolveIndex(ctx context.Context, indexName tree.Name, prefix tree.ObjectNamePrefix) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor, catalog.Index)
+
 	// MayResolveType looks up a type by name.
 	MayResolveType(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TypeDescriptor)
 

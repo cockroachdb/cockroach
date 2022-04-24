@@ -412,6 +412,13 @@ type CreateSchemaChangerJob struct {
 	RunningStatus string
 }
 
+// UpsertTableComment is used to add a comment to a table.
+type UpsertTableComment struct {
+	mutationOp
+	TableID descpb.ID
+	Comment string
+}
+
 // RemoveAllTableComments is used to delete all comments associated with a
 // table when dropping a table.
 type RemoveAllTableComments struct {
@@ -425,16 +432,38 @@ type RemoveTableComment struct {
 	TableID descpb.ID
 }
 
+// UpsertDatabaseComment is used to add a comment to a database.
+type UpsertDatabaseComment struct {
+	mutationOp
+	DatabaseID descpb.ID
+	Comment    string
+}
+
 // RemoveDatabaseComment is used to delete a comment associated with a database.
 type RemoveDatabaseComment struct {
 	mutationOp
 	DatabaseID descpb.ID
 }
 
+// UpsertSchemaComment is used to add a comment to a schema.
+type UpsertSchemaComment struct {
+	mutationOp
+	SchemaID descpb.ID
+	Comment  string
+}
+
 // RemoveSchemaComment is used to delete a comment associated with a schema.
 type RemoveSchemaComment struct {
 	mutationOp
 	SchemaID descpb.ID
+}
+
+// UpsertIndexComment is used to add a comment to an index.
+type UpsertIndexComment struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+	Comment string
 }
 
 // RemoveIndexComment is used to delete a comment associated with an index.
@@ -444,12 +473,29 @@ type RemoveIndexComment struct {
 	IndexID descpb.IndexID
 }
 
+// UpsertColumnComment is used to add a comment to a column.
+type UpsertColumnComment struct {
+	mutationOp
+	TableID        descpb.ID
+	ColumnID       descpb.ColumnID
+	PGAttributeNum descpb.PGAttributeNum
+	Comment        string
+}
+
 // RemoveColumnComment is used to delete a comment associated with a column.
 type RemoveColumnComment struct {
 	mutationOp
 	TableID        descpb.ID
 	ColumnID       descpb.ColumnID
 	PgAttributeNum descpb.PGAttributeNum
+}
+
+// UpsertConstraintComment is used to add a comment to a constraint.
+type UpsertConstraintComment struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+	Comment      string
 }
 
 // RemoveConstraintComment is used to delete a comment associated with a

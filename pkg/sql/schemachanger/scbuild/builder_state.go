@@ -687,6 +687,19 @@ func (b *builderState) ResolveIndex(
 	})
 }
 
+// ResolveTableWithIndexBestEffort implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolveTableWithIndexBestEffort(
+	prefix tree.ObjectNamePrefix, indexName tree.Name, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	resolvedPrefix, tblDesc, _ := b.cr.MayResolveIndex(b.ctx, indexName, prefix)
+	tableName := tree.NewTableNameWithSchema(
+		tree.Name(resolvedPrefix.Database.GetName()),
+		tree.Name(resolvedPrefix.Schema.GetName()),
+		tree.Name(tblDesc.GetName()),
+	)
+	return b.ResolveTable(tableName.ToUnresolvedObjectName(), p)
+}
+
 // ResolveColumn implements the scbuildstmt.NameResolver interface.
 func (b *builderState) ResolveColumn(
 	relationID catid.DescID, columnName tree.Name, p scbuildstmt.ResolveParams,
@@ -696,9 +709,15 @@ func (b *builderState) ResolveColumn(
 	rel := c.desc.(catalog.TableDescriptor)
 	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
 	var columnID catid.ColumnID
+	var pgAttrNum catid.PGAttributeNum
 	scpb.ForEachColumnName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) {
 		if e.TableID == relationID && tree.Name(e.Name) == columnName {
 			columnID = e.ColumnID
+		}
+	})
+	scpb.ForEachColumn(c.ers, func(current scpb.Status, target scpb.TargetStatus, e *scpb.Column) {
+		if e.TableID == relationID && e.ColumnID == columnID {
+			pgAttrNum = e.PgAttributeNum
 		}
 	})
 	if columnID == 0 {
@@ -710,7 +729,57 @@ func (b *builderState) ResolveColumn(
 	}
 	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
-		return idI != nil && idI.(catid.ColumnID) == columnID
+		pgID, _ := screl.Schema.GetAttribute(screl.PgAttributeNum, e)
+		return (idI != nil && idI.(catid.ColumnID) == columnID) || (pgID != nil && pgID == pgAttrNum)
+	})
+}
+
+// ResolveConstraint implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolveConstraint(
+	relationID catid.DescID, constraintName tree.Name, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	b.ensureDescriptor(relationID)
+	c := b.descCache[relationID]
+	rel := c.desc.(catalog.TableDescriptor)
+	var constraintID catid.ConstraintID
+	scpb.ForEachConstraintName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintName) {
+		if e.TableID == relationID && tree.Name(e.Name) == constraintName {
+			constraintID = e.ConstraintID
+		}
+	})
+
+	if constraintID == 0 {
+		var indexID catid.IndexID
+		scpb.ForEachIndexName(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
+			if e.TableID == relationID && tree.Name(e.Name) == constraintName {
+				indexID = e.IndexID
+			}
+		})
+		if indexID != 0 {
+			scpb.ForEachPrimaryIndex(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.PrimaryIndex) {
+				if e.TableID == relationID && e.IndexID == indexID {
+					constraintID = e.ConstraintID
+				}
+			})
+			scpb.ForEachSecondaryIndex(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.SecondaryIndex) {
+				if e.TableID == relationID && e.IndexID == indexID && e.IsUnique {
+					constraintID = e.ConstraintID
+				}
+			})
+		}
+	}
+
+	if constraintID == 0 {
+		if p.IsExistenceOptional {
+			return nil
+		}
+		panic(pgerror.Newf(pgcode.UndefinedObject,
+			"constraint %q of relation %q does not exist", constraintName, rel.GetName()))
+	}
+
+	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		return idI != nil && idI.(catid.ConstraintID) == constraintID
 	})
 }
 

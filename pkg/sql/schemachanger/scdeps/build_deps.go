@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -131,6 +133,29 @@ func (d *buildDeps) MayResolveTable(
 		return prefix, nil
 	}
 	return prefix, desc.(catalog.TableDescriptor)
+}
+
+// MayResolveIndex implements the scbuild.CatalogReader interface.
+func (d *buildDeps) MayResolveIndex(
+	ctx context.Context, indexName tree.Name, prefix tree.ObjectNamePrefix,
+) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor, catalog.Index) {
+	found, resolvedPrefix, err := resolver.ResolveObjectNamePrefix(
+		ctx, d.schemaResolver, d.CurrentDatabase(), d.sessionData.SearchPath, &prefix,
+	)
+	if err != nil {
+		panic(err)
+	}
+	if !found {
+		if !prefix.ExplicitCatalog && !prefix.ExplicitSchema {
+			panic(pgerror.Newf(pgcode.InvalidName, "no database or schema specified"))
+		}
+		panic(pgerror.Newf(pgcode.UndefinedSchema,
+			"schema %q in database %q not found", prefix.Schema(), prefix.Catalog()))
+	}
+
+	dsNames, dsIDs := d.CatalogReader().ReadObjectNamesAndIDs(ctx, resolvedPrefix.Database, resolvedPrefix.Schema)
+	tableDesc, idxDesc := FindTableContainsIndex(ctx, d.CatalogReader(), indexName, dsNames, dsIDs)
+	return resolvedPrefix, tableDesc, idxDesc
 }
 
 // MayResolveType implements the scbuild.CatalogReader interface.
