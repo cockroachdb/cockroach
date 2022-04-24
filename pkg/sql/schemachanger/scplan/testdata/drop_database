@@ -100,7 +100,7 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
       DescID: 116
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 117
-PreCommitPhase stage 1 of 1 with 83 MutationType ops
+PreCommitPhase stage 1 of 1 with 84 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -137,13 +137,13 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[Table:{DescID: 110}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 110, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
@@ -163,13 +163,13 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 109, Comment: t1 is good}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 109, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
@@ -181,7 +181,7 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -190,10 +190,10 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 112}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 112, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 112, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 112, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -202,10 +202,10 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 113}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -214,10 +214,10 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 114}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 114, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -240,13 +240,13 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
     [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 117}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 117, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 117, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 117, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 117, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 117, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -258,6 +258,19 @@ PreCommitPhase stage 1 of 1 with 83 MutationType ops
       DatabaseID: 104
     *scop.RemoveDatabaseComment
       DatabaseID: 104
+    *scop.LogEvent
+      Authorization:
+        UserName: root
+      Element:
+        DatabaseComment:
+          comment: db1 is good
+          databaseId: 104
+      Statement: DROP DATABASE ‹db1› CASCADE
+      StatementTag: DROP DATABASE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      TargetStatus: 1
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
@@ -555,33 +568,33 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
     [[Schema:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
     [[Table:{DescID: 110}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 110, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
     [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
     [[Table:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> ABSENT
     [[View:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 111, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[View:{DescID: 112}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 112, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 112, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[View:{DescID: 113}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[View:{DescID: 114}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 114, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 114, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[EnumType:{DescID: 115}, ABSENT], DROPPED] -> ABSENT
     [[AliasType:{DescID: 116}, ABSENT], DROPPED] -> ABSENT
     [[View:{DescID: 117}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 1, PgAttributeNum: 1}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 2, PgAttributeNum: 2}, ABSENT], WRITE_ONLY] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 117, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 117, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
+    [[Column:{DescID: 117, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
   ops:
     *scop.LogEvent
       Authorization:
@@ -921,131 +934,131 @@ DROP DATABASE db1 CASCADE
   to:   [EnumType:{DescID: 115}, DROPPED]
   kind: SameStagePrecedence
   rule: array type drops right before its element enum type
-- from: [Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
+- from: [Column:{DescID: 109, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
+- from: [Column:{DescID: 110, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 111, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 111, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 112, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 112, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 112, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 112, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 112, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 112, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 112, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 113, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 114, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 114, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 114, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 114, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 117, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 117, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 117, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
+- from: [Column:{DescID: 117, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 117, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 117, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 117, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 117, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
+- from: [Column:{DescID: 117, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
+- from: [Column:{DescID: 117, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 117, Name: n1, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
+- from: [Column:{DescID: 117, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
@@ -1082,7 +1095,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT]
@@ -1090,7 +1103,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT]
@@ -1098,7 +1111,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT]
@@ -1106,7 +1119,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT]
@@ -1114,7 +1127,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT]
@@ -1122,7 +1135,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT]
@@ -1130,7 +1143,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 111, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT]
@@ -1138,7 +1151,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 112, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT]
@@ -1146,7 +1159,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 112, Name: n2, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 112, Name: n2, ColumnID: 2}, ABSENT]
@@ -1154,7 +1167,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT]
@@ -1162,7 +1175,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT]
@@ -1170,7 +1183,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT]
@@ -1178,7 +1191,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT]
@@ -1186,7 +1199,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT]
@@ -1194,7 +1207,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 117, Name: n1, ColumnID: 3}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 117, Name: n1, ColumnID: 3}, ABSENT]
@@ -1202,7 +1215,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnName:{DescID: 117, Name: n2, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 117, Name: n2, ColumnID: 2}, ABSENT]
@@ -1210,67 +1223,67 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 111, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 112, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
 - from: [DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT]
@@ -1526,15 +1539,15 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [Table:{DescID: 109}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 109}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 109}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 109}, ABSENT]
@@ -1542,15 +1555,15 @@ DROP DATABASE db1 CASCADE
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 110}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 110}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 2}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 110}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [Table:{DescID: 110}, ABSENT]
@@ -1690,7 +1703,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [View:{DescID: 111}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 111, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 111}, DROPPED]
@@ -1698,11 +1711,11 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: view drops before the types, views and tables it depends on
 - from: [View:{DescID: 112}, ABSENT]
-  to:   [Column:{DescID: 112, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 112}, ABSENT]
-  to:   [Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 112, ColumnID: 2}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 112}, DROPPED]
@@ -1710,11 +1723,11 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: view drops before the types, views and tables it depends on
 - from: [View:{DescID: 113}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 113}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 113, ColumnID: 2}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 113}, DROPPED]
@@ -1726,11 +1739,11 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: view drops before the types, views and tables it depends on
 - from: [View:{DescID: 114}, ABSENT]
-  to:   [Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 114}, ABSENT]
-  to:   [Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 114, ColumnID: 2}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 114}, DROPPED]
@@ -1738,15 +1751,15 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: view drops before the types, views and tables it depends on
 - from: [View:{DescID: 117}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 117}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 2}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 117}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
+  to:   [Column:{DescID: 117, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
 - from: [View:{DescID: 117}, DROPPED]
