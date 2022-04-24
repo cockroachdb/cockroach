@@ -17,9 +17,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,7 +91,8 @@ func TestConnTracker(t *testing.T) {
 	tenantIDs = tracker.getTenantIDs()
 	require.Empty(t, tenantIDs)
 	for _, entry := range tracker.mu.tenants {
-		require.Empty(t, entry.mu.assignments)
+		require.Empty(t, entry.assignments.active)
+		require.Empty(t, entry.assignments.idle)
 	}
 }
 
@@ -156,6 +160,62 @@ func TestConnTracker_GetConnsMap(t *testing.T) {
 	require.Empty(t, connsMap)
 }
 
+func TestConnTrackerPartitionsRefresh(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Use a custom time source for testing.
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := timeutil.NewManualTime(t0)
+
+	tracker, err := NewConnTracker(ctx, stopper, timeSource)
+	require.NoError(t, err)
+
+	// Create three assignments: two for tenant-10, and one for tenant-20.
+	// Use a dummy address for all of them.
+	const addr = "127.0.0.10:1020"
+	tenant10, tenant20 := roachpb.MakeTenantID(10), roachpb.MakeTenantID(20)
+	h1, h2, h3 := &testConnHandle{}, &testConnHandle{}, &testConnHandle{}
+	s1 := NewServerAssignment(tenant10, tracker, h1, addr)
+	defer s1.Close()
+	s2 := NewServerAssignment(tenant10, tracker, h2, addr)
+	defer s2.Close()
+	s3 := NewServerAssignment(tenant20, tracker, h3, addr)
+	defer s3.Close()
+
+	e10 := tracker.getEntry(tenant10, false)
+	e20 := tracker.getEntry(tenant20, false)
+	activeList, idleList := e10.listAssignments()
+	require.Len(t, activeList, 2)
+	require.Empty(t, idleList)
+	activeList, idleList = e20.listAssignments()
+	require.Len(t, activeList, 1)
+	require.Empty(t, idleList)
+
+	// Update idle states for h1 and h3.
+	h1.setIdle(true)
+	h3.setIdle(true)
+
+	// Now advance the time, and partitions should update after the timer fires.
+	// The manual time is a little flaky, so we'll continuously advance until
+	// the update fires. Without this loop, we may advance, but the timer does
+	// not get fired.
+	testutils.SucceedsSoon(t, func() error {
+		timeSource.Advance(partitionsRefreshInterval)
+
+		activeList10, idleList10 := e10.listAssignments()
+		activeList20, idleList20 := e20.listAssignments()
+		if len(activeList10) == 1 && len(idleList10) == 1 &&
+			len(activeList20) == 0 && len(idleList20) == 1 {
+			return nil
+		}
+		return errors.New("partitions have not been updated yet")
+	})
+}
+
 func TestTenantEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -170,19 +230,153 @@ func TestTenantEntry(t *testing.T) {
 	// Add a new assignment.
 	require.True(t, entry.addAssignment(s))
 	require.False(t, entry.addAssignment(s))
-	require.Equal(t, 1, entry.getConnsCount())
+	require.Equal(t, 1, entry.assignmentsCount())
+	activeListInitial, idleListInitial := entry.listAssignments()
+	require.Len(t, activeListInitial, 1)
+	require.Empty(t, idleListInitial)
+
+	// Test for connsMap.
+	//
+	// TODO(jaylim-crl): Remove this block when getConnsMap gets removed.
 	connsMap := entry.getConnsMap()
 	require.Len(t, connsMap, 1)
 	arr, ok := connsMap[addr]
 	require.True(t, ok)
 	require.Equal(t, []ConnectionHandle{h1}, arr)
 
-	// Remove the assignment.
+	// Move assignment to the idle partition.
+	h1.setIdle(true)
+	entry.refreshPartitions()
+	activeList, idleList := entry.listAssignments()
+	require.Empty(t, activeList)
+	require.Len(t, idleList, 1)
+
+	// Verify that listAssignments are snapshots. They should not be updated
+	// when we call refreshPartitions.
+	require.Len(t, activeListInitial, 1)
+	require.Empty(t, idleListInitial)
+
+	// Trying to add an assignment would still fail.
+	require.False(t, entry.addAssignment(s))
+
+	// Remove the assignment when it's idle.
 	require.True(t, entry.removeAssignment(s))
 	require.False(t, entry.removeAssignment(s))
-	require.Equal(t, 0, entry.getConnsCount())
-	require.Empty(t, entry.getConnsMap())
+	require.Equal(t, 0, entry.assignmentsCount())
+	activeList, idleList = entry.listAssignments()
+	require.Empty(t, activeList)
+	require.Empty(t, idleList)
 
-	// Show that connsMap is a snapshot/copy.
-	require.Len(t, connsMap, 1)
+	// Test for connsMap.
+	//
+	// TODO(jaylim-crl): Remove this block when getConnsMap gets removed.
+	connsMap = entry.getConnsMap()
+	require.Empty(t, connsMap)
+
+	// Add the assignment again, and remove when it's active.
+	h1.setIdle(false)
+	require.True(t, entry.addAssignment(s))
+	require.True(t, entry.removeAssignment(s))
+}
+
+func TestTenantEntry_refreshPartitions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	entry := newTenantEntry()
+
+	h1 := &testConnHandle{}
+	s1 := &ServerAssignment{addr: "1", owner: h1}
+	h2 := &testConnHandle{}
+	s2 := &ServerAssignment{addr: "2", owner: h2}
+
+	// Add new assignments.
+	require.True(t, entry.addAssignment(s1))
+	require.True(t, entry.addAssignment(s2))
+	activeList, idleList := entry.listAssignments()
+	require.Len(t, activeList, 2)
+	require.Empty(t, idleList)
+	require.Equal(t, 2, entry.assignmentsCount())
+
+	// Refresh should be a no-op.
+	entry.refreshPartitions()
+	activeList, idleList = entry.listAssignments()
+	require.Len(t, activeList, 2)
+	require.Empty(t, idleList)
+
+	// Move s1 to the idle partition.
+	h1.setIdle(true)
+	entry.refreshPartitions()
+	activeList, idleList = entry.listAssignments()
+	require.Len(t, activeList, 1)
+	require.Len(t, idleList, 1)
+
+	// Move s1 to the active partition, and s2 to the idle partition.
+	h1.setIdle(false)
+	h2.setIdle(true)
+	entry.refreshPartitions()
+	activeList, idleList = entry.listAssignments()
+	require.Equal(t, []*ServerAssignment{s1}, activeList)
+	require.Equal(t, []*ServerAssignment{s2}, idleList)
+
+	// Refresh should be a no-op.
+	entry.refreshPartitions()
+	activeList, idleList = entry.listAssignments()
+	require.Len(t, activeList, 1)
+	require.Len(t, idleList, 1)
+
+	// Move both back to active partitions.
+	h1.setIdle(false)
+	h2.setIdle(false)
+	entry.refreshPartitions()
+	activeList, idleList = entry.listAssignments()
+	require.Len(t, activeList, 2)
+	require.Empty(t, idleList)
+
+	// Ensure that partitions are always disjoint sets. This validates that
+	// an assignment doesn't get re-added during a partition refresh once it has
+	// been removed.
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			h := &testConnHandle{}
+			s := &ServerAssignment{addr: fmt.Sprint(i), owner: h1}
+
+			time.Sleep(time.Duration(rand.Int31n(75)+25) * time.Millisecond) // 25-100ms
+			require.True(t, entry.addAssignment(s))
+
+			time.Sleep(time.Duration(rand.Int31n(75)+25) * time.Millisecond) // 25-100ms
+			if rand.Float32() < 0.5 {
+				h.setIdle(true)
+			} else {
+				h.setIdle(false)
+			}
+
+			time.Sleep(time.Duration(rand.Int31n(75)+25) * time.Millisecond) // 25-100ms
+			require.True(t, entry.removeAssignment(s))
+		}(i)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		wg.Wait()
+		cancel()
+	}()
+
+	// Keep refreshing partitions, and validating for correctness.
+	for ctx.Err() != nil {
+		entry.refreshPartitions()
+
+		// Validate that the lists are disjoint.
+		activeList, idleList = entry.listAssignments()
+		inActive := make(map[*ServerAssignment]struct{})
+		for _, sa := range activeList {
+			inActive[sa] = struct{}{}
+		}
+		for _, sa := range idleList {
+			_, ok := inActive[sa]
+			require.False(t, ok)
+		}
+	}
 }
