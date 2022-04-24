@@ -50,47 +50,47 @@ COMMENT ON CONSTRAINT fk_customers ON defaultdb.shipments IS 'customer is import
 build
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-- [[Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 109
-- [[Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 109
-- [[Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC]
+- [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
     pgAttributeNum: 3
     tableId: 109
-- [[Column:{DescID: 109, ColumnID: 4, PgAttributeNum: 4}, ABSENT], PUBLIC]
+- [[Column:{DescID: 109, ColumnID: 4}, ABSENT], PUBLIC]
   details:
     columnId: 4
     pgAttributeNum: 4
     tableId: 109
-- [[Column:{DescID: 109, ColumnID: 5, PgAttributeNum: 5}, ABSENT], PUBLIC]
+- [[Column:{DescID: 109, ColumnID: 5}, ABSENT], PUBLIC]
   details:
     columnId: 5
     pgAttributeNum: 5
     tableId: 109
-- [[Column:{DescID: 109, ColumnID: 6, PgAttributeNum: 6}, ABSENT], PUBLIC]
+- [[Column:{DescID: 109, ColumnID: 6}, ABSENT], PUBLIC]
   details:
     columnId: 6
     pgAttributeNum: 6
     tableId: 109
-- [[Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 111
-- [[Column:{DescID: 111, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 111
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 1, Comment: tracking_number is good}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 109, ColumnID: 1, Comment: tracking_number is good}, ABSENT], PUBLIC]
   details:
     columnId: 1
     comment: tracking_number is good

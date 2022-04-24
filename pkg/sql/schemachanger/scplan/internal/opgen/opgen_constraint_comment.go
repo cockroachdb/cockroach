@@ -21,7 +21,14 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.ConstraintComment) scop.Op {
-					return notImplemented(this)
+					return &scop.UpsertConstraintComment{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+						Comment:      this.Comment,
+					}
+				}),
+				emit(func(this *scpb.ConstraintComment, md *targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 			),
 		),
@@ -36,6 +43,9 @@ func init() {
 						TableID:      this.TableID,
 						ConstraintID: this.ConstraintID,
 					}
+				}),
+				emit(func(this *scpb.ConstraintComment, md *targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 			),
 		),
