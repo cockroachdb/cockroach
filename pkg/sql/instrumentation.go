@@ -322,7 +322,10 @@ func (ih *instrumentationHelper) Finish(
 
 	var bundle diagnosticsBundle
 	if ih.collectBundle {
-		ie := p.extendedEvalCtx.ExecCfg.InternalExecutor
+		ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(
+			p.EvalContext().Context,
+			p.SessionData(),
+		)
 		phaseTimes := statsCollector.PhaseTimes()
 		if ih.stmtDiagnosticsRecorder.IsExecLatencyConditionMet(
 			ih.diagRequestID, ih.diagRequest, phaseTimes.GetServiceLatencyNoOverhead(),
@@ -334,7 +337,7 @@ func (ih *instrumentationHelper) Finish(
 				&queryLevelStats,
 			)
 			bundle = buildStatementBundle(
-				ih.origCtx, cfg.DB, ie, &p.curPlan, ob.BuildString(), trace, placeholders,
+				ih.origCtx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
 			)
 			bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
 			ih.stmtDiagnosticsRecorder.RemoveOngoing(ih.diagRequestID, ih.diagRequest)
