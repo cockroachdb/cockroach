@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -324,7 +325,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	// Evaluate the configuration input.
 	if n.yamlConfig != nil {
 		// From a YAML string.
-		datum, err := n.yamlConfig.Eval(params.EvalContext())
+		datum, err := eval.Expr(params.EvalContext(), n.yamlConfig)
 		if err != nil {
 			return err
 		}
@@ -365,7 +366,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				optionsStr = append(optionsStr, fmt.Sprintf("%s = COPY FROM PARENT", name))
 				continue
 			}
-			datum, err := expr.Eval(params.EvalContext())
+			datum, err := eval.Expr(params.EvalContext(), expr)
 			if err != nil {
 				return err
 			}

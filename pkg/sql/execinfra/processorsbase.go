@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -110,7 +111,7 @@ func (h *ProcOutputHelper) Init(
 	post *execinfrapb.PostProcessSpec,
 	coreOutputTypes []*types.T,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
@@ -334,7 +335,7 @@ type ProcessorBaseNoHelper struct {
 	FlowCtx *FlowCtx
 
 	// EvalCtx is used for expression evaluation. It overrides the one in flowCtx.
-	EvalCtx *tree.EvalContext
+	EvalCtx *eval.Context
 
 	// Closed is set by InternalClose(). Once set, the processor's tracing span
 	// has been closed.
@@ -748,7 +749,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	post *execinfrapb.PostProcessSpec,
 	coreOutputTypes []*types.T,
 	flowCtx *FlowCtx,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	processorID int32,
 	output RowReceiver,
 	memMonitor *mon.BytesMonitor,
@@ -774,7 +775,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 func (pb *ProcessorBaseNoHelper) Init(
 	self RowSource,
 	flowCtx *FlowCtx,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	processorID int32,
 	output RowReceiver,
 	opts ProcStateOpts,
@@ -962,7 +963,7 @@ func NewLimitedMonitorNoFlowCtx(
 	// Create a fake FlowCtx populating only the required fields.
 	flowCtx := &FlowCtx{
 		Cfg: config,
-		EvalCtx: &tree.EvalContext{
+		EvalCtx: &eval.Context{
 			SessionDataStack: sessiondata.NewStack(sd),
 		},
 	}

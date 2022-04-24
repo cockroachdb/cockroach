@@ -13,16 +13,14 @@ package distribution
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
 // CanProvide returns true if the given operator returns rows that can
 // satisfy the given required distribution.
-func CanProvide(
-	evalCtx *tree.EvalContext, expr memo.RelExpr, required *physical.Distribution,
-) bool {
+func CanProvide(evalCtx *eval.Context, expr memo.RelExpr, required *physical.Distribution) bool {
 	if required.Any() {
 		return true
 	}
@@ -83,7 +81,7 @@ func BuildChildRequired(
 // This function assumes that the provided distributions have already been set in
 // the children of the expression.
 func BuildProvided(
-	evalCtx *tree.EvalContext, expr memo.RelExpr, required *physical.Distribution,
+	evalCtx *eval.Context, expr memo.RelExpr, required *physical.Distribution,
 ) physical.Distribution {
 	var provided physical.Distribution
 	switch t := expr.(type) {

@@ -33,6 +33,7 @@ go_library(
         "//pkg/sql/memsize",  # keep
         "//pkg/sql/rowenc",  # keep
         "//pkg/sql/sem/builtins",  # keep
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep
         "//pkg/util/duration",  # keep
@@ -73,6 +74,7 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/randgen",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/types",

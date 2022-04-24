@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -56,7 +57,7 @@ type rangeOffsetHandler interface {
 }
 
 func newRangeOffsetHandler(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	datumAlloc *tree.DatumAlloc,
 	bound *execinfrapb.WindowerSpec_Frame_Bound,
 	ordColType *types.T,
@@ -140,9 +141,9 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartAscDatum{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
+						_, binOp, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp.EvalOp, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -219,9 +220,9 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartDescDatum{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
+						binOp, _, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp.EvalOp, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -301,9 +302,9 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndAscDatum{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
+						_, binOp, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp.EvalOp, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -380,9 +381,9 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndDescDatum{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
+						binOp, _, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp.EvalOp, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -465,9 +466,9 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartAscDatum{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
+						binOp, _, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp.EvalOp, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -544,9 +545,9 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartDescDatum{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
+						_, binOp, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp.EvalOp, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -626,9 +627,9 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndAscDatum{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
+						binOp, _, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp.EvalOp, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -705,9 +706,9 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndDescDatum{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(tree.Datum),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
+						_, binOp, _ := eval.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp.EvalOp, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -1918,7 +1919,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(ctx context.Context, c
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -2971,7 +2972,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(ctx context.Context, 
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -4366,7 +4367,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(ctx context.Context, cur
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -5572,7 +5573,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(ctx context.Context, cu
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -6814,7 +6815,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(ctx context.Context, c
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -7867,7 +7868,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(ctx context.Context, 
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -9262,7 +9263,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(ctx context.Context, cur
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
@@ -10468,7 +10469,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(ctx context.Context, cu
 	col := vec.Datum()
 	currRowVal := col.Get(vecIdx)
 
-	_res, err := _overloadHelper.BinFn(_overloadHelper.EvalCtx, currRowVal.(tree.Datum), h.offset.(tree.Datum))
+	_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, currRowVal.(tree.Datum), h.offset.(tree.Datum))
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}

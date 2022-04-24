@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -420,13 +421,13 @@ func TestGetJoinMultiplicity(t *testing.T) {
 
 type testOpBuilder struct {
 	t   *testing.T
-	ctx *tree.EvalContext
+	ctx *eval.Context
 	mem *Memo
 	cat *testcat.Catalog
 }
 
 func makeOpBuilder(t *testing.T) testOpBuilder {
-	ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	var mem Memo
 	mem.Init(&ctx)
 	ob := testOpBuilder{

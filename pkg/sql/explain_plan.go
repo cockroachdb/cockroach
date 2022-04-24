@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -155,10 +156,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 }
 
 func emitExplain(
-	ob *explain.OutputBuilder,
-	evalCtx *tree.EvalContext,
-	codec keys.SQLCodec,
-	explainPlan *explain.Plan,
+	ob *explain.OutputBuilder, evalCtx *eval.Context, codec keys.SQLCodec, explainPlan *explain.Plan,
 ) (err error) {
 	// Guard against bugs in the explain code.
 	defer func() {

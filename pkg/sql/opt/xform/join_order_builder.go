@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -272,7 +272,7 @@ type OnAddJoinFunc func(left, right, all, refs []memo.RelExpr, op opt.Operator)
 // Citations: [8]
 type JoinOrderBuilder struct {
 	f       *norm.Factory
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	// vertexes is the set of base relations that form the vertexes of the join
 	// graph. Any RelExpr can be a vertex, including a join (e.g. in case where
@@ -319,7 +319,7 @@ type JoinOrderBuilder struct {
 // Init initializes a new JoinOrderBuilder with the given factory. The join
 // graph is reset, so a JoinOrderBuilder can be reused. Callback functions are
 // not reset.
-func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *tree.EvalContext) {
+func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *eval.Context) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*jb = JoinOrderBuilder{

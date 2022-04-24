@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -237,7 +237,7 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity Selectivity, inputRows fl
 
 // CopyFromOther copies all fields of the other ColumnStatistic except Cols,
 // including the Histogram, into the receiver.
-func (c *ColumnStatistic) CopyFromOther(other *ColumnStatistic, evalCtx *tree.EvalContext) {
+func (c *ColumnStatistic) CopyFromOther(other *ColumnStatistic, evalCtx *eval.Context) {
 	c.DistinctCount = other.DistinctCount
 	c.NullCount = other.NullCount
 	c.AvgSize = other.AvgSize

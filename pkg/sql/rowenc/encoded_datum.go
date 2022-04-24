@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -352,7 +353,7 @@ func (ed *EncDatum) Fingerprint(
 //    0  if the receiver is equal to rhs,
 //    +1 if the receiver is greater than rhs.
 func (ed *EncDatum) Compare(
-	typ *types.T, a *tree.DatumAlloc, evalCtx *tree.EvalContext, rhs *EncDatum,
+	typ *types.T, a *tree.DatumAlloc, evalCtx *eval.Context, rhs *EncDatum,
 ) (int, error) {
 	// TODO(radu): if we have both the Datum and a key encoding available, which
 	// one would be faster to use?
@@ -505,7 +506,7 @@ func (r EncDatumRow) Compare(
 	types []*types.T,
 	a *tree.DatumAlloc,
 	ordering colinfo.ColumnOrdering,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	rhs EncDatumRow,
 ) (int, error) {
 	if len(r) != len(types) || len(rhs) != len(types) {
@@ -531,7 +532,7 @@ func (r EncDatumRow) CompareToDatums(
 	types []*types.T,
 	a *tree.DatumAlloc,
 	ordering colinfo.ColumnOrdering,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	rhs tree.Datums,
 ) (int, error) {
 	for _, c := range ordering {

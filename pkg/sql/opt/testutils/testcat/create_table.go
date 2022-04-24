@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -779,7 +780,7 @@ func (tt *Table) addIndexWithVersion(
 	if partitionBy != nil {
 		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext()
-		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		if len(partitionBy.List) > 0 {
 			idx.partitions = make([]Partition, len(partitionBy.List))
@@ -1143,7 +1144,7 @@ func (tt *Table) addPrimaryColumnIndex(colName string) {
 // partitionByListExprToDatums converts an expression from a PARTITION BY LIST
 // clause to a list of datums.
 func (ti *Index) partitionByListExprToDatums(
-	ctx context.Context, evalCtx *tree.EvalContext, semaCtx *tree.SemaContext, e tree.Expr,
+	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext, e tree.Expr,
 ) tree.Datums {
 	var vals []tree.Expr
 	switch t := e.(type) {
@@ -1169,7 +1170,7 @@ func (ti *Index) partitionByListExprToDatums(
 		if err != nil {
 			panic(err)
 		}
-		d[i], err = cTyped.Eval(evalCtx)
+		d[i], err = eval.Expr(evalCtx, cTyped)
 		if err != nil {
 			panic(err)
 		}

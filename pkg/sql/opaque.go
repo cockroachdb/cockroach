@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -37,7 +38,7 @@ func (o *opaqueMetadata) String() string                 { return o.info }
 func (o *opaqueMetadata) Columns() colinfo.ResultColumns { return o.columns }
 
 func buildOpaque(
-	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, stmt tree.Statement,
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, stmt tree.Statement,
 ) (opt.OpaqueMetadata, error) {
 	p := evalCtx.Planner.(*planner)
 

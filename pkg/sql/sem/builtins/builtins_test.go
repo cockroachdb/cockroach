@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -220,7 +221,7 @@ func TestStringToArrayAndBack(t *testing.T) {
 				}
 			}
 
-			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			evalContext := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			if result.Compare(evalContext, expectedArray) != 0 {
 				t.Errorf("expected %v, got %v", tc.expected, result)
 			}

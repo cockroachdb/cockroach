@@ -248,9 +248,8 @@ func (d *dummyColumn) TypeCheck(
 	return d, nil
 }
 
-// Eval implements the TypedExpr interface.
-func (*dummyColumn) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic("dummyColumnItem.Eval() is undefined")
+func (*dummyColumn) Eval(v tree.ExprEvaluator) (tree.Datum, error) {
+	panic("dummyColumnItem.EvalVisit() is undefined")
 }
 
 // ResolvedType implements the TypedExpr interface.

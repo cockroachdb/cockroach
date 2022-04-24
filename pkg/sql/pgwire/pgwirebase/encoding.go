@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -311,9 +312,7 @@ func validateArrayDimensions(nDimensions int, nElements int) error {
 // DecodeDatum decodes bytes with specified type and format code into
 // a datum. If res is nil, then user defined types are not attempted
 // to be resolved.
-func DecodeDatum(
-	evalCtx *tree.EvalContext, t *types.T, code FormatCode, b []byte,
-) (tree.Datum, error) {
+func DecodeDatum(evalCtx *eval.Context, t *types.T, code FormatCode, b []byte) (tree.Datum, error) {
 	id := t.Oid()
 	switch code {
 	case FormatText:
@@ -353,7 +352,7 @@ func DecodeDatum(
 			oid.T_regnamespace,
 			oid.T_regprocedure,
 			oid.T_regdictionary:
-			return tree.ParseDOid(evalCtx, string(b), t)
+			return eval.ParseDOid(evalCtx, string(b), t)
 		case oid.T_float4, oid.T_float8:
 			f, err := strconv.ParseFloat(string(b), 64)
 			if err != nil {
@@ -934,7 +933,7 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 }
 
 func decodeBinaryArray(
-	evalCtx *tree.EvalContext, t *types.T, b []byte, code FormatCode,
+	evalCtx *eval.Context, t *types.T, b []byte, code FormatCode,
 ) (tree.Datum, error) {
 	var hdr struct {
 		Ndims int32
@@ -992,7 +991,7 @@ func decodeBinaryArray(
 
 const tupleHeaderSize, oidSize, elementSize = 4, 4, 4
 
-func decodeBinaryTuple(evalCtx *tree.EvalContext, b []byte) (tree.Datum, error) {
+func decodeBinaryTuple(evalCtx *eval.Context, b []byte) (tree.Datum, error) {
 
 	bufferLength := len(b)
 	if bufferLength < tupleHeaderSize {

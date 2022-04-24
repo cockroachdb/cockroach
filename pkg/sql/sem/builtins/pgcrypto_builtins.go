@@ -13,7 +13,9 @@ package builtins
 import (
 	"crypto/hmac"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -33,7 +35,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.String}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				alg := tree.MustBeDString(args[1])
 				hashFunc, err := getHashFunc(string(alg))
 				if err != nil {
@@ -47,12 +49,12 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			},
 			Info: "Computes a binary hash of the given `data`. `type` is the algorithm " +
 				"to use (md5, sha1, sha224, sha256, sha384, or sha512).",
-			Volatility: tree.VolatilityLeakProof,
+			Volatility: volatility.LeakProof,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.Bytes}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				alg := tree.MustBeDString(args[1])
 				hashFunc, err := getHashFunc(string(alg))
 				if err != nil {
@@ -66,7 +68,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			},
 			Info: "Computes a binary hash of the given `data`. `type` is the algorithm " +
 				"to use (md5, sha1, sha224, sha256, sha384, or sha512).",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -77,7 +79,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.String}, {"key", types.String}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := tree.MustBeDString(args[1])
 				alg := tree.MustBeDString(args[2])
 				hashFunc, err := getHashFunc(string(alg))
@@ -91,12 +93,12 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
 			},
 			Info:       "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
-			Volatility: tree.VolatilityLeakProof,
+			Volatility: volatility.LeakProof,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.Bytes}, {"key", types.Bytes}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := tree.MustBeDBytes(args[1])
 				alg := tree.MustBeDString(args[2])
 				hashFunc, err := getHashFunc(string(alg))
@@ -110,7 +112,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(h.Sum(nil))), nil
 			},
 			Info:       "Calculates hashed MAC for `data` with key `key`. `type` is the same as in `digest()`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 }

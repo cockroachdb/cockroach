@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	tu "github.com/cockroachdb/cockroach/pkg/testutils"
@@ -41,7 +42,7 @@ func TestDetachMemo(t *testing.T) {
 	}
 
 	var o xform.Optimizer
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE c=$1")
 
 	before := o.DetachMemo()
@@ -93,7 +94,7 @@ func TestDetachMemoRace(t *testing.T) {
 		t.Fatal(err)
 	}
 	var o xform.Optimizer
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE a = $1")
 	mem := o.DetachMemo()
 
@@ -103,7 +104,7 @@ func TestDetachMemoRace(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			var o xform.Optimizer
-			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+			evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 			o.Init(&evalCtx, catalog)
 			f := o.Factory()
 			var replaceFn norm.ReplaceFunc

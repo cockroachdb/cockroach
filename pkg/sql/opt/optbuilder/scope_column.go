@@ -141,6 +141,10 @@ func (c *scopeColumn) String() string {
 	return tree.AsString(c)
 }
 
+func (c *scopeColumn) Eval(v tree.ExprEvaluator) (tree.Datum, error) {
+	panic(errors.AssertionFailedf("scopeColumn must be replaced before evaluation"))
+}
+
 // Format implements the NodeFormatter interface.
 func (c *scopeColumn) Format(ctx *tree.FmtCtx) {
 	// FmtCheckEquivalence is used by getExprStr when comparing expressions for
@@ -184,11 +188,6 @@ func (c *scopeColumn) TypeCheck(
 // ResolvedType is part of the tree.TypedExpr interface.
 func (c *scopeColumn) ResolvedType() *types.T {
 	return c.typ
-}
-
-// Eval is part of the tree.TypedExpr interface.
-func (*scopeColumn) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(errors.AssertionFailedf("scopeColumn must be replaced before evaluation"))
 }
 
 // Variable is part of the tree.VariableExpr interface. This prevents the

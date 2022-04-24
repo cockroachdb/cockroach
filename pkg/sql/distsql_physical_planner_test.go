@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -916,7 +917,7 @@ func TestPartitionSpans(t *testing.T) {
 
 			ctx := context.Background()
 			planCtx := dsp.NewPlanningCtx(ctx, &extendedEvalContext{
-				EvalContext: tree.EvalContext{Codec: keys.SystemSQLCodec},
+				Context: eval.Context{Codec: keys.SystemSQLCodec},
 			}, nil, nil, DistributionTypeSystemTenantOnly)
 			var spans []roachpb.Span
 			for _, s := range tc.spans {
@@ -1102,7 +1103,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 
 			ctx := context.Background()
 			planCtx := dsp.NewPlanningCtx(ctx, &extendedEvalContext{
-				EvalContext: tree.EvalContext{Codec: keys.SystemSQLCodec},
+				Context: eval.Context{Codec: keys.SystemSQLCodec},
 			}, nil, nil, DistributionTypeSystemTenantOnly)
 			partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span})
 			if err != nil {
@@ -1203,7 +1204,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 
 	ctx := context.Background()
 	planCtx := dsp.NewPlanningCtx(ctx, &extendedEvalContext{
-		EvalContext: tree.EvalContext{Codec: keys.SystemSQLCodec},
+		Context: eval.Context{Codec: keys.SystemSQLCodec},
 	}, nil, nil, DistributionTypeSystemTenantOnly)
 	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span})
 	if err != nil {

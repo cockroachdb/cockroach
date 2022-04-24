@@ -58,7 +58,7 @@ type renderNode struct {
 }
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+func (r *renderNode) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
 	panic("renderNode can't be run in local mode")
 }
 

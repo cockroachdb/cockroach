@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -68,7 +69,7 @@ func (b *Builder) buildSQLFn(
 	}
 
 	// Get the SQL statement and parse it.
-	sql, err := info.def.Overload.SQLFn(b.evalCtx, exprs)
+	sql, err := info.def.Overload.SQLFn.(eval.SQLFnOverload)(b.evalCtx, exprs)
 	if err != nil {
 		panic(err)
 	}

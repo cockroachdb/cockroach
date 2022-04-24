@@ -13,6 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -120,7 +121,8 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 			if function.Overload.GeneratorWithExprs != nil {
 				panic(errors.AssertionFailedf("unexpected GeneratorWithExprs"))
 			}
-			generator, err := function.Overload.Generator(c.f.evalCtx, tree.Datums{t.Value})
+			generator, err := function.Overload.
+				Generator.(eval.GeneratorOverload)(c.f.evalCtx, tree.Datums{t.Value})
 			if err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator retrieval failed"))
 			}

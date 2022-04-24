@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -138,12 +139,12 @@ func (c *CustomFuncs) UnifyComparison(
 	// means we don't lose any information needed to generate spans, and combined
 	// with monotonicity means that it's safe to convert the RHS to the type of
 	// the LHS.
-	convertedDatum, err := tree.PerformCast(c.f.evalCtx, cnst.Value, desiredType)
+	convertedDatum, err := eval.PerformCast(c.f.evalCtx, cnst.Value, desiredType)
 	if err != nil {
 		return nil, false
 	}
 
-	convertedBack, err := tree.PerformCast(c.f.evalCtx, convertedDatum, originalType)
+	convertedBack, err := eval.PerformCast(c.f.evalCtx, convertedDatum, originalType)
 	if err != nil {
 		return nil, false
 	}
