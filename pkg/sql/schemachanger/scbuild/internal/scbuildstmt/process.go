@@ -54,6 +54,13 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.DropTable)(nil)):    {DropTable, true},
 	reflect.TypeOf((*tree.DropType)(nil)):     {DropType, true},
 	reflect.TypeOf((*tree.DropView)(nil)):     {DropView, true},
+	// TODO (Chengxiong) turn on `COMMENT ON` with version gating after 22.1 release.
+	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {CommentOnDatabase, false},
+	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {CommentOnSchema, false},
+	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {CommentOnTable, false},
+	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {CommentOnColumn, false},
+	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {CommentOnIndex, false},
+	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {CommentOnConstraint, false},
 }
 
 func init() {

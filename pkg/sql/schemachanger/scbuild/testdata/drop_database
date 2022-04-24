@@ -73,87 +73,87 @@ DROP DATABASE db1 CASCADE
         family: ArrayFamily
         oid: 100116
     typeId: 116
-- [[Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 109
-- [[Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 109
-- [[Column:{DescID: 109, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC]
+- [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
     pgAttributeNum: 3
     tableId: 109
-- [[Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 110
-- [[Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 110
-- [[Column:{DescID: 110, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC]
+- [[Column:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
     pgAttributeNum: 3
     tableId: 110
-- [[Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 111
-- [[Column:{DescID: 112, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 112, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 112
-- [[Column:{DescID: 112, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 112, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 112
-- [[Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 113
-- [[Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 113
-- [[Column:{DescID: 114, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 114
-- [[Column:{DescID: 114, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 114, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 114
-- [[Column:{DescID: 117, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 117, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 117
-- [[Column:{DescID: 117, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 117, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 117
-- [[Column:{DescID: 117, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC]
+- [[Column:{DescID: 117, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
     pgAttributeNum: 3
     tableId: 117
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 1, Comment: id is good}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 109, ColumnID: 1, Comment: id is good}, ABSENT], PUBLIC]
   details:
     columnId: 1
     comment: id is good

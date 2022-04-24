@@ -628,6 +628,8 @@ type TableDescriptor interface {
 	GetConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
 	// GetConstraintInfo returns a summary of all constraints on the table.
 	GetConstraintInfo() (map[string]descpb.ConstraintDetail, error)
+	// FindConstraintWithID returns a constraint given a constraint id.
+	FindConstraintWithID(id descpb.ConstraintID) (*descpb.ConstraintDetail, error)
 
 	// GetUniqueWithoutIndexConstraints returns all the unique constraints defined
 	// on this table that are not enforced by an index.
