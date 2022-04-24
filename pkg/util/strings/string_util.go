@@ -34,21 +34,31 @@ func CollapseDupeChar(toCollapse string, collapseChar rune) string {
 
 	var builder strings.Builder
 	hadPrevious := false
+	begIndx := 0
+	endIndx := 0
 	for _, r := range toCollapse {
 		if r != collapseChar {
 			hadPrevious = false
-			builder.WriteRune(r)
+			endIndx++
 			continue
 		}
 
 		// Our character matches
 		if hadPrevious {
+			if begIndx != endIndx {
+				builder.WriteString(toCollapse[begIndx:endIndx])
+			}
+
+			endIndx++
+			begIndx = endIndx
 			continue
 		}
 
 		hadPrevious = true
-		builder.WriteRune(r)
+		endIndx++
 	}
+
+	builder.WriteString(toCollapse[begIndx:endIndx])
 
 	return builder.String()
 }
