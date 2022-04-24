@@ -888,7 +888,7 @@ func TestConnectionMigration(t *testing.T) {
 
 		var f *forwarder
 		require.Eventually(t, func() bool {
-			connsMap := proxy.handler.connTracker.GetConnsMap(tenantID)
+			connsMap := proxy.handler.balancer.GetTracker().GetConnsMap(tenantID)
 			for _, conns := range connsMap {
 				if len(conns) != 0 {
 					f = conns[0].(*forwarder)
@@ -1098,7 +1098,7 @@ func TestConnectionMigration(t *testing.T) {
 
 		var f *forwarder
 		require.Eventually(t, func() bool {
-			connsMap := proxy.handler.connTracker.GetConnsMap(tenantID)
+			connsMap := proxy.handler.balancer.GetTracker().GetConnsMap(tenantID)
 			for _, conns := range connsMap {
 				if len(conns) != 0 {
 					f = conns[0].(*forwarder)
@@ -1181,7 +1181,7 @@ func TestConnectionMigration(t *testing.T) {
 
 	// All connections should eventually be terminated.
 	require.Eventually(t, func() bool {
-		connsMap := proxy.handler.connTracker.GetConnsMap(tenantID)
+		connsMap := proxy.handler.balancer.GetTracker().GetConnsMap(tenantID)
 		return len(connsMap) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 }

@@ -58,14 +58,6 @@ type connector struct {
 	// NOTE: This field is required.
 	Balancer *balancer.Balancer
 
-	// ConnTracker is used to track connections within the proxy.
-	//
-	// NOTE: This field is required.
-	//
-	// TODO(jaylim-crl): This field can be removed once we move the lookup logic
-	// into the balancer component.
-	ConnTracker *balancer.ConnTracker
-
 	// StartupMsg represents the startup message associated with the client.
 	// This will be used when establishing a pgwire connection with the SQL pod.
 	//
@@ -227,10 +219,10 @@ func (c *connector) dialTenantCluster(
 
 		// Make a connection to the SQL pod.
 		//
-		// TODO(jaylim-crl): See comment above about moving lookupValidAddr into
+		// TODO(jaylim-crl): See comment above about moving lookupAddr into
 		// the balancer.
 		serverAssignment := balancer.NewServerAssignment(
-			c.TenantID, c.ConnTracker, requester, serverAddr,
+			c.TenantID, c.Balancer.GetTracker(), requester, serverAddr,
 		)
 		crdbConn, err = c.dialSQLServer(serverAssignment)
 		if err != nil {
