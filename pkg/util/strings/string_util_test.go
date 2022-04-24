@@ -40,3 +40,35 @@ func TestCollapseDupeChar(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkNoDupe(b *testing.B) {
+	toTest := "%test%"
+
+	for n := 0; n < b.N; n++ {
+		CollapseDupeChar(toTest, '%')
+	}
+}
+
+func BenchmarkSingleDupe(b *testing.B) {
+	toTest := "%test%%%%"
+
+	for n := 0; n < b.N; n++ {
+		CollapseDupeChar(toTest, '%')
+	}
+}
+
+func BenchmarkMultipleDupe(b *testing.B) {
+	toTest := "%%%%%test%%%%"
+
+	for n := 0; n < b.N; n++ {
+		CollapseDupeChar(toTest, '%')
+	}
+}
+
+func BenchmarkSpacedDupe(b *testing.B) {
+	toTest := "%%%spaced%%%dupe%%%"
+
+	for n := 0; n < b.N; n++ {
+		CollapseDupeChar(toTest, '%')
+	}
+}
