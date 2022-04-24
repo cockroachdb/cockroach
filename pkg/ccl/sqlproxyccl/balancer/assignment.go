@@ -52,5 +52,8 @@ func (sa *ServerAssignment) Addr() string {
 // Close cleans up the server assignment and deregisters it from the connection
 // tracker. This is idempotent.
 func (sa *ServerAssignment) Close() {
-	sa.onClose.Do(sa.onClose.closerFn)
+	// Tests may create a ServerAssignment without a closerFn.
+	if sa.onClose.closerFn != nil {
+		sa.onClose.Do(sa.onClose.closerFn)
+	}
 }

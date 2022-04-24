@@ -12,6 +12,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
@@ -26,11 +27,21 @@ func TestServerAssignment(t *testing.T) {
 
 	tracker, err := NewConnTracker(ctx, stopper, nil /* timeSource */)
 	require.NoError(t, err)
-	tenantID, handle := makeConn(10, "foo-bar-baz")
 
+	tenantID := roachpb.MakeTenantID(10)
+	handle := &testConnHandle{}
 	sa := NewServerAssignment(tenantID, tracker, handle, "127.0.0.10")
 	require.Equal(t, handle, sa.Owner())
 	require.Equal(t, "127.0.0.10", sa.Addr())
-	// TODO(jaylim-crl): test Close once {register,unregister}Assignment gets
-	// implemented.
+	require.Equal(t, map[string][]ConnectionHandle{
+		sa.Addr(): {handle},
+	}, tracker.GetConnsMap(tenantID))
+
+	// Once Close gets invoked, assignments should be empty.
+	sa.Close()
+	require.Empty(t, tracker.GetConnsMap(tenantID))
+
+	// Invoke Close again for idempotency.
+	sa.Close()
+	require.Empty(t, tracker.GetConnsMap(tenantID))
 }

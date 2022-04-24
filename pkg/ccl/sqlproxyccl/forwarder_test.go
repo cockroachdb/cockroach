@@ -345,23 +345,6 @@ func TestForwarder_Close(t *testing.T) {
 	}
 }
 
-func TestForwarder_ServerRemoteAddr(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	p1, p2 := net.Pipe()
-
-	f := newForwarder(ctx, nil /* connector */, nil /* metrics */, nil /* timeSource */)
-	defer f.Close()
-
-	require.Equal(t, "", f.ServerRemoteAddr())
-
-	err := f.run(p1, p2)
-	require.NoError(t, err)
-
-	require.Equal(t, "pipe", f.ServerRemoteAddr())
-}
-
 func TestForwarder_tryReportError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

@@ -32,6 +32,7 @@ go_test(
     srcs = [
         "assignment_test.go",
         "balancer_test.go",
+        "conn_test.go",
         "conn_tracker_test.go",
         "pod_test.go",
     ],
