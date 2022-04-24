@@ -33,7 +33,7 @@ func targetNodeVars(el rel.Var) (element, target, node rel.Var) {
 }
 
 type depRuleSpec struct {
-	ruleName              string
+	ruleName              scgraph.RuleName
 	edgeKind              scgraph.DepEdgeKind
 	targetStatus          scpb.Status
 	from, to              elementSpec
@@ -44,7 +44,7 @@ type depRuleSpec struct {
 }
 
 func depRule(
-	ruleName string,
+	ruleName scgraph.RuleName,
 	edgeKind scgraph.DepEdgeKind,
 	targetStatus scpb.TargetStatus,
 	from, to elementSpec,

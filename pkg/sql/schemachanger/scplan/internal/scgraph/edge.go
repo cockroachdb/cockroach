@@ -93,7 +93,7 @@ type DepEdge struct {
 
 	// TODO(ajwerner): Deal with the possibility that multiple rules could
 	// generate the same edge.
-	rule string
+	rule RuleName
 }
 
 // From implements the Edge interface.
@@ -103,7 +103,7 @@ func (de *DepEdge) From() *screl.Node { return de.from }
 func (de *DepEdge) To() *screl.Node { return de.to }
 
 // Name returns the name of the rule which generated this edge.
-func (de *DepEdge) Name() string { return de.rule }
+func (de *DepEdge) Name() RuleName { return de.rule }
 
 // Kind returns the kind of the DepEdge.
 func (de *DepEdge) Kind() DepEdgeKind { return de.kind }
