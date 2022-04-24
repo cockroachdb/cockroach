@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"sync"
 	"time"
 
@@ -453,6 +454,16 @@ func (reg *registry) PublishToOverlapping(
 		minTS = hlc.MaxTimestamp
 	default:
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
+	}
+
+	if event.SST != nil {
+		fmt.Println("received sst in registry", event.SST.Span)
+		// Print out all registrations
+		reg.forOverlappingRegs(roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+			func(r *registration) (disconnect bool, pErr *roachpb.Error) {
+				fmt.Println("registration span:", r.span)
+				return false, nil
+			})
 	}
 
 	reg.forOverlappingRegs(span, func(r *registration) (bool, *roachpb.Error) {

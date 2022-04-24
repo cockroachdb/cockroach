@@ -41,7 +41,7 @@ var (
 		settings.TenantWritable,
 		"kv.bulk_io_write.small_write_size",
 		"size below which a 'bulk' write will be performed as a normal write instead",
-		400*1<<10, // 400 Kib
+		1, // 400 Kib
 	)
 
 	ingestDelay = settings.RegisterDurationSetting(
@@ -176,7 +176,7 @@ func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 
 // AddMVCCKey adds a key+timestamp/value pair to the batch (flushing if needed).
 // This is only for callers that want to control the timestamp on individual
-// keys -- like RESTORE where we want the restored data to look the like backup.
+// keys -- like RESTORE where we want the restored data to look like the backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
 	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) && !b.ingestAll {
@@ -528,6 +528,7 @@ func (b *SSTBatcher) addSSTable(
 				// and just switch how it writes its result.
 				ingestAsWriteBatch := false
 				if b.settings != nil && int64(len(item.sstBytes)) < tooSmallSSTSize.Get(&b.settings.SV) {
+					// No, this is disabled since we change tooSmallSSTSize to be 1.
 					log.VEventf(ctx, 3, "ingest data is too small (%d keys/%d bytes) for SSTable, adding via regular batch", item.stats.KeyCount, len(item.sstBytes))
 					ingestAsWriteBatch = true
 				}
@@ -542,6 +543,7 @@ func (b *SSTBatcher) addSSTable(
 					ReturnFollowingLikelyNonEmptySpanStart: true,
 				}
 				if b.writeAtBatchTS {
+					// Yes, this is triggerred to make it mvcc compatible
 					req.SSTTimestampToRequestTimestamp = b.batchTS
 				}
 

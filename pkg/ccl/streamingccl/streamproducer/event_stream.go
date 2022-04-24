@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,12 +43,12 @@ type eventStream struct {
 	data tree.Datums // Data to send to the consumer
 
 	// Fields below initialized when Start called.
-	rf          *rangefeed.RangeFeed        // Currently running rangefeed.
-	streamGroup ctxgroup.Group              // Context group controlling stream execution.
-	eventsCh    chan roachpb.RangeFeedEvent // Channel receiving rangefeed events.
-	errCh       chan error                  // Signaled when error occurs in rangefeed.
-	streamCh    chan tree.Datums            // Channel signaled to forward datums to consumer.
-	sp          *tracing.Span               // Span representing the lifetime of the eventStream.
+	rf          *rangefeed.RangeFeed           // Currently running rangefeed.
+	streamGroup ctxgroup.Group                 // Context group controlling stream execution.
+	eventsCh    chan roachpb.RangeFeedEvent    // Channel receiving rangefeed events.
+	errCh       chan error                     // Signaled when error occurs in rangefeed.
+	streamCh    chan tree.Datums               // Channel signaled to forward datums to consumer.
+	sp          *tracing.Span                  // Span representing the lifetime of the eventStream.
 }
 
 var _ tree.ValueGenerator = (*eventStream)(nil)
@@ -92,6 +93,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		}),
 
 		rangefeed.WithMemoryMonitor(s.mon),
+
+		rangefeed.WithOnSSTable(s.onSSTable),
 	}
 
 	frontier, err := span.MakeFrontier(s.spec.Spans...)
@@ -129,7 +132,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	// Start rangefeed, which spins up a separate go routine to perform it's job.
 	s.rf = s.execCfg.RangeFeedFactory.New(
-		fmt.Sprintf("streamID=%d", s.streamID), s.spec.StartFrom, s.onEvent, opts...)
+		fmt.Sprintf("streamID=%d", s.streamID), s.spec.StartFrom, s.onValue, opts...)
 	if err := s.rf.Start(ctx, s.spec.Spans); err != nil {
 		return err
 	}
@@ -214,12 +217,12 @@ func (s *eventStream) Close(ctx context.Context) {
 	s.sp.Finish()
 }
 
-func (s *eventStream) onEvent(ctx context.Context, value *roachpb.RangeFeedValue) {
+func (s *eventStream) onValue(ctx context.Context, value *roachpb.RangeFeedValue) {
 	select {
 	case <-ctx.Done():
 	case s.eventsCh <- roachpb.RangeFeedEvent{Val: value}:
 		if log.V(1) {
-			log.Infof(ctx, "onEvent: %s@%s", value.Key, value.Value.Timestamp)
+			log.Infof(ctx, "onValue: %s@%s", value.Key, value.Value.Timestamp)
 		}
 	}
 }
@@ -248,6 +251,11 @@ func (s *eventStream) onSpanCompleted(ctx context.Context, sp roachpb.Span) erro
 		}
 		return nil
 	}
+}
+
+func (s *eventStream) onSSTable(ctx context.Context, sst *roachpb.RangeFeedSSTable) {
+	fmt.Println("eventloop: received a sst")
+	s.eventsCh <- roachpb.RangeFeedEvent{SST: sst}
 }
 
 // makeCheckpoint generates checkpoint based on the frontier.
@@ -340,6 +348,37 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 		batchSize += keyValue.Size()
 	}
 
+	scanSST := func(sst *roachpb.RangeFeedSSTable) error {
+		iter, err := storage.NewMemSSTIterator(sst.Data, true)
+		if err != nil {
+			return err
+		}
+		for _, sp := range s.spec.Spans {
+			iter.SeekGE(storage.MVCCKey{Key: sp.Key})
+			endKey := storage.MVCCKey{Key: sp.EndKey}
+			for ; ; iter.Next() {
+				if ok, err := iter.Valid(); err != nil {
+					return err
+				} else if !ok {
+					break
+				} else if !iter.UnsafeKey().Less(endKey) {
+					break
+				}
+
+				keyValue := roachpb.KeyValue{
+					Key: iter.UnsafeKey().Key,
+					Value: roachpb.Value{
+						RawBytes:  iter.UnsafeValue(),
+						Timestamp: iter.UnsafeKey().Timestamp,
+					},
+				}
+				batch.KeyValues = append(batch.KeyValues, keyValue)
+				batchSize += keyValue.Size()
+			}
+		}
+		return nil
+	}
+
 	maybeFlushBatch := func(force bool) error {
 		if (force && batchSize > 0) || batchSize > int(s.spec.Config.BatchByteSize) {
 			defer func() {
@@ -384,8 +423,13 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 						return err
 					}
 				}
+			case ev.SST != nil:
+				fmt.Println("received a sst in event loop")
+				scanSST(ev.SST)
+				if err := maybeFlushBatch(flushIfNeeded); err != nil {
+					return err
+				}
 			default:
-				// TODO(yevgeniy): Handle SSTs.
 				return errors.AssertionFailedf("unexpected event")
 			}
 		}
