@@ -29,7 +29,7 @@ _gen_script = rule(
     attrs = {
         "test": attr.label(mandatory = True),
         "_template": attr.label(
-            default = "@com_github_cockroachdb_cockroach//build/bazelutil:lint.sh.in",
+            default = "//build/bazelutil:lint.sh.in",
             allow_single_file = True,
         ),
     },

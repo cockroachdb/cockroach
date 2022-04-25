@@ -56,6 +56,8 @@ func TestPlanDataDriven(t *testing.T) {
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
+			// TODO (Chengxiong): make this switch block to have only "build" and
+			// "ops/deps" sections.
 			switch d.Cmd {
 			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema", "create-index":
 				stmts, err := parser.Parse(d.Input)
@@ -89,6 +91,13 @@ func TestPlanDataDriven(t *testing.T) {
 						t.Fatalf("failed to read ID of new table %s", tableName)
 					}
 					t.Logf("created relation with id %d", tableID)
+				}
+				return ""
+			case "setup":
+				stmts, err := parser.Parse(d.Input)
+				require.NoError(t, err)
+				for _, stmt := range stmts {
+					tdb.Exec(t, stmt.SQL)
 				}
 				return ""
 			case "ops", "deps":

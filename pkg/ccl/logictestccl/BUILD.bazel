@@ -16,7 +16,7 @@ go_test(
     ],
     data = glob(["testdata/**"]) + [
         "//pkg/sql/logictest:testdata",
-        "@com_github_cockroachdb_cockroach//c-deps:libgeos",
+        "//c-deps:libgeos",
     ],
     embed = [":logictestccl"],
     deps = [

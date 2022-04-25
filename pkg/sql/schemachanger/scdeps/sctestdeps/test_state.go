@@ -18,11 +18,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/redact"
@@ -33,6 +37,7 @@ import (
 // purpose of facilitating end-to-end testing of the declarative schema changer.
 type TestState struct {
 	catalog, synthetic      nstree.MutableCatalog
+	comments                map[descmetadata.CommentKey]string
 	currentDatabase         string
 	phase                   scop.Phase
 	sessionData             sessiondata.SessionData
@@ -143,5 +148,70 @@ func (s *TestState) CheckFeature(ctx context.Context, featureName tree.SchemaFea
 
 // FeatureChecker implements scbuild.Dependencies
 func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
+	return s
+}
+
+// LoadCommentsForObjects implements scdecomp.CommentGetter interface.
+func (s *TestState) LoadCommentsForObjects(ctx context.Context, objIDs []descpb.ID) error {
+	return nil
+}
+
+// Get implements DescriptorCommentCache interface.
+func (s *TestState) get(
+	ctx context.Context, objID catid.DescID, subID uint32, commentType keys.CommentType,
+) (comment string, ok bool, err error) {
+	commentKey := descmetadata.CommentKey{
+		ObjectID:    objID,
+		SubID:       subID,
+		CommentType: commentType,
+	}
+	comment, ok = s.comments[commentKey]
+	return comment, ok, nil
+}
+
+// GetDatabaseComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetDatabaseComment(
+	ctx context.Context, dbID catid.DescID,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, dbID, 0, keys.DatabaseCommentType)
+}
+
+// GetSchemaComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetSchemaComment(
+	ctx context.Context, schemaID catid.DescID,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, schemaID, 0, keys.SchemaCommentType)
+}
+
+// GetTableComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetTableComment(
+	ctx context.Context, tableID catid.DescID,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, tableID, 0, keys.TableCommentType)
+}
+
+// GetColumnComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetColumnComment(
+	ctx context.Context, tableID catid.DescID, pgAttrNum catid.PGAttributeNum,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, tableID, uint32(pgAttrNum), keys.ColumnCommentType)
+}
+
+// GetIndexComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetIndexComment(
+	ctx context.Context, tableID catid.DescID, indexID catid.IndexID,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, tableID, uint32(indexID), keys.IndexCommentType)
+}
+
+// GetConstraintComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetConstraintComment(
+	ctx context.Context, tableID catid.DescID, constraintID catid.ConstraintID,
+) (comment string, ok bool, err error) {
+	return s.get(ctx, tableID, uint32(constraintID), keys.ConstraintCommentType)
+}
+
+// DescriptorCommentCache implements scbuild.Dependencies interface.
+func (s *TestState) DescriptorCommentCache() scbuild.CommentCache {
 	return s
 }

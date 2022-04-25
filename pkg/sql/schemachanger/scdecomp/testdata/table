@@ -7,6 +7,10 @@ CREATE TABLE tbl (
   INDEX sec (name) STORING (price) WHERE (id > 0),
   CONSTRAINT myfk FOREIGN KEY (id) REFERENCES parent (id)
 );
+COMMENT ON TABLE tbl IS 'tbl is good table';
+COMMENT ON INDEX tbl@tbl_pkey IS 'tbl_pkey is a primary key';
+COMMENT ON COLUMN tbl.id IS 'id is a identifier';
+COMMENT ON CONSTRAINT myfk ON tbl IS 'must have a parent';
 ----
 
 decompose
@@ -53,10 +57,6 @@ ElementState:
       tableId: 104
       temporaryIndexId: 0
   Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 104
-  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: id
@@ -89,20 +89,9 @@ ElementState:
     isVirtual: false
     tableId: 104
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 104
-  Status: PUBLIC
 - IndexName:
     indexId: 1
     name: parent_pkey
-    tableId: 104
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 1
     tableId: 104
   Status: PUBLIC
 - Namespace:
@@ -225,7 +214,7 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - TableComment:
-    comment: __placeholder_comment__
+    comment: tbl is good table
     tableId: 105
   Status: PUBLIC
 - ColumnName:
@@ -326,20 +315,8 @@ ElementState:
   Status: PUBLIC
 - ColumnComment:
     columnId: 1
-    comment: __placeholder_comment__
+    comment: id is a identifier
     pgAttributeNum: 1
-    tableId: 105
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 105
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 3
-    comment: __placeholder_comment__
-    pgAttributeNum: 3
     tableId: 105
   Status: PUBLIC
 - IndexName:
@@ -362,13 +339,8 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - IndexComment:
-    comment: __placeholder_comment__
+    comment: tbl_pkey is a primary key
     indexId: 1
-    tableId: 105
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 2
     tableId: 105
   Status: PUBLIC
 - ConstraintName:
@@ -377,7 +349,7 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - ConstraintComment:
-    comment: __placeholder_comment__
+    comment: must have a parent
     constraintId: 2
     tableId: 105
   Status: PUBLIC
@@ -469,10 +441,6 @@ ElementState:
       tableId: 104
       temporaryIndexId: 0
   Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 104
-  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: id
@@ -537,26 +505,9 @@ ElementState:
     isVirtual: false
     tableId: 104
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 104
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 104
-  Status: PUBLIC
 - IndexName:
     indexId: 1
     name: parent_pkey
-    tableId: 104
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 1
     tableId: 104
   Status: PUBLIC
 - Namespace:
@@ -642,10 +593,6 @@ ElementState:
       tableId: 108
       temporaryIndexId: 0
   Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 108
-  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: v
@@ -723,26 +670,9 @@ ElementState:
       usesTypeIds: []
     tableId: 108
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 108
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 108
-  Status: PUBLIC
 - IndexName:
     indexId: 1
     name: greeter_pkey
-    tableId: 108
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 1
     tableId: 108
   Status: PUBLIC
 - Namespace:
