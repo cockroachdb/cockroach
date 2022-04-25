@@ -148,7 +148,7 @@ func TestSSTIterator(t *testing.T) {
 				}
 				asOfKVs = append(asOfKVs, kv)
 			}
-			asOfIter := MakeReadAsOfIterator(iter, asOf)
+			asOfIter := NewReadAsOfIterator(iter, asOf)
 			runTestSSTIterator(t, asOfIter, asOfKVs)
 		}
 	})

@@ -300,7 +300,7 @@ func (rd *restoreDataProcessor) openSSTs(
 	// channel.
 	sendIters := func(itersToSend []storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage) error {
 		multiIter := storage.MakeMultiIterator(itersToSend)
-		readAsOfIter := storage.MakeReadAsOfIterator(multiIter, rd.spec.RestoreTime)
+		readAsOfIter := storage.NewReadAsOfIterator(multiIter, rd.spec.RestoreTime)
 
 		cleanup := func() {
 			readAsOfIter.Close()
