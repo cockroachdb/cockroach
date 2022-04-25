@@ -346,6 +346,9 @@ const (
 	// tenant spans.
 	SeedSpanCountTable
 
+	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
+	V22_1
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -595,6 +598,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SeedSpanCountTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 112},
+	},
+	{
+		Key:     V22_1,
+		Version: roachpb.Version{Major: 22, Minor: 1},
 	},
 
 	// *************************************************
