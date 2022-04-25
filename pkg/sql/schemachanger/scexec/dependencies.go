@@ -40,6 +40,7 @@ type Dependencies interface {
 	EventLogger() EventLogger
 	DescriptorMetadataUpdater(ctx context.Context) DescriptorMetadataUpdater
 	StatsRefresher() StatsRefreshQueue
+	GetTestingKnobs() *TestingKnobs
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string

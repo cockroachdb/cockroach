@@ -45,7 +45,7 @@ func NewJobRunDependencies(
 	indexValidator scexec.IndexValidator,
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
 	statsRefresher scexec.StatsRefresher,
-	testingKnobs *scrun.TestingKnobs,
+	testingKnobs *scexec.TestingKnobs,
 	statements []string,
 	sessionData *sessiondata.SessionData,
 	kvTrace bool,
@@ -88,7 +88,7 @@ type jobExecutionDeps struct {
 
 	codec        keys.SQLCodec
 	settings     *cluster.Settings
-	testingKnobs *scrun.TestingKnobs
+	testingKnobs *scexec.TestingKnobs
 	statements   []string
 	sessionData  *sessiondata.SessionData
 }
@@ -133,6 +133,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			clock:                   NewConstantClock(timeutil.FromUnixMicros(pl.StartedMicros)),
 			commentUpdaterFactory:   d.commentUpdaterFactory,
 			sessionData:             d.sessionData,
+			testingKnobs:            d.testingKnobs,
 		}
 		if err := fn(ctx, ed); err != nil {
 			return err

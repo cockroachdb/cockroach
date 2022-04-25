@@ -220,6 +220,20 @@ func (mr *MockDependenciesMockRecorder) EventLogger() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EventLogger", reflect.TypeOf((*MockDependencies)(nil).EventLogger))
 }
 
+// GetTestingKnobs mocks base method.
+func (m *MockDependencies) GetTestingKnobs() *scexec.TestingKnobs {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTestingKnobs")
+	ret0, _ := ret[0].(*scexec.TestingKnobs)
+	return ret0
+}
+
+// GetTestingKnobs indicates an expected call of GetTestingKnobs.
+func (mr *MockDependenciesMockRecorder) GetTestingKnobs() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTestingKnobs", reflect.TypeOf((*MockDependencies)(nil).GetTestingKnobs))
+}
+
 // IndexBackfiller mocks base method.
 func (m *MockDependencies) IndexBackfiller() scexec.Backfiller {
 	m.ctrl.T.Helper()

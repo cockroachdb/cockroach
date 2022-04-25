@@ -22,7 +22,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql/schemachanger/scrun",
+        "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/sctest",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

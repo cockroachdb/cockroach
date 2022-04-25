@@ -260,6 +260,7 @@ func newSchemaChangerTxnRunDependencies(
 		execCfg.DescMetadaUpdaterFactory,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
 		execCfg.StatsRefresher,
+		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		kvTrace,
 		schemaChangerJobID,
 		stmts,

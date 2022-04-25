@@ -62,6 +62,7 @@ func NewExecutorDependencies(
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
 	eventLogger scexec.EventLogger,
 	statsRefresher scexec.StatsRefresher,
+	testingKnobs *scexec.TestingKnobs,
 	kvTrace bool,
 	schemaChangerJobID jobspb.JobID,
 	statements []string,
@@ -86,6 +87,7 @@ func NewExecutorDependencies(
 		user:                    user,
 		sessionData:             sessionData,
 		clock:                   clock,
+		testingKnobs:            testingKnobs,
 	}
 }
 
@@ -363,6 +365,7 @@ type execDeps struct {
 	statements              []string
 	user                    username.SQLUsername
 	sessionData             *sessiondata.SessionData
+	testingKnobs            *scexec.TestingKnobs
 }
 
 func (d *execDeps) Clock() scmutationexec.Clock {
@@ -426,6 +429,11 @@ type EventLoggerFactory = func(*kv.Txn) scexec.EventLogger
 // EventLogger implements scexec.Dependencies
 func (d *execDeps) EventLogger() scexec.EventLogger {
 	return d.eventLogger
+}
+
+// GetTestingKnobs implements scexec.Dependencies
+func (d *execDeps) GetTestingKnobs() *scexec.TestingKnobs {
+	return d.testingKnobs
 }
 
 // AddTableForStatsRefresh adds a table for stats refresh once we are finished

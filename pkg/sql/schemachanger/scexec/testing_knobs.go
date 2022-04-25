@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package scrun
+package scexec
 
 import "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 
@@ -30,6 +30,9 @@ type TestingKnobs struct {
 	// OnPostCommitError is called whenever the schema changer job returns an
 	// error.
 	OnPostCommitError func(p scplan.Plan, stageIdx int, err error) error
+
+	// RunBeforeBackfill is called just before starting the backfill.
+	RunBeforeBackfill func() error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

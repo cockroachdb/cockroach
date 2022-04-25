@@ -33,7 +33,10 @@ import (
 // state. These are the immediate changes which take place at DDL statement
 // execution time (scop.StatementPhase).
 func RunStatementPhase(
-	ctx context.Context, knobs *TestingKnobs, deps scexec.Dependencies, state scpb.CurrentState,
+	ctx context.Context,
+	knobs *scexec.TestingKnobs,
+	deps scexec.Dependencies,
+	state scpb.CurrentState,
 ) (scpb.CurrentState, jobspb.JobID, error) {
 	return runTransactionPhase(ctx, knobs, deps, state, scop.StatementPhase)
 }
@@ -43,14 +46,17 @@ func RunStatementPhase(
 // than the asynchronous changes which are done by the schema changer job
 // after the transaction commits.
 func RunPreCommitPhase(
-	ctx context.Context, knobs *TestingKnobs, deps scexec.Dependencies, state scpb.CurrentState,
+	ctx context.Context,
+	knobs *scexec.TestingKnobs,
+	deps scexec.Dependencies,
+	state scpb.CurrentState,
 ) (scpb.CurrentState, jobspb.JobID, error) {
 	return runTransactionPhase(ctx, knobs, deps, state, scop.PreCommitPhase)
 }
 
 func runTransactionPhase(
 	ctx context.Context,
-	knobs *TestingKnobs,
+	knobs *scexec.TestingKnobs,
 	deps scexec.Dependencies,
 	state scpb.CurrentState,
 	phase scop.Phase,
@@ -83,7 +89,7 @@ func runTransactionPhase(
 // declarative schema change job, with the dependencies abstracted away.
 func RunSchemaChangesInJob(
 	ctx context.Context,
-	knobs *TestingKnobs,
+	knobs *scexec.TestingKnobs,
 	settings *cluster.Settings,
 	deps JobRunDependencies,
 	jobID jobspb.JobID,
@@ -139,7 +145,7 @@ func pausepointName(state scpb.CurrentState, i int) string {
 
 func executeStage(
 	ctx context.Context,
-	knobs *TestingKnobs,
+	knobs *scexec.TestingKnobs,
 	deps scexec.Dependencies,
 	p scplan.Plan,
 	stageIdx int,

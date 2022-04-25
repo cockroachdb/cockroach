@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "dependencies.go",
         "scrun.go",
-        "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun",
     visibility = ["//visibility:public"],

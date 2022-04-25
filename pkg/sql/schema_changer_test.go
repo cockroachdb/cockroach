@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -7733,8 +7734,10 @@ CREATE TABLE t.test (x INT);`,
 				return nil
 			}
 			params.Knobs = base.TestingKnobs{
+				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+					RunBeforeBackfill: waitFunc,
+				},
 				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-					RunBeforeBackfill:          waitFunc,
 					RunBeforeModifyRowLevelTTL: waitFunc,
 				},
 			}
