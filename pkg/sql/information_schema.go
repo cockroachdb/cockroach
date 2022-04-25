@@ -1364,7 +1364,15 @@ func populateTablePrivileges(
 			// TODO(knz): This should filter for the current user, see
 			// https://github.com/cockroachdb/cockroach/issues/35572
 			populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
-			for _, u := range table.GetPrivileges().Show(privilege.Table) {
+
+			var tableType privilege.ObjectType
+			if table.IsSequence() {
+				tableType = privilege.Sequence
+			} else {
+				tableType = privilege.Table
+			}
+
+			for _, u := range table.GetPrivileges().Show(tableType) {
 				granteeNameStr := tree.NewDString(u.User.Normalized())
 				for _, priv := range u.Privileges {
 					var isGrantable tree.Datum
