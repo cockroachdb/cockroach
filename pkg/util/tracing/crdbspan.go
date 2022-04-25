@@ -124,11 +124,22 @@ type crdbSpanMu struct {
 	// lazyTags are tags whose values are only string-ified on demand. Each lazy
 	// tag is expected to implement either fmt.Stringer or LazyTag.
 	lazyTags []lazyTag
+
+	// eventListeners is a list of registered EventListener's that are notified
+	// whenever a Structured event is recorded by the span.
+	//
+	// Child spans of this span will inherit this list of EventListeners.
+	eventListeners []eventListener
 }
 
 type lazyTag struct {
 	Key   string
 	Value interface{}
+}
+
+type eventListener struct {
+	Key      string
+	Listener EventListener
 }
 
 type recordingState struct {
@@ -533,6 +544,55 @@ func (s *crdbSpan) getLazyTagLocked(key string) (interface{}, bool) {
 	return nil, false
 }
 
+// registerEventListenerLocked registers an EventListener to listen for
+// Structured events recorded by the span. If an EventListener with the same key
+// already exists, then this will be a no-op.
+func (s *crdbSpan) registerEventListenerLocked(key string, listener EventListener) {
+	if s.recordingType() == RecordingOff {
+		return
+	}
+
+	// TODO(during review): Should we limit the number of listeners a span can register?
+	for i := range s.mu.eventListeners {
+		if s.mu.eventListeners[i].Key == key {
+			return
+		}
+	}
+	s.mu.eventListeners = append(s.mu.eventListeners, eventListener{Key: key, Listener: listener})
+}
+
+// unregisterEventListenerLocked unregisters a previously registered
+// EventListener.
+func (s *crdbSpan) unregisterEventListenerLocked(key string) {
+	numListeners := len(s.mu.eventListeners)
+	for i := range s.mu.eventListeners {
+		if s.mu.eventListeners[i].Key == key {
+			s.mu.eventListeners[i] = s.mu.eventListeners[numListeners-1]
+			s.mu.eventListeners[numListeners-1] = eventListener{}
+			s.mu.eventListeners = s.mu.eventListeners[:numListeners-1]
+			return
+		}
+	}
+}
+
+// notifyEventListeners notifies all the EventListeners registered with this
+// span about the recorded Structured item.
+func (s *crdbSpan) notifyEventListeners(item Structured) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var wg sync.WaitGroup
+	for _, listener := range s.mu.eventListeners {
+		wg.Add(1)
+		go func(l EventListener) {
+			defer wg.Done()
+			l.Listen(item)
+		}(listener.Listener)
+	}
+
+	wg.Wait()
+}
+
 // record includes a log message in s' recording.
 func (s *crdbSpan) record(msg redact.RedactableString) {
 	if s.recordingType() != RecordingVerbose {
@@ -581,6 +641,10 @@ func (s *crdbSpan) recordStructured(item Structured) {
 		Payload: p,
 	}
 	s.recordInternal(sr, &s.mu.recording.structured)
+
+	// If there are any listener's registered with this span, notify them of the
+	// Structured event being recorded.
+	s.notifyEventListeners(item)
 }
 
 // memorySizable is implemented by log records and structured events for

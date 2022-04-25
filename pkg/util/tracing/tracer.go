@@ -961,6 +961,7 @@ type spanAllocHelper struct {
 	tagsAlloc             [3]attribute.KeyValue
 	childrenAlloc         [4]childRef
 	structuredEventsAlloc [3]interface{}
+	eventListenerAlloc    [3]eventListener
 }
 
 // newSpan allocates a span using the Tracer's sync.Pool. A span that was
@@ -973,6 +974,7 @@ func (t *Tracer) newSpan(
 	goroutineID uint64,
 	startTime time.Time,
 	logTags *logtags.Buffer,
+	eventListeners []eventListener,
 	kind oteltrace.SpanKind,
 	otelSpan oteltrace.Span,
 	netTr trace.Trace,
@@ -984,7 +986,7 @@ func (t *Tracer) newSpan(
 	h := t.spanPool.Get().(*spanAllocHelper)
 	h.span.reset(
 		traceID, spanID, operation, goroutineID,
-		startTime, logTags, kind,
+		startTime, logTags, eventListeners, kind,
 		otelSpan, netTr, sterile)
 	return &h.span
 }
@@ -1019,6 +1021,7 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	c.mu.openChildren = nil
 	c.mu.recording.finishedChildren = nil
 	c.mu.tags = nil
+	c.mu.eventListeners = nil
 	c.mu.recording.logs.Discard()
 	c.mu.recording.structured.Discard()
 	c.mu.Unlock()
@@ -1029,6 +1032,7 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	h.tagsAlloc = [3]attribute.KeyValue{}
 	h.childrenAlloc = [4]childRef{}
 	h.structuredEventsAlloc = [3]interface{}{}
+	h.eventListenerAlloc = [3]eventListener{}
 
 	release := true
 	if fn := t.testing.ReleaseSpanToPool; fn != nil {
@@ -1179,10 +1183,11 @@ child operation: %s, tracer created at:
 		traceID = tracingpb.TraceID(randutil.FastInt63())
 	}
 	spanID := tracingpb.SpanID(randutil.FastInt63())
+	eventListeners := opts.parentEventListeners()
 
 	s := t.newSpan(
 		traceID, spanID, opName, uint64(goid.Get()),
-		startTime, opts.LogTags, opts.SpanKind,
+		startTime, opts.LogTags, eventListeners, opts.SpanKind,
 		otelSpan, netTr, opts.Sterile)
 
 	s.i.crdb.enableRecording(opts.recordingType())
