@@ -718,8 +718,9 @@ var enableSuperRegions = settings.RegisterBoolSetting(
 var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.defaults.override_alter_primary_region_in_super_region.enabled",
-	"default value for override_multi_region_zone_config; "+
-		"allows for overriding the zone configs of a multi-region table or database",
+	"default value for override_alter_primary_region_in_super_region; "+
+		"allows for altering the primary region even if the primary region is a "+
+		"member of a super region",
 	false,
 ).WithPublic()
 
