@@ -44,9 +44,9 @@ func (a azureConfig) filePath(f string) string {
 
 func getAzureConfig() (azureConfig, error) {
 	cfg := azureConfig{
-		account: os.Getenv("AZURE_ACCOUNT_NAME"),
-		key:     os.Getenv("AZURE_ACCOUNT_KEY"),
-		bucket:  os.Getenv("AZURE_CONTAINER"),
+		account:     os.Getenv("AZURE_ACCOUNT_NAME"),
+		key:         os.Getenv("AZURE_ACCOUNT_KEY"),
+		bucket:      os.Getenv("AZURE_CONTAINER"),
 		environment: azure.PublicCloud.Name,
 	}
 	if cfg.account == "" || cfg.key == "" || cfg.bucket == "" {
@@ -113,9 +113,9 @@ func TestParseAzureURL(t *testing.T) {
 }
 
 func TestMakeAzureStorageURLFromEnvironment(t *testing.T) {
-	for _, tt := range []struct{
+	for _, tt := range []struct {
 		environment string
-		expected string
+		expected    string
 	}{
 		{environment: azure.PublicCloud.Name, expected: "https://account.blob.core.windows.net/container"},
 		{environment: azure.USGovernmentCloud.Name, expected: "https://account.blob.core.usgovcloudapi.net/container"},
