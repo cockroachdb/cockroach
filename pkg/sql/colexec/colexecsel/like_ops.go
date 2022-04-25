@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -23,6 +24,7 @@ import (
 func GetLikeOperator(
 	ctx *tree.EvalContext, input colexecop.Operator, colIdx int, pattern string, negate bool,
 ) (colexecop.Operator, error) {
+	pattern = util.CollapseDupeChar(pattern, '%')
 	likeOpType, patterns, err := colexeccmp.GetLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err

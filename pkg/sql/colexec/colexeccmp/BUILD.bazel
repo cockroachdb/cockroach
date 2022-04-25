@@ -13,6 +13,7 @@ go_library(
     # Pin the dependencies used in auto-generated code.
     deps = [
         "//pkg/sql/sem/tree",  # keep
+        "//pkg/util",
         "@com_github_cockroachdb_errors//:errors",  # keep
     ],
 )
