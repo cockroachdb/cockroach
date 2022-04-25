@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -97,7 +97,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					return nil
 				},
 			},
-			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Assert that when job 3 is running, there are no mutations other
 					// than the ones associated with this schema change.
@@ -207,7 +207,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		var kvDB *kv.DB
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
-			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Verify that we never queue mutations for job 2 before finishing job
 					// 1.
@@ -326,7 +326,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		stmt2 := `DROP SCHEMA db.s2`
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
-			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 				BeforeStage: func(p scplan.Plan, stageIdx int) error {
 					if p.Params.ExecutionPhase != scop.PostCommitPhase {
 						return nil
@@ -419,7 +419,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		stmt2 := `DROP TABLE db.t2`
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
-			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 				BeforeStage: func(p scplan.Plan, stageIdx int) error {
 					if p.Params.ExecutionPhase != scop.PostCommitPhase {
 						return nil
@@ -521,7 +521,7 @@ func TestConcurrentSchemaChangesWait(t *testing.T) {
 		var kvDB *kv.DB
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
-			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 				BeforeWaitingForConcurrentSchemaChanges: func(_ []string) {
 					waitingForConcurrent <- struct{}{}
 				},
@@ -667,7 +667,7 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 	var jr *jobs.Registry
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 			AfterStage: func(p scplan.Plan, stageIdx int) error {
 				if p.Params.ExecutionPhase < scop.PostCommitPhase || stageIdx > 1 {
 					return nil
@@ -710,7 +710,7 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	var jobIDValue int64
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 			AfterStage: func(p scplan.Plan, stageIdx int) error {
 				if p.Params.ExecutionPhase == scop.PostCommitPhase && stageIdx == 1 {
 					atomic.StoreInt64(&jobIDValue, int64(p.JobID))
@@ -785,7 +785,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 				return nil
 			},
 		},
-		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
