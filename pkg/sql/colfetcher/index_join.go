@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -126,7 +127,7 @@ type ColIndexJoin struct {
 		*kvstreamer.Streamer
 		budgetAcc   *mon.BoundAccount
 		budgetLimit int64
-		diskMonitor *mon.BytesMonitor
+		diskBuffer  kvstreamer.ResultDiskBuffer
 	}
 }
 
@@ -163,8 +164,7 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 			mode,
 			kvstreamer.Hints{UniqueRequests: true},
 			int(s.cf.table.spec.MaxKeysPerRow),
-			s.flowCtx.Cfg.TempStorage,
-			s.streamerInfo.diskMonitor,
+			s.streamerInfo.diskBuffer,
 		)
 	}
 }
@@ -547,7 +547,9 @@ func NewColIndexJoin(
 		if spec.MaintainOrdering && diskMonitor == nil {
 			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
 		}
-		op.streamerInfo.diskMonitor = diskMonitor
+		op.streamerInfo.diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
+			flowCtx.Cfg.TempStorage, diskMonitor,
+		)
 		if memoryLimit < op.mem.inputBatchSizeLimit {
 			// If we have a low workmem limit, then we want to reduce the input
 			// batch size limit.

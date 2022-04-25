@@ -133,6 +133,7 @@ type joinReader struct {
 		budgetLimit         int64
 		maxKeysPerRow       int
 		diskMonitor         *mon.BytesMonitor
+		diskBuffer          kvstreamer.ResultDiskBuffer
 	}
 
 	input execinfra.RowSource
@@ -1014,13 +1015,15 @@ func (jr *joinReader) Start(ctx context.Context) {
 			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
 				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
 			)
+			jr.streamerInfo.diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
+				jr.FlowCtx.Cfg.TempStorage, jr.streamerInfo.diskMonitor,
+			)
 		}
 		jr.streamerInfo.Streamer.Init(
 			mode,
 			kvstreamer.Hints{UniqueRequests: true},
 			jr.streamerInfo.maxKeysPerRow,
-			jr.FlowCtx.Cfg.TempStorage,
-			jr.streamerInfo.diskMonitor,
+			jr.streamerInfo.diskBuffer,
 		)
 	}
 	jr.runningState = jrReadingInput

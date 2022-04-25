@@ -16,14 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -280,6 +273,29 @@ func (b *outOfOrderResultsBuffer) close(context.Context) {
 	b.signal()
 }
 
+// ResultDiskBuffer encapsulates the logic for spilling Results to temporary
+// disk storage.
+//
+// At the moment, we use facilities of the SQL layer for this purpose, so we
+// introduced this interface to avoid the dependency on SQL.
+type ResultDiskBuffer interface {
+	// Serialize writes the given Result into the disk buffer. An integer
+	// identifying the position of the Result is returned.
+	Serialize(context.Context, *Result) (resultID int, _ error)
+	// Deserialize updates the Result in-place according to the
+	// previously-serialized Result identified by resultID.
+	Deserialize(_ context.Context, _ *Result, resultID int) error
+	// Reset reset the buffer for reuse.
+	Reset(context.Context) error
+	// Close closes the buffer and releases all of its resources.
+	Close(context.Context)
+}
+
+// TestResultDiskBufferConstructor constructs a ResultDiskBuffer for tests. It
+// is injected to be rowcontainer.NewKVStreamerResultDiskBuffer in order to
+// avoid an import cycle.
+var TestResultDiskBufferConstructor func(diskmap.Factory, *mon.BytesMonitor) ResultDiskBuffer
+
 // inOrderResultsBuffer is a resultsBuffer that returns the Results in the same
 // order as the original requests were Enqueued into the Streamer (in other
 // words, in non-decreasing fashion of Result.position). Internally, it
@@ -299,44 +315,21 @@ type inOrderResultsBuffer struct {
 	// buffered contains all buffered Results, regardless of whether they are
 	// stored in-memory or on disk.
 	buffered []inOrderBufferedResult
-	disk     struct {
-		// initialized is set to true when the first Result is spilled to disk.
-		initialized bool
-		// container stores all Results that have been spilled to disk since the
-		// last call to init().
-		// TODO(yuzefovich): at the moment, all spilled results that have been
-		// returned to the client still exist in the row container, so they have
-		// to be skipped over many times leading to a quadratic behavior.
-		// Improve this. One idea is to track the "garbage ratio" and once that
-		// exceeds say 50%, a new container is created and non-garbage rows are
-		// inserted into it.
-		container rowcontainer.DiskRowContainer
-		// iter, if non-nil, is the iterator currently positioned at iterRowID
-		// row. If a new row is added into the container, the iterator becomes
-		// invalid, so it'll be closed and nil-ed out.
-		iter      rowcontainer.RowIterator
-		iterRowID int
 
-		engine     diskmap.Factory
-		monitor    *mon.BytesMonitor
-		rowScratch rowenc.EncDatumRow
-		alloc      tree.DatumAlloc
-	}
+	diskBuffer ResultDiskBuffer
 }
 
 var _ resultsBuffer = &inOrderResultsBuffer{}
 var _ heap.Interface = &inOrderResultsBuffer{}
 
-func newInOrderResultsBuffer(
-	budget *budget, engine diskmap.Factory, diskMonitor *mon.BytesMonitor,
-) resultsBuffer {
-	if engine == nil || diskMonitor == nil {
-		panic(errors.AssertionFailedf("either engine or diskMonitor is nil"))
+func newInOrderResultsBuffer(budget *budget, diskBuffer ResultDiskBuffer) resultsBuffer {
+	if diskBuffer == nil {
+		panic(errors.AssertionFailedf("diskBuffer is nil"))
 	}
-	b := &inOrderResultsBuffer{resultsBufferBase: newResultsBufferBase(budget)}
-	b.disk.engine = engine
-	b.disk.monitor = diskMonitor
-	return b
+	return &inOrderResultsBuffer{
+		resultsBufferBase: newResultsBufferBase(budget),
+		diskBuffer:        diskBuffer,
+	}
 }
 
 func (b *inOrderResultsBuffer) Len() int {
@@ -369,17 +362,9 @@ func (b *inOrderResultsBuffer) init(ctx context.Context, numExpectedResponses in
 		return err
 	}
 	b.headOfLinePosition = 0
-	if b.disk.initialized {
-		// If the row container was initialized, make sure to reset it.
-		if b.disk.iter != nil {
-			b.disk.iter.Close()
-			b.disk.iter = nil
-			b.disk.iterRowID = 0
-		}
-		if err := b.disk.container.UnsafeReset(ctx); err != nil {
-			b.setErrorLocked(err)
-			return err
-		}
+	if err := b.diskBuffer.Reset(ctx); err != nil {
+		b.setErrorLocked(err)
+		return err
 	}
 	return nil
 }
@@ -443,11 +428,11 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 					// The buffered result has been updated in-place to hold the
 					// deserialized Result, but since we didn't have the budget
 					// to keep it in-memory, we need to spill it. Note that we
-					// don't need to update the row container since the
-					// serialized Result is still stored at the same position,
+					// don't need to update the disk buffer since the
+					// serialized Result is still stored with the same resultID,
 					// we only need to make sure to lose the references to
 					// Get/Scan responses.
-					b.buffered[0].spill(b.buffered[0].diskRowID)
+					b.buffered[0].spill(b.buffered[0].diskResultID)
 					break
 				}
 				b.setErrorLocked(err)
@@ -525,16 +510,6 @@ func (b *inOrderResultsBuffer) spill(
 			atLeastBytes, spillingPriority, b.stringLocked(),
 		)
 	}
-	if !b.disk.initialized {
-		b.disk.container = rowcontainer.MakeDiskRowContainer(
-			b.disk.monitor,
-			inOrderResultsBufferSpillTypeSchema,
-			colinfo.ColumnOrdering{},
-			b.disk.engine,
-		)
-		b.disk.initialized = true
-		b.disk.rowScratch = make(rowenc.EncDatumRow, len(inOrderResultsBufferSpillTypeSchema))
-	}
 	// Iterate in reverse order so that the results with higher priority values
 	// are spilled first (this could matter if the query has a LIMIT).
 	for idx := len(b.buffered) - 1; idx >= 0; idx-- {
@@ -545,21 +520,12 @@ func (b *inOrderResultsBuffer) spill(
 					r.position, r.memoryTok.toRelease,
 				)
 			}
-			if err := b.buffered[idx].serialize(b.disk.rowScratch, &b.disk.alloc); err != nil {
-				return false, err
-			}
-			if err := b.disk.container.AddRow(ctx, b.disk.rowScratch); err != nil {
+			diskResultID, err := b.diskBuffer.Serialize(ctx, &b.buffered[idx].Result)
+			if err != nil {
 				b.setErrorLocked(err)
 				return false, err
 			}
-			// The iterator became invalid, so we need to close it.
-			if b.disk.iter != nil {
-				b.disk.iter.Close()
-				b.disk.iter = nil
-				b.disk.iterRowID = 0
-			}
-			// The result is spilled as the current last row in the container.
-			r.spill(b.disk.container.Len() - 1)
+			r.spill(diskResultID)
 			b.budget.releaseLocked(ctx, r.memoryTok.toRelease)
 			atLeastBytes -= r.memoryTok.toRelease
 			if atLeastBytes <= 0 {
@@ -576,13 +542,7 @@ func (b *inOrderResultsBuffer) spill(
 func (b *inOrderResultsBuffer) close(ctx context.Context) {
 	b.Lock()
 	defer b.Unlock()
-	if b.disk.initialized {
-		if b.disk.iter != nil {
-			b.disk.iter.Close()
-			b.disk.iter = nil
-		}
-		b.disk.container.Close(ctx)
-	}
+	b.diskBuffer.Close(ctx)
 	// Note that only the client's goroutine can be blocked waiting for the
 	// results, and close() is called only by the same goroutine, so signaling
 	// isn't necessary. However, we choose to be safe and do it anyway.
@@ -596,19 +556,19 @@ type inOrderBufferedResult struct {
 	// and Result.position are set.
 	Result
 	// If onDisk is true, then the serialized Result is stored on disk in the
-	// row container at position diskRowID.
-	onDisk    bool
-	diskRowID int
+	// ResultDiskBuffer, identified by diskResultID.
+	onDisk       bool
+	diskResultID int
 }
 
 // spill updates r to represent a result that has been spilled to disk and is
-// stored at the provided ordinal in the disk row container.
-func (r *inOrderBufferedResult) spill(diskRowID int) {
+// identified by the provided ordinal in the disk buffer.
+func (r *inOrderBufferedResult) spill(diskResultID int) {
 	isScanComplete := r.ScanResp.Complete
 	*r = inOrderBufferedResult{
-		Result:    Result{memoryTok: r.memoryTok, position: r.position},
-		onDisk:    true,
-		diskRowID: diskRowID,
+		Result:       Result{memoryTok: r.memoryTok, position: r.position},
+		onDisk:       true,
+		diskResultID: diskResultID,
 	}
 	r.ScanResp.Complete = isScanComplete
 }
@@ -622,142 +582,8 @@ func (r *inOrderBufferedResult) get(
 	if !r.onDisk {
 		return r.Result, 0, nil
 	}
-	// The Result is currently on disk, so we have to position the iterator at
-	// the corresponding rowID first.
-	if b.disk.iter == nil {
-		b.disk.iter = b.disk.container.NewIterator(ctx)
-		b.disk.iter.Rewind()
-	}
-	if r.diskRowID < b.disk.iterRowID {
-		b.disk.iter.Rewind()
-		b.disk.iterRowID = 0
-	}
-	for b.disk.iterRowID < r.diskRowID {
-		b.disk.iter.Next()
-		b.disk.iterRowID++
-	}
-	// Now we take the row representing the Result and deserialize it into r.
-	serialized, err := b.disk.iter.Row()
-	if err != nil {
+	if err := b.diskBuffer.Deserialize(ctx, &r.Result, r.diskResultID); err != nil {
 		return Result{}, 0, err
 	}
-	if err = deserialize(&r.Result, serialized, &b.disk.alloc); err != nil {
-		return Result{}, 0, err
-	}
-	return r.Result, r.memoryTok.toRelease, err
-}
-
-// inOrderResultsBufferSpillTypeSchema is the type schema of a single Result
-// that is spilled to disk.
-//
-// It contains all the information except for 'ScanResp.Complete', 'memoryTok',
-// and 'position' fields which are kept in-memory (because they are allocated in
-// inOrderBufferedResult.Result anyway).
-var inOrderResultsBufferSpillTypeSchema = []*types.T{
-	types.Bool, // isGet
-	// GetResp.Value:
-	//	RawBytes []byte
-	//	Timestamp hlc.Timestamp
-	//	  WallTime int64
-	//	  Logical int32
-	//	  Synthetic bool
-	types.Bytes, types.Int, types.Int, types.Bool,
-	// ScanResp:
-	//  BatchResponses [][]byte
-	types.BytesArray,
-	types.IntArray, // EnqueueKeysSatisfied []int
-}
-
-type resultSerializationIndex int
-
-const (
-	isGetIdx resultSerializationIndex = iota
-	getRawBytesIdx
-	getTSWallTimeIdx
-	getTSLogicalIdx
-	getTSSyntheticIdx
-	scanBatchResponsesIdx
-	enqueueKeysSatisfiedIdx
-)
-
-// serialize writes the serialized representation of the Result into row
-// according to inOrderResultsBufferSpillTypeSchema.
-func (r *Result) serialize(row rowenc.EncDatumRow, alloc *tree.DatumAlloc) error {
-	row[isGetIdx] = rowenc.EncDatum{Datum: tree.MakeDBool(r.GetResp != nil)}
-	if r.GetResp != nil && r.GetResp.Value != nil {
-		// We have a non-empty Get response.
-		v := r.GetResp.Value
-		row[getRawBytesIdx] = rowenc.EncDatum{Datum: alloc.NewDBytes(tree.DBytes(v.RawBytes))}
-		row[getTSWallTimeIdx] = rowenc.EncDatum{Datum: alloc.NewDInt(tree.DInt(v.Timestamp.WallTime))}
-		row[getTSLogicalIdx] = rowenc.EncDatum{Datum: alloc.NewDInt(tree.DInt(v.Timestamp.Logical))}
-		row[getTSSyntheticIdx] = rowenc.EncDatum{Datum: tree.MakeDBool(tree.DBool(v.Timestamp.Synthetic))}
-		row[scanBatchResponsesIdx] = rowenc.EncDatum{Datum: tree.DNull}
-	} else {
-		row[getRawBytesIdx] = rowenc.EncDatum{Datum: tree.DNull}
-		row[getTSWallTimeIdx] = rowenc.EncDatum{Datum: tree.DNull}
-		row[getTSLogicalIdx] = rowenc.EncDatum{Datum: tree.DNull}
-		row[getTSSyntheticIdx] = rowenc.EncDatum{Datum: tree.DNull}
-		if r.GetResp != nil {
-			// We have an empty Get response.
-			row[scanBatchResponsesIdx] = rowenc.EncDatum{Datum: tree.DNull}
-		} else {
-			// We have a Scan response.
-			batchResponses := tree.NewDArray(types.Bytes)
-			batchResponses.Array = make(tree.Datums, 0, len(r.ScanResp.BatchResponses))
-			for _, b := range r.ScanResp.BatchResponses {
-				if err := batchResponses.Append(alloc.NewDBytes(tree.DBytes(b))); err != nil {
-					return err
-				}
-			}
-			row[scanBatchResponsesIdx] = rowenc.EncDatum{Datum: batchResponses}
-		}
-	}
-	enqueueKeysSatisfied := tree.NewDArray(types.Int)
-	enqueueKeysSatisfied.Array = make(tree.Datums, 0, len(r.EnqueueKeysSatisfied))
-	for _, k := range r.EnqueueKeysSatisfied {
-		if err := enqueueKeysSatisfied.Append(alloc.NewDInt(tree.DInt(k))); err != nil {
-			return err
-		}
-	}
-	row[enqueueKeysSatisfiedIdx] = rowenc.EncDatum{Datum: enqueueKeysSatisfied}
-	return nil
-}
-
-// deserialize updates r in-place based on row which contains the serialized
-// state of the Result according to inOrderResultsBufferSpillTypeSchema.
-//
-// 'ScanResp.Complete', 'memoryTok', and 'position' fields are left unchanged
-// since those aren't serialized.
-func deserialize(r *Result, row rowenc.EncDatumRow, alloc *tree.DatumAlloc) error {
-	for i := range row {
-		if err := row[i].EnsureDecoded(inOrderResultsBufferSpillTypeSchema[i], alloc); err != nil {
-			return err
-		}
-	}
-	if isGet := tree.MustBeDBool(row[isGetIdx].Datum); isGet {
-		r.GetResp = &roachpb.GetResponse{}
-		if row[getRawBytesIdx].Datum != tree.DNull {
-			r.GetResp.Value = &roachpb.Value{
-				RawBytes: []byte(tree.MustBeDBytes(row[getRawBytesIdx].Datum)),
-				Timestamp: hlc.Timestamp{
-					WallTime:  int64(tree.MustBeDInt(row[getTSWallTimeIdx].Datum)),
-					Logical:   int32(tree.MustBeDInt(row[getTSLogicalIdx].Datum)),
-					Synthetic: bool(tree.MustBeDBool(row[getTSSyntheticIdx].Datum)),
-				},
-			}
-		}
-	} else {
-		r.ScanResp.ScanResponse = &roachpb.ScanResponse{}
-		batchResponses := tree.MustBeDArray(row[scanBatchResponsesIdx].Datum)
-		r.ScanResp.ScanResponse.BatchResponses = make([][]byte, batchResponses.Len())
-		for i := range batchResponses.Array {
-			r.ScanResp.ScanResponse.BatchResponses[i] = []byte(tree.MustBeDBytes(batchResponses.Array[i]))
-		}
-	}
-	enqueueKeysSatisfied := tree.MustBeDArray(row[enqueueKeysSatisfiedIdx].Datum)
-	r.EnqueueKeysSatisfied = make([]int, enqueueKeysSatisfied.Len())
-	for i := range enqueueKeysSatisfied.Array {
-		r.EnqueueKeysSatisfied[i] = int(tree.MustBeDInt(enqueueKeysSatisfied.Array[i]))
-	}
-	return nil
+	return r.Result, r.memoryTok.toRelease, nil
 }
