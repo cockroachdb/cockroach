@@ -872,13 +872,12 @@ func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Desc
 func (p *planner) QueryRowEx(
 	ctx context.Context,
 	opName string,
-	txn *kv.Txn,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	return ie.QueryRowEx(ctx, opName, txn, override, stmt, qargs...)
+	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
 // QueryIteratorEx executes the query, returning an iterator that can be used
@@ -890,12 +889,11 @@ func (p *planner) QueryRowEx(
 func (p *planner) QueryIteratorEx(
 	ctx context.Context,
 	opName string,
-	txn *kv.Txn,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (eval.InternalRows, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
+	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 	return rows.(eval.InternalRows), err
 }

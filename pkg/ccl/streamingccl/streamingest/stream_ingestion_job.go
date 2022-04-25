@@ -35,8 +35,7 @@ func completeStreamIngestion(
 	// Get the job payload for job_id.
 	const jobsQuery = `SELECT progress FROM system.jobs WHERE id=$1 FOR UPDATE`
 	row, err := evalCtx.Planner.QueryRowEx(evalCtx.Context,
-		"get-stream-ingestion-job-metadata",
-		txn, sessiondata.NodeUserSessionDataOverride, jobsQuery, streamID)
+		"get-stream-ingestion-job-metadata", sessiondata.NodeUserSessionDataOverride, jobsQuery, streamID)
 	if err != nil {
 		return err
 	}
@@ -89,7 +88,7 @@ func completeStreamIngestion(
 	}
 	updateJobQuery := `UPDATE system.jobs SET progress=$1 WHERE id=$2`
 	_, err = evalCtx.Planner.QueryRowEx(evalCtx.Context,
-		"set-stream-ingestion-job-metadata", txn,
+		"set-stream-ingestion-job-metadata",
 		sessiondata.NodeUserSessionDataOverride, updateJobQuery, progressBytes, streamID)
 	return err
 }

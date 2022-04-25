@@ -1975,7 +1975,6 @@ func makePayloadsForTraceGenerator(
 	it, err := ctx.Planner.QueryIteratorEx(
 		ctx.Ctx(),
 		"crdb_internal.payloads_for_trace",
-		ctx.Txn,
 		sessiondata.NoSessionDataOverride,
 		query,
 		traceID,
