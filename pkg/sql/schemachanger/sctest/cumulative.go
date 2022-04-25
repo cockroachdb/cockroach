@@ -25,10 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -130,7 +130,7 @@ func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
 			return nil
 		}
 
-		db, cleanup := newCluster(t, &scrun.TestingKnobs{
+		db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: beforeStage,
 			OnPostCommitError: func(p scplan.Plan, stageIdx int, err error) error {
 				if strings.Contains(err.Error(), "boom") {
@@ -229,7 +229,7 @@ func Pause(t *testing.T, dir string, newCluster NewClusterFunc) {
 		// remaining stages before the pause and then after. It's not totally
 		// trivial, as we don't checkpoint during non-mutation stages, so we'd
 		// need to look back and find the last mutation phase.
-		db, cleanup := newCluster(t, &scrun.TestingKnobs{
+		db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				if atomic.LoadUint32(&numInjectedFailures) > 0 {
 					return nil
@@ -335,7 +335,7 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 	) {
 		stageChan := make(chan stage)
 		ctx, cancel := context.WithCancel(context.Background())
-		db, cleanup := newCluster(t, &scrun.TestingKnobs{
+		db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				if p.Stages[stageIdx].Phase < scop.PostCommitPhase {
 					return nil
@@ -520,7 +520,7 @@ func processPlanInPhase(
 	after func(db *gosql.DB),
 ) {
 	var processOnce sync.Once
-	db, cleanup := newCluster(t, &scrun.TestingKnobs{
+	db, cleanup := newCluster(t, &scexec.TestingKnobs{
 		BeforeStage: func(p scplan.Plan, _ int) error {
 			if p.Params.ExecutionPhase == phaseToProcess {
 				processOnce.Do(func() { processFunc(p) })
