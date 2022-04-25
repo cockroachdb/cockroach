@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -47,34 +49,37 @@ func NewBuilderDependencies(
 	sessionData *sessiondata.SessionData,
 	settings *cluster.Settings,
 	statements []string,
+	internalExecutor sqlutil.InternalExecutor,
 ) scbuild.Dependencies {
 	return &buildDeps{
-		clusterID:       clusterID,
-		codec:           codec,
-		txn:             txn,
-		descsCollection: descsCollection,
-		schemaResolver:  schemaResolver,
-		authAccessor:    authAccessor,
-		sessionData:     sessionData,
-		settings:        settings,
-		statements:      statements,
-		astFormatter:    astFormatter,
-		featureChecker:  featureChecker,
+		clusterID:        clusterID,
+		codec:            codec,
+		txn:              txn,
+		descsCollection:  descsCollection,
+		schemaResolver:   schemaResolver,
+		authAccessor:     authAccessor,
+		sessionData:      sessionData,
+		settings:         settings,
+		statements:       statements,
+		astFormatter:     astFormatter,
+		featureChecker:   featureChecker,
+		internalExecutor: internalExecutor,
 	}
 }
 
 type buildDeps struct {
-	clusterID       uuid.UUID
-	codec           keys.SQLCodec
-	txn             *kv.Txn
-	descsCollection *descs.Collection
-	schemaResolver  resolver.SchemaResolver
-	authAccessor    scbuild.AuthorizationAccessor
-	sessionData     *sessiondata.SessionData
-	settings        *cluster.Settings
-	statements      []string
-	astFormatter    scbuild.AstFormatter
-	featureChecker  scbuild.FeatureChecker
+	clusterID        uuid.UUID
+	codec            keys.SQLCodec
+	txn              *kv.Txn
+	descsCollection  *descs.Collection
+	schemaResolver   resolver.SchemaResolver
+	authAccessor     scbuild.AuthorizationAccessor
+	sessionData      *sessiondata.SessionData
+	settings         *cluster.Settings
+	statements       []string
+	astFormatter     scbuild.AstFormatter
+	featureChecker   scbuild.FeatureChecker
+	internalExecutor sqlutil.InternalExecutor
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -317,4 +322,8 @@ func (d *buildDeps) IncrementUserDefinedSchemaCounter(
 // IncrementEnumCounter implements the scbuild.Dependencies interface.
 func (d *buildDeps) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryType) {
 	sqltelemetry.IncrementEnumCounter(counterType)
+}
+
+func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
+	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
 }

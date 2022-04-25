@@ -34,6 +34,11 @@ create-view
 CREATE VIEW sc1.v5 AS (SELECT 'a'::sc1.typ::STRING AS k, n2, n1 FROM sc1.v4)
 ----
 
+setup
+COMMENT ON SCHEMA sc1 IS 'sc1 is good schema';
+COMMENT ON TABLE sc1.t1 IS 't1 is good table';
+----
+
 deps
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
@@ -41,10 +46,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [EnumType:{DescID: 111}, DROPPED]
   kind: SameStagePrecedence
   rule: array type drops right before its element enum type
-- from: [Column:{DescID: 106, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 106, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
 - from: [Column:{DescID: 106, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -54,10 +55,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 106, PgAttributeNum: 2}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
-- from: [Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: name, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
@@ -65,10 +62,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 106, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 106, PgAttributeNum: 3}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
 - from: [Column:{DescID: 106, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: val, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -78,10 +71,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 107, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 107, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
-- from: [Column:{DescID: 107, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
@@ -89,10 +78,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 108, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 108, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
 - from: [Column:{DescID: 108, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -102,10 +87,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 108, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 108, PgAttributeNum: 2}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
-- from: [Column:{DescID: 108, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
@@ -113,10 +94,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 109, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
 - from: [Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -126,10 +103,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 109, PgAttributeNum: 2}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
-- from: [Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
@@ -137,10 +110,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 110, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
 - from: [Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -150,10 +119,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 110, PgAttributeNum: 2}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
-- from: [Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
@@ -161,10 +126,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 113, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
 - from: [Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -174,10 +135,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 113, PgAttributeNum: 2}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
@@ -186,10 +143,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: column dependents removed after column no longer public
 - from: [Column:{DescID: 113, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
-  to:   [ColumnComment:{DescID: 113, PgAttributeNum: 3}, ABSENT]
-  kind: Precedence
-  rule: column comments removed after column no longer public
-- from: [Column:{DescID: 113, ColumnID: 3, PgAttributeNum: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: n1, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
@@ -197,110 +150,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column dependents removed after column no longer public
-- from: [ColumnComment:{DescID: 106, PgAttributeNum: 1}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 106, PgAttributeNum: 1}, ABSENT]
-  to:   [Table:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 106, PgAttributeNum: 2}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 106, PgAttributeNum: 2}, ABSENT]
-  to:   [Table:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 106, PgAttributeNum: 3}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 106, PgAttributeNum: 3}, ABSENT]
-  to:   [Table:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 107, PgAttributeNum: 1}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 107, PgAttributeNum: 1}, ABSENT]
-  to:   [View:{DescID: 107}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 108, PgAttributeNum: 1}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 108, PgAttributeNum: 1}, ABSENT]
-  to:   [View:{DescID: 108}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 108, PgAttributeNum: 2}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 108, PgAttributeNum: 2}, ABSENT]
-  to:   [View:{DescID: 108}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 109, PgAttributeNum: 1}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 109, PgAttributeNum: 1}, ABSENT]
-  to:   [View:{DescID: 109}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 109, PgAttributeNum: 2}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 109, PgAttributeNum: 2}, ABSENT]
-  to:   [View:{DescID: 109}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 110, PgAttributeNum: 1}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 110, PgAttributeNum: 1}, ABSENT]
-  to:   [View:{DescID: 110}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 110, PgAttributeNum: 2}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 110, PgAttributeNum: 2}, ABSENT]
-  to:   [View:{DescID: 110}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 113, PgAttributeNum: 1}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 113, PgAttributeNum: 1}, ABSENT]
-  to:   [View:{DescID: 113}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 113, PgAttributeNum: 2}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 113, PgAttributeNum: 2}, ABSENT]
-  to:   [View:{DescID: 113}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ColumnComment:{DescID: 113, PgAttributeNum: 3}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
-  kind: Precedence
-  rule: column comment removed before column
-- from: [ColumnComment:{DescID: 113, PgAttributeNum: 3}, ABSENT]
-  to:   [View:{DescID: 113}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [ColumnDefaultExpression:{DescID: 106, ColumnID: 3}, ABSENT]
   to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
@@ -473,14 +322,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Column:{DescID: 113, ColumnID: 3, PgAttributeNum: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [IndexComment:{DescID: 106, IndexID: 1}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before index
-- from: [IndexComment:{DescID: 106, IndexID: 1}, ABSENT]
-  to:   [Table:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -642,14 +483,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
-  to:   [IndexComment:{DescID: 106, IndexID: 1}, ABSENT]
-  kind: Precedence
-  rule: dependents removed after index no longer public
-- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed after index no longer public
-- from: [SchemaComment:{DescID: 104}, ABSENT]
+- from: [SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT]
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -673,32 +510,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: dependent element removal right after descriptor removal
-- from: [TableComment:{DescID: 105}, ABSENT]
-  to:   [Sequence:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [TableComment:{DescID: 106}, ABSENT]
+- from: [TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT]
   to:   [Table:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [TableComment:{DescID: 107}, ABSENT]
-  to:   [View:{DescID: 107}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [TableComment:{DescID: 108}, ABSENT]
-  to:   [View:{DescID: 108}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [TableComment:{DescID: 109}, ABSENT]
-  to:   [View:{DescID: 109}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [TableComment:{DescID: 110}, ABSENT]
-  to:   [View:{DescID: 110}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [TableComment:{DescID: 113}, ABSENT]
-  to:   [View:{DescID: 113}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
@@ -906,94 +719,78 @@ PreCommitPhase stage 1 of 1 with 62 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Schema:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
     [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[SchemaComment:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 105, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 106, Name: t1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 106}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 106, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 106, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 106, PgAttributeNum: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 106, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 106, PgAttributeNum: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 106, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 106, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 106, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 106, PgAttributeNum: 3}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexComment:{DescID: 106, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 107, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 107}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 107, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 107, PgAttributeNum: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 108, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 108, PgAttributeNum: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 108, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 108, PgAttributeNum: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 109, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 109}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 109, PgAttributeNum: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 109, PgAttributeNum: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 110}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 110, PgAttributeNum: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 110, PgAttributeNum: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -1014,19 +811,15 @@ PreCommitPhase stage 1 of 1 with 62 MutationType ops
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 113}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 113, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 113}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 113, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 113, PgAttributeNum: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 113, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 113, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 113, PgAttributeNum: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 113, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 113, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnComment:{DescID: 113, PgAttributeNum: 3}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.DrainDescriptorName
       Namespace:
