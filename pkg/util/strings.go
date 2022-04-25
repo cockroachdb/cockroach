@@ -167,3 +167,37 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 	}
 	return string(buf)
 }
+
+// CollapseDupeChar will take the given string and given character
+// and collapse any repeating instances of this character to a
+// single instance.
+// E.g. CollapseDupeChar("wwwhy hello there", 'w') returns "why hello there"
+func CollapseDupeChar(toCollapse string, collapseChar rune) string {
+	var builder strings.Builder
+	hadPrevious := false
+	begIndx := 0
+	for i, r := range toCollapse {
+		if r != collapseChar {
+			hadPrevious = false
+			continue
+		}
+
+		if !hadPrevious {
+			hadPrevious = true
+			continue
+		}
+
+		if begIndx != i {
+			builder.WriteString(toCollapse[begIndx:i])
+		}
+		begIndx = i + 1
+	}
+
+	if begIndx == 0 {
+		return toCollapse
+	}
+
+	builder.WriteString(toCollapse[begIndx:])
+
+	return builder.String()
+}
