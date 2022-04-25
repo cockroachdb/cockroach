@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -193,6 +194,15 @@ func (p *planner) getAndValidateTypedClusterSetting(
 }
 
 func (n *setClusterSettingNode) startExec(params runParams) error {
+
+	if strings.Contains(n.name, "sql.defaults") {
+		params.p.BufferClientNotice(params.ctx,
+			pgnotice.Newf("The `SET CLUSTER SETTING sql.defaults...` syntax is deprecated, please "+
+				"use the `ALTER ROLE ... SET` syntax: %s. The `ALTER ROLE ... SET` syntax can control session variable defaults at a finer-grained level",
+				"https://www.cockroachlabs.com/docs/stable/alter-role.html#set-default-session-variable-values-for-a-role",
+			))
+	}
+
 	if !params.extendedEvalCtx.TxnIsSingleStmt {
 		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a multi-statement transaction")
 	}
