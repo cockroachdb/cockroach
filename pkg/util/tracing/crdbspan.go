@@ -124,6 +124,10 @@ type crdbSpanMu struct {
 	// lazyTags are tags whose values are only string-ified on demand. Each lazy
 	// tag is expected to implement either fmt.Stringer or LazyTag.
 	lazyTags []lazyTag
+
+	// eventListeners is a list of registered EventListener's that are notified
+	// whenever a Structured event is recorded by the span and its children.
+	eventListeners []EventListener
 }
 
 type lazyTag struct {
@@ -142,6 +146,10 @@ type recordingState struct {
 	// recorded on this span, and also the ones recorded on children that
 	// finished while this parent span's recording was not verbose.
 	structured sizeLimitedBuffer
+
+	// notifyParentOnStructuredEvent is true if the span's parent has asked to be
+	// notified of every StructuredEvent recording on this span.
+	notifyParentOnStructuredEvent bool
 
 	// dropped is true if the span has capped out it's memory limits for
 	// logs and structured events, and has had to drop some. It's used to
@@ -225,6 +233,7 @@ func (s *crdbSpan) finish() bool {
 			return false
 		}
 		s.mu.finished = true
+		s.mu.eventListeners = nil
 
 		if s.recordingType() != RecordingOff {
 			duration := timeutil.Since(s.startTime)
@@ -465,6 +474,14 @@ func (s *crdbSpan) recordFinishedChildren(children []tracingpb.RecordedSpan) {
 		return
 	}
 
+	// Notify the event listeners registered with s of the StructuredEvents on the
+	// children being added to s.
+	for _, span := range children {
+		for _, record := range span.StructuredRecords {
+			s.notifyEventListeners(record.Payload)
+		}
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.recordFinishedChildrenLocked(children)
@@ -545,6 +562,23 @@ func (s *crdbSpan) getLazyTagLocked(key string) (interface{}, bool) {
 	return nil, false
 }
 
+// notifyEventListeners recursively notifies all the EventListeners registered
+// with this span and any ancestor spans in the Recording, of a StructuredEvent.
+func (s *crdbSpan) notifyEventListeners(item Structured) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.mu.parent.empty() && s.mu.recording.notifyParentOnStructuredEvent {
+		parent := s.mu.parent.Span.i.crdb
+		if parent != nil {
+			parent.notifyEventListeners(item)
+		}
+	}
+
+	for _, listener := range s.mu.eventListeners {
+		listener.Notify(item)
+	}
+}
+
 // record includes a log message in s' recording.
 func (s *crdbSpan) record(msg redact.RedactableString) {
 	if s.recordingType() != RecordingVerbose {
@@ -593,6 +627,10 @@ func (s *crdbSpan) recordStructured(item Structured) {
 		Payload: p,
 	}
 	s.recordInternal(sr, &s.mu.recording.structured)
+
+	// If there are any listener's registered with this span, notify them of the
+	// Structured event being recorded.
+	s.notifyEventListeners(item)
 }
 
 // memorySizable is implemented by log records and structured events for
@@ -914,6 +952,15 @@ func (s *crdbSpan) withLock(f func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	f()
+}
+
+// wantEventNotifications returns true if the span was created
+// WithEventListeners(...) or the span has been configured to notify its parent
+// span on a StructuredEvent recording.
+func (s *crdbSpan) wantEventNotifications() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.mu.eventListeners) != 0 || s.mu.recording.notifyParentOnStructuredEvent
 }
 
 // setGoroutineID updates the span's goroutine ID.
