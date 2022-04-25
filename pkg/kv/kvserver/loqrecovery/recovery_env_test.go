@@ -81,6 +81,7 @@ type storeView struct {
 	StoreID roachpb.StoreID `yaml:"StoreID"`
 
 	Descriptors []storeDescriptorView `yaml:"Descriptors"`
+	LocalData   []localDataView       `yaml:"LocalData"`
 }
 
 // storeDescriptorView contains important fields from the range
@@ -117,6 +118,12 @@ func (r replicaDescriptorView) asReplicaDescriptor() roachpb.ReplicaDescriptor {
 		ReplicaID: r.ReplicaID,
 		Type:      r.ReplicaType,
 	}
+}
+
+// localDataView contains interesting local store data for each range.
+type localDataView struct {
+	RangeID       roachpb.RangeID `yaml:"RangeID"`
+	RaftReplicaID int             `yaml:"RaftReplicaID"`
 }
 
 // Store with its owning NodeID for easier grouping by owning nodes.
@@ -520,10 +527,21 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 	var storesView []storeView
 	for _, storeID := range stores {
 		var descriptorViews []storeDescriptorView
+		var localDataViews []localDataView
 		store := e.stores[storeID]
 		err := kvserver.IterateRangeDescriptorsFromDisk(ctx, store.engine,
 			func(desc roachpb.RangeDescriptor) error {
 				descriptorViews = append(descriptorViews, descriptorView(desc))
+
+				sl := stateloader.Make(desc.RangeID)
+				raftReplicaID, _, err := sl.LoadRaftReplicaID(ctx, store.engine)
+				if err != nil {
+					t.Fatalf("failed to load Raft replica ID: %v", err)
+				}
+				localDataViews = append(localDataViews, localDataView{
+					RangeID:       desc.RangeID,
+					RaftReplicaID: int(raftReplicaID.ReplicaID),
+				})
 				return nil
 			})
 		if err != nil {
@@ -533,6 +551,7 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 			NodeID:      e.stores[storeID].nodeID,
 			StoreID:     storeID,
 			Descriptors: descriptorViews,
+			LocalData:   localDataViews,
 		})
 	}
 	out, err := yaml.Marshal(storesView)
