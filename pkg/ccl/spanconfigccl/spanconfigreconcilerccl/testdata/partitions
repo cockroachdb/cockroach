@@ -13,6 +13,7 @@ mutations discard
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 
 exec-sql
@@ -33,6 +34,7 @@ upsert /Table/10{6-7}                      range default
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/10{6-7}                             range default
 
@@ -50,6 +52,7 @@ upsert /Table/10{6-7}                      num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/10{6-7}                             num_replicas=7 num_voters=5
 
@@ -72,6 +75,7 @@ upsert /Table/10{6/1/3-7}                  num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/106{-/1/1}                          num_replicas=7 num_voters=5
 /Table/106/1/{1-2}                         global_reads=true num_replicas=7 num_voters=5
@@ -94,6 +98,7 @@ upsert /Table/10{6/1/5-7}                  num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/106{-/1/1}                          num_replicas=7 num_voters=5
 /Table/106/1/{1-2}                         global_reads=true num_replicas=7 num_voters=5
@@ -130,6 +135,7 @@ upsert /Table/10{6/2-7}                    num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/106{-/1}                            num_replicas=7 num_voters=5
 /Table/106/1{-/1}                          num_replicas=7 num_voters=6
@@ -164,6 +170,7 @@ upsert /Table/10{6/2-7}                    num_replicas=7
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/106{-/1}                            num_replicas=7
 /Table/106/1{-/1}                          num_replicas=7 num_voters=6
@@ -192,4 +199,5 @@ delete /Table/10{6/2-7}
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
