@@ -12,12 +12,11 @@ import (
 	"container/list"
 	"context"
 	"math"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -90,15 +89,6 @@ func TimeSource(ts timeutil.TimeSource) Option {
 // Balancer handles load balancing of SQL connections within the proxy.
 // All methods on the Balancer instance are thread-safe.
 type Balancer struct {
-	// mu synchronizes access to fields in the struct.
-	mu struct {
-		syncutil.Mutex
-
-		// rng corresponds to the random number generator instance which will
-		// be used for load balancing.
-		rng *rand.Rand
-	}
-
 	// stopper is used to start async tasks (e.g. transfer requests) within the
 	// balancer.
 	stopper *stop.Stopper
@@ -171,8 +161,6 @@ func NewBalancer(
 		return nil, err
 	}
 
-	b.mu.rng, _ = randutil.NewPseudoRand()
-
 	// Run queue processor to handle rebalance requests.
 	if err := b.stopper.RunAsyncTask(ctx, "processQueue", b.processQueue); err != nil {
 		return nil, err
@@ -195,7 +183,15 @@ func NewBalancer(
 // TODO(jaylim-crl): Rename this to SelectSQLServer(requester, tenantID, clusterName)
 // which returns a ServerAssignment.
 func (b *Balancer) SelectTenantPod(pods []*tenant.Pod) (*tenant.Pod, error) {
-	pod := selectTenantPod(b.randFloat32(), pods)
+	// The second case should not happen if the directory is returning the
+	// right data. Check it regardless or else roachpb.MakeTenantID will panic
+	// on a zero TenantID.
+	if len(pods) == 0 || pods[0].TenantID == 0 {
+		return nil, ErrNoAvailablePods
+	}
+	tenantID := roachpb.MakeTenantID(pods[0].TenantID)
+	tenantEntry := b.connTracker.getEntry(tenantID, true /* allowCreate */)
+	pod := selectTenantPod(pods, tenantEntry)
 	if pod == nil {
 		return nil, ErrNoAvailablePods
 	}
@@ -208,14 +204,6 @@ func (b *Balancer) SelectTenantPod(pods []*tenant.Pod) (*tenant.Pod, error) {
 // a ServerAssignment instead of a pod.
 func (b *Balancer) GetTracker() *ConnTracker {
 	return b.connTracker
-}
-
-// randFloat32 generates a random float32 within the bounds [0, 1) and is
-// thread-safe.
-func (b *Balancer) randFloat32() float32 {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.mu.rng.Float32()
 }
 
 // processQueue runs on a background goroutine, and invokes TransferConnection
