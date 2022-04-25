@@ -230,9 +230,8 @@ import (
 //    above are supported, though the statement may not be in a "repeat".
 //    Incomplete pending statements will result in an error on test completion.
 //    Note that as the statement will be run asynchronously, subsequent queries
-//    that depend on the state of the asynchronous statement should be run with
-//    the "retry" option to ensure deterministic testing and avoid racing with
-//    the asynchronous statement.
+//    that depend on the state of the statement should be run with the "retry"
+//    option to ensure deterministic test results.
 //
 //  - awaitstatement <name>
 //    Completes a pending statement with the provided name, validating its
@@ -277,6 +276,15 @@ import (
 //            testutils.SucceedsSoon for more information. If run with the
 //            -rewrite flag, inserts a 500ms sleep before executing the query
 //            once.
+//      - async: runs the query asynchronously, marking it as a pending
+//            query using the label parameter as a unique name, to be completed
+//            and validated later with "awaitquery". This is intended for use
+//            with queries that may block, such as those contending on locks.
+//            It is supported with other options, with the exception of "retry",
+//            and may not be in a "repeat". Note that as the query will be run
+//            asynchronously, subsequent queries that depend on the state of
+//            the query should be run with the "retry" option to ensure
+//            deterministic test results.
 //      - kvtrace: runs the query and compares against the results of the
 //            kv operations trace of the query. kvtrace optionally accepts
 //            arguments of the form kvtrace(op,op,...). Op is one of
@@ -300,6 +308,10 @@ import (
 //  - query error <regexp>
 //    Runs the query that follows and expects an error
 //    that matches the given regexp.
+//
+//  - awaitquery <name>
+//    Completes a pending query with the provided name, validating its
+//    results as expected per the given options to "query ... async ... <label>".
 //
 //  - repeat <number>
 //    It causes the following `statement` or `query` to be repeated the given
@@ -555,6 +567,8 @@ type testClusterConfig struct {
 	// it's state to a new cluster at random points during a logic test.
 	backupRestoreProbability float64
 }
+
+const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
 
 const threeNodeTenantConfigName = "3node-tenant"
 
@@ -1048,8 +1062,8 @@ type logicStatement struct {
 	statementName string
 }
 
-// pendingExecResult represents a final SQL query string run and the resulting
-// output and error from running it against the DB.
+// pendingExecResult represents the asynchronous result of a logicStatement
+// run against the DB, as well as the final SQL used in execution.
 type pendingExecResult struct {
 	execSQL string
 	res     gosql.Result
@@ -1062,8 +1076,25 @@ type pendingExecResult struct {
 type pendingStatement struct {
 	logicStatement
 
-	// the channel on which to receive the execution results, when completed.
+	// The channel on which to receive the execution results, when completed.
 	resultChan chan pendingExecResult
+}
+
+// pendingQueryResult represents the asynchronous result of a logicQuery
+// run against the DB, including any returned rows.
+type pendingQueryResult struct {
+	rows *gosql.Rows
+	err  error
+}
+
+// pendingQuery encapsulates a logicQuery that is expected to block and
+// as such is run in a separate goroutine, as well as the channel on which to
+// receive the results of the query execution.
+type pendingQuery struct {
+	logicQuery
+
+	// The channel on which to receive the query results, when completed.
+	resultChan chan pendingQueryResult
 }
 
 // readSQL reads the lines of a SQL statement or query until the first blank
@@ -1445,6 +1476,9 @@ type logicTest struct {
 	// pendingStatements tracks any async statements by name key.
 	pendingStatements map[string]pendingStatement
 
+	// pendingQueries tracks any async queries by name key.
+	pendingQueries map[string]pendingQuery
+
 	// noticeBuffer retains the notices from the past query.
 	noticeBuffer []string
 
@@ -1503,6 +1537,23 @@ func (t *logicTest) substituteVars(line string) string {
 		}
 		return line
 	})
+}
+
+// rewriteUpToRegex rewrites the rewriteResTestBuf up to the line which matches
+// the provided regex, returning a scanner containing the remainder of the lines.
+// This is used to aid in rewriting the results of asynchronously run queries.
+func (t *logicTest) rewriteUpToRegex(matchRE *regexp.Regexp) *bufio.Scanner {
+	remainder := bytes.NewReader(t.rewriteResTestBuf.Bytes())
+	t.rewriteResTestBuf = bytes.Buffer{}
+	scanner := bufio.NewScanner(remainder)
+	for scanner.Scan() {
+		if matchRE.Match(scanner.Bytes()) {
+			break
+		}
+		t.rewriteResTestBuf.Write(scanner.Bytes())
+		t.rewriteResTestBuf.WriteString("\n")
+	}
+	return scanner
 }
 
 // emit is used for the --generate-testfiles mode; it emits a line of testfile.
@@ -2068,6 +2119,7 @@ CREATE DATABASE test; USE test;
 	t.labelMap = make(map[string]string)
 	t.varMap = make(map[string]string)
 	t.pendingStatements = make(map[string]pendingStatement)
+	t.pendingQueries = make(map[string]pendingQuery)
 
 	t.progress = 0
 	t.failures = 0
@@ -2805,6 +2857,28 @@ func (t *logicTest) processSubtest(
 			repeat = 1
 			t.success(path)
 
+		case "awaitquery":
+			if len(fields) != 2 {
+				return errors.New("invalid line format")
+			}
+
+			name := fields[1]
+
+			var pending pendingQuery
+			var ok bool
+			if pending, ok = t.pendingQueries[name]; !ok {
+				return errors.Newf("pending query with name %q unknown", name)
+			}
+
+			execRes := <-pending.resultChan
+			err := t.finishExecQuery(pending.logicQuery, execRes.rows, execRes.err)
+			if err != nil {
+				t.Error(err)
+			}
+
+			delete(t.pendingQueries, name)
+			t.success(path)
+
 		case "query":
 			var query logicQuery
 			query.pos = fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile)
@@ -2927,7 +3001,8 @@ func (t *logicTest) processSubtest(
 						case "round-in-strings":
 							query.roundFloatsInStrings = true
 
-						// TODO(sarkesian): support "async" options for queries as well as statements
+						case "async":
+							query.expectAsync = true
 
 						default:
 							if strings.HasPrefix(opt, "nodeidx=") {
@@ -2945,12 +3020,22 @@ func (t *logicTest) processSubtest(
 				}
 				if len(fields) >= 4 {
 					query.label = fields[3]
+					if query.expectAsync {
+						query.statementName = fields[3]
+					}
 				}
 			}
 
 			if query.noticetrace && query.kvtrace {
 				return errors.Errorf(
 					"%s: cannot have both noticetrace and kvtrace on at the same time",
+					query.pos,
+				)
+			}
+
+			if query.expectAsync && query.statementName == "" {
+				return errors.Errorf(
+					"%s: cannot have async enabled without a label",
 					query.pos,
 				)
 			}
@@ -3473,6 +3558,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	t.noticeBuffer = nil
 
 	db := t.db
+	var closeDB func()
 	if query.nodeIdx != 0 {
 		addr := t.cluster.Server(query.nodeIdx).ServingSQLAddr()
 		if len(t.tenantAddrs) > 0 {
@@ -3483,13 +3569,49 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		pgURL.Path = "test"
 
 		db = t.openDB(pgURL)
-		defer func() {
+		closeDB = func() {
 			if err := db.Close(); err != nil {
 				t.Fatal(err)
 			}
-		}()
+		}
 	}
+
+	if query.expectAsync {
+		if _, ok := t.pendingQueries[query.statementName]; ok {
+			return errors.Newf("pending query with name %q already exists", query.statementName)
+		}
+
+		pending := pendingQuery{
+			logicQuery: query,
+			resultChan: make(chan pendingQueryResult),
+		}
+		t.pendingQueries[query.statementName] = pending
+
+		if *rewriteResultsInTestfiles || *rewriteSQL {
+			t.emit(fmt.Sprintf("%s_%s", queryRewritePlaceholderPrefix, query.statementName))
+		}
+
+		startedChan := make(chan struct{})
+		go func() {
+			if closeDB != nil {
+				defer closeDB()
+			}
+			startedChan <- struct{}{}
+			rows, err := db.Query(query.sql)
+			pending.resultChan <- pendingQueryResult{rows, err}
+		}()
+
+		<-startedChan
+		return nil
+	} else if closeDB != nil {
+		defer closeDB()
+	}
+
 	rows, err := db.Query(query.sql)
+	return t.finishExecQuery(query, rows, err)
+}
+
+func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err error) error {
 	if err == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
 
@@ -3745,6 +3867,10 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	}
 
 	if *rewriteResultsInTestfiles || *rewriteSQL {
+		var remainder *bufio.Scanner
+		if query.expectAsync {
+			remainder = t.rewriteUpToRegex(regexp.MustCompile(fmt.Sprintf("^%s_%s$", queryRewritePlaceholderPrefix, query.statementName)))
+		}
 		if query.expectedHash != "" {
 			if query.expectedValues == 1 {
 				t.emit(fmt.Sprintf("1 value hashing to %s", query.expectedHash))
@@ -3765,6 +3891,11 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
 					t.emit(line)
 				}
+			}
+		}
+		if remainder != nil {
+			for remainder.Scan() {
+				t.emit(remainder.Text())
 			}
 		}
 		return nil
@@ -3908,25 +4039,9 @@ func (t *logicTest) success(file string) {
 }
 
 func (t *logicTest) validateAfterTestCompletion() error {
-	// Check any remaining pending statements
-	if len(t.pendingStatements) > 0 {
-		log.Warningf(context.Background(), "%d remaining pending statements", len(t.pendingStatements))
-	}
-	for name, pending := range t.pendingStatements {
-		select {
-		case execRes := <-pending.resultChan:
-			// check if execRes shows that statement completed successfully
-			cont, err := t.finishExecStatement(pending.logicStatement, execRes.execSQL, execRes.res, execRes.err)
-
-			if err != nil {
-				if !cont {
-					return errors.Wrapf(execRes.err, "pending statement %q resulted in error", name)
-				}
-				t.Errorf("pending statement %q resulted in error: %v", name, execRes.err)
-			}
-		default:
-			t.Fatalf("pending statement %q did not finish", name)
-		}
+	// Error on any unfinished async statements or queries
+	if len(t.pendingStatements) > 0 || len(t.pendingQueries) > 0 {
+		t.Fatalf("%d remaining async statements, %d remaining async queries", len(t.pendingStatements), len(t.pendingQueries))
 	}
 
 	// Close all clients other than "root"
