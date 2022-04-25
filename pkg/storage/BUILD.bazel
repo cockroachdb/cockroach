@@ -114,6 +114,7 @@ go_test(
         "pebble_file_registry_test.go",
         "pebble_mvcc_scanner_test.go",
         "pebble_test.go",
+        "read_as_of_iterator_test.go",
         "resource_limiter_test.go",
         "sst_iterator_test.go",
         "sst_test.go",
