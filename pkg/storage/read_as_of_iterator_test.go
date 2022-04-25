@@ -127,6 +127,9 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 		{"a3a2a1", "a1", "a1", ""},
 		{"a3a2a1", "a1", "a1", "2"},
 
+		// Ensure out of bounds seek fails gracefully
+		{"a1", "b1", "notOK", ""},
+
 		// Ensure the asOf timestamp moves the iterator during a seek
 		{"a2a1", "a2", "a1", "1"},
 		{"a2b1", "a2", "b1", "1"},
@@ -174,6 +177,9 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 				t.Fatalf("unexpected error: %+v", err)
 			}
 			if !ok {
+				if test.expected == "notOK" {
+					return
+				}
 				t.Fatalf("unexpected error: seek not ok")
 			}
 			output.Write(it.UnsafeKey().Key)

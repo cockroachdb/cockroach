@@ -41,15 +41,18 @@ func (f *ReadAsOfIterator) SeekGE(originalKey MVCCKey) {
 	// key) than the original key.
 	synthetic := MVCCKey{Key: originalKey.Key, Timestamp: hlc.MaxTimestamp}
 	f.iter.SeekGE(synthetic)
-	f.advance()
-
+	if ok := f.advance(); !ok {
+		return
+	}
 	for f.UnsafeKey().Less(originalKey) {
 		// The following is true:
 		// originalKey.Key == syntheticKey.key &&
 		// f.asOf timestamp >= current timestamp > originalKey timestamp
 		// move to the next key and advance to a key that obeys the asOf constraints.
 		f.iter.Next()
-		f.advance()
+		if ok := f.advance(); !ok {
+			return
+		}
 	}
 }
 
@@ -92,9 +95,9 @@ func (f *ReadAsOfIterator) UnsafeValue() []byte {
 
 // advance moves past keys with timestamps later than the f.asOf and MVCC keys whose
 // value has been deleted.
-func (f *ReadAsOfIterator) advance() {
+func (f *ReadAsOfIterator) advance() bool {
 	if ok, _ := f.Valid(); !ok {
-		return
+		return ok
 	}
 
 	// If neither of the internal functions move the iterator, then the current
@@ -106,7 +109,17 @@ func (f *ReadAsOfIterator) advance() {
 	for {
 		ok, moved = f.advanceAsOf()
 		if !ok {
-			return
+			return ok
+		}
+		if moved {
+			continue
+		}
+		ok, moved = f.advanceDel()
+		if !ok {
+			return ok
+		}
+		if !moved {
+			break
 		}
 		if moved {
 			continue
@@ -119,6 +132,7 @@ func (f *ReadAsOfIterator) advance() {
 			break
 		}
 	}
+	return true
 }
 
 // advanceDel moves the iterator to the next key if the current key is a delete
