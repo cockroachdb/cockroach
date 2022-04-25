@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/kvinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -483,6 +484,7 @@ func internalExtendedEvalCtx(
 			TxnTimestamp:              txnTimestamp,
 			SQLStatsController:        sqlStatsController,
 			IndexUsageStatsController: indexUsageStatsController,
+			ForceRetryRunner:          kvinterfaces.NewForceRetryableError(txn),
 		},
 		Tracing:         &SessionTracing{},
 		Descs:           tables,

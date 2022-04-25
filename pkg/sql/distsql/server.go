@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/kvinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -317,6 +318,7 @@ func (ds *ServerImpl) setupFlow(
 			// Update the Txn field early (before f.SetTxn() below) since some
 			// processors capture the field in their constructor (see #41992).
 			evalCtx.Txn = leafTxn
+			evalCtx.ForceRetryRunner = kvinterfaces.NewForceRetryableError(leafTxn)
 		}
 	} else {
 		if localState.IsLocal {
@@ -361,6 +363,7 @@ func (ds *ServerImpl) setupFlow(
 			SQLLivenessReader:         ds.ServerConfig.SQLLivenessReader,
 			SQLStatsController:        ds.ServerConfig.SQLStatsController,
 			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,
+			ForceRetryRunner:          kvinterfaces.NewForceRetryableError(leafTxn),
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))

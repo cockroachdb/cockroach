@@ -3742,6 +3742,11 @@ type EvalContext struct {
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
 	KVStoresIterator kvserverbase.StoresIterator
+
+	// The following fields are used to interface with KV for builtins.
+
+	// ForceRetryRunner is used by crdb_internal.force_retry.
+	ForceRetryRunner ForceRetryRunner
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.

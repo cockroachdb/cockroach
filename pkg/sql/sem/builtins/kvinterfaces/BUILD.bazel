@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvinterfaces",
+    srcs = ["force_retry.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/kvinterfaces",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/kv"],
+)

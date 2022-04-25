@@ -64,6 +64,7 @@ go_library(
         "indexed_vars.go",
         "insert.go",
         "interval.go",
+        "kv_builtin_interfaces.go",
         "name_part.go",
         "name_resolution.go",
         "normalize.go",

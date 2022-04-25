@@ -5226,8 +5226,9 @@ value if you rely on the HLC for accuracy.`,
 				minDuration := args[0].(*tree.DInterval).Duration
 				elapsed := duration.MakeDuration(int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)), 0, 0)
 				if elapsed.Compare(minDuration) < 0 {
-					return nil, ctx.Txn.GenerateForcedRetryableError(
-						ctx.Ctx(), "forced by crdb_internal.force_retry()")
+					return nil, ctx.ForceRetryRunner.GenerateForcedRetryableError(
+						ctx.Ctx(), "forced by crdb_internal.force_retry()",
+					)
 				}
 				return tree.DZero, nil
 			},

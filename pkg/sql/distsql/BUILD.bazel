@@ -19,6 +19,7 @@ go_library(
         "//pkg/sql/faketreeeval",
         "//pkg/sql/flowinfra",
         "//pkg/sql/rowflow",
+        "//pkg/sql/sem/builtins/kvinterfaces",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
