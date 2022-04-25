@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -42,11 +43,11 @@ import (
 // NewClusterFunc provides functionality to construct a new cluster
 // given testing knobs.
 type NewClusterFunc func(
-	t *testing.T, knobs *scrun.TestingKnobs,
+	t *testing.T, knobs *scexec.TestingKnobs,
 ) (_ *gosql.DB, cleanup func())
 
 // SingleNodeCluster is a NewClusterFunc.
-func SingleNodeCluster(t *testing.T, knobs *scrun.TestingKnobs) (*gosql.DB, func()) {
+func SingleNodeCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, func()) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLDeclarativeSchemaChanger: knobs,
@@ -114,7 +115,7 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 						sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 						sd.ApplicationName = ""
 					})),
-					sctestdeps.WithTestingKnobs(&scrun.TestingKnobs{
+					sctestdeps.WithTestingKnobs(&scexec.TestingKnobs{
 						BeforeStage: func(p scplan.Plan, stageIdx int) error {
 							deps.LogSideEffectf("## %s", p.Stages[stageIdx].String())
 							return nil
