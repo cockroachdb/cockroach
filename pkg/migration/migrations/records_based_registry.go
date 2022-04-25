@@ -22,9 +22,11 @@ import (
 func recordsBasedRegistryMigration(
 	ctx context.Context, cv clusterversion.ClusterVersion, deps migration.SystemDeps, _ *jobs.Job,
 ) error {
-	return deps.Cluster.ForEveryNode(ctx, "deprecate-base-encryption-registry", func(ctx context.Context, client serverpb.MigrationClient) error {
-		req := &serverpb.DeprecateBaseEncryptionRegistryRequest{Version: &cv.Version}
-		_, err := client.DeprecateBaseEncryptionRegistry(ctx, req)
-		return err
+	return deps.Cluster.UntilClusterStable(ctx, func() error {
+		return deps.Cluster.ForEveryNode(ctx, "deprecate-base-encryption-registry", func(ctx context.Context, client serverpb.MigrationClient) error {
+			req := &serverpb.DeprecateBaseEncryptionRegistryRequest{Version: &cv.Version}
+			_, err := client.DeprecateBaseEncryptionRegistry(ctx, req)
+			return err
+		})
 	})
 }
