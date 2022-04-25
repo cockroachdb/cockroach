@@ -75,6 +75,7 @@ type spanOptions struct {
 	ForceRealSpan                 bool                   // see WithForceRealSpan
 	SpanKind                      oteltrace.SpanKind     // see WithSpanKind
 	Sterile                       bool                   // see WithSterile
+	EventListeners                []EventListener        // see WithEventListeners
 
 	// recordingTypeExplicit is set if the WithRecording() option was used. In
 	// that case, spanOptions.recordingType() returns recordingTypeOpt below. If
@@ -99,6 +100,18 @@ func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
 		return opts.RemoteParent.spanID
 	}
 	return 0
+}
+
+// notifyParentOnStructuredEvent returns true if the parent span was created
+// WithEventListeners(...) or the parent span has been configured to notify its
+// parent span on a StructuredEvent recording.
+func (opts *spanOptions) notifyParentOnStructuredEvent() bool {
+	if opts.Parent.empty() || opts.Parent.IsNoop() {
+		return false
+	}
+
+	parent := opts.Parent.i.crdb
+	return parent.wantEventNotifications()
 }
 
 func (opts *spanOptions) recordingType() RecordingType {
@@ -438,4 +451,29 @@ func WithSterile() SpanOption {
 func (w withSterileOption) apply(opts spanOptions) spanOptions {
 	opts.Sterile = true
 	return opts
+}
+
+type eventListenersOption []EventListener
+
+var _ SpanOption = eventListenersOption{}
+
+func (ev eventListenersOption) apply(opts spanOptions) spanOptions {
+	eventListeners := ([]EventListener)(ev)
+	opts.EventListeners = eventListeners
+	return opts
+}
+
+// WithEventListeners registers eventListeners to the span. The listeners are
+// notified of Structured events recorded by the span and its children. Once the
+// span is finished, the listeners are not notified of events any more even from
+// surviving child spans.
+//
+// The listeners will also be notified of StructuredEvents recorded on remote
+// spans, when the remote recording is imported by the span or one of its
+// children.
+//
+// The caller should not mutate `eventListeners` after calling
+// WithEventListeners.
+func WithEventListeners(eventListeners []EventListener) SpanOption {
+	return (eventListenersOption)(eventListeners)
 }
