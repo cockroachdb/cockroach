@@ -110,7 +110,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// release. This only happens as part of preparing the master branch for the
 		// next release. The release team runbooks, at time of writing, reflect
 		// this.
-		makeFixtureVersion := "21.2.0" // for 21.2 release in late 2021
+		makeFixtureVersion := "22.1.0-beta.3" // for 21.2 release in late 2021
 		makeVersionFixtureAndFatal(ctx, t, c, makeFixtureVersion)
 	}
 
