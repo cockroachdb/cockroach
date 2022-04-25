@@ -973,6 +973,7 @@ func (t *Tracer) newSpan(
 	goroutineID uint64,
 	startTime time.Time,
 	logTags *logtags.Buffer,
+	eventListeners []EventListener,
 	kind oteltrace.SpanKind,
 	otelSpan oteltrace.Span,
 	netTr trace.Trace,
@@ -984,7 +985,7 @@ func (t *Tracer) newSpan(
 	h := t.spanPool.Get().(*spanAllocHelper)
 	h.span.reset(
 		traceID, spanID, operation, goroutineID,
-		startTime, logTags, kind,
+		startTime, logTags, eventListeners, kind,
 		otelSpan, netTr, sterile)
 	return &h.span
 }
@@ -1019,6 +1020,7 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	c.mu.openChildren = nil
 	c.mu.recording.finishedChildren = nil
 	c.mu.tags = nil
+	c.mu.eventListeners = nil
 	c.mu.recording.logs.Discard()
 	c.mu.recording.structured.Discard()
 	c.mu.Unlock()
@@ -1182,7 +1184,7 @@ child operation: %s, tracer created at:
 
 	s := t.newSpan(
 		traceID, spanID, opName, uint64(goid.Get()),
-		startTime, opts.LogTags, opts.SpanKind,
+		startTime, opts.LogTags, opts.EventListeners, opts.SpanKind,
 		otelSpan, netTr, opts.Sterile)
 
 	s.i.crdb.enableRecording(opts.recordingType())
@@ -1221,6 +1223,7 @@ child operation: %s, tracer created at:
 					// parent of the child finish). Note that some methods on opts cannot
 					// be used from this moment on.
 					s.i.crdb.mu.parent = opts.Parent.move()
+					s.i.crdb.mu.recording.notifyParentOnStructuredEvent = parent.wantEventNotificationsLocked()
 				} else {
 					// The parent has already finished, so make this "child" a root.
 					localRoot = true
