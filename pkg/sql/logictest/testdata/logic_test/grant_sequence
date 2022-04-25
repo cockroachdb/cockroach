@@ -1,0 +1,142 @@
+# LogicTest: local
+
+statement ok
+CREATE SEQUENCE a START 1 INCREMENT BY 2
+
+statement ok
+CREATE USER readwrite
+
+statement ok
+SET ROLE readwrite
+
+statement error pq: user readwrite does not have SELECT privilege on relation a
+SELECT * FROM a;
+
+statement error pq: nextval\(\): user readwrite does not have UPDATE or USAGE privilege on relation a
+SELECT nextval('a')
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT USAGE ON SEQUENCE a TO readwrite
+
+statement ok
+SET ROLE readwrite
+
+query I
+SELECT nextval('a')
+----
+1
+
+query I
+SELECT currval('a')
+----
+1
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT ALL ON SEQUENCE a TO readwrite
+
+query TTTTTB colnames
+SHOW GRANTS ON SEQUENCE a
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       a           admin      ALL             true
+test           public       a           readwrite  ALL             true
+test           public       a           root       ALL             true
+
+statement ok
+REVOKE UPDATE ON SEQUENCE a FROM readwrite
+
+query TTTTTB colnames
+SHOW GRANTS ON SEQUENCE a
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       a           admin      ALL             true
+test           public       a           readwrite  CREATE          true
+test           public       a           readwrite  DELETE          true
+test           public       a           readwrite  DROP            true
+test           public       a           readwrite  GRANT           true
+test           public       a           readwrite  INSERT          true
+test           public       a           readwrite  SELECT          true
+test           public       a           readwrite  USAGE           true
+test           public       a           readwrite  ZONECONFIG      true
+test           public       a           root       ALL             true
+
+statement ok
+GRANT UPDATE ON SEQUENCE a TO readwrite
+
+statement ok
+SET ROLE readwrite
+
+query IIB
+SELECT * FROM a;
+----
+1  0  true
+
+query I
+SELECT nextval('a')
+----
+3
+
+query I
+SELECT nextval('a')
+----
+5
+
+statement ok
+SET ROLE root
+
+query TTTTTTTT
+SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
+----
+NULL  readwrite  test  public  a  CREATE      YES  NO
+NULL  readwrite  test  public  a  DELETE      YES  NO
+NULL  readwrite  test  public  a  DROP        YES  NO
+NULL  readwrite  test  public  a  GRANT       YES  NO
+NULL  readwrite  test  public  a  INSERT      YES  NO
+NULL  readwrite  test  public  a  SELECT      YES  YES
+NULL  readwrite  test  public  a  UPDATE      YES  NO
+NULL  readwrite  test  public  a  UPDATE      YES  NO
+NULL  readwrite  test  public  a  USAGE       YES  NO
+NULL  readwrite  test  public  a  ZONECONFIG  YES  NO
+
+statement ok
+CREATE SEQUENCE b START 1 INCREMENT BY 2
+
+statement ok
+GRANT ALL ON ALL SEQUENCES IN SCHEMA test.public TO readwrite;
+
+query TTTTTTTT
+SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
+----
+NULL  readwrite  test  public  a  ALL  YES  NO
+NULL  readwrite  test  public  b  ALL  YES  NO
+
+statement ok
+REVOKE SELECT ON ALL SEQUENCES IN SCHEMA test.public FROM readwrite;
+
+query TTTTTTTT
+SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
+----
+NULL  readwrite  test  public  a  CREATE      YES  NO
+NULL  readwrite  test  public  a  DELETE      YES  NO
+NULL  readwrite  test  public  a  DROP        YES  NO
+NULL  readwrite  test  public  a  GRANT       YES  NO
+NULL  readwrite  test  public  a  INSERT      YES  NO
+NULL  readwrite  test  public  a  UPDATE      YES  NO
+NULL  readwrite  test  public  a  UPDATE      YES  NO
+NULL  readwrite  test  public  a  USAGE       YES  NO
+NULL  readwrite  test  public  a  ZONECONFIG  YES  NO
+NULL  readwrite  test  public  b  CREATE      YES  NO
+NULL  readwrite  test  public  b  DELETE      YES  NO
+NULL  readwrite  test  public  b  DROP        YES  NO
+NULL  readwrite  test  public  b  GRANT       YES  NO
+NULL  readwrite  test  public  b  INSERT      YES  NO
+NULL  readwrite  test  public  b  UPDATE      YES  NO
+NULL  readwrite  test  public  b  UPDATE      YES  NO
+NULL  readwrite  test  public  b  USAGE       YES  NO
+NULL  readwrite  test  public  b  ZONECONFIG  YES  NO

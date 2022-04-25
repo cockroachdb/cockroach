@@ -64,8 +64,8 @@ func MaybeFixUsagePrivForTablesAndDBs(ptr **catpb.PrivilegeDescriptor) bool {
 // * fixing default privileges for the "root" user
 // * fixing maximum privileges for users.
 // * populating the owner field if previously empty.
-// * updating version field to Version21_2.
-// MaybeFixPrivileges can be removed after v21.2.
+// * updating version field older than 21.2 to Version21_2.
+// MaybeFixPrivileges can be removed after v22.2.
 func MaybeFixPrivileges(
 	ptr **catpb.PrivilegeDescriptor,
 	parentID, parentSchemaID descpb.ID,
