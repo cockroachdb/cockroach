@@ -124,6 +124,12 @@ type crdbSpanMu struct {
 	// lazyTags are tags whose values are only string-ified on demand. Each lazy
 	// tag is expected to implement either fmt.Stringer or LazyTag.
 	lazyTags []lazyTag
+
+	// eventListeners is a list of registered EventListener's that are notified
+	// whenever a Structured event is recorded by the span.
+	//
+	// Child spans will inherit this list of EventListeners.
+	eventListeners []EventListener
 }
 
 type lazyTag struct {
@@ -465,6 +471,14 @@ func (s *crdbSpan) recordFinishedChildren(children []tracingpb.RecordedSpan) {
 		return
 	}
 
+	// Notify the event listeners registered with s of the StructuredEvents on the
+	// children being added to s.
+	for _, span := range children {
+		for _, record := range span.StructuredRecords {
+			s.notifyEventListeners(record.Payload)
+		}
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.recordFinishedChildrenLocked(children)
@@ -533,6 +547,26 @@ func (s *crdbSpan) getLazyTagLocked(key string) (interface{}, bool) {
 	return nil, false
 }
 
+// registerEventListenerLocked registers an EventListener to listen for
+// Structured events recorded by the span.
+func (s *crdbSpan) registerEventListenerLocked(listener EventListener) {
+	if s.recordingType() == RecordingOff {
+		return
+	}
+	s.mu.eventListeners = append(s.mu.eventListeners, listener)
+}
+
+// notifyEventListeners notifies all the EventListeners registered with this
+// span about the recorded Structured item.
+func (s *crdbSpan) notifyEventListeners(item Structured) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, listener := range s.mu.eventListeners {
+		listener.Notify(item)
+	}
+}
+
 // record includes a log message in s' recording.
 func (s *crdbSpan) record(msg redact.RedactableString) {
 	if s.recordingType() != RecordingVerbose {
@@ -581,6 +615,10 @@ func (s *crdbSpan) recordStructured(item Structured) {
 		Payload: p,
 	}
 	s.recordInternal(sr, &s.mu.recording.structured)
+
+	// If there are any listener's registered with this span, notify them of the
+	// Structured event being recorded.
+	s.notifyEventListeners(item)
 }
 
 // memorySizable is implemented by log records and structured events for

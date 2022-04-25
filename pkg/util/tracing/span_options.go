@@ -101,6 +101,16 @@ func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
 	return 0
 }
 
+// parentEventListeners returns a copy of the parent span's event listeners.
+func (opts *spanOptions) parentEventListeners() []EventListener {
+	if !opts.Parent.empty() && !opts.Parent.IsNoop() {
+		opts.Parent.i.crdb.mu.Lock()
+		defer opts.Parent.i.crdb.mu.Unlock()
+		return opts.Parent.i.crdb.mu.eventListeners[:]
+	}
+	return nil
+}
+
 func (opts *spanOptions) recordingType() RecordingType {
 	if opts.recordingTypeExplicit {
 		return opts.recordingTypeOpt

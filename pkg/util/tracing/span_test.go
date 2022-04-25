@@ -700,3 +700,65 @@ func TestWithRemoteParentFromTraceInfo(t *testing.T) {
 	otelCtx := sp.i.otelSpan.SpanContext()
 	require.Equal(t, oteltrace.TraceID(otelTraceID), otelCtx.TraceID())
 }
+
+type mockEventListener struct {
+	eventsSeen int
+}
+
+func (f *mockEventListener) Notify(_ Structured) {
+	f.eventsSeen++
+}
+
+var _ EventListener = &mockEventListener{}
+
+func TestEventListener(t *testing.T) {
+	ctx := context.Background()
+	tr := NewTracerWithOpt(ctx, WithTracingMode(TracingModeActiveSpansRegistry))
+	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
+
+	rootEventListener := mockEventListener{}
+	sp.RegisterEventListener(&rootEventListener)
+
+	// Record a few Structured events.
+	sp.RecordStructured(&types.Int32Value{Value: 4})
+	sp.RecordStructured(&types.Int32Value{Value: 5})
+	require.Equal(t, 2, rootEventListener.eventsSeen)
+
+	// Start a child span that will inherit the listener.
+	childSp := tr.StartSpan("child", WithParent(sp))
+
+	childSp.RecordStructured(&types.Int32Value{Value: 6})
+	childSp.RecordStructured(&types.Int32Value{Value: 7})
+	require.Equal(t, 4, rootEventListener.eventsSeen)
+
+	// Register another event listener on only the child span.
+	childEventListener := mockEventListener{}
+	childSp.RegisterEventListener(&childEventListener)
+
+	// Record an event on the root span, and make sure we don't see it on the
+	// listener registered with the child span.
+	sp.RecordStructured(&types.Int32Value{Value: 8})
+	require.Equal(t, 5, rootEventListener.eventsSeen)
+	require.Equal(t, 0, childEventListener.eventsSeen)
+
+	childSp.RecordStructured(&types.Int32Value{Value: 9})
+	require.Equal(t, 6, rootEventListener.eventsSeen)
+	require.Equal(t, 1, childEventListener.eventsSeen)
+
+	// Finish the child span, and ensure the Structured events aren't re-seen by
+	// the listener when the child deposits them with the parent.
+	childSp.Finish()
+	require.Equal(t, 6, rootEventListener.eventsSeen)
+
+	// Create a remote child, and the root listener should not be inherited.
+	remoteSp := tr.StartSpan("remote-child", WithRemoteParentFromSpanMeta(sp.Meta()))
+	remoteSp.RecordStructured(&types.Int32Value{Value: 10})
+	require.Equal(t, 6, rootEventListener.eventsSeen)
+
+	// But, when we import the recording in the root span, the root listener
+	// should see these events.
+	sp.ImportRemoteSpans(remoteSp.FinishAndGetConfiguredRecording())
+	require.Equal(t, 7, rootEventListener.eventsSeen)
+
+	sp.Finish()
+}
