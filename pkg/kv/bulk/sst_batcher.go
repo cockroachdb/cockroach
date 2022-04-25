@@ -114,6 +114,13 @@ type SSTBatcher struct {
 	batchEndValue   []byte
 	flushKeyChecked bool
 	flushKey        roachpb.Key
+	// lastRange is the span and remaining capacity of the last range added to,
+	// for checking if the next addition would overfill it.
+	lastRange struct {
+		span            roachpb.Span
+		remaining       sz
+		nextExistingKey roachpb.Key
+	}
 
 	// stores on-the-fly stats for the SST if disallowShadowingBelow is set.
 	ms enginepb.MVCCStats
@@ -127,14 +134,6 @@ type SSTBatcher struct {
 
 		maxWriteTS hlc.Timestamp
 		totalRows  roachpb.BulkOpSummary
-
-		// lastRange is the span and remaining capacity of the last range added to,
-		// for checking if the next addition would overfill it.
-		lastRange struct {
-			span            roachpb.Span
-			remaining       sz
-			nextExistingKey roachpb.Key
-		}
 	}
 }
 
@@ -147,6 +146,7 @@ func MakeSSTBatcher(
 	disallowShadowingBelow hlc.Timestamp,
 	writeAtBatchTs bool,
 	splitFilledRanges bool,
+	mem mon.BoundAccount,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		name:                   name,
@@ -155,6 +155,7 @@ func MakeSSTBatcher(
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
 		disableSplits:          !splitFilledRanges,
+		mem:                    mem,
 	}
 	err := b.Reset(ctx)
 	return b, err
@@ -163,9 +164,9 @@ func MakeSSTBatcher(
 // MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
 // that might be received from a cluster to cluster stream.
 func MakeStreamSSTBatcher(
-	ctx context.Context, db *kv.DB, settings *cluster.Settings,
+	ctx context.Context, db *kv.DB, settings *cluster.Settings, mem mon.BoundAccount,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, ingestAll: true}
+	b := &SSTBatcher{db: db, settings: settings, ingestAll: true, mem: mem}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -396,19 +397,13 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	// than the size that range had when we last added to it, then we should split
 	// off the suffix of that range where this file starts and add it to that new
 	// range after scattering it.
-	b.mu.Lock()
-	shouldSplit := !b.disableSplits && b.mu.lastRange.span.ContainsKey(start) && size >= b.mu.lastRange.remaining
-	b.mu.Unlock()
-
-	if shouldSplit {
+	if !b.disableSplits && b.lastRange.span.ContainsKey(start) && size >= b.lastRange.remaining {
 		log.VEventf(ctx, 2, "%s batcher splitting full range before adding file starting at %s",
 			b.name, start)
 
 		expire := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Minute * 10).UnixNano()}
 
-		b.mu.Lock()
-		nextKey := b.mu.lastRange.nextExistingKey.Clone()
-		b.mu.Unlock()
+		nextKey := b.lastRange.nextExistingKey
 
 		// If there was existing data as of last add that is above the file we are
 		// about to add, split there first, both since that could be why the range
@@ -480,8 +475,9 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	batchTS := b.batchTS
 	var reserved int64
 
+	updatesLastRange := reason != rangeFlush
 	fn := func(ctx context.Context) error {
-		if err := b.addSSTable(ctx, batchTS, start, end, data, stats); err != nil {
+		if err := b.addSSTable(ctx, batchTS, start, end, data, stats, updatesLastRange); err != nil {
 			b.mem.Shrink(ctx, reserved)
 			return err
 		}
@@ -563,6 +559,7 @@ func (b *SSTBatcher) addSSTable(
 	start, end roachpb.Key,
 	sstBytes []byte,
 	stats enginepb.MVCCStats,
+	updatesLastRange bool,
 ) error {
 	sendStart := timeutil.Now()
 	iter, err := storage.NewMemSSTIterator(sstBytes, true)
@@ -651,12 +648,19 @@ func (b *SSTBatcher) addSSTable(
 					if b.writeAtBatchTS {
 						b.mu.maxWriteTS.Forward(br.Timestamp)
 					}
-					b.mu.lastRange.span = resp.RangeSpan
-					if resp.RangeSpan.Valid() {
-						b.mu.lastRange.remaining = sz(resp.AvailableBytes)
-						b.mu.lastRange.nextExistingKey = resp.FollowingLikelyNonEmptySpanStart
-					}
 					b.mu.Unlock()
+					// If this was sent async then, by the time the reply gets back, it
+					// might not be the last range anymore. We can just discard the last
+					// range reply in this case though because async sends are only used
+					// for SSTs sent due to range boundaries, i.e. when we are done with
+					// with that range anyway.
+					if updatesLastRange {
+						b.lastRange.span = resp.RangeSpan
+						if resp.RangeSpan.Valid() {
+							b.lastRange.remaining = sz(resp.AvailableBytes)
+							b.lastRange.nextExistingKey = resp.FollowingLikelyNonEmptySpanStart
+						}
+					}
 					files++
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, sendTime)
 					return nil
@@ -705,9 +709,7 @@ func (b *SSTBatcher) addSSTable(
 		// top level SST which is kept around to iterate over.
 		item.sstBytes = nil
 	}
-	b.mu.Lock()
-	b.stats.splitRetries += files - 1
-	b.mu.Unlock()
+	atomic.AddInt64(&b.stats.splitRetriesAtomic, int64(files-1))
 
 	log.VEventf(ctx, 3, "AddSSTable [%v, %v) added %d files and took %v", start, end, files, timeutil.Since(sendStart))
 	return nil
