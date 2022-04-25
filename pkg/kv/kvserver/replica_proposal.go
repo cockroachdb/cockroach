@@ -430,7 +430,7 @@ func (r *Replica) leasePostApplyLocked(
 var addSSTPreApplyWarn = struct {
 	threshold time.Duration
 	log.EveryN
-}{30 * time.Second, log.Every(5 * time.Second)}
+}{500 * time.Millisecond, log.Every(time.Second)}
 
 func addSSTablePreApply(
 	ctx context.Context,
