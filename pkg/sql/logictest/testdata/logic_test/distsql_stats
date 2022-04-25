@@ -1345,3 +1345,25 @@ CREATE TABLE t76867 (
 
 statement ok
 ANALYZE t76867
+
+# Regression tests for #80123. Collecting stats on system tables is allowed.
+statement ok
+ANALYZE system.locations
+
+# EXPLAIN output should indicate stats collected on system.locations.
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM system.locations] OFFSET 2
+----
+·
+• scan
+  estimated row count: 5 (100% of the table; stats collected <hidden> ago)
+  table: locations@primary
+  spans: FULL SCAN
+
+# Collecting stats on system.lease is disallowed.
+statement error pq: cannot create statistics on system.lease
+ANALYZE system.lease
+
+# Collecting stats on system.table_statistics is disallowed.
+statement error pq: cannot create statistics on system.table_statistics
+ANALYZE system.table_statistics
