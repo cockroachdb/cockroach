@@ -146,6 +146,7 @@ func MakeSSTBatcher(
 	disallowShadowingBelow hlc.Timestamp,
 	writeAtBatchTs bool,
 	splitFilledRanges bool,
+	mem mon.BoundAccount,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		name:                   name,
@@ -154,6 +155,7 @@ func MakeSSTBatcher(
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
 		disableSplits:          !splitFilledRanges,
+		mem:                    mem,
 	}
 	err := b.Reset(ctx)
 	return b, err
@@ -162,9 +164,9 @@ func MakeSSTBatcher(
 // MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
 // that might be received from a cluster to cluster stream.
 func MakeStreamSSTBatcher(
-	ctx context.Context, db *kv.DB, settings *cluster.Settings,
+	ctx context.Context, db *kv.DB, settings *cluster.Settings, mem mon.BoundAccount,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, ingestAll: true}
+	b := &SSTBatcher{db: db, settings: settings, ingestAll: true, mem: mem}
 	err := b.Reset(ctx)
 	return b, err
 }
