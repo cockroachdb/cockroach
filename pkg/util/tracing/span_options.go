@@ -75,6 +75,7 @@ type spanOptions struct {
 	ForceRealSpan                 bool                   // see WithForceRealSpan
 	SpanKind                      oteltrace.SpanKind     // see WithSpanKind
 	Sterile                       bool                   // see WithSterile
+	EventListeners                []EventListener        // see WithEventListeners
 
 	// recordingTypeExplicit is set if the WithRecording() option was used. In
 	// that case, spanOptions.recordingType() returns recordingTypeOpt below. If
@@ -437,4 +438,42 @@ func WithSterile() SpanOption {
 func (w withSterileOption) apply(opts spanOptions) spanOptions {
 	opts.Sterile = true
 	return opts
+}
+
+type eventListenersOption []EventListener
+
+var _ SpanOption = eventListenersOption{}
+
+func (ev eventListenersOption) apply(opts spanOptions) spanOptions {
+	// Applying an EventListener span option implies the span has at least
+	// `RecordingStructured` recording type. If the span explicitly specifies a
+	// `RecordingVerbose` recording type via the `WithRecording(...)` option, that
+	// will be respected instead.
+	if !opts.recordingTypeExplicit {
+		opts.recordingTypeExplicit = true
+		opts.recordingTypeOpt = RecordingStructured
+	}
+	eventListeners := ([]EventListener)(ev)
+	opts.EventListeners = eventListeners
+	return opts
+}
+
+// WithEventListeners registers eventListeners to the span. The listeners are
+// notified of Structured events recorded by the span and its children. Once the
+// span is finished, the listeners are not notified of events any more even from
+// surviving child spans.
+//
+// The listeners will also be notified of StructuredEvents recorded on remote
+// spans, when the remote recording is imported by the span or one of its
+// children. Note, the listeners will be notified of StructuredEvents in the
+// imported remote recording out of order.
+//
+// WithEventListeners implies a `RecordingStructured` recording type for the
+// span. If the recording type has been explicitly set to `RecordingVerbose` via
+// the `WithRecording(...) option, that will be respected instead.
+//
+// The caller should not mutate `eventListeners` after calling
+// WithEventListeners.
+func WithEventListeners(eventListeners []EventListener) SpanOption {
+	return (eventListenersOption)(eventListeners)
 }
