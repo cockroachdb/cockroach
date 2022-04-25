@@ -74,7 +74,6 @@ func getTopologicallySortedTableIDs(
 		it, err := evalPlanner.QueryIteratorEx(
 			ctx,
 			"crdb_internal.show_create_all_tables",
-			txn,
 			sessiondata.NoSessionDataOverride,
 			query,
 			tid,
@@ -161,7 +160,6 @@ func getTableIDs(
 	it, err := evalPlanner.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
-		txn,
 		sessiondata.NoSessionDataOverride,
 		query,
 		dbName,
@@ -250,7 +248,6 @@ func getCreateStatement(
 	row, err := evalPlanner.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
-		txn,
 		sessiondata.NoSessionDataOverride,
 		query,
 		id,
@@ -281,7 +278,6 @@ func getAlterStatements(
 	row, err := evalPlanner.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
-		txn,
 		sessiondata.NoSessionDataOverride,
 		query,
 		id,
