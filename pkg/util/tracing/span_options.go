@@ -75,6 +75,7 @@ type spanOptions struct {
 	ForceRealSpan                 bool                   // see WithForceRealSpan
 	SpanKind                      oteltrace.SpanKind     // see WithSpanKind
 	Sterile                       bool                   // see WithSterile
+	EventListeners                []EventListener        // see WithEventListeners
 
 	// recordingTypeExplicit is set if the WithRecording() option was used. In
 	// that case, spanOptions.recordingType() returns recordingTypeOpt below. If
@@ -99,6 +100,26 @@ func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
 		return opts.RemoteParent.spanID
 	}
 	return 0
+}
+
+// notifyParentOnStructuredEvent returns true if the parent span was created
+// WithEventListeners(...) or the parent span has been configured to notify its
+// parent span on a StructuredEvent recording.
+func (opts *spanOptions) notifyParentOnStructuredEvent() bool {
+	if opts.Parent.empty() || opts.Parent.IsNoop() {
+		return false
+	}
+
+	var notifyParentOnStructuredEvent bool
+	parent := opts.Parent.i.crdb
+	if parent == nil {
+		return false
+	}
+	parent.withLock(func() {
+		notifyParentOnStructuredEvent = len(parent.mu.eventListeners) != 0 ||
+			parent.mu.recording.notifyParentOnStructuredEvent
+	})
+	return notifyParentOnStructuredEvent
 }
 
 func (opts *spanOptions) recordingType() RecordingType {
@@ -438,4 +459,24 @@ func WithSterile() SpanOption {
 func (w withSterileOption) apply(opts spanOptions) spanOptions {
 	opts.Sterile = true
 	return opts
+}
+
+type eventListenersOption []EventListener
+
+var _ SpanOption = eventListenersOption{}
+
+func (ev eventListenersOption) apply(opts spanOptions) spanOptions {
+	eventListeners := ([]EventListener)(ev)
+	opts.EventListeners = eventListeners
+	return opts
+}
+
+// WithEventListeners registers eventListeners to the span. The listeners are
+// notified of Structured events recorded by the span and its children. The
+// listeners are removed when the span is Finish()'ed.
+//
+// The listeners will also be notified of StructuredEvents recorded on remote
+// spans, when the Recording is imported using sp.ImportRemoteSpans.
+func WithEventListeners(eventListeners []EventListener) SpanOption {
+	return (eventListenersOption)(eventListeners)
 }

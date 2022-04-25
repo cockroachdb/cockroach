@@ -973,10 +973,12 @@ func (t *Tracer) newSpan(
 	goroutineID uint64,
 	startTime time.Time,
 	logTags *logtags.Buffer,
+	eventListeners []EventListener,
 	kind oteltrace.SpanKind,
 	otelSpan oteltrace.Span,
 	netTr trace.Trace,
 	sterile bool,
+	notifyParentOnStructuredEvent bool,
 ) *Span {
 	if t.testing.MaintainAllocationCounters {
 		atomic.AddInt32(&t.spansCreated, 1)
@@ -984,8 +986,8 @@ func (t *Tracer) newSpan(
 	h := t.spanPool.Get().(*spanAllocHelper)
 	h.span.reset(
 		traceID, spanID, operation, goroutineID,
-		startTime, logTags, kind,
-		otelSpan, netTr, sterile)
+		startTime, logTags, eventListeners, kind,
+		otelSpan, netTr, sterile, notifyParentOnStructuredEvent)
 	return &h.span
 }
 
@@ -1019,6 +1021,7 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	c.mu.openChildren = nil
 	c.mu.recording.finishedChildren = nil
 	c.mu.tags = nil
+	c.mu.eventListeners = nil
 	c.mu.recording.logs.Discard()
 	c.mu.recording.structured.Discard()
 	c.mu.Unlock()
@@ -1179,11 +1182,12 @@ child operation: %s, tracer created at:
 		traceID = tracingpb.TraceID(randutil.FastInt63())
 	}
 	spanID := tracingpb.SpanID(randutil.FastInt63())
+	notifyParentOnStructuredEvent := opts.notifyParentOnStructuredEvent()
 
 	s := t.newSpan(
 		traceID, spanID, opName, uint64(goid.Get()),
-		startTime, opts.LogTags, opts.SpanKind,
-		otelSpan, netTr, opts.Sterile)
+		startTime, opts.LogTags, opts.EventListeners, opts.SpanKind,
+		otelSpan, netTr, opts.Sterile, notifyParentOnStructuredEvent)
 
 	s.i.crdb.enableRecording(opts.recordingType())
 
