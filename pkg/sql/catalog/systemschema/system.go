@@ -683,7 +683,7 @@ CREATE TABLE system.hot_ranges (
 	tenant_id INT NOT NULL,
 	info BYTES NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (sample_ts, tenant_id),
-	FAMILY "primary" (sample_ts, tenant_id)
+	FAMILY "primary" (sample_ts, tenant_id, info)
 );`
 )
 
@@ -2418,10 +2418,11 @@ var (
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
-					Name:        "primary",
-					ID:          0,
-					ColumnNames: []string{"sample_ts", "tenant_id", "info"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+					Name:            "primary",
+					ID:              0,
+					DefaultColumnID: 3,
+					ColumnNames:     []string{"sample_ts", "tenant_id", "info"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
 				},
 			},
 			descpb.IndexDescriptor{
