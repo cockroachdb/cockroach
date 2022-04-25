@@ -8,19 +8,16 @@
 
 package balancer
 
-import "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+import (
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+)
 
 // selectTenantPod selects a tenant pod from the given list to receive incoming
-// traffic. Pods are weighted by their reported CPU load. rand must be a pseudo
-// random number within the bounds [0, 1). It is suggested to use Float32() of a
-// PseudoRand instance that is guarded by a mutex.
-//
-//	rngMu.Lock()
-//	rand := rng.Float32()
-//	rngMu.Unlock()
-//	selectTenantPod(rand, pods)
-func selectTenantPod(rand float32, pods []*tenant.Pod) *tenant.Pod {
-	if len(pods) == 0 {
+// traffic. Pods are selected based on the least connections algorithm.
+func selectTenantPod(pods []*tenant.Pod, entry *tenantEntry) *tenant.Pod {
+	if len(pods) == 0 || entry == nil {
 		return nil
 	}
 
@@ -28,22 +25,32 @@ func selectTenantPod(rand float32, pods []*tenant.Pod) *tenant.Pod {
 		return pods[0]
 	}
 
-	totalLoad := float32(0)
-	for _, pod := range pods {
-		totalLoad += 1 - pod.Load
+	// computeActiveCounts returns a mapping of pod addresses to number of active
+	// connections.
+	computeActiveCounts := func() map[string]int {
+		entry.mu.Lock()
+		defer entry.mu.Unlock()
+
+		counts := make(map[string]int)
+		for a := range entry.assignments.active {
+			counts[a.Addr()]++
+		}
+		return counts
 	}
 
-	totalLoad *= rand
-
+	// It is possible that connections that came in at the same time may get
+	// routed to the same pod since we don't create a new ServerAssignment
+	// object while holding entry's lock. This is fine for now. Since we create
+	// a new ServerAssignment before dialing the pod, in practice, this window
+	// is very small.
+	activeCounts := computeActiveCounts()
+	var minPod *tenant.Pod
+	minCount := math.MaxInt32
 	for _, pod := range pods {
-		totalLoad -= 1 - pod.Load
-		if totalLoad < 0 {
-			return pod
+		if activeCounts[pod.Addr] < minCount {
+			minCount = activeCounts[pod.Addr]
+			minPod = pod
 		}
 	}
-
-	// This is unreachable provided that Load is [0, 1] and rand is [0, 1). We
-	// fallback to the final pod in the list to prevent complications if we've
-	// received malformed .Loads.
-	return pods[len(pods)-1]
+	return minPod
 }

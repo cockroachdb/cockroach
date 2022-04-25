@@ -520,6 +520,99 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		require.Equal(t, 2, dialSQLServerCount)
 		require.Equal(t, 1, reportFailureFnCount)
 	})
+
+	t.Run("load balancing", func(t *testing.T) {
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+
+		crdbConn, _ := net.Pipe()
+		defer crdbConn.Close()
+
+		var mu struct {
+			syncutil.Mutex
+			pods map[string]struct{}
+		}
+		mu.pods = make(map[string]struct{})
+		addPod := func(addr string) {
+			mu.Lock()
+			defer mu.Unlock()
+			mu.pods[addr] = struct{}{}
+		}
+		removePod := func(addr string) {
+			mu.Lock()
+			defer mu.Unlock()
+			delete(mu.pods, addr)
+		}
+
+		tenantID := roachpb.MakeTenantID(42)
+		directoryCache := &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				mu.Lock()
+				defer mu.Unlock()
+
+				pods := make([]*tenant.Pod, 0, len(mu.pods))
+				for addr := range mu.pods {
+					pods = append(pods, &tenant.Pod{
+						TenantID: tenantID.ToUint64(),
+						Addr:     addr,
+						State:    tenant.RUNNING,
+					})
+				}
+				return pods, nil
+			},
+		}
+
+		b, err := balancer.NewBalancer(
+			ctx,
+			stopper,
+			nil, /* metrics */
+			directoryCache,
+			balancer.NoRebalanceLoop(),
+		)
+		require.NoError(t, err)
+
+		c := &connector{
+			ClusterName:    "my-foo",
+			TenantID:       tenantID,
+			DirectoryCache: directoryCache,
+			Balancer:       b,
+		}
+
+		// Create two pods with similar number of assignments.
+		const (
+			addr1 = "127.0.0.10:80"
+			addr2 = "127.0.0.20:90"
+		)
+		addPod(addr1)
+		addPod(addr2)
+
+		// Requests should be evenly distributed.
+		responses := map[string]int{}
+		c.testingKnobs.dialSQLServer = func(serverAssignment *balancer.ServerAssignment) (net.Conn, error) {
+			responses[serverAssignment.Addr()]++
+			return crdbConn, nil
+		}
+		for i := 0; i < 100; i++ {
+			conn, err := c.dialTenantCluster(ctx, nil /* requester */)
+			require.NoError(t, err)
+			require.Equal(t, crdbConn, conn)
+		}
+		require.Equal(t, map[string]int{addr1: 50, addr2: 50}, responses)
+
+		// Delete the first pod.
+		removePod(addr1)
+
+		responses = map[string]int{}
+		for i := 0; i < 100; i++ {
+			conn, err := c.dialTenantCluster(ctx, nil /* requester */)
+			require.NoError(t, err)
+			require.Equal(t, crdbConn, conn)
+		}
+		require.Equal(t, map[string]int{addr2: 100}, responses)
+	})
 }
 
 func TestConnector_lookupAddr(t *testing.T) {
@@ -554,8 +647,8 @@ func TestConnector_lookupAddr(t *testing.T) {
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
 				return []*tenant.Pod{
-					{Addr: "127.0.0.10:70", State: tenant.DRAINING},
-					{Addr: "127.0.0.10:80", State: tenant.RUNNING},
+					{TenantID: c.TenantID.ToUint64(), Addr: "127.0.0.10:70", State: tenant.DRAINING},
+					{TenantID: c.TenantID.ToUint64(), Addr: "127.0.0.10:80", State: tenant.RUNNING},
 				}, nil
 			},
 		}
@@ -564,87 +657,6 @@ func TestConnector_lookupAddr(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "127.0.0.10:80", addr)
 		require.Equal(t, 1, lookupTenantPodsFnCount)
-	})
-
-	t.Run("load balancing", func(t *testing.T) {
-		var mu struct {
-			syncutil.Mutex
-			pods map[string]float32
-		}
-		mu.pods = make(map[string]float32)
-		addPod := func(addr string, load float32) {
-			mu.Lock()
-			defer mu.Unlock()
-			mu.pods[addr] = load
-		}
-		removePod := func(addr string) {
-			mu.Lock()
-			defer mu.Unlock()
-			delete(mu.pods, addr)
-		}
-		c := &connector{
-			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer,
-		}
-		c.DirectoryCache = &testTenantDirectoryCache{
-			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
-			) ([]*tenant.Pod, error) {
-				mu.Lock()
-				defer mu.Unlock()
-
-				pods := make([]*tenant.Pod, 0, len(mu.pods))
-				for addr, load := range mu.pods {
-					pods = append(pods, &tenant.Pod{
-						Addr:  addr,
-						Load:  load,
-						State: tenant.RUNNING,
-					})
-				}
-				return pods, nil
-			},
-		}
-
-		// Create two pods with similar load.
-		const (
-			addr1 = "127.0.0.10:80"
-			addr2 = "127.0.0.20:90"
-		)
-		addPod(addr1, 0)
-		addPod(addr2, 0)
-
-		// lookupAddr should evenly distribute the load.
-		responses := map[string]int{}
-		for i := 0; i < 100; i++ {
-			addr, err := c.lookupAddr(ctx)
-			require.NoError(t, err)
-			responses[addr]++
-		}
-		require.InDelta(t, responses[addr1], 50, 25)
-		require.InDelta(t, responses[addr2], 50, 25)
-
-		// Adjust load such that the distribution will be a 1/9 split.
-		addPod(addr1, 0.1)
-		addPod(addr2, 0.9)
-
-		// We should see that the distribution is skewed towards addr1.
-		responses = map[string]int{}
-		for i := 0; i < 100; i++ {
-			addr, err := c.lookupAddr(ctx)
-			require.NoError(t, err)
-			responses[addr]++
-		}
-		require.InDelta(t, responses[addr1], 90, 25)
-		require.InDelta(t, responses[addr2], 10, 25)
-
-		// Delete the first pod.
-		removePod(addr1)
-
-		// Lookup will still work.
-		addr, err := c.lookupAddr(ctx)
-		require.NoError(t, err)
-		require.Equal(t, addr2, addr)
 	})
 
 	t.Run("FailedPrecondition error", func(t *testing.T) {
