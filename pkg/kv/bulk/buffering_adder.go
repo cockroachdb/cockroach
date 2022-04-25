@@ -370,9 +370,10 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 			if strings.Contains(err.Error(), "predicate") {
 				log.VEventf(ctx, 1, "%s adder split at %s rejected, had previously split and no longer included %s",
 					b.name, splitKey, predicateKey)
-				continue
+			} else {
+				log.Warningf(ctx, "failed to create initial split %s: %s", splitKey, err)
 			}
-			return err
+			continue
 		}
 		toScatter = append(toScatter, splitKey)
 	}
