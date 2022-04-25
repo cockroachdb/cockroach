@@ -1371,6 +1371,15 @@ func removeDeadReplicas(
 			batch.Close()
 			return nil, err
 		}
+		// Write the new replica ID to RaftReplicaIDKey.
+		replicas := desc.Replicas().Descriptors()
+		if len(replicas) != 1 {
+			return nil, errors.Errorf("expected 1 replica, got %v", replicas)
+		}
+		if err := sl.SetRaftReplicaID(ctx, batch, replicas[0].ReplicaID); err != nil {
+			return nil, errors.Wrapf(err, "failed to write new replica ID for range %d", desc.RangeID)
+		}
+		// Update MVCC stats.
 		if err := sl.SetMVCCStats(ctx, batch, &ms); err != nil {
 			return nil, errors.Wrap(err, "updating MVCCStats")
 		}
