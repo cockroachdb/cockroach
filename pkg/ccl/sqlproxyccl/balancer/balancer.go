@@ -236,7 +236,7 @@ func (b *Balancer) processQueue(ctx context.Context) {
 
 			// Each request is retried up to maxTransferAttempts.
 			for i := 0; i < maxTransferAttempts && ctx.Err() == nil; i++ {
-				err := req.conn.TransferConnection(req.dst)
+				err := req.conn.TransferConnection()
 				if err == nil || errors.Is(err, context.Canceled) ||
 					req.dst == req.conn.ServerRemoteAddr() {
 					break
