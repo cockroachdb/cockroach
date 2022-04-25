@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -193,6 +195,18 @@ func (p *planner) getAndValidateTypedClusterSetting(
 }
 
 func (n *setClusterSettingNode) startExec(params runParams) error {
+
+	if strings.Contains(n.name, "sql.defaults") {
+		params.p.BufferClientNotice(
+			params.ctx,
+			errors.WithHintf(
+				pgnotice.Newf("Setting global default %s`;", n.name),
+				"use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: %s",
+				docs.URL("https://www.cockroachlabs.com/docs/stable/alter-role.html#set-default-session-variable-values-for-a-role"),
+			),
+		)
+	}
+
 	if !params.extendedEvalCtx.TxnIsSingleStmt {
 		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a multi-statement transaction")
 	}
