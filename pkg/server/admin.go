@@ -3402,6 +3402,28 @@ func (c *adminPrivilegeChecker) requireViewActivityOrViewActivityRedactedPermiss
 	return nil
 }
 
+// hasViewActivityRedactedPermissionAndNoAdmin returns true if the user from the context
+// has the VIEWACTIVITYREDACTED permission and no admin role. Error returned is a gRPC error.
+func (c *adminPrivilegeChecker) hasViewActivityRedactedPermissionAndNoAdmin(
+	ctx context.Context,
+) (bool, error) {
+	userName, isAdmin, err := c.getUserAndRole(ctx)
+	if err != nil {
+		return false, serverError(ctx, err)
+	}
+
+	if isAdmin {
+		return false, nil
+	}
+
+	hasViewActivityRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
+	if err != nil {
+		return false, serverError(ctx, err)
+	}
+
+	return hasViewActivityRedacted, nil
+}
+
 // This function requires that the user have the VIEWACTIVITY role, but does not
 // have the VIEWACTIVITYREDACTED role.
 // This function's error return is a gRPC error.

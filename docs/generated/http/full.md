@@ -2125,12 +2125,12 @@ ActiveQuery represents a query in flight on some Session.
 | ----- | ---- | ----- | ----------- | -------------- |
 | id | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | ID of the query (uint128 presented as a hexadecimal string). | [reserved](#support-status) |
 | txn_id | [bytes](#cockroach.server.serverpb.ListSessionsResponse-bytes) |  | The UUID of the transaction this query is running in. | [reserved](#support-status) |
-| sql | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | SQL query string specified by the user. | [reserved](#support-status) |
+| sql | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Full SQL query string specified by the user. This field is unset if the user does not have admin or VIEWACTIVITY roles, and the user did not issue the query. | [reserved](#support-status) |
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | Start timestamp of this query. | [reserved](#support-status) |
 | is_distributed | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if this query is distributed. | [reserved](#support-status) |
 | phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. | [reserved](#support-status) |
 | progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  | progress is an estimate of the fraction of this query that has been processed. | [reserved](#support-status) |
-| sql_no_constants | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. | [reserved](#support-status) |
+| sql_no_constants | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL query with constants removed. | [reserved](#support-status) |
 | sql_summary | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | A summarized version of the sql query. | [reserved](#support-status) |
 
 
@@ -2259,12 +2259,12 @@ ActiveQuery represents a query in flight on some Session.
 | ----- | ---- | ----- | ----------- | -------------- |
 | id | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | ID of the query (uint128 presented as a hexadecimal string). | [reserved](#support-status) |
 | txn_id | [bytes](#cockroach.server.serverpb.ListSessionsResponse-bytes) |  | The UUID of the transaction this query is running in. | [reserved](#support-status) |
-| sql | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | SQL query string specified by the user. | [reserved](#support-status) |
+| sql | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Full SQL query string specified by the user. This field is unset if the user does not have admin or VIEWACTIVITY roles, and the user did not issue the query. | [reserved](#support-status) |
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | Start timestamp of this query. | [reserved](#support-status) |
 | is_distributed | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if this query is distributed. | [reserved](#support-status) |
 | phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. | [reserved](#support-status) |
 | progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  | progress is an estimate of the fraction of this query that has been processed. | [reserved](#support-status) |
-| sql_no_constants | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. | [reserved](#support-status) |
+| sql_no_constants | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL query with constants removed. | [reserved](#support-status) |
 | sql_summary | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | A summarized version of the sql query. | [reserved](#support-status) |
 
 
@@ -4861,6 +4861,95 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | events | [cockroach.sql.contentionpb.ExtendedContentionEvent](#cockroach.server.serverpb.TransactionContentionEventsResponse-cockroach.sql.contentionpb.ExtendedContentionEvent) | repeated |  | [reserved](#support-status) |
 
+
+
+
+
+
+
+## ClusterLocksState
+
+`GET /_status/clusterlocks`
+
+Get the state of locks in the cluster.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| locks | [ClusterLocksStateResponse.LockInfo](#cockroach.server.serverpb.ClusterLocksStateResponse-cockroach.server.serverpb.ClusterLocksStateResponse.LockInfo) | repeated | The lock the txn is either holding or waiting for. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ClusterLocksStateResponse-cockroach.server.serverpb.ClusterLocksStateResponse.LockInfo"></a>
+#### ClusterLocksStateResponse.LockInfo
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| database_name | [string](#cockroach.server.serverpb.ClusterLocksStateResponse-string) |  |  | [reserved](#support-status) |
+| table_name | [string](#cockroach.server.serverpb.ClusterLocksStateResponse-string) |  |  | [reserved](#support-status) |
+| index_name | [string](#cockroach.server.serverpb.ClusterLocksStateResponse-string) |  |  | [reserved](#support-status) |
+| schema_name | [string](#cockroach.server.serverpb.ClusterLocksStateResponse-string) |  |  | [reserved](#support-status) |
+| key_pretty_or_redacted | [string](#cockroach.server.serverpb.ClusterLocksStateResponse-string) |  | The lock key as a string, empty for VIEWACTIVITYREDACTED. | [reserved](#support-status) |
+| txn_lock_holder | [ClusterLocksStateResponse.LockTxnInfo](#cockroach.server.serverpb.ClusterLocksStateResponse-cockroach.server.serverpb.ClusterLocksStateResponse.LockTxnInfo) |  | The id of the transaction holding the lock. | [reserved](#support-status) |
+| waiting_txns | [ClusterLocksStateResponse.LockTxnInfo](#cockroach.server.serverpb.ClusterLocksStateResponse-cockroach.server.serverpb.ClusterLocksStateResponse.LockTxnInfo) | repeated | List of transactions waiting for this lock. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ClusterLocksStateResponse-cockroach.server.serverpb.ClusterLocksStateResponse.LockTxnInfo"></a>
+#### ClusterLocksStateResponse.LockTxnInfo
+
+A transaction that are holding or waiting for the lock.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [bytes](#cockroach.server.serverpb.ClusterLocksStateResponse-bytes) |  |  | [reserved](#support-status) |
+| lock_strength | [string](#cockroach.server.serverpb.ClusterLocksStateResponse-string) |  | The strength at which the txn acquires this lock. | [reserved](#support-status) |
+| duration | [google.protobuf.Duration](#cockroach.server.serverpb.ClusterLocksStateResponse-google.protobuf.Duration) |  | The duration the transaction has been holding or waiting for the lock. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ClusterLocksStateResponse-cockroach.server.serverpb.ClusterLocksStateResponse.LockTxnInfo"></a>
+#### ClusterLocksStateResponse.LockTxnInfo
+
+A transaction that are holding or waiting for the lock.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [bytes](#cockroach.server.serverpb.ClusterLocksStateResponse-bytes) |  |  | [reserved](#support-status) |
+| lock_strength | [string](#cockroach.server.serverpb.ClusterLocksStateResponse-string) |  | The strength at which the txn acquires this lock. | [reserved](#support-status) |
+| duration | [google.protobuf.Duration](#cockroach.server.serverpb.ClusterLocksStateResponse-google.protobuf.Duration) |  | The duration the transaction has been holding or waiting for the lock. | [reserved](#support-status) |
 
 
 

@@ -638,12 +638,12 @@
           "x-go-name": "Progress"
         },
         "sql": {
-          "description": "SQL query string specified by the user.",
+          "description": "Full SQL query string specified by the user. This field is unset if the user\ndoes not have admin or VIEWACTIVITY roles, and the user did not issue the\nquery.",
           "type": "string",
           "x-go-name": "Sql"
         },
         "sql_no_constants": {
-          "description": "The SQL statement fingerprint, compatible with StatementStatisticsKey.",
+          "description": "The SQL query with constants removed.",
           "type": "string",
           "x-go-name": "SqlNoConstants"
         },

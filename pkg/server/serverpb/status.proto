@@ -864,6 +864,7 @@ message TxnInfo {
 message ActiveQuery {
   // ID of the query (uint128 presented as a hexadecimal string).
   string id = 1 [ (gogoproto.customname) = "ID" ];
+
   // The UUID of the transaction this query is running in.
   bytes txn_id = 7 [
     (gogoproto.customname) = "TxnID",
@@ -871,11 +872,14 @@ message ActiveQuery {
     (gogoproto.customtype) =
       "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
+
   // SQL query string specified by the user.
   string sql = 2;
+
   // Start timestamp of this query.
   google.protobuf.Timestamp start = 3
       [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+
   // True if this query is distributed.
   bool is_distributed = 4;
 
@@ -884,6 +888,7 @@ message ActiveQuery {
     PREPARING = 0;
     EXECUTING = 1;
   }
+
   // phase stores the current phase of execution for this query.
   Phase phase = 5;
 
@@ -891,7 +896,7 @@ message ActiveQuery {
   // processed.
   float progress = 6;
 
-  // The SQL statement fingerprint, compatible with StatementStatisticsKey.
+  // The SQL query with constants removed.
   string sql_no_constants = 8;
 
   // A summarized version of the sql query.
@@ -978,6 +983,47 @@ message ListSessionsResponse {
   // If set and non-empty, indicates the prefix to application_name
   // used for statements/queries issued internally by CockroachDB.
   string internal_app_name_prefix = 3;
+}
+
+message ClusterLocksStateRequest {}
+
+message ClusterLocksStateResponse {
+  // A transaction that are holding or waiting for the lock.
+  message LockTxnInfo {
+    bytes id = 1 [
+      (gogoproto.customname) = "TxnID",
+      (gogoproto.nullable) = false,
+      (gogoproto.customtype) =
+        "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+    ];
+
+    // The strength at which the txn acquires this lock.
+    string lock_strength = 2;
+
+
+    // The duration the transaction has been holding or waiting for the lock.
+    google.protobuf.Duration duration = 4 [(gogoproto.nullable) = false,
+      (gogoproto.stdduration) = true];
+  }
+
+  message LockInfo {
+    string database_name = 1;
+    string table_name = 2;
+    string index_name = 3;
+    string schema_name = 4;
+
+    // The lock key as a string, empty for VIEWACTIVITYREDACTED.
+    string key_pretty_or_redacted = 5;
+
+    // The id of the transaction holding the lock.
+    LockTxnInfo txn_lock_holder = 6;
+
+    // List of transactions waiting for this lock.
+    repeated LockTxnInfo waiting_txns = 7;
+  }
+
+  // The lock the txn is either holding or waiting for.
+  repeated LockInfo locks = 1;
 }
 
 // Request object for issuing a query cancel request.
@@ -2205,6 +2251,13 @@ service Status {
   rpc TransactionContentionEvents(TransactionContentionEventsRequest) returns (TransactionContentionEventsResponse) {
     option (google.api.http) = {
       get: "/_status/transactioncontentionevents"
+    };
+  }
+
+  // Get the state of locks in the cluster.
+  rpc ClusterLocksState(ClusterLocksStateRequest) returns (ClusterLocksStateResponse) {
+    option (google.api.http) = {
+      get: "/_status/clusterlocks"
     };
   }
 }
