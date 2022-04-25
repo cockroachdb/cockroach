@@ -95,3 +95,15 @@ RETURNING span_count
 		return nil
 	})
 }
+
+func hotRangesTableMigration(
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
+) error {
+	if d.Codec.ForSystemTenant() {
+		return nil // only applicable for secondary tenants
+	}
+
+	return createSystemTable(
+		ctx, d.DB, d.Codec, systemschema.HotRangesTable,
+	)
+}

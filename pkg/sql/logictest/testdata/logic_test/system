@@ -16,6 +16,7 @@ public  comments                         table  NULL  0  NULL
 public  database_role_settings           table  NULL  0  NULL
 public  descriptor                       table  NULL  0  NULL
 public  eventlog                         table  NULL  0  NULL
+public  hot_ranges                       table  NULL  0  NULL
 public  jobs                             table  NULL  0  NULL
 public  join_tokens                      table  NULL  0  NULL
 public  lease                            table  NULL  0  NULL
@@ -133,6 +134,7 @@ SELECT id FROM system.descriptor
 45
 46
 47
+48
 50
 100
 101
@@ -340,6 +342,16 @@ system  public  eventlog                         root    GRANT   true
 system  public  eventlog                         root    INSERT  true
 system  public  eventlog                         root    SELECT  true
 system  public  eventlog                         root    UPDATE  true
+system  public  hot_ranges                       admin   DELETE  true
+system  public  hot_ranges                       admin   GRANT   true
+system  public  hot_ranges                       admin   INSERT  true
+system  public  hot_ranges                       admin   SELECT  true
+system  public  hot_ranges                       admin   UPDATE  true
+system  public  hot_ranges                       root    DELETE  true
+system  public  hot_ranges                       root    GRANT   true
+system  public  hot_ranges                       root    INSERT  true
+system  public  hot_ranges                       root    SELECT  true
+system  public  hot_ranges                       root    UPDATE  true
 system  public  jobs                             admin   DELETE  true
 system  public  jobs                             admin   GRANT   true
 system  public  jobs                             admin   INSERT  true

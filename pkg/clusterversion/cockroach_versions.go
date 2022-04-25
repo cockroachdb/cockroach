@@ -600,7 +600,7 @@ var versionsSingleton = keyedVersions{
 	},
 	{
 		Key:     HotRangesTable,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 114},
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 114},
 	},
 
 	// *************************************************
