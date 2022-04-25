@@ -7,6 +7,7 @@ ALL_TESTS = [
     "//pkg/bench/tpcc:tpcc_test",
     "//pkg/bench:bench_test",
     "//pkg/blobs:blobs_test",
+    "//pkg/build/starlarkutil:starlarkutil_test",
     "//pkg/build/util:util_test",
     "//pkg/ccl/backupccl/backupresolver:backupresolver_test",
     "//pkg/ccl/backupccl:backupccl_test",
