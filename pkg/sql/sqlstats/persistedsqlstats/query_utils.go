@@ -20,16 +20,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(azhng): add WHERE clause to ensure we don't delete stats that's less
-//  than 1 hour old. Perhaps even add a cluster setting to configure the that
-//  value.
 var (
 	// N.B.: statement and transaction statistics system tables has hash sharded
 	//       primary index with number of buckets. A "wide scan" is a scan node
-	//       that scans over the entire bucket of the hash sharded index.
+	//       that scans over the entire bucket (until the latest aggregation
+	//       interval) of the hash sharded index.
 	//       In the EXPLAIN output, a wide scan looks like the following:
 	// 				```
-	// 				Spans: /0 - /1
+	// 				Spans: /0 - /1/{some TimestampTZ indicating latest agg interval}
 	// 				```
 	//       Running large number of wide scans is extremely risky as its
 	//       performance can degrade overtime as MVCC garbage accumulates. Hence,
@@ -43,6 +41,7 @@ var (
 		  SELECT aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 		  FROM system.statement_statistics
 		  WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1
+				AND aggregated_ts < $3
 		  ORDER BY aggregated_ts ASC
 		  LIMIT $2
 		) RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id`
@@ -53,6 +52,7 @@ var (
 		  SELECT aggregated_ts, fingerprint_id, app_name, node_id
 		  FROM system.transaction_statistics
 		  WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = $1
+				AND aggregated_ts < $3
 		  ORDER BY aggregated_ts ASC
 		  LIMIT $2
 		) RETURNING aggregated_ts, fingerprint_id, app_name, node_id`
@@ -71,8 +71,9 @@ var (
 		      plan_hash,
 		      app_name,
 		      node_id                   
-				) >= ($3, $4, $5, $6, $7, $8)
+				) >= ($4, $5, $6, $7, $8, $9)
 		  )
+				AND aggregated_ts < $3
 		  ORDER BY aggregated_ts ASC
 		  LIMIT $2
 		) RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id`
@@ -89,8 +90,9 @@ var (
 					fingerprint_id,
 		      app_name,
 		      node_id                   
-				) >= ($3, $4, $5, $6)
+				) >= ($4, $5, $6, $7)
 		  )
+				AND aggregated_ts < $3
 		  ORDER BY aggregated_ts ASC
 		  LIMIT $2
 		) RETURNING aggregated_ts, fingerprint_id, app_name, node_id`

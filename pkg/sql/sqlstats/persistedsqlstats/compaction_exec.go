@@ -13,6 +13,7 @@ package persistedsqlstats
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -158,6 +160,8 @@ func (c *StatsCompactor) removeStaleRowsForShard(
 	existingRowCountPerShard, maxRowLimitPerShard int64,
 ) error {
 	var err error
+	var qargs []interface{}
+
 	lastDeletedRow := tree.Datums{}
 	stmt := ops.initialDeleteStmt
 	maxDeleteRowsPerTxn := CompactionJobRowsToDeletePerTxn.Get(&c.st.SV)
@@ -172,7 +176,10 @@ func (c *StatsCompactor) removeStaleRowsForShard(
 				rowsToRemovePerTxn = maxDeleteRowsPerTxn
 			}
 
-			qargs := getQargs(shardIdx, rowsToRemovePerTxn, lastDeletedRow)
+			qargs, err = c.getQargs(shardIdx, rowsToRemovePerTxn, lastDeletedRow)
+			if err != nil {
+				return err
+			}
 
 			var rowsRemoved int64
 
@@ -220,15 +227,29 @@ WHERE %[3]s = $1
 	return fmt.Sprintf(existingRowCountQuery, tableName, followerReadClause, hashColumnName)
 }
 
-func getQargs(shardIdx, limit int64, lastDeletedRow tree.Datums) []interface{} {
-	qargs := make([]interface{}, 0, len(lastDeletedRow)+2)
+func (c *StatsCompactor) getQargs(
+	shardIdx, limit int64, lastDeletedRow tree.Datums,
+) ([]interface{}, error) {
+	qargs := make([]interface{}, 0, len(lastDeletedRow)+3)
 
 	qargs = append(qargs, tree.NewDInt(tree.DInt(shardIdx)))
 	qargs = append(qargs, tree.NewDInt(tree.DInt(limit)))
+
+	now := timeutil.Now()
+	if c.knobs != nil && c.knobs.StubTimeNow != nil {
+		now = c.knobs.StubTimeNow()
+	}
+	aggInterval := SQLStatsAggregationInterval.Get(&c.st.SV)
+	aggTs := now.Truncate(aggInterval)
+	datum, err := tree.MakeDTimestampTZ(aggTs, time.Microsecond)
+	if err != nil {
+		return nil, err
+	}
+	qargs = append(qargs, datum)
 
 	for _, value := range lastDeletedRow {
 		qargs = append(qargs, value)
 	}
 
-	return qargs
+	return qargs, nil
 }

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -62,7 +64,9 @@ WHERE
 	})
 }
 
-func newTestHelper(t *testing.T) (helper *testHelper, cleanup func()) {
+func newTestHelper(
+	t *testing.T, sqlStatsKnobs *sqlstats.TestingKnobs,
+) (helper *testHelper, cleanup func()) {
 	helper = &testHelper{
 		env: jobstest.NewJobSchedulerTestEnv(
 			jobstest.UseSystemTables, timeutil.Now(), tree.ScheduledSQLStatsCompactionExecutor),
@@ -83,6 +87,7 @@ func newTestHelper(t *testing.T) (helper *testHelper, cleanup func()) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.JobsTestingKnobs = knobs
+	params.Knobs.SQLStatsKnobs = sqlStatsKnobs
 	server, db, _ := serverutils.StartServer(t, params)
 	require.NotNil(t, helper.cfg)
 
@@ -124,7 +129,15 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	helper, helperCleanup := newTestHelper(t)
+	var tm atomic.Value
+	tm.Store(timeutil.Now().Add(-2 * time.Hour))
+	knobs := &sqlstats.TestingKnobs{
+		StubTimeNow: func() time.Time {
+			return tm.Load().(time.Time)
+		},
+	}
+
+	helper, helperCleanup := newTestHelper(t, knobs)
 	defer helperCleanup()
 
 	// We run some queries then flush so that we ensure that are some stats in
@@ -142,6 +155,8 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	verifySQLStatsCompactionScheduleCreatedOnStartup(t, helper)
 	schedule := getSQLStatsCompactionSchedule(t, helper)
 	require.Equal(t, string(jobs.StatusPending), schedule.ScheduleStatus())
+
+	tm.Store(timeutil.Now())
 
 	// Force the schedule to execute.
 	helper.env.SetTime(schedule.NextRun().Add(time.Minute))
@@ -164,7 +179,7 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	helper, helperCleanup := newTestHelper(t)
+	helper, helperCleanup := newTestHelper(t, nil /* sqlStatsKnobs */)
 	defer helperCleanup()
 
 	schedID := getSQLStatsCompactionSchedule(t, helper).ScheduleID()
