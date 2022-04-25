@@ -36,6 +36,7 @@ go_library(
         "//pkg/sql/execstats",
         "//pkg/sql/memsize",
         "//pkg/sql/row",
+        "//pkg/sql/rowcontainer",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowinfra",
