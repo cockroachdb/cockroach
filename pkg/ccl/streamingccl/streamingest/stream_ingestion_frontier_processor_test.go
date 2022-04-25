@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
@@ -52,9 +54,10 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings:    st,
-			DB:          kvDB,
-			JobRegistry: registry,
+			Settings:          st,
+			DB:                kvDB,
+			JobRegistry:       registry,
+			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},
 		EvalCtx:     &evalCtx,
 		DiskMonitor: testDiskMonitor,
