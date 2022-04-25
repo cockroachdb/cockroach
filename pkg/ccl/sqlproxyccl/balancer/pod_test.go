@@ -9,7 +9,7 @@
 package balancer
 
 import (
-	"math/rand"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
@@ -21,34 +21,61 @@ func TestSelectTenantPods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("no pods", func(t *testing.T) {
-		require.Nil(t, selectTenantPod(0, nil))
+		require.Nil(t, selectTenantPod(nil, newTenantEntry()))
+	})
+
+	t.Run("no entry", func(t *testing.T) {
+		require.Nil(t, selectTenantPod([]*tenant.Pod{{TenantID: 10, Addr: "1"}}, nil))
 	})
 
 	t.Run("one pod", func(t *testing.T) {
-		pod := selectTenantPod(0, []*tenant.Pod{{Addr: "1"}})
+		pod := selectTenantPod([]*tenant.Pod{{Addr: "1"}}, newTenantEntry())
 		require.Equal(t, "1", pod.Addr)
 	})
 
 	t.Run("many pods", func(t *testing.T) {
-		pods := []*tenant.Pod{
-			{Addr: "1", Load: 0.0},
-			{Addr: "2", Load: 0.5},
-			{Addr: "3", Load: 0.9},
+		for _, update := range []bool{true, false} {
+			t.Run(fmt.Sprintf("update=%v", update), func(t *testing.T) {
+				// Counts: 0, 5, 9 for pods 1, 2, 3 respectively.
+				entry := newTenantEntry()
+				for i := 0; i < 5; i++ {
+					entry.addAssignment(&ServerAssignment{addr: "2"})
+				}
+				for i := 0; i < 9; i++ {
+					entry.addAssignment(&ServerAssignment{addr: "3"})
+				}
+
+				pods := []*tenant.Pod{
+					{TenantID: 10, Addr: "1"},
+					{TenantID: 10, Addr: "2"},
+					{TenantID: 10, Addr: "3"},
+				}
+
+				distribution := map[string]int{}
+				for i := 0; i < 10000; i++ {
+					pod := selectTenantPod(pods, entry)
+					if update {
+						// Simulate the case where the entry gets updated after.
+						entry.addAssignment(&ServerAssignment{addr: pod.Addr})
+					}
+					distribution[pod.Addr]++
+				}
+
+				if update {
+					// Distribution should eventually converge to ~3333 each.
+					require.Equal(t, map[string]int{
+						"1": 3338,
+						"2": 3333,
+						"3": 3329,
+					}, distribution)
+				} else {
+					// All requests get routed to the pod with the lowest
+					// number of assignments, which is pod 1.
+					require.Equal(t, map[string]int{
+						"1": 10000,
+					}, distribution)
+				}
+			})
 		}
-
-		distribution := map[string]int{}
-		rng := rand.New(rand.NewSource(0))
-
-		for i := 0; i < 10000; i++ {
-			pod := selectTenantPod(rng.Float32(), pods)
-			distribution[pod.Addr]++
-		}
-
-		// Assert that the distribution is a roughly function of 1 - Load.
-		require.Equal(t, map[string]int{
-			"1": 6121,
-			"2": 3214,
-			"3": 665,
-		}, distribution)
 	})
 }
