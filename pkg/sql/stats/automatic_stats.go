@@ -38,12 +38,26 @@ import (
 // cluster setting.
 const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
 
+// UseStatsOnSystemTables is the name of the use statistics on system tables
+// cluster setting.
+const UseStatsOnSystemTables = "sql.stats.system_tables.enabled"
+
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	AutoStatsClusterSettingName,
 	"automatic statistics collection mode",
+	true,
+).WithPublic()
+
+// UseStatisticsOnSystemTables controls the cluster setting for enabling
+// statistics usage by the optimizer for planning queries involving system
+// tables.
+var UseStatisticsOnSystemTables = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	UseStatsOnSystemTables,
+	"use of statistics on system tables by the query optimizer enabled",
 	true,
 ).WithPublic()
 
@@ -389,7 +403,7 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 		// Automatic stats are disabled.
 		return
 	}
-	if !hasStatistics(table) {
+	if !autostatsCollectionAllowed(table) {
 		// Don't collect stats for this kind of table: system, virtual, view, etc.
 		return
 	}
