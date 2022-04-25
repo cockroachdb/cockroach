@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -42,7 +41,7 @@ type TestState struct {
 	phase                   scop.Phase
 	sessionData             sessiondata.SessionData
 	statements              []string
-	testingKnobs            *scrun.TestingKnobs
+	testingKnobs            *scexec.TestingKnobs
 	jobs                    []jobs.Record
 	createdJobsInCurrentTxn []jobspb.JobID
 	jobCounter              int

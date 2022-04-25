@@ -850,7 +850,7 @@ func (s *TestState) SchemaChangerJobID() jobspb.JobID {
 }
 
 // TestingKnobs exposes the testing knobs.
-func (s *TestState) TestingKnobs() *scrun.TestingKnobs {
+func (s *TestState) TestingKnobs() *scexec.TestingKnobs {
 	return s.testingKnobs
 }
 
@@ -1022,6 +1022,11 @@ func (s *TestState) TableReader() scbuild.TableReader {
 // StatsRefresher implement scexec.Dependencies.
 func (s *TestState) StatsRefresher() scexec.StatsRefreshQueue {
 	return s
+}
+
+// GetTestingKnobs implement scexec.Dependencies.
+func (s *TestState) GetTestingKnobs() *scexec.TestingKnobs {
+	return &scexec.TestingKnobs{}
 }
 
 // AddTableForStatsRefresh implements scexec.StatsRefreshQueue

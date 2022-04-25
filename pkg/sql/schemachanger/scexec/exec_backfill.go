@@ -233,7 +233,13 @@ func runBackfills(
 	progresses []BackfillProgress,
 	tables map[descpb.ID]catalog.TableDescriptor,
 ) error {
-
+	if deps.GetTestingKnobs() != nil &&
+		deps.GetTestingKnobs().RunBeforeBackfill != nil {
+		err := deps.GetTestingKnobs().RunBeforeBackfill()
+		if err != nil {
+			return err
+		}
+	}
 	stop := deps.PeriodicProgressFlusher().StartPeriodicUpdates(ctx, tracker)
 	defer func() { _ = stop() }()
 	bf := deps.IndexBackfiller()
