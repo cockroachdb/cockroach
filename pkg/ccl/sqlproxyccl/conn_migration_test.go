@@ -114,7 +114,7 @@ func TestTransferConnection(t *testing.T) {
 		ctx, cancel := newTransferContext(context.Background())
 		cancel()
 
-		conn, err := transferConnection(ctx, nil, nil, nil, nil, "")
+		conn, err := transferConnection(ctx, nil, nil, nil, nil)
 		require.EqualError(t, err, context.Canceled.Error())
 		require.Nil(t, conn)
 		require.True(t, ctx.isRecoverable())
@@ -138,7 +138,6 @@ func TestTransferConnection(t *testing.T) {
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.Regexp(t, "foo", err)
 		require.Nil(t, conn)
@@ -179,7 +178,6 @@ func TestTransferConnection(t *testing.T) {
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.Regexp(t, "foobar", err)
 		require.Nil(t, conn)
@@ -220,7 +218,6 @@ func TestTransferConnection(t *testing.T) {
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.Regexp(t, "foobaz", err)
 		require.Nil(t, conn)
@@ -259,11 +256,9 @@ func TestTransferConnection(t *testing.T) {
 			func(
 				tCtx context.Context,
 				token string,
-				dstAddr string,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
 				require.Equal(t, "token", token)
-				require.Equal(t, "dst-addr", dstAddr)
 				return nil, errors.New("foobarbaz")
 			},
 		)()
@@ -274,7 +269,6 @@ func TestTransferConnection(t *testing.T) {
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.Regexp(t, "foobarbaz", err)
 		require.Nil(t, conn)
@@ -316,11 +310,9 @@ func TestTransferConnection(t *testing.T) {
 			func(
 				tCtx context.Context,
 				token string,
-				dstAddr string,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
 				require.Equal(t, "token", token)
-				require.Equal(t, "dst-addr", dstAddr)
 				return netConn, nil
 			},
 		)()
@@ -344,7 +336,6 @@ func TestTransferConnection(t *testing.T) {
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.Regexp(t, "foobar", err)
 		require.Nil(t, conn)
@@ -390,11 +381,9 @@ func TestTransferConnection(t *testing.T) {
 			func(
 				tCtx context.Context,
 				token string,
-				dstAddr string,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
 				require.Equal(t, "token", token)
-				require.Equal(t, "dst-addr", dstAddr)
 				return netConn, nil
 			},
 		)()
@@ -418,7 +407,6 @@ func TestTransferConnection(t *testing.T) {
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.NoError(t, err)
 		require.NotNil(t, conn)
