@@ -235,11 +235,20 @@ func maybeFillInDescriptor(
 	if parentSchemaID == descpb.InvalidID {
 		parentSchemaID = keys.PublicSchemaID
 	}
+
+	var objectType privilege.ObjectType
+
+	if desc.IsSequence() {
+		objectType = privilege.Sequence
+	} else {
+		objectType = privilege.Table
+	}
+
 	fixedPrivileges := catprivilege.MaybeFixPrivileges(
 		&desc.Privileges,
 		desc.GetParentID(),
 		parentSchemaID,
-		privilege.Table,
+		objectType,
 		desc.GetName(),
 	)
 	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(desc.Privileges)

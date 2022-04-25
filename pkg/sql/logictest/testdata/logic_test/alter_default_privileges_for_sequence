@@ -89,6 +89,7 @@ test           public       s2          testuser   DROP            true
 test           public       s2          testuser   GRANT           true
 test           public       s2          testuser   INSERT          true
 test           public       s2          testuser   UPDATE          true
+test           public       s2          testuser   USAGE           true
 test           public       s2          testuser   ZONECONFIG      true
 test           public       s2          testuser2  CREATE          true
 test           public       s2          testuser2  DELETE          true
@@ -96,6 +97,7 @@ test           public       s2          testuser2  DROP            true
 test           public       s2          testuser2  GRANT           true
 test           public       s2          testuser2  INSERT          true
 test           public       s2          testuser2  UPDATE          true
+test           public       s2          testuser2  USAGE           true
 test           public       s2          testuser2  ZONECONFIG      true
 
 statement ok

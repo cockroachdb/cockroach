@@ -932,7 +932,7 @@ user testuser
 statement error pq: user testuser does not have SELECT privilege on relation priv_test
 SELECT * FROM priv_test
 
-statement error pq: nextval\(\): user testuser does not have UPDATE privilege on relation priv_test
+statement error pq: nextval\(\): user testuser does not have UPDATE or USAGE privilege on relation priv_test
 SELECT nextval('priv_test')
 
 statement error pq: setval\(\): user testuser does not have UPDATE privilege on relation priv_test

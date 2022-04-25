@@ -445,7 +445,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		if len(targets.Schemas) == 0 {
 			return nil, errNoSchema
 		}
-		if targets.AllTablesInSchema {
+		if targets.AllTablesInSchema || targets.AllSequencesInSchema {
 			// Get all the descriptors for the tables in the specified schemas.
 			db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, p.CurrentDatabase(), flags)
 			if err != nil {
@@ -464,8 +464,22 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 					return nil, err
 				}
 				for _, mut := range muts {
-					if mut != nil && mut.DescriptorType() == catalog.Table {
-						descs = append(descs, mut)
+					if targets.AllTablesInSchema {
+						if mut != nil {
+							if mut.DescriptorType() == catalog.Table {
+								descs = append(descs, mut)
+							}
+						}
+					} else if targets.AllSequencesInSchema {
+						if mut.DescriptorType() == catalog.Table {
+							tableDesc, err := catalog.AsTableDescriptor(mut)
+							if err != nil {
+								return nil, err
+							}
+							if tableDesc.IsSequence() {
+								descs = append(descs, mut)
+							}
+						}
 					}
 				}
 			}
@@ -529,7 +543,17 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 		for _, mut := range muts {
 			if mut != nil && mut.DescriptorType() == catalog.Table {
-				descs = append(descs, mut)
+				if targets.Tables.IsSequence {
+					tableDesc, err := catalog.AsTableDescriptor(mut)
+					if err != nil {
+						return nil, err
+					}
+					if tableDesc.IsSequence() {
+						descs = append(descs, mut)
+					}
+				} else {
+					descs = append(descs, mut)
+				}
 			}
 		}
 	}
