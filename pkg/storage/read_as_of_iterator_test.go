@@ -43,7 +43,7 @@ func TestReadAsOfIterator(t *testing.T) {
 	// readAsOfIterator, which is fully iterated (using either NextKey or Next) and
 	// turned back into a string in the same format as `input`. This is compared
 	// to 'expectedNextKey' or 'expectedNext'. The 'asOf' field represents the
-	// wall time of the hlc.Timestamp for the readAsOfIterator. The field is a
+	// wall time of the hlc.Timestamp for the readAsOfIterator. This field is a
 	// string to play nice with the 'input' parser in populateBatch.
 	tests := []asOfTest{
 		// ensure next and nextkey work as expected
@@ -63,26 +63,24 @@ func TestReadAsOfIterator(t *testing.T) {
 		// ensure next key captures at most one mvcc key per key after an asOf skip
 		{input: "b3c2c1", expectedNextKey: "c2", expectedNext: "c2c1", asOf: "2"},
 
-		// ensure tombstone is always skipped
+		// ensure an AOST 'next' takes precedence over a tombstone 'nextkey'
 		{input: "b2Xb1c1", expectedNextKey: "c1", expectedNext: "c1", asOf: ""},
-		{input: "b2Xb1c1", expectedNextKey: "c1", expectedNext: "c1", asOf: "1"},
+		{input: "b2Xb1c1", expectedNextKey: "b1c1", expectedNext: "b1c1", asOf: "1"},
+
+		// Ensure clean iteration over double tombstone
+		{input: "a1Xb2Xb1c1", expectedNextKey: "c1", expectedNext: "c1", asOf: ""},
+		{input: "a1Xb2Xb1c1", expectedNextKey: "b1c1", expectedNext: "b1c1", asOf: "1"},
 
 		// ensure tombstone is skipped after an AOST skip
 		{input: "b3c2Xc1d1", expectedNextKey: "d1", expectedNext: "d1", asOf: "2"},
+		{input: "b3c2Xc1d1", expectedNextKey: "c1d1", expectedNext: "c1d1", asOf: "1"},
+
+		// Ensure key before delete tombstone gets read if under AOST
+		{input: "b2b1Xc1", expectedNextKey: "b2c1", expectedNext: "b2c1", asOf: ""},
+		{input: "b2b1Xc1", expectedNextKey: "c1", expectedNext: "c1", asOf: "1"},
 	}
 
-	// repeat all test cases prefixed with another tombstone to
-	// cover any iterator behavior after a tombstone
-	tombstoneTests := make([]asOfTest, len(tests))
-	for i := range tombstoneTests {
-		tombstoneTests[i] = asOfTest{
-			input:           "a1X" + tests[i].input,
-			expectedNextKey: tests[i].expectedNextKey,
-			expectedNext:    tests[i].expectedNext,
-			asOf:            tests[i].asOf}
-	}
-
-	for i, test := range append(tests, tombstoneTests...) {
+	for i, test := range tests {
 		name := fmt.Sprintf("Test %d: %s, AOST %s", i, test.input, test.asOf)
 		t.Run(name, func(t *testing.T) {
 			batch := pebble.NewBatch()
@@ -95,7 +93,6 @@ func TestReadAsOfIterator(t *testing.T) {
 				{"NextKey", test.expectedNextKey, (SimpleMVCCIterator).NextKey},
 				{"Next", test.expectedNext, (SimpleMVCCIterator).Next},
 			}
-
 			for _, subtest := range subtests {
 				t.Run(subtest.name, func(t *testing.T) {
 					asOf := hlc.Timestamp{}
@@ -136,11 +133,20 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 
 		// Ensure seek does not return on a tombstone
 		{"a3Xa1b1", "a3", "b1", ""},
-		{"a3Xa1b1", "a3", "b1", "1"},
 
 		// Ensure seek does not return on a key shadowed by a tombstone
 		{"a3Xa2a1b1", "a2", "b1", ""},
-		{"a3Xa2a1b1", "a2", "b1", "1"},
+		{"a3Xa2a1b1", "a2", "b1", "3"},
+		{"a3a2Xa1b1", "a1", "b1", ""},
+		{"a3a2Xa1b2Xb1c1", "a1", "c1", ""},
+
+		// Ensure we can seek to a key right before a tombstone
+		{"a2Xa1b2b1Xc1", "a1", "b2", ""},
+
+		// Ensure AOST 'next' takes precendence over tombstone 'nextkey'
+		{"a4a3Xa1b1", "a3", "a1", "1"},
+		{"a4a3Xa2a1b1", "a2", "a1", "1"},
+		{"a4a3Xa2a1b1", "a2", "a2", "2"},
 	}
 	for i, test := range tests {
 		name := fmt.Sprintf("Test %d: %s, AOST %s", i, test.input, test.asOf)

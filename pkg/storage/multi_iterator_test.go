@@ -142,7 +142,8 @@ type iterSubtest struct {
 	fn       func(SimpleMVCCIterator)
 }
 
-// iterateSimpleMultiIter iterates through a simpleMVCCIterator for expected values
+// iterateSimpleMultiIter iterates through a simpleMVCCIterator for expected values,
+// and assumes that populateBatch populated the keys for the iterator.
 func iterateSimpleMultiIter(t *testing.T, it SimpleMVCCIterator, subtest iterSubtest) {
 	var output bytes.Buffer
 	for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; subtest.fn(it) {
