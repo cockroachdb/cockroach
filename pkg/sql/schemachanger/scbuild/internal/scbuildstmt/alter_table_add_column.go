@@ -64,6 +64,13 @@ func alterTableAddColumn(
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
 	}
+	{
+		tableElts := b.QueryByID(tbl.TableID)
+		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
+			panic(scerrors.NotImplementedErrorf(d,
+				"regional by row partitioning is not supported"))
+		}
+	}
 	// Some of the building for the index exists below but end-to-end support is
 	// not complete, so return an error for new unique columns.
 	if d.Unique.IsUnique {
@@ -112,7 +119,6 @@ func alterTableAddColumn(
 
 	} else {
 		spec.colType.TypeT = b.ResolveTypeRef(d.Type)
-		// FIMXE:
 		if spec.colType.TypeT.Type.UserDefined() {
 			typeID, err := typedesc.UserDefinedTypeOIDToID(spec.colType.TypeT.Type.Oid())
 			if err != nil {

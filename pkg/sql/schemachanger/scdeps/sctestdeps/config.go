@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
@@ -71,7 +70,7 @@ func WithSessionData(sessionData sessiondata.SessionData) Option {
 }
 
 // WithTestingKnobs sets the TestState testing knobs to the provided value.
-func WithTestingKnobs(testingKnobs *scrun.TestingKnobs) Option {
+func WithTestingKnobs(testingKnobs *scexec.TestingKnobs) Option {
 	return optionFunc(func(state *TestState) {
 		state.testingKnobs = testingKnobs
 	})
