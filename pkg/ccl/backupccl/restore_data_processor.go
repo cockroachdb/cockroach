@@ -436,11 +436,12 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		disallowShadowingBelow,
 		writeAtBatchTS,
 		false, /* splitFilledRanges */
+		rd.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
 	)
 	if err != nil {
 		return summary, err
 	}
-	defer batcher.Close()
+	defer batcher.Close(ctx)
 
 	var keyScratch, valueScratch []byte
 
