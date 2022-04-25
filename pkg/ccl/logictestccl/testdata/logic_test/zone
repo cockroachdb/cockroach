@@ -32,110 +32,6 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@t_pkey
-  spans: [/10 - /10]
-
-query T retry
-EXPLAIN (OPT, CATALOG) SELECT * FROM t
-----
-TABLE t
- ├── k int not null
- ├── v string
- ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── tableoid oid [hidden] [system]
- ├── FAMILY fam_0_k_v (k, v)
- ├── PRIMARY INDEX t_pkey
- │    └── k int not null
- ├── INDEX secondary
- │    ├── k int not null
- │    └── v string (storing)
- └── INDEX tertiary
-      ├── k int not null
-      └── v string (storing)
-scan t
-
-# ------------------------------------------------------------------------------
-# Move secondary to dc3 and put tertiary in dc1 and ensure that gateway matches
-# tertiary instead of secondary. Regression for #35546.
-# ------------------------------------------------------------------------------
-
-statement ok
-ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
-
-statement ok
-ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
-
-query T retry
-EXPLAIN SELECT * FROM t WHERE k=10
-----
-distribution: local
-vectorized: true
-·
-• scan
-  missing stats
-  table: t@t_pkey
-  spans: [/10 - /10]
-
-query T retry
-EXPLAIN (OPT, CATALOG) SELECT * FROM t
-----
-TABLE t
- ├── k int not null
- ├── v string
- ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── tableoid oid [hidden] [system]
- ├── FAMILY fam_0_k_v (k, v)
- ├── PRIMARY INDEX t_pkey
- │    └── k int not null
- ├── INDEX secondary
- │    ├── k int not null
- │    └── v string (storing)
- └── INDEX tertiary
-      ├── k int not null
-      └── v string (storing)
-scan t
-
-# ------------------------------------------------------------------------------
-# Swap secondary and tertiary localities and ensure invalidation occurs.
-# Regression for #35546.
-# ------------------------------------------------------------------------------
-
-statement ok
-ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
-
-statement ok
-ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
-
-query T retry
-EXPLAIN SELECT * FROM t WHERE k=10
-----
-distribution: local
-vectorized: true
-·
-• scan
-  missing stats
-  table: t@t_pkey
-  spans: [/10 - /10]
-
-# ------------------------------------------------------------------------------
-# Swap location of primary and secondary indexes and ensure that primary index
-# is used instead.
-# ------------------------------------------------------------------------------
-
-statement ok
-ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
-
-statement ok
-ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
-
-query T retry
-EXPLAIN SELECT * FROM t WHERE k=10
-----
-distribution: local
-vectorized: true
-·
-• scan
-  missing stats
   table: t@secondary
   spans: [/10 - /10]
 
@@ -165,6 +61,122 @@ TABLE t
 scan t@secondary
 
 # ------------------------------------------------------------------------------
+# Move secondary to dc3 and put tertiary in dc1 and ensure that gateway matches
+# tertiary instead of secondary. Regression for #35546.
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
+
+statement ok
+ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+query T retry
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@tertiary
+  spans: [/10 - /10]
+
+query T retry
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_k_v (k, v)
+ ├── PRIMARY INDEX t_pkey
+ │    ├── k int not null
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc2]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc3]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           └── constraints: [+region=test,+dc=dc1]
+scan t@tertiary
+
+# ------------------------------------------------------------------------------
+# Swap secondary and tertiary localities and ensure invalidation occurs.
+# Regression for #35546.
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+statement ok
+ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
+
+query T retry
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@secondary
+  spans: [/10 - /10]
+
+# ------------------------------------------------------------------------------
+# Swap location of primary and secondary indexes and ensure that primary index
+# is used instead.
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
+
+query T retry
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/10 - /10]
+
+query T retry
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_k_v (k, v)
+ ├── PRIMARY INDEX t_pkey
+ │    ├── k int not null
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc1]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc2]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           └── constraints: [+region=test,+dc=dc3]
+scan t
+
+# ------------------------------------------------------------------------------
 # Use PREPARE to make sure that the prepared plan is invalidated when the
 # secondary index's constraints change.
 # ------------------------------------------------------------------------------
@@ -180,7 +192,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@secondary
+  table: t@t_pkey
   spans: [/10 - /10]
 
 statement ok
@@ -197,7 +209,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@tertiary
+  table: t@secondary
   spans: [/10 - /10]
 
 statement ok
@@ -248,7 +260,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@secondary
+  table: t@tertiary
   spans: [/10 - /10]
 
 query T retry
@@ -263,18 +275,21 @@ TABLE t
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
  │    └── ZONE
- │         └── constraints: [+region=test,+dc=dc1]
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc2]
  ├── INDEX secondary
  │    ├── k int not null
  │    ├── v string (storing)
  │    └── ZONE
- │         └── constraints: [+region=test,+dc=dc2]
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc3]
  └── INDEX tertiary
       ├── k int not null
       ├── v string (storing)
       └── ZONE
-           └── constraints: [+region=test,+dc=dc3]
-scan t
+           ├── constraints: [+region=test]
+           └── lease preference: [+region=test,+dc=dc1]
+scan t@tertiary
 
 # ------------------------------------------------------------------------------
 # Ensure that an index constrained to a region is preferred over an index that
@@ -302,7 +317,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@t_pkey
+  table: t@secondary
   spans: [/10 - /10]
 
 query T retry
@@ -317,18 +332,21 @@ TABLE t
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
  │    └── ZONE
- │         └── constraints: [+region=test,+dc=dc1]
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc1]
  ├── INDEX secondary
  │    ├── k int not null
  │    ├── v string (storing)
  │    └── ZONE
- │         └── constraints: [+region=test,+dc=dc2]
+ │         ├── constraints: [+region=test,+dc=dc1]
+ │         └── lease preference: [+region=test,+dc=dc3]
  └── INDEX tertiary
       ├── k int not null
       ├── v string (storing)
       └── ZONE
-           └── constraints: [+region=test,+dc=dc3]
-scan t
+           ├── constraints: [+region=test]
+           └── lease preference: [+region=test,+dc=dc1]
+scan t@secondary
 
 # ------------------------------------------------------------------------------
 # Use PREPARE to make sure that the prepared plan is invalidated when the
@@ -361,7 +379,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t@secondary
+  table: t@t_pkey
   spans: [/10 - /10]
 
 statement ok
@@ -393,7 +411,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t36642@t36642_pkey
+  table: t36642@secondary
   spans: [/10 - /10]
 
 statement ok
@@ -410,7 +428,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t36642@t36642_pkey
+  table: t36642@tertiary
   spans: [/10 - /10]
 
 query T retry
@@ -431,15 +449,15 @@ TABLE t
  │    ├── k int not null
  │    ├── v string (storing)
  │    └── ZONE
- │         ├── constraints: [+region=test,+dc=dc1]
- │         └── lease preference: [+region=test,+dc=dc3]
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc2]
  └── INDEX tertiary
       ├── k int not null
       ├── v string (storing)
       └── ZONE
            ├── constraints: [+region=test]
            └── lease preference: [+region=test,+dc=dc1]
-scan t@secondary
+scan t
 
 
 # ------------------------------------------------------------------------------
@@ -468,7 +486,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t36644@t36644_pkey
+  table: t36644@secondary
   spans: [/10 - /10]
 
 statement ok
@@ -486,7 +504,7 @@ vectorized: true
 ·
 • scan
   missing stats
-  table: t36644@t36644_pkey
+  table: t36644@tertiary
   spans: [/10 - /10]
 
 subtest regression_35756

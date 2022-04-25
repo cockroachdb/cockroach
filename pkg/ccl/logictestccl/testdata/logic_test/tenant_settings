@@ -199,3 +199,4 @@ query I
 SELECT count(*) FROM system.tenant_settings WHERE tenant_id = 1234
 ----
 0
+
