@@ -70,6 +70,8 @@ const (
 	Table ObjectType = "table"
 	// Type represents a type object.
 	Type ObjectType = "type"
+	// Sequence represents a sequence object.
+	Sequence ObjectType = "sequence"
 )
 
 // Predefined sets of privileges.
@@ -81,6 +83,10 @@ var (
 	TablePrivileges  = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
 	SchemaPrivileges = List{ALL, GRANT, CREATE, USAGE}
 	TypePrivileges   = List{ALL, GRANT, USAGE}
+	// SequencePrivileges is appended with TablePrivileges as well. This is because
+	// before v22.2 we treated Sequences the same as Tables. This is to avoid making
+	// certain privileges unavailable after upgrade migration.
+	SequencePrivileges = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, GRANT, INSERT, DELETE, ZONECONFIG}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -268,6 +274,8 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 		return DBPrivileges
 	case Type:
 		return TypePrivileges
+	case Sequence:
+		return SequencePrivileges
 	case Any:
 		return AllPrivileges
 	default:

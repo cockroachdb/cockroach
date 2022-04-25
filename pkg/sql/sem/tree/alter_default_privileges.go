@@ -72,7 +72,7 @@ type AlterDefaultPrivilegesTargetObject uint32
 func (t AlterDefaultPrivilegesTargetObject) ToPrivilegeObjectType() privilege.ObjectType {
 	targetObjectToPrivilegeObject := map[AlterDefaultPrivilegesTargetObject]privilege.ObjectType{
 		Tables:    privilege.Table,
-		Sequences: privilege.Table,
+		Sequences: privilege.Sequence,
 		Schemas:   privilege.Schema,
 		Types:     privilege.Type,
 	}
