@@ -191,6 +191,15 @@ func (s *spanInner) GetLazyTag(key string) (interface{}, bool) {
 	return s.crdb.getLazyTagLocked(key)
 }
 
+func (s *spanInner) RegisterEventListener(listener EventListener) {
+	if s.isNoop() {
+		return
+	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	s.crdb.registerEventListenerLocked(listener)
+}
+
 func (s *spanInner) RecordStructured(item Structured) {
 	if s.isNoop() {
 		return
