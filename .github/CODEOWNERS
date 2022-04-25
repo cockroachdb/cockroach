@@ -122,6 +122,7 @@
 /pkg/geo/                    @cockroachdb/geospatial
 
 /pkg/kv/                     @cockroachdb/kv-prs
+/pkg/kv/kvclient/kvstreamer  @cockroachdb/sql-queries
 
 /pkg/storage/                @cockroachdb/storage
 
