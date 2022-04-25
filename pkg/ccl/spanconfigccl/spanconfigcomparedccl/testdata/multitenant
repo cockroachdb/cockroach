@@ -18,6 +18,7 @@ initialize tenant=11
 configs version=current offset=43
 ----
 ...
+/Table/48                                  database system (host)
 /Table/50                                  database system (host)
 /Tenant/10                                 database system (tenant)
 /Tenant/11                                 database system (tenant)
@@ -37,16 +38,17 @@ reconcile tenant=11
 configs version=current offset=43 limit=5
 ----
 ...
+/Table/48                                  database system (host)
 /Table/50                                  database system (host)
 /Tenant/10                                 database system (tenant)
 /Tenant/11                                 database system (tenant)
 /Tenant/11/Table/4                         database system (tenant)
-/Tenant/11/Table/5                         database system (tenant)
 ...
 
 configs version=legacy offset=43
 ----
 ...
+/Table/48                                  database system (host)
 /Table/50                                  range system
 /Tenant/10                                 database system (tenant)
 /Tenant/11                                 database system (tenant)
@@ -117,6 +119,7 @@ diff offset=48
 +/Tenant/11/Table/43                        database system (tenant)
 +/Tenant/11/Table/44                        database system (tenant)
 +/Tenant/11/Table/46                        database system (tenant)
++/Tenant/11/Table/48                        database system (tenant)
 +/Tenant/11/Table/50                        database system (tenant)
 +/Tenant/11/Table/106                       ttl_seconds=1000 num_replicas=42
 +/Tenant/11/Table/107                       range default
