@@ -47,6 +47,9 @@ dump-store stores=(1,2)
     - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
     - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
     - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 1
 - NodeID: 2
   StoreID: 2
   Descriptors:
@@ -56,3 +59,6 @@ dump-store stores=(1,2)
     - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
     - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
     - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 2

@@ -293,6 +293,11 @@ func applyReplicaUpdate(
 	report.OldReplica, _ = report.RemovedReplicas.RemoveReplica(
 		update.NewReplica.NodeID, update.NewReplica.StoreID)
 
+	// Persist the new replica ID.
+	if err := sl.SetRaftReplicaID(ctx, readWriter, update.NewReplica.ReplicaID); err != nil {
+		return PrepareReplicaReport{}, errors.Wrap(err, "setting new replica ID")
+	}
+
 	// Refresh stats
 	if err := sl.SetMVCCStats(ctx, readWriter, &ms); err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "updating MVCCStats")
