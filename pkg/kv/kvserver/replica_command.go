@@ -1312,19 +1312,19 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 		return nil, err
 	}
 
-	if fn := r.store.TestingKnobs().BeforeRemovingDemotedLearner; fn != nil {
+	if fn := r.store.TestingKnobs().BeforeRemovingLearners; fn != nil {
 		fn()
 	}
 	// Now the config isn't joint any more, but we may have demoted some voters
 	// into learners. These learners should go as well.
-	learners := desc.Replicas().LearnerDescriptors()
-	if len(learners) == 0 {
+	expectedLearners := desc.Replicas().LearnerDescriptors()
+	if len(expectedLearners) == 0 {
 		return desc, nil
 	}
-	targets := make([]roachpb.ReplicationTarget, len(learners))
-	for i := range learners {
-		targets[i].NodeID = learners[i].NodeID
-		targets[i].StoreID = learners[i].StoreID
+	targets := make([]roachpb.ReplicationTarget, len(expectedLearners))
+	for i := range expectedLearners {
+		targets[i].NodeID = expectedLearners[i].NodeID
+		targets[i].StoreID = expectedLearners[i].StoreID
 	}
 	log.VEventf(ctx, 2, `removing learner replicas %v from %v`, targets, desc)
 	// NB: unroll the removals because at the time of writing, we can't atomically
@@ -1348,6 +1348,16 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 		if err != nil {
 			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
 		}
+	}
+	// NB: Ensure that there are no new learners that we didn't initially find
+	// above (due to intervening replication changes). Also ensure that we are
+	// indeed no longer in a joint config. If so, we want to fail this operation
+	// since we've raced with a concurrent change.
+	if len(desc.Replicas().VoterFullAndNonVoterDescriptors()) != len(desc.Replicas().Descriptors()) {
+		return desc, errors.Mark(errors.Newf(
+			"failing because this operation raced with a concurrent replication change; found desc: %v",
+			desc,
+		), errMarkCanRetryReplicationChangeWithUpdatedDesc)
 	}
 	return desc, nil
 }

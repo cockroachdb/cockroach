@@ -306,9 +306,9 @@ type StoreTestingKnobs struct {
 	// through a joint configuration, even when this isn't necessary (because
 	// the replication change affects only one replica).
 	ReplicationAlwaysUseJointConfig func() bool
-	// BeforeRemovingDemotedLearner is run before a demoted learner (i.e. a
-	// learner that results from a range exiting its joint config) is removed.
-	BeforeRemovingDemotedLearner func()
+	// BeforeRemovingLearners is run before a demoted learner (i.e. a learner that
+	// results from a range exiting its joint config) is removed.
+	BeforeRemovingLearners func()
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
 	BeforeSnapshotSSTIngestion func(IncomingSnapshot, kvserverpb.SnapshotRequest_Type, []string) error

@@ -1096,7 +1096,7 @@ func TestDemotedLearnerRemovalHandlesRace(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						BeforeRemovingDemotedLearner: func() {
+						BeforeRemovingLearners: func() {
 							if atomic.LoadInt64(&activateTestingKnob) == 1 {
 								// Signal to the test that the rebalance is now trying to remove
 								// the demoted learner.
