@@ -5888,158 +5888,138 @@ func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
 	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".bank`), statsBackup2)
 }
 
-// TestProtectedTimestampsDuringBackup ensures that the timestamp at which a
-// table is taken offline is protected during a BACKUP job to ensure that if
-// data can be read for a period longer than the default GC interval.
+// TestProtectedTimestampsDuringBackup runs and pauses a backup to ensure that
+// the protected timestamp record written by the backup holds up GC on the
+// target schema object.
+//
+// This test runs as both a system tenant, and a secondary tenant.
 func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// A sketch of the test is as follows:
-	//
-	//  * Create a table foo to backup.
-	//  * Create an initial BACKUP of foo.
-	//  * Set a 1 second gcttl for foo.
-	//  * Start a BACKUP incremental from that base backup which blocks after
-	//	  setup (after time of backup is decided), until it is signaled.
-	//  * Manually enqueue the ranges for GC and ensure that at least one
-	//    range ran the GC.
-	//  * Unblock the backup.
-	//  * Ensure the backup has succeeded.
+	skip.UnderStress(t, "test is too heavy to run under stress")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	allowRequest := make(chan struct{})
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
-	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
-			for _, ru := range ba.Requests {
-				switch ru.GetInner().(type) {
-				case *roachpb.ExportRequest:
-					<-allowRequest
-				}
-			}
-			return nil
-		},
-	}
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	tc := testcluster.StartTestCluster(t, 3, params)
 	defer tc.Stopper().Stop(ctx)
 
 	tc.WaitForNodeLiveness(t)
 	require.NoError(t, tc.WaitForFullReplication())
 
+	// Setup a tenant.
+	ts := tc.Server(0)
+	tenantID := roachpb.MakeTenantID(10)
+	_, ttSQLDBRaw := serverutils.StartTenant(
+		t, ts, base.TestTenantArgs{
+			TenantID: tenantID,
+			TestingKnobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	)
+	defer ttSQLDBRaw.Close()
+	ttSQLDB := sqlutils.MakeSQLRunner(ttSQLDBRaw)
+
 	conn := tc.ServerConn(0)
-	runner := sqlutils.MakeSQLRunner(conn)
-	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
-	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
-	runner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
+	systemTenantRunner := sqlutils.MakeSQLRunner(conn)
+	setAndWaitForTenantReadOnlyClusterSetting(t, sql.SecondaryTenantsZoneConfigsEnabledSettingName,
+		systemTenantRunner, ttSQLDB, tenantID, "true")
 
-	close(allowRequest)
+	// Run the test as the system tenant, and as the secondary tenant.
+	testutils.RunTrueAndFalse(t, "secondary-tenant", func(t *testing.T,
+		forSecondaryTenant bool) {
+		runner := systemTenantRunner
+		if forSecondaryTenant {
+			runner = ttSQLDB
+		}
+		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+		defer runner.Exec(t, `DROP TABLE foo`)
 
-	for _, testrun := range []struct {
-		name      string
-		runBackup func(t *testing.T, query string, sqlDB *sqlutils.SQLRunner)
-	}{
-		{
-			"backup-normal",
-			func(t *testing.T, query string, sqlDB *sqlutils.SQLRunner) {
-				sqlDB.Exec(t, query)
-			},
-		},
-		{
-			"backup-detached",
-			func(t *testing.T, query string, sqlDB *sqlutils.SQLRunner) {
-				backupWithDetachedOption := query + ` WITH DETACHED`
-				db := sqlDB.DB.(*gosql.DB)
-				var jobID jobspb.JobID
-				err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
-					return tx.QueryRow(backupWithDetachedOption).Scan(&jobID)
-				})
-				require.NoError(t, err)
-				waitForSuccessfulJob(t, tc, jobID)
-			},
-		},
-	} {
-		baseBackupURI := "nodelocal://0/foo" + testrun.name
-		testrun.runBackup(t, fmt.Sprintf(`BACKUP TABLE FOO TO '%s'`, baseBackupURI), runner) // create a base backup.
-		allowRequest = make(chan struct{})
+		var tableID int
+		runner.QueryRow(t, `SELECT id FROM system.namespace WHERE name = $1`, "foo").Scan(&tableID)
+		startPretty := fmt.Sprintf("/Tenant/10/Table/%d", tableID)
+
+		// Speeds up the test.
+		runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
+		runner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+
+		// Run a full backup.
+		baseBackupURI := "userfile:///foo"
+		runner.Exec(t, fmt.Sprintf(`BACKUP TABLE foo INTO '%s'`, baseBackupURI))
+
+		// Kickoff an incremental backup, but pause it just after it writes its
+		// protected timestamps.
+		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before_flow'`)
+
+		var jobID int
+		runner.QueryRow(t,
+			fmt.Sprintf(`BACKUP TABLE FOO INTO LATEST IN '%s' WITH detached `, baseBackupURI)).Scan(&jobID)
+		jobutils.WaitForJobToPause(t, runner, jobspb.JobID(jobID))
+
+		// Drop the GC TTL.
 		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
+
+		checkProtectionPolicyTrace := func(trace string) error {
+			// Check the trace for the applicable protection policy.
+			processedPattern := "(?s)has a protection policy protecting:.*shouldQueue=false"
+			processedRegexp := regexp.MustCompile(processedPattern)
+			if !processedRegexp.MatchString(trace) {
+				return errors.Newf("%q does not match %q", trace, processedRegexp)
+			}
+			return nil
+		}
+
+		// Ensure we see the protection policy written by the paused backup.
+		if forSecondaryTenant {
+			runGCAndCheckTraceForSecondaryTenant(ctx, t, tc, systemTenantRunner,
+				false /* skipShouldQueue */, startPretty, checkProtectionPolicyTrace)
+		} else {
+			runGCAndCheckTrace(ctx, t, tc, systemTenantRunner,
+				false /* skipShouldQueue */, "defaultdb", "foo", checkProtectionPolicyTrace)
+		}
+
+		// Now, clear the pause point and allow the job to complete. This should
+		// release the protected timestamp record.
+		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+		runner.Exec(t, `RESUME JOB $1`, jobID)
+		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(jobID))
+
 		rRand, _ := randutil.NewTestRand()
 		writeGarbage := func(from, to int) {
 			for i := from; i < to; i++ {
 				runner.Exec(t, "UPSERT INTO foo VALUES ($1, $2)", i, randutil.RandBytes(rRand, 1<<10))
 			}
 		}
-		writeGarbage(3, 10)
-		rowCount := runner.QueryStr(t, "SELECT * FROM foo")
-
-		g, _ := errgroup.WithContext(ctx)
-		g.Go(func() error {
-			// If BACKUP does not protect the timestamp, the ExportRequest will
-			// throw an error and fail the backup.
-			incURI := "nodelocal://0/foo-inc" + testrun.name
-			testrun.runBackup(t, fmt.Sprintf(`BACKUP TABLE FOO TO '%s' INCREMENTAL FROM '%s'`, incURI, baseBackupURI), runner)
-			return nil
-		})
-
-		var jobID string
-		testutils.SucceedsSoon(t, func() error {
-			row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
-			return row.Scan(&jobID)
-		})
-
-		time.Sleep(3 * time.Second) // Wait for the data to definitely be expired and GC to run.
-		gcTable := func(skipShouldQueue bool) (traceStr string) {
-			rows := runner.Query(t, "SELECT start_key"+
-				" FROM crdb_internal.ranges_no_leases"+
-				" WHERE table_name = $1"+
-				" AND database_name = current_database()"+
-				" ORDER BY start_key ASC", "foo")
-			var traceBuf strings.Builder
-			for rows.Next() {
-				var startKey roachpb.Key
-				require.NoError(t, rows.Scan(&startKey))
-				r := tc.LookupRangeOrFatal(t, startKey)
-				l, _, err := tc.FindRangeLease(r, nil)
-				require.NoError(t, err)
-				lhServer := tc.Server(int(l.Replica.NodeID) - 1)
-				s, repl := getFirstStoreReplica(t, lhServer, startKey)
-				trace, _, err := s.ManuallyEnqueue(ctx, "mvccGC", repl, skipShouldQueue)
-				require.NoError(t, err)
-				fmt.Fprintf(&traceBuf, "%s\n", trace.String())
-			}
-			require.NoError(t, rows.Err())
-			return traceBuf.String()
-		}
-
-		// We should have refused to GC over the timestamp which we needed to protect.
-		gcTable(true /* skipShouldQueue */)
-
-		// Unblock the blocked backup request.
-		close(allowRequest)
-
-		runner.CheckQueryResultsRetry(t, "SELECT * FROM foo", rowCount)
-
 		// Wait for the ranges to learn about the removed record and ensure that we
 		// can GC from the range soon.
 		// This regex matches when all float priorities other than 0.00000. It does
 		// this by matching either a float >= 1 (e.g. 1230.012) or a float < 1 (e.g.
 		// 0.000123).
-		matchNonZero := "[1-9]\\d*\\.\\d+|0\\.\\d*[1-9]\\d*"
-		nonZeroProgressRE := regexp.MustCompile(fmt.Sprintf("priority=(%s)", matchNonZero))
-		testutils.SucceedsSoon(t, func() error {
+		checkGCProgressesTrace := func(trace string) error {
 			writeGarbage(3, 10)
-			if trace := gcTable(false /* skipShouldQueue */); !nonZeroProgressRE.MatchString(trace) {
-				return fmt.Errorf("expected %v in trace: %v", nonZeroProgressRE, trace)
+			matchNonZero := "[1-9]\\d*\\.\\d+|0\\.\\d*[1-9]\\d*"
+			nonZeroProgressRE := regexp.MustCompile(fmt.Sprintf("priority=(%s)", matchNonZero))
+			if !nonZeroProgressRE.MatchString(trace) {
+				return errors.Newf("%q does not match %q", trace, nonZeroProgressRE)
 			}
 			return nil
-		})
-		require.NoError(t, g.Wait())
-	}
+		}
+
+		if forSecondaryTenant {
+			runGCAndCheckTraceForSecondaryTenant(ctx, t, tc, systemTenantRunner, false, /* skipShouldQueue */
+				startPretty, checkGCProgressesTrace)
+		} else {
+			runGCAndCheckTrace(ctx, t, tc, systemTenantRunner, false, /* skipShouldQueue */
+				"defaultdb", "foo", checkGCProgressesTrace)
+		}
+	})
 }
 
 func getTableID(db *kv.DB, dbName, tableName string) descpb.ID {
@@ -9289,7 +9269,8 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	var tsBefore string
 	require.NoError(t, conn.QueryRow("SELECT cluster_logical_timestamp()").Scan(&tsBefore))
 	upsertUntilBackpressure()
-	runGCAndCheckTrace(ctx, t, tc, conn, false /* skipShouldQueue */, "foo", "defaultdb", func(traceStr string) error {
+	runner := sqlutils.MakeSQLRunner(conn)
+	runGCAndCheckTrace(ctx, t, tc, runner, false /* skipShouldQueue */, "defaultdb", "foo", func(traceStr string) error {
 		const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
 		processedRegexp := regexp.MustCompile(processedPattern)
 		if !processedRegexp.MatchString(traceStr) {
@@ -9409,7 +9390,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	// check that the replica corresponding to `test.foo` continue to GC data
 	// since it has been marked as `exclude_data_from_backup`.
 	upsertUntilBackpressure()
-	runGCAndCheckTrace(ctx, t, tc, conn, false /* skipShouldQueue */, "foo", "test", func(traceStr string) error {
+	runGCAndCheckTrace(ctx, t, tc, runner, false /* skipShouldQueue */, "test", "foo", func(traceStr string) error {
 		const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
 		processedRegexp := regexp.MustCompile(processedPattern)
 		if !processedRegexp.MatchString(traceStr) {
