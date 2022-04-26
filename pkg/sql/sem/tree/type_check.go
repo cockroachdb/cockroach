@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	cast2 "github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -494,7 +495,7 @@ func resolveCast(
 		return nil
 
 	default:
-		cast, ok := LookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
+		cast, ok := cast2.LookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
 		if !ok {
 			return invalidCastError(castFrom, castTo)
 		}

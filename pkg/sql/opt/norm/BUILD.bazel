@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/internal/cast",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sem/volatility",
