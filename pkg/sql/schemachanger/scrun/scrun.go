@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -169,8 +170,14 @@ func executeStage(
 		// Don't go through the effort to wrap the error if it's a retry or it's a
 		// cancelation.
 		if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) &&
-			!errors.Is(err, context.Canceled) {
+			!errors.Is(err, context.Canceled) &&
+			!scerrors.HasSchemaChangerUserError(err) {
 			err = p.DecorateErrorWithPlanDetails(err)
+		}
+		// Certain errors are aimed to be user consumable and should never be
+		// wrapped.
+		if scerrors.HasSchemaChangerUserError(err) {
+			return errors.Unwrap(err)
 		}
 		return errors.Wrapf(err, "error executing %s", stage)
 	}

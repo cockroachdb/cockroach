@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -251,7 +252,7 @@ func runBackfills(
 			ctx, deps.IndexSpanSplitter(), bf, *p, tracker, tables[p.TableID],
 		)
 	}); err != nil {
-		return err
+		return scerrors.SchemaChangerUserError(err)
 	}
 	if err := stop(); err != nil {
 		return err
