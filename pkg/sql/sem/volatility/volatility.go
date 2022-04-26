@@ -8,7 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+// Package volatility defines terms used to describe the properties of
+// functions.
+package volatility
 
 import "github.com/cockroachdb/errors"
 
@@ -25,7 +27,7 @@ import "github.com/cockroachdb/errors"
 type Volatility int8
 
 const (
-	// VolatilityLeakProof means that the operator cannot modify the database, the
+	// LeakProof means that the operator cannot modify the database, the
 	// transaction state, or any other state. It cannot depend on configuration
 	// settings and is guaranteed to return the same results given the same
 	// arguments in any context. In addition, no information about the arguments
@@ -37,40 +39,40 @@ const (
 	// expressions out of a CASE). In the future, they may even run on rows that
 	// the user doesn't have permission to access.
 	//
-	// Note: VolatilityLeakProof is strictly stronger than VolatilityImmutable. In
+	// Note: LeakProof is strictly stronger than volatility.Immutable. In
 	// principle it could be possible to have leak-proof stable or volatile
 	// functions (perhaps now()); but this is not useful in practice as very few
 	// operators are marked leak-proof.
 	// Examples: integer comparison.
-	VolatilityLeakProof Volatility = 1 + iota
-	// VolatilityImmutable means that the operator cannot modify the database, the
+	LeakProof Volatility = 1 + iota
+	// Immutable means that the operator cannot modify the database, the
 	// transaction state, or any other state. It cannot depend on configuration
 	// settings and is guaranteed to return the same results given the same
 	// arguments in any context. ImmutableCopy operators can be constant folded.
 	// Examples: log, from_json.
-	VolatilityImmutable
-	// VolatilityStable means that the operator cannot modify the database or the
+	Immutable
+	// Stable means that the operator cannot modify the database or the
 	// transaction state and is guaranteed to return the same results given the
 	// same arguments whenever it is evaluated within the same statement. Multiple
 	// calls to a stable operator can be optimized to a single call.
 	// Examples: current_timestamp, current_date.
-	VolatilityStable
-	// VolatilityVolatile means that the operator can do anything, including
+	Stable
+	// Volatile means that the operator can do anything, including
 	// modifying database state.
 	// Examples: random, crdb_internal.force_error, nextval.
-	VolatilityVolatile
+	Volatile
 )
 
 // String returns the byte representation of Volatility as a string.
 func (v Volatility) String() string {
 	switch v {
-	case VolatilityLeakProof:
+	case LeakProof:
 		return "leak-proof"
-	case VolatilityImmutable:
+	case Immutable:
 		return "immutable"
-	case VolatilityStable:
+	case Stable:
 		return "stable"
-	case VolatilityVolatile:
+	case Volatile:
 		return "volatile"
 	default:
 		return "invalid"
@@ -81,32 +83,32 @@ func (v Volatility) String() string {
 // the "proleakproof" flag.
 func (v Volatility) ToPostgres() (provolatile string, proleakproof bool) {
 	switch v {
-	case VolatilityLeakProof:
+	case LeakProof:
 		return "i", true
-	case VolatilityImmutable:
+	case Immutable:
 		return "i", false
-	case VolatilityStable:
+	case Stable:
 		return "s", false
-	case VolatilityVolatile:
+	case Volatile:
 		return "v", false
 	default:
 		panic(errors.AssertionFailedf("invalid volatility %s", v))
 	}
 }
 
-// VolatilityFromPostgres returns a Volatility that matches the postgres
+// FromPostgres returns a Volatility that matches the postgres
 // provolatile/proleakproof settings.
-func VolatilityFromPostgres(provolatile string, proleakproof bool) (Volatility, error) {
+func FromPostgres(provolatile string, proleakproof bool) (Volatility, error) {
 	switch provolatile {
 	case "i":
 		if proleakproof {
-			return VolatilityLeakProof, nil
+			return LeakProof, nil
 		}
-		return VolatilityImmutable, nil
+		return Immutable, nil
 	case "s":
-		return VolatilityStable, nil
+		return Stable, nil
 	case "v":
-		return VolatilityVolatile, nil
+		return Volatile, nil
 	default:
 		return 0, errors.AssertionFailedf("invalid provolatile %s", provolatile)
 	}

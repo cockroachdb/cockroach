@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -253,7 +254,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Int,
 			"Calculates the number of bits used to represent `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
@@ -261,7 +262,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Int,
 			"Calculates the number of bits used to represent `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		bitsOverload1(
 			func(_ *tree.EvalContext, s *tree.DBitArray) (tree.Datum, error) {
@@ -269,7 +270,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Int,
 			"Calculates the number of bits used to represent `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -280,7 +281,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Int,
 			"Calculates the number of bytes used to represent `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
@@ -288,7 +289,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Int,
 			"Calculates the number of bytes used to represent `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		bitsOverload1(
 			func(_ *tree.EvalContext, s *tree.DBitArray) (tree.Datum, error) {
@@ -296,7 +297,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Int,
 			"Calculates the number of bits used to represent `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -309,7 +310,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Converts all characters in `val` to their lower-case equivalents.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -329,7 +330,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Removes accents (diacritic signs) from the text provided in `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -340,7 +341,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Converts all characters in `val` to their to their upper-case equivalents.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -355,7 +356,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Prettifies a statement using a the default pretty-printing config.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -379,7 +380,7 @@ var builtins = map[string]builtinDefinition{
 			Info: "Prettifies a statement using a user-configured pretty-printing config.\n" +
 				"Align mode values range from 0 - 3, representing no, partial, full, and extra alignment respectively.\n" +
 				"Case mode values range between 0 - 1, representing lower casing and upper casing respectively.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -411,7 +412,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(buffer.String()), nil
 			},
 			Info:       "Concatenates a comma-separated list of strings.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 			// In Postgres concat can take any arguments, converting them to
 			// their text representation. Since the text representation can
 			// depend on the context (e.g. timezone), the function is Stable. In
@@ -457,7 +458,7 @@ var builtins = map[string]builtinDefinition{
 			Info: "Uses the first argument as a separator between the concatenation of the " +
 				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
 				"returns `wow!great`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 			// In Postgres concat_ws can take any arguments, converting them to
 			// their text representation. Since the text representation can
 			// depend on the context (e.g. timezone), the function is Stable. In
@@ -495,7 +496,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Decode the bytes in `str` into a string using encoding `enc`. " +
 				"Supports encodings 'UTF8' and 'LATIN1'.",
-			Volatility:            tree.VolatilityImmutable,
+			Volatility:            volatility.Immutable,
 			IgnoreVolatilityCheck: true,
 		}),
 
@@ -528,7 +529,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Encode the string `str` as a byte array using encoding `enc`. " +
 				"Supports encodings 'UTF8' and 'LATIN1'.",
-			Volatility:            tree.VolatilityImmutable,
+			Volatility:            volatility.Immutable,
 			IgnoreVolatilityCheck: true,
 		}),
 
@@ -547,7 +548,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(bit)), nil
 			},
 			Info:       "Extracts a bit at given index in the bit array.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"byte_string", types.Bytes}, {"index", types.Int}},
@@ -569,7 +570,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(0)), nil
 			},
 			Info:       "Extracts a bit at the given index in the byte array.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
@@ -588,7 +589,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(byteString[index])), nil
 			},
 			Info:       "Extracts a byte at the given index in the byte array.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
@@ -617,7 +618,7 @@ var builtins = map[string]builtinDefinition{
 				return &tree.DBitArray{BitArray: updatedBitString}, nil
 			},
 			Info:       "Updates a bit at given index in the bit array.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -650,7 +651,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(byteString)), nil
 			},
 			Info:       "Updates a bit at the given index in the byte array.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
@@ -675,7 +676,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(byteString)), nil
 			},
 			Info:       "Updates a byte at the given index in the byte array.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}),
 
 	"uuid_generate_v4": generateRandomUUID4Impl,
@@ -714,7 +715,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Generates a version 1 UUID, and returns it as a value of UUID type. " +
 				"This uses the real MAC address of the server and a timestamp.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -735,7 +736,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Generates a version 1 UUID, and returns it as a value of UUID type. " +
 				"This uses a random MAC address and a timestamp.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -755,7 +756,7 @@ var builtins = map[string]builtinDefinition{
 			Info: "Generates a version 3 UUID in the given namespace using the specified input name, " +
 				"with md5 as the hashing method. " +
 				"The namespace should be one of the special constants produced by the uuid_ns_*() functions.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -774,7 +775,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Generates a version 5 UUID in the given namespace using the specified input name. " +
 				"This is similar to a version 3 UUID, except it uses SHA-1 for hashing.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -792,7 +793,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Converts the character string representation of a UUID to its byte string " +
 				"representation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -810,7 +811,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Converts the byte string representation of a UUID to its character string " +
 				"representation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -827,7 +828,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDUuid(tree.DUuid{UUID: uuid.UUID(uv)}), nil
 			},
 			Info:       "Generates a random ULID and returns it as a value of UUID type.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -844,7 +845,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(ul.String()), nil
 			},
 			Info:       "Converts a UUID-encoded ULID to its string representation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -869,7 +870,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
 			},
 			Info:       "Converts a ULID string to its UUID-encoded representation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -898,7 +899,7 @@ var builtins = map[string]builtinDefinition{
 			Info: "Converts the combined IP address and prefix length to an abbreviated display format as text." +
 				"For INET types, this will omit the prefix length if it's not the default (32 or IPv4, 128 for IPv6)" +
 				"\n\nFor example, `abbrev('192.168.1.2/24')` returns `'192.168.1.2/24'`",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -913,7 +914,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Gets the broadcast address for the network address represented by the value." +
 				"\n\nFor example, `broadcast('192.168.1.2/24')` returns `'192.168.1.255/24'`",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -930,7 +931,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Extracts the IP family of the value; 4 for IPv4, 6 for IPv6." +
 				"\n\nFor example, `family('::1')` returns `6`",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -948,7 +949,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Extracts the address part of the combined address/prefixlen value as text." +
 				"\n\nFor example, `host('192.168.1.2/16')` returns `'192.168.1.2'`",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -963,7 +964,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Creates an IP host mask corresponding to the prefix length in the value." +
 				"\n\nFor example, `hostmask('192.168.1.2/16')` returns `'0.0.255.255'`",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -977,7 +978,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Retrieves the prefix length stored in the value." +
 				"\n\nFor example, `masklen('192.168.1.2/16')` returns `16`",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -992,7 +993,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Creates an IP network mask corresponding to the prefix length in the value." +
 				"\n\nFor example, `netmask('192.168.1.2/16')` returns `'255.255.0.0'`",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1015,7 +1016,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Sets the prefix length of `val` to `prefixlen`.\n\n" +
 				"For example, `set_masklen('192.168.1.2', 16)` returns `'192.168.1.2/16'`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1033,7 +1034,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(s), nil
 			},
 			Info:       "Converts the IP address and prefix length to text.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1050,7 +1051,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.MakeDBool(tree.DBool(first.Family == other.Family)), nil
 			},
 			Info:       "Checks if two IP addresses are of the same IP family.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1068,7 +1069,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Test for subnet inclusion or equality, using only the network parts of the addresses. " +
 				"The host part of the addresses is ignored.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1086,7 +1087,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Test for subnet inclusion or equality, using only the network parts of the addresses. " +
 				"The host part of the addresses is ignored.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1106,7 +1107,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Converts the byte string representation of an IP to its character string " +
 				"representation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1127,7 +1128,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Converts the character string representation of an IP to its byte string " +
 				"representation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1158,7 +1159,7 @@ var builtins = map[string]builtinDefinition{
 			Info: "Splits `input` on `delimiter` and return the value in the `return_index_pos`  " +
 				"position (starting at 1). \n\nFor example, `split_part('123.456.789.0','.',3)`" +
 				"returns `789`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1186,7 +1187,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Concatenates `input` `repeat_counter` number of times.\n\nFor example, " +
 				"`repeat('dog', 2)` returns `dogdog`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1206,7 +1207,7 @@ var builtins = map[string]builtinDefinition{
 					string(data), be, true /* skipHexPrefix */)), nil
 			},
 			Info:       "Encodes `data` using `format` (`hex` / `escape` / `base64`).",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1228,7 +1229,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(res)), nil
 			},
 			Info:       "Decodes `data` using `format` (`hex` / `escape` / `base64`).",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1256,7 +1257,7 @@ var builtins = map[string]builtinDefinition{
 				}
 			},
 			Info:       "Compress `data` with the specified `codec` (`gzip`).",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1285,7 +1286,7 @@ var builtins = map[string]builtinDefinition{
 				}
 			},
 			Info:       "Decompress `data` with the specified `codec` (`gzip`).",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1299,7 +1300,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Int,
 			"Returns the character code of the first character in `val`. Despite the name, the function supports Unicode too.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		)),
 
 	"chr": makeBuiltin(tree.FunctionProperties{Category: categoryString},
@@ -1320,7 +1321,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(answer), nil
 			},
 			Info:       "Returns the character with the code given in `val`. Inverse function of `ascii()`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1398,7 +1399,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(fmt.Sprintf("%x", uint64(val))), nil
 			},
 			Info:       "Converts `val` to its hexadecimal representation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Bytes}},
@@ -1407,7 +1408,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(fmt.Sprintf("%x", tree.MustBeDBytes(args[0]))), nil
 			},
 			Info:       "Converts `val` to its hexadecimal representation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.String}},
@@ -1416,7 +1417,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(fmt.Sprintf("%x", tree.MustBeDString(args[0]))), nil
 			},
 			Info:       "Converts `val` to its hexadecimal representation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1453,7 +1454,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(buf.String()), nil
 			},
 			Info:       "This function enunciates the value of its argument using English cardinals.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1474,7 +1475,7 @@ var builtins = map[string]builtinDefinition{
 			types.Int,
 			"Calculates the position where the string `find` begins in `input`. \n\nFor"+
 				" example, `strpos('doggie', 'gie')` returns `4`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		bitsOverload2("input", "find",
 			func(_ *tree.EvalContext, bitString, bitSubstring *tree.DBitArray) (tree.Datum, error) {
@@ -1486,7 +1487,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Int,
 			"Calculates the position where the bit subarray `find` begins in `input`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		bytesOverload2(
 			"input",
@@ -1500,7 +1501,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Int,
 			"Calculates the position where the byte subarray `find` begins in `input`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		)),
 
 	"overlay": makeBuiltin(defProps(),
@@ -1521,7 +1522,7 @@ var builtins = map[string]builtinDefinition{
 			Info: "Replaces characters in `input` with `overlay_val` starting at `start_pos` " +
 				"(begins at 1). \n\nFor example, `overlay('doggie', 'CAT', 2)` returns " +
 				"`dCATie`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1540,7 +1541,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Deletes the characters in `input` between `start_pos` and `end_pos` (count " +
 				"starts at 1), and then insert `overlay_val` at `start_pos`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1560,7 +1561,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Pads `string` to `length` by adding ' ' to the left of `string`." +
 				"If `string` is longer than `length` it is truncated.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}, {"fill", types.String}},
@@ -1577,7 +1578,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Pads `string` by adding `fill` to the left of `string` to make it `length`. " +
 				"If `string` is longer than `length` it is truncated.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1597,7 +1598,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Pads `string` to `length` by adding ' ' to the right of string. " +
 				"If `string` is longer than `length` it is truncated.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}, {"fill", types.String}},
@@ -1614,7 +1615,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Pads `string` to `length` by adding `fill` to the right of `string`. " +
 				"If `string` is longer than `length` it is truncated.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1630,7 +1631,7 @@ var builtins = map[string]builtinDefinition{
 			"Removes any characters included in `trim_chars` from the beginning or end"+
 				" of `input` (applies recursively). \n\nFor example, `btrim('doggie', 'eod')` "+
 				"returns `ggi`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
@@ -1638,7 +1639,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Removes all spaces from the beginning and end of `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -1654,7 +1655,7 @@ var builtins = map[string]builtinDefinition{
 			"Removes any characters included in `trim_chars` from the beginning "+
 				"(left-hand side) of `input` (applies recursively). \n\nFor example, "+
 				"`ltrim('doggie', 'od')` returns `ggie`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
@@ -1662,7 +1663,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Removes all spaces from the beginning (left-hand side) of `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -1678,7 +1679,7 @@ var builtins = map[string]builtinDefinition{
 			"Removes any characters included in `trim_chars` from the end (right-hand "+
 				"side) of `input` (applies recursively). \n\nFor example, `rtrim('doggie', 'ei')` "+
 				"returns `dogg`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
@@ -1686,7 +1687,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Removes all spaces from the end (right-hand side) of `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -1704,7 +1705,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Reverses the order of the string's characters.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -1734,7 +1735,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Replaces all occurrences of `find` with `replace` in `input`",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -1769,7 +1770,7 @@ var builtins = map[string]builtinDefinition{
 			"In `input`, replaces the first character from `find` with the first "+
 				"character in `replace`; repeat for each character in `find`. \n\nFor example, "+
 				"`translate('doggie', 'dog', '123');` returns `1233ie`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -1783,7 +1784,7 @@ var builtins = map[string]builtinDefinition{
 				return regexpExtract(ctx, s, pattern, `\`)
 			},
 			Info:       "Returns the first match for the Regular Expression `regex` in `input`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1807,7 +1808,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Replaces matches for the Regular Expression `regex` in `input` with the " +
 				"Regular Expression `replace`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1830,7 +1831,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Replaces matches for the regular expression `regex` in `input` with the regular " +
 				"expression `replace` using `flags`." + regexpFlagInfo,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1846,7 +1847,7 @@ var builtins = map[string]builtinDefinition{
 				return regexpSplitToArray(ctx, args, false /* hasFlags */)
 			},
 			Info:       "Split string using a POSIX regular expression as the delimiter.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1859,7 +1860,7 @@ var builtins = map[string]builtinDefinition{
 				return regexpSplitToArray(ctx, args, true /* hasFlags */)
 			},
 			Info:       "Split string using a POSIX regular expression as the delimiter with flags." + regexpFlagInfo,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1871,7 +1872,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Bool,
 			"Matches `unescaped` with `pattern` using `escape` as an escape token.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -1888,7 +1889,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Bool,
 			"Checks whether `unescaped` not matches with `pattern` using `escape` as an escape token.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		)),
 
 	"ilike_escape": makeBuiltin(defProps(),
@@ -1899,7 +1900,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Bool,
 			"Matches case insensetively `unescaped` with `pattern` using `escape` as an escape token.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		)),
 
 	"not_ilike_escape": makeBuiltin(defProps(),
@@ -1915,7 +1916,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Bool,
 			"Checks whether `unescaped` not matches case insensetively with `pattern` using `escape` as an escape token.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		)),
 
 	"similar_escape": makeBuiltin(
@@ -1935,7 +1936,7 @@ var builtins = map[string]builtinDefinition{
 				},
 				types.Bool,
 				"Matches `unescaped` with `pattern` using `escape` as an escape token.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			),
 		)...,
 	),
@@ -1953,7 +1954,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.Bool,
 			"Checks whether `unescaped` not matches with `pattern` using `escape` as an escape token.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		)),
 
 	"initcap": makeBuiltin(defProps(),
@@ -1963,7 +1964,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Capitalizes the first letter of `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		)),
 
 	"quote_ident": makeBuiltin(defProps(),
@@ -1975,7 +1976,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Return `val` suitably quoted to serve as identifier in a SQL statement.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		)),
 
 	"quote_literal": makeBuiltin(defProps(),
@@ -1988,7 +1989,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(lexbase.EscapeSQLString(string(s))), nil
 			},
 			Info:       "Return `val` suitably quoted to serve as string literal in a SQL statement.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Any}},
@@ -2004,7 +2005,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(strD.String()), nil
 			},
 			Info:       "Coerce `val` to a string and then quote it as a literal.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -2026,7 +2027,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(lexbase.EscapeSQLString(string(s))), nil
 			},
 			Info:       "Coerce `val` to a string and then quote it as a literal. If `val` is NULL, returns 'NULL'.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Any}},
@@ -2045,7 +2046,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(strD.String()), nil
 			},
 			Info:       "Coerce `val` to a string and then quote it as a literal. If `val` is NULL, returns 'NULL'.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -2067,7 +2068,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(bytes[:n])), nil
 			},
 			Info:       "Returns the first `return_set` bytes from `input`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.String}, {"return_set", types.Int}},
@@ -2086,7 +2087,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(string(runes[:n])), nil
 			},
 			Info:       "Returns the first `return_set` characters from `input`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2108,7 +2109,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(bytes[len(bytes)-n:])), nil
 			},
 			Info:       "Returns the last `return_set` bytes from `input`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.String}, {"return_set", types.Int}},
@@ -2127,7 +2128,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(string(runes[len(runes)-n:])), nil
 			},
 			Info:       "Returns the last `return_set` characters from `input`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2141,7 +2142,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Returns a random floating-point number between 0 (inclusive) and 1 (exclusive). " +
 				"Note that the value contains at most 53 bits of randomness.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2160,7 +2161,7 @@ var builtins = map[string]builtinDefinition{
 				"insert timestamp and the ID of the node executing the statement, which " +
 				"guarantees this combination is globally unique. However, there can be " +
 				"gaps and the order is not completely guaranteed.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2179,7 +2180,7 @@ var builtins = map[string]builtinDefinition{
 				"insert timestamp and the ID of the node executing the statement, which " +
 				"guarantees this combination is globally unique. The way it is generated " +
 				"there is no ordering",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2207,7 +2208,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(res)), nil
 			},
 			Info:       "Advances the given sequence and returns its new value.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{SequenceNameArg, types.RegClass}},
@@ -2221,7 +2222,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(res)), nil
 			},
 			Info:       "Advances the given sequence and returns its new value.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2247,7 +2248,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(res)), nil
 			},
 			Info:       "Returns the latest value obtained with nextval for this sequence in this session.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{SequenceNameArg, types.RegClass}},
@@ -2261,7 +2262,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(res)), nil
 			},
 			Info:       "Returns the latest value obtained with nextval for this sequence in this session.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2280,7 +2281,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(val)), nil
 			},
 			Info:       "Return value most recently obtained with nextval in this session.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2311,7 +2312,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Set the given sequence's current value. The next call to nextval will return " +
 				"`value + Increment`",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{SequenceNameArg, types.RegClass}, {"value", types.Int}},
@@ -2327,7 +2328,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Set the given sequence's current value. The next call to nextval will return " +
 				"`value + Increment`",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -2351,7 +2352,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Set the given sequence's current value. If is_called is false, the next call to " +
 				"nextval will return `value`; otherwise `value + Increment`.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -2371,7 +2372,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Set the given sequence's current value. If is_called is false, the next call to " +
 				"nextval will return `value`; otherwise `value + Increment`.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2390,7 +2391,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.PickFromTuple(ctx, true /* greatest */, args)
 			},
 			Info:       "Returns the element with the greatest value.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2406,7 +2407,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.PickFromTuple(ctx, false /* greatest */, args)
 			},
 			Info:       "Returns the element with the lowest value.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2430,7 +2431,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "From `input`, extracts and formats the time as identified in `extract_format` " +
 				"using standard `strftime` notation (though not all formatting is supported).",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.Date}, {"extract_format", types.String}},
@@ -2449,7 +2450,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "From `input`, extracts and formats the time as identified in `extract_format` " +
 				"using standard `strftime` notation (though not all formatting is supported).",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.TimestampTZ}, {"extract_format", types.String}},
@@ -2465,7 +2466,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "From `input`, extracts and formats the time as identified in `extract_format` " +
 				"using standard `strftime` notation (though not all formatting is supported).",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2487,7 +2488,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Returns `input` as a timestamptz using `format` (which uses standard " +
 				"`strptime` formatting).",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2503,7 +2504,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(buf.String()), nil
 			},
 			Info:       "Convert an interval to a string assuming the Postgres IntervalStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"timestamp", types.Timestamp}},
@@ -2513,7 +2514,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(tree.AsStringWithFlags(&ts, tree.FmtBareStrings)), nil
 			},
 			Info:       "Convert an timestamp to a string assuming the ISO, MDY DateStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"date", types.Date}},
@@ -2523,7 +2524,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(tree.AsStringWithFlags(&ts, tree.FmtBareStrings)), nil
 			},
 			Info:       "Convert an date to a string assuming the ISO, MDY DateStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2548,7 +2549,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(buf.String()), nil
 			},
 			Info:       "Convert an interval to a string using the given IntervalStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"timestamp", types.Timestamp}, {"datestyle", types.String}},
@@ -2566,7 +2567,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(tree.AsStringWithFlags(&ts, tree.FmtBareStrings)), nil
 			},
 			Info:       "Convert an timestamp to a string assuming the string is formatted using the given DateStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"date", types.Date}, {"datestyle", types.String}},
@@ -2584,7 +2585,7 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(tree.AsStringWithFlags(&ts, tree.FmtBareStrings)), nil
 			},
 			Info:       "Convert an date to a string assuming the string is formatted using the given DateStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2607,7 +2608,7 @@ var builtins = map[string]builtinDefinition{
 Note this may not be an accurate time span since years and months are normalized
 from days, and years and months are out of context. To avoid normalizing days into
 months and years, use ` + "`now() - timestamptz`" + `.`,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"end", types.TimestampTZ}, {"begin", types.TimestampTZ}},
@@ -2625,7 +2626,7 @@ months and years, use ` + "`now() - timestamptz`" + `.`,
 Note this may not be an accurate time span since years and months are normalized
 from days, and years and months are out of context. To avoid normalizing days into
 months and years, use the timestamptz subtraction operator.`,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2636,7 +2637,7 @@ months and years, use the timestamptz subtraction operator.`,
 			ReturnType: tree.FixedReturnType(types.Date),
 			Fn:         currentDate,
 			Info:       "Returns the date of the current transaction." + txnTSContextDoc,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -2658,7 +2659,7 @@ months and years, use the timestamptz subtraction operator.`,
 				return tree.MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond)
 			},
 			Info:       "Returns the start time of the current statement.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -2667,7 +2668,7 @@ months and years, use the timestamptz subtraction operator.`,
 				return tree.MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond)
 			},
 			Info:       "Returns the start time of the current statement.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -2689,7 +2690,7 @@ Note that this function requires an enterprise license on a CCL distribution to
 return a result that is less likely the closest replica. It is otherwise
 hardcoded as %s from the statement time, which may not result in reading from the
 nearest replica.`, defaultFollowerReadDuration),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2700,7 +2701,7 @@ nearest replica.`, defaultFollowerReadDuration),
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn:         followerReadTimestamp,
 			Info:       fmt.Sprintf("Same as %s. This name is deprecated.", tree.FollowerReadTimestampFunctionName),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2715,7 +2716,7 @@ nearest replica.`, defaultFollowerReadDuration),
 				return withMinTimestamp(ctx, tree.MustBeDTimestampTZ(args[0]).Time)
 			},
 			Info:       withMinTimestampInfo(false /* nearestOnly */),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -2727,7 +2728,7 @@ nearest replica.`, defaultFollowerReadDuration),
 				return withMinTimestamp(ctx, tree.MustBeDTimestampTZ(args[0]).Time)
 			},
 			Info:       withMinTimestampInfo(true /* nearestOnly */),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2742,7 +2743,7 @@ nearest replica.`, defaultFollowerReadDuration),
 				return withMaxStaleness(ctx, tree.MustBeDInterval(args[0]).Duration)
 			},
 			Info:       withMaxStalenessInfo(false /* nearestOnly */),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -2754,7 +2755,7 @@ nearest replica.`, defaultFollowerReadDuration),
 				return withMaxStaleness(ctx, tree.MustBeDInterval(args[0]).Duration)
 			},
 			Info:       withMaxStalenessInfo(true /* nearestOnly */),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2773,7 +2774,7 @@ a CockroachDB HLC in decimal form.
 
 Note that uses of this function disable server-side optimizations and
 may increase either contention or retry errors, or both.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2791,7 +2792,7 @@ may increase either contention or retry errors, or both.`,
 Note that a TimestampTZ has less precision than a CockroachDB HLC. It is intended as
 a convenience function to display HLCs in a print-friendly form. Use the decimal
 value if you rely on the HLC for accuracy.`,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2805,7 +2806,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.MakeDTimestampTZ(timeutil.Now(), time.Microsecond)
 			},
 			Info:       "Returns the current system time on one of the cluster nodes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -2814,7 +2815,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.MakeDTimestamp(timeutil.Now(), time.Microsecond)
 			},
 			Info:       "Returns the current system time on one of the cluster nodes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -2830,7 +2831,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(ctxTime.Format("Mon Jan 2 15:04:05.000000 2006 -0700")), nil
 			},
 			Info:       "Returns the current system time on one of the cluster nodes as a string.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -2872,7 +2873,7 @@ value if you rely on the HLC for accuracy.`,
 			Info: "Extracts `element` from `input`.\n" +
 				"Compatible elements: hour, minute, second, millisecond, microsecond.\n" +
 				"This is deprecated in favor of `extract` which supports duration.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2929,7 +2930,7 @@ value if you rely on the HLC for accuracy.`,
 				"significant than `element` to zero (or one, for day and month)\n\n" +
 				"Compatible elements: millennium, century, decade, year, quarter, month,\n" +
 				"week, day, hour, minute, second, millisecond, microsecond.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
@@ -2948,7 +2949,7 @@ value if you rely on the HLC for accuracy.`,
 				"significant than `element` to zero (or one, for day and month)\n\n" +
 				"Compatible elements: millennium, century, decade, year, quarter, month,\n" +
 				"week, day, hour, minute, second, millisecond, microsecond.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
@@ -2965,7 +2966,7 @@ value if you rely on the HLC for accuracy.`,
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero.\n\n" +
 				"Compatible elements: hour, minute, second, millisecond, microsecond.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
@@ -2979,7 +2980,7 @@ value if you rely on the HLC for accuracy.`,
 				"significant than `element` to zero (or one, for day and month)\n\n" +
 				"Compatible elements: millennium, century, decade, year, quarter, month,\n" +
 				"week, day, hour, minute, second, millisecond, microsecond.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
@@ -2993,7 +2994,7 @@ value if you rely on the HLC for accuracy.`,
 				"significant than `element` to zero (or one, for day and month)\n\n" +
 				"Compatible elements: millennium, century, decade, year, quarter, month,\n" +
 				"week, day, hour, minute, second, millisecond, microsecond.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -3027,7 +3028,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDJSON(builder.Build()), nil
 			},
 			Info:       "Returns the row as a JSON object.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -3055,7 +3056,7 @@ value if you rely on the HLC for accuracy.`,
 				return ts.EvalAtTimeZone(ctx, loc)
 			},
 			Info:       "Convert given time stamp with time zone to the new time zone, with no time zone designation.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3079,7 +3080,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.MakeDTimestampTZ(ts.Time.Add(durationDelta), time.Microsecond)
 			},
 			Info:       "Treat given time stamp without time zone as located in the specified time zone.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3100,7 +3101,7 @@ value if you rely on the HLC for accuracy.`,
 				return ts.EvalAtTimeZone(ctx, loc)
 			},
 			Info:       "Convert given time stamp with time zone to the new time zone, with no time zone designation.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3124,7 +3125,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc).Add(durationDelta))), nil
 			},
 			Info:       "Treat given time without time zone as located in the specified time zone.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 			// This overload's volatility does not match Postgres. See
 			// https://github.com/cockroachdb/cockroach/pull/51037 for details.
 			IgnoreVolatilityCheck: true,
@@ -3150,7 +3151,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc))), nil
 			},
 			Info:       "Convert given time with time zone to the new time zone.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 			// This overload's volatility does not match Postgres. See
 			// https://github.com/cockroachdb/cockroach/pull/51037 for details.
 			IgnoreVolatilityCheck: true,
@@ -3184,7 +3185,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			types.Timestamp,
 			"Convert a string containing an absolute timestamp to the corresponding timestamp assuming dates are in MDY format.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"string", types.String}, {"datestyle", types.String}},
@@ -3213,7 +3214,7 @@ value if you rely on the HLC for accuracy.`,
 				return ts, nil
 			},
 			Info:       "Convert a string containing an absolute timestamp to the corresponding timestamp assuming dates formatted using the given DateStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3238,7 +3239,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			types.Date,
 			"Parses a date assuming it is in MDY format.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"string", types.String}, {"datestyle", types.String}},
@@ -3263,7 +3264,7 @@ value if you rely on the HLC for accuracy.`,
 				return ts, nil
 			},
 			Info:       "Parses a date assuming it is in format specified by DateStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3289,7 +3290,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			types.Time,
 			"Parses a time assuming the date (if any) is in MDY format.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"string", types.String}, {"timestyle", types.String}},
@@ -3314,7 +3315,7 @@ value if you rely on the HLC for accuracy.`,
 				return t, nil
 			},
 			Info:       "Parses a time assuming the date (if any) is in format specified by DateStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3326,7 +3327,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			types.Interval,
 			"Convert a string to an interval assuming the Postgres IntervalStyle.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"string", types.String}, {"style", types.String}},
@@ -3345,7 +3346,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.ParseDInterval(duration.IntervalStyle(styleVal), s)
 			},
 			Info:       "Convert a string to an interval using the given IntervalStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3371,7 +3372,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			types.TimeTZ,
 			"Parses a timetz assuming the date (if any) is in MDY format.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"string", types.String}, {"timestyle", types.String}},
@@ -3396,7 +3397,7 @@ value if you rely on the HLC for accuracy.`,
 				return t, nil
 			},
 			Info:       "Parses a timetz assuming the date (if any) is in format specified by DateStyle.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3415,7 +3416,7 @@ value if you rely on the HLC for accuracy.`,
 				return stringToArray(str, delimOrNil, nil)
 			},
 			Info:       "Split a string into components on a delimiter.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}, {"null", types.String}},
@@ -3430,7 +3431,7 @@ value if you rely on the HLC for accuracy.`,
 				return stringToArray(str, delimOrNil, nullStr)
 			},
 			Info:       "Split a string into components on a delimiter with a specified string to consider NULL.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3447,7 +3448,7 @@ value if you rely on the HLC for accuracy.`,
 				return arrayToString(evalCtx, arr, delim, nil)
 			},
 			Info:       "Join an array into a string with a delimiter.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delimiter", types.String}, {"null", types.String}},
@@ -3462,7 +3463,7 @@ value if you rely on the HLC for accuracy.`,
 				return arrayToString(evalCtx, arr, delim, nullStr)
 			},
 			Info:       "Join an array into a string with a delimiter, replacing NULLs with a null string.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -3478,7 +3479,7 @@ value if you rely on the HLC for accuracy.`,
 			Info: "Calculates the length of `input` on the provided `array_dimension`. However, " +
 				"because CockroachDB doesn't yet support multi-dimensional arrays, the only supported" +
 				" `array_dimension` is **1**.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3491,7 +3492,7 @@ value if you rely on the HLC for accuracy.`,
 				return cardinality(arr), nil
 			},
 			Info:       "Calculates the number of elements contained in `input`",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3507,7 +3508,7 @@ value if you rely on the HLC for accuracy.`,
 			Info: "Calculates the minimum value of `input` on the provided `array_dimension`. " +
 				"However, because CockroachDB doesn't yet support multi-dimensional arrays, the only " +
 				"supported `array_dimension` is **1**.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3523,7 +3524,7 @@ value if you rely on the HLC for accuracy.`,
 			Info: "Calculates the maximum value of `input` on the provided `array_dimension`. " +
 				"However, because CockroachDB doesn't yet support multi-dimensional arrays, the only " +
 				"supported `array_dimension` is **1**.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3542,7 +3543,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.AppendToMaybeNullArray(typ, args[0], args[1])
 			},
 			Info:       "Appends `elem` to `array`, returning the result.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}
 	})),
 
@@ -3561,7 +3562,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.PrependToMaybeNullArray(typ, args[0], args[1])
 			},
 			Info:       "Prepends `elem` to `array`, returning the result.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}
 	})),
 
@@ -3585,7 +3586,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.ConcatArrays(typ, args[0], args[1])
 			},
 			Info:       "Appends two arrays.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}
 	})),
 
@@ -3612,7 +3613,7 @@ value if you rely on the HLC for accuracy.`,
 				return result, nil
 			},
 			Info:       "Remove from `array` all elements equal to `elem`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}
 	})),
 
@@ -3643,7 +3644,7 @@ value if you rely on the HLC for accuracy.`,
 				return result, nil
 			},
 			Info:       "Replace all occurrences of `toreplace` in `array` with `replacewith`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}
 	})),
 
@@ -3667,7 +3668,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DNull, nil
 			},
 			Info:       "Return the index of the first occurrence of `elem` in `array`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}
 	})),
 
@@ -3694,7 +3695,7 @@ value if you rely on the HLC for accuracy.`,
 				return result, nil
 			},
 			Info:       "Returns and array of indexes of all occurrences of `elem` in `array`.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}
 	})),
 
@@ -3741,7 +3742,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(t), nil
 			},
 			Info:       "Convert a string to its Soundex code.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	// The function is confusingly named, `similarity` would have been a better name,
@@ -3758,7 +3759,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(strconv.Itoa(diff)), nil
 			},
 			Info:       "Convert two strings to their Soundex codes and then reports the number of matching code positions.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"levenshtein": makeBuiltin(defProps(),
@@ -3776,7 +3777,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDInt(tree.DInt(ld)), nil
 			},
 			Info:       "Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{{"source", types.String}, {"target", types.String},
@@ -3795,7 +3796,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info: "Calculates the Levenshtein distance between two strings. The cost parameters specify how much to " +
 				"charge for each edit operation. Maximum input length is 255 characters.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}),
 	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
 	"metaphone":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
@@ -3841,7 +3842,7 @@ value if you rely on the HLC for accuracy.`,
 				return &tree.DJSON{JSON: s}, nil
 			},
 			Info:       "Remove the specified path from the JSON object.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3871,7 +3872,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(s), nil
 			},
 			Info:       "Returns the given JSON value as a STRING indented and with newlines.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3917,7 +3918,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.JSONExistsAny(e, tree.MustBeDJSON(args[0]), tree.MustBeDArray(args[1]))
 			},
 			Info:       "Returns whether any of the strings in the text array exist as top-level keys or array elements",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3932,7 +3933,7 @@ value if you rely on the HLC for accuracy.`,
 				return jsonValidate(e, tree.MustBeDString(args[0])), nil
 			},
 			Info:       "Returns whether the given string is a valid JSON or not",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3941,7 +3942,7 @@ value if you rely on the HLC for accuracy.`,
 		func() []tree.Overload {
 			returnType := tree.FixedReturnType(types.Jsonb)
 			const info = "Converts protocol message to its JSONB representation."
-			volatility := tree.VolatilityImmutable
+			volatility := volatility.Immutable
 			pbToJSON := func(typ string, data []byte, flags protoreflect.FmtFlags) (tree.Datum, error) {
 				msg, err := protoreflect.DecodeMessage(typ, data)
 				if err != nil {
@@ -4035,7 +4036,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDBytes(tree.DBytes(data)), nil
 			},
 			Info:       "Convert JSONB data to protocol message bytes",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}),
 
 	"crdb_internal.read_file": makeBuiltin(
@@ -4051,7 +4052,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDBytes(tree.DBytes(content)), err
 			},
 			Info:       "Read the content of the file at the supplied external storage URI",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		}),
 
 	"crdb_internal.write_file": makeBuiltin(
@@ -4071,7 +4072,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDInt(tree.DInt(len(data))), nil
 			},
 			Info:       "Write the content passed to a file at the supplied external storage URI",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		}),
 
 	"crdb_internal.datums_to_bytes": makeBuiltin(
@@ -4102,7 +4103,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDBytes(tree.DBytes(out)), nil
 			},
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"crdb_internal.merge_statement_stats": makeBuiltin(arrayProps(),
@@ -4133,7 +4134,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDJSON(aggregatedJSON), nil
 			},
 			Info:       "Merge an array of roachpb.StatementStatistics into a single JSONB object",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"crdb_internal.merge_transaction_stats": makeBuiltin(arrayProps(),
@@ -4167,7 +4168,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDJSON(aggregatedJSON), nil
 			},
 			Info:       "Merge an array of roachpb.TransactionStatistics into a single JSONB object",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"crdb_internal.merge_stats_metadata": makeBuiltin(arrayProps(),
@@ -4217,7 +4218,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDJSON(aggregatedJSON), nil
 			},
 			Info:       "Merge an array of StmtStatsMetadata into a single JSONB object",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -4239,7 +4240,7 @@ value if you rely on the HLC for accuracy.`,
 				return min, nil
 			},
 			Info:       "Returns the first value of the input enum type.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4260,7 +4261,7 @@ value if you rely on the HLC for accuracy.`,
 				return max, nil
 			},
 			Info:       "Returns the last value of the input enum type.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4293,7 +4294,7 @@ value if you rely on the HLC for accuracy.`,
 				return arr, nil
 			},
 			Info:       "Returns all values of the input enum in an ordered array.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"lower", types.AnyEnum}, {"upper", types.AnyEnum}},
@@ -4360,7 +4361,7 @@ value if you rely on the HLC for accuracy.`,
 				return arr, nil
 			},
 			Info:       "Returns all values of the input enum in an ordered array between the two arguments (inclusive).",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4376,7 +4377,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(build.GetInfo().Short()), nil
 			},
 			Info:       "Returns the node's version of CockroachDB.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -4393,7 +4394,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(ctx.SessionData().Database), nil
 			},
 			Info:       "Returns the current database.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4427,7 +4428,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DNull, nil
 			},
 			Info:       "Returns the current schema.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4473,7 +4474,7 @@ value if you rely on the HLC for accuracy.`,
 				return schemas, nil
 			},
 			Info:       "Returns the valid schemas in the search path.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4491,7 +4492,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info: "Returns the current user. This function is provided for " +
 				"compatibility with PostgreSQL.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4509,7 +4510,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info: "Returns the session user. This function is provided for " +
 				"compatibility with PostgreSQL.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4542,7 +4543,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info: "Returns the current trace ID or an error if no trace is open.",
 			// NB: possibly this is or could be made stable, but it's not worth it.
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -4595,7 +4596,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "Returns true if root span was found and verbosity was set, false otherwise.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -4619,7 +4620,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DNull, nil
 			},
 			Info:       "Returns the value of the specified locality key.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4650,7 +4651,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(setting.EncodedDefault()), nil
 			},
 			Info:       "Returns the encoded default value of the given cluster setting.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -4691,7 +4692,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(repr), nil
 			},
 			Info:       "Decodes the given encoded value for a cluster setting.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -4705,7 +4706,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(v), nil
 			},
 			Info:       "Returns the version of CockroachDB this node is running.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -4727,7 +4728,7 @@ value if you rely on the HLC for accuracy.`,
 				return jsonDatum, nil
 			},
 			Info:       "Returns the current active cluster version.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -4755,7 +4756,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolFalse, nil
 			},
 			Info:       "Returns true if the cluster version is not older than the argument.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -4768,7 +4769,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DecimalToInexactDTimestamp(args[0].(*tree.DDecimal))
 			},
 			Info:       "Converts the crdb_internal_mvcc_timestamp column into an approximate timestamp.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -4781,7 +4782,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDUuid(tree.DUuid{UUID: ctx.ClusterID}), nil
 			},
 			Info:       "Returns the logical cluster ID for this tenant.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4798,7 +4799,7 @@ value if you rely on the HLC for accuracy.`,
 				return dNodeID, nil
 			},
 			Info:       "Returns the node ID.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -4811,7 +4812,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(ctx.ClusterName), nil
 			},
 			Info:       "Returns the cluster name.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -4840,7 +4841,7 @@ value if you rely on the HLC for accuracy.`,
 				return args[0], nil
 			},
 			Info:       "Creates a new tenant with the provided ID. Must be run by the System tenant.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -4857,7 +4858,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(token), nil
 			},
 			Info:       "Creates a join token for use when adding a new node to a secure cluster.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -4884,7 +4885,7 @@ value if you rely on the HLC for accuracy.`,
 				return args[0], nil
 			},
 			Info:       "Destroys a tenant with the provided ID. Must be run by the System tenant.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4907,7 +4908,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info: "Destroys a tenant with the provided ID. Must be run by the System tenant. " +
 				"Optionally, synchronously destroy the data",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5038,7 +5039,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDBytes(tree.DBytes(res)), nil
 			},
 			Info:       "Generate the key for a row on a particular table and index.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -5068,7 +5069,7 @@ value if you rely on the HLC for accuracy.`,
 				return nil, pgerror.Newf(pgcode.MakeCode(errCode), "%s", msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5088,7 +5089,7 @@ value if you rely on the HLC for accuracy.`,
 				return crdbInternalSendNotice(ctx, "NOTICE", msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"severity", types.String}, {"msg", types.String}},
@@ -5110,7 +5111,7 @@ value if you rely on the HLC for accuracy.`,
 				return crdbInternalSendNotice(ctx, severityString, msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5130,7 +5131,7 @@ value if you rely on the HLC for accuracy.`,
 				return nil, errors.AssertionFailedf("%s", msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5145,7 +5146,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DVoidDatum, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5178,7 +5179,7 @@ value if you rely on the HLC for accuracy.`,
 				panic(msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5206,7 +5207,7 @@ value if you rely on the HLC for accuracy.`,
 				return nil, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5232,7 +5233,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DZero, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5260,7 +5261,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)), nil
 			},
 			Info:       "This function is used to fetch the leaseholder corresponding to a request key",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5276,7 +5277,7 @@ value if you rely on the HLC for accuracy.`,
 				return args[0], nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5299,7 +5300,7 @@ value if you rely on the HLC for accuracy.`,
 					int(tree.MustBeDInt(args[1])))), nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -5325,7 +5326,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(catalogkeys.PrettySpan(nil /* valDirs */, span, skip)), nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -5362,7 +5363,7 @@ value if you rely on the HLC for accuracy.`,
 				return jsonDatum, nil
 			},
 			Info:       "This function is used to retrieve range statistics information as a JSON object.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5393,7 +5394,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDInt(id), nil
 			},
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5419,7 +5420,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDInt(id), nil
 			},
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -5449,7 +5450,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDInt(id), nil
 			},
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -5475,7 +5476,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDBytes(bytes), nil
 			},
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -5507,7 +5508,7 @@ value if you rely on the HLC for accuracy.`,
 				"Example syntax: `crdb_internal.set_vmodule('recordio=2,file=1,gfs*=3')`. " +
 				"Reset with: `crdb_internal.set_vmodule('')`. " +
 				"Raising the verbosity can severely affect performance.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5530,7 +5531,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDString(log.GetVModule()), nil
 			},
 			Info:       "Returns the vmodule configuration on the gateway node processing this request.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -5577,7 +5578,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDInt(tree.DInt(len(keys))), nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5615,7 +5616,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDInt(tree.DInt(len(keys))), nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		}),
 	// Returns the number of distinct inverted index entries that would be
 	// generated for a value.
@@ -5631,7 +5632,7 @@ value if you rely on the HLC for accuracy.`,
 				return jsonNumInvertedIndexEntries(ctx, args[0])
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyArray}},
@@ -5640,7 +5641,7 @@ value if you rely on the HLC for accuracy.`,
 				return arrayNumInvertedIndexEntries(ctx, args[0], tree.DNull)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5657,7 +5658,7 @@ value if you rely on the HLC for accuracy.`,
 				return jsonNumInvertedIndexEntries(ctx, args[0])
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5669,7 +5670,7 @@ value if you rely on the HLC for accuracy.`,
 				return arrayNumInvertedIndexEntries(ctx, args[0], args[1])
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		}),
 
 	// Returns true iff the current user has admin role.
@@ -5694,7 +5695,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.MakeDBool(tree.DBool(isAdmin)), nil
 			},
 			Info:       "Retrieves the current user's admin status.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -5727,7 +5728,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.MakeDBool(tree.DBool(ok)), nil
 			},
 			Info:       "Returns whether the current user has the specified role option",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -5755,7 +5756,7 @@ value if you rely on the HLC for accuracy.`,
 			Info: "This function is used internally to perform assignment casts during mutations.",
 			// The volatility of an assignment cast depends on the argument
 			// types, so we set it to the maximum volatility of all casts.
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -5775,7 +5776,7 @@ value if you rely on the HLC for accuracy.`,
 				return roundDDecimal(value, scale)
 			},
 			Info:       "This function is used internally to round decimal values during mutations.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5817,7 +5818,7 @@ value if you rely on the HLC for accuracy.`,
 				return value, nil
 			},
 			Info:       "This function is used internally to round decimal array values during mutations.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 	"crdb_internal.completed_migrations": makeBuiltin(
@@ -5844,7 +5845,7 @@ value if you rely on the HLC for accuracy.`,
 				return ret, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"crdb_internal.unsafe_upsert_descriptor": makeBuiltin(
@@ -5869,7 +5870,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5888,7 +5889,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"crdb_internal.unsafe_delete_descriptor": makeBuiltin(
@@ -5912,7 +5913,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5930,7 +5931,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"crdb_internal.unsafe_upsert_namespace_entry": makeBuiltin(
@@ -5962,7 +5963,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5986,7 +5987,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"crdb_internal.unsafe_delete_namespace_entry": makeBuiltin(
@@ -6017,7 +6018,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6042,7 +6043,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6061,7 +6062,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.MakeDBool(tree.DBool(live)), nil
 			},
 			Info:       "Checks is given sqlliveness session id is not expired",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -6088,7 +6089,7 @@ value if you rely on the HLC for accuracy.`,
 				return args[0], nil
 			},
 			Info:       "Garbage collects a tenant with the provided ID. Must be run by the System tenant.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6133,7 +6134,7 @@ value if you rely on the HLC for accuracy.`,
 				return args[0], nil
 			},
 			Info:       "Updates resource limits for the tenant with the provided ID. Must be run by the System tenant.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6170,7 +6171,7 @@ value if you rely on the HLC for accuracy.`,
 				"formatted bytea, one can use decode(<key string>, 'hex'|'escape') as the parameter. " +
 				"The compaction is run synchronously, so this function may take a long time to return. " +
 				"One can use the logs at the node to confirm that a compaction has started.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6193,7 +6194,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info: "This function can be used to report the usage of an arbitrary feature. The " +
 				"feature name is hashed for privacy purposes.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6217,7 +6218,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDInt(tree.DInt(numNulls)), nil
 			},
 			Info:       "Returns the number of null arguments.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"num_nonnulls": makeBuiltin(
@@ -6240,7 +6241,7 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDInt(tree.DInt(numNonNulls)), nil
 			},
 			Info:       "Returns the number of nonnull arguments.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -6265,7 +6266,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info: `Returns the region of the connection's current node as defined by
 the locality flag on node startup. Returns an error if no region is set.`,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 	DefaultToDatabasePrimaryRegionBuiltinName: makeBuiltin(
@@ -6293,7 +6294,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			`Returns the given region if the region has been added to the current database.
 	Otherwise, this will return the primary region of the current database.
 	This will error if the current database is not a multi-region database.`,
-			tree.VolatilityStable,
+			volatility.Stable,
 		),
 	),
 	RehomeRowBuiltinName: makeBuiltin(
@@ -6328,7 +6329,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			},
 			Info: `Returns the region of the connection's current node as defined by
 the locality flag on node startup. Returns an error if no region is set.`,
-			Volatility:       tree.VolatilityStable,
+			Volatility:       volatility.Stable,
 			DistsqlBlocklist: true,
 		},
 	),
@@ -6349,7 +6350,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			for the current database, including all tables, indexes and partitions underneath.
 			Returns an error if validation fails. This builtin uses un-leased versions of the
 			each descriptor, requiring extra round trips.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"crdb_internal.reset_multi_region_zone_configs_for_table": makeBuiltin(
@@ -6371,7 +6372,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Info: `Resets the zone configuration for a multi-region table to
 match its original state. No-ops if the given table ID is not a multi-region
 table.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"crdb_internal.reset_multi_region_zone_configs_for_database": makeBuiltin(
@@ -6393,7 +6394,7 @@ table.`,
 			Info: `Resets the zone configuration for a multi-region database to
 match its original state. No-ops if the given database ID is not multi-region
 enabled.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"crdb_internal.filter_multiregion_fields_from_zone_config_sql": makeBuiltin(
@@ -6428,7 +6429,7 @@ enabled.`,
 SQL statement omitting multi-region related zone configuration fields.
 If the CONFIGURE ZONE statement can be inferred by the database's or
 table's zone configuration this will return NULL.`,
-			tree.VolatilityStable,
+			volatility.Stable,
 		),
 	),
 	"crdb_internal.reset_index_usage_stats": makeBuiltin(
@@ -6457,7 +6458,7 @@ table's zone configuration this will return NULL.`,
 				return tree.MakeDBool(true), nil
 			},
 			Info:       `This function is used to clear the collected index usage statistics.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"crdb_internal.reset_sql_stats": makeBuiltin(
@@ -6486,7 +6487,7 @@ table's zone configuration this will return NULL.`,
 				return tree.MakeDBool(true), nil
 			},
 			Info:       `This function is used to clear the collected SQL statistics.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	// Deletes the underlying spans backing a table, only
@@ -6510,7 +6511,7 @@ table's zone configuration this will return NULL.`,
 				return tree.DBoolTrue, err
 			},
 			Info:       "This function can be used to clear the data belonging to a table, when the table cannot be dropped.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6525,7 +6526,7 @@ table's zone configuration this will return NULL.`,
 				return evalCtx.Planner.SerializeSessionState()
 			},
 			Info:       `This function serializes the variables in the current session.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6541,7 +6542,7 @@ table's zone configuration this will return NULL.`,
 				return evalCtx.Planner.DeserializeSessionState(tree.NewDBytes(state))
 			},
 			Info:       `This function deserializes the serialized variables into the current session.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6556,7 +6557,7 @@ table's zone configuration this will return NULL.`,
 				return evalCtx.Planner.CreateSessionRevivalToken()
 			},
 			Info:       `Generate a token that can be used to create a new session for the current user.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"crdb_internal.validate_session_revival_token": makeBuiltin(
@@ -6571,7 +6572,7 @@ table's zone configuration this will return NULL.`,
 				return evalCtx.Planner.ValidateSessionRevivalToken(&token)
 			},
 			Info:       `Validate a token that was created by create_session_revival_token. Intended for testing.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6586,7 +6587,7 @@ table's zone configuration this will return NULL.`,
 				return tree.DVoidDatum, evalCtx.Planner.ValidateTTLScheduledJobsInCurrentDB(evalCtx.Context)
 			},
 			Info:       `Validate all TTL tables have a valid scheduled job attached.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6605,7 +6606,7 @@ table's zone configuration this will return NULL.`,
 				return tree.DVoidDatum, nil
 			},
 			Info:       `Repairs the scheduled job for a TTL table if it is missing.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6629,7 +6630,7 @@ table's zone configuration this will return NULL.`,
 				return tree.NewDString(schemeName), nil
 			},
 			Info:       "This function checks whether a string is a precomputed password hash. Returns the hash algorithm.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -6652,7 +6653,7 @@ table's zone configuration this will return NULL.`,
 				return tree.DBoolTrue, nil
 			},
 			Info:       "This function is used to start a SQL stats compaction job.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6671,7 +6672,7 @@ table's zone configuration this will return NULL.`,
 			},
 			Info: `This function is used to revalidate all unique constraints in tables
 in the current database. Returns an error if validation fails.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6695,7 +6696,7 @@ in the current database. Returns an error if validation fails.`,
 			},
 			Info: `This function is used to revalidate all unique constraints in the given
 table. Returns an error if validation fails.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6722,7 +6723,7 @@ table. Returns an error if validation fails.`,
 			},
 			Info: `This function is used to revalidate the given unique constraint in the given
 table. Returns an error if validation fails.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6761,7 +6762,7 @@ table. Returns an error if validation fails.`,
 			Info: `Used to enable/disable the named queue on all stores on the node it's run from.
 One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC', 'raftlog',
 'raftsnapshot', 'consistencyChecker', and 'timeSeriesMaintenance'.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6802,7 +6803,7 @@ One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC', 'raftlog',
 			Info: `Used to enable/disable the named queue on the specified store on the node it's
 run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 'raftlog', 'raftsnapshot', 'consistencyChecker', and 'timeSeriesMaintenance'.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -6857,7 +6858,7 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 'replicate', 'replicaGC', 'raftlog', 'raftsnapshot', 'consistencyChecker', and
 'timeSeriesMaintenance'.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6901,7 +6902,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 'replicate', 'replicaGC', 'raftlog', 'raftsnapshot', 'consistencyChecker', and
 'timeSeriesMaintenance'.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 }
@@ -6914,7 +6915,7 @@ var lengthImpls = func(incBitOverload bool) builtinDefinition {
 			},
 			types.Int,
 			"Calculates the number of characters in `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
@@ -6922,7 +6923,7 @@ var lengthImpls = func(incBitOverload bool) builtinDefinition {
 			},
 			types.Int,
 			"Calculates the number of bytes in `val`.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	)
 	if incBitOverload {
@@ -6932,7 +6933,7 @@ var lengthImpls = func(incBitOverload bool) builtinDefinition {
 				func(_ *tree.EvalContext, s *tree.DBitArray) (tree.Datum, error) {
 					return tree.NewDInt(tree.DInt(s.BitArray.BitLen())), nil
 				}, types.Int, "Calculates the number of bits in `val`.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			),
 		)
 	}
@@ -6951,7 +6952,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 			return tree.NewDString(substring), nil
 		},
 		Info:       "Returns a substring of `input` starting at `start_pos` (count starts at 1).",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
@@ -6974,7 +6975,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 		},
 		Info: "Returns a substring of `input` starting at `start_pos` (count starts at 1) and " +
 			"including up to `length` characters.",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
@@ -6988,7 +6989,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 			return regexpExtract(ctx, s, pattern, `\`)
 		},
 		Info:       "Returns a substring of `input` that matches the regular expression `regex`.",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
@@ -7005,7 +7006,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 		},
 		Info: "Returns a substring of `input` that matches the regular expression `regex` using " +
 			"`escape_char` as your escape character instead of `\\`.",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
@@ -7020,7 +7021,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 			return tree.ParseDBitArray(substring)
 		},
 		Info:       "Returns a bit subarray of `input` starting at `start_pos` (count starts at 1).",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
@@ -7042,7 +7043,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 		},
 		Info: "Returns a bit subarray of `input` starting at `start_pos` (count starts at 1) and " +
 			"including up to `length` characters.",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
@@ -7057,7 +7058,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 			return tree.NewDBytes(tree.DBytes(substring)), nil
 		},
 		Info:       "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1).",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
@@ -7079,7 +7080,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 		},
 		Info: "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1) and " +
 			"including up to `length` characters.",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 )
 
@@ -7187,7 +7188,7 @@ var generateRandomUUID4Impl = makeBuiltin(
 			return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
 		},
 		Info:       "Generates a random version 4 UUID, and returns it as a value of UUID type.",
-		Volatility: tree.VolatilityVolatile,
+		Volatility: volatility.Volatile,
 	},
 )
 
@@ -7202,7 +7203,7 @@ var uuidV4Impl = makeBuiltin(
 			return tree.NewDBytes(tree.DBytes(uuid.MakeV4().GetBytes())), nil
 		},
 		Info:       "Returns a UUID.",
-		Volatility: tree.VolatilityVolatile,
+		Volatility: volatility.Volatile,
 	},
 )
 
@@ -7218,7 +7219,7 @@ func generateConstantUUIDImpl(id uuid.UUID, info string) builtinDefinition {
 				return tree.NewDUuid(tree.DUuid{UUID: id}), nil
 			},
 			Info:       info,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	)
 }
@@ -7254,7 +7255,7 @@ func txnTSOverloads(preferTZOverload bool) []tree.Overload {
 				return ctx.GetTxnTimestamp(time.Microsecond), nil
 			},
 			Info:       txnTSDoc + tzAdditionalDesc,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		{
 			Types:             tree.ArgTypes{},
@@ -7264,14 +7265,14 @@ func txnTSOverloads(preferTZOverload bool) []tree.Overload {
 				return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
 			},
 			Info:       txnTSDoc + noTZAdditionalDesc,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Date),
 			Fn:         currentDate,
 			Info:       txnTSDoc,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	}
 }
@@ -7292,7 +7293,7 @@ func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
 					return ctx.GetTxnTimestamp(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
 				},
 				Info:       txnTSDoc + tzAdditionalDesc,
-				Volatility: tree.VolatilityStable,
+				Volatility: volatility.Stable,
 			},
 			{
 				Types:             tree.ArgTypes{{"precision", types.Int}},
@@ -7306,7 +7307,7 @@ func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
 					return ctx.GetTxnTimestampNoZone(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
 				},
 				Info:       txnTSDoc + noTZAdditionalDesc,
-				Volatility: tree.VolatilityStable,
+				Volatility: volatility.Stable,
 			},
 			{
 				Types:      tree.ArgTypes{{"precision", types.Int}},
@@ -7319,7 +7320,7 @@ func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
 					return currentDate(ctx, args)
 				},
 				Info:       txnTSDoc,
-				Volatility: tree.VolatilityStable,
+				Volatility: volatility.Stable,
 			},
 		},
 		txnTSOverloads(preferTZOverload)...,
@@ -7356,7 +7357,7 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 				return ctx.GetTxnTime(time.Microsecond), nil
 			},
 			Info:       "Returns the current transaction's time with time zone." + tzAdditionalDesc,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:             tree.ArgTypes{},
@@ -7366,7 +7367,7 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 				return ctx.GetTxnTimeNoZone(time.Microsecond), nil
 			},
 			Info:       "Returns the current transaction's time with no time zone." + noTZAdditionalDesc,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:             tree.ArgTypes{{"precision", types.Int}},
@@ -7380,7 +7381,7 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 				return ctx.GetTxnTime(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
 			},
 			Info:       "Returns the current transaction's time with time zone." + tzAdditionalDesc,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:             tree.ArgTypes{{"precision", types.Int}},
@@ -7394,7 +7395,7 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 				return ctx.GetTxnTimeNoZone(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
 			},
 			Info:       "Returns the current transaction's time with no time zone." + noTZAdditionalDesc,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	)
 }
@@ -7437,7 +7438,7 @@ var jsonExtractPathImpl = tree.Overload{
 		return &tree.DJSON{JSON: result}, nil
 	},
 	Info:       "Returns the JSON value pointed to by the variadic arguments.",
-	Volatility: tree.VolatilityImmutable,
+	Volatility: volatility.Immutable,
 }
 
 var jsonExtractPathTextImpl = tree.Overload{
@@ -7461,7 +7462,7 @@ var jsonExtractPathTextImpl = tree.Overload{
 		return tree.NewDString(*text), nil
 	},
 	Info:       "Returns the JSON value as text pointed to by the variadic arguments.",
-	Volatility: tree.VolatilityImmutable,
+	Volatility: volatility.Immutable,
 }
 
 func jsonExtractPathHelper(args tree.Datums) (json.JSON, error) {
@@ -7515,7 +7516,7 @@ var jsonSetImpl = tree.Overload{
 		return jsonDatumSet(args[0], args[1], args[2], tree.DBoolTrue)
 	},
 	Info:       "Returns the JSON value pointed to by the variadic arguments.",
-	Volatility: tree.VolatilityImmutable,
+	Volatility: volatility.Immutable,
 }
 
 var jsonSetWithCreateMissingImpl = tree.Overload{
@@ -7532,7 +7533,7 @@ var jsonSetWithCreateMissingImpl = tree.Overload{
 	Info: "Returns the JSON value pointed to by the variadic arguments. " +
 		"If `create_missing` is false, new keys will not be inserted to objects " +
 		"and values will not be prepended or appended to arrays.",
-	Volatility: tree.VolatilityImmutable,
+	Volatility: volatility.Immutable,
 }
 
 func jsonDatumSet(
@@ -7566,7 +7567,7 @@ var jsonInsertImpl = tree.Overload{
 		return insertToJSONDatum(args[0], args[1], args[2], tree.DBoolFalse)
 	},
 	Info:       "Returns the JSON value pointed to by the variadic arguments. `new_val` will be inserted before path target.",
-	Volatility: tree.VolatilityImmutable,
+	Volatility: volatility.Immutable,
 }
 
 var jsonInsertWithInsertAfterImpl = tree.Overload{
@@ -7582,7 +7583,7 @@ var jsonInsertWithInsertAfterImpl = tree.Overload{
 	},
 	Info: "Returns the JSON value pointed to by the variadic arguments. " +
 		"If `insert_after` is true (default is false), `new_val` will be inserted after path target.",
-	Volatility: tree.VolatilityImmutable,
+	Volatility: volatility.Immutable,
 }
 
 func insertToJSONDatum(
@@ -7628,7 +7629,7 @@ var jsonTypeOfImpl = tree.Overload{
 		return nil, errors.AssertionFailedf("unexpected JSON type %d", t)
 	},
 	Info:       "Returns the type of the outermost JSON value as a text string.",
-	Volatility: tree.VolatilityImmutable,
+	Volatility: volatility.Immutable,
 }
 
 func jsonProps() tree.FunctionProperties {
@@ -7683,7 +7684,7 @@ var jsonBuildObjectImpl = tree.Overload{
 		return tree.NewDJSON(builder.Build()), nil
 	},
 	Info:       "Builds a JSON object out of a variadic argument list.",
-	Volatility: tree.VolatilityStable,
+	Volatility: volatility.Stable,
 }
 
 var toJSONImpl = tree.Overload{
@@ -7693,7 +7694,7 @@ var toJSONImpl = tree.Overload{
 		return toJSONObject(ctx, args[0])
 	},
 	Info:       "Returns the value as JSON or JSONB.",
-	Volatility: tree.VolatilityStable,
+	Volatility: volatility.Stable,
 }
 
 var prettyPrintNotSupportedError = pgerror.Newf(pgcode.FeatureNotSupported, "pretty printing is not supported")
@@ -7704,7 +7705,7 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 		ReturnType: tree.FixedReturnType(types.Jsonb),
 		Fn:         toJSONImpl.Fn,
 		Info:       "Returns the array as JSON or JSONB.",
-		Volatility: tree.VolatilityStable,
+		Volatility: volatility.Stable,
 	},
 	tree.Overload{
 		Types:      tree.ArgTypes{{"array", types.AnyArray}, {"pretty_bool", types.Bool}},
@@ -7717,7 +7718,7 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 			return toJSONObject(ctx, args[0])
 		},
 		Info:       "Returns the array as JSON or JSONB.",
-		Volatility: tree.VolatilityStable,
+		Volatility: volatility.Stable,
 	},
 )
 
@@ -7740,7 +7741,7 @@ var jsonBuildArrayImpl = tree.Overload{
 		return tree.NewDJSON(builder.Build()), nil
 	},
 	Info:       "Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.",
-	Volatility: tree.VolatilityStable,
+	Volatility: volatility.Stable,
 }
 
 var jsonObjectImpls = makeBuiltin(jsonProps(),
@@ -7776,7 +7777,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 		Info: "Builds a JSON or JSONB object out of a text array. The array must have " +
 			"exactly one dimension with an even number of members, in which case " +
 			"they are taken as alternating key/value pairs.",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{{"keys", types.StringArray},
@@ -7812,7 +7813,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 		Info: "This form of json_object takes keys and values pairwise from two " +
 			"separate arrays. In all other respects it is identical to the " +
 			"one-argument form.",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 )
 
@@ -7824,7 +7825,7 @@ var jsonStripNullsImpl = tree.Overload{
 		return tree.NewDJSON(j), err
 	},
 	Info:       "Returns from_json with all object fields that have null values omitted. Other null values are untouched.",
-	Volatility: tree.VolatilityImmutable,
+	Volatility: volatility.Immutable,
 }
 
 var jsonArrayLengthImpl = tree.Overload{
@@ -7844,7 +7845,7 @@ var jsonArrayLengthImpl = tree.Overload{
 		}
 	},
 	Info:       "Returns the number of elements in the outermost JSON or JSONB array.",
-	Volatility: tree.VolatilityImmutable,
+	Volatility: volatility.Immutable,
 }
 
 var similarOverloads = []tree.Overload{
@@ -7859,7 +7860,7 @@ var similarOverloads = []tree.Overload{
 			return tree.SimilarPattern(pattern, "")
 		},
 		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern`.",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	{
 		Types:      tree.ArgTypes{{"pattern", types.String}, {"escape", types.String}},
@@ -7876,7 +7877,7 @@ var similarOverloads = []tree.Overload{
 			return tree.SimilarPattern(pattern, escape)
 		},
 		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using `escape` as an escape token.",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 }
 
@@ -7906,7 +7907,7 @@ func jsonOverload1(
 	f func(*tree.EvalContext, json.JSON) (tree.Datum, error),
 	returnType *types.T,
 	info string,
-	volatility tree.Volatility,
+	volatility volatility.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ArgTypes{{"val", types.Jsonb}},
@@ -7923,7 +7924,7 @@ func stringOverload1(
 	f func(*tree.EvalContext, string) (tree.Datum, error),
 	returnType *types.T,
 	info string,
-	volatility tree.Volatility,
+	volatility volatility.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ArgTypes{{"val", types.String}},
@@ -7941,7 +7942,7 @@ func stringOverload2(
 	f func(*tree.EvalContext, string, string) (tree.Datum, error),
 	returnType *types.T,
 	info string,
-	volatility tree.Volatility,
+	volatility volatility.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ArgTypes{{a, types.String}, {b, types.String}},
@@ -7959,7 +7960,7 @@ func stringOverload3(
 	f func(*tree.EvalContext, string, string, string) (tree.Datum, error),
 	returnType *types.T,
 	info string,
-	volatility tree.Volatility,
+	volatility volatility.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ArgTypes{{a, types.String}, {b, types.String}, {c, types.String}},
@@ -7976,7 +7977,7 @@ func bytesOverload1(
 	f func(*tree.EvalContext, string) (tree.Datum, error),
 	returnType *types.T,
 	info string,
-	volatility tree.Volatility,
+	volatility volatility.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ArgTypes{{"val", types.Bytes}},
@@ -7994,7 +7995,7 @@ func bytesOverload2(
 	f func(*tree.EvalContext, string, string) (tree.Datum, error),
 	returnType *types.T,
 	info string,
-	volatility tree.Volatility,
+	volatility volatility.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ArgTypes{{a, types.Bytes}, {b, types.Bytes}},
@@ -8011,7 +8012,7 @@ func bitsOverload1(
 	f func(*tree.EvalContext, *tree.DBitArray) (tree.Datum, error),
 	returnType *types.T,
 	info string,
-	volatility tree.Volatility,
+	volatility volatility.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ArgTypes{{"val", types.VarBit}},
@@ -8029,7 +8030,7 @@ func bitsOverload2(
 	f func(*tree.EvalContext, *tree.DBitArray, *tree.DBitArray) (tree.Datum, error),
 	returnType *types.T,
 	info string,
-	volatility tree.Volatility,
+	volatility volatility.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ArgTypes{{a, types.VarBit}, {b, types.VarBit}},
@@ -8100,7 +8101,7 @@ func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
 				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
 			Info:       info,
-			Volatility: tree.VolatilityLeakProof,
+			Volatility: volatility.LeakProof,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Bytes},
@@ -8113,7 +8114,7 @@ func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
 				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
 			Info:       info,
-			Volatility: tree.VolatilityLeakProof,
+			Volatility: volatility.LeakProof,
 		},
 	)
 }
@@ -8131,7 +8132,7 @@ func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
 				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
 			Info:       info,
-			Volatility: tree.VolatilityLeakProof,
+			Volatility: volatility.LeakProof,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Bytes},
@@ -8144,7 +8145,7 @@ func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
 				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
 			Info:       info,
-			Volatility: tree.VolatilityLeakProof,
+			Volatility: volatility.LeakProof,
 		},
 	)
 }
@@ -8162,7 +8163,7 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 				return tree.NewDInt(tree.DInt(h.Sum64())), nil
 			},
 			Info:       info,
-			Volatility: tree.VolatilityLeakProof,
+			Volatility: volatility.LeakProof,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Bytes},
@@ -8175,7 +8176,7 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 				return tree.NewDInt(tree.DInt(h.Sum64())), nil
 			},
 			Info:       info,
-			Volatility: tree.VolatilityLeakProof,
+			Volatility: volatility.LeakProof,
 		},
 	)
 }
@@ -8539,7 +8540,7 @@ var extractBuiltin = makeBuiltin(
 			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
 			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
 			"hour, minute, second, millisecond, microsecond, epoch",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
@@ -8552,7 +8553,7 @@ var extractBuiltin = makeBuiltin(
 		Info: "Extracts `element` from `input`.\n\n" +
 			"Compatible elements: millennium, century, decade, year,\n" +
 			"month, day, hour, minute, second, millisecond, microsecond, epoch",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
@@ -8570,7 +8571,7 @@ var extractBuiltin = makeBuiltin(
 			"Compatible elements: millennium, century, decade, year, isoyear,\n" +
 			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
 			"hour, minute, second, millisecond, microsecond, epoch",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
@@ -8585,7 +8586,7 @@ var extractBuiltin = makeBuiltin(
 			"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
 			"hour, minute, second, millisecond, microsecond, epoch,\n" +
 			"timezone, timezone_hour, timezone_minute",
-		Volatility: tree.VolatilityStable,
+		Volatility: volatility.Stable,
 	},
 	tree.Overload{
 		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
@@ -8597,7 +8598,7 @@ var extractBuiltin = makeBuiltin(
 		},
 		Info: "Extracts `element` from `input`.\n\n" +
 			"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 	tree.Overload{
 		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
@@ -8610,7 +8611,7 @@ var extractBuiltin = makeBuiltin(
 		Info: "Extracts `element` from `input`.\n\n" +
 			"Compatible elements: hour, minute, second, millisecond, microsecond, epoch,\n" +
 			"timezone, timezone_hour, timezone_minute",
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	},
 )
 
