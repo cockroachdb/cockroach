@@ -160,12 +160,12 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 			// If the right type is "larger", use it.
 			src, tgt = left, right
 		}
-		if !cast.ValidCast(src, tgt, cast.CastContextExplicit) {
+		if !cast.ValidCast(src, tgt, cast.ContextExplicit) {
 			// Error if no cast exists from src to tgt.
 			// TODO(#75103): For legacy reasons, we check for a valid cast in
-			// the most permissive context, CastContextExplicit. To be
+			// the most permissive context, cast.ContextExplicit. To be
 			// consistent with Postgres, we should check for a valid cast in the
-			// most restrictive context, CastContextImplicit.
+			// most restrictive context, cast.ContextImplicit.
 			panic(pgerror.Newf(
 				pgcode.DatatypeMismatch,
 				"%v types %s and %s cannot be matched", clauseTag, left, right,
