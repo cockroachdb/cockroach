@@ -519,7 +519,7 @@ func initNonArrayToNonArrayConcatenation() {
 		})
 	}
 	fromTypeToVolatility := make(map[oid.Oid]Volatility)
-	ForEachCast(func(src, tgt oid.Oid) {
+	ForEachCast(func(src, tgt oid.Oid, _ CastContext, _ ContextOrigin) {
 		if tgt == oid.T_text {
 			fromTypeToVolatility[src] = castMap[src][tgt].volatility
 		}

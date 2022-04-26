@@ -479,13 +479,23 @@ var pgCatalogCastTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 	schema: vtable.PGCatalogCast,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// TODO(someone): to populate this, we should split up the big PerformCast
-		// method in tree/eval.go into schemasByName in a list. Then, this virtual table
-		// can simply range over the list. This would probably be better for
-		// maintainability anyway.
+		h := makeOidHasher()
+		tree.ForEachCast(func(src, tgt oid.Oid, cCtx tree.CastContext, ctxOrigin tree.ContextOrigin) {
+			if ctxOrigin == tree.ContextOriginPgCast {
+				castCtx := cCtx.PGString()
+
+				_ = addRow(
+					h.CastOid(src, tgt),          //oid
+					tree.NewDOid(tree.DInt(src)), //cast source
+					tree.NewDOid(tree.DInt(tgt)), //casttarget
+					tree.DNull,                   //castfunc
+					tree.NewDString(castCtx),     //castcontext
+					tree.DNull,                   //castmethod
+				)
+			}
+		})
 		return nil
 	},
-	unimplemented: true,
 }
 
 func userIsSuper(
@@ -4274,6 +4284,7 @@ const (
 	enumEntryTypeTag
 	rewriteTypeTag
 	dbSchemaRoleTypeTag
+	castTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -4467,5 +4478,12 @@ func dbOid(id descpb.ID) *tree.DOid {
 func stringOid(s string) *tree.DOid {
 	h := makeOidHasher()
 	h.writeStr(s)
+	return h.getOid()
+}
+
+func (h oidHasher) CastOid(srcID oid.Oid, tgtID oid.Oid) *tree.DOid {
+	h.writeTypeTag(castTypeTag)
+	h.writeUInt32(uint32(srcID))
+	h.writeUInt32(uint32(tgtID))
 	return h.getOid()
 }

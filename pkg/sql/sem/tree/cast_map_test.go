@@ -36,7 +36,7 @@ func TestCastMap(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
 
-	tree.ForEachCast(func(src, tgt oid.Oid) {
+	tree.ForEachCast(func(src, tgt oid.Oid, _ tree.CastContext, _ tree.ContextOrigin) {
 		srcType := types.OidToType[src]
 		tgtType := types.OidToType[tgt]
 		srcDatum := randgen.RandDatum(rng, srcType, false /* nullOk */)
