@@ -213,7 +213,7 @@ func resultsToString(results []Result) string {
 		if i > 0 {
 			result += ", "
 		}
-		result += fmt.Sprintf("%d", r.position)
+		result += fmt.Sprintf("%d", r.Position)
 	}
 	return result
 }
@@ -298,8 +298,8 @@ var TestResultDiskBufferConstructor func(diskmap.Factory, *mon.BytesMonitor) Res
 
 // inOrderResultsBuffer is a resultsBuffer that returns the Results in the same
 // order as the original requests were Enqueued into the Streamer (in other
-// words, in non-decreasing fashion of Result.position). Internally, it
-// maintains a min heap over Result.position values, keeps track of the current
+// words, in non-decreasing fashion of Result.Position). Internally, it
+// maintains a min heap over Result.Position values, keeps track of the current
 // head-of-the-line position, and might spill some of the Results to disk when
 // asked.
 //
@@ -309,7 +309,7 @@ var TestResultDiskBufferConstructor func(diskmap.Factory, *mon.BytesMonitor) Res
 // headOfLine=true even if there are some buffered results.
 type inOrderResultsBuffer struct {
 	*resultsBufferBase
-	// headOfLinePosition is the position value of the next Result to be
+	// headOfLinePosition is the Position value of the next Result to be
 	// returned.
 	headOfLinePosition int
 	// buffered contains all buffered Results, regardless of whether they are
@@ -337,7 +337,7 @@ func (b *inOrderResultsBuffer) Len() int {
 }
 
 func (b *inOrderResultsBuffer) Less(i, j int) bool {
-	return b.buffered[i].position < b.buffered[j].position
+	return b.buffered[i].Position < b.buffered[j].Position
 }
 
 func (b *inOrderResultsBuffer) Swap(i, j int) {
@@ -378,12 +378,12 @@ func (b *inOrderResultsBuffer) add(results []Result) {
 	foundHeadOfLine := false
 	for _, r := range results {
 		if debug {
-			fmt.Printf("adding a result for position %d of size %d\n", r.position, r.memoryTok.toRelease)
+			fmt.Printf("adding a result for position %d of size %d\n", r.Position, r.memoryTok.toRelease)
 		}
 		// All the Results have already been registered with the budget, so
 		// we're keeping them in-memory.
 		heap.Push(b, inOrderBufferedResult{Result: r, onDisk: false})
-		if r.position == b.headOfLinePosition {
+		if r.Position == b.headOfLinePosition {
 			foundHeadOfLine = true
 		}
 	}
@@ -398,7 +398,7 @@ func (b *inOrderResultsBuffer) add(results []Result) {
 // TODO(yuzefovich): this doesn't work for Scan responses spanning multiple
 // Results, fix it once lookup joins are supported. In particular, it can
 // reorder responses for a single ScanRequest since all of them have the same
-// position value.
+// Position value.
 func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) {
 	// Whenever a result is picked up from disk, we need to make the memory
 	// reservation for it, so we acquire the budget's mutex.
@@ -410,7 +410,7 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 	if debug {
 		fmt.Printf("attempting to get results, current headOfLinePosition = %d\n", b.headOfLinePosition)
 	}
-	for len(b.buffered) > 0 && b.buffered[0].position == b.headOfLinePosition {
+	for len(b.buffered) > 0 && b.buffered[0].Position == b.headOfLinePosition {
 		result, toConsume, err := b.buffered[0].get(ctx, b)
 		if err != nil {
 			b.setErrorLocked(err)
@@ -472,7 +472,7 @@ func (b *inOrderResultsBuffer) stringLocked() string {
 		if b.buffered[i].onDisk {
 			onDiskInfo = " (on disk)"
 		}
-		result += fmt.Sprintf("[%d]%s: size %d", b.buffered[i].position, onDiskInfo, b.buffered[i].memoryTok.toRelease)
+		result += fmt.Sprintf("[%d]%s: size %d", b.buffered[i].Position, onDiskInfo, b.buffered[i].memoryTok.toRelease)
 	}
 	return result
 }
@@ -490,10 +490,10 @@ func (b *inOrderResultsBuffer) spill(
 		defer func() {
 			if !spilled {
 				for i := range b.buffered {
-					if b.buffered[i].position > spillingPriority && !b.buffered[i].onDisk {
+					if b.buffered[i].Position > spillingPriority && !b.buffered[i].onDisk {
 						panic(errors.AssertionFailedf(
 							"unexpectedly result for position %d wasn't spilled, spilling priority %d\n%s\n",
-							b.buffered[i].position, spillingPriority, b.stringLocked()),
+							b.buffered[i].Position, spillingPriority, b.stringLocked()),
 						)
 					}
 				}
@@ -513,11 +513,11 @@ func (b *inOrderResultsBuffer) spill(
 	// Iterate in reverse order so that the results with higher priority values
 	// are spilled first (this could matter if the query has a LIMIT).
 	for idx := len(b.buffered) - 1; idx >= 0; idx-- {
-		if r := &b.buffered[idx]; !r.onDisk && r.position > spillingPriority {
+		if r := &b.buffered[idx]; !r.onDisk && r.Position > spillingPriority {
 			if debug {
 				fmt.Printf(
 					"spilling a result for position %d which will free up %d bytes\n",
-					r.position, r.memoryTok.toRelease,
+					r.Position, r.memoryTok.toRelease,
 				)
 			}
 			diskResultID, err := b.diskBuffer.Serialize(ctx, &b.buffered[idx].Result)
@@ -553,7 +553,7 @@ func (b *inOrderResultsBuffer) close(ctx context.Context) {
 // of where it is stored (in-memory or on disk).
 type inOrderBufferedResult struct {
 	// If onDisk is true, then only Result.ScanResp.Complete, Result.memoryTok,
-	// and Result.position are set.
+	// and Result.Position are set.
 	Result
 	// If onDisk is true, then the serialized Result is stored on disk in the
 	// ResultDiskBuffer, identified by diskResultID.
@@ -566,7 +566,7 @@ type inOrderBufferedResult struct {
 func (r *inOrderBufferedResult) spill(diskResultID int) {
 	isScanComplete := r.ScanResp.Complete
 	*r = inOrderBufferedResult{
-		Result:       Result{memoryTok: r.memoryTok, position: r.position},
+		Result:       Result{memoryTok: r.memoryTok, Position: r.Position},
 		onDisk:       true,
 		diskResultID: diskResultID,
 	}
