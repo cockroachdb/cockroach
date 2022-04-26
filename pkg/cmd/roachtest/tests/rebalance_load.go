@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -46,7 +47,7 @@ func registerRebalanceLoad(r registry.Registry) {
 	//
 	// In other words, this test should always pass with
 	// kv.allocator.stat_based_rebalancing.enabled set to true, while it should
-	// usually (but not always fail) with it set to false.
+	// usually (but not always) fail with it set to false.
 	rebalanceLoadRun := func(
 		ctx context.Context,
 		t test.Test,
@@ -61,7 +62,9 @@ func registerRebalanceLoad(r registry.Registry) {
 		splits := len(roachNodes) - 1 // n-1 splits => n ranges => 1 lease per node
 
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
+		startOpts.RoachprodOpts.StoreCount = c.Spec().SSDs
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		settings := install.MakeClusterSettings()
 		if mixedVersion {
 			predecessorVersion, err := PredecessorVersion(*t.BuildVersion())
@@ -208,6 +211,36 @@ func registerRebalanceLoad(r registry.Registry) {
 				}
 				rebalanceLoadRun(
 					ctx, t, c, "leases and replicas", 5*time.Minute, concurrency, true, /* mixedVersion */
+				)
+			},
+		},
+	)
+	r.Add(
+		registry.TestSpec{
+			Name:    `rebalance/by-load/leases/ssds=8`,
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(4, spec.SSD(8)), // the last node is just used to generate load
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					concurrency = 32
+					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
+				}
+				rebalanceLoadRun(ctx, t, c, "leases", 3*time.Minute, concurrency, false /* mixedVersion */)
+			},
+		},
+	)
+	r.Add(
+		registry.TestSpec{
+			Name:    `rebalance/by-load/replicas/ssds=8`,
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(7, spec.SSD(8)), // the last node is just used to generate load
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					concurrency = 32
+					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
+				}
+				rebalanceLoadRun(
+					ctx, t, c, "leases and replicas", 5*time.Minute, concurrency, false, /* mixedVersion */
 				)
 			},
 		},
