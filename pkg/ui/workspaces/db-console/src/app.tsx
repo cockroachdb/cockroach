@@ -264,8 +264,13 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 />
                 <Route
                   exact
-                  path={`/transaction/:${aggregatedTsAttr}/:${txnFingerprintIdAttr}`}
+                  path={`/transaction/:${txnFingerprintIdAttr}`}
                   component={TransactionDetails}
+                />
+                <Redirect
+                  exact
+                  from={`/transaction/:${aggregatedTsAttr}/:${txnFingerprintIdAttr}`}
+                  to={`/transaction/:${txnFingerprintIdAttr}`}
                 />
 
                 {/* debug pages */}
