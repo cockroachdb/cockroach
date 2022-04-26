@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -49,7 +50,7 @@ func TestMaybeAppendColumn(t *testing.T) {
 	defer testMemMonitor.Stop(ctx)
 	memAcc := testMemMonitor.MakeBoundAccount()
 	defer memAcc.Close(ctx)
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
 	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
 
@@ -105,7 +106,7 @@ func TestResetMaybeReallocate(t *testing.T) {
 	defer testMemMonitor.Stop(ctx)
 	memAcc := testMemMonitor.MakeBoundAccount()
 	defer memAcc.Close(ctx)
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
 	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
 
@@ -197,7 +198,7 @@ func TestPerformAppend(t *testing.T) {
 	defer testMemMonitor.Stop(ctx)
 	memAcc := testMemMonitor.MakeBoundAccount()
 	defer memAcc.Close(ctx)
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
 	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
 
@@ -270,7 +271,7 @@ func TestSetAccountingHelper(t *testing.T) {
 	defer testMemMonitor.Stop(ctx)
 	memAcc := testMemMonitor.MakeBoundAccount()
 	defer memAcc.Close(ctx)
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
 	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
 
@@ -349,7 +350,7 @@ func TestEstimateBatchSizeBytes(t *testing.T) {
 	defer testMemMonitor.Stop(ctx)
 	memAcc := testMemMonitor.MakeBoundAccount()
 	defer memAcc.Close(ctx)
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
 	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
 

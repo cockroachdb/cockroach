@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -113,7 +114,7 @@ func TestOrderedSync(t *testing.T) {
 			rowBuf := distsqlutils.NewRowBuffer(types.ThreeIntCols, srcRows, distsqlutils.RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
-		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		src, err := makeSerialSync(c.ordering, evalCtx, sources)
 		if err != nil {
@@ -153,7 +154,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 	o, err := makeSerialSync(colinfo.ColumnOrdering{}, evalCtx, sources)
 	if err != nil {

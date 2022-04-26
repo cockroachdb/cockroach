@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -34,7 +35,7 @@ func TestEncDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &tree.DatumAlloc{}
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	v := rowenc.EncDatum{}
 	if !v.IsUnset() {
@@ -176,7 +177,7 @@ func checkEncDatumCmp(
 
 	dec2 := rowenc.EncDatumFromEncoded(enc2, buf2)
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	if val, err := dec1.Compare(typ, a, evalCtx, &dec2); err != nil {
 		t.Fatal(err)
@@ -207,7 +208,7 @@ func TestEncDatumCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &tree.DatumAlloc{}
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewTestRand()
 
@@ -266,7 +267,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var alloc tree.DatumAlloc
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewTestRand()
 	for test := 0; test < 20; test++ {
@@ -447,7 +448,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 	}
 
 	a := &tree.DatumAlloc{}
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for _, c := range testCases {
 		typs := make([]*types.T, len(c.row1))
@@ -469,7 +470,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 func TestEncDatumRowAlloc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewTestRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {
@@ -513,7 +514,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 	rng, seed := randutil.NewTestRand()
 	tests := make([]tree.Datum, 1000)
 	colTypes := make([]*types.T, 1000)
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for i := range tests {
 		len := rng.Intn(5)
@@ -732,7 +733,7 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 	memAcc := evalCtx.Mon.MakeBoundAccount()
 	defer memAcc.Close(ctx)

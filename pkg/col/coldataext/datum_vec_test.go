@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -24,7 +25,7 @@ import (
 func TestDatumVec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := &tree.EvalContext{}
+	evalCtx := &eval.Context{}
 
 	dv1 := newDatumVec(types.Jsonb, 0 /* n */, evalCtx)
 

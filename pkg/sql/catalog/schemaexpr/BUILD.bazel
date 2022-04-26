@@ -26,6 +26,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",

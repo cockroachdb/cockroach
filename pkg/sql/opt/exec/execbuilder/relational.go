@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -743,7 +744,7 @@ func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan
 	for i, expr := range scan.Span {
 		// The expression is either a placeholder or a constant.
 		if p, ok := expr.(*memo.PlaceholderExpr); ok {
-			val, err := p.Value.(*tree.Placeholder).Eval(b.evalCtx)
+			val, err := eval.Expr(b.evalCtx, p.Value)
 			if err != nil {
 				return execPlan{}, err
 			}

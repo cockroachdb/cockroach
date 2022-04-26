@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -328,7 +329,7 @@ func createChangefeedJobRecord(
 	endTime := hlc.Timestamp{}
 	if endTimeOpt, ok := opts[changefeedbase.OptEndTime]; ok {
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(endTimeOpt)}
-		asOf, err := tree.EvalAsOfTimestamp(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().EvalContext)
+		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context)
 		if err != nil {
 			return nil, err
 		}

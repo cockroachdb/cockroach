@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -41,7 +42,7 @@ func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.Typed
 
 // init is part of the tableWriter interface.
 func (td *tableDeleter) init(
-	_ context.Context, txn *kv.Txn, evalCtx *tree.EvalContext, sv *settings.Values,
+	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
 ) error {
 	td.tableWriterBase.init(txn, td.tableDesc(), evalCtx, sv)
 	return nil

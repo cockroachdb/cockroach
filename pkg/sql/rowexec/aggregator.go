@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -30,7 +31,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type aggregateFuncs []tree.AggregateFunc
+type aggregateFuncs []eval.AggregateFunc
 
 func (af aggregateFuncs) close(ctx context.Context) {
 	for _, f := range af {
@@ -876,7 +877,7 @@ func (ag *orderedAggregator) accumulateRow(row rowenc.EncDatumRow) error {
 }
 
 type aggregateFuncHolder struct {
-	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+	create func(*eval.Context, tree.Datums) eval.AggregateFunc
 
 	// arguments is the list of constant (non-aggregated) arguments to the
 	// aggregate, for instance, the separator in string_agg.
@@ -888,11 +889,11 @@ type aggregateFuncHolder struct {
 
 const (
 	sizeOfAggregateFuncs = int64(unsafe.Sizeof(aggregateFuncs{}))
-	sizeOfAggregateFunc  = int64(unsafe.Sizeof(tree.AggregateFunc(nil)))
+	sizeOfAggregateFunc  = int64(unsafe.Sizeof(eval.AggregateFunc(nil)))
 )
 
 func (ag *aggregatorBase) newAggregateFuncHolder(
-	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc, arguments tree.Datums,
+	create func(*eval.Context, tree.Datums) eval.AggregateFunc, arguments tree.Datums,
 ) *aggregateFuncHolder {
 	return &aggregateFuncHolder{
 		create:    create,

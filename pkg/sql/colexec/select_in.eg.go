@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -54,7 +55,7 @@ const (
 )
 
 func GetInProjectionOperator(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	allocator *colmem.Allocator,
 	t *types.T,
 	input colexecop.Operator,
@@ -216,7 +217,7 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	t *types.T,
 	input colexecop.Operator,
 	colIdx int,
@@ -375,7 +376,7 @@ type projectInOpBool struct {
 var _ colexecop.Operator = &projectInOpBool{}
 
 func fillDatumRowBool(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]bool, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -609,7 +610,7 @@ type projectInOpBytes struct {
 var _ colexecop.Operator = &projectInOpBytes{}
 
 func fillDatumRowBytes(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([][]byte, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -831,7 +832,7 @@ type projectInOpDecimal struct {
 var _ colexecop.Operator = &projectInOpDecimal{}
 
 func fillDatumRowDecimal(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]apd.Decimal, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -1057,7 +1058,7 @@ type projectInOpInt16 struct {
 var _ colexecop.Operator = &projectInOpInt16{}
 
 func fillDatumRowInt16(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]int16, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -1294,7 +1295,7 @@ type projectInOpInt32 struct {
 var _ colexecop.Operator = &projectInOpInt32{}
 
 func fillDatumRowInt32(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]int32, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -1531,7 +1532,7 @@ type projectInOpInt64 struct {
 var _ colexecop.Operator = &projectInOpInt64{}
 
 func fillDatumRowInt64(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]int64, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -1768,7 +1769,7 @@ type projectInOpFloat64 struct {
 var _ colexecop.Operator = &projectInOpFloat64{}
 
 func fillDatumRowFloat64(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]float64, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -2013,7 +2014,7 @@ type projectInOpTimestamp struct {
 var _ colexecop.Operator = &projectInOpTimestamp{}
 
 func fillDatumRowTimestamp(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]time.Time, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -2246,7 +2247,7 @@ type projectInOpInterval struct {
 var _ colexecop.Operator = &projectInOpInterval{}
 
 func fillDatumRowInterval(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]duration.Duration, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -2472,7 +2473,7 @@ type projectInOpJSON struct {
 var _ colexecop.Operator = &projectInOpJSON{}
 
 func fillDatumRowJSON(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]json.JSON, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
@@ -2700,7 +2701,7 @@ type projectInOpDatum struct {
 var _ colexecop.Operator = &projectInOpDatum{}
 
 func fillDatumRowDatum(
-	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]interface{}, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)

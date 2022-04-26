@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -365,7 +366,7 @@ func getSchemaByNameFromMap(
 }
 
 func createPostgresTables(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	p sql.JobExecContext,
 	createTbl map[schemaAndTableName]*tree.CreateTable,
 	fks fkHandler,
@@ -405,7 +406,7 @@ func createPostgresTables(
 }
 
 func resolvePostgresFKs(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	parentDB catalog.DatabaseDescriptor,
 	tableFKs map[schemaAndTableName][]*tree.ForeignKeyConstraintTableDef,
 	fks fkHandler,
@@ -479,7 +480,7 @@ var placeholderID descpb.ID
 func readPostgresCreateTable(
 	ctx context.Context,
 	input io.Reader,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	p sql.JobExecContext,
 	match string,
 	parentDB catalog.DatabaseDescriptor,
@@ -587,7 +588,7 @@ func readPostgresCreateTable(
 
 func readPostgresStmt(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	match string,
 	fks fkHandler,
 	schemaObjects *schemaParsingObjects,
@@ -796,8 +797,8 @@ func readPostgresStmt(
 					}
 					ov := expr.ResolvedOverload()
 					// Search for a SQLFn, which returns a SQL string to execute.
-					fn := ov.SQLFn
-					if fn == nil {
+					fn, ok := ov.SQLFn.(eval.SQLFnOverload)
+					if !ok {
 						err := errors.Errorf("unsupported function call: %s in stmt: %s",
 							expr.Func.String(), stmt.String())
 						if ignoreUnsupportedStmts {
@@ -969,7 +970,7 @@ type pgDumpReader struct {
 	colMap                map[*row.DatumRowConverter](map[string]int)
 	jobID                 int64
 	unsupportedStmtLogger *unsupportedStmtLogger
-	evalCtx               *tree.EvalContext
+	evalCtx               *eval.Context
 }
 
 var _ inputConverter = &pgDumpReader{}
@@ -983,7 +984,7 @@ func newPgDumpReader(
 	opts roachpb.PgDumpOptions,
 	walltime int64,
 	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (*pgDumpReader, error) {
 	tableDescs := make(map[string]catalog.TableDescriptor, len(descs))
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
@@ -1163,7 +1164,7 @@ func (m *pgDumpReader) readFile(
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
 					}
-					converted, err := typed.Eval(conv.EvalCtx)
+					converted, err := eval.Expr(conv.EvalCtx, typed)
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)

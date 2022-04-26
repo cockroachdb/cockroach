@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -70,7 +71,7 @@ func nativeTimeToDatum(t time.Time, targetT *types.T) (tree.Datum, error) {
 // the key is a primitive or logical Avro type name ("string",
 // "long.time-millis", etc).
 func nativeToDatum(
-	x interface{}, targetT *types.T, avroT []string, evalCtx *tree.EvalContext,
+	x interface{}, targetT *types.T, avroT []string, evalCtx *eval.Context,
 ) (tree.Datum, error) {
 	var d tree.Datum
 
@@ -494,7 +495,7 @@ func newAvroInputReader(
 	avroOpts roachpb.AvroOptions,
 	walltime int64,
 	parallelism int,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (*avroInputReader, error) {
 
 	return &avroInputReader{

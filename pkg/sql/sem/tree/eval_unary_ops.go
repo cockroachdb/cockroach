@@ -10,11 +10,6 @@
 
 package tree
 
-// This file is used as input to the evalgen command to generate the methods
-// and interface for eval_op_generated.go. Note that operations which define
-// their own Eval method will not have one generated for them and will not be
-// a part of the relevant Evaluator interface.
-
 // UnaryNoop is a UnaryEvalOp.
 type UnaryNoop struct{}
 

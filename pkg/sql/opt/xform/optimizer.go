@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,7 +51,7 @@ type RuleSet = util.FastIntSet
 // expression must provide. The optimizer will return an Expr over the output
 // expression tree with the lowest cost.
 type Optimizer struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	// f is the factory that creates the normalized expressions during the first
 	// optimization phase.
@@ -110,7 +110,7 @@ const maxGroupPasses = 100_000
 
 // Init initializes the Optimizer with a new, blank memo structure inside. This
 // must be called before the optimizer can be used (or reused).
-func (o *Optimizer) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
+func (o *Optimizer) Init(evalCtx *eval.Context, catalog cat.Catalog) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*o = Optimizer{

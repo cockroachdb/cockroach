@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -50,13 +52,13 @@ func prepareExpr(t *testing.T, datumExpr string) tree.Datum {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
 	// Normalization ensures that casts are processed.
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
+	typedExpr, err = normalize.Expr(evalCtx, typedExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
-	d, err := typedExpr.Eval(evalCtx)
+	d, err := eval.Expr(evalCtx, typedExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
@@ -239,7 +241,7 @@ func TestDatumOrdering(t *testing.T) {
 		{`((false,), ARRAY[true])`, noPrev, `((false,), ARRAY[true,NULL])`,
 			`((false,), ARRAY[])`, noMax},
 	}
-	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, td := range testData {
 		d := prepareExpr(t, td.datumExpr)
 
@@ -333,7 +335,7 @@ func TestDFloatCompare(t *testing.T) {
 			} else if i > j {
 				expected = 1
 			}
-			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			got := x.Compare(evalCtx, y)
 			if got != expected {
@@ -419,7 +421,7 @@ func TestParseDIntervalWithTypeMetadata(t *testing.T) {
 			t.Errorf("unexpected error while parsing expected value INTERVAL %s: %s", td.expected, err)
 			continue
 		}
-		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		if expected.Compare(evalCtx, actual) != 0 {
 			t.Errorf("INTERVAL %s %#v: got %s, expected %s", td.str, td.dtype, actual, expected)
@@ -476,7 +478,7 @@ func TestParseDDate(t *testing.T) {
 			t.Errorf("unexpected error while parsing expected value DATE %s: %s", td.expected, err)
 			continue
 		}
-		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		if expected.Compare(evalCtx, actual) != 0 {
 			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
@@ -875,7 +877,7 @@ func TestMakeDJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if j1.Compare(tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), j2) != -1 {
+	if j1.Compare(eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), j2) != -1 {
 		t.Fatal("expected JSON 1 < 2")
 	}
 }
@@ -884,7 +886,7 @@ func TestDTimeTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := &tree.EvalContext{
+	ctx := &eval.Context{
 		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
 			Location: time.UTC,
 		}),
@@ -1020,7 +1022,7 @@ func TestDTimeTZPrev(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	rng, _ := randutil.NewTestRand()
-	evalCtx := &tree.EvalContext{
+	evalCtx := &eval.Context{
 		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
 			Location: time.UTC,
 		}),
@@ -1095,7 +1097,7 @@ func TestDTimeTZNext(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	rng, _ := randutil.NewTestRand()
-	evalCtx := &tree.EvalContext{
+	evalCtx := &eval.Context{
 		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
 			Location: time.UTC,
 		}),
@@ -1252,7 +1254,7 @@ func TestIsDistinctFrom(t *testing.T) {
 		t.Run(fmt.Sprintf("%s to %s", td.a, td.b), func(t *testing.T) {
 			datumsA := convert(td.a)
 			datumsB := convert(td.b)
-			if e, a := td.expected, datumsA.IsDistinctFrom(&tree.EvalContext{}, datumsB); e != a {
+			if e, a := td.expected, datumsA.IsDistinctFrom(&eval.Context{}, datumsB); e != a {
 				if e {
 					t.Errorf("expected %s to be distinct from %s, but got %t", datumsA, datumsB, e)
 				} else {
@@ -1284,7 +1286,7 @@ func TestNewDefaultDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	testCases := []struct {
@@ -1328,7 +1330,7 @@ func TestNewDefaultDatum(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("#%d %s", i, tc.t.SQLString()), func(t *testing.T) {
-			datum, err := tree.NewDefaultDatum(evalCtx, tc.t)
+			datum, err := tree.NewDefaultDatum(&evalCtx.CollationEnv, tc.t)
 			if err != nil {
 				t.Errorf("unexpected error: %s", err)
 			}

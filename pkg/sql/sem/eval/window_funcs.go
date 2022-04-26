@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package eval
 
 import (
 	"context"
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -22,6 +23,25 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+// WindowFunc performs a computation on each row using data from a provided *WindowFrameRun.
+type WindowFunc interface {
+	// Compute computes the window function for the provided window frame, given the
+	// current state of WindowFunc. The method should be called sequentially for every
+	// row in a partition in turn with the desired ordering of the WindowFunc. This is
+	// because there is an implicit carried dependency between each row and all those
+	// that have come before it (like in an AggregateFunc). As such, this approach does
+	// not present any exploitable associativity/commutativity for optimization.
+	Compute(context.Context, *Context, *WindowFrameRun) (tree.Datum, error)
+
+	// Reset resets the window function which allows for reusing it when
+	// computing over different partitions.
+	Reset(context.Context)
+
+	// Close allows the window function to free any memory it requested during execution,
+	// such as during the execution of an aggregation like CONCAT_AGG or ARRAY_AGG.
+	Close(context.Context, *Context)
+}
 
 // IndexedRows are rows with the corresponding indices.
 type IndexedRows interface {
@@ -31,23 +51,23 @@ type IndexedRows interface {
 
 // IndexedRow is a row with a corresponding index.
 type IndexedRow interface {
-	GetIdx() int                                    // returns index of the row
-	GetDatum(idx int) (Datum, error)                // returns a datum at the given index
-	GetDatums(startIdx, endIdx int) (Datums, error) // returns datums at indices [startIdx, endIdx)
+	GetIdx() int                                         // returns index of the row
+	GetDatum(idx int) (tree.Datum, error)                // returns a datum at the given index
+	GetDatums(startIdx, endIdx int) (tree.Datums, error) // returns datums at indices [startIdx, endIdx)
 }
 
 // WindowFrameRun contains the runtime state of window frame during calculations.
 type WindowFrameRun struct {
 	// constant for all calls to WindowFunc.Add
 	Rows             IndexedRows
-	ArgsIdxs         []uint32     // indices of the arguments to the window function
-	Frame            *WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
-	StartBoundOffset Datum
-	EndBoundOffset   Datum
+	ArgsIdxs         []uint32          // indices of the arguments to the window function
+	Frame            *tree.WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
+	StartBoundOffset tree.Datum
+	EndBoundOffset   tree.Datum
 	FilterColIdx     int
 	OrdColIdx        int                // Column over which rows are ordered within the partition. It is only required in RANGE mode.
 	OrdDirection     encoding.Direction // Direction of the ordering over OrdColIdx.
-	PlusOp, MinusOp  *BinOp             // Binary operators for addition and subtraction required only in RANGE mode.
+	PlusOp, MinusOp  *tree.BinOp        // Binary operators for addition and subtraction required only in RANGE mode.
 	PeerHelper       PeerGroupsIndicesHelper
 
 	// Any error that occurred within methods that cannot return an error (like
@@ -68,13 +88,13 @@ type WindowFrameRangeOps struct{}
 // LookupImpl looks up implementation of Plus and Minus binary operators for
 // provided left and right types and returns them along with a boolean which
 // indicates whether lookup is successful.
-func (o WindowFrameRangeOps) LookupImpl(left, right *types.T) (*BinOp, *BinOp, bool) {
-	plusOverloads, minusOverloads := BinOps[treebin.Plus], BinOps[treebin.Minus]
-	plusOp, found := plusOverloads.lookupImpl(left, right)
+func (o WindowFrameRangeOps) LookupImpl(left, right *types.T) (*tree.BinOp, *tree.BinOp, bool) {
+	plusOverloads, minusOverloads := tree.BinOps[treebin.Plus], tree.BinOps[treebin.Minus]
+	plusOp, found := plusOverloads.LookupImpl(left, right)
 	if !found {
 		return nil, nil, false
 	}
-	minusOp, found := minusOverloads.lookupImpl(left, right)
+	minusOp, found := minusOverloads.LookupImpl(left, right)
 	if !found {
 		return nil, nil, false
 	}
@@ -85,14 +105,14 @@ func (o WindowFrameRangeOps) LookupImpl(left, right *types.T) (*BinOp, *BinOp, b
 // in the column over which rows are ordered plus/minus logic offset, and an
 // error if encountered. It should be used only in RANGE mode.
 func (wfr *WindowFrameRun) getValueByOffset(
-	ctx context.Context, evalCtx *EvalContext, offset Datum, negative bool,
-) (Datum, error) {
+	ctx context.Context, evalCtx *Context, offset tree.Datum, negative bool,
+) (tree.Datum, error) {
 	if wfr.OrdDirection == encoding.Descending {
 		// If rows are in descending order, we want to perform the "opposite"
 		// addition/subtraction to default ascending order.
 		negative = !negative
 	}
-	var binOp *BinOp
+	var binOp *tree.BinOp
 	if negative {
 		binOp = wfr.MinusOp
 	} else {
@@ -102,14 +122,14 @@ func (wfr *WindowFrameRun) getValueByOffset(
 	if err != nil {
 		return nil, err
 	}
-	if value == DNull {
-		return DNull, nil
+	if value == tree.DNull {
+		return tree.DNull, nil
 	}
-	return binOp.Fn(evalCtx, value, offset)
+	return binOp.EvalOp.Eval((*evaluator)(evalCtx), value, offset)
 }
 
 // FrameStartIdx returns the index of starting row in the frame (which is the first to be included).
-func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalContext) (int, error) {
+func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *Context) (int, error) {
 	if wfr.Frame == nil {
 		return 0, nil
 	}
@@ -219,7 +239,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 		case treewindow.UnboundedPreceding:
 			return 0, nil
 		case treewindow.OffsetPreceding:
-			offset := MustBeDInt(wfr.StartBoundOffset)
+			offset := tree.MustBeDInt(wfr.StartBoundOffset)
 			idx := wfr.RowIdx - int(offset)
 			if idx < 0 {
 				idx = 0
@@ -228,7 +248,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 		case treewindow.CurrentRow:
 			return wfr.RowIdx, nil
 		case treewindow.OffsetFollowing:
-			offset := MustBeDInt(wfr.StartBoundOffset)
+			offset := tree.MustBeDInt(wfr.StartBoundOffset)
 			idx := wfr.RowIdx + int(offset)
 			if idx >= wfr.PartitionSize() || int(offset) >= wfr.PartitionSize() {
 				// The second part of the condition protects us from an integer
@@ -246,7 +266,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 		case treewindow.UnboundedPreceding:
 			return 0, nil
 		case treewindow.OffsetPreceding:
-			offset := MustBeDInt(wfr.StartBoundOffset)
+			offset := tree.MustBeDInt(wfr.StartBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum - int(offset)
 			if peerGroupNum < 0 {
 				peerGroupNum = 0
@@ -256,7 +276,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 			// Spec: in GROUPS mode CURRENT ROW means that the frame starts with the current row's first peer.
 			return wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum), nil
 		case treewindow.OffsetFollowing:
-			offset := MustBeDInt(wfr.StartBoundOffset)
+			offset := tree.MustBeDInt(wfr.StartBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum + int(offset)
 			lastPeerGroupNum := wfr.PeerHelper.GetLastPeerGroupNum()
 			if peerGroupNum > lastPeerGroupNum || peerGroupNum < 0 {
@@ -275,26 +295,8 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 	}
 }
 
-// IsDefaultFrame returns whether a frame equivalent to the default frame
-// is being used (default is RANGE UNBOUNDED PRECEDING).
-func (f *WindowFrame) IsDefaultFrame() bool {
-	if f == nil {
-		return true
-	}
-	if f.Bounds.StartBound.BoundType == treewindow.UnboundedPreceding {
-		return f.DefaultFrameExclusion() && f.Mode == treewindow.RANGE &&
-			(f.Bounds.EndBound == nil || f.Bounds.EndBound.BoundType == treewindow.CurrentRow)
-	}
-	return false
-}
-
-// DefaultFrameExclusion returns true if optional frame exclusion is omitted.
-func (f *WindowFrame) DefaultFrameExclusion() bool {
-	return f == nil || f.Exclusion == treewindow.NoExclusion
-}
-
 // FrameEndIdx returns the index of the first row after the frame.
-func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext) (int, error) {
+func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *Context) (int, error) {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize(), nil
 	}
@@ -415,7 +417,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
 		case treewindow.OffsetPreceding:
-			offset := MustBeDInt(wfr.EndBoundOffset)
+			offset := tree.MustBeDInt(wfr.EndBoundOffset)
 			idx := wfr.RowIdx - int(offset) + 1
 			if idx < 0 {
 				idx = 0
@@ -424,7 +426,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		case treewindow.CurrentRow:
 			return wfr.RowIdx + 1, nil
 		case treewindow.OffsetFollowing:
-			offset := MustBeDInt(wfr.EndBoundOffset)
+			offset := tree.MustBeDInt(wfr.EndBoundOffset)
 			idx := wfr.RowIdx + int(offset) + 1
 			if idx >= wfr.PartitionSize() || int(offset) >= wfr.PartitionSize() {
 				// The second part of the condition protects us from an integer
@@ -447,7 +449,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
 		case treewindow.OffsetPreceding:
-			offset := MustBeDInt(wfr.EndBoundOffset)
+			offset := tree.MustBeDInt(wfr.EndBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum - int(offset)
 			if peerGroupNum < wfr.PeerHelper.headPeerGroupNum {
 				// EndBound's peer group is "outside" of the partition.
@@ -457,7 +459,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		case treewindow.CurrentRow:
 			return wfr.DefaultFrameSize(), nil
 		case treewindow.OffsetFollowing:
-			offset := MustBeDInt(wfr.EndBoundOffset)
+			offset := tree.MustBeDInt(wfr.EndBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum + int(offset)
 			lastPeerGroupNum := wfr.PeerHelper.GetLastPeerGroupNum()
 			if peerGroupNum > lastPeerGroupNum || peerGroupNum < 0 {
@@ -481,7 +483,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 
 // FrameSize returns the number of rows in the current frame (taking into
 // account - if present - a filter and a frame exclusion).
-func (wfr *WindowFrameRun) FrameSize(ctx context.Context, evalCtx *EvalContext) (int, error) {
+func (wfr *WindowFrameRun) FrameSize(ctx context.Context, evalCtx *Context) (int, error) {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize(), nil
 	}
@@ -539,22 +541,22 @@ func (wfr *WindowFrameRun) FirstInPeerGroup() bool {
 }
 
 // Args returns the current argument set in the window frame.
-func (wfr *WindowFrameRun) Args(ctx context.Context) (Datums, error) {
+func (wfr *WindowFrameRun) Args(ctx context.Context) (tree.Datums, error) {
 	return wfr.ArgsWithRowOffset(ctx, 0)
 }
 
 // ArgsWithRowOffset returns the argument set at the given offset in the window frame.
-func (wfr *WindowFrameRun) ArgsWithRowOffset(ctx context.Context, offset int) (Datums, error) {
+func (wfr *WindowFrameRun) ArgsWithRowOffset(ctx context.Context, offset int) (tree.Datums, error) {
 	return wfr.ArgsByRowIdx(ctx, wfr.RowIdx+offset)
 }
 
 // ArgsByRowIdx returns the argument set of the row at idx.
-func (wfr *WindowFrameRun) ArgsByRowIdx(ctx context.Context, idx int) (Datums, error) {
+func (wfr *WindowFrameRun) ArgsByRowIdx(ctx context.Context, idx int) (tree.Datums, error) {
 	row, err := wfr.Rows.GetRow(ctx, idx)
 	if err != nil {
 		return nil, err
 	}
-	datums := make(Datums, len(wfr.ArgsIdxs))
+	datums := make(tree.Datums, len(wfr.ArgsIdxs))
 	for i, argIdx := range wfr.ArgsIdxs {
 		datums[i], err = row.GetDatum(int(argIdx))
 		if err != nil {
@@ -565,7 +567,7 @@ func (wfr *WindowFrameRun) ArgsByRowIdx(ctx context.Context, idx int) (Datums, e
 }
 
 // valueAt returns the first argument of the window function at the row idx.
-func (wfr *WindowFrameRun) valueAt(ctx context.Context, idx int) (Datum, error) {
+func (wfr *WindowFrameRun) valueAt(ctx context.Context, idx int) (tree.Datum, error) {
 	row, err := wfr.Rows.GetRow(ctx, idx)
 	if err != nil {
 		return nil, err
@@ -604,24 +606,26 @@ func (wfr *WindowFrameRun) FullPartitionIsInWindow() bool {
 		if wfr.Frame.Bounds.StartBound.BoundType == treewindow.OffsetPreceding {
 			// Both ROWS and GROUPS have an offset of integer type, so this type
 			// conversion is safe.
-			startOffset := wfr.StartBoundOffset.(*DInt)
+			startOffset := wfr.StartBoundOffset.(*tree.DInt)
 			// The idea of this conditional is that to confirm that all preceding
 			// rows will always be in the window, we only need to look at the last
 			// row: if startOffset is at least as large as the number of rows in the
 			// partition before the last one, then it will be true for the first to
 			// last, second to last, etc.
-			precedingConfirmed = precedingConfirmed || *startOffset >= DInt(wfr.Rows.Len()-1)
+			precedingConfirmed = precedingConfirmed ||
+				*startOffset >= tree.DInt(wfr.Rows.Len()-1)
 		}
 		if wfr.Frame.Bounds.EndBound.BoundType == treewindow.OffsetFollowing {
 			// Both ROWS and GROUPS have an offset of integer type, so this type
 			// conversion is safe.
-			endOffset := wfr.EndBoundOffset.(*DInt)
+			endOffset := wfr.EndBoundOffset.(*tree.DInt)
 			// The idea of this conditional is that to confirm that all following
 			// rows will always be in the window, we only need to look at the first
 			// row: if endOffset is at least as large as the number of rows in the
 			// partition after the first one, then it will be true for the second,
 			// third, etc rows as well.
-			followingConfirmed = followingConfirmed || *endOffset >= DInt(wfr.Rows.Len()-1)
+			followingConfirmed = followingConfirmed ||
+				*endOffset >= tree.DInt(wfr.Rows.Len()-1)
 		}
 	}
 	return precedingConfirmed && followingConfirmed
@@ -629,7 +633,7 @@ func (wfr *WindowFrameRun) FullPartitionIsInWindow() bool {
 
 // noFilter returns whether a filter is present.
 func (wfr *WindowFrameRun) noFilter() bool {
-	return wfr.FilterColIdx == NoColumnIdx
+	return wfr.FilterColIdx == tree.NoColumnIdx
 }
 
 // isRowExcluded returns whether the row at index idx should be excluded from
@@ -669,7 +673,7 @@ func (wfr *WindowFrameRun) IsRowSkipped(ctx context.Context, idx int) (bool, err
 		if err != nil {
 			return false, err
 		}
-		if d != DBoolTrue {
+		if d != tree.DBoolTrue {
 			// Row idx is filtered out from the window frame, so it is skipped.
 			return true, nil
 		}
@@ -681,37 +685,18 @@ func (wfr *WindowFrameRun) IsRowSkipped(ctx context.Context, idx int) (bool, err
 // compareForWindow wraps the Datum Compare method so that casts can be
 // performed up front. This allows us to return an expected error in the event
 // of an invalid comparison, rather than panicking.
-func compareForWindow(evalCtx *EvalContext, left, right Datum) (int, error) {
+func compareForWindow(evalCtx *Context, left, right tree.Datum) (int, error) {
 	if types.IsDateTimeType(left.ResolvedType()) && left.ResolvedType() != types.Interval {
 		// Datetime values (other than Intervals) are converted to timestamps for
 		// comparison. Note that the right side never needs to be casted.
-		ts, err := timeFromDatumForComparison(evalCtx, left)
+		ts, err := tree.TimeFromDatumForComparison(evalCtx, left)
 		if err != nil {
 			return 0, err
 		}
-		left, err = MakeDTimestampTZ(ts, time.Microsecond)
+		left, err = tree.MakeDTimestampTZ(ts, time.Microsecond)
 		if err != nil {
 			return 0, err
 		}
 	}
 	return left.Compare(evalCtx, right), nil
-}
-
-// WindowFunc performs a computation on each row using data from a provided *WindowFrameRun.
-type WindowFunc interface {
-	// Compute computes the window function for the provided window frame, given the
-	// current state of WindowFunc. The method should be called sequentially for every
-	// row in a partition in turn with the desired ordering of the WindowFunc. This is
-	// because there is an implicit carried dependency between each row and all those
-	// that have come before it (like in an AggregateFunc). As such, this approach does
-	// not present any exploitable associativity/commutativity for optimization.
-	Compute(context.Context, *EvalContext, *WindowFrameRun) (Datum, error)
-
-	// Reset resets the window function which allows for reusing it when
-	// computing over different partitions.
-	Reset(context.Context)
-
-	// Close allows the window function to free any memory it requested during execution,
-	// such as during the execution of an aggregation like CONCAT_AGG or ARRAY_AGG.
-	Close(context.Context, *EvalContext)
 }

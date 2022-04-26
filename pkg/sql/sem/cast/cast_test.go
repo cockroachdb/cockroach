@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -160,6 +160,14 @@ func castContextFromPostgres(castcontext string) (Context, error) {
 	}
 }
 
+func oidStr(o oid.Oid) string {
+	res, ok := oidext.TypeName(o)
+	if !ok {
+		res = fmt.Sprintf("%d", o)
+	}
+	return res
+}
+
 // TestCastsFromUnknown verifies that there is a cast from Unknown defined for
 // all types.
 func TestCastsFromUnknown(t *testing.T) {
@@ -228,12 +236,4 @@ func TestTupleCastVolatility(t *testing.T) {
 			t.Errorf("from: %s  to: %s  expected: %s  got: %s", &from, &to, tc.exp, res)
 		}
 	}
-}
-
-func oidStr(o oid.Oid) string {
-	res, ok := oidext.TypeName(o)
-	if !ok {
-		res = fmt.Sprintf("%d", o)
-	}
-	return res
 }

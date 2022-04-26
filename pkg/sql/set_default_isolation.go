@@ -13,6 +13,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
@@ -54,12 +55,12 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 		// the same SET SESSION CHARACTERISTICS AS TRANSACTION mechanism? Currently, the
 		// way to do this is SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE;
 		if n.Modes.AsOf.Expr != nil {
-			if tree.IsFollowerReadTimestampFunction(n.Modes.AsOf, p.semaCtx.SearchPath) {
+			if asof.IsFollowerReadTimestampFunction(n.Modes.AsOf, p.semaCtx.SearchPath) {
 				m.SetDefaultTransactionUseFollowerReads(true)
 			} else {
 				return pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported default as of system time expression, only %s() allowed",
-					tree.FollowerReadTimestampFunctionName)
+					asof.FollowerReadTimestampFunctionName)
 			}
 		}
 		return nil

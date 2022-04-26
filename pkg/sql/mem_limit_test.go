@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -53,7 +53,7 @@ func TestMemoryLimit(t *testing.T) {
 	serverArgs := base.TestServerArgs{
 		SQLMemoryPoolSize: 5 << 20, /* 5MiB */
 	}
-	serverArgs.Knobs.SQLEvalContext = &tree.EvalContextTestingKnobs{
+	serverArgs.Knobs.SQLEvalContext = &eval.TestingKnobs{
 		// This test expects the default value of
 		// rowinfra.defaultBatchBytesLimit.
 		ForceProductionValues: true,

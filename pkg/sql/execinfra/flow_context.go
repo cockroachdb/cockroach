@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -44,7 +45,7 @@ type FlowCtx struct {
 	//
 	// TODO(andrei): Get rid of this field and pass a non-shared EvalContext to
 	// cores of the processors that need it.
-	EvalCtx *tree.EvalContext
+	EvalCtx *eval.Context
 
 	// The transaction in which kv operations performed by processors in the flow
 	// must be performed. Processors in the Flow will use this txn concurrently.
@@ -98,7 +99,7 @@ type FlowCtx struct {
 // EvalContext, since it stores that EvalContext in its exprHelpers and mutates
 // them at runtime to ensure expressions are evaluated with the correct indexed
 // var context.
-func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
+func (ctx *FlowCtx) NewEvalCtx() *eval.Context {
 	evalCopy := ctx.EvalCtx.Copy()
 	return evalCopy
 }

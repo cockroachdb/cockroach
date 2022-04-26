@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -116,7 +117,7 @@ func (s *Set) IsUnconstrained() bool {
 // Constraints that exist in either of the input sets will get merged into the
 // combined set. Compatible constraints (that share same column list) are
 // intersected with one another. Intersect returns the merged set.
-func (s *Set) Intersect(evalCtx *tree.EvalContext, other *Set) *Set {
+func (s *Set) Intersect(evalCtx *eval.Context, other *Set) *Set {
 	// Intersection with the contradiction set is always the contradiction set.
 	if s == Contradiction || other == Contradiction {
 		return Contradiction
@@ -188,7 +189,7 @@ func (s *Set) Intersect(evalCtx *tree.EvalContext, other *Set) *Set {
 // the union is unconstrained (and thus allows combinations like x,y = 10,0).
 //
 // Union returns the merged set.
-func (s *Set) Union(evalCtx *tree.EvalContext, other *Set) *Set {
+func (s *Set) Union(evalCtx *eval.Context, other *Set) *Set {
 	// Union with the contradiction set is an identity operation.
 	if s == Contradiction {
 		return other
@@ -265,7 +266,7 @@ func (s *Set) ExtractCols() opt.ColSet {
 
 // ExtractNotNullCols returns a set of columns that cannot be NULL for the
 // constraints in the set to hold.
-func (s *Set) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
+func (s *Set) ExtractNotNullCols(evalCtx *eval.Context) opt.ColSet {
 	if s == Unconstrained || s == Contradiction {
 		return opt.ColSet{}
 	}
@@ -278,7 +279,7 @@ func (s *Set) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 
 // ExtractConstCols returns a set of columns which can only have one value
 // for the constraints in the set to hold.
-func (s *Set) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
+func (s *Set) ExtractConstCols(evalCtx *eval.Context) opt.ColSet {
 	if s == Unconstrained || s == Contradiction {
 		return opt.ColSet{}
 	}
@@ -291,7 +292,7 @@ func (s *Set) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
 
 // ExtractValueForConstCol extracts the value for a constant column returned
 // by ExtractConstCols. If the given column is not constant, nil is returned.
-func (s *Set) ExtractValueForConstCol(evalCtx *tree.EvalContext, col opt.ColumnID) tree.Datum {
+func (s *Set) ExtractValueForConstCol(evalCtx *eval.Context, col opt.ColumnID) tree.Datum {
 	if s == Unconstrained || s == Contradiction {
 		return nil
 	}
@@ -315,7 +316,7 @@ func (s *Set) ExtractValueForConstCol(evalCtx *tree.EvalContext, col opt.ColumnI
 // constraint on a single column which allows for one or more non-ranging
 // constant values. On success, returns the column and the constant value.
 func (s *Set) HasSingleColumnConstValues(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (col opt.ColumnID, constValues tree.Datums, ok bool) {
 	if s.Length() != 1 {
 		return 0, nil, false

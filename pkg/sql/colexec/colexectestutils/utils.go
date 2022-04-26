@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -82,7 +83,7 @@ func (t Tuple) String() string {
 	return sb.String()
 }
 
-func (t Tuple) less(other Tuple, evalCtx *tree.EvalContext, tupleFromOtherSet Tuple) bool {
+func (t Tuple) less(other Tuple, evalCtx *eval.Context, tupleFromOtherSet Tuple) bool {
 	for i := range t {
 		// If either side is nil, we short circuit the comparison. For nil, we
 		// define: nil < {any_none_nil}
@@ -255,7 +256,7 @@ func (t Tuples) String() string {
 // tree.Datum in the latter but strings in the former. In order to use the same
 // ordering when sorting the strings, we need to peek into the actual tuple to
 // determine whether we want to convert the string to datum before comparison.
-func (t Tuples) sort(evalCtx *tree.EvalContext, tupleFromOtherSet Tuple) Tuples {
+func (t Tuples) sort(evalCtx *eval.Context, tupleFromOtherSet Tuple) Tuples {
 	b := make(Tuples, len(t))
 	for i := range b {
 		b[i] = make(Tuple, len(t[i]))
@@ -358,7 +359,7 @@ func RunTestsWithOrderedCols(
 
 	{
 		ctx := context.Background()
-		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(ctx)
 		log.Info(ctx, "allNullsInjection")
 		// This test replaces all values in the input tuples with nulls and ensures
@@ -734,7 +735,7 @@ func RunTestsWithFixedSel(
 	}
 }
 
-func stringToDatum(val string, typ *types.T, evalCtx *tree.EvalContext) tree.Datum {
+func stringToDatum(val string, typ *types.T, evalCtx *eval.Context) tree.Datum {
 	expr, err := parser.ParseExpr(val)
 	if err != nil {
 		colexecerror.InternalError(err)
@@ -744,7 +745,7 @@ func stringToDatum(val string, typ *types.T, evalCtx *tree.EvalContext) tree.Dat
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	d, err := typedExpr.Eval(evalCtx)
+	d, err := eval.Expr(evalCtx, typedExpr)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -753,7 +754,7 @@ func stringToDatum(val string, typ *types.T, evalCtx *tree.EvalContext) tree.Dat
 
 // setColVal is a test helper function to set the given value at the equivalent
 // col[idx]. This function is slow due to reflection.
-func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalContext) {
+func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *eval.Context) {
 	switch vec.CanonicalTypeFamily() {
 	case types.BytesFamily:
 		var (
@@ -859,7 +860,7 @@ type opTestInput struct {
 	useSel        bool
 	rng           *rand.Rand
 	selection     []int
-	evalCtx       *tree.EvalContext
+	evalCtx       *eval.Context
 
 	// injectAllNulls determines whether opTestInput will replace all values in
 	// the input tuples with nulls.
@@ -884,7 +885,7 @@ func NewOpTestInput(
 		tuples:        tuples,
 		initialTuples: tuples,
 		typs:          typs,
-		evalCtx:       tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		evalCtx:       eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 	return ret
 }
@@ -899,7 +900,7 @@ func newOpTestSelInput(
 		tuples:        tuples,
 		initialTuples: tuples,
 		typs:          typs,
-		evalCtx:       tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		evalCtx:       eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 	return ret
 }
@@ -1082,7 +1083,7 @@ type opFixedSelTestInput struct {
 	tuples    Tuples
 	batch     coldata.Batch
 	sel       []int
-	evalCtx   *tree.EvalContext
+	evalCtx   *eval.Context
 	// idx is the index of the tuple to be emitted next. We need to maintain it
 	// in case the provided selection vector or provided tuples (if sel is nil)
 	// is longer than requested batch size.
@@ -1103,7 +1104,7 @@ func NewOpFixedSelTestInput(
 		sel:       sel,
 		tuples:    tuples,
 		typs:      typs,
-		evalCtx:   tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		evalCtx:   eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 	return ret
 }
@@ -1194,7 +1195,7 @@ func (s *opFixedSelTestInput) Reset(context.Context) {
 type OpTestOutput struct {
 	colexecop.OneInputNode
 	expected    Tuples
-	evalCtx     *tree.EvalContext
+	evalCtx     *eval.Context
 	typs        []*types.T
 	orderedCols []uint32
 
@@ -1210,7 +1211,7 @@ func NewOpTestOutput(input colexecop.Operator, expected Tuples) *OpTestOutput {
 	return &OpTestOutput{
 		OneInputNode: colexecop.NewOneInputNode(input),
 		expected:     expected,
-		evalCtx:      tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		evalCtx:      eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 }
 
@@ -1387,7 +1388,7 @@ func (r *OpTestOutput) VerifyPartialOrder() error {
 // tupleEquals checks that two tuples are equal, using a slow,
 // reflection-based method to do the comparison. Reflection is used so that
 // values can be compared in a type-agnostic way.
-func tupleEquals(expected Tuple, actual Tuple, evalCtx *tree.EvalContext) bool {
+func tupleEquals(expected Tuple, actual Tuple, evalCtx *eval.Context) bool {
 	if len(expected) != len(actual) {
 		return false
 	}
@@ -1496,7 +1497,7 @@ func makeError(expected Tuples, actual Tuples) error {
 }
 
 // AssertTuplesSetsEqual asserts that two sets of tuples are equal.
-func AssertTuplesSetsEqual(expected Tuples, actual Tuples, evalCtx *tree.EvalContext) error {
+func AssertTuplesSetsEqual(expected Tuples, actual Tuples, evalCtx *eval.Context) error {
 	if len(expected) != len(actual) {
 		return makeError(expected, actual)
 	}
@@ -1514,7 +1515,7 @@ func AssertTuplesSetsEqual(expected Tuples, actual Tuples, evalCtx *tree.EvalCon
 
 // assertTuplesOrderedEqual asserts that two permutations of tuples are equal
 // in order.
-func assertTuplesOrderedEqual(expected Tuples, actual Tuples, evalCtx *tree.EvalContext) error {
+func assertTuplesOrderedEqual(expected Tuples, actual Tuples, evalCtx *eval.Context) error {
 	if len(expected) != len(actual) {
 		return errors.Errorf("expected %+v, actual %+v", expected, actual)
 	}

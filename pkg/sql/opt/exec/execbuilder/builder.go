@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -53,7 +54,7 @@ type Builder struct {
 	catalog          cat.Catalog
 	e                opt.Expr
 	disableTelemetry bool
-	evalCtx          *tree.EvalContext
+	evalCtx          *eval.Context
 
 	// subqueries accumulates information about subqueries that are part of scalar
 	// expressions we built. Each entry is associated with a tree.Subquery
@@ -145,7 +146,7 @@ func New(
 	mem *memo.Memo,
 	catalog cat.Catalog,
 	e opt.Expr,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	allowAutoCommit bool,
 ) *Builder {
 	b := &Builder{
@@ -287,7 +288,7 @@ type mdVarContainer struct {
 var _ tree.IndexedVarContainer = &mdVarContainer{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
-func (c *mdVarContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+func (c *mdVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
 	return nil, errors.AssertionFailedf("no eval allowed in mdVarContainer")
 }
 

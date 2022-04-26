@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -66,7 +68,7 @@ func TestCastFromNull(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	for _, typ := range types.Scalar {
 		castExpr := tree.CastExpr{Expr: tree.DNull, Type: typ}
-		res, err := castExpr.Eval(nil)
+		res, err := eval.Expr(nil, &castExpr)
 		require.NoError(t, err)
 		require.Equal(t, tree.DNull, res)
 	}
@@ -79,7 +81,7 @@ func TestStringConcat(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 	for _, typ := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
 		// Strings and Bytes are handled specially.
@@ -87,15 +89,15 @@ func TestStringConcat(t *testing.T) {
 			continue
 		}
 		d := randgen.RandDatum(rng, typ, false /* nullOk */)
-		expected, err := tree.PerformCast(&evalCtx, d, types.String)
+		expected, err := eval.PerformCast(&evalCtx, d, types.String)
 		require.NoError(t, err)
 		concatOp := treebin.MakeBinaryOperator(treebin.Concat)
 		concatExprLeft := tree.NewTypedBinaryExpr(concatOp, tree.NewDString(""), d, types.String)
-		resLeft, err := concatExprLeft.Eval(&evalCtx)
+		resLeft, err := eval.Expr(&evalCtx, concatExprLeft)
 		require.NoError(t, err)
 		require.Equal(t, expected, resLeft)
 		concatExprRight := tree.NewTypedBinaryExpr(concatOp, d, tree.NewDString(""), types.String)
-		resRight, err := concatExprRight.Eval(&evalCtx)
+		resRight, err := eval.Expr(&evalCtx, concatExprRight)
 		require.NoError(t, err)
 		require.Equal(t, expected, resRight)
 	}
@@ -172,13 +174,13 @@ func TestExprString(t *testing.T) {
 			t.Errorf("Print/parse/print cycle changes the string: `%s` vs `%s`", str, str2)
 		}
 		// Compare the normalized expressions.
-		ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer ctx.Mon.Stop(context.Background())
-		normalized, err := ctx.NormalizeExpr(typedExpr)
+		normalized, err := normalize.Expr(ctx, typedExpr)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		normalized2, err := ctx.NormalizeExpr(typedExpr2)
+		normalized2, err := normalize.Expr(ctx, typedExpr2)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}

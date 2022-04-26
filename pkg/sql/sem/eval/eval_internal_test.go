@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package eval
 
 import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -132,7 +133,7 @@ func TestEvalContextCopy(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// Note: the test relies on "parent" EvalContext having non-nil and non-empty
 	// iVarContainerStack.
-	ctx := EvalContext{iVarContainerStack: make([]IndexedVarContainer, 1)}
+	ctx := Context{iVarContainerStack: make([]tree.IndexedVarContainer, 1)}
 
 	cpy := ctx.Copy()
 	if &ctx.iVarContainerStack[0] == &cpy.iVarContainerStack[0] {

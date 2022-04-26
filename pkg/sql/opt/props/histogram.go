@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -36,7 +37,7 @@ import (
 // a relational expression.
 // Histograms are immutable.
 type Histogram struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 	col     opt.ColumnID
 	buckets []cat.HistogramBucket
 }
@@ -50,9 +51,7 @@ func (h *Histogram) String() string {
 }
 
 // Init initializes the histogram with data from the catalog.
-func (h *Histogram) Init(
-	evalCtx *tree.EvalContext, col opt.ColumnID, buckets []cat.HistogramBucket,
-) {
+func (h *Histogram) Init(evalCtx *eval.Context, col opt.ColumnID, buckets []cat.HistogramBucket) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*h = Histogram{

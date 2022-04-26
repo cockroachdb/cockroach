@@ -35,6 +35,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/row",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",

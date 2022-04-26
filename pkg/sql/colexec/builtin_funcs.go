@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -26,7 +27,7 @@ import (
 type defaultBuiltinFuncOperator struct {
 	colexecop.OneInputHelper
 	allocator           *colmem.Allocator
-	evalCtx             *tree.EvalContext
+	evalCtx             *eval.Context
 	funcExpr            *tree.FuncExpr
 	columnTypes         []*types.T
 	argumentCols        []int
@@ -72,7 +73,8 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 				if hasNulls && !b.funcExpr.CanHandleNulls() {
 					res = tree.DNull
 				} else {
-					res, err = b.funcExpr.ResolvedOverload().Fn(b.evalCtx, b.row)
+					res, err = b.funcExpr.ResolvedOverload().
+						Fn.(eval.FnOverload)(b.evalCtx, b.row)
 					if err != nil {
 						colexecerror.ExpectedError(b.funcExpr.MaybeWrapError(err))
 					}
@@ -104,7 +106,7 @@ func (b *defaultBuiltinFuncOperator) Release() {
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
 func NewBuiltinFunctionOperator(
 	allocator *colmem.Allocator,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	funcExpr *tree.FuncExpr,
 	columnTypes []*types.T,
 	argumentCols []int,

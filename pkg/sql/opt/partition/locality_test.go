@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -27,7 +28,7 @@ func TestPrefixSorter(t *testing.T) {
 
 	defer leaktest.AfterTest(t)()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	const (
 		local  = true
 		remote = false
@@ -133,7 +134,7 @@ func TestPrefixSorter(t *testing.T) {
 // parsePartitionKeys parses a PARTITION BY LIST representation with integer
 // values like:
 //   "[/1] [/1/2] [/1/3] [/1/3/5]"
-func parsePartitionKeys(evalCtx *tree.EvalContext, str string) []tree.Datums {
+func parsePartitionKeys(evalCtx *eval.Context, str string) []tree.Datums {
 	if str == "" {
 		return []tree.Datums{}
 	}
@@ -151,7 +152,7 @@ func parsePartitionKeys(evalCtx *tree.EvalContext, str string) []tree.Datums {
 // e.g: [/1/2/3]. If no types are passed in, the type is inferred as being an
 // int if possible; otherwise a string. If any types are specified, they must be
 // specified for every datum.
-func ParsePartitionKey(evalCtx *tree.EvalContext, str string, typs ...types.Family) tree.Datums {
+func ParsePartitionKey(evalCtx *eval.Context, str string, typs ...types.Family) tree.Datums {
 	if len(str) < len("[]") {
 		panic(str)
 	}
@@ -166,6 +167,6 @@ func ParsePartitionKey(evalCtx *tree.EvalContext, str string, typs ...types.Fami
 		typs = tree.InferTypes(key)
 	}
 
-	vals := tree.ParseDatumPath(evalCtx, expr, typs)
+	vals := ParseDatumPath(evalCtx, expr, typs)
 	return vals
 }

@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -105,7 +106,7 @@ func (n *showTraceNode) Next(params runParams) (bool, error) {
 // This code must be careful not to overwrite traceRows,
 // because this is a shared slice which will be reused
 // by subsequent SHOW TRACE FOR SESSION statements.
-func (n *showTraceNode) processTraceRows(evalCtx *tree.EvalContext, traceRows []traceRow) {
+func (n *showTraceNode) processTraceRows(evalCtx *eval.Context, traceRows []traceRow) {
 	// Filter trace rows based on the message (in the SHOW KV TRACE case)
 	if n.kvTracingEnabled {
 		res := make([]traceRow, 0, len(traceRows))

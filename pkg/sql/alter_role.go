@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -590,7 +591,7 @@ func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
 		return "", nil
 	}
 	for i, v := range n.typedValues {
-		d, err := v.Eval(params.EvalContext())
+		d, err := eval.Expr(params.EvalContext(), v)
 		if err != nil {
 			return "", err
 		}

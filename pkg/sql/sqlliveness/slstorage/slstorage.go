@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
@@ -478,7 +479,7 @@ func decodeValue(kv kv.KeyValue) (hlc.Timestamp, error) {
 
 func encodeValue(expiration hlc.Timestamp) roachpb.Value {
 	var v roachpb.Value
-	dec := tree.TimestampToDecimal(expiration)
+	dec := eval.TimestampToDecimal(expiration)
 	v.SetTuple(encoding.EncodeDecimalValue(nil, 2, &dec))
 	return v
 }

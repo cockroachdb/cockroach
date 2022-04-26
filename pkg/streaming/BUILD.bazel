@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/ccl/streamingccl/streampb",
         "//pkg/kv",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/eval",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
     ],

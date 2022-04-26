@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -275,7 +276,7 @@ func GetSelectionConstOperator(
 	inputTypes []*types.T,
 	colIdx int,
 	constArg tree.Datum,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecop.Operator, error) {
 	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
@@ -331,7 +332,7 @@ func GetSelectionOperator(
 	inputTypes []*types.T,
 	col1Idx int,
 	col2Idx int,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecop.Operator, error) {
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]

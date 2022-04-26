@@ -19,13 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type defaultOrderedAgg struct {
 	orderedAggregateFuncBase
-	fn  tree.AggregateFunc
+	fn  eval.AggregateFunc
 	ctx context.Context
 	// inputArgsConverter is managed by the aggregator, and this function can
 	// simply call GetDatumColumn.
@@ -154,7 +155,7 @@ func (a *defaultOrderedAgg) Reset() {
 func newDefaultOrderedAggAlloc(
 	allocator *colmem.Allocator,
 	constructor execinfra.AggregateConstructor,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	inputArgsConverter *colconv.VecToDatumConverter,
 	numArguments int,
 	constArguments tree.Datums,
@@ -184,7 +185,7 @@ type defaultOrderedAggAlloc struct {
 	aggFuncs []defaultOrderedAgg
 
 	constructor execinfra.AggregateConstructor
-	evalCtx     *tree.EvalContext
+	evalCtx     *eval.Context
 	// inputArgsConverter is a converter from coldata.Vecs to tree.Datums that
 	// is shared among all aggregate functions and is managed by the aggregator
 	// (meaning that the aggregator operator is responsible for calling

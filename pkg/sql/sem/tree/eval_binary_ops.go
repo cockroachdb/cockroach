@@ -42,6 +42,7 @@ type CompareTupleOp struct {
 type CompareAnyTupleOp CompareTupleOp
 
 // Eval suppresses an auto-generated binding and membership in the
+// OpEvaluator interface.
 func (t *CompareAnyTupleOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	if a == DNull || b == DNull {
 		return MakeDBool(a == DNull && b == DNull), nil

@@ -11,6 +11,7 @@
 package keyside
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -38,7 +39,7 @@ func Encode(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 		return encoding.EncodeNullDescending(b), nil
 	}
 
-	switch t := tree.UnwrapDatum(nil, val).(type) {
+	switch t := eval.UnwrapDatum(nil, val).(type) {
 	case *tree.DBool:
 		var x int64
 		if *t {

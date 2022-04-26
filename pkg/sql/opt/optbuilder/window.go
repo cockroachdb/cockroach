@@ -51,7 +51,7 @@ func (w *windowInfo) TypeCheck(
 }
 
 // Eval is part of the tree.TypedExpr interface.
-func (w *windowInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+func (w *windowInfo) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("windowInfo must be replaced before evaluation"))
 }
 
