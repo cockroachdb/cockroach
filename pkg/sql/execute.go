@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,7 +54,7 @@ func (p *planner) fillInPlaceholders(
 			}
 		}
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-			ctx, e, typ, "EXECUTE parameter" /* context */, &semaCtx, tree.VolatilityVolatile,
+			ctx, e, typ, "EXECUTE parameter" /* context */, &semaCtx, volatility.Volatile,
 		)
 		if err != nil {
 			return nil, pgerror.WithCandidateCode(err, pgcode.WrongObjectType)

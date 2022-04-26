@@ -40,6 +40,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/stats",
         "//pkg/testutils/sqlutils",
         "//pkg/util",

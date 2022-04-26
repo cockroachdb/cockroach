@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -76,7 +77,7 @@ func DequalifyAndValidateExpr(
 	typ *types.T,
 	context string,
 	semaCtx *tree.SemaContext,
-	maxVolatility tree.Volatility,
+	maxVolatility volatility.V,
 	tn *tree.TableName,
 ) (string, *types.T, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
@@ -293,12 +294,12 @@ func deserializeExprForFormatting(
 	// typedExpr.
 	if fmtFlags == tree.FmtPGCatalog {
 		sanitizedExpr, err := SanitizeVarFreeExpr(ctx, expr, typedExpr.ResolvedType(), "FORMAT", semaCtx,
-			tree.VolatilityImmutable)
-		// If the expr has no variables and has VolatilityImmutable, we can evaluate
+			volatility.Immutable)
+		// If the expr has no variables and has volatility.Immutable, we can evaluate
 		// it and turn it into a constant.
 		if err == nil {
 			// An empty EvalContext is fine here since the expression has
-			// VolatilityImmutable.
+			// volatility.Immutable.
 			d, err := sanitizedExpr.Eval(&tree.EvalContext{})
 			if err == nil {
 				return d, nil
@@ -395,7 +396,7 @@ func SanitizeVarFreeExpr(
 	expectedType *types.T,
 	context string,
 	semaCtx *tree.SemaContext,
-	maxVolatility tree.Volatility,
+	maxVolatility volatility.V,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(expr) {
 		return nil, pgerror.Newf(pgcode.Syntax,
@@ -411,14 +412,14 @@ func SanitizeVarFreeExpr(
 	flags := tree.RejectSpecial
 
 	switch maxVolatility {
-	case tree.VolatilityImmutable:
+	case volatility.Immutable:
 		flags |= tree.RejectStableOperators
 		fallthrough
 
-	case tree.VolatilityStable:
+	case volatility.Stable:
 		flags |= tree.RejectVolatileFunctions
 
-	case tree.VolatilityVolatile:
+	case volatility.Volatile:
 		// Allow anything (no flags needed).
 
 	default:

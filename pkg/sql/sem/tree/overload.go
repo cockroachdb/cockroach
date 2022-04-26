@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -47,7 +48,7 @@ const (
 type Overload struct {
 	Types      TypeList
 	ReturnType ReturnTyper
-	Volatility Volatility
+	Volatility volatility.V
 
 	// PreferredOverload determines overload resolution as follows.
 	// When multiple overloads are eligible based on types even after all of of

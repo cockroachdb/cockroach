@@ -17,12 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
 // FoldingControl is used to control whether normalization rules allow constant
-// folding of VolatilityStable operators.
+// folding of volatility.Stable operators.
 //
 // FoldingControl can be initialized in either "allow stable folds" or "disallow
 // stable folds" state.
@@ -72,11 +73,11 @@ import (
 //
 type FoldingControl struct {
 	// allowStable controls whether canFoldOperator returns true or false for
-	// VolatilityStable.
+	// volatility.Stable.
 	allowStable bool
 
 	// encounteredStableFold is true if canFoldOperator was called with
-	// VolatilityStable.
+	// volatility.Stable.
 	encounteredStableFold bool
 }
 
@@ -106,11 +107,11 @@ func (fc *FoldingControl) TemporarilyDisallowStableFolds(fn func()) {
 	fn()
 }
 
-func (fc *FoldingControl) canFoldOperator(v tree.Volatility) bool {
-	if v < tree.VolatilityStable {
+func (fc *FoldingControl) canFoldOperator(v volatility.V) bool {
+	if v < volatility.Stable {
 		return true
 	}
-	if v > tree.VolatilityStable {
+	if v > volatility.Stable {
 		return false
 	}
 	fc.encounteredStableFold = true
@@ -140,8 +141,8 @@ func (fc *FoldingControl) PermittedStableFold() bool {
 
 // CanFoldOperator returns true if we should fold an operator with the given
 // volatility. This depends on the foldingVolatility setting of the factory
-// (which can be either VolatilityImmutable or VolatilityStable).
-func (c *CustomFuncs) CanFoldOperator(v tree.Volatility) bool {
+// (which can be either volatility.Immutable or volatility.Stable).
+func (c *CustomFuncs) CanFoldOperator(v volatility.V) bool {
 	return c.f.foldingControl.canFoldOperator(v)
 }
 
