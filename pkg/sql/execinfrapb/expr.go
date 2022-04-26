@@ -55,10 +55,7 @@ func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 //
 // evalCtx will not be mutated.
 func processExpression(
-	exprSpec Expression,
-	evalCtx *tree.EvalContext,
-	semaCtx *tree.SemaContext,
-	h *tree.IndexedVarHelper,
+	exprSpec Expression, evalCtx *eval.Context, semaCtx *tree.SemaContext, h *tree.IndexedVarHelper,
 ) (tree.TypedExpr, error) {
 	if exprSpec.Expr == "" {
 		return nil, nil
@@ -110,7 +107,7 @@ type ExprHelper struct {
 	// `Row`.
 	Vars tree.IndexedVarHelper
 
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	Types      []*types.T
 	Row        rowenc.EncDatumRow
@@ -152,7 +149,7 @@ func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 //
 // evalCtx will not be mutated.
 func DeserializeExpr(
-	expr string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, vars *tree.IndexedVarHelper,
+	expr string, semaCtx *tree.SemaContext, evalCtx *eval.Context, vars *tree.IndexedVarHelper,
 ) (tree.TypedExpr, error) {
 	if expr == "" {
 		return nil, nil
@@ -171,7 +168,7 @@ func DeserializeExpr(
 
 // Init initializes the ExprHelper.
 func (eh *ExprHelper) Init(
-	expr Expression, types []*types.T, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+	expr Expression, types []*types.T, semaCtx *tree.SemaContext, evalCtx *eval.Context,
 ) error {
 	if expr.Empty() {
 		return nil
@@ -209,7 +206,7 @@ func (eh *ExprHelper) EvalFilter(row rowenc.EncDatumRow) (bool, error) {
 }
 
 // RunFilter runs a filter expression and returns whether the filter passes.
-func RunFilter(filter tree.TypedExpr, evalCtx *tree.EvalContext) (bool, error) {
+func RunFilter(filter tree.TypedExpr, evalCtx *eval.Context) (bool, error) {
 	if filter == nil {
 		return true, nil
 	}

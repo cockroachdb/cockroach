@@ -20,7 +20,7 @@ import (
 )
 
 // GetGenerator is used to construct a ValueGenerator from a FuncExpr.
-func GetGenerator(ctx *tree.EvalContext, expr *tree.FuncExpr) (ValueGenerator, error) {
+func GetGenerator(ctx *Context, expr *tree.FuncExpr) (ValueGenerator, error) {
 	if !expr.IsGeneratorClass() {
 		return nil, errors.AssertionFailedf(
 			"cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q",

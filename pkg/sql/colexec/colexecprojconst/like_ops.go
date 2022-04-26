@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -26,7 +25,7 @@ import (
 // true. The implementation varies depending on the complexity of the pattern.
 func GetLikeProjectionOperator(
 	allocator *colmem.Allocator,
-	ctx *tree.EvalContext,
+	ctx *eval.Context,
 	input colexecop.Operator,
 	colIdx int,
 	resultIdx int,

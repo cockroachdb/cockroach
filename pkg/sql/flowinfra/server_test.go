@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -166,7 +166,7 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 func runLocalFlow(
 	ctx context.Context, s serverutils.TestServerInterface, req *execinfrapb.SetupFlowRequest,
 ) (rowenc.EncDatumRows, error) {
-	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 	var rowBuf distsqlutils.RowBuffer
 	flowCtx, flow, _, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.Mon, req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})
@@ -203,7 +203,7 @@ func runLocalFlow(
 func runLocalFlowTenant(
 	ctx context.Context, s serverutils.TestTenantInterface, req *execinfrapb.SetupFlowRequest,
 ) (rowenc.EncDatumRows, error) {
-	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 	var rowBuf distsqlutils.RowBuffer
 	flowCtx, flow, _, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.Mon, req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})

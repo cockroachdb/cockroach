@@ -18,7 +18,7 @@ import (
 )
 
 // Expr normalizes the provided expr.
-func Expr(ctx *tree.EvalContext, typedExpr tree.TypedExpr) (tree.TypedExpr, error) {
+func Expr(ctx *eval.Context, typedExpr tree.TypedExpr) (tree.TypedExpr, error) {
 	v := MakeNormalizeVisitor(ctx)
 	expr, _ := tree.WalkExpr(&v, typedExpr)
 	if v.err != nil {
@@ -29,7 +29,7 @@ func Expr(ctx *tree.EvalContext, typedExpr tree.TypedExpr) (tree.TypedExpr, erro
 
 // Visitor supports the execution of Expr.
 type Visitor struct {
-	ctx *tree.EvalContext
+	ctx *eval.Context
 	err error
 
 	fastIsConstVisitor fastIsConstVisitor
@@ -38,7 +38,7 @@ type Visitor struct {
 var _ tree.Visitor = &Visitor{}
 
 // MakeNormalizeVisitor creates a Visitor instance.
-func MakeNormalizeVisitor(ctx *tree.EvalContext) Visitor {
+func MakeNormalizeVisitor(ctx *eval.Context) Visitor {
 	return Visitor{ctx: ctx, fastIsConstVisitor: fastIsConstVisitor{ctx: ctx}}
 }
 
@@ -112,7 +112,7 @@ func (v *Visitor) isConst(expr tree.Expr) bool {
 // zero.
 func (v *Visitor) isNumericZero(expr tree.TypedExpr) bool {
 	if d, ok := expr.(tree.Datum); ok {
-		switch t := tree.UnwrapDatum(v.ctx, d).(type) {
+		switch t := eval.UnwrapDatum(v.ctx, d).(type) {
 		case *tree.DDecimal:
 			return t.Decimal.Sign() == 0
 		case *tree.DFloat:
@@ -128,7 +128,7 @@ func (v *Visitor) isNumericZero(expr tree.TypedExpr) bool {
 // one.
 func (v *Visitor) isNumericOne(expr tree.TypedExpr) bool {
 	if d, ok := expr.(tree.Datum); ok {
-		switch t := tree.UnwrapDatum(v.ctx, d).(type) {
+		switch t := eval.UnwrapDatum(v.ctx, d).(type) {
 		case *tree.DDecimal:
 			return t.Decimal.Cmp(&DecimalOne.Decimal) == 0
 		case *tree.DFloat:
@@ -166,7 +166,7 @@ func invertComparisonOp(op treecmp.ComparisonOperator) (treecmp.ComparisonOperat
 // bottom-up. If a child is *not* a const tree.Datum, that means it was already
 // determined to be non-constant, and therefore was not evaluated.
 type fastIsConstVisitor struct {
-	ctx     *tree.EvalContext
+	ctx     *eval.Context
 	isConst bool
 
 	// visited indicates whether we have already visited one level of the tree.

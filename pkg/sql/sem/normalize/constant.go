@@ -18,7 +18,7 @@ import (
 
 // ConstantEvalVisitor replaces constant TypedExprs with the result of Eval.
 type ConstantEvalVisitor struct {
-	ctx *tree.EvalContext
+	ctx *eval.Context
 	err error
 
 	fastIsConstVisitor fastIsConstVisitor
@@ -27,7 +27,7 @@ type ConstantEvalVisitor struct {
 var _ tree.Visitor = &ConstantEvalVisitor{}
 
 // MakeConstantEvalVisitor creates a ConstantEvalVisitor instance.
-func MakeConstantEvalVisitor(ctx *tree.EvalContext) ConstantEvalVisitor {
+func MakeConstantEvalVisitor(ctx *eval.Context) ConstantEvalVisitor {
 	return ConstantEvalVisitor{ctx: ctx, fastIsConstVisitor: fastIsConstVisitor{ctx: ctx}}
 }
 

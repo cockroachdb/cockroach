@@ -780,7 +780,7 @@ func (tt *Table) addIndexWithVersion(
 	if partitionBy != nil {
 		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext()
-		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		if len(partitionBy.List) > 0 {
 			idx.partitions = make([]Partition, len(partitionBy.List))
@@ -1144,7 +1144,7 @@ func (tt *Table) addPrimaryColumnIndex(colName string) {
 // partitionByListExprToDatums converts an expression from a PARTITION BY LIST
 // clause to a list of datums.
 func (ti *Index) partitionByListExprToDatums(
-	ctx context.Context, evalCtx *tree.EvalContext, semaCtx *tree.SemaContext, e tree.Expr,
+	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext, e tree.Expr,
 ) tree.Datums {
 	var vals []tree.Expr
 	switch t := e.(type) {

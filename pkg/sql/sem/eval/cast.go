@@ -60,7 +60,7 @@ func ReType(expr tree.TypedExpr, wantedType *types.T) (_ tree.TypedExpr, ok bool
 // PerformCast performs a cast from the provided Datum to the specified
 // types.T. The original datum is returned if its type is identical
 // to the specified type.
-func PerformCast(ctx *tree.EvalContext, d tree.Datum, t *types.T) (tree.Datum, error) {
+func PerformCast(ctx *Context, d tree.Datum, t *types.T) (tree.Datum, error) {
 	ret, err := performCastWithoutPrecisionTruncation(ctx, d, t, true /* truncateWidth */)
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func PerformCast(ctx *tree.EvalContext, d tree.Datum, t *types.T) (tree.Datum, e
 // or string values are too wide for the given type, rather than truncating the
 // value. The one exception to this is casts to the special "char" type which
 // are truncated.
-func PerformAssignmentCast(ctx *tree.EvalContext, d tree.Datum, t *types.T) (tree.Datum, error) {
+func PerformAssignmentCast(ctx *Context, d tree.Datum, t *types.T) (tree.Datum, error) {
 	if !ValidAssignmentCast(d.ResolvedType(), t) {
 		return nil, pgerror.Newf(
 			pgcode.CannotCoerce,
@@ -107,7 +107,7 @@ var (
 // and casting logic before this can happen.
 // See also: #55094.
 func performCastWithoutPrecisionTruncation(
-	ctx *tree.EvalContext, d tree.Datum, t *types.T, truncateWidth bool,
+	ctx *Context, d tree.Datum, t *types.T, truncateWidth bool,
 ) (tree.Datum, error) {
 	// No conversion is needed if d is NULL.
 	if d == tree.DNull {
@@ -907,7 +907,7 @@ func performCastWithoutPrecisionTruncation(
 // performIntToOidCast casts the input integer to the OID type given by the
 // input types.T.
 func performIntToOidCast(
-	ctx context.Context, res tree.TypeResolver, t *types.T, v tree.DInt,
+	ctx context.Context, res TypeResolver, t *types.T, v tree.DInt,
 ) (tree.Datum, error) {
 	switch t.Oid() {
 	case oid.T_oid:

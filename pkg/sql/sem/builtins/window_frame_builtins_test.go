@@ -57,7 +57,7 @@ func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (tree.Datums, error)
 }
 
 func testSlidingWindow(t *testing.T, count int) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	wfr := makeTestWindowFrameRun(count)
 	wfr.Frame = &tree.WindowFrame{
@@ -72,12 +72,12 @@ func testSlidingWindow(t *testing.T, count int) {
 	testSumAndAvg(t, evalCtx, wfr)
 }
 
-func testMin(t *testing.T, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun) {
+func testMin(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 	for offset := 0; offset < maxOffset; offset += int(rand.Int31n(maxOffset / 10)) {
 		wfr.StartBoundOffset = tree.NewDInt(tree.DInt(offset))
 		wfr.EndBoundOffset = tree.NewDInt(tree.DInt(offset))
 		min := &slidingWindowFunc{}
-		min.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
+		min.sw = makeSlidingWindow(evalCtx, func(evalCtx *eval.Context, a, b tree.Datum) int {
 			return -a.Compare(evalCtx, b)
 		})
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
@@ -115,12 +115,12 @@ func testMin(t *testing.T, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun) 
 	}
 }
 
-func testMax(t *testing.T, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun) {
+func testMax(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 	for offset := 0; offset < maxOffset; offset += int(rand.Int31n(maxOffset / 10)) {
 		wfr.StartBoundOffset = tree.NewDInt(tree.DInt(offset))
 		wfr.EndBoundOffset = tree.NewDInt(tree.DInt(offset))
 		max := &slidingWindowFunc{}
-		max.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
+		max.sw = makeSlidingWindow(evalCtx, func(evalCtx *eval.Context, a, b tree.Datum) int {
 			return a.Compare(evalCtx, b)
 		})
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
@@ -158,7 +158,7 @@ func testMax(t *testing.T, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun) 
 	}
 }
 
-func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun) {
+func testSumAndAvg(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 	for offset := 0; offset < maxOffset; offset += int(rand.Int31n(maxOffset / 10)) {
 		wfr.StartBoundOffset = tree.NewDInt(tree.DInt(offset))
 		wfr.EndBoundOffset = tree.NewDInt(tree.DInt(offset))

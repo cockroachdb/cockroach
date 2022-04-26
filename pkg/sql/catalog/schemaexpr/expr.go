@@ -301,7 +301,7 @@ func deserializeExprForFormatting(
 		if err == nil {
 			// An empty EvalContext is fine here since the expression has
 			// Immutable.
-			d, err := eval.Expr(&tree.EvalContext{}, sanitizedExpr)
+			d, err := eval.Expr(&eval.Context{}, sanitizedExpr)
 			if err == nil {
 				return d, nil
 			}
@@ -314,7 +314,7 @@ func deserializeExprForFormatting(
 // nameResolver is used to replace unresolved names in expressions with
 // IndexedVars.
 type nameResolver struct {
-	evalCtx    *tree.EvalContext
+	evalCtx    *eval.Context
 	tableID    descpb.ID
 	source     *colinfo.DataSourceInfo
 	nrc        *nameResolverIVarContainer
@@ -323,7 +323,7 @@ type nameResolver struct {
 
 // newNameResolver creates and returns a nameResolver.
 func newNameResolver(
-	evalCtx *tree.EvalContext, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
+	evalCtx *eval.Context, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
 ) *nameResolver {
 	source := colinfo.NewSourceInfoForSingleTable(
 		*tn,

@@ -27,7 +27,7 @@ import (
 type defaultBuiltinFuncOperator struct {
 	colexecop.OneInputHelper
 	allocator           *colmem.Allocator
-	evalCtx             *tree.EvalContext
+	evalCtx             *eval.Context
 	funcExpr            *tree.FuncExpr
 	columnTypes         []*types.T
 	argumentCols        []int
@@ -106,7 +106,7 @@ func (b *defaultBuiltinFuncOperator) Release() {
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
 func NewBuiltinFunctionOperator(
 	allocator *colmem.Allocator,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	funcExpr *tree.FuncExpr,
 	columnTypes []*types.T,
 	argumentCols []int,

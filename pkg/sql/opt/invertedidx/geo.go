@@ -335,7 +335,7 @@ var _ invertedFilterPlanner = &geoFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
 // interface.
 func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	evalCtx *tree.EvalContext, expr opt.ScalarExpr,
+	evalCtx *eval.Context, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
@@ -706,7 +706,7 @@ func (p *PreFilterer) PreFilter(
 // geoDatumsToInvertedExpr implements invertedexpr.DatumsToInvertedExpr for
 // geospatial columns.
 type geoDatumsToInvertedExpr struct {
-	evalCtx      *tree.EvalContext
+	evalCtx      *eval.Context
 	colTypes     []*types.T
 	invertedExpr tree.TypedExpr
 	indexConfig  geoindex.Config
@@ -747,7 +747,7 @@ func (g *geoDatumsToInvertedExpr) IndexedVarNodeFormatter(idx int) tree.NodeForm
 
 // NewGeoDatumsToInvertedExpr returns a new geoDatumsToInvertedExpr.
 func NewGeoDatumsToInvertedExpr(
-	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, config geoindex.Config,
+	evalCtx *eval.Context, colTypes []*types.T, expr tree.TypedExpr, config geoindex.Config,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
 	if config.IsEmpty() {
 		return nil, fmt.Errorf("inverted joins are currently only supported for geospatial indexes")

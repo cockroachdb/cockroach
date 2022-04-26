@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -165,7 +166,7 @@ func MakeSimpleTableDescriptor(
 	}
 	create.Defs = filteredDefs
 
-	evalCtx := tree.EvalContext{
+	evalCtx := eval.Context{
 		Context:            ctx,
 		Sequence:           &importSequenceOperators{},
 		Regions:            makeImportRegionOperator(""),
@@ -253,12 +254,12 @@ func (i importDatabaseRegionConfig) PrimaryRegionString() string {
 	return string(i.primaryRegion)
 }
 
-var _ tree.DatabaseRegionConfig = &importDatabaseRegionConfig{}
+var _ eval.DatabaseRegionConfig = &importDatabaseRegionConfig{}
 
 // CurrentDatabaseRegionConfig is part of the eval.DatabaseCatalog interface.
 func (so *importRegionOperator) CurrentDatabaseRegionConfig(
 	_ context.Context,
-) (tree.DatabaseRegionConfig, error) {
+) (eval.DatabaseRegionConfig, error) {
 	return importDatabaseRegionConfig{primaryRegion: so.primaryRegion}, nil
 }
 
@@ -336,11 +337,11 @@ func (so *importSequenceOperators) IsTypeVisible(
 // HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) HasAnyPrivilege(
 	ctx context.Context,
-	specifier tree.HasPrivilegeSpecifier,
+	specifier eval.HasPrivilegeSpecifier,
 	user security.SQLUsername,
 	privs []privilege.Privilege,
-) (tree.HasAnyPrivilegeResult, error) {
-	return tree.HasNoPrivilege, errors.WithStack(errSequenceOperators)
+) (eval.HasAnyPrivilegeResult, error) {
+	return eval.HasNoPrivilege, errors.WithStack(errSequenceOperators)
 }
 
 // IncrementSequenceByID implements the eval.SequenceOperators interface.

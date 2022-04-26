@@ -17,12 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
 
-func checkBoundedStalenessEnabled(ctx *tree.EvalContext) error {
+func checkBoundedStalenessEnabled(ctx *eval.Context) error {
 	st := ctx.Settings
 	return utilccl.CheckEnterpriseEnabled(
 		st,
@@ -32,7 +32,7 @@ func checkBoundedStalenessEnabled(ctx *tree.EvalContext) error {
 	)
 }
 
-func evalMaxStaleness(ctx *tree.EvalContext, d duration.Duration) (time.Time, error) {
+func evalMaxStaleness(ctx *eval.Context, d duration.Duration) (time.Time, error) {
 	if err := checkBoundedStalenessEnabled(ctx); err != nil {
 		return time.Time{}, err
 	}
@@ -46,7 +46,7 @@ func evalMaxStaleness(ctx *tree.EvalContext, d duration.Duration) (time.Time, er
 	return duration.Add(ctx.GetStmtTimestamp(), d.Mul(-1)), nil
 }
 
-func evalMinTimestamp(ctx *tree.EvalContext, t time.Time) (time.Time, error) {
+func evalMinTimestamp(ctx *eval.Context, t time.Time) (time.Time, error) {
 	if err := checkBoundedStalenessEnabled(ctx); err != nil {
 		return time.Time{}, err
 	}

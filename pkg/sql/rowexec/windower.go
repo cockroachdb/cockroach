@@ -413,7 +413,7 @@ func (w *windower) findOrderOfWindowFnsToProcessIn() {
 // function to be processed.
 func (w *windower) processPartition(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	partition *rowcontainer.DiskBackedIndexedRowContainer,
 	partitionIdx int,
 ) error {
@@ -602,7 +602,7 @@ func (w *windower) processPartition(
 // computeWindowFunctions computes all window functions over all partitions.
 // Partitions are processed one at a time with the underlying row container
 // reused (and reordered if needed).
-func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.EvalContext) error {
+func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *eval.Context) error {
 	w.findOrderOfWindowFnsToProcessIn()
 
 	// We don't know how many partitions there are, so we'll be accounting for
@@ -752,7 +752,7 @@ type windowFunc struct {
 
 type partitionPeerGrouper struct {
 	ctx       context.Context
-	evalCtx   *tree.EvalContext
+	evalCtx   *eval.Context
 	partition *rowcontainer.DiskBackedIndexedRowContainer
 	ordering  execinfrapb.Ordering
 	rowCopy   rowenc.EncDatumRow

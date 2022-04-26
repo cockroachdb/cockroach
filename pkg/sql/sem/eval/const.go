@@ -14,13 +14,13 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // IsConst returns whether the expression is constant. A constant expression
 // does not contain variables, as defined by ContainsVars, nor impure functions.
-func IsConst(evalCtx *tree.EvalContext, expr tree.TypedExpr) bool {
+func IsConst(evalCtx *Context, expr tree.TypedExpr) bool {
 	v := isConstVisitor{ctx: evalCtx}
 	return v.run(expr)
 }
 
 type isConstVisitor struct {
-	ctx     *tree.EvalContext
+	ctx     *Context
 	isConst bool
 }
 
@@ -52,7 +52,7 @@ func (v *isConstVisitor) run(expr tree.Expr) bool {
 // placeholder will have the same value for every row processed.
 // It is set to false for scalar expressions that are not
 // evaluated as part of query execution, eg. tree.DEFAULT expressions.
-func IsVar(evalCtx *tree.EvalContext, expr tree.Expr, allowConstPlaceholders bool) bool {
+func IsVar(evalCtx *Context, expr tree.Expr, allowConstPlaceholders bool) bool {
 	switch expr.(type) {
 	case tree.VariableExpr:
 		return true

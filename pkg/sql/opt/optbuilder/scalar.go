@@ -832,7 +832,7 @@ type ScalarBuilder struct {
 // NewScalar creates a new ScalarBuilder. The columns in the metadata are accessible
 // from scalar expressions via IndexedVars.
 func NewScalar(
-	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, factory *norm.Factory,
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, factory *norm.Factory,
 ) *ScalarBuilder {
 	md := factory.Metadata()
 	sb := &ScalarBuilder{

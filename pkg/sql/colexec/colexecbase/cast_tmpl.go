@@ -105,7 +105,7 @@ func GetCastOperator(
 	resultIdx int,
 	fromType *types.T,
 	toType *types.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	base := castOpBase{
@@ -228,7 +228,7 @@ type castOpBase struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
-	evalCtx   *tree.EvalContext
+	evalCtx   *eval.Context
 }
 
 func (c *castOpBase) Reset(ctx context.Context) {
@@ -385,7 +385,7 @@ func setNativeToDatumCast(
 	scratchIdx int,
 	outputIdx int,
 	toType *types.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	hasNulls bool,
 	scratchBCE bool,
 ) {
@@ -509,7 +509,7 @@ func castTuples(
 	toType *types.T,
 	n int,
 	sel []int,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	hasNulls bool,
 	hasSel bool,
 ) {

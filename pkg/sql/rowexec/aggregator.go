@@ -877,7 +877,7 @@ func (ag *orderedAggregator) accumulateRow(row rowenc.EncDatumRow) error {
 }
 
 type aggregateFuncHolder struct {
-	create func(*tree.EvalContext, tree.Datums) eval.AggregateFunc
+	create func(*eval.Context, tree.Datums) eval.AggregateFunc
 
 	// arguments is the list of constant (non-aggregated) arguments to the
 	// aggregate, for instance, the separator in string_agg.
@@ -893,7 +893,7 @@ const (
 )
 
 func (ag *aggregatorBase) newAggregateFuncHolder(
-	create func(*tree.EvalContext, tree.Datums) eval.AggregateFunc, arguments tree.Datums,
+	create func(*eval.Context, tree.Datums) eval.AggregateFunc, arguments tree.Datums,
 ) *aggregateFuncHolder {
 	return &aggregateFuncHolder{
 		create:    create,

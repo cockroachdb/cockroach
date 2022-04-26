@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -188,7 +189,7 @@ FROM
 	}
 	defer rows.Close()
 
-	evalCtx := tree.EvalContext{}
+	evalCtx := eval.Context{}
 	udtMapping := make(map[tree.TypeName]*types.T)
 
 	for rows.Next() {

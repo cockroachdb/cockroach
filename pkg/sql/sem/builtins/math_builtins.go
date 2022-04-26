@@ -62,7 +62,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := tree.MustBeDInt(args[0])
 				switch {
 				case x == math.MinInt64:
@@ -206,7 +206,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"x", types.Int}, {"y", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				y := tree.MustBeDInt(args[1])
 				if y == 0 {
 					return nil, tree.ErrDivByZero
@@ -242,7 +242,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDFloat(tree.DFloat(float64(*args[0].(*tree.DInt)))), nil
 			},
 			Info:       "Calculates the largest integer not greater than `val`.",
@@ -256,7 +256,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			// a boolean.
 			Types:      tree.ArgTypes{{"val", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDBool(tree.DBool(math.IsNaN(float64(*args[0].(*tree.DFloat))))), nil
 			},
 			Info:       "Returns true if `val` is NaN, false otherwise.",
@@ -265,7 +265,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Decimal}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				isNaN := args[0].(*tree.DDecimal).Decimal.Form == apd.NaN
 				return tree.MakeDBool(tree.DBool(isNaN)), nil
 			},
@@ -345,7 +345,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"x", types.Int}, {"y", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				y := tree.MustBeDInt(args[1])
 				if y == 0 {
 					return nil, tree.ErrDivByZero
@@ -362,7 +362,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDFloat(math.Pi), nil
 			},
 			Info:       "Returns the value for pi (3.141592653589793).",
@@ -390,7 +390,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.Float}, {"decimal_accuracy", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				f := float64(*args[0].(*tree.DFloat))
 				if math.IsInf(f, 0) || math.IsNaN(f) {
 					return args[0], nil
@@ -422,7 +422,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.Decimal}, {"decimal_accuracy", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Decimal),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// TODO(mjibson): make sure this fits in an int32.
 				scale := int32(tree.MustBeDInt(args[1]))
 				return roundDecimal(&args[0].(*tree.DDecimal).Decimal, scale)
@@ -472,7 +472,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := tree.MustBeDInt(args[0])
 				switch {
 				case x < 0:
@@ -531,7 +531,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			Types: tree.ArgTypes{{"operand", types.Decimal}, {"b1", types.Decimal},
 				{"b2", types.Decimal}, {"count", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				operand, _ := args[0].(*tree.DDecimal).Float64()
 				b1, _ := args[1].(*tree.DDecimal).Float64()
 				b2, _ := args[2].(*tree.DDecimal).Float64()
@@ -552,7 +552,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			Types: tree.ArgTypes{{"operand", types.Int}, {"b1", types.Int},
 				{"b2", types.Int}, {"count", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				operand := float64(tree.MustBeDInt(args[0]))
 				b1 := float64(tree.MustBeDInt(args[1]))
 				b2 := float64(tree.MustBeDInt(args[2]))
@@ -566,7 +566,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"operand", types.Any}, {"thresholds", types.AnyArray}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				operand := args[0]
 				thresholds := tree.MustBeDArray(args[1])
 
@@ -605,7 +605,7 @@ var ceilImpl = makeBuiltin(defProps(),
 	tree.Overload{
 		Types:      tree.ArgTypes{{"val", types.Int}},
 		ReturnType: tree.FixedReturnType(types.Float),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(float64(*args[0].(*tree.DInt)))), nil
 		},
 		Info:       "Calculates the smallest integer not smaller than `val`.",
@@ -628,7 +628,7 @@ var powImpls = makeBuiltin(defProps(),
 			{"y", types.Int},
 		},
 		ReturnType: tree.FixedReturnType(types.Int),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 			return eval.IntPow(tree.MustBeDInt(args[0]), tree.MustBeDInt(args[1]))
 		},
 		Info:       "Calculates `x`^`y`.",
@@ -658,7 +658,7 @@ func floatOverload1(
 	return tree.Overload{
 		Types:      tree.ArgTypes{{"val", types.Float}},
 		ReturnType: tree.FixedReturnType(types.Float),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 			return f(float64(*args[0].(*tree.DFloat)))
 		},
 		Info:       info,
@@ -675,7 +675,7 @@ func floatOverload2(
 	return tree.Overload{
 		Types:      tree.ArgTypes{{a, types.Float}, {b, types.Float}},
 		ReturnType: tree.FixedReturnType(types.Float),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 			return f(float64(*args[0].(*tree.DFloat)),
 				float64(*args[1].(*tree.DFloat)))
 		},
@@ -690,7 +690,7 @@ func decimalOverload1(
 	return tree.Overload{
 		Types:      tree.ArgTypes{{"val", types.Decimal}},
 		ReturnType: tree.FixedReturnType(types.Decimal),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 			dec := &args[0].(*tree.DDecimal).Decimal
 			return f(dec)
 		},
@@ -708,7 +708,7 @@ func decimalOverload2(
 	return tree.Overload{
 		Types:      tree.ArgTypes{{a, types.Decimal}, {b, types.Decimal}},
 		ReturnType: tree.FixedReturnType(types.Decimal),
-		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 			dec1 := &args[0].(*tree.DDecimal).Decimal
 			dec2 := &args[1].(*tree.DDecimal).Decimal
 			return f(dec1, dec2)

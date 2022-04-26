@@ -51,7 +51,7 @@ import (
 // extendedEvalContext extends eval.Context with fields that are needed for
 // distsql planning.
 type extendedEvalContext struct {
-	tree.EvalContext
+	eval.Context
 
 	// SessionID for this connection.
 	SessionID ClusterWideID
@@ -131,7 +131,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 // copy returns a deep copy of ctx.
 func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 	cpy := *evalCtx
-	cpy.EvalContext = *evalCtx.EvalContext.Copy()
+	cpy.Context = *evalCtx.Context.Copy()
 	return &cpy
 }
 
@@ -452,8 +452,8 @@ func internalExtendedEvalCtx(
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
-	var sqlStatsController tree.SQLStatsController
-	var indexUsageStatsController tree.IndexUsageStatsController
+	var sqlStatsController eval.SQLStatsController
+	var indexUsageStatsController eval.IndexUsageStatsController
 	if execCfg.InternalExecutor != nil {
 		if execCfg.InternalExecutor.s != nil {
 			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
@@ -471,7 +471,7 @@ func internalExtendedEvalCtx(
 		}
 	}
 	ret := extendedEvalContext{
-		EvalContext: tree.EvalContext{
+		Context: eval.Context{
 			Txn:                       txn,
 			SessionDataStack:          sds,
 			TxnReadOnly:               false,
@@ -523,8 +523,8 @@ func (p *planner) CurrentSearchPath() sessiondata.SearchPath {
 }
 
 // EvalContext() provides convenient access to the planner's EvalContext().
-func (p *planner) EvalContext() *tree.EvalContext {
-	return &p.extendedEvalCtx.EvalContext
+func (p *planner) EvalContext() *eval.Context {
+	return &p.extendedEvalCtx.Context
 }
 
 func (p *planner) Descriptors() *descs.Collection {
@@ -690,7 +690,7 @@ const (
 // evalStringOptions evaluates the KVOption values as strings and returns them
 // in a map. Options with no value have an empty string.
 func evalStringOptions(
-	evalCtx *tree.EvalContext, opts []exec.KVOption, optValidate map[string]KVStringOptValidate,
+	evalCtx *eval.Context, opts []exec.KVOption, optValidate map[string]KVStringOptValidate,
 ) (map[string]string, error) {
 	res := make(map[string]string, len(opts))
 	for _, opt := range opts {
@@ -818,7 +818,7 @@ func (p *planner) SessionDataMutatorIterator() *sessionDataMutatorIterator {
 
 // Ann is a shortcut for the Annotations from the eval context.
 func (p *planner) Ann() *tree.Annotations {
-	return p.ExtendedEvalContext().EvalContext.Annotations
+	return p.ExtendedEvalContext().Context.Annotations
 }
 
 // ExecutorConfig implements Planner interface.
@@ -894,8 +894,8 @@ func (p *planner) QueryIteratorEx(
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
-) (tree.InternalRows, error) {
+) (eval.InternalRows, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
-	return rows.(tree.InternalRows), err
+	return rows.(eval.InternalRows), err
 }

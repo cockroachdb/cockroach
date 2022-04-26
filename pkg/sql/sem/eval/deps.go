@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package eval
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -46,20 +47,20 @@ const (
 )
 
 // DatabaseCatalog consists of functions that reference the session database
-// and is to be used from EvalContext.
+// and is to be used from Context.
 type DatabaseCatalog interface {
 
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
 	// NB: this is deprecated! Use parser.ParseQualifiedTableName when possible.
-	ParseQualifiedTableName(sql string) (*TableName, error)
+	ParseQualifiedTableName(sql string) (*tree.TableName, error)
 
 	// ResolveTableName expands the given table name and
 	// makes it point to a valid object.
 	// If the database name is not given, it uses the search path to find it, and
 	// sets it on the returned TableName.
 	// It returns the ID of the resolved table, and an error if the table doesn't exist.
-	ResolveTableName(ctx context.Context, tn *TableName) (ID, error)
+	ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error)
 
 	// SchemaExists looks up the schema with the given name and determines
 	// whether it exists.
@@ -108,13 +109,13 @@ type HasPrivilegeSpecifier struct {
 	// Column privilege
 	// Requires TableName or TableOID.
 	// Only one of ColumnName, ColumnAttNum is filled.
-	ColumnName   *Name
+	ColumnName   *tree.Name
 	ColumnAttNum *uint32
 }
 
 // TypeResolver is an interface for resolving types and type OIDs.
 type TypeResolver interface {
-	TypeReferenceResolver
+	tree.TypeReferenceResolver
 
 	// ResolveOIDFromString looks up the populated value of the OID with the
 	// desired resultType which matches the provided name.
@@ -123,8 +124,8 @@ type TypeResolver interface {
 	// set to the result of the query. If there was not exactly one result to the
 	// query, an error will be returned.
 	ResolveOIDFromString(
-		ctx context.Context, resultType *types.T, toResolve *DString,
-	) (*DOid, error)
+		ctx context.Context, resultType *types.T, toResolve *tree.DString,
+	) (*tree.DOid, error)
 
 	// ResolveOIDFromOID looks up the populated value of the oid with the
 	// desired resultType which matches the provided oid.
@@ -133,8 +134,8 @@ type TypeResolver interface {
 	// set to the result of the query. If there was not exactly one result to the
 	// query, an error will be returned.
 	ResolveOIDFromOID(
-		ctx context.Context, resultType *types.T, toResolve *DOid,
-	) (*DOid, error)
+		ctx context.Context, resultType *types.T, toResolve *tree.DOid,
+	) (*tree.DOid, error)
 }
 
 // Planner is a limited planner that can be used from EvalContext.
@@ -155,7 +156,7 @@ type Planner interface {
 	GetTypeFromValidSQLSyntax(sql string) (*types.T, error)
 
 	// EvalSubquery returns the Datum for the given subquery node.
-	EvalSubquery(expr *Subquery) (Datum, error)
+	EvalSubquery(expr *tree.Subquery) (tree.Datum, error)
 
 	// UnsafeUpsertDescriptor is used to repair descriptors in dire
 	// circumstances. See the comment on the planner implementation.
@@ -217,19 +218,19 @@ type Planner interface {
 
 	// SerializeSessionState serializes the variables in the current session
 	// and returns a state, in bytes form.
-	SerializeSessionState() (*DBytes, error)
+	SerializeSessionState() (*tree.DBytes, error)
 
 	// DeserializeSessionState deserializes the state as serialized variables
 	// into the current session.
-	DeserializeSessionState(state *DBytes) (*DBool, error)
+	DeserializeSessionState(state *tree.DBytes) (*tree.DBool, error)
 
 	// CreateSessionRevivalToken creates a token that can be used to log in
 	// as the current user, in bytes form.
-	CreateSessionRevivalToken() (*DBytes, error)
+	CreateSessionRevivalToken() (*tree.DBytes, error)
 
 	// ValidateSessionRevivalToken checks if the given bytes are a valid
 	// session revival token.
-	ValidateSessionRevivalToken(token *DBytes) (*DBool, error)
+	ValidateSessionRevivalToken(token *tree.DBytes) (*tree.DBool, error)
 
 	// RevalidateUniqueConstraintsInCurrentDB verifies that all unique constraints
 	// defined on tables in the current database are valid. In other words, it
@@ -269,7 +270,7 @@ type Planner interface {
 		txn *kv.Txn,
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
-		qargs ...interface{}) (Datums, error)
+		qargs ...interface{}) (tree.Datums, error)
 
 	// QueryIteratorEx executes the query, returning an iterator that can be used
 	// to get the results. If the call is successful, the returned iterator
@@ -307,7 +308,7 @@ type InternalRows interface {
 	// Cur returns the row at the current position of the iterator. The row is
 	// safe to hold onto (meaning that calling Next() or Close() will not
 	// invalidate it).
-	Cur() Datums
+	Cur() tree.Datums
 
 	// Close closes this iterator, releasing any resources it held open. Close
 	// is idempotent and *must* be called once the caller is done with the
@@ -376,13 +377,13 @@ type PrivilegedAccessor interface {
 	// if there is one.
 	LookupNamespaceID(
 		ctx context.Context, parentID int64, parentSchemaID int64, name string,
-	) (DInt, bool, error)
+	) (tree.DInt, bool, error)
 
 	// LookupZoneConfigByNamespaceID returns the zone config given a namespace id.
 	// It is meant as a replacement for looking up system.zones directly.
 	// Returns the config byte array, a bool representing whether the namespace exists,
 	// and an error if there is one.
-	LookupZoneConfigByNamespaceID(ctx context.Context, id int64) (DBytes, bool, error)
+	LookupZoneConfigByNamespaceID(ctx context.Context, id int64) (tree.DBytes, bool, error)
 }
 
 // RegionOperator gives access to the current region, validation for all
@@ -409,13 +410,13 @@ type RegionOperator interface {
 }
 
 // SequenceOperators is used for various sql related functions that can
-// be used from EvalContext.
+// be used from Context.
 type SequenceOperators interface {
 
 	// GetSerialSequenceNameFromColumn returns the sequence name for a given table and column
 	// provided it is part of a SERIAL sequence.
 	// Returns an empty string if the sequence name does not exist.
-	GetSerialSequenceNameFromColumn(ctx context.Context, tableName *TableName, columnName Name) (*TableName, error)
+	GetSerialSequenceNameFromColumn(ctx context.Context, tableName *tree.TableName, columnName tree.Name) (*tree.TableName, error)
 
 	// IncrementSequenceByID increments the given sequence and returns the result.
 	// It returns an error if the given ID is not a sequence.

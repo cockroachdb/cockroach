@@ -480,7 +480,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			)
 		}()
 		// TODO(radu): consider removing this if/when #46164 is addressed.
-		p.extendedEvalCtx.EvalContext.Context = ctx
+		p.extendedEvalCtx.Context.Context = ctx
 	}
 
 	// We exempt `SET` statements from the statement timeout, particularly so as
@@ -799,7 +799,7 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 	return nil
 }
 
-func formatWithPlaceholders(ast tree.Statement, evalCtx *tree.EvalContext) string {
+func formatWithPlaceholders(ast tree.Statement, evalCtx *eval.Context) string {
 	var fmtCtx *tree.FmtCtx
 	fmtFlags := tree.FmtSimple
 
@@ -1445,7 +1445,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			// Query diagnostics can change the Context; make sure we are using the
 			// same one.
 			// TODO(radu): consider removing this if/when #46164 is addressed.
-			factoryEvalCtx.EvalContext = evalCtx.EvalContext
+			factoryEvalCtx.Context = evalCtx.Context
 			return &factoryEvalCtx
 		}
 	}

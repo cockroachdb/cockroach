@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -51,7 +52,7 @@ import (
 // tables with names that appear in the `tables` map is converted to Cockroach
 // KVs using the mapped converter and sent to kvCh.
 type mysqldumpReader struct {
-	evalCtx  *tree.EvalContext
+	evalCtx  *eval.Context
 	tables   map[string]*row.DatumRowConverter
 	kvCh     chan row.KVBatch
 	debugRow func(tree.Datums)
@@ -67,7 +68,7 @@ func newMysqldumpReader(
 	kvCh chan row.KVBatch,
 	walltime int64,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	opts roachpb.MysqldumpOptions,
 ) (*mysqldumpReader, error) {
 	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh, walltime: walltime, opts: opts}
@@ -209,7 +210,7 @@ const (
 // wrapper types are: StrVal, IntVal, FloatVal, HexNum, HexVal, ValArg, BitVal
 // as well as NullVal.
 func mysqlValueToDatum(
-	raw mysql.Expr, desired *types.T, evalContext *tree.EvalContext,
+	raw mysql.Expr, desired *types.T, evalContext *eval.Context,
 ) (tree.Datum, error) {
 	switch v := raw.(type) {
 	case mysql.BoolVal:
@@ -298,7 +299,7 @@ func mysqlValueToDatum(
 func readMysqlCreateTable(
 	ctx context.Context,
 	input io.Reader,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	p sql.JobExecContext,
 	startingID descpb.ID,
 	parentDB catalog.DatabaseDescriptor,
@@ -377,7 +378,7 @@ func safeName(in mysqlIdent) tree.Name {
 // Cockroach counterparts.
 func mysqlTableToCockroach(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	p sql.JobExecContext,
 	parentDB catalog.DatabaseDescriptor,
 	id descpb.ID,
@@ -590,7 +591,7 @@ type delayedFK struct {
 }
 
 func addDelayedFKs(
-	ctx context.Context, defs []delayedFK, resolver fkResolver, evalCtx *tree.EvalContext,
+	ctx context.Context, defs []delayedFK, resolver fkResolver, evalCtx *eval.Context,
 ) error {
 	for _, def := range defs {
 		backrefs := map[descpb.ID]*tabledesc.Mutable{}

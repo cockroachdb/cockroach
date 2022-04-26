@@ -241,21 +241,21 @@ func (n *resetAllNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *resetAllNode) Values() tree.Datums            { return nil }
 func (n *resetAllNode) Close(_ context.Context)        {}
 
-func getStringVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (string, error) {
+func getStringVal(evalCtx *eval.Context, name string, values []tree.TypedExpr) (string, error) {
 	if len(values) != 1 {
 		return "", newSingleArgVarError(name)
 	}
 	return paramparse.DatumAsString(evalCtx, name, values[0])
 }
 
-func getIntVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (int64, error) {
+func getIntVal(evalCtx *eval.Context, name string, values []tree.TypedExpr) (int64, error) {
 	if len(values) != 1 {
 		return 0, newSingleArgVarError(name)
 	}
 	return paramparse.DatumAsInt(evalCtx, name, values[0])
 }
 
-func getFloatVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (float64, error) {
+func getFloatVal(evalCtx *eval.Context, name string, values []tree.TypedExpr) (float64, error) {
 	if len(values) != 1 {
 		return 0, newSingleArgVarError(name)
 	}
@@ -268,14 +268,14 @@ func timeZoneVarGetStringVal(
 	if len(values) != 1 {
 		return "", newSingleArgVarError("timezone")
 	}
-	d, err := eval.Expr(&evalCtx.EvalContext, values[0])
+	d, err := eval.Expr(&evalCtx.Context, values[0])
 	if err != nil {
 		return "", err
 	}
 
 	var loc *time.Location
 	var offset int64
-	switch v := tree.UnwrapDatum(&evalCtx.EvalContext, d).(type) {
+	switch v := eval.UnwrapDatum(&evalCtx.Context, d).(type) {
 	case *tree.DString:
 		location := string(*v)
 		loc, err = timeutil.TimeZoneStringToLocation(
@@ -342,13 +342,13 @@ func makeTimeoutVarGetter(
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		d, err := eval.Expr(&evalCtx.EvalContext, values[0])
+		d, err := eval.Expr(&evalCtx.Context, values[0])
 		if err != nil {
 			return "", err
 		}
 
 		var timeout time.Duration
-		switch v := tree.UnwrapDatum(&evalCtx.EvalContext, d).(type) {
+		switch v := eval.UnwrapDatum(&evalCtx.Context, d).(type) {
 		case *tree.DString:
 			return string(*v), nil
 		case *tree.DInterval:

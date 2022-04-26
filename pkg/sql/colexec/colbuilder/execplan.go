@@ -1763,7 +1763,7 @@ func addProjection(
 
 func planSelectionOperators(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
 	input colexecop.Operator,
@@ -1939,7 +1939,7 @@ func planCastOperator(
 	fromType *types.T,
 	toType *types.T,
 	factory coldata.ColumnFactory,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	outputIdx := len(columnTypes)
 	op, err = colexecbase.GetCastOperator(colmem.NewAllocator(ctx, acc, factory), input, inputIdx, outputIdx, fromType, toType, evalCtx)
@@ -1953,7 +1953,7 @@ func planCastOperator(
 // resulting batches.
 func planProjectionOperators(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
 	input colexecop.Operator,
@@ -2293,7 +2293,7 @@ func checkSupportedBinaryExpr(left, right tree.TypedExpr, outputType *types.T) e
 
 func planProjectionExpr(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	projOp tree.Operator,
 	outputType *types.T,
 	left, right tree.TypedExpr,
@@ -2450,7 +2450,7 @@ func planProjectionExpr(
 // a logical operation (either AND or OR).
 func planLogicalProjectionOp(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
 	input colexecop.Operator,
@@ -2517,7 +2517,7 @@ func planLogicalProjectionOp(
 // expressions (tree.IsNullExpr and tree.IsNotNullExpr, respectively).
 func planIsNullProjectionOp(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	outputType *types.T,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
@@ -2572,7 +2572,7 @@ func useDefaultCmpOpForIn(tuple *tree.DTuple) bool {
 
 // evalTupleIfConst checks whether t contains only constant (i.e. tree.Datum)
 // expressions and evaluates the tuple if so.
-func evalTupleIfConst(evalCtx *tree.EvalContext, t *tree.Tuple) (_ tree.Datum, ok bool) {
+func evalTupleIfConst(evalCtx *eval.Context, t *tree.Tuple) (_ tree.Datum, ok bool) {
 	for _, expr := range t.Exprs {
 		if _, isDatum := expr.(tree.Datum); !isDatum {
 			// Not a constant expression.

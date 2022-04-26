@@ -25,7 +25,7 @@ import (
 // MatchLikeEscape matches 'unescaped' with 'pattern' using custom escape character 'escape' which
 // must be either empty (which disables the escape mechanism) or a single unicode character.
 func MatchLikeEscape(
-	ctx *tree.EvalContext, unescaped, pattern, escape string, caseInsensitive bool,
+	ctx *Context, unescaped, pattern, escape string, caseInsensitive bool,
 ) (tree.Datum, error) {
 	var escapeRune rune
 	if len(escape) > 0 {
@@ -71,7 +71,7 @@ func MatchLikeEscape(
 // ConvertLikeToRegexp compiles the specified LIKE pattern as an equivalent
 // regular expression.
 func ConvertLikeToRegexp(
-	ctx *tree.EvalContext, pattern string, caseInsensitive bool, escape rune,
+	ctx *Context, pattern string, caseInsensitive bool, escape rune,
 ) (*regexp.Regexp, error) {
 	key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escape}
 	re, err := ctx.ReCache.GetRegexp(key)
@@ -82,9 +82,7 @@ func ConvertLikeToRegexp(
 	return re, nil
 }
 
-func matchLike(
-	ctx *tree.EvalContext, left, right tree.Datum, caseInsensitive bool,
-) (tree.Datum, error) {
+func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree.Datum, error) {
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}
@@ -120,9 +118,7 @@ func matchLike(
 	return tree.MakeDBool(tree.DBool(matches)), err
 }
 
-func matchRegexpWithKey(
-	ctx *tree.EvalContext, str tree.Datum, key tree.RegexpCacheKey,
-) (tree.Datum, error) {
+func matchRegexpWithKey(ctx *Context, str tree.Datum, key tree.RegexpCacheKey) (tree.Datum, error) {
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
 		return tree.DBoolFalse, pgerror.Wrap(err, pgcode.InvalidRegularExpression, "invalid regular expression")
@@ -779,7 +775,7 @@ func (k similarToKey) Pattern() (string, error) {
 
 // SimilarToEscape checks if 'unescaped' is SIMILAR TO 'pattern' using custom escape token 'escape'
 // which must be either empty (which disables the escape mechanism) or a single unicode character.
-func SimilarToEscape(ctx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
+func SimilarToEscape(ctx *Context, unescaped, pattern, escape string) (tree.Datum, error) {
 	key, err := makeSimilarToKey(pattern, escape)
 	if err != nil {
 		return tree.DBoolFalse, err

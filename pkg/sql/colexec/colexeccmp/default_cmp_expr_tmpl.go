@@ -29,7 +29,7 @@ import (
 
 type cmpExprAdapterBase struct {
 	op      tree.BinaryEvalOp
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 }
 
 // {{range .}}

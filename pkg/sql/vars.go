@@ -271,7 +271,7 @@ var varGen = map[string]sessionVar{
 		GetStringVal: func(
 			ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
 		) (string, error) {
-			dbName, err := getStringVal(&evalCtx.EvalContext, `database`, values)
+			dbName, err := getStringVal(&evalCtx.Context, `database`, values)
 			if err != nil {
 				return "", err
 			}
@@ -1193,7 +1193,7 @@ var varGen = map[string]sessionVar{
 			comma := ""
 			var buf bytes.Buffer
 			for _, v := range values {
-				s, err := paramparse.DatumAsString(&evalCtx.EvalContext, "search_path", v)
+				s, err := paramparse.DatumAsString(&evalCtx.Context, "search_path", v)
 				if err != nil {
 					return "", err
 				}
@@ -2129,7 +2129,7 @@ func makePostgresBoolGetStringValFn(varName string) getStringValFn {
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		val, err := eval.Expr(&evalCtx.EvalContext, values[0])
+		val, err := eval.Expr(&evalCtx.Context, values[0])
 		if err != nil {
 			return "", err
 		}
@@ -2265,7 +2265,7 @@ func makeBackwardsCompatBoolVar(varName string, displayValue bool) sessionVar {
 // the user to provide plain integer values to a SET variable.
 func makeIntGetStringValFn(name string) getStringValFn {
 	return func(ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr) (string, error) {
-		s, err := getIntVal(&evalCtx.EvalContext, name, values)
+		s, err := getIntVal(&evalCtx.Context, name, values)
 		if err != nil {
 			return "", err
 		}
@@ -2277,7 +2277,7 @@ func makeIntGetStringValFn(name string) getStringValFn {
 // the user to provide plain float values to a SET variable.
 func makeFloatGetStringValFn(name string) getStringValFn {
 	return func(ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr) (string, error) {
-		f, err := getFloatVal(&evalCtx.EvalContext, name, values)
+		f, err := getFloatVal(&evalCtx.Context, name, values)
 		if err != nil {
 			return "", err
 		}

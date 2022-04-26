@@ -150,7 +150,7 @@ type MemRowContainer struct {
 	scratchRow    tree.Datums
 	scratchEncRow rowenc.EncDatumRow
 
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	datumAlloc tree.DatumAlloc
 }
@@ -161,7 +161,7 @@ var _ IndexedRowContainer = &MemRowContainer{}
 // Init initializes the MemRowContainer. The MemRowContainer uses evalCtx.Mon
 // to track memory usage.
 func (mc *MemRowContainer) Init(
-	ordering colinfo.ColumnOrdering, types []*types.T, evalCtx *tree.EvalContext,
+	ordering colinfo.ColumnOrdering, types []*types.T, evalCtx *eval.Context,
 ) {
 	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon)
 }
@@ -169,10 +169,7 @@ func (mc *MemRowContainer) Init(
 // InitWithMon initializes the MemRowContainer with an explicit monitor. Only
 // use this if the default MemRowContainer.Init() function is insufficient.
 func (mc *MemRowContainer) InitWithMon(
-	ordering colinfo.ColumnOrdering,
-	types []*types.T,
-	evalCtx *tree.EvalContext,
-	mon *mon.BytesMonitor,
+	ordering colinfo.ColumnOrdering, types []*types.T, evalCtx *eval.Context, mon *mon.BytesMonitor,
 ) {
 	acc := mon.MakeBoundAccount()
 	mc.RowContainer.Init(acc, colinfo.ColTypeInfoFromColTypes(types), 0 /* rowCapacity */)
@@ -404,7 +401,7 @@ var _ DeDupingRowContainer = &DiskBackedRowContainer{}
 func (f *DiskBackedRowContainer) Init(
 	ordering colinfo.ColumnOrdering,
 	types []*types.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
@@ -684,7 +681,7 @@ var _ IndexedRowContainer = &DiskBackedIndexedRowContainer{}
 func NewDiskBackedIndexedRowContainer(
 	ordering colinfo.ColumnOrdering,
 	typs []*types.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,

@@ -109,7 +109,7 @@ go_test(
         "//pkg/sql/flowinfra",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",

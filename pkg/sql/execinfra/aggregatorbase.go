@@ -22,7 +22,7 @@ import (
 )
 
 // AggregateConstructor is a function that creates an aggregate function.
-type AggregateConstructor func(*tree.EvalContext, tree.Datums) eval.AggregateFunc
+type AggregateConstructor func(*eval.Context, tree.Datums) eval.AggregateFunc
 
 // GetAggregateInfo returns the aggregate constructor and the return type for
 // the given aggregate function when applied on the given type.
@@ -56,7 +56,7 @@ func GetAggregateInfo(
 		}
 		if match {
 			// Found!
-			constructAgg := func(evalCtx *tree.EvalContext, arguments tree.Datums) eval.AggregateFunc {
+			constructAgg := func(evalCtx *eval.Context, arguments tree.Datums) eval.AggregateFunc {
 				return b.AggregateFunc.(eval.AggregateOverload)(inputTypes, evalCtx, arguments)
 			}
 			colTyp := b.InferReturnTypeFromInputArgTypes(inputTypes)
@@ -73,7 +73,7 @@ func GetAggregateInfo(
 //
 // evalCtx will not be mutated.
 func GetAggregateConstructor(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	aggInfo *execinfrapb.AggregatorSpec_Aggregation,
 	inputTypes []*types.T,
@@ -111,7 +111,7 @@ func GetAggregateConstructor(
 // when given fn is applied to given inputTypes.
 func GetWindowFunctionInfo(
 	fn execinfrapb.WindowerSpec_Func, inputTypes ...*types.T,
-) (windowConstructor func(*tree.EvalContext) eval.WindowFunc, returnType *types.T, err error) {
+) (windowConstructor func(*eval.Context) eval.WindowFunc, returnType *types.T, err error) {
 	if fn.AggregateFunc != nil && *fn.AggregateFunc == execinfrapb.AnyNotNull {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
@@ -149,7 +149,7 @@ func GetWindowFunctionInfo(
 		}
 		if match {
 			// Found!
-			constructAgg := func(evalCtx *tree.EvalContext) eval.WindowFunc {
+			constructAgg := func(evalCtx *eval.Context) eval.WindowFunc {
 				return b.WindowFunc.(eval.WindowOverload)(inputTypes, evalCtx)
 			}
 			colTyp := b.InferReturnTypeFromInputArgTypes(inputTypes)

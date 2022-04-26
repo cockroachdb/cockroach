@@ -155,7 +155,7 @@ func (a *defaultOrderedAgg) Reset() {
 func newDefaultOrderedAggAlloc(
 	allocator *colmem.Allocator,
 	constructor execinfra.AggregateConstructor,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	inputArgsConverter *colconv.VecToDatumConverter,
 	numArguments int,
 	constArguments tree.Datums,
@@ -185,7 +185,7 @@ type defaultOrderedAggAlloc struct {
 	aggFuncs []defaultOrderedAgg
 
 	constructor execinfra.AggregateConstructor
-	evalCtx     *tree.EvalContext
+	evalCtx     *eval.Context
 	// inputArgsConverter is a converter from coldata.Vecs to tree.Datums that
 	// is shared among all aggregate functions and is managed by the aggregator
 	// (meaning that the aggregator operator is responsible for calling

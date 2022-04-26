@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -88,7 +89,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 			// The internal planner overrides the database to "system", here we
 			// change it back.
 			{
-				ec := p.(interface{ EvalContext() *tree.EvalContext }).EvalContext()
+				ec := p.(interface{ EvalContext() *eval.Context }).EvalContext()
 				require.NoError(b, ec.SessionAccessor.SetSessionVar(
 					ctx, "database", "defaultdb", false,
 				))

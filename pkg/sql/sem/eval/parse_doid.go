@@ -28,7 +28,7 @@ import (
 var pgSignatureRegexp = regexp.MustCompile(`^\s*([\w\."]+)\s*\((?:(?:\s*[\w"]+\s*,)*\s*[\w"]+)?\s*\)\s*$`)
 
 // ParseDOid parses and returns an Oid family datum.
-func ParseDOid(ctx *tree.EvalContext, s string, t *types.T) (*tree.DOid, error) {
+func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 	// If it is an integer in string form, convert it as an int.
 	if val, err := tree.ParseDInt(strings.TrimSpace(s)); err == nil {
 		tmpOid := tree.NewDOid(*val)

@@ -32,7 +32,7 @@ type WindowFunc interface {
 	// because there is an implicit carried dependency between each row and all those
 	// that have come before it (like in an AggregateFunc). As such, this approach does
 	// not present any exploitable associativity/commutativity for optimization.
-	Compute(context.Context, *tree.EvalContext, *WindowFrameRun) (tree.Datum, error)
+	Compute(context.Context, *Context, *WindowFrameRun) (tree.Datum, error)
 
 	// Reset resets the window function which allows for reusing it when
 	// computing over different partitions.
@@ -40,7 +40,7 @@ type WindowFunc interface {
 
 	// Close allows the window function to free any memory it requested during execution,
 	// such as during the execution of an aggregation like CONCAT_AGG or ARRAY_AGG.
-	Close(context.Context, *tree.EvalContext)
+	Close(context.Context, *Context)
 }
 
 // IndexedRows are rows with the corresponding indices.
@@ -105,7 +105,7 @@ func (o WindowFrameRangeOps) LookupImpl(left, right *types.T) (*tree.BinOp, *tre
 // in the column over which rows are ordered plus/minus logic offset, and an
 // error if encountered. It should be used only in RANGE mode.
 func (wfr *WindowFrameRun) getValueByOffset(
-	ctx context.Context, evalCtx *tree.EvalContext, offset tree.Datum, negative bool,
+	ctx context.Context, evalCtx *Context, offset tree.Datum, negative bool,
 ) (tree.Datum, error) {
 	if wfr.OrdDirection == encoding.Descending {
 		// If rows are in descending order, we want to perform the "opposite"
@@ -129,9 +129,7 @@ func (wfr *WindowFrameRun) getValueByOffset(
 }
 
 // FrameStartIdx returns the index of starting row in the frame (which is the first to be included).
-func (wfr *WindowFrameRun) FrameStartIdx(
-	ctx context.Context, evalCtx *tree.EvalContext,
-) (int, error) {
+func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *Context) (int, error) {
 	if wfr.Frame == nil {
 		return 0, nil
 	}
@@ -298,9 +296,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(
 }
 
 // FrameEndIdx returns the index of the first row after the frame.
-func (wfr *WindowFrameRun) FrameEndIdx(
-	ctx context.Context, evalCtx *tree.EvalContext,
-) (int, error) {
+func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *Context) (int, error) {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize(), nil
 	}
@@ -487,7 +483,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(
 
 // FrameSize returns the number of rows in the current frame (taking into
 // account - if present - a filter and a frame exclusion).
-func (wfr *WindowFrameRun) FrameSize(ctx context.Context, evalCtx *tree.EvalContext) (int, error) {
+func (wfr *WindowFrameRun) FrameSize(ctx context.Context, evalCtx *Context) (int, error) {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize(), nil
 	}
@@ -689,7 +685,7 @@ func (wfr *WindowFrameRun) IsRowSkipped(ctx context.Context, idx int) (bool, err
 // compareForWindow wraps the Datum Compare method so that casts can be
 // performed up front. This allows us to return an expected error in the event
 // of an invalid comparison, rather than panicking.
-func compareForWindow(evalCtx *tree.EvalContext, left, right tree.Datum) (int, error) {
+func compareForWindow(evalCtx *Context, left, right tree.Datum) (int, error) {
 	if types.IsDateTimeType(left.ResolvedType()) && left.ResolvedType() != types.Interval {
 		// Datetime values (other than Intervals) are converted to timestamps for
 		// comparison. Note that the right side never needs to be casted.

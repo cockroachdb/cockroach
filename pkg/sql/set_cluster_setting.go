@@ -284,7 +284,7 @@ func writeSettingInternal(
 	user security.SQLUsername,
 	st *cluster.Settings,
 	value tree.TypedExpr,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	forSystemTenant bool,
 	logFn func(context.Context, descpb.ID, eventpb.EventPayload) error,
 ) (expectedEncodedValue string, err error) {

@@ -26,6 +26,7 @@ go_test(
         ":normalize",
         "//pkg/settings/cluster",
         "//pkg/sql/parser",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",

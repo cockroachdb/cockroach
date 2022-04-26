@@ -34,6 +34,7 @@ go_test(
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/parser",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",
         "//pkg/util/leaktest",

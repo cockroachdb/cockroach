@@ -412,7 +412,7 @@ func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
 }
 
 func streamPartition(
-	evalCtx *tree.EvalContext, streamID streaming.StreamID, opaqueSpec []byte,
+	evalCtx *eval.Context, streamID streaming.StreamID, opaqueSpec []byte,
 ) (eval.ValueGenerator, error) {
 	if !evalCtx.SessionData().AvoidBuffering {
 		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")

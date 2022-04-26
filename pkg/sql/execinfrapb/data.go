@@ -76,7 +76,7 @@ func ConvertToMappedSpecOrdering(
 // ExprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.
-func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
+func ExprFmtCtxBase(evalCtx *eval.Context) *tree.FmtCtx {
 	fmtCtx := evalCtx.FmtCtx(
 		tree.FmtCheckEquivalence,
 		tree.FmtPlaceholderFormat(

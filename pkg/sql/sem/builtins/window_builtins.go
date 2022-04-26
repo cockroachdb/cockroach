@@ -263,15 +263,15 @@ type aggregateWindowFunc struct {
 // NewAggregateWindowFunc creates a constructor of aggregateWindowFunc
 // with agg initialized by provided aggConstructor.
 func NewAggregateWindowFunc(
-	aggConstructor func(*tree.EvalContext, tree.Datums) eval.AggregateFunc,
-) func(*tree.EvalContext) eval.WindowFunc {
-	return func(evalCtx *tree.EvalContext) eval.WindowFunc {
+	aggConstructor func(*eval.Context, tree.Datums) eval.AggregateFunc,
+) func(*eval.Context) eval.WindowFunc {
+	return func(evalCtx *eval.Context) eval.WindowFunc {
 		return &aggregateWindowFunc{agg: aggConstructor(evalCtx, nil /* arguments */)}
 	}
 }
 
 func (w *aggregateWindowFunc) Compute(
-	ctx context.Context, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, evalCtx *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	if !wfr.FirstInPeerGroup() && wfr.Frame.DefaultFrameExclusion() {
 		return w.peerRes, nil
@@ -321,7 +321,7 @@ func (w *aggregateWindowFunc) Reset(ctx context.Context) {
 	w.peerFrameEndIdx = 0
 }
 
-func (w *aggregateWindowFunc) Close(ctx context.Context, _ *tree.EvalContext) {
+func (w *aggregateWindowFunc) Close(ctx context.Context, _ *eval.Context) {
 	w.agg.Close(ctx)
 }
 
@@ -337,12 +337,12 @@ func ShouldReset(w eval.WindowFunc) {
 // shouldReset indicates whether the resetting behavior is desired.
 type framableAggregateWindowFunc struct {
 	agg            *aggregateWindowFunc
-	aggConstructor func(*tree.EvalContext, tree.Datums) eval.AggregateFunc
+	aggConstructor func(*eval.Context, tree.Datums) eval.AggregateFunc
 	shouldReset    bool
 }
 
 func newFramableAggregateWindow(
-	agg eval.AggregateFunc, aggConstructor func(*tree.EvalContext, tree.Datums) eval.AggregateFunc,
+	agg eval.AggregateFunc, aggConstructor func(*eval.Context, tree.Datums) eval.AggregateFunc,
 ) eval.WindowFunc {
 	// jsonObjectAggregate is a special aggregate function because its
 	// implementation assumes that once Result is called, the returned
@@ -358,7 +358,7 @@ func newFramableAggregateWindow(
 }
 
 func (w *framableAggregateWindowFunc) Compute(
-	ctx context.Context, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, evalCtx *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	if wfr.FullPartitionIsInWindow() {
 		// Full partition is always inside of the window, and aggregations will
@@ -442,7 +442,7 @@ func (w *framableAggregateWindowFunc) Reset(ctx context.Context) {
 	w.agg.Reset(ctx)
 }
 
-func (w *framableAggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.EvalContext) {
+func (w *framableAggregateWindowFunc) Close(ctx context.Context, evalCtx *eval.Context) {
 	w.agg.Close(ctx, evalCtx)
 }
 
@@ -450,12 +450,12 @@ func (w *framableAggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.E
 // counting from 1.
 type rowNumberWindow struct{}
 
-func newRowNumberWindow([]*types.T, *tree.EvalContext) eval.WindowFunc {
+func newRowNumberWindow([]*types.T, *eval.Context) eval.WindowFunc {
 	return &rowNumberWindow{}
 }
 
 func (rowNumberWindow) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *eval.WindowFrameRun,
+	_ context.Context, _ *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	return tree.NewDInt(tree.DInt(wfr.RowIdx + 1 /* one-indexed */)), nil
 }
@@ -463,19 +463,19 @@ func (rowNumberWindow) Compute(
 // Reset implements eval.WindowFunc interface.
 func (rowNumberWindow) Reset(context.Context) {}
 
-func (rowNumberWindow) Close(context.Context, *tree.EvalContext) {}
+func (rowNumberWindow) Close(context.Context, *eval.Context) {}
 
 // rankWindow computes the rank of the current row with gaps.
 type rankWindow struct {
 	peerRes *tree.DInt
 }
 
-func newRankWindow([]*types.T, *tree.EvalContext) eval.WindowFunc {
+func newRankWindow([]*types.T, *eval.Context) eval.WindowFunc {
 	return &rankWindow{}
 }
 
 func (w *rankWindow) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *eval.WindowFrameRun,
+	_ context.Context, _ *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	if wfr.FirstInPeerGroup() {
 		w.peerRes = tree.NewDInt(tree.DInt(wfr.Rank()))
@@ -488,7 +488,7 @@ func (w *rankWindow) Reset(context.Context) {
 	w.peerRes = nil
 }
 
-func (w *rankWindow) Close(context.Context, *tree.EvalContext) {}
+func (w *rankWindow) Close(context.Context, *eval.Context) {}
 
 // denseRankWindow computes the rank of the current row without gaps (it counts peer groups).
 type denseRankWindow struct {
@@ -496,12 +496,12 @@ type denseRankWindow struct {
 	peerRes   *tree.DInt
 }
 
-func newDenseRankWindow([]*types.T, *tree.EvalContext) eval.WindowFunc {
+func newDenseRankWindow([]*types.T, *eval.Context) eval.WindowFunc {
 	return &denseRankWindow{}
 }
 
 func (w *denseRankWindow) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *eval.WindowFrameRun,
+	_ context.Context, _ *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	if wfr.FirstInPeerGroup() {
 		w.denseRank++
@@ -516,7 +516,7 @@ func (w *denseRankWindow) Reset(context.Context) {
 	w.peerRes = nil
 }
 
-func (w *denseRankWindow) Close(context.Context, *tree.EvalContext) {}
+func (w *denseRankWindow) Close(context.Context, *eval.Context) {}
 
 // percentRankWindow computes the relative rank of the current row using:
 //   (rank - 1) / (total rows - 1)
@@ -524,14 +524,14 @@ type percentRankWindow struct {
 	peerRes *tree.DFloat
 }
 
-func newPercentRankWindow([]*types.T, *tree.EvalContext) eval.WindowFunc {
+func newPercentRankWindow([]*types.T, *eval.Context) eval.WindowFunc {
 	return &percentRankWindow{}
 }
 
 var dfloatZero = tree.NewDFloat(0)
 
 func (w *percentRankWindow) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *eval.WindowFrameRun,
+	_ context.Context, _ *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	// Return zero if there's only one row, per spec.
 	if wfr.PartitionSize() <= 1 {
@@ -550,7 +550,7 @@ func (w *percentRankWindow) Reset(context.Context) {
 	w.peerRes = nil
 }
 
-func (w *percentRankWindow) Close(context.Context, *tree.EvalContext) {}
+func (w *percentRankWindow) Close(context.Context, *eval.Context) {}
 
 // cumulativeDistWindow computes the relative rank of the current row using:
 //   (number of rows preceding or peer with current row) / (total rows)
@@ -558,12 +558,12 @@ type cumulativeDistWindow struct {
 	peerRes *tree.DFloat
 }
 
-func newCumulativeDistWindow([]*types.T, *tree.EvalContext) eval.WindowFunc {
+func newCumulativeDistWindow([]*types.T, *eval.Context) eval.WindowFunc {
 	return &cumulativeDistWindow{}
 }
 
 func (w *cumulativeDistWindow) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *eval.WindowFrameRun,
+	_ context.Context, _ *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	if wfr.FirstInPeerGroup() {
 		// (number of rows preceding or peer with current row) / (total rows)
@@ -577,7 +577,7 @@ func (w *cumulativeDistWindow) Reset(context.Context) {
 	w.peerRes = nil
 }
 
-func (w *cumulativeDistWindow) Close(context.Context, *tree.EvalContext) {}
+func (w *cumulativeDistWindow) Close(context.Context, *eval.Context) {}
 
 // ntileWindow computes an integer ranging from 1 to the argument value, dividing
 // the partition as equally as possible.
@@ -588,7 +588,7 @@ type ntileWindow struct {
 	remainder      int        // (total rows) % (bucket num)
 }
 
-func newNtileWindow([]*types.T, *tree.EvalContext) eval.WindowFunc {
+func newNtileWindow([]*types.T, *eval.Context) eval.WindowFunc {
 	return &ntileWindow{}
 }
 
@@ -598,7 +598,7 @@ var ErrInvalidArgumentForNtile = pgerror.Newf(
 	pgcode.InvalidParameterValue, "argument of ntile() must be greater than zero")
 
 func (w *ntileWindow) Compute(
-	ctx context.Context, _ *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, _ *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	if w.ntile == nil {
 		// If this is the first call to ntileWindow.Compute, set up the buckets.
@@ -655,7 +655,7 @@ func (w *ntileWindow) Reset(context.Context) {
 	w.remainder = 0
 }
 
-func (w *ntileWindow) Close(context.Context, *tree.EvalContext) {}
+func (w *ntileWindow) Close(context.Context, *eval.Context) {}
 
 type leadLagWindow struct {
 	forward     bool
@@ -673,14 +673,14 @@ func newLeadLagWindow(forward, withOffset, withDefault bool) eval.WindowFunc {
 
 func makeLeadLagWindowConstructor(
 	forward, withOffset, withDefault bool,
-) func([]*types.T, *tree.EvalContext) eval.WindowFunc {
-	return func([]*types.T, *tree.EvalContext) eval.WindowFunc {
+) func([]*types.T, *eval.Context) eval.WindowFunc {
+	return func([]*types.T, *eval.Context) eval.WindowFunc {
 		return newLeadLagWindow(forward, withOffset, withDefault)
 	}
 }
 
 func (w *leadLagWindow) Compute(
-	ctx context.Context, _ *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, _ *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	offset := 1
 	if w.withOffset {
@@ -721,17 +721,17 @@ func (w *leadLagWindow) Compute(
 // Reset implements eval.WindowFunc interface.
 func (w *leadLagWindow) Reset(context.Context) {}
 
-func (w *leadLagWindow) Close(context.Context, *tree.EvalContext) {}
+func (w *leadLagWindow) Close(context.Context, *eval.Context) {}
 
 // firstValueWindow returns value evaluated at the row that is the first row of the window frame.
 type firstValueWindow struct{}
 
-func newFirstValueWindow([]*types.T, *tree.EvalContext) eval.WindowFunc {
+func newFirstValueWindow([]*types.T, *eval.Context) eval.WindowFunc {
 	return &firstValueWindow{}
 }
 
 func (firstValueWindow) Compute(
-	ctx context.Context, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, evalCtx *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
@@ -759,17 +759,17 @@ func (firstValueWindow) Compute(
 // Reset implements eval.WindowFunc interface.
 func (firstValueWindow) Reset(context.Context) {}
 
-func (firstValueWindow) Close(context.Context, *tree.EvalContext) {}
+func (firstValueWindow) Close(context.Context, *eval.Context) {}
 
 // lastValueWindow returns value evaluated at the row that is the last row of the window frame.
 type lastValueWindow struct{}
 
-func newLastValueWindow([]*types.T, *tree.EvalContext) eval.WindowFunc {
+func newLastValueWindow([]*types.T, *eval.Context) eval.WindowFunc {
 	return &lastValueWindow{}
 }
 
 func (lastValueWindow) Compute(
-	ctx context.Context, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, evalCtx *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
@@ -797,13 +797,13 @@ func (lastValueWindow) Compute(
 // Reset implements eval.WindowFunc interface.
 func (lastValueWindow) Reset(context.Context) {}
 
-func (lastValueWindow) Close(context.Context, *tree.EvalContext) {}
+func (lastValueWindow) Close(context.Context, *eval.Context) {}
 
 // nthValueWindow returns value evaluated at the row that is the nth row of the window frame
 // (counting from 1). Returns null if no such row.
 type nthValueWindow struct{}
 
-func newNthValueWindow([]*types.T, *tree.EvalContext) eval.WindowFunc {
+func newNthValueWindow([]*types.T, *eval.Context) eval.WindowFunc {
 	return &nthValueWindow{}
 }
 
@@ -813,7 +813,7 @@ var ErrInvalidArgumentForNthValue = pgerror.Newf(
 	pgcode.InvalidParameterValue, "argument of nth_value() must be greater than zero")
 
 func (nthValueWindow) Compute(
-	ctx context.Context, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, evalCtx *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	args, err := wfr.Args(ctx)
 	if err != nil {
@@ -876,4 +876,4 @@ func (nthValueWindow) Compute(
 // Reset implements eval.WindowFunc interface.
 func (nthValueWindow) Reset(context.Context) {}
 
-func (nthValueWindow) Close(context.Context, *tree.EvalContext) {}
+func (nthValueWindow) Close(context.Context, *eval.Context) {}

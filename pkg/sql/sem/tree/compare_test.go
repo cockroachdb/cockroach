@@ -55,7 +55,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 			Left:     tree.NewDString(d.left),
 			Right:    tree.NewDString(d.right),
 		}
-		ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer ctx.Mon.Stop(context.Background())
 		ctx.ReCache = tree.NewRegexpCache(8)
 		typedExpr, err := tree.TypeCheck(context.Background(), expr, nil, types.Any)

@@ -11,6 +11,7 @@
 package transform
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -29,7 +30,7 @@ type ExprTransformContext struct {
 // avoids allocation of a normalizeVisitor. See normalize.go for
 // details.
 func (t *ExprTransformContext) NormalizeExpr(
-	ctx *tree.EvalContext, typedExpr tree.TypedExpr,
+	ctx *eval.Context, typedExpr tree.TypedExpr,
 ) (tree.TypedExpr, error) {
 	if ctx.SkipNormalize {
 		return typedExpr, nil

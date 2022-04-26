@@ -38,12 +38,12 @@ type indexedValue struct {
 // sequences of frame start and frame end indices.
 type slidingWindow struct {
 	values  ring.Buffer
-	evalCtx *tree.EvalContext
-	cmp     func(*tree.EvalContext, tree.Datum, tree.Datum) int
+	evalCtx *eval.Context
+	cmp     func(*eval.Context, tree.Datum, tree.Datum) int
 }
 
 func makeSlidingWindow(
-	evalCtx *tree.EvalContext, cmp func(*tree.EvalContext, tree.Datum, tree.Datum) int,
+	evalCtx *eval.Context, cmp func(*eval.Context, tree.Datum, tree.Datum) int,
 ) *slidingWindow {
 	return &slidingWindow{
 		evalCtx: evalCtx,
@@ -94,7 +94,7 @@ type slidingWindowFunc struct {
 
 // Compute implements WindowFunc interface.
 func (w *slidingWindowFunc) Compute(
-	ctx context.Context, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, evalCtx *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
@@ -192,7 +192,7 @@ func (w *slidingWindowFunc) Reset(context.Context) {
 }
 
 // Close implements WindowFunc interface.
-func (w *slidingWindowFunc) Close(context.Context, *tree.EvalContext) {
+func (w *slidingWindowFunc) Close(context.Context, *eval.Context) {
 	w.sw = nil
 }
 
@@ -221,7 +221,7 @@ func newSlidingWindowSumFunc(agg eval.AggregateFunc) *slidingWindowSumFunc {
 // removeAllBefore subtracts the values from all the rows that are no longer in
 // the frame.
 func (w *slidingWindowSumFunc) removeAllBefore(
-	ctx context.Context, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, evalCtx *eval.Context, wfr *eval.WindowFrameRun,
 ) error {
 	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
@@ -266,7 +266,7 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 
 // Compute implements WindowFunc interface.
 func (w *slidingWindowSumFunc) Compute(
-	ctx context.Context, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, evalCtx *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
@@ -348,7 +348,7 @@ func (w *slidingWindowSumFunc) Reset(ctx context.Context) {
 }
 
 // Close implements WindowFunc interface.
-func (w *slidingWindowSumFunc) Close(ctx context.Context, _ *tree.EvalContext) {
+func (w *slidingWindowSumFunc) Close(ctx context.Context, _ *eval.Context) {
 	w.agg.Close(ctx)
 }
 
@@ -359,7 +359,7 @@ type avgWindowFunc struct {
 
 // Compute implements WindowFunc interface.
 func (w *avgWindowFunc) Compute(
-	ctx context.Context, evalCtx *tree.EvalContext, wfr *eval.WindowFrameRun,
+	ctx context.Context, evalCtx *eval.Context, wfr *eval.WindowFrameRun,
 ) (tree.Datum, error) {
 	sum, err := w.sum.Compute(ctx, evalCtx, wfr)
 	if err != nil {
@@ -425,6 +425,6 @@ func (w *avgWindowFunc) Reset(ctx context.Context) {
 }
 
 // Close implements WindowFunc interface.
-func (w *avgWindowFunc) Close(ctx context.Context, evalCtx *tree.EvalContext) {
+func (w *avgWindowFunc) Close(ctx context.Context, evalCtx *eval.Context) {
 	w.sum.Close(ctx, evalCtx)
 }

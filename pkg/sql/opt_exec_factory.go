@@ -136,7 +136,7 @@ func (ef *execFactory) ConstructScan(
 }
 
 func generateScanSpans(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	codec keys.SQLCodec,
 	tabDesc catalog.TableDescriptor,
 	index catalog.Index,

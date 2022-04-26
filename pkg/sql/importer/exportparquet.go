@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -774,7 +775,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 						// If we're encoding a DOidWrapper, then we want to cast the wrapped datum.
 						// Note that we pass in nil as the first argument since we're not interested
 						// in evaluating the evalCtx's placeholders.
-						edNative, err := exporter.parquetColumns[i].encodeFn(tree.UnwrapDatum(nil, ed.Datum))
+						edNative, err := exporter.parquetColumns[i].encodeFn(eval.UnwrapDatum(nil, ed.Datum))
 						if err != nil {
 							return err
 						}

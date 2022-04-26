@@ -43,7 +43,7 @@ func TestLike(t *testing.T) {
 		{`_%\b\n`, `%__`, tree.DBoolTrue, false},
 		{`_\nL_`, `%_%`, tree.DBoolTrue, false},
 	}
-	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, d := range testData {
 		if matches, err := matchLike(ctx, tree.NewDString(d.expr), tree.NewDString(d.pattern), false); err != nil && !d.erroneous {
 			t.Error(err)
@@ -87,7 +87,7 @@ func TestLikeEscape(t *testing.T) {
 		{`_\nL_`, `%_%`, `%`, tree.DBoolFalse, true},
 		{`\n\t`, `_%%_`, string('\x7f'), tree.DBoolTrue, false},
 	}
-	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, d := range testData {
 		if matches, err := MatchLikeEscape(ctx, d.expr, d.pattern, d.escape, false); err != nil && !d.erroneous {
 			t.Error(err)
@@ -145,7 +145,7 @@ var benchmarkLikePatterns = []string{
 	`also\%`,
 }
 
-func benchmarkLike(b *testing.B, ctx *tree.EvalContext, caseInsensitive bool) {
+func benchmarkLike(b *testing.B, ctx *Context, caseInsensitive bool) {
 	op := treecmp.Like
 	if caseInsensitive {
 		op = treecmp.ILike
@@ -169,7 +169,7 @@ func benchmarkLike(b *testing.B, ctx *tree.EvalContext, caseInsensitive bool) {
 }
 
 func BenchmarkLikeWithCache(b *testing.B) {
-	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	ctx.ReCache = tree.NewRegexpCache(len(benchmarkLikePatterns))
 	defer ctx.Mon.Stop(context.Background())
 
@@ -177,14 +177,14 @@ func BenchmarkLikeWithCache(b *testing.B) {
 }
 
 func BenchmarkLikeWithoutCache(b *testing.B) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	benchmarkLike(b, evalCtx, false)
 }
 
 func BenchmarkILikeWithCache(b *testing.B) {
-	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	ctx.ReCache = tree.NewRegexpCache(len(benchmarkLikePatterns))
 	defer ctx.Mon.Stop(context.Background())
 
@@ -192,7 +192,7 @@ func BenchmarkILikeWithCache(b *testing.B) {
 }
 
 func BenchmarkILikeWithoutCache(b *testing.B) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	benchmarkLike(b, evalCtx, true)

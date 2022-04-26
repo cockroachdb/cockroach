@@ -21,9 +21,7 @@ import (
 // PopulateDatumWithJSON is used for the json to record function family, like
 // json_populate_record. It's less restrictive than the casting system, which
 // is why it's implemented separately.
-func PopulateDatumWithJSON(
-	ctx *tree.EvalContext, j json.JSON, desiredType *types.T,
-) (tree.Datum, error) {
+func PopulateDatumWithJSON(ctx *Context, j json.JSON, desiredType *types.T) (tree.Datum, error) {
 	if j == json.NullJSONValue {
 		return tree.DNull, nil
 	}
@@ -79,7 +77,7 @@ func PopulateDatumWithJSON(
 // Each field will be set by a best-effort coercion to its type from the JSON
 // field. The logic is more permissive than casts.
 func PopulateRecordWithJSON(
-	ctx *tree.EvalContext, j json.JSON, desiredType *types.T, tup *tree.DTuple,
+	ctx *Context, j json.JSON, desiredType *types.T, tup *tree.DTuple,
 ) error {
 	if j.Type() != json.ObjectJSONType {
 		return pgerror.Newf(pgcode.InvalidParameterValue, "expected JSON object")

@@ -21,7 +21,7 @@ import (
 // ComparisonExprWithSubOperator evaluates a comparison expression that has
 // sub-operator.
 func ComparisonExprWithSubOperator(
-	ctx *tree.EvalContext, expr *tree.ComparisonExpr, left, right tree.Datum,
+	ctx *Context, expr *tree.ComparisonExpr, left, right tree.Datum,
 ) (tree.Datum, error) {
 	var datums tree.Datums
 	// Right is either a tuple or an array of Datums.
@@ -38,7 +38,7 @@ func ComparisonExprWithSubOperator(
 }
 
 func evalComparison(
-	ctx *tree.EvalContext, op treecmp.ComparisonOperator, left, right tree.Datum,
+	ctx *Context, op treecmp.ComparisonOperator, left, right tree.Datum,
 ) (tree.Datum, error) {
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
@@ -67,7 +67,7 @@ func evalComparison(
 // evalArrayCmp would be called with:
 //   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
 func evalDatumsCmp(
-	ctx *tree.EvalContext,
+	ctx *Context,
 	op, subOp treecmp.ComparisonOperator,
 	fn *tree.CmpOp,
 	left tree.Datum,

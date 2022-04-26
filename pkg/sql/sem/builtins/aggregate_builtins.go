@@ -343,10 +343,10 @@ var aggregates = map[string]builtinDefinition{
 			Types:         tree.ArgTypes{},
 			ReturnType:    tree.FixedReturnType(types.Int),
 			AggregateFunc: eval.AggregateOverload(newCountRowsAggregate),
-			WindowFunc: eval.WindowOverload(func(params []*types.T, evalCtx *tree.EvalContext) eval.WindowFunc {
+			WindowFunc: eval.WindowOverload(func(params []*types.T, evalCtx *eval.Context) eval.WindowFunc {
 				return newFramableAggregateWindow(
 					newCountRowsAggregate(params, evalCtx, nil /* arguments */),
-					func(evalCtx *tree.EvalContext, arguments tree.Datums) eval.AggregateFunc {
+					func(evalCtx *eval.Context, arguments tree.Datums) eval.AggregateFunc {
 						return newCountRowsAggregate(params, evalCtx, arguments)
 					},
 				)
@@ -550,7 +550,7 @@ var aggregates = map[string]builtinDefinition{
 			[]*types.T{types.Geometry},
 			types.Geometry,
 			func(
-				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stMakeLineAgg{
 					acc: evalCtx.Mon.MakeBoundAccount(),
@@ -572,7 +572,7 @@ var aggregates = map[string]builtinDefinition{
 			[]*types.T{types.Geometry},
 			types.Box2D,
 			func(
-				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stExtentAgg{}
 			},
@@ -694,7 +694,7 @@ func makePrivate(b builtinDefinition) builtinDefinition {
 func makeAggOverload(
 	in []*types.T,
 	ret *types.T,
-	f func([]*types.T, *tree.EvalContext, tree.Datums) eval.AggregateFunc,
+	f func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 	info string,
 	volatility volatility.Volatility,
 ) tree.Overload {
@@ -726,18 +726,18 @@ func makeAggOverloadWithReturnType(
 		Types:         argTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
-		WindowFunc: eval.WindowOverload(func(params []*types.T, evalCtx *tree.EvalContext) eval.WindowFunc {
+		WindowFunc: eval.WindowOverload(func(params []*types.T, evalCtx *eval.Context) eval.WindowFunc {
 			aggWindowFunc := f(params, evalCtx, nil /* arguments */)
 			switch w := aggWindowFunc.(type) {
 			case *minAggregate:
 				min := &slidingWindowFunc{}
-				min.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
+				min.sw = makeSlidingWindow(evalCtx, func(evalCtx *eval.Context, a, b tree.Datum) int {
 					return -a.Compare(evalCtx, b)
 				})
 				return min
 			case *maxAggregate:
 				max := &slidingWindowFunc{}
-				max.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
+				max.sw = makeSlidingWindow(evalCtx, func(evalCtx *eval.Context, a, b tree.Datum) int {
 					return a.Compare(evalCtx, b)
 				})
 				return max
@@ -756,7 +756,7 @@ func makeAggOverloadWithReturnType(
 
 			return newFramableAggregateWindow(
 				aggWindowFunc,
-				func(evalCtx *tree.EvalContext, arguments tree.Datums) eval.AggregateFunc {
+				func(evalCtx *eval.Context, arguments tree.Datums) eval.AggregateFunc {
 					return f(params, evalCtx, arguments)
 				},
 			)
@@ -807,7 +807,7 @@ func makeSTUnionBuiltin() builtinDefinition {
 			[]*types.T{types.Geometry},
 			types.Geometry,
 			func(
-				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stUnionAgg{
 					acc: evalCtx.Mon.MakeBoundAccount(),
@@ -822,7 +822,7 @@ func makeSTUnionBuiltin() builtinDefinition {
 }
 
 func makeRegressionAggregateBuiltin(
-	aggregateFunc func([]*types.T, *tree.EvalContext, tree.Datums) eval.AggregateFunc, info string,
+	aggregateFunc func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc, info string,
 ) builtinDefinition {
 	return makeRegressionAggregate(aggregateFunc, info, types.Float)
 }
@@ -836,7 +836,7 @@ func makeTransitionRegressionAggregateBuiltin() builtinDefinition {
 }
 
 func makeRegressionAggregate(
-	aggregateFunc func([]*types.T, *tree.EvalContext, tree.Datums) eval.AggregateFunc,
+	aggregateFunc func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 	info string,
 	ret *types.T,
 ) builtinDefinition {
@@ -1006,7 +1006,7 @@ type stCollectAgg struct {
 	coll geom.T
 }
 
-func newSTCollectAgg(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newSTCollectAgg(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &stCollectAgg{
 		acc: evalCtx.Mon.MakeBoundAccount(),
 	}
@@ -1192,7 +1192,7 @@ func makeVarianceBuiltin() builtinDefinition {
 }
 
 // builtinMustNotRun panics and indicates that a builtin cannot be run.
-func builtinMustNotRun(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func builtinMustNotRun(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	panic("builtin must be overridden and cannot be run directly")
 }
 
@@ -1339,7 +1339,7 @@ const (
 // makeSingleDatumAggregateBase makes a new singleDatumAggregateBase. If
 // evalCtx has non-nil SingleDatumAggMemAccount field, then that memory account
 // will be used by the new struct which will operate in "shared" mode
-func makeSingleDatumAggregateBase(evalCtx *tree.EvalContext) singleDatumAggregateBase {
+func makeSingleDatumAggregateBase(evalCtx *eval.Context) singleDatumAggregateBase {
 	if evalCtx.SingleDatumAggMemAccount == nil {
 		newAcc := evalCtx.Mon.MakeBoundAccount()
 		return singleDatumAggregateBase{
@@ -1412,7 +1412,7 @@ type anyNotNullAggregate struct {
 //
 //  - for query optimization, when moving aggregations across left joins (which
 //    add NULL values).
-func NewAnyNotNullAggregate(evalCtx *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func NewAnyNotNullAggregate(evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &anyNotNullAggregate{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
 		val:                      tree.DNull,
@@ -1420,7 +1420,7 @@ func NewAnyNotNullAggregate(evalCtx *tree.EvalContext, _ tree.Datums) eval.Aggre
 }
 
 func newAnyNotNullAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, datums tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, datums tree.Datums,
 ) eval.AggregateFunc {
 	return NewAnyNotNullAggregate(evalCtx, datums)
 }
@@ -1465,9 +1465,7 @@ type arrayAggregate struct {
 	acc mon.BoundAccount
 }
 
-func newArrayAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newArrayAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &arrayAggregate{
 		arr: tree.NewDArray(params[0]),
 		acc: evalCtx.Mon.MakeBoundAccount(),
@@ -1514,22 +1512,22 @@ type avgAggregate struct {
 }
 
 func newIntAvgAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &avgAggregate{agg: newIntSumAggregate(params, evalCtx, arguments)}
 }
 func newFloatAvgAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &avgAggregate{agg: newFloatSumAggregate(params, evalCtx, arguments)}
 }
 func newDecimalAvgAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &avgAggregate{agg: newDecimalSumAggregate(params, evalCtx, arguments)}
 }
 func newIntervalAvgAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &avgAggregate{agg: newIntervalSumAggregate(params, evalCtx, arguments)}
 }
@@ -1595,7 +1593,7 @@ type concatAggregate struct {
 }
 
 func newBytesConcatAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	concatAgg := &concatAggregate{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
@@ -1610,7 +1608,7 @@ func newBytesConcatAggregate(
 }
 
 func newStringConcatAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	concatAgg := &concatAggregate{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
@@ -1695,7 +1693,7 @@ type intBitAndAggregate struct {
 	result     int64
 }
 
-func newIntBitAndAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newIntBitAndAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &intBitAndAggregate{}
 }
 
@@ -1744,7 +1742,7 @@ type bitBitAndAggregate struct {
 	result     bitarray.BitArray
 }
 
-func newBitBitAndAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newBitBitAndAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &bitBitAndAggregate{}
 }
 
@@ -1799,7 +1797,7 @@ type intBitOrAggregate struct {
 	result     int64
 }
 
-func newIntBitOrAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newIntBitOrAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &intBitOrAggregate{}
 }
 
@@ -1850,7 +1848,7 @@ type bitBitOrAggregate struct {
 	result     bitarray.BitArray
 }
 
-func newBitBitOrAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newBitBitOrAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &bitBitOrAggregate{}
 }
 
@@ -1907,7 +1905,7 @@ type boolAndAggregate struct {
 	result     bool
 }
 
-func newBoolAndAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newBoolAndAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &boolAndAggregate{}
 }
 
@@ -1949,7 +1947,7 @@ type boolOrAggregate struct {
 	result     bool
 }
 
-func newBoolOrAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newBoolOrAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &boolOrAggregate{}
 }
 
@@ -2009,9 +2007,7 @@ type regressionAccumulatorDecimalBase struct {
 	scale, tmp, tmpN                                 apd.Decimal
 }
 
-func makeRegressionAccumulatorDecimalBase(
-	evalCtx *tree.EvalContext,
-) regressionAccumulatorDecimalBase {
+func makeRegressionAccumulatorDecimalBase(evalCtx *eval.Context) regressionAccumulatorDecimalBase {
 	ed := apd.MakeErrDecimal(tree.HighPrecisionCtx)
 	return regressionAccumulatorDecimalBase{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
@@ -2023,7 +2019,7 @@ func makeRegressionAccumulatorDecimalBase(
 const regrFieldsTotal = 6
 
 func makeTransitionRegressionAccumulatorDecimalBase(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	ed := apd.MakeErrDecimal(tree.HighPrecisionCtx)
 	return &regressionAccumulatorDecimalBase{
@@ -2515,7 +2511,7 @@ type corrAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newCorrAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newCorrAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &corrAggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
 	}
@@ -2531,7 +2527,7 @@ type finalCorrAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalCorrAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newFinalCorrAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &finalCorrAggregate{
 		finalRegressionAccumulatorDecimalBase{
 			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
@@ -2549,7 +2545,7 @@ type covarPopAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newCovarPopAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newCovarPopAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &covarPopAggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
 	}
@@ -2565,9 +2561,7 @@ type finalCovarPopAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalCovarPopAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newFinalCovarPopAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &finalCovarPopAggregate{
 		finalRegressionAccumulatorDecimalBase{
 			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
@@ -2599,9 +2593,7 @@ type finalRegrSXXAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalRegrSXXAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newFinalRegrSXXAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &finalRegrSXXAggregate{
 		finalRegressionAccumulatorDecimalBase{
 			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
@@ -2620,9 +2612,7 @@ type finalRegrSXYAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalRegrSXYAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newFinalRegrSXYAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &finalRegrSXYAggregate{
 		finalRegressionAccumulatorDecimalBase{
 			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
@@ -2640,9 +2630,7 @@ type finalRegrSYYAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalRegrSYYAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newFinalRegrSYYAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &finalRegrSYYAggregate{
 		finalRegressionAccumulatorDecimalBase{
 			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
@@ -2660,7 +2648,7 @@ type covarSampAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newCovarSampAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newCovarSampAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &covarSampAggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
 	}
@@ -2676,9 +2664,7 @@ type finalCovarSampAggregate struct {
 	finalRegressionAccumulatorDecimalBase
 }
 
-func newFinalCovarSampAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newFinalCovarSampAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &finalCovarSampAggregate{
 		finalRegressionAccumulatorDecimalBase{
 			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
@@ -2697,9 +2683,7 @@ type regressionAvgXAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionAvgXAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newRegressionAvgXAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &regressionAvgXAggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
 	}
@@ -2717,7 +2701,7 @@ type finalRegressionAvgXAggregate struct {
 }
 
 func newFinalRegressionAvgXAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, ctx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &finalRegressionAvgXAggregate{
 		finalRegressionAccumulatorDecimalBase{
@@ -2737,9 +2721,7 @@ type regressionAvgYAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionAvgYAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newRegressionAvgYAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &regressionAvgYAggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
 	}
@@ -2757,7 +2739,7 @@ type finalRegressionAvgYAggregate struct {
 }
 
 func newFinalRegressionAvgYAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, ctx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &finalRegressionAvgYAggregate{
 		finalRegressionAccumulatorDecimalBase{
@@ -2777,7 +2759,7 @@ type regressionInterceptAggregate struct {
 }
 
 func newRegressionInterceptAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, ctx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &regressionInterceptAggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
@@ -2795,7 +2777,7 @@ type finalRegressionInterceptAggregate struct {
 }
 
 func newFinalRegressionInterceptAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, ctx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &finalRegressionInterceptAggregate{
 		finalRegressionAccumulatorDecimalBase{
@@ -2814,9 +2796,7 @@ type regressionR2Aggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionR2Aggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newRegressionR2Aggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &regressionR2Aggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
 	}
@@ -2833,7 +2813,7 @@ type finalRegressionR2Aggregate struct {
 }
 
 func newFinalRegressionR2Aggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, ctx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &finalRegressionR2Aggregate{
 		finalRegressionAccumulatorDecimalBase{
@@ -2854,7 +2834,7 @@ type regressionSlopeAggregate struct {
 }
 
 func newRegressionSlopeAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, ctx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &regressionSlopeAggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
@@ -2873,7 +2853,7 @@ type finalRegressionSlopeAggregate struct {
 }
 
 func newFinalRegressionSlopeAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, ctx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &finalRegressionSlopeAggregate{
 		finalRegressionAccumulatorDecimalBase{
@@ -2892,9 +2872,7 @@ type regressionSXXAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionSXXAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newRegressionSXXAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &regressionSXXAggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
 	}
@@ -2911,9 +2889,7 @@ type regressionSXYAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionSXYAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newRegressionSXYAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &regressionSXYAggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
 	}
@@ -2929,9 +2905,7 @@ type regressionSYYAggregate struct {
 	regressionAccumulatorDecimalBase
 }
 
-func newRegressionSYYAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newRegressionSYYAggregate(_ []*types.T, ctx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &regressionSYYAggregate{
 		makeRegressionAccumulatorDecimalBase(ctx),
 	}
@@ -2948,7 +2922,7 @@ type regressionCountAggregate struct {
 	count int
 }
 
-func newRegressionCountAggregate([]*types.T, *tree.EvalContext, tree.Datums) eval.AggregateFunc {
+func newRegressionCountAggregate([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc {
 	return &regressionCountAggregate{}
 }
 
@@ -2990,7 +2964,7 @@ type countAggregate struct {
 	count int
 }
 
-func newCountAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newCountAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &countAggregate{}
 }
 
@@ -3023,7 +2997,7 @@ type countRowsAggregate struct {
 	count int
 }
 
-func newCountRowsAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newCountRowsAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &countRowsAggregate{}
 }
 
@@ -3054,13 +3028,11 @@ type maxAggregate struct {
 	singleDatumAggregateBase
 
 	max               tree.Datum
-	evalCtx           *tree.EvalContext
+	evalCtx           *eval.Context
 	variableDatumSize bool
 }
 
-func newMaxAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newMaxAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	_, variable := tree.DatumTypeSize(params[0])
 	// If the datum type has a variable size, the memory account will be
 	// updated accordingly on every change to the current "max" value, but if
@@ -3126,13 +3098,11 @@ type minAggregate struct {
 	singleDatumAggregateBase
 
 	min               tree.Datum
-	evalCtx           *tree.EvalContext
+	evalCtx           *eval.Context
 	variableDatumSize bool
 }
 
-func newMinAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newMinAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	_, variable := tree.DatumTypeSize(params[0])
 	// If the datum type has a variable size, the memory account will be
 	// updated accordingly on every change to the current "min" value, but if
@@ -3198,7 +3168,7 @@ type smallIntSumAggregate struct {
 	seenNonNull bool
 }
 
-func newSmallIntSumAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newSmallIntSumAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &smallIntSumAggregate{}
 }
 
@@ -3252,7 +3222,7 @@ type intSumAggregate struct {
 	seenNonNull bool
 }
 
-func newIntSumAggregate(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newIntSumAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &intSumAggregate{singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx)}
 }
 
@@ -3337,9 +3307,7 @@ type decimalSumAggregate struct {
 	sawNonNull bool
 }
 
-func newDecimalSumAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newDecimalSumAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &decimalSumAggregate{singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx)}
 }
 
@@ -3394,7 +3362,7 @@ type floatSumAggregate struct {
 	sawNonNull bool
 }
 
-func newFloatSumAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newFloatSumAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &floatSumAggregate{}
 }
 
@@ -3436,7 +3404,7 @@ type intervalSumAggregate struct {
 	sawNonNull bool
 }
 
-func newIntervalSumAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newIntervalSumAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &intervalSumAggregate{}
 }
 
@@ -3488,13 +3456,11 @@ type intSqrDiffAggregate struct {
 	tmpDec tree.DDecimal
 }
 
-func newIntSqrDiff(evalCtx *tree.EvalContext) decimalSqrDiff {
+func newIntSqrDiff(evalCtx *eval.Context) decimalSqrDiff {
 	return &intSqrDiffAggregate{agg: newDecimalSqrDiff(evalCtx)}
 }
 
-func newIntSqrDiffAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newIntSqrDiffAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return newIntSqrDiff(evalCtx)
 }
 
@@ -3550,7 +3516,7 @@ func newFloatSqrDiff() floatSqrDiff {
 	return &floatSqrDiffAggregate{}
 }
 
-func newFloatSqrDiffAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newFloatSqrDiffAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return newFloatSqrDiff()
 }
 
@@ -3618,7 +3584,7 @@ type decimalSqrDiffAggregate struct {
 	tmp   apd.Decimal
 }
 
-func newDecimalSqrDiff(evalCtx *tree.EvalContext) decimalSqrDiff {
+func newDecimalSqrDiff(evalCtx *eval.Context) decimalSqrDiff {
 	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
 	return &decimalSqrDiffAggregate{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
@@ -3627,7 +3593,7 @@ func newDecimalSqrDiff(evalCtx *tree.EvalContext) decimalSqrDiff {
 }
 
 func newDecimalSqrDiffAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return newDecimalSqrDiff(evalCtx)
 }
@@ -3729,13 +3695,13 @@ func (a *decimalSqrDiffAggregate) Size() int64 {
 }
 
 func newFloatFinalSqrdiffAggregate(
-	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, _ *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return newFloatSumSqrDiffs()
 }
 
 func newDecimalFinalSqrdiffAggregate(
-	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, ctx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return newDecimalSumSqrDiffs(ctx)
 }
@@ -3833,7 +3799,7 @@ type decimalSumSqrDiffsAggregate struct {
 	tmp      apd.Decimal
 }
 
-func newDecimalSumSqrDiffs(evalCtx *tree.EvalContext) decimalSqrDiff {
+func newDecimalSumSqrDiffs(evalCtx *eval.Context) decimalSqrDiff {
 	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
 	return &decimalSumSqrDiffsAggregate{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
@@ -3983,31 +3949,29 @@ type decimalVarianceAggregate struct {
 // which takes in three inputs: (local) SQRDIFF, SUM, COUNT.
 // FinalVariance is used for local/final aggregation in distsql.
 func newIntVarianceAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalVarianceAggregate{agg: newIntSqrDiff(evalCtx)}
 }
 
-func newFloatVarianceAggregate(
-	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newFloatVarianceAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &floatVarianceAggregate{agg: newFloatSqrDiff()}
 }
 
 func newDecimalVarianceAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalVarianceAggregate{agg: newDecimalSqrDiff(evalCtx)}
 }
 
 func newFloatFinalVarianceAggregate(
-	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, _ *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &floatVarianceAggregate{agg: newFloatSumSqrDiffs()}
 }
 
 func newDecimalFinalVarianceAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalVarianceAggregate{agg: newDecimalSumSqrDiffs(evalCtx)}
 }
@@ -4104,30 +4068,26 @@ type decimalVarPopAggregate struct {
 	agg decimalSqrDiff
 }
 
-func newIntVarPopAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newIntVarPopAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &decimalVarPopAggregate{agg: newIntSqrDiff(evalCtx)}
 }
 
-func newFloatVarPopAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newFloatVarPopAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &floatVarPopAggregate{agg: newFloatSqrDiff()}
 }
 
 func newDecimalVarPopAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalVarPopAggregate{agg: newDecimalSqrDiff(evalCtx)}
 }
 
-func newFloatFinalVarPopAggregate(
-	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newFloatFinalVarPopAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &floatVarPopAggregate{agg: newFloatSumSqrDiffs()}
 }
 
 func newDecimalFinalVarPopAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalVarPopAggregate{agg: newDecimalSumSqrDiffs(evalCtx)}
 }
@@ -4226,61 +4186,61 @@ type decimalStdDevAggregate struct {
 // which takes in three inputs: (local) SQRDIFF, SUM, COUNT.
 // FinalStdDev is used for local/final aggregation in distsql.
 func newIntStdDevAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newIntVarianceAggregate(params, evalCtx, arguments)}
 }
 
 func newFloatStdDevAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &floatStdDevAggregate{agg: newFloatVarianceAggregate(params, evalCtx, arguments)}
 }
 
 func newDecimalStdDevAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalVarianceAggregate(params, evalCtx, arguments)}
 }
 
 func newFloatFinalStdDevAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &floatStdDevAggregate{agg: newFloatFinalVarianceAggregate(params, evalCtx, arguments)}
 }
 
 func newDecimalFinalStdDevAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalFinalVarianceAggregate(params, evalCtx, arguments)}
 }
 
 func newIntStdDevPopAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newIntVarPopAggregate(params, evalCtx, arguments)}
 }
 
 func newFloatStdDevPopAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &floatStdDevAggregate{agg: newFloatVarPopAggregate(params, evalCtx, arguments)}
 }
 
 func newDecimalStdDevPopAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalVarPopAggregate(params, evalCtx, arguments)}
 }
 
 func newDecimalFinalStdDevPopAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalFinalVarPopAggregate(params, evalCtx, arguments)}
 }
 
 func newFloatFinalStdDevPopAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	return &floatStdDevAggregate{agg: newFloatFinalVarPopAggregate(params, evalCtx, arguments)}
 }
@@ -4374,9 +4334,7 @@ type bytesXorAggregate struct {
 	sawNonNull bool
 }
 
-func newBytesXorAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newBytesXorAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &bytesXorAggregate{singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx)}
 }
 
@@ -4434,7 +4392,7 @@ type intXorAggregate struct {
 	sawNonNull bool
 }
 
-func newIntXorAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newIntXorAggregate(_ []*types.T, _ *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &intXorAggregate{}
 }
 
@@ -4474,12 +4432,12 @@ func (a *intXorAggregate) Size() int64 {
 type jsonAggregate struct {
 	singleDatumAggregateBase
 
-	evalCtx    *tree.EvalContext
+	evalCtx    *eval.Context
 	builder    *json.ArrayBuilderWithCounter
 	sawNonNull bool
 }
 
-func newJSONAggregate(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) eval.AggregateFunc {
+func newJSONAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &jsonAggregate{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
 		evalCtx:                  evalCtx,
@@ -4581,7 +4539,7 @@ type percentileDiscAggregate struct {
 }
 
 func newPercentileDiscAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &percentileDiscAggregate{
 		arr: tree.NewDArray(params[1]),
@@ -4679,7 +4637,7 @@ type percentileContAggregate struct {
 }
 
 func newPercentileContAggregate(
-	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &percentileContAggregate{
 		arr: tree.NewDArray(params[1]),
@@ -4798,14 +4756,12 @@ func (a *percentileContAggregate) Size() int64 {
 type jsonObjectAggregate struct {
 	singleDatumAggregateBase
 
-	evalCtx    *tree.EvalContext
+	evalCtx    *eval.Context
 	builder    *json.ObjectBuilderWithCounter
 	sawNonNull bool
 }
 
-func newJSONObjectAggregate(
-	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
-) eval.AggregateFunc {
+func newJSONObjectAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &jsonObjectAggregate{
 		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
 		evalCtx:                  evalCtx,

@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -231,7 +231,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	defer s.Stopper().Stop(ctx)
 	init(s.ClusterSettings())
 
-	evalCtx := tree.EvalContext{Settings: s.ClusterSettings()}
+	evalCtx := eval.Context{Settings: s.ClusterSettings()}
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			DB: kvDB,
@@ -242,7 +242,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			Settings: s.ClusterSettings(),
 			Codec:    keys.SystemSQLCodec,
 		},
-		EvalCtx: &tree.EvalContext{
+		EvalCtx: &eval.Context{
 			Codec:    keys.SystemSQLCodec,
 			Settings: s.ClusterSettings(),
 		},
@@ -405,7 +405,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 
 func newTestingRestoreDataProcessor(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec execinfrapb.RestoreDataSpec,
 ) (*restoreDataProcessor, error) {

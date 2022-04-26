@@ -61,6 +61,7 @@ go_test(
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/opt/testutils/testexpr",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",

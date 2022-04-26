@@ -100,7 +100,7 @@ func TestIndexedVars(t *testing.T) {
 	if !typ.Equivalent(types.Int) {
 		t.Errorf("invalid expression type %s", typ)
 	}
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	evalCtx.IVarContainer = c
 	d, err := eval.Expr(evalCtx, typedExpr)

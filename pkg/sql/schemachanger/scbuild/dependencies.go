@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
@@ -65,7 +66,7 @@ type Dependencies interface {
 type CreatePartitioningCCLCallback func(
 	ctx context.Context,
 	st *cluster.Settings,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	columnLookupFn func(tree.Name) (catalog.Column, error),
 	oldNumImplicitColumns int,
 	oldKeyColumnNames []string,

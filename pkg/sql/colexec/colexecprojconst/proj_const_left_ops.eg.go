@@ -26277,7 +26277,7 @@ func GetProjectionLConstOperator(
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecop.Operator, error) {

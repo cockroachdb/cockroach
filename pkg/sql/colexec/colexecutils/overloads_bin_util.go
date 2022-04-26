@@ -10,7 +10,10 @@
 
 package colexecutils
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 // BinaryOverloadHelper is a utility struct used for templates of the binary
 // overloads that fall back to the row-based tree.Datum computation.
@@ -20,5 +23,5 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 // overloaded code.
 type BinaryOverloadHelper struct {
 	BinOp   tree.BinaryEvalOp
-	EvalCtx *tree.EvalContext
+	EvalCtx *eval.Context
 }

@@ -609,7 +609,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ec := tree.MakeTestingEvalContext(nil)
+	ec := eval.MakeTestingEvalContext(nil)
 
 	var smither *sqlsmith.Smither
 	testRandomSyntax(t, true, "", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {

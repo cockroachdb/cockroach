@@ -46,7 +46,7 @@ import (
 // TODO(dan): The typechecking here should be run during plan construction, so
 // we can support placeholders.
 func valueEncodePartitionTuple(
-	typ tree.PartitionByType, evalCtx *tree.EvalContext, maybeTuple tree.Expr, cols []catalog.Column,
+	typ tree.PartitionByType, evalCtx *eval.Context, maybeTuple tree.Expr, cols []catalog.Column,
 ) ([]byte, error) {
 	// Replace any occurrences of the MINVALUE/MAXVALUE pseudo-names
 	// into MinVal and MaxVal, to be recognized below.
@@ -152,7 +152,7 @@ func (replaceMinMaxValVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr
 
 func createPartitioningImpl(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	columnLookupFn func(tree.Name) (catalog.Column, error),
 	newIdxColumnNames []string,
 	partBy *tree.PartitionBy,
@@ -336,7 +336,7 @@ func findColumnByNameOnTable(
 func createPartitioning(
 	ctx context.Context,
 	st *cluster.Settings,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	columnLookupFn func(tree.Name) (catalog.Column, error),
 	oldNumImplicitColumns int,
 	oldKeyColumnNames []string,
@@ -410,7 +410,7 @@ func createPartitioning(
 // selectPartitionExprs constructs an expression for selecting all rows in the
 // given partitions.
 func selectPartitionExprs(
-	evalCtx *tree.EvalContext, tableDesc catalog.TableDescriptor, partNames tree.NameList,
+	evalCtx *eval.Context, tableDesc catalog.TableDescriptor, partNames tree.NameList,
 ) (tree.Expr, error) {
 	exprsByPartName := make(map[string]tree.TypedExpr)
 	for _, partName := range partNames {
@@ -474,7 +474,7 @@ func selectPartitionExprs(
 // that the requested partitions are all valid).
 func selectPartitionExprsByName(
 	a *tree.DatumAlloc,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
 	part catalog.Partitioning,

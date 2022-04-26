@@ -366,7 +366,7 @@ func getSchemaByNameFromMap(
 }
 
 func createPostgresTables(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	p sql.JobExecContext,
 	createTbl map[schemaAndTableName]*tree.CreateTable,
 	fks fkHandler,
@@ -406,7 +406,7 @@ func createPostgresTables(
 }
 
 func resolvePostgresFKs(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	parentDB catalog.DatabaseDescriptor,
 	tableFKs map[schemaAndTableName][]*tree.ForeignKeyConstraintTableDef,
 	fks fkHandler,
@@ -480,7 +480,7 @@ var placeholderID descpb.ID
 func readPostgresCreateTable(
 	ctx context.Context,
 	input io.Reader,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	p sql.JobExecContext,
 	match string,
 	parentDB catalog.DatabaseDescriptor,
@@ -588,7 +588,7 @@ func readPostgresCreateTable(
 
 func readPostgresStmt(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	match string,
 	fks fkHandler,
 	schemaObjects *schemaParsingObjects,
@@ -970,7 +970,7 @@ type pgDumpReader struct {
 	colMap                map[*row.DatumRowConverter](map[string]int)
 	jobID                 int64
 	unsupportedStmtLogger *unsupportedStmtLogger
-	evalCtx               *tree.EvalContext
+	evalCtx               *eval.Context
 }
 
 var _ inputConverter = &pgDumpReader{}
@@ -984,7 +984,7 @@ func newPgDumpReader(
 	opts roachpb.PgDumpOptions,
 	walltime int64,
 	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (*pgDumpReader, error) {
 	tableDescs := make(map[string]catalog.TableDescriptor, len(descs))
 	converters := make(map[string]*row.DatumRowConverter, len(descs))

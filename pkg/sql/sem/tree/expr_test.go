@@ -81,7 +81,7 @@ func TestStringConcat(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 	for _, typ := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
 		// Strings and Bytes are handled specially.
@@ -174,7 +174,7 @@ func TestExprString(t *testing.T) {
 			t.Errorf("Print/parse/print cycle changes the string: `%s` vs `%s`", str, str2)
 		}
 		// Compare the normalized expressions.
-		ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer ctx.Mon.Stop(context.Background())
 		normalized, err := normalize.Expr(ctx, typedExpr)
 		if err != nil {

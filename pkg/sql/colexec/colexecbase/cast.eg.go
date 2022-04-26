@@ -72,7 +72,7 @@ func GetCastOperator(
 	resultIdx int,
 	fromType *types.T,
 	toType *types.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	base := castOpBase{
@@ -815,7 +815,7 @@ type castOpBase struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
-	evalCtx   *tree.EvalContext
+	evalCtx   *eval.Context
 }
 
 func (c *castOpBase) Reset(ctx context.Context) {
@@ -938,7 +938,7 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 			if inputVec.Nulls().MaybeHasNulls() {
 				for scratchIdx, outputIdx := range sel[:n] {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						converted := scratch[scratchIdx]
 						if true && converted == tree.DNull {
 							outputNulls.SetNull(outputIdx)
@@ -954,7 +954,7 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 			} else {
 				for scratchIdx, outputIdx := range sel[:n] {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						converted := scratch[scratchIdx]
 						if false && converted == tree.DNull {
 							outputNulls.SetNull(outputIdx)
@@ -974,9 +974,9 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 				for idx := 0; idx < n; idx++ {
 					{
 						var (
-							scratchIdx int               = idx
-							outputIdx  int               = idx
-							evalCtx    *tree.EvalContext = c.evalCtx
+							scratchIdx int           = idx
+							outputIdx  int           = idx
+							evalCtx    *eval.Context = c.evalCtx
 						)
 						//gcassert:bce
 						converted := scratch[scratchIdx]
@@ -995,9 +995,9 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 				for idx := 0; idx < n; idx++ {
 					{
 						var (
-							scratchIdx int               = idx
-							outputIdx  int               = idx
-							evalCtx    *tree.EvalContext = c.evalCtx
+							scratchIdx int           = idx
+							outputIdx  int           = idx
+							evalCtx    *eval.Context = c.evalCtx
 						)
 						//gcassert:bce
 						converted := scratch[scratchIdx]
@@ -1053,7 +1053,7 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1075,7 +1075,7 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1103,7 +1103,7 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1125,7 +1125,7 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1185,7 +1185,7 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1207,7 +1207,7 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1235,7 +1235,7 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1257,7 +1257,7 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1317,7 +1317,7 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1339,7 +1339,7 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1367,7 +1367,7 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1389,7 +1389,7 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1449,7 +1449,7 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1471,7 +1471,7 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1499,7 +1499,7 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1521,7 +1521,7 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1581,7 +1581,7 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1598,7 +1598,7 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1621,7 +1621,7 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1638,7 +1638,7 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1693,7 +1693,7 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1729,7 +1729,7 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1771,7 +1771,7 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1807,7 +1807,7 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1881,7 +1881,7 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1917,7 +1917,7 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -1959,7 +1959,7 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -1995,7 +1995,7 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2069,7 +2069,7 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2099,7 +2099,7 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2135,7 +2135,7 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2165,7 +2165,7 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2233,7 +2233,7 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2258,7 +2258,7 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2289,7 +2289,7 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2314,7 +2314,7 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2377,7 +2377,7 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2399,7 +2399,7 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2427,7 +2427,7 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2449,7 +2449,7 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2509,7 +2509,7 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2526,7 +2526,7 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2549,7 +2549,7 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2566,7 +2566,7 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2621,7 +2621,7 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2638,7 +2638,7 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2661,7 +2661,7 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2678,7 +2678,7 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2733,7 +2733,7 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2752,7 +2752,7 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2777,7 +2777,7 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2796,7 +2796,7 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2853,7 +2853,7 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2876,7 +2876,7 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2905,7 +2905,7 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -2928,7 +2928,7 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -2989,7 +2989,7 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3008,7 +3008,7 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3033,7 +3033,7 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3052,7 +3052,7 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3109,7 +3109,7 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3132,7 +3132,7 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3161,7 +3161,7 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3184,7 +3184,7 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3245,7 +3245,7 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3262,7 +3262,7 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3285,7 +3285,7 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3302,7 +3302,7 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3357,7 +3357,7 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3376,7 +3376,7 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3401,7 +3401,7 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3420,7 +3420,7 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3477,7 +3477,7 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3500,7 +3500,7 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3529,7 +3529,7 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3552,7 +3552,7 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3613,7 +3613,7 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3632,7 +3632,7 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3657,7 +3657,7 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3676,7 +3676,7 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3733,7 +3733,7 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3756,7 +3756,7 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3785,7 +3785,7 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3808,7 +3808,7 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3869,7 +3869,7 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3892,7 +3892,7 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -3921,7 +3921,7 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -3944,7 +3944,7 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4005,7 +4005,7 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4024,7 +4024,7 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4049,7 +4049,7 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4068,7 +4068,7 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4125,7 +4125,7 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4148,7 +4148,7 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4177,7 +4177,7 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4200,7 +4200,7 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4261,7 +4261,7 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4280,7 +4280,7 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4305,7 +4305,7 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4324,7 +4324,7 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4381,7 +4381,7 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4400,7 +4400,7 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4425,7 +4425,7 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4444,7 +4444,7 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4501,7 +4501,7 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4526,7 +4526,7 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4557,7 +4557,7 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4582,7 +4582,7 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4645,7 +4645,7 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4667,7 +4667,7 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4695,7 +4695,7 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4717,7 +4717,7 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4777,7 +4777,7 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4799,7 +4799,7 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4827,7 +4827,7 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4849,7 +4849,7 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4909,7 +4909,7 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4931,7 +4931,7 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -4959,7 +4959,7 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -4981,7 +4981,7 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5041,7 +5041,7 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5064,7 +5064,7 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5093,7 +5093,7 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5116,7 +5116,7 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5177,7 +5177,7 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5200,7 +5200,7 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5229,7 +5229,7 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5252,7 +5252,7 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5313,7 +5313,7 @@ func (c *castDateIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5330,7 +5330,7 @@ func (c *castDateIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5353,7 +5353,7 @@ func (c *castDateIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5370,7 +5370,7 @@ func (c *castDateIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5425,7 +5425,7 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5444,7 +5444,7 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5469,7 +5469,7 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5488,7 +5488,7 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5545,7 +5545,7 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5568,7 +5568,7 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5597,7 +5597,7 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5620,7 +5620,7 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = inputCol.Get(n - 1)
@@ -5681,7 +5681,7 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5704,7 +5704,7 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5729,7 +5729,7 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5752,7 +5752,7 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5809,7 +5809,7 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5832,7 +5832,7 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -5859,7 +5859,7 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5882,7 +5882,7 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -5941,7 +5941,7 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5964,7 +5964,7 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -5989,7 +5989,7 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6012,7 +6012,7 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6069,7 +6069,7 @@ func (c *castStringStringOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6112,7 +6112,7 @@ func (c *castStringStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6157,7 +6157,7 @@ func (c *castStringStringOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6200,7 +6200,7 @@ func (c *castStringStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6277,7 +6277,7 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6300,7 +6300,7 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6325,7 +6325,7 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6348,7 +6348,7 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6405,7 +6405,7 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6433,7 +6433,7 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6463,7 +6463,7 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6491,7 +6491,7 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6554,7 +6554,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6579,7 +6579,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -6608,7 +6608,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6633,7 +6633,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -6695,7 +6695,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6720,7 +6720,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -6749,7 +6749,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6774,7 +6774,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -6836,7 +6836,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6861,7 +6861,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -6890,7 +6890,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -6915,7 +6915,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -6977,7 +6977,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7002,7 +7002,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7031,7 +7031,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7056,7 +7056,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7118,7 +7118,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7143,7 +7143,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7172,7 +7172,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7197,7 +7197,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7259,7 +7259,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7284,7 +7284,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7313,7 +7313,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7338,7 +7338,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7400,7 +7400,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7425,7 +7425,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7454,7 +7454,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7479,7 +7479,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7541,7 +7541,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7566,7 +7566,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7595,7 +7595,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7620,7 +7620,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7682,7 +7682,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7707,7 +7707,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7736,7 +7736,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7761,7 +7761,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -7823,7 +7823,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7848,7 +7848,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7875,7 +7875,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7900,7 +7900,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7960,7 +7960,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -7985,7 +7985,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8012,7 +8012,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8037,7 +8037,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8097,7 +8097,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8122,7 +8122,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -8151,7 +8151,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8176,7 +8176,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						_ = outputCol.Get(n - 1)
@@ -8238,7 +8238,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8263,7 +8263,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8290,7 +8290,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8315,7 +8315,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8375,7 +8375,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8400,7 +8400,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8427,7 +8427,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8452,7 +8452,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8511,7 +8511,7 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 				outputNulls.Copy(inputNulls)
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8542,7 +8542,7 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8575,7 +8575,7 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 			} else {
 				if sel != nil {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int
@@ -8606,7 +8606,7 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 					}
 				} else {
 					{
-						var evalCtx *tree.EvalContext = c.evalCtx
+						var evalCtx *eval.Context = c.evalCtx
 						// Silence unused warning.
 						_ = evalCtx
 						var tupleIdx int

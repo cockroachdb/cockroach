@@ -86,7 +86,7 @@ func (cdd *ColumnDefDescs) ForEachTypedExpr(fn func(tree.TypedExpr) error) error
 //
 // See the ColumnDefDescs definition for a description of the return values.
 func MakeColumnDefDescs(
-	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *eval.Context,
 ) (*ColumnDefDescs, error) {
 	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
@@ -227,7 +227,7 @@ func MakeColumnDefDescs(
 func EvalShardBucketCount(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	shardBuckets tree.Expr,
 	storageParams tree.StorageParams,
 ) (int32, error) {

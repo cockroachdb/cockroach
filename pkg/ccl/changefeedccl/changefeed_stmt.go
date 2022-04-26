@@ -329,7 +329,7 @@ func createChangefeedJobRecord(
 	endTime := hlc.Timestamp{}
 	if endTimeOpt, ok := opts[changefeedbase.OptEndTime]; ok {
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(endTimeOpt)}
-		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().EvalContext)
+		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context)
 		if err != nil {
 			return nil, err
 		}

@@ -88,7 +88,7 @@ type Builder struct {
 
 	ctx        context.Context
 	semaCtx    *tree.SemaContext
-	evalCtx    *tree.EvalContext
+	evalCtx    *eval.Context
 	catalog    cat.Catalog
 	scopeAlloc []scope
 
@@ -152,7 +152,7 @@ type Builder struct {
 func New(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factory *norm.Factory,
 	stmt tree.Statement,

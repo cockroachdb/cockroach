@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -121,7 +122,7 @@ type OptTester struct {
 	sql          string
 	ctx          context.Context
 	semaCtx      tree.SemaContext
-	evalCtx      tree.EvalContext
+	evalCtx      eval.Context
 	appliedRules RuleSet
 
 	builder strings.Builder
@@ -268,7 +269,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 		sql:     sql,
 		ctx:     ctx,
 		semaCtx: tree.MakeSemaContext(),
-		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 	// To allow opttester tests to use now(), we hardcode a preset transaction
 	// time. May 10, 2017 is a historic day: the release date of CockroachDB 1.0.

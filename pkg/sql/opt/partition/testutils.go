@@ -13,6 +13,7 @@ package partition
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -20,7 +21,7 @@ import (
 
 // ParseDatumPath parses a span key string like "/1/2/3".
 // Only NULL and a subset of types are currently supported.
-func ParseDatumPath(evalCtx *tree.EvalContext, str string, typs []types.Family) []tree.Datum {
+func ParseDatumPath(evalCtx *eval.Context, str string, typs []types.Family) []tree.Datum {
 	var res []tree.Datum
 	for i, valStr := range tree.ParsePath(str) {
 		if i >= len(typs) {

@@ -37,7 +37,7 @@ import (
 func SetStorageParameters(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	params tree.StorageParams,
 	paramObserver StorageParamObserver,
 ) error {
@@ -76,7 +76,7 @@ func SetStorageParameters(
 // given observer.
 func ResetStorageParameters(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	params tree.NameList,
 	paramObserver StorageParamObserver,
 ) error {
@@ -93,9 +93,9 @@ func ResetStorageParameters(
 type StorageParamObserver interface {
 	// onSet is called during CREATE [TABLE | INDEX] ... WITH (...) or
 	// ALTER [TABLE | INDEX] ... WITH (...).
-	onSet(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	onSet(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
 	// onReset is called during ALTER [TABLE | INDEX] ... RESET (...)
-	onReset(evalCtx *tree.EvalContext, key string) error
+	onReset(evalCtx *eval.Context, key string) error
 	// runPostChecks is called after all storage parameters have been set.
 	// This allows checking whether multiple storage parameters together
 	// form a valid configuration.
@@ -130,7 +130,7 @@ func (po *TableStorageParamObserver) runPostChecks() error {
 	return nil
 }
 
-func boolFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (bool, error) {
+func boolFromDatum(evalCtx *eval.Context, key string, datum tree.Datum) (bool, error) {
 	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
 		return ParseBoolVar(key, stringVal)
 	}
@@ -142,22 +142,22 @@ func boolFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (boo
 }
 
 type tableParam struct {
-	onSet   func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
-	onReset func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error
+	onSet   func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
+	onReset func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error
 }
 
 var tableParams = map[string]tableParam{
 	`fillfactor`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			return setFillFactorStorageParam(evalCtx, key, datum)
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			// Operation is a no-op so do nothing.
 			return nil
 		},
 	},
 	`autovacuum_enabled`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			var boolVal bool
 			if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
 				boolVal, err = ParseBoolVar(key, stringVal)
@@ -179,13 +179,13 @@ var tableParams = map[string]tableParam{
 			}
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			// Operation is a no-op so do nothing.
 			return nil
 		},
 	},
 	`ttl`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			setTrue, err := boolFromDatum(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -200,13 +200,13 @@ var tableParams = map[string]tableParam{
 			}
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			po.tableDesc.RowLevelTTL = nil
 			return nil
 		},
 	},
 	`ttl_automatic_column`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			setTrue, err := boolFromDatum(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -219,12 +219,12 @@ var tableParams = map[string]tableParam{
 			}
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			return unimplemented.NewWithIssue(76916, "unsetting TTL automatic column not yet implemented")
 		},
 	},
 	`ttl_expire_after`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			var d *tree.DInterval
 			if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
 				d, err = tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), stringVal)
@@ -259,7 +259,7 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.RowLevelTTL.DurationExpr = catpb.Expression(tree.Serialize(d))
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			return errors.WithHintf(
 				pgerror.Newf(
 					pgcode.InvalidParameterValue,
@@ -270,7 +270,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_select_batch_size`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
 				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
@@ -284,7 +284,7 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.RowLevelTTL.SelectBatchSize = val
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.SelectBatchSize = 0
 			}
@@ -292,7 +292,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_delete_batch_size`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
 				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
@@ -306,7 +306,7 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.RowLevelTTL.DeleteBatchSize = val
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.DeleteBatchSize = 0
 			}
@@ -314,7 +314,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_range_concurrency`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
 				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
@@ -328,7 +328,7 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.RowLevelTTL.RangeConcurrency = val
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.RangeConcurrency = 0
 			}
@@ -336,7 +336,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_delete_rate_limit`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
 				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
@@ -350,7 +350,7 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.RowLevelTTL.DeleteRateLimit = val
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.DeleteRateLimit = 0
 			}
@@ -358,7 +358,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_label_metrics`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
 				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
@@ -369,13 +369,13 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.RowLevelTTL.LabelMetrics = val
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			po.tableDesc.RowLevelTTL.LabelMetrics = false
 			return nil
 		},
 	},
 	`ttl_job_cron`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
 				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
@@ -389,7 +389,7 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.RowLevelTTL.DeletionCron = str
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.DeletionCron = ""
 			}
@@ -397,7 +397,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_pause`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			b, err := boolFromDatum(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -408,13 +408,13 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.RowLevelTTL.Pause = b
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			po.tableDesc.RowLevelTTL.Pause = false
 			return nil
 		},
 	},
 	`ttl_row_stats_poll_interval`: {
-		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			d, err := DatumAsDuration(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -428,14 +428,14 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.RowLevelTTL.RowStatsPollInterval = d
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			po.tableDesc.RowLevelTTL.RowStatsPollInterval = 0
 			return nil
 		},
 	},
 	`exclude_data_from_backup`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
-			evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			evalCtx *eval.Context, key string, datum tree.Datum) error {
 			if po.tableDesc.Temporary {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"cannot set data in a temporary table to be excluded from backup")
@@ -462,7 +462,7 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.ExcludeDataFromBackup = excludeDataFromBackup
 			return nil
 		},
-		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+		onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 			po.tableDesc.ExcludeDataFromBackup = false
 			return nil
 		},
@@ -500,10 +500,10 @@ func init() {
 		`user_catalog_table`,
 	} {
 		tableParams[param] = tableParam{
-			onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 				return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 			},
-			onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			onReset: func(po *TableStorageParamObserver, evalCtx *eval.Context, key string) error {
 				return nil
 			},
 		}
@@ -514,7 +514,7 @@ func init() {
 func (po *TableStorageParamObserver) onSet(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	key string,
 	datum tree.Datum,
 ) error {
@@ -531,7 +531,7 @@ func (po *TableStorageParamObserver) onSet(
 }
 
 // onReset implements the StorageParamObserver interface.
-func (po *TableStorageParamObserver) onReset(evalCtx *tree.EvalContext, key string) error {
+func (po *TableStorageParamObserver) onReset(evalCtx *eval.Context, key string) error {
 	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
 		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
@@ -544,7 +544,7 @@ func (po *TableStorageParamObserver) onReset(evalCtx *tree.EvalContext, key stri
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
 
-func setFillFactorStorageParam(evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+func setFillFactorStorageParam(evalCtx *eval.Context, key string, datum tree.Datum) error {
 	val, err := DatumAsFloat(evalCtx, key, datum)
 	if err != nil {
 		return err
@@ -580,7 +580,7 @@ func getS2ConfigFromIndex(indexDesc *descpb.IndexDescriptor) *geoindex.S2Config 
 }
 
 func (po *IndexStorageParamObserver) applyS2ConfigSetting(
-	evalCtx *tree.EvalContext, key string, expr tree.Datum, min int64, max int64,
+	evalCtx *eval.Context, key string, expr tree.Datum, min int64, max int64,
 ) error {
 	s2Config := getS2ConfigFromIndex(po.IndexDesc)
 	if s2Config == nil {
@@ -617,7 +617,7 @@ func (po *IndexStorageParamObserver) applyS2ConfigSetting(
 }
 
 func (po *IndexStorageParamObserver) applyGeometryIndexSetting(
-	evalCtx *tree.EvalContext, key string, expr tree.Datum,
+	evalCtx *eval.Context, key string, expr tree.Datum,
 ) error {
 	if po.IndexDesc.GeoConfig.S2Geometry == nil {
 		return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be applied to GEOMETRY spatial indexes", key)
@@ -645,7 +645,7 @@ func (po *IndexStorageParamObserver) applyGeometryIndexSetting(
 func (po *IndexStorageParamObserver) onSet(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	key string,
 	expr tree.Datum,
 ) error {
@@ -676,7 +676,7 @@ func (po *IndexStorageParamObserver) onSet(
 }
 
 // onReset implements the StorageParameterObserver interface.
-func (po *IndexStorageParamObserver) onReset(evalCtx *tree.EvalContext, key string) error {
+func (po *IndexStorageParamObserver) onReset(evalCtx *eval.Context, key string) error {
 	return errors.AssertionFailedf("non-implemented codepath")
 }
 

@@ -172,6 +172,7 @@ go_test(
         "//pkg/sql/rowcontainer",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/span",
         "//pkg/sql/sqlutil",

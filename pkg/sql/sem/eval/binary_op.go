@@ -31,9 +31,7 @@ import (
 )
 
 // BinaryOp evaluates a tree.BinaryEvalOp.
-func BinaryOp(
-	ctx *tree.EvalContext, op tree.BinaryEvalOp, left, right tree.Datum,
-) (tree.Datum, error) {
+func BinaryOp(ctx *Context, op tree.BinaryEvalOp, left, right tree.Datum) (tree.Datum, error) {
 	return op.Eval((*evaluator)(ctx), left, right)
 }
 

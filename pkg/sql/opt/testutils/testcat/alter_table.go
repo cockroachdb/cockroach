@@ -59,7 +59,7 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 func injectTableStats(tt *Table, statsExpr tree.Expr) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	typedExpr, err := tree.TypeCheckAndRequire(
 		ctx, statsExpr, &semaCtx, types.Jsonb, "INJECT STATISTICS",
 	)

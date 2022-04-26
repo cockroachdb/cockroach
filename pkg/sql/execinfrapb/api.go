@@ -14,7 +14,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -52,7 +52,7 @@ type DistSQLVersion uint32
 
 // MakeEvalContext serializes some of the fields of a eval.Context into a
 // execinfrapb.EvalContext proto.
-func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
+func MakeEvalContext(evalCtx *eval.Context) EvalContext {
 	sessionDataProto := evalCtx.SessionData().SessionData
 	sessiondata.MarshalNonLocal(evalCtx.SessionData(), &sessionDataProto)
 	return EvalContext{

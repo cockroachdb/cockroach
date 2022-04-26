@@ -353,7 +353,7 @@ func mustParseDVarBit(t *testing.T, s string) tree.Datum {
 }
 func mustParseDArrayOfType(typ *types.T) func(t *testing.T, s string) tree.Datum {
 	return func(t *testing.T, s string) tree.Datum {
-		evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalContext := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 		d, _, err := tree.ParseDArrayFromString(&evalContext, s, typ)
 		if err != nil {
 			t.Fatal(err)
@@ -587,7 +587,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 	}
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for i, test := range testCases {
 		parseableCount := 0

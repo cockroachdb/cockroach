@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	tu "github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -63,7 +64,7 @@ func TestExprIsNeverNull(t *testing.T) {
 			case "scalar-is-not-nullable":
 				ctx := context.Background()
 				semaCtx := tree.MakeSemaContext()
-				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+				evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 				var o xform.Optimizer
 				o.Init(&evalCtx, catalog)

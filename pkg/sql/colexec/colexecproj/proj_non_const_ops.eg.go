@@ -56196,7 +56196,7 @@ func GetProjectionOperator(
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecop.Operator, error) {

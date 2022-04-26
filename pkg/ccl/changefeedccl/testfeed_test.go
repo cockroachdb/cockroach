@@ -1120,7 +1120,7 @@ func makeKafkaFeedFactoryForCluster(
 }
 
 func exprAsString(expr tree.Expr) (string, error) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	semaCtx := tree.MakeSemaContext()
 	te, err := expr.TypeCheck(context.Background(), &semaCtx, types.String)
 	if err != nil {

@@ -57,7 +57,7 @@ go_test(
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/types",
         "//pkg/util/leaktest",
         "//pkg/util/log",

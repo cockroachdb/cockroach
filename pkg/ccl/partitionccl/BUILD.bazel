@@ -73,6 +73,7 @@ go_test(
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/tests",
         "//pkg/sql/types",

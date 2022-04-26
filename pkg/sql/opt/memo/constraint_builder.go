@@ -27,7 +27,7 @@ import (
 // expression. A "tight" boolean is also returned which is true if the
 // constraint is exactly equivalent to the expression.
 func BuildConstraints(
-	e opt.ScalarExpr, md *opt.Metadata, evalCtx *tree.EvalContext,
+	e opt.ScalarExpr, md *opt.Metadata, evalCtx *eval.Context,
 ) (_ *constraint.Set, tight bool) {
 	cb := constraintsBuilder{md: md, evalCtx: evalCtx}
 	return cb.buildConstraints(e)
@@ -51,7 +51,7 @@ var contradiction = constraint.Contradiction
 // constraint that is not tight is weaker than the expression.
 type constraintsBuilder struct {
 	md      *opt.Metadata
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 }
 
 // buildSingleColumnConstraint creates a constraint set implied by

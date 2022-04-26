@@ -16,7 +16,7 @@ import (
 )
 
 // PickFromTuple picks the greatest (or least value) from a tuple.
-func PickFromTuple(ctx *tree.EvalContext, greatest bool, args tree.Datums) (tree.Datum, error) {
+func PickFromTuple(ctx *Context, greatest bool, args tree.Datums) (tree.Datum, error) {
 	g := args[0]
 	// Pick a greater (or smaller) value.
 	for _, d := range args[1:] {

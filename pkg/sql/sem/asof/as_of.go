@@ -98,9 +98,9 @@ func Eval(
 	ctx context.Context,
 	asOf tree.AsOfClause,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	opts ...EvalOption,
-) (tree.AsOfSystemTime, error) {
+) (eval.AsOfSystemTime, error) {
 	o := evalOptions{}
 	for _, f := range opts {
 		o = f(o)
@@ -129,7 +129,7 @@ func Eval(
 	defer scalarProps.Restore(*scalarProps)
 	scalarProps.Require("AS OF SYSTEM TIME", tree.RejectSpecial|tree.RejectSubqueries)
 
-	var ret tree.AsOfSystemTime
+	var ret eval.AsOfSystemTime
 
 	// In order to support the follower reads feature we permit this expression
 	// to be a simple invocation of the follower_read_timestamp function.
@@ -142,7 +142,7 @@ func Eval(
 		case funcTypeFollowerRead:
 		case funcTypeBoundedStaleness:
 			if !o.allowBoundedStaleness {
-				return tree.AsOfSystemTime{}, newInvalidExprError()
+				return eval.AsOfSystemTime{}, newInvalidExprError()
 			}
 			ret.BoundedStaleness = true
 
@@ -150,15 +150,15 @@ func Eval(
 			if len(asOfFuncExpr.Exprs) == 2 {
 				nearestOnlyExpr, err := asOfFuncExpr.Exprs[1].TypeCheck(ctx, semaCtx, types.Bool)
 				if err != nil {
-					return tree.AsOfSystemTime{}, err
+					return eval.AsOfSystemTime{}, err
 				}
 				nearestOnlyEval, err := eval.Expr(evalCtx, nearestOnlyExpr)
 				if err != nil {
-					return tree.AsOfSystemTime{}, err
+					return eval.AsOfSystemTime{}, err
 				}
 				nearestOnly, ok := nearestOnlyEval.(*tree.DBool)
 				if !ok {
-					return tree.AsOfSystemTime{}, pgerror.Newf(
+					return eval.AsOfSystemTime{}, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						"%s: expected bool argument for nearest_only",
 						asOfFuncExpr.Func.String(),
@@ -167,40 +167,40 @@ func Eval(
 				ret.NearestOnly = bool(*nearestOnly)
 			}
 		default:
-			return tree.AsOfSystemTime{}, newInvalidExprError()
+			return eval.AsOfSystemTime{}, newInvalidExprError()
 		}
 		var err error
 		te, err = asOf.Expr.TypeCheck(ctx, semaCtx, types.TimestampTZ)
 		if err != nil {
-			return tree.AsOfSystemTime{}, err
+			return eval.AsOfSystemTime{}, err
 		}
 	} else {
 		var err error
 		te, err = asOf.Expr.TypeCheck(ctx, semaCtx, types.String)
 		if err != nil {
-			return tree.AsOfSystemTime{}, err
+			return eval.AsOfSystemTime{}, err
 		}
 		if !eval.IsConst(evalCtx, te) {
-			return tree.AsOfSystemTime{}, newInvalidExprError()
+			return eval.AsOfSystemTime{}, newInvalidExprError()
 		}
 	}
 
 	d, err := eval.Expr(evalCtx, te)
 	if err != nil {
-		return tree.AsOfSystemTime{}, err
+		return eval.AsOfSystemTime{}, err
 	}
 
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
 	ret.Timestamp, err = DatumToHLC(evalCtx, stmtTimestamp, d)
 	if err != nil {
-		return tree.AsOfSystemTime{}, errors.Wrap(err, "AS OF SYSTEM TIME")
+		return eval.AsOfSystemTime{}, errors.Wrap(err, "AS OF SYSTEM TIME")
 	}
 	return ret, nil
 }
 
 // DatumToHLC performs the conversion from a Datum to an HLC timestamp.
 func DatumToHLC(
-	evalCtx *tree.EvalContext, stmtTimestamp time.Time, d tree.Datum,
+	evalCtx *eval.Context, stmtTimestamp time.Time, d tree.Datum,
 ) (hlc.Timestamp, error) {
 	ts := hlc.Timestamp{}
 	var convErr error

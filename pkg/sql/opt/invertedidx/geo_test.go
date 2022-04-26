@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -34,7 +35,7 @@ import (
 func TestTryJoinGeoIndex(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 
 	tc := testcat.New()
 
@@ -315,7 +316,7 @@ func TestTryJoinGeoIndex(t *testing.T) {
 func TestTryFilterGeoIndex(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 
 	tc := testcat.New()
 	if _, err := tc.ExecuteDDL(

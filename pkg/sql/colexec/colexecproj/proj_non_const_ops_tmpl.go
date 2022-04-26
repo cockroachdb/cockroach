@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -237,7 +238,7 @@ func GetProjectionOperator(
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecop.Operator, error) {

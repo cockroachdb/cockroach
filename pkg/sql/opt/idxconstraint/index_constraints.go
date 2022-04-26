@@ -1052,7 +1052,7 @@ func (ic *Instance) Init(
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
 	consolidate bool,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	factory *norm.Factory,
 	ps *partition.PrefixSorter,
 ) {
@@ -1153,7 +1153,7 @@ type indexConstraintCtx struct {
 
 	computedCols map[opt.ColumnID]opt.ScalarExpr
 
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	// We pre-initialize the KeyContext for each suffix of the index columns.
 	keyCtx []constraint.KeyContext
@@ -1165,7 +1165,7 @@ func (c *indexConstraintCtx) init(
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	factory *norm.Factory,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly

@@ -48,7 +48,7 @@ func TestCastToCollatedString(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			val, err := eval.Expr(evalCtx, typedexpr)
 			if err != nil {

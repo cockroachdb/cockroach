@@ -18,7 +18,7 @@ import (
 )
 
 // UnaryOp will evaluate a tree.UnaryEvalOp on a Datum into another Datum.
-func UnaryOp(ctx *tree.EvalContext, op tree.UnaryEvalOp, in tree.Datum) (tree.Datum, error) {
+func UnaryOp(ctx *Context, op tree.UnaryEvalOp, in tree.Datum) (tree.Datum, error) {
 	return op.Eval((*evaluator)(ctx), in)
 }
 

@@ -93,7 +93,7 @@ func GenerateInsertRow(
 	computeExprs []tree.TypedExpr,
 	insertCols []catalog.Column,
 	computedColsLookup []catalog.Column,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	tableDesc catalog.TableDescriptor,
 	rowVals tree.Datums,
 	rowContainerForComputedVals *schemaexpr.RowIndexedVarContainer,
@@ -208,7 +208,7 @@ type DatumRowConverter struct {
 
 	// The rest of these are derived from tableDesc, just cached here.
 	ri                    Inserter
-	EvalCtx               *tree.EvalContext
+	EvalCtx               *eval.Context
 	cols                  []catalog.Column
 	VisibleCols           []catalog.Column
 	VisibleColTypes       []*types.T
@@ -243,7 +243,7 @@ func TestingSetDatumRowConverterBatchSize(newSize int) func() {
 // related to the sequence which will be used when evaluating the default
 // expression using the sequence.
 func (c *DatumRowConverter) getSequenceAnnotation(
-	evalCtx *tree.EvalContext, cols []catalog.Column,
+	evalCtx *eval.Context, cols []catalog.Column,
 ) (map[string]*SequenceMetadata, map[descpb.ID]*SequenceMetadata, error) {
 	// Identify the sequences used in all the columns.
 	sequenceIDs := make(map[descpb.ID]struct{})
@@ -293,7 +293,7 @@ func NewDatumRowConverter(
 	baseSemaCtx *tree.SemaContext,
 	tableDesc catalog.TableDescriptor,
 	targetColNames tree.NameList,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	kvCh chan<- KVBatch,
 	seqChunkProvider *SeqChunkProvider,
 	metrics *rowinfra.Metrics,

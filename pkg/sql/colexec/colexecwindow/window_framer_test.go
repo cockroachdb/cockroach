@@ -53,7 +53,7 @@ func TestWindowFramer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	rng, _ := randutil.NewTestRand()
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -145,7 +145,7 @@ func TestWindowFramer(t *testing.T) {
 
 type testConfig struct {
 	rng        *rand.Rand
-	evalCtx    *tree.EvalContext
+	evalCtx    *eval.Context
 	factory    coldata.ColumnFactory
 	allocator  *colmem.Allocator
 	queueCfg   colcontainer.DiskQueueCfg
@@ -253,7 +253,7 @@ func getEndBound(
 type datumRows struct {
 	rows tree.Datums
 	asc  bool
-	ctx  *tree.EvalContext
+	ctx  *eval.Context
 }
 
 func (r *datumRows) Len() int {
@@ -471,7 +471,7 @@ func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (tree.Datums, error)
 }
 
 type peerGroupChecker struct {
-	evalCtx   tree.EvalContext
+	evalCtx   eval.Context
 	partition tree.Datums
 	ordered   bool
 }

@@ -42,7 +42,7 @@ func TestEval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 
 	walk := func(t *testing.T, getExpr func(*testing.T, *datadriven.TestData) string) {
@@ -93,7 +93,7 @@ func TestEval(t *testing.T) {
 	})
 }
 
-func optBuildScalar(evalCtx *tree.EvalContext, e tree.Expr) (tree.TypedExpr, error) {
+func optBuildScalar(evalCtx *eval.Context, e tree.Expr) (tree.TypedExpr, error) {
 	var o xform.Optimizer
 	o.Init(evalCtx, nil /* catalog */)
 	ctx := context.Background()
@@ -192,7 +192,7 @@ func TestTimeConversion(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer ctx.Mon.Stop(context.Background())
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
 		expr, err := parser.ParseExpr(exprStr)
@@ -364,7 +364,7 @@ func TestEvalError(t *testing.T) {
 		semaCtx := tree.MakeSemaContext()
 		typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 		if err == nil {
-			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			_, err = eval.Expr(evalCtx, typedExpr)
 		}
@@ -381,8 +381,8 @@ func TestHLCTimestampDecimalRoundTrip(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		ts := hlc.Timestamp{WallTime: rng.Int63(), Logical: rng.Int31()}
-		dec := tree.TimestampToDecimalDatum(ts)
-		approx, err := tree.DecimalToInexactDTimestamp(dec)
+		dec := eval.TimestampToDecimalDatum(ts)
+		approx, err := eval.DecimalToInexactDTimestamp(dec)
 		require.NoError(t, err)
 		// The expected timestamp is at the microsecond precision.
 		expectedTsDatum := tree.MustMakeDTimestamp(timeutil.Unix(0, ts.WallTime), time.Microsecond)

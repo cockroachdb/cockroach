@@ -35,7 +35,7 @@ func TestCastMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	rng, _ := randutil.NewTestRand()
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
 

@@ -19,7 +19,7 @@ import (
 
 // ParseDatumStringAs parses s as type t. This function is guaranteed to
 // round-trip when printing a Datum with FmtExport.
-func ParseDatumStringAs(t *types.T, s string, evalCtx *tree.EvalContext) (tree.Datum, error) {
+func ParseDatumStringAs(t *types.T, s string, evalCtx *eval.Context) (tree.Datum, error) {
 	switch t.Family() {
 	// We use a different parser for array types because ParseAndRequireString only parses
 	// the internal postgres string representation of arrays.
@@ -37,7 +37,7 @@ func ParseDatumStringAs(t *types.T, s string, evalCtx *tree.EvalContext) (tree.D
 // than the bytes case, this function does the same as ParseDatumStringAs but is not
 // guaranteed to round-trip.
 func ParseDatumStringAsWithRawBytes(
-	t *types.T, s string, evalCtx *tree.EvalContext,
+	t *types.T, s string, evalCtx *eval.Context,
 ) (tree.Datum, error) {
 	switch t.Family() {
 	case types.BytesFamily:
@@ -47,7 +47,7 @@ func ParseDatumStringAsWithRawBytes(
 	}
 }
 
-func parseAsTyp(evalCtx *tree.EvalContext, typ *types.T, s string) (tree.Datum, error) {
+func parseAsTyp(evalCtx *eval.Context, typ *types.T, s string) (tree.Datum, error) {
 	expr, err := parser.ParseExpr(s)
 	if err != nil {
 		return nil, err

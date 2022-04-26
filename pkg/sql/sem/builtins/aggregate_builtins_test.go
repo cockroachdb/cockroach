@@ -34,11 +34,11 @@ import (
 // accumulation, which violates the "deep copy of any internal state" condition.
 func testAggregateResultDeepCopy(
 	t *testing.T,
-	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) eval.AggregateFunc,
+	aggFunc func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 	firstArgs []tree.Datum,
 	otherArgs ...[]tree.Datum,
 ) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	argTypes := []*types.T{firstArgs[0].ResolvedType()}
 	otherArgs = flattenArgs(otherArgs...)
@@ -380,7 +380,7 @@ func TestRegressionAvgY(t *testing.T) {
 // testRegressionAggregateFunctionResultDeepCopy is a helper function
 // for testing regression aggregate functions.
 func testRegressionAggregateFunctionResultDeepCopy(
-	t *testing.T, aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) eval.AggregateFunc,
+	t *testing.T, aggFunc func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 ) {
 	defer leaktest.AfterTest(t)()
 	t.Run("float float", func(t *testing.T) {
@@ -569,11 +569,11 @@ func testArrayAggAliasedTypeOverload(ctx context.Context, t *testing.T, expected
 
 func runBenchmarkAggregate(
 	b *testing.B,
-	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) eval.AggregateFunc,
+	aggFunc func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 	firstArgs []tree.Datum,
 	otherArgs ...[]tree.Datum,
 ) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	argTypes := []*types.T{firstArgs[0].ResolvedType()}
 	otherArgs = flattenArgs(otherArgs...)
@@ -846,7 +846,7 @@ func BenchmarkRegressionAvgYAggregate(b *testing.B) {
 // runRegressionAggregateBenchmarks is a helper function for running
 // benchmarks for regression aggregate functions.
 func runRegressionAggregateBenchmarks(
-	b *testing.B, aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) eval.AggregateFunc,
+	b *testing.B, aggFunc func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 ) {
 	b.Run(fmt.Sprintf("Ints count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
 		runBenchmarkAggregate(

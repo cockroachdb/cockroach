@@ -19,13 +19,13 @@ import (
 )
 
 // Expr evaluates a TypedExpr into a Datum.
-func Expr(ctx *tree.EvalContext, n tree.TypedExpr) (tree.Datum, error) {
+func Expr(ctx *Context, n tree.TypedExpr) (tree.Datum, error) {
 	return n.Eval((*evaluator)(ctx))
 }
 
-type evaluator tree.EvalContext
+type evaluator Context
 
-func (e *evaluator) ctx() *tree.EvalContext { return (*tree.EvalContext)(e) }
+func (e *evaluator) ctx() *Context { return (*Context)(e) }
 
 func (e *evaluator) EvalAllColumnsSelector(selector *tree.AllColumnsSelector) (tree.Datum, error) {
 	return nil, errors.AssertionFailedf("unhandled type %T", selector)
@@ -59,7 +59,7 @@ func (e *evaluator) EvalAndExpr(expr *tree.AndExpr) (tree.Datum, error) {
 }
 
 func (e *evaluator) EvalArray(t *tree.Array) (tree.Datum, error) {
-	array, err := tree.arrayOfType(t.ResolvedType())
+	array, err := arrayOfType(t.ResolvedType())
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (e *evaluator) EvalArray(t *tree.Array) (tree.Datum, error) {
 }
 
 func (e *evaluator) EvalArrayFlatten(t *tree.ArrayFlatten) (tree.Datum, error) {
-	array, err := tree.arrayOfType(t.ResolvedType())
+	array, err := arrayOfType(t.ResolvedType())
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (e *evaluator) EvalBinaryExpr(expr *tree.BinaryExpr) (tree.Datum, error) {
 		return nil, err
 	}
 	if e.TestingKnobs.AssertBinaryExprReturnTypes {
-		if err := tree.ensureExpectedType(expr.Op.ReturnType, res); err != nil {
+		if err := ensureExpectedType(expr.Op.ReturnType, res); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"binary op %q", expr)
 		}
@@ -179,7 +179,7 @@ func (e *evaluator) EvalCastExpr(expr *tree.CastExpr) (tree.Datum, error) {
 	if d == tree.DNull {
 		return d, nil
 	}
-	d = tree.UnwrapDatum(e.ctx(), d)
+	d = UnwrapDatum(e.ctx(), d)
 	return PerformCast(e.ctx(), d, expr.ResolvedType())
 }
 
@@ -201,7 +201,7 @@ func (e *evaluator) EvalCollateExpr(expr *tree.CollateExpr) (tree.Datum, error) 
 	if err != nil {
 		return nil, err
 	}
-	unwrapped := tree.UnwrapDatum(e.ctx(), d)
+	unwrapped := UnwrapDatum(e.ctx(), d)
 	if unwrapped == tree.DNull {
 		return tree.DNull, nil
 	}
@@ -423,7 +423,7 @@ func (e *evaluator) EvalFuncExpr(expr *tree.FuncExpr) (tree.Datum, error) {
 		return nil, expr.MaybeWrapError(err)
 	}
 	if e.TestingKnobs.AssertFuncExprReturnTypes {
-		if err := tree.ensureExpectedType(fn.FixedReturnType(), res); err != nil {
+		if err := ensureExpectedType(fn.FixedReturnType(), res); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "function %q", expr)
 		}
 	}
@@ -591,7 +591,7 @@ func (e *evaluator) EvalUnaryExpr(expr *tree.UnaryExpr) (tree.Datum, error) {
 		return nil, err
 	}
 	if e.TestingKnobs.AssertUnaryExprReturnTypes {
-		if err := tree.ensureExpectedType(op.ReturnType, res); err != nil {
+		if err := ensureExpectedType(op.ReturnType, res); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "unary op %q", expr)
 		}
 	}

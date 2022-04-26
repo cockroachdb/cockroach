@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -82,7 +83,7 @@ type windowFramer interface {
 }
 
 func newWindowFramer(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
 	inputTypes []*types.T,
@@ -1255,7 +1256,7 @@ func (b *windowFramerBase) isFirstPeer(ctx context.Context, idx int) bool {
 // handleOffsets populates the offset fields of the window framer operator, if
 // one or both bounds are OFFSET PRECEDING or OFFSET FOLLOWING.
 func (b *windowFramerBase) handleOffsets(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
 	inputTypes []*types.T,
@@ -1566,9 +1567,7 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetPreceding) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsUnboundedPrecedingOffsetPreceding) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsUnboundedPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -1619,9 +1618,7 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -1712,9 +1709,7 @@ func (f *windowFramerRowsUnboundedPrecedingCurrentRow) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsUnboundedPrecedingCurrentRow) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsUnboundedPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -1762,9 +1757,7 @@ func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -1860,9 +1853,7 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsUnboundedPrecedingOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -1915,9 +1906,7 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2008,9 +1997,7 @@ func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2058,9 +2045,7 @@ func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2157,9 +2142,7 @@ func (f *windowFramerRowsOffsetPrecedingOffsetPreceding) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetPrecedingOffsetPreceding) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2213,9 +2196,7 @@ func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2309,9 +2290,7 @@ func (f *windowFramerRowsOffsetPrecedingCurrentRow) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetPrecedingCurrentRow) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2362,9 +2341,7 @@ func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2463,9 +2440,7 @@ func (f *windowFramerRowsOffsetPrecedingOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetPrecedingOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2521,9 +2496,7 @@ func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2617,9 +2590,7 @@ func (f *windowFramerRowsOffsetPrecedingUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetPrecedingUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2670,9 +2641,7 @@ func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2763,9 +2732,7 @@ func (f *windowFramerRowsCurrentRowCurrentRow) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsCurrentRowCurrentRow) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsCurrentRowCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2813,9 +2780,7 @@ func (f *windowFramerRowsCurrentRowCurrentRowExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsCurrentRowCurrentRowExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsCurrentRowCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2911,9 +2876,7 @@ func (f *windowFramerRowsCurrentRowOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsCurrentRowOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsCurrentRowOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -2966,9 +2929,7 @@ func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3059,9 +3020,7 @@ func (f *windowFramerRowsCurrentRowUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsCurrentRowUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsCurrentRowUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3109,9 +3068,7 @@ func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3212,9 +3169,7 @@ func (f *windowFramerRowsOffsetFollowingOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetFollowingOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetFollowingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3272,9 +3227,7 @@ func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3370,9 +3323,7 @@ func (f *windowFramerRowsOffsetFollowingUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetFollowingUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3425,9 +3376,7 @@ func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3526,9 +3475,7 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetPreceding) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsUnboundedPrecedingOffsetPreceding) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3583,9 +3530,7 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3679,9 +3624,7 @@ func (f *windowFramerGroupsUnboundedPrecedingCurrentRow) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsUnboundedPrecedingCurrentRow) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3731,9 +3674,7 @@ func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3832,9 +3773,7 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3889,9 +3828,7 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -3982,9 +3919,7 @@ func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4032,9 +3967,7 @@ func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) close() 
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4058,9 +3991,7 @@ func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameLas
 // frameNthIdx returns the index of the nth row (starting from one) in the
 // window frame for the current row. If no such row exists, frameNthIdx
 // returns -1.
-func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(
-	n int,
-) (idx int) {
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
 }
@@ -4138,9 +4069,7 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetPreceding) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetPrecedingOffsetPreceding) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4198,9 +4127,7 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4301,9 +4228,7 @@ func (f *windowFramerGroupsOffsetPrecedingCurrentRow) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetPrecedingCurrentRow) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4360,9 +4285,7 @@ func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4468,9 +4391,7 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetPrecedingOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4532,9 +4453,7 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4633,9 +4552,7 @@ func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4690,9 +4607,7 @@ func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4788,9 +4703,7 @@ func (f *windowFramerGroupsCurrentRowCurrentRow) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsCurrentRowCurrentRow) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsCurrentRowCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4842,9 +4755,7 @@ func (f *windowFramerGroupsCurrentRowCurrentRowExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsCurrentRowCurrentRowExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsCurrentRowCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -4945,9 +4856,7 @@ func (f *windowFramerGroupsCurrentRowOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsCurrentRowOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsCurrentRowOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5004,9 +4913,7 @@ func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5100,9 +5007,7 @@ func (f *windowFramerGroupsCurrentRowUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsCurrentRowUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsCurrentRowUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5152,9 +5057,7 @@ func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5260,9 +5163,7 @@ func (f *windowFramerGroupsOffsetFollowingOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetFollowingOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5324,9 +5225,7 @@ func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5425,9 +5324,7 @@ func (f *windowFramerGroupsOffsetFollowingUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetFollowingUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5482,9 +5379,7 @@ func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5580,9 +5475,7 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5634,9 +5527,7 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5730,9 +5621,7 @@ func (f *windowFramerRangeUnboundedPrecedingCurrentRow) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeUnboundedPrecedingCurrentRow) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeUnboundedPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5782,9 +5671,7 @@ func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5880,9 +5767,7 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -5934,9 +5819,7 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6027,9 +5910,7 @@ func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6077,9 +5958,7 @@ func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6103,9 +5982,7 @@ func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameLast
 // frameNthIdx returns the index of the nth row (starting from one) in the
 // window frame for the current row. If no such row exists, frameNthIdx
 // returns -1.
-func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(
-	n int,
-) (idx int) {
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameNthIdx(n int) (idx int) {
 	idx = f.windowFramerBase.frameNthIdx(n)
 	return f.handleExcludeForNthIdx(idx)
 }
@@ -6181,9 +6058,7 @@ func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6239,9 +6114,7 @@ func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6339,9 +6212,7 @@ func (f *windowFramerRangeOffsetPrecedingCurrentRow) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetPrecedingCurrentRow) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6395,9 +6266,7 @@ func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6497,9 +6366,7 @@ func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6555,9 +6422,7 @@ func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6653,9 +6518,7 @@ func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6707,9 +6570,7 @@ func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6805,9 +6666,7 @@ func (f *windowFramerRangeCurrentRowCurrentRow) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeCurrentRowCurrentRow) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeCurrentRowCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6859,9 +6718,7 @@ func (f *windowFramerRangeCurrentRowCurrentRowExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeCurrentRowCurrentRowExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeCurrentRowCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -6959,9 +6816,7 @@ func (f *windowFramerRangeCurrentRowOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeCurrentRowOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeCurrentRowOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -7015,9 +6870,7 @@ func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -7111,9 +6964,7 @@ func (f *windowFramerRangeCurrentRowUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeCurrentRowUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeCurrentRowUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -7163,9 +7014,7 @@ func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -7265,9 +7114,7 @@ func (f *windowFramerRangeOffsetFollowingOffsetFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetFollowingOffsetFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetFollowingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -7323,9 +7170,7 @@ func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -7421,9 +7266,7 @@ func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
@@ -7475,9 +7318,7 @@ func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) close() {
 // rows that should be added to the current aggregation, and those which
 // should be removed from the current aggregation. It is used to implement the
 // sliding window optimization for aggregate window functions.
-func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) slidingWindowIntervals() (
-	toAdd, toRemove []windowInterval,
-) {
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
 	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
 	f.frameIntervals()
 	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)

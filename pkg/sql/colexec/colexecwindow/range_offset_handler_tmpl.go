@@ -94,7 +94,7 @@ type rangeOffsetHandler interface {
 }
 
 func newRangeOffsetHandler(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	datumAlloc *tree.DatumAlloc,
 	bound *execinfrapb.WindowerSpec_Frame_Bound,
 	ordColType *types.T,

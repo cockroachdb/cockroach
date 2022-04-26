@@ -41,7 +41,7 @@ func (c *rowContainerHelper) Init(
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
-		colinfo.NoOrdering, typs, &evalContext.EvalContext,
+		colinfo.NoOrdering, typs, &evalContext.Context,
 		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
 	)
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
@@ -64,7 +64,7 @@ func (c *rowContainerHelper) InitWithDedup(
 		ordering[i].Direction = encoding.Ascending
 	}
 	c.rows.Init(
-		ordering, typs, &evalContext.EvalContext,
+		ordering, typs, &evalContext.Context,
 		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
 	)
 	c.rows.DoDeDuplicate()

@@ -78,7 +78,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/distsql",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sessiondatapb",
         "//pkg/streaming",
         "//pkg/testutils",

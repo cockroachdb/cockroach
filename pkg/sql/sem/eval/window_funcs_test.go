@@ -32,7 +32,7 @@ const maxOffset = 100
 const probabilityOfNewNumber = 0.5
 
 func testRangeMode(t *testing.T, count int) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	wfr := &WindowFrameRun{
@@ -60,9 +60,7 @@ func testRangeMode(t *testing.T, count int) {
 	testEndFollowing(t, evalCtx, wfr, types.Decimal)
 }
 
-func testStartPreceding(
-	t *testing.T, evalCtx *tree.EvalContext, wfr *WindowFrameRun, offsetType *types.T,
-) {
+func testStartPreceding(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offsetType *types.T) {
 	wfr.Frame = &tree.WindowFrame{
 		Mode:   treewindow.RANGE,
 		Bounds: tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetPreceding}},
@@ -110,9 +108,7 @@ func testStartPreceding(
 	}
 }
 
-func testStartFollowing(
-	t *testing.T, evalCtx *tree.EvalContext, wfr *WindowFrameRun, offsetType *types.T,
-) {
+func testStartFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offsetType *types.T) {
 	wfr.Frame = &tree.WindowFrame{
 		Mode:   treewindow.RANGE,
 		Bounds: tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetFollowing}, EndBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetFollowing}},
@@ -169,9 +165,7 @@ func testStartFollowing(
 	}
 }
 
-func testEndPreceding(
-	t *testing.T, evalCtx *tree.EvalContext, wfr *WindowFrameRun, offsetType *types.T,
-) {
+func testEndPreceding(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offsetType *types.T) {
 	wfr.Frame = &tree.WindowFrame{
 		Mode:   treewindow.RANGE,
 		Bounds: tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetPreceding}, EndBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetPreceding}},
@@ -219,9 +213,7 @@ func testEndPreceding(
 	}
 }
 
-func testEndFollowing(
-	t *testing.T, evalCtx *tree.EvalContext, wfr *WindowFrameRun, offsetType *types.T,
-) {
+func testEndFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offsetType *types.T) {
 	wfr.Frame = &tree.WindowFrame{
 		Mode:   treewindow.RANGE,
 		Bounds: tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetPreceding}, EndBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetFollowing}},

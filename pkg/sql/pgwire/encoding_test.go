@@ -59,7 +59,7 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 
 	ctx := context.Background()
 	sema := tree.MakeSemaContext()
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := eval.MakeTestingEvalContext(nil)
 
 	for _, tc := range tests {
 		// Convert the SQL expression to a Datum.
@@ -152,7 +152,7 @@ func TestEncodings(t *testing.T) {
 
 	conv, loc := makeTestingConvCfg()
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := eval.MakeTestingEvalContext(nil)
 
 	type writeFunc func(tree.Datum, *types.T)
 	type testCase struct {
@@ -330,7 +330,7 @@ func TestExoticNumericEncodings(t *testing.T) {
 		{apd.New(1234123400, -2), []byte{0, 4, 0, 1, 0, 0, 0, 2, 0x4, 0xd2, 0x4, 0xd2, 0, 0, 0, 0}},
 	}
 
-	evalCtx := tree.MakeTestingEvalContext(nil)
+	evalCtx := eval.MakeTestingEvalContext(nil)
 	for i, c := range testCases {
 		t.Run(fmt.Sprintf("%d_%s", i, c.Value), func(t *testing.T) {
 			d, err := pgwirebase.DecodeDatum(
