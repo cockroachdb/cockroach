@@ -24,9 +24,33 @@ import (
 
 // A CatchUpIterator is an iterator for catchUp-scans.
 type CatchUpIterator struct {
-	storage.SimpleMVCCIterator
+	simpleCatchupIter
 	close func()
 }
+
+// simpleCatchupIter is an extension of SimpleMVCCIterator that allows for the
+// primary iterator to be implemented using a regular MVCCIterator or a
+// (often) more efficient MVCCIncrementalIterator. When the caller wants to
+// iterate to see older versions of a key, the desire of the caller needs to
+// be expressed using one of two methods:
+// - Next: when it wants to omit any versions that are not within the time
+//   bounds.
+// - NextIgnoringTime: when it wants to see the next older version even if it
+//   is not within the time bounds.
+type simpleCatchupIter interface {
+	storage.SimpleMVCCIterator
+	NextIgnoringTime()
+}
+
+type simpleCatchupIterAdapter struct {
+	storage.SimpleMVCCIterator
+}
+
+func (i simpleCatchupIterAdapter) NextIgnoringTime() {
+	i.SimpleMVCCIterator.Next()
+}
+
+var _ simpleCatchupIter = simpleCatchupIterAdapter{}
 
 // NewCatchUpIterator returns a CatchUpIterator for the given Reader.
 // If useTBI is true, a time-bound iterator will be used if possible,
@@ -37,13 +61,8 @@ func NewCatchUpIterator(
 	ret := &CatchUpIterator{
 		close: closer,
 	}
-	// TODO(ssd): The withDiff option requires us to iterate over
-	// values arbitrarily in the past so that we can populate the
-	// previous value of a key. This is possible since the
-	// IncrementalIterator has a non-timebound iterator
-	// internally, but it is not yet implemented.
-	if useTBI && !args.WithDiff {
-		ret.SimpleMVCCIterator = storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
+	if useTBI {
+		ret.simpleCatchupIter = storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
 			EnableTimeBoundIteratorOptimization: true,
 			EndKey:                              args.Span.EndKey,
 			// StartTime is exclusive but args.Timestamp
@@ -63,9 +82,10 @@ func NewCatchUpIterator(
 			InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
 		})
 	} else {
-		ret.SimpleMVCCIterator = reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: args.Span.EndKey,
 		})
+		ret.simpleCatchupIter = simpleCatchupIterAdapter{SimpleMVCCIterator: iter}
 	}
 
 	return ret
@@ -74,7 +94,7 @@ func NewCatchUpIterator(
 // Close closes the iterator and calls the instantiator-supplied close
 // callback.
 func (i *CatchUpIterator) Close() {
-	i.SimpleMVCCIterator.Close()
+	i.simpleCatchupIter.Close()
 	if i.close != nil {
 		i.close()
 	}
@@ -87,7 +107,7 @@ type outputEventFn func(e *roachpb.RangeFeedEvent) error
 
 // CatchUpScan iterates over all changes for the given span of keys,
 // starting at catchUpTimestamp. Keys and Values are emitted as
-// RangeFeedEvents passed to the given outputFn.
+// RangeFeedEvents passed to the given outputFn. catchUpTimestamp is exclusive.
 func (i *CatchUpIterator) CatchUpScan(
 	startKey, endKey storage.MVCCKey,
 	catchUpTimestamp hlc.Timestamp,
@@ -107,6 +127,8 @@ func (i *CatchUpIterator) CatchUpScan(
 			if reorderBuf[l-1].Val.PrevValue.IsPresent() {
 				panic("RangeFeedValue.PrevVal unexpectedly set")
 			}
+			// TODO(sumeer): find out if it is deliberate that we are not populating
+			// PrevValue.Timestamp.
 			reorderBuf[l-1].Val.PrevValue.RawBytes = val
 		}
 	}
@@ -146,7 +168,9 @@ func (i *CatchUpIterator) CatchUpScan(
 				// only cares about committed values, so ignore this and skip past
 				// the corresponding provisional key-value. To do this, iterate to
 				// the provisional key-value, validate its timestamp, then iterate
-				// again.
+				// again. When using MVCCIncrementalIterator we know that the
+				// provisional value will also be within the time bounds so we use
+				// Next.
 				i.Next()
 				if ok, err := i.Valid(); err != nil {
 					return errors.Wrap(err, "iterating to provisional value for intent")
@@ -234,8 +258,15 @@ func (i *CatchUpIterator) CatchUpScan(
 			// Skip all the way to the next key.
 			i.NextKey()
 		} else {
-			// Move to the next version of this key.
-			i.Next()
+			// Move to the next version of this key (there may not be one, in which
+			// case it will move to the next key).
+			if withDiff {
+				// Need to see the next version even if it is older than the time
+				// bounds.
+				i.NextIgnoringTime()
+			} else {
+				i.Next()
+			}
 		}
 	}
 
