@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -99,7 +100,11 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if c.IsLocal() {
 		t.Fatal("cannot be run in local mode")
 	}
-
+	// We may not have the requisite certificates to start DMS/RDS on non-AWS invocations.
+	if cloud := c.Spec().Cloud; cloud != spec.AWS {
+		t.Skip("skipping test on cloud %s", cloud)
+		return
+	}
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithDefaultRegion("us-east-1"))
 	if err != nil {
 		t.Fatal(err)

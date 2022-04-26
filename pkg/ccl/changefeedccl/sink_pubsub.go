@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
@@ -48,6 +49,7 @@ type pubsubClient interface {
 	flushTopics()
 	sendMessage(content []byte, topic string, key string) error
 	sendMessageToAllTopics(content []byte) error
+	connectivityError() error
 }
 
 // payload struct is sent to the sink
@@ -72,6 +74,12 @@ type gcpPubsubClient struct {
 	region     string
 	topicNamer *TopicNamer
 	url        sinkURL
+
+	mu struct {
+		syncutil.Mutex
+		autocreateError error
+		publishError    error
+	}
 }
 
 type pubsubSink struct {
@@ -247,6 +255,13 @@ func (p *pubsubSink) EmitResolvedTimestamp(
 
 // Flush blocks until all messages in the event channels are sent
 func (p *pubsubSink) Flush(ctx context.Context) error {
+	if err := p.flush(ctx); err != nil {
+		return errors.CombineErrors(p.client.connectivityError(), err)
+	}
+	return nil
+}
+
+func (p *pubsubSink) flush(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -438,9 +453,16 @@ func (p *gcpPubsubClient) init() error {
 func (p *gcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, error) {
 	t, err := p.client.CreateTopic(p.ctx, topicName)
 	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
+		switch status.Code(err) {
+		case codes.AlreadyExists:
 			t = p.client.Topic(topicName)
-		} else {
+		case codes.PermissionDenied:
+			// PermissionDenied may not be fatal if the topic already exists,
+			// but record it in case it turns out not to.
+			p.recordAutocreateError(err)
+			t = p.client.Topic(topicName)
+		default:
+			p.recordAutocreateError(err)
 			return nil, err
 		}
 	}
@@ -470,6 +492,7 @@ func (p *gcpPubsubClient) sendMessage(m []byte, topic string, key string) error 
 	// an error is returned for the published message.
 	_, err = res.Get(p.ctx)
 	if err != nil {
+		p.recordPublishError(err)
 		return err
 	}
 
@@ -504,6 +527,31 @@ func (p *gcpPubsubClient) forEachTopic(f func(name string, topicClient *pubsub.T
 		}
 		return f(n, t)
 	})
+}
+
+func (p *gcpPubsubClient) recordAutocreateError(e error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.autocreateError = e
+}
+
+func (p *gcpPubsubClient) recordPublishError(e error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.publishError = e
+}
+
+// connectivityError returns any errors encountered while writing to gcp.
+func (p *gcpPubsubClient) connectivityError() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if status.Code(p.mu.publishError) == codes.NotFound && p.mu.autocreateError != nil {
+		return errors.WithHint(
+			errors.Wrap(p.mu.autocreateError,
+				"Topic not found, and attempt to autocreate it failed."),
+			"Create topics in advance or grant this service account the pubsub.editor role on your project.")
+	}
+	return errors.CombineErrors(p.mu.publishError, p.mu.autocreateError)
 }
 
 // Generate the cloud endpoint that's specific to a region (e.g. us-east1).

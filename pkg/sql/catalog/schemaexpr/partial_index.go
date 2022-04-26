@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -47,7 +48,7 @@ func ValidatePartialIndexPredicate(
 		types.Bool,
 		"index predicate",
 		semaCtx,
-		tree.VolatilityImmutable,
+		volatility.Immutable,
 		tn,
 	)
 	if err != nil {

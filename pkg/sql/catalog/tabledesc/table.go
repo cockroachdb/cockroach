@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -146,7 +147,7 @@ func MakeColumnDefDescs(
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
 		ret.DefaultExpr, err = schemaexpr.SanitizeVarFreeExpr(
-			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, tree.VolatilityVolatile,
+			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, volatility.Volatile,
 		)
 		if err != nil {
 			return nil, err
@@ -166,7 +167,7 @@ func MakeColumnDefDescs(
 		// Verify the on update expression type is compatible with the column type
 		// and does not contain invalid functions.
 		ret.OnUpdateExpr, err = schemaexpr.SanitizeVarFreeExpr(
-			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, tree.VolatilityVolatile,
+			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, volatility.Volatile,
 		)
 		if err != nil {
 			return nil, err
@@ -251,7 +252,7 @@ func EvalShardBucketCount(
 			shardBuckets = paramVal
 		}
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-			ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,
+			ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, volatility.Volatile,
 		)
 		if err != nil {
 			return 0, err

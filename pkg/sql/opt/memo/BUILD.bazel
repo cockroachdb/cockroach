@@ -36,6 +36,7 @@ go_library(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/cast",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/stats",

@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -56,7 +58,7 @@ func (v *fixCastForStyleVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr
 		types.Any,
 		"fixCastForStyleVisitor",
 		v.semaCtx,
-		tree.VolatilityImmutable,
+		volatility.Immutable,
 		tree.NewUnqualifiedTableName(tree.Name(v.tDesc.GetName())),
 	)
 	if err == nil {
@@ -100,11 +102,11 @@ func (v *fixCastForStyleVisitor) VisitPost(expr tree.Expr) tree.Expr {
 		innerExpr := expr.Expr.(tree.TypedExpr)
 		outerTyp := expr.ResolvedType()
 		innerTyp := innerExpr.ResolvedType()
-		volatility, ok := tree.LookupCastVolatility(innerTyp, outerTyp, &sd)
+		vol, ok := cast.LookupCastVolatility(innerTyp, outerTyp, &sd)
 		if !ok {
 			v.err = errors.AssertionFailedf("Not a valid cast %s -> %s", innerTyp.SQLString(), outerTyp.SQLString())
 		}
-		if volatility <= tree.VolatilityImmutable {
+		if vol <= volatility.Immutable {
 			return expr
 		}
 

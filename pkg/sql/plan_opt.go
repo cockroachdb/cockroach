@@ -557,7 +557,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	}
 
 	// If this statement doesn't have placeholders and we have not constant-folded
-	// any VolatilityStable operators, add it to the cache.
+	// any volatility.Stable operators, add it to the cache.
 	// Note that non-prepared statements from pgwire clients cannot have
 	// placeholders.
 	if opc.useCache && !bld.HadPlaceholders && !bld.DisableMemoReuse &&

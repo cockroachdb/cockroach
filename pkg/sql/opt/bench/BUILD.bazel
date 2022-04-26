@@ -31,6 +31,7 @@ go_test(
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/volatility",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/log",

@@ -29,6 +29,7 @@ go_library(
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sem/tree/treewindow",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

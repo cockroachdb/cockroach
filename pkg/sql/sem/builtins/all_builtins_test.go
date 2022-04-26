@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,7 +32,7 @@ func TestOverloadsHaveVolatility(t *testing.T) {
 		for idx, overload := range builtin.overloads {
 			assert.NotEqual(
 				t,
-				tree.Volatility(0),
+				volatility.V(0),
 				overload.Volatility,
 				"function %s at overload idx %d has no Volatility set",
 				name,
@@ -70,7 +71,7 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 
 	type pgOverload struct {
 		families   []types.Family
-		volatility tree.Volatility
+		volatility volatility.V
 	}
 
 	// Maps proname -> equivalent pg overloads.
@@ -102,7 +103,7 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 		if badType {
 			continue
 		}
-		v, err := tree.VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
+		v, err := volatility.FromPostgres(provolatile, proleakproof[0] == 't')
 		require.NoError(t, err)
 		foundVolatilities[proname] = append(
 			foundVolatilities[proname],
@@ -115,10 +116,10 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 
 	// findOverloadVolatility checks if the volatility is found in the
 	// foundVolatilities mapping and returns the volatility and true if found.
-	findOverloadVolatility := func(name string, overload tree.Overload) (tree.Volatility, bool) {
+	findOverloadVolatility := func(name string, overload tree.Overload) (volatility.V, bool) {
 		v, ok := foundVolatilities[name]
 		if !ok {
-			return tree.Volatility(0), false
+			return volatility.V(0), false
 		}
 		for _, postgresOverload := range v {
 			if len(postgresOverload.families) != overload.Types.Length() {
@@ -135,7 +136,7 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 				return postgresOverload.volatility, true
 			}
 		}
-		return tree.Volatility(0), false
+		return volatility.V(0), false
 	}
 
 	// Check each builtin against Postgres.
