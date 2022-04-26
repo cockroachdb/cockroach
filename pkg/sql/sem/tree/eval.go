@@ -520,9 +520,9 @@ func initNonArrayToNonArrayConcatenation() {
 		})
 	}
 	fromTypeToVolatility := make(map[oid.Oid]volatility.V)
-	ForEachCast(func(src, tgt oid.Oid, _ CastContext, _ ContextOrigin) {
+	ForEachCast(func(src, tgt oid.Oid, _ CastContext, _ ContextOrigin, v volatility.V) {
 		if tgt == oid.T_text {
-			fromTypeToVolatility[src] = castMap[src][tgt].volatility
+			fromTypeToVolatility[src] = v
 		}
 	})
 	// We allow tuple + string concatenation, as well as any scalar types.
