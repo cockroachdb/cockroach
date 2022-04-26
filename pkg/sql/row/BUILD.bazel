@@ -53,6 +53,7 @@ go_library(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/span",
         "//pkg/sql/sqlerrors",

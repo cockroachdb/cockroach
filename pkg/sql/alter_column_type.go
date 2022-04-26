@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -305,7 +306,7 @@ func alterColumnTypeGeneral(
 			toType,
 			"ALTER COLUMN TYPE USING EXPRESSION",
 			&params.p.semaCtx,
-			tree.VolatilityVolatile,
+			volatility.Volatile,
 			tn,
 		)
 

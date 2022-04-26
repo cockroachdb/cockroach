@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -87,7 +88,7 @@ func TestCastsMatchPostgres(t *testing.T) {
 	}
 
 	type pgCastValue struct {
-		volatility Volatility
+		volatility volatility.V
 		context    CastContext
 	}
 
@@ -114,7 +115,7 @@ func TestCastsMatchPostgres(t *testing.T) {
 		castcontext := line[4]
 		require.Len(t, castcontext, 1)
 
-		v, err := VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
+		v, err := volatility.FromPostgres(provolatile, proleakproof[0] == 't')
 		require.NoError(t, err)
 
 		c, err := castContextFromPostgres(castcontext)

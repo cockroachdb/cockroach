@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -374,25 +375,25 @@ func TestTypeCheckVolatility(t *testing.T) {
 
 	testCases := []struct {
 		expr       string
-		volatility tree.Volatility
+		volatility volatility.V
 	}{
-		{"1 + 1", tree.VolatilityImmutable},
-		{"random()", tree.VolatilityVolatile},
-		{"now()", tree.VolatilityStable},
-		{"'2020-01-01 01:02:03'::timestamp", tree.VolatilityImmutable},
-		{"'now'::timestamp", tree.VolatilityStable},
-		{"'2020-01-01 01:02:03'::timestamptz", tree.VolatilityStable},
-		{"'1 hour'::interval", tree.VolatilityImmutable},
-		{"$1", tree.VolatilityImmutable},
+		{"1 + 1", volatility.Immutable},
+		{"random()", volatility.Volatile},
+		{"now()", volatility.Stable},
+		{"'2020-01-01 01:02:03'::timestamp", volatility.Immutable},
+		{"'now'::timestamp", volatility.Stable},
+		{"'2020-01-01 01:02:03'::timestamptz", volatility.Stable},
+		{"'1 hour'::interval", volatility.Immutable},
+		{"$1", volatility.Immutable},
 
 		// Stable cast with immutable input.
-		{"$1::string", tree.VolatilityStable},
+		{"$1::string", volatility.Stable},
 
 		// Stable binary operator with immutable inputs.
-		{"$1 + '1 hour'::interval", tree.VolatilityStable},
+		{"$1 + '1 hour'::interval", volatility.Stable},
 
 		// Stable comparison operator with immutable inputs.
-		{"$1 = '2020-01-01 01:02:03'::timestamp", tree.VolatilityStable},
+		{"$1 = '2020-01-01 01:02:03'::timestamp", volatility.Stable},
 	}
 
 	ctx := context.Background()
@@ -418,7 +419,7 @@ func TestTypeCheckVolatility(t *testing.T) {
 		}
 
 		semaCtx.Properties.Require("", tree.RejectVolatileFunctions)
-		expectErr := tc.volatility == tree.VolatilityVolatile
+		expectErr := tc.volatility == volatility.Volatile
 		if err := typeCheck(tc.expr); err == nil && expectErr {
 			t.Fatalf("%s: should have rejected volatile function", tc.expr)
 		} else if err != nil && !expectErr {
@@ -426,7 +427,7 @@ func TestTypeCheckVolatility(t *testing.T) {
 		}
 
 		semaCtx.Properties.Require("", tree.RejectStableOperators|tree.RejectVolatileFunctions)
-		expectErr = tc.volatility >= tree.VolatilityStable
+		expectErr = tc.volatility >= volatility.Stable
 		if err := typeCheck(tc.expr); err == nil && expectErr {
 			t.Fatalf("%s: should have rejected stable operator", tc.expr)
 		} else if err != nil && !expectErr {
