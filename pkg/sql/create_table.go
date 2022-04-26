@@ -251,6 +251,16 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	colsWithPrimaryKeyConstraint := make(map[tree.Name]bool)
 
+	// Copy column definition slice, since we will modify it below. This
+	// ensures, that  nothing bad happens on a transaction retry errors, for
+	// example we implicitly add columns for REGIONAL BY ROW.
+	// Note: This is only a shallow copy and meant to deal with addition /
+	// deletion into the slice.
+	defsCopy := make(tree.TableDefs, 0, len(n.n.Defs))
+	defsCopy = append(defsCopy, n.n.Defs...)
+	defer func(originalDefs tree.TableDefs) { n.n.Defs = originalDefs }(n.n.Defs)
+	n.n.Defs = defsCopy
+
 	for _, def := range n.n.Defs {
 		switch v := def.(type) {
 		case *tree.UniqueConstraintTableDef:
