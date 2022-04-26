@@ -296,11 +296,18 @@ func main() {
 				if err != nil {
 					log.Fatal(err)
 				}
+				numTargets := 0
 				for _, target := range strings.Split(string(out), "\n") {
 					target = strings.TrimSpace(target)
 					if target != "" {
 						args = append(args, target)
+						numTargets++
 					}
+				}
+				if numTargets == 0 {
+					// In this case there's nothing to test, so we can bail out early.
+					log.Printf("found no targets to test under package %s\n", name)
+					continue
 				}
 				args = append(args, "--")
 				if target == "stressrace" {
