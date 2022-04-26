@@ -580,25 +580,6 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 // TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
 func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	testutils.RunTrueAndFalse(t, "InMem", func(t *testing.T, engineInMem bool) {
-		var eng storage.Engine
-		if engineInMem {
-			eng = storage.NewDefaultInMemForTesting()
-		} else {
-			var cleanup func()
-			ctx := context.Background()
-			cleanup, eng = newOnDiskEngine(ctx, t)
-			defer cleanup()
-		}
-		defer eng.Close()
-		testRaftSSTableSideloadingProposal(t, eng)
-	})
-}
-
-// TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
-func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
-	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
