@@ -12,6 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     # Pin the dependencies used in auto-generated code.
     deps = [
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",  # keep
         "@com_github_cockroachdb_errors//:errors",  # keep
     ],

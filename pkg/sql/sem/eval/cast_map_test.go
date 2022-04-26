@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree_test
+package eval_test
 
 import (
 	"testing"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -34,7 +35,7 @@ func TestCastMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	rng, _ := randutil.NewTestRand()
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
 
@@ -53,7 +54,7 @@ func TestCastMap(t *testing.T) {
 			}
 		}
 
-		_, err := tree.PerformCast(&evalCtx, srcDatum, tgtType)
+		_, err := eval.PerformCast(&evalCtx, srcDatum, tgtType)
 		// If the error is a CannotCoerce error, then PerformCast does not
 		// support casting from src to tgt. The one exception is negative
 		// integers to bit types which return the same error code (see the TODO

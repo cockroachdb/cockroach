@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -162,7 +163,7 @@ func writeTextDatumNotNull(
 ) {
 	oldDCC := b.textFormatter.SetDataConversionConfig(conv)
 	defer b.textFormatter.SetDataConversionConfig(oldDCC)
-	switch v := tree.UnwrapDatum(nil, d).(type) {
+	switch v := eval.UnwrapDatum(nil, d).(type) {
 	case *tree.DBitArray:
 		b.textFormatter.FormatNode(v)
 		b.writeFromFmtCtx(b.textFormatter)
@@ -554,7 +555,7 @@ func (b *writeBuffer) writeBinaryDatum(
 func writeBinaryDatumNotNull(
 	ctx context.Context, b *writeBuffer, d tree.Datum, sessionLoc *time.Location, t *types.T,
 ) {
-	switch v := tree.UnwrapDatum(nil, d).(type) {
+	switch v := eval.UnwrapDatum(nil, d).(type) {
 	case *tree.DBitArray:
 		words, lastBitsUsed := v.EncodingParts()
 		if len(words) == 0 {

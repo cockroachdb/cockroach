@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -292,11 +293,11 @@ func (k Key) String() string {
 // KeyContext contains the necessary metadata for comparing Keys.
 type KeyContext struct {
 	Columns Columns
-	EvalCtx *tree.EvalContext
+	EvalCtx *eval.Context
 }
 
 // MakeKeyContext initializes a KeyContext.
-func MakeKeyContext(cols *Columns, evalCtx *tree.EvalContext) KeyContext {
+func MakeKeyContext(cols *Columns, evalCtx *eval.Context) KeyContext {
 	return KeyContext{Columns: *cols, EvalCtx: evalCtx}
 }
 

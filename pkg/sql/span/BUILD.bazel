@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/opt/constraint",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/util",
         "//pkg/util/encoding",

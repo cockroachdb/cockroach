@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -34,7 +35,7 @@ import (
 
 func TestEncodeDecode(t *testing.T) {
 	a := &tree.DatumAlloc{}
-	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 10000
 	properties := gopter.NewProperties(parameters)
@@ -90,7 +91,7 @@ func TestDecode(t *testing.T) {
 			} else if err != nil {
 				return
 			}
-			if tc.in.Compare(tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), d) != 0 {
+			if tc.in.Compare(eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), d) != 0 {
 				t.Fatalf("decoded datum %[1]v (%[1]T) does not match encoded datum %[2]v (%[2]T)", d, tc.in)
 			}
 		})
@@ -278,7 +279,7 @@ func TestLegacy(t *testing.T) {
 
 func TestLegacyRoundtrip(t *testing.T) {
 	a := &tree.DatumAlloc{}
-	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 10000
 	properties := gopter.NewProperties(parameters)

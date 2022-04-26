@@ -13,6 +13,7 @@ package randgen
 import (
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -217,7 +218,7 @@ func randExpr(
 		}
 
 	default:
-		vol, ok := tree.LookupCastVolatility(xTyp, types.String, nil /* sessionData */)
+		vol, ok := eval.LookupCastVolatility(xTyp, types.String, nil /* sessionData */)
 		if ok && vol <= volatility.Immutable &&
 			!typeToStringCastHasIncorrectVolatility(xTyp) {
 			// We can cast to string; use lower(x::string)

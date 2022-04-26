@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -27,7 +27,7 @@ import (
 
 // WindowArgs extracts common arguments to window operators.
 type WindowArgs struct {
-	EvalCtx         *tree.EvalContext
+	EvalCtx         *eval.Context
 	MainAllocator   *colmem.Allocator
 	BufferAllocator *colmem.Allocator
 	MemoryLimit     int64

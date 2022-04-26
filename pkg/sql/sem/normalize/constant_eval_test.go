@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree_test
+package normalize_test
 
 import (
 	"context"
@@ -17,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -40,9 +42,9 @@ func TestConstantEvalArrayComparison(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer ctx.Mon.Stop(context.Background())
-	c := tree.MakeConstantEvalVisitor(ctx)
+	c := normalize.MakeConstantEvalVisitor(ctx)
 	expr, _ = tree.WalkExpr(&c, typedExpr)
 	if err := c.Err(); err != nil {
 		t.Fatal(err)

@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
         "//pkg/util",
@@ -61,7 +62,7 @@ go_test(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/types",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/skip",

@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -160,7 +160,7 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 			// If the right type is "larger", use it.
 			src, tgt = left, right
 		}
-		if !cast.ValidCast(src, tgt, cast.CastContextExplicit) {
+		if !eval.ValidExplicitCast(src, tgt) {
 			// Error if no cast exists from src to tgt.
 			// TODO(#75103): For legacy reasons, we check for a valid cast in
 			// the most permissive context, CastContextExplicit. To be

@@ -892,7 +892,7 @@ func parseAndCreateBundleTableDescs(
 			return tableDescs, schemaDescs, err
 		}
 		fks.resolver.format.Format = roachpb.IOFileFormat_Mysqldump
-		evalCtx := &p.ExtendedEvalContext().EvalContext
+		evalCtx := &p.ExtendedEvalContext().Context
 		tableDescs, err = readMysqlCreateTable(
 			ctx, reader, evalCtx, p, id, parentDB, tableName, fks,
 			seqVals, owner, walltime,
@@ -902,7 +902,7 @@ func parseAndCreateBundleTableDescs(
 		}
 	case roachpb.IOFileFormat_PgDump:
 		fks.resolver.format.Format = roachpb.IOFileFormat_PgDump
-		evalCtx := &p.ExtendedEvalContext().EvalContext
+		evalCtx := &p.ExtendedEvalContext().Context
 
 		// Setup a logger to handle unsupported DDL statements in the PGDUMP file.
 		unsupportedStmtLogger := makeUnsupportedStmtLogger(ctx, p.User(), int64(jobID),
@@ -1387,7 +1387,7 @@ func createNonDropDatabaseChangeJob(
 
 	jobID := p.ExecCfg().JobRegistry.MakeJobID()
 	return p.ExecCfg().JobRegistry.CreateJobWithTxn(
-		p.ExtendedEvalContext().Context,
+		p.ExtendedEvalContext().Ctx(),
 		jobRecord,
 		jobID,
 		txn,

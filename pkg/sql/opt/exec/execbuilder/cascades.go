@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -159,7 +160,7 @@ func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
 		PlanFn: func(
 			ctx context.Context,
 			semaCtx *tree.SemaContext,
-			evalCtx *tree.EvalContext,
+			evalCtx *eval.Context,
 			execFactory exec.Factory,
 			bufferRef exec.Node,
 			numBufferedRows int,
@@ -181,7 +182,7 @@ func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
 func (cb *cascadeBuilder) planCascade(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	execFactory exec.Factory,
 	cascade *memo.FKCascade,
 	bufferRef exec.Node,

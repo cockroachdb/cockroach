@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -280,7 +281,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		inputRow := n.run.inputRow(rowIdx)
 		for col, typedExpr := range tupleRow {
 			var err error
-			inputRow[col], err = typedExpr.Eval(params.EvalContext())
+			inputRow[col], err = eval.Expr(params.EvalContext(), typedExpr)
 			if err != nil {
 				err = interceptAlterColumnTypeParseError(n.run.insertCols, col, err)
 				return false, err

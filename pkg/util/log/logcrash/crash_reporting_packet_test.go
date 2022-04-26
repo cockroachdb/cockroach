@@ -273,7 +273,7 @@ func TestInternalErrorReporting(t *testing.T) {
 	assert.Regexp(t, `^\*errutil\.leafError: crdb_internal\.force_assertion_error\(\): `+rm, p.Exception[1].Value)
 	fr := p.Exception[1].Stacktrace.Frames
 	assert.Regexp(t, `.*/builtins.go`, fr[len(fr)-1].Filename)
-	assert.Regexp(t, `.*/eval.go`, fr[len(fr)-2].Filename)
+	assert.Regexp(t, `.*/expr.go`, fr[len(fr)-2].Filename)
 
 	assert.Regexp(t, `^\(1\) eval.go:\d+ \(MaybeWrapError\)$`, p.Exception[0].Type)
 	assert.Regexp(t, `^\*withstack\.withStack$`, p.Exception[0].Value)

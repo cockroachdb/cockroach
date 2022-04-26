@@ -366,7 +366,7 @@ func getDatumToNativeCastFunc(
 	return func(to, from, evalCtx, toType string) string {
 		convStr := `
 		{
-			_castedDatum, err := tree.PerformCast(%[3]s, %[2]s.(tree.Datum), %[4]s)
+			_castedDatum, err := eval.PerformCast(%[3]s, %[2]s.(tree.Datum), %[4]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
@@ -380,7 +380,7 @@ func getDatumToNativeCastFunc(
 func datumToDatum(to, from, evalCtx, toType string) string {
 	convStr := `
 		{
-			_castedDatum, err := tree.PerformCast(%[3]s, %[2]s.(tree.Datum), %[4]s)
+			_castedDatum, err := eval.PerformCast(%[3]s, %[2]s.(tree.Datum), %[4]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}

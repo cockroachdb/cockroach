@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -65,7 +66,7 @@ func (s *streamGroupAccumulator) start(ctx context.Context) {
 // nextGroup returns the next group from the inputs. The returned slice is not safe
 // to use after the next call to nextGroup.
 func (s *streamGroupAccumulator) nextGroup(
-	ctx context.Context, evalCtx *tree.EvalContext,
+	ctx context.Context, evalCtx *eval.Context,
 ) ([]rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if s.srcConsumed {
 		// If src has been exhausted, then we also must have advanced away from the

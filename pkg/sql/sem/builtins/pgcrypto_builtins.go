@@ -13,6 +13,7 @@ package builtins
 import (
 	"crypto/hmac"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,7 +35,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.String}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				alg := tree.MustBeDString(args[1])
 				hashFunc, err := getHashFunc(string(alg))
 				if err != nil {
@@ -53,7 +54,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.Bytes}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				alg := tree.MustBeDString(args[1])
 				hashFunc, err := getHashFunc(string(alg))
 				if err != nil {
@@ -78,7 +79,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.String}, {"key", types.String}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := tree.MustBeDString(args[1])
 				alg := tree.MustBeDString(args[2])
 				hashFunc, err := getHashFunc(string(alg))
@@ -97,7 +98,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.Bytes}, {"key", types.Bytes}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := tree.MustBeDBytes(args[1])
 				alg := tree.MustBeDString(args[2])
 				hashFunc, err := getHashFunc(string(alg))

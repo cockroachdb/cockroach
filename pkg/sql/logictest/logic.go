@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -1664,7 +1665,7 @@ func (t *logicTest) newCluster(
 					// The consistency queue makes a lot of noisy logs during logic tests.
 					DisableConsistencyQueue: true,
 				},
-				SQLEvalContext: &tree.EvalContextTestingKnobs{
+				SQLEvalContext: &eval.TestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
 					AssertUnaryExprReturnTypes:      true,
 					AssertFuncExprReturnTypes:       true,

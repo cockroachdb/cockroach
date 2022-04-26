@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -95,7 +96,7 @@ func (ib infoBuilder) String() string {
 
 // geomFromWKTOverload converts an (E)WKT string to its Geometry form.
 var geomFromWKTOverload = stringOverload1(
-	func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+	func(_ *eval.Context, s string) (tree.Datum, error) {
 		g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
 		if err != nil {
 			return nil, err
@@ -110,7 +111,7 @@ var geomFromWKTOverload = stringOverload1(
 
 // geomFromWKBOverload converts a WKB bytea to its Geometry form.
 var geomFromWKBOverload = bytesOverload1(
-	func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+	func(_ *eval.Context, s string) (tree.Datum, error) {
 		g, err := geo.ParseGeometryFromEWKB([]byte(s))
 		if err != nil {
 			return nil, err
@@ -127,7 +128,7 @@ func geometryFromTextCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinit
 	return makeBuiltin(
 		defProps(),
 		stringOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			func(_ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
 				if err != nil {
 					return nil, err
@@ -149,7 +150,7 @@ func geometryFromTextCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinit
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
 				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
@@ -177,7 +178,7 @@ func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefiniti
 	return makeBuiltin(
 		defProps(),
 		bytesOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			func(_ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromEWKB(geopb.EWKB(s))
 				if err != nil {
 					return nil, err
@@ -199,7 +200,7 @@ func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefiniti
 		tree.Overload{
 			Types:      tree.ArgTypes{{"wkb", types.Bytes}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDBytes(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
 				g, err := geo.ParseGeometryFromEWKBAndSRID(geopb.EWKB(s), srid)
@@ -223,7 +224,7 @@ func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefiniti
 }
 
 var areaOverloadGeometry1 = geometryOverload1(
-	func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+	func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 		ret, err := geomfn.Area(g.Geometry)
 		if err != nil {
 			return nil, err
@@ -239,7 +240,7 @@ var areaOverloadGeometry1 = geometryOverload1(
 )
 
 var lengthOverloadGeometry1 = geometryOverload1(
-	func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+	func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 		ret, err := geomfn.Length(g.Geometry)
 		if err != nil {
 			return nil, err
@@ -257,7 +258,7 @@ Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.`,
 )
 
 var perimeterOverloadGeometry1 = geometryOverload1(
-	func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+	func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 		ret, err := geomfn.Perimeter(g.Geometry)
 		if err != nil {
 			return nil, err
@@ -371,9 +372,7 @@ func fitMaxDecimalDigitsToBounds(maxDecimalDigits int) int {
 	return maxDecimalDigits
 }
 
-func makeMinimumBoundGenerator(
-	ctx *tree.EvalContext, args tree.Datums,
-) (tree.ValueGenerator, error) {
+func makeMinimumBoundGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 	geometry := tree.MustBeDGeometry(args[0])
 
 	_, center, radius, err := geomfn.MinimumBoundingCircle(geometry.Geometry)
@@ -421,10 +420,10 @@ func (m *minimumBoundRadiusGen) Values() (tree.Datums, error) {
 
 func (m *minimumBoundRadiusGen) Close(_ context.Context) {}
 
-func makeSubdividedGeometriesGeneratorFactory(expectMaxVerticesArg bool) tree.GeneratorFactory {
+func makeSubdividedGeometriesGeneratorFactory(expectMaxVerticesArg bool) eval.GeneratorOverload {
 	return func(
-		ctx *tree.EvalContext, args tree.Datums,
-	) (tree.ValueGenerator, error) {
+		ctx *eval.Context, args tree.Datums,
+	) (eval.ValueGenerator, error) {
 		geometry := tree.MustBeDGeometry(args[0])
 		var maxVertices int
 		if expectMaxVerticesArg {
@@ -474,7 +473,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"postgis_addbbox": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return g, nil
 			},
 			types.Geometry,
@@ -487,7 +486,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"postgis_dropbbox": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return g, nil
 			},
 			types.Geometry,
@@ -500,7 +499,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"postgis_hasbbox": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				if g.Geometry.Empty() {
 					return tree.DBoolFalse, nil
 				}
@@ -519,7 +518,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"postgis_getbbox": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				bbox := g.CartesianBoundingBox()
 				if bbox == nil {
 					return tree.DNull, nil
@@ -558,7 +557,7 @@ var geoBuiltins = map[string]builtinDefinition{
 	"st_s2covering": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(evalCtx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(evalCtx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				cfg, err := geoindex.GeometryIndexConfigForSRID(g.SRID())
 				if err != nil {
 					return nil, err
@@ -578,7 +577,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"settings", types.String}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				params := tree.MustBeDString(args[1])
 
@@ -609,7 +608,7 @@ SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3').
 			Volatility: volatility.Immutable,
 		},
 		geographyOverload1(
-			func(evalCtx *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(evalCtx *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				cfg := geoindex.DefaultGeographyIndexConfig().S2Geography
 				ret, err := geoindex.NewS2GeographyIndex(*cfg).CoveringGeography(evalCtx.Context, g.Geography)
 				if err != nil {
@@ -626,7 +625,7 @@ SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geography", types.Geography}, {"settings", types.String}},
 			ReturnType: tree.FixedReturnType(types.Geography),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				params := tree.MustBeDString(args[1])
 
@@ -665,7 +664,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
 				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
@@ -683,7 +682,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_geomfromewkt": makeBuiltin(
 		defProps(),
 		stringOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			func(_ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
 				if err != nil {
 					return nil, err
@@ -703,7 +702,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
 				g, err := geo.ParseGeometryFromEWKBAndSRID(geopb.EWKB(b), srid)
@@ -721,7 +720,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_geomfromewkb": makeBuiltin(
 		defProps(),
 		bytesOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			func(_ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromEWKB([]byte(s))
 				if err != nil {
 					return nil, err
@@ -738,7 +737,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.String}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g, err := geo.ParseGeometryFromGeoJSON([]byte(tree.MustBeDString(args[0])))
 				if err != nil {
 					return nil, err
@@ -752,7 +751,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Volatility:        volatility.Immutable,
 		},
 		jsonOverload1(
-			func(_ *tree.EvalContext, s json.JSON) (tree.Datum, error) {
+			func(_ *eval.Context, s json.JSON) (tree.Datum, error) {
 				// TODO(otan): optimize to not string it first.
 				asString, err := s.AsText()
 				if err != nil {
@@ -777,7 +776,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
 				y := float64(tree.MustBeDFloat(args[1]))
 				g, err := geo.MakeGeometryFromLayoutAndPointCoords(geom.XY, []float64{x, y})
@@ -792,7 +791,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
 				y := float64(tree.MustBeDFloat(args[1]))
 				z := float64(tree.MustBeDFloat(args[2]))
@@ -808,7 +807,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}, {"m", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
 				y := float64(tree.MustBeDFloat(args[1]))
 				z := float64(tree.MustBeDFloat(args[2]))
@@ -828,7 +827,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"m", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
 				y := float64(tree.MustBeDFloat(args[1]))
 				m := float64(tree.MustBeDFloat(args[2]))
@@ -845,7 +844,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_makepolygon": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, outer *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, outer *tree.DGeometry) (tree.Datum, error) {
 				g, err := geomfn.MakePolygon(outer.Geometry)
 				if err != nil {
 					return nil, err
@@ -864,7 +863,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"interior", types.AnyArray},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				outer := tree.MustBeDGeometry(args[0])
 				interiorArr := tree.MustBeDArray(args[1])
 				interior := make([]geo.Geometry, len(interiorArr.Array))
@@ -895,7 +894,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"srid", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				srid := tree.MustBeDInt(args[1])
 				polygon, err := geomfn.MakePolygonWithSRID(g.Geometry, int(srid))
@@ -948,7 +947,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_geographyfromtext": makeBuiltin(
 		defProps(),
 		stringOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			func(_ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
 				if err != nil {
 					return nil, err
@@ -962,7 +961,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geography),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
 				g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
@@ -981,7 +980,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_geogfromewkt": makeBuiltin(
 		defProps(),
 		stringOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			func(_ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
 				if err != nil {
 					return nil, err
@@ -996,7 +995,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_geogfromwkb": makeBuiltin(
 		defProps(),
 		bytesOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			func(_ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeographyFromEWKB([]byte(s))
 				if err != nil {
 					return nil, err
@@ -1010,7 +1009,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geography),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
 				g, err := geo.ParseGeographyFromEWKBAndSRID(geopb.EWKB(b), srid)
@@ -1028,7 +1027,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_geogfromewkb": makeBuiltin(
 		defProps(),
 		bytesOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			func(_ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeographyFromEWKB([]byte(s))
 				if err != nil {
 					return nil, err
@@ -1043,7 +1042,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_geogfromgeojson": makeBuiltin(
 		defProps(),
 		stringOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			func(_ *eval.Context, s string) (tree.Datum, error) {
 				g, err := geo.ParseGeographyFromGeoJSON([]byte(s))
 				if err != nil {
 					return nil, err
@@ -1055,7 +1054,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			volatility.Immutable,
 		),
 		jsonOverload1(
-			func(_ *tree.EvalContext, s json.JSON) (tree.Datum, error) {
+			func(_ *eval.Context, s json.JSON) (tree.Datum, error) {
 				// TODO(otan): optimize to not string it first.
 				asString, err := s.AsText()
 				if err != nil {
@@ -1080,7 +1079,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				x := float64(tree.MustBeDFloat(args[0]))
 				y := float64(tree.MustBeDFloat(args[1]))
 				g, err := geo.MakeGeometryFromPointCoords(x, y)
@@ -1101,7 +1100,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"precision", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDString(args[0])
 				p := tree.MustBeDInt(args[1])
 				ret, err := geo.ParseGeometryPointFromGeoHash(string(g), int(p))
@@ -1120,7 +1119,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"geohash", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDString(args[0])
 				p := len(string(g))
 				ret, err := geo.ParseGeometryPointFromGeoHash(string(g), p)
@@ -1143,7 +1142,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"precision", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDString(args[0])
 				p := tree.MustBeDInt(args[1])
 				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(g), int(p))
@@ -1166,7 +1165,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"geohash", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDString(args[0])
 				p := len(string(g))
 				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(g), p)
@@ -1193,7 +1192,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"precision", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
 				}
@@ -1223,7 +1222,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"geohash", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
 				}
@@ -1249,7 +1248,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_astext": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				wkt, err := geo.SpatialObjectToWKT(g.Geometry.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(wkt)), err
 			},
@@ -1265,7 +1264,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"max_decimal_digits", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
 				wkt, err := geo.SpatialObjectToWKT(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
@@ -1277,7 +1276,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Volatility: volatility.Immutable,
 		},
 		geographyOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				wkt, err := geo.SpatialObjectToWKT(g.Geography.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(wkt)), err
 			},
@@ -1293,7 +1292,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"max_decimal_digits", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
 				wkt, err := geo.SpatialObjectToWKT(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
@@ -1308,7 +1307,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_asewkt": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ewkt, err := geo.SpatialObjectToEWKT(g.Geometry.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(ewkt)), err
 			},
@@ -1324,7 +1323,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"max_decimal_digits", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
 				ewkt, err := geo.SpatialObjectToEWKT(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
@@ -1336,7 +1335,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Volatility: volatility.Immutable,
 		},
 		geographyOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				ewkt, err := geo.SpatialObjectToEWKT(g.Geography.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(ewkt)), err
 			},
@@ -1352,7 +1351,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"max_decimal_digits", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
 				ewkt, err := geo.SpatialObjectToEWKT(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
@@ -1367,7 +1366,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_asbinary": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				wkb, err := geo.SpatialObjectToWKB(g.Geometry.SpatialObject(), geo.DefaultEWKBEncodingFormat)
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
@@ -1376,7 +1375,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			volatility.Immutable,
 		),
 		geographyOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				wkb, err := geo.SpatialObjectToWKB(g.Geography.SpatialObject(), geo.DefaultEWKBEncodingFormat)
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
@@ -1390,7 +1389,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"xdr_or_ndr", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				text := string(tree.MustBeDString(args[1]))
 
@@ -1409,7 +1408,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"xdr_or_ndr", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				text := string(tree.MustBeDString(args[1]))
 
@@ -1426,7 +1425,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_asewkb": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return tree.NewDBytes(tree.DBytes(g.EWKB())), nil
 			},
 			types.Bytes,
@@ -1434,7 +1433,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			volatility.Immutable,
 		),
 		geographyOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				return tree.NewDBytes(tree.DBytes(g.EWKB())), nil
 			},
 			types.Bytes,
@@ -1445,7 +1444,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_ashexwkb": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				hexwkb, err := geo.SpatialObjectToWKBHex(g.Geometry.SpatialObject())
 				return tree.NewDString(hexwkb), err
 			},
@@ -1454,7 +1453,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			volatility.Immutable,
 		),
 		geographyOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				hexwkb, err := geo.SpatialObjectToWKBHex(g.Geography.SpatialObject())
 				return tree.NewDString(hexwkb), err
 			},
@@ -1466,7 +1465,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_ashexewkb": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return tree.NewDString(g.Geometry.EWKBHex()), nil
 			},
 			types.String,
@@ -1474,7 +1473,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			volatility.Immutable,
 		),
 		geographyOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				return tree.NewDString(g.Geography.EWKBHex()), nil
 			},
 			types.String,
@@ -1487,7 +1486,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"xdr_or_ndr", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				text := string(tree.MustBeDString(args[1]))
 
@@ -1520,7 +1519,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"xdr_or_ndr", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				text := string(tree.MustBeDString(args[1]))
 
@@ -1556,7 +1555,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"precision_xy", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				t, err := tree.MustBeDGeometry(args[0]).AsGeomT()
 				if err != nil {
 					return nil, err
@@ -1582,7 +1581,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"precision_z", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				t, err := tree.MustBeDGeometry(args[0]).AsGeomT()
 				if err != nil {
 					return nil, err
@@ -1610,7 +1609,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"precision_m", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				t, err := tree.MustBeDGeometry(args[0]).AsGeomT()
 				if err != nil {
 					return nil, err
@@ -1635,7 +1634,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_askml": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				kml, err := geo.SpatialObjectToKML(g.Geometry.SpatialObject())
 				return tree.NewDString(kml), err
 			},
@@ -1644,7 +1643,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			volatility.Immutable,
 		),
 		geographyOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				kml, err := geo.SpatialObjectToKML(g.Geography.SpatialObject())
 				return tree.NewDString(kml), err
 			},
@@ -1656,7 +1655,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	"st_geohash": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geo.SpatialObjectToGeoHash(g.Geometry.SpatialObject(), geo.GeoHashAutoPrecision)
 				if err != nil {
 					return nil, err
@@ -1675,7 +1674,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"precision", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				p := tree.MustBeDInt(args[1])
 				ret, err := geo.SpatialObjectToGeoHash(g.Geometry.SpatialObject(), int(p))
@@ -1690,7 +1689,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Volatility: volatility.Immutable,
 		},
 		geographyOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				ret, err := geo.SpatialObjectToGeoHash(g.Geography.SpatialObject(), geo.GeoHashAutoPrecision)
 				if err != nil {
 					return nil, err
@@ -1709,7 +1708,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"precision", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				p := tree.MustBeDInt(args[1])
 				ret, err := geo.SpatialObjectToGeoHash(g.Geography.SpatialObject(), int(p))
@@ -1729,7 +1728,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"row", types.AnyTuple}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tuple := tree.MustBeDTuple(args[0])
 				return stAsGeoJSONFromTuple(
 					ctx,
@@ -1750,7 +1749,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		tree.Overload{
 			Types:      tree.ArgTypes{{"row", types.AnyTuple}, {"geo_column", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tuple := tree.MustBeDTuple(args[0])
 				return stAsGeoJSONFromTuple(
 					ctx,
@@ -1775,7 +1774,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"max_decimal_digits", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tuple := tree.MustBeDTuple(args[0])
 				return stAsGeoJSONFromTuple(
 					ctx,
@@ -1801,7 +1800,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"pretty", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tuple := tree.MustBeDTuple(args[0])
 				return stAsGeoJSONFromTuple(
 					ctx,
@@ -1820,7 +1819,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Volatility: volatility.Stable,
 		},
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagShortCRSIfNot4326)
 				return tree.NewDString(string(geojson)), err
 			},
@@ -1839,7 +1838,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"max_decimal_digits", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
 				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), geo.SpatialObjectToGeoJSONFlagShortCRSIfNot4326)
@@ -1857,7 +1856,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				{"options", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
 				options := geo.SpatialObjectToGeoJSONFlag(tree.MustBeDInt(args[2]))
@@ -1877,7 +1876,7 @@ Options is a flag that can be bitmasked. The options are:
 			Volatility: volatility.Immutable,
 		},
 		geographyOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				geojson, err := geo.SpatialObjectToGeoJSON(g.Geography.SpatialObject(), geo.DefaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
 				return tree.NewDString(string(geojson)), err
 			},
@@ -1896,7 +1895,7 @@ Options is a flag that can be bitmasked. The options are:
 				{"max_decimal_digits", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
 				geojson, err := geo.SpatialObjectToGeoJSON(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), geo.SpatialObjectToGeoJSONFlagZero)
@@ -1914,7 +1913,7 @@ Options is a flag that can be bitmasked. The options are:
 				{"options", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
 				options := geo.SpatialObjectToGeoJSONFlag(tree.MustBeDInt(args[2]))
@@ -1943,7 +1942,7 @@ Options is a flag that can be bitmasked. The options are:
 				{"azimuth", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				distance := float64(tree.MustBeDFloat(args[1]))
 				azimuth := float64(tree.MustBeDFloat(args[2]))
@@ -1976,7 +1975,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 	"st_ndims": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2001,7 +2000,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 	"st_dimension": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				dim, err := geomfn.Dimension(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -2018,7 +2017,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 	"st_startpoint": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2049,7 +2048,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 	"st_summary": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2077,7 +2076,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 			volatility.Immutable,
 		),
 		geographyOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				t, err := g.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2108,7 +2107,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 	"st_endpoint": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2141,7 +2140,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geometry := tree.MustBeDGeometry(args[0]).Geometry
 				npoints := int(tree.MustBeDInt(args[1]))
 				seed := timeutil.Now().Unix()
@@ -2163,7 +2162,7 @@ The requested number of points must be not larger than 65336.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}, {"seed", types.Int4}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geometry := tree.MustBeDGeometry(args[0]).Geometry
 				npoints := int(tree.MustBeDInt(args[1]))
 				seed := int64(tree.MustBeDInt(args[2]))
@@ -2189,7 +2188,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_numpoints": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2210,7 +2209,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_hasarc": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				// We don't support CIRCULARSTRINGs, so always return false.
 				return tree.DBoolFalse, nil
 			},
@@ -2224,7 +2223,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_npoints": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2241,7 +2240,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_points": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				points, err := geomfn.Points(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -2258,7 +2257,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_exteriorring": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2292,7 +2291,7 @@ The requested number of points must be not larger than 65336.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"n", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				n := int(tree.MustBeDInt(args[1]))
 				t, err := g.Geometry.AsGeomT()
@@ -2326,7 +2325,7 @@ The requested number of points must be not larger than 65336.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"n", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				n := int(tree.MustBeDInt(args[1])) - 1
 				if n < 0 {
@@ -2360,7 +2359,7 @@ The requested number of points must be not larger than 65336.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"n", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				n := int(tree.MustBeDInt(args[1])) - 1
 				if n < 0 {
@@ -2428,7 +2427,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_minimumclearance": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.MinimumClearance(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -2446,7 +2445,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_minimumclearanceline": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.MinimumClearanceLine(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -2465,7 +2464,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_numinteriorrings": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2490,7 +2489,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_nrings": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2511,7 +2510,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_force2d": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForceLayout(g.Geometry, geom.XY)
 				if err != nil {
 					return nil, err
@@ -2529,7 +2528,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_force3dz": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForceLayout(g.Geometry, geom.XYZ)
 				if err != nil {
 					return nil, err
@@ -2547,7 +2546,7 @@ The requested number of points must be not larger than 65336.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				defaultZ := tree.MustBeDFloat(args[1])
 
@@ -2566,7 +2565,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_force3dm": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForceLayout(g.Geometry, geom.XYM)
 				if err != nil {
 					return nil, err
@@ -2584,7 +2583,7 @@ The requested number of points must be not larger than 65336.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultM", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				defaultM := tree.MustBeDFloat(args[1])
 
@@ -2603,7 +2602,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_force4d": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForceLayout(g.Geometry, geom.XYZM)
 				if err != nil {
 					return nil, err
@@ -2621,7 +2620,7 @@ The requested number of points must be not larger than 65336.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				defaultZ := tree.MustBeDFloat(args[1])
 
@@ -2639,7 +2638,7 @@ The requested number of points must be not larger than 65336.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}, {"defaultM", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				defaultZ := tree.MustBeDFloat(args[1])
 				defaultM := tree.MustBeDFloat(args[2])
@@ -2659,7 +2658,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_forcepolygoncw": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForcePolygonOrientation(g.Geometry, geomfn.OrientationCW)
 				if err != nil {
 					return nil, err
@@ -2676,7 +2675,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_forcepolygonccw": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForcePolygonOrientation(g.Geometry, geomfn.OrientationCCW)
 				if err != nil {
 					return nil, err
@@ -2715,7 +2714,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_numgeometries": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2769,7 +2768,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_x": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2794,7 +2793,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_y": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2819,7 +2818,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_z": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(evalContext *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2844,7 +2843,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_m": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(evalContext *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2869,7 +2868,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_zmflag": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(evalContext *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				t, err := g.Geometry.AsGeomT()
 				if err != nil {
 					return nil, err
@@ -2898,7 +2897,7 @@ The requested number of points must be not larger than 65336.`,
 		defProps(),
 		append(
 			geographyOverload1WithUseSpheroid(
-				func(ctx *tree.EvalContext, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
+				func(ctx *eval.Context, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
 					ret, err := geogfn.Area(g.Geography, useSphereOrSpheroid)
 					if err != nil {
 						return nil, err
@@ -2922,7 +2921,7 @@ The requested number of points must be not larger than 65336.`,
 		defProps(),
 		append(
 			geographyOverload1WithUseSpheroid(
-				func(ctx *tree.EvalContext, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
+				func(ctx *eval.Context, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
 					ret, err := geogfn.Length(g.Geography, useSphereOrSpheroid)
 					if err != nil {
 						return nil, err
@@ -2946,7 +2945,7 @@ The requested number of points must be not larger than 65336.`,
 		defProps(),
 		append(
 			geographyOverload1WithUseSpheroid(
-				func(ctx *tree.EvalContext, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
+				func(ctx *eval.Context, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
 					ret, err := geogfn.Perimeter(g.Geography, useSphereOrSpheroid)
 					if err != nil {
 						return nil, err
@@ -2969,7 +2968,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_srid": makeBuiltin(
 		defProps(),
 		geographyOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeography) (tree.Datum, error) {
 				return tree.NewDInt(tree.DInt(g.SRID())), nil
 			},
 			types.Int,
@@ -2979,7 +2978,7 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return tree.NewDInt(tree.DInt(g.SRID())), nil
 			},
 			types.Int,
@@ -2992,7 +2991,7 @@ The requested number of points must be not larger than 65336.`,
 	"geometrytype": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return tree.NewDString(g.ShapeType2D().String()), nil
 			},
 			types.String,
@@ -3006,7 +3005,7 @@ The requested number of points must be not larger than 65336.`,
 	"st_geometrytype": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				return tree.NewDString(fmt.Sprintf("ST_%s", g.ShapeType2D().String())), nil
 			},
 			types.String,
@@ -3022,7 +3021,7 @@ The requested number of points must be not larger than 65336.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"start", types.Float}, {"end", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				start := tree.MustBeDFloat(args[1])
 				end := tree.MustBeDFloat(args[2])
@@ -3062,7 +3061,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 				{"repeat", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				fraction := float64(tree.MustBeDFloat(args[1]))
 				repeat := bool(tree.MustBeDBool(args[2]))
@@ -3085,7 +3084,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	"st_multi": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				multi, err := geomfn.Multi(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -3108,7 +3107,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 				{"type", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				shapeType := tree.MustBeDInt(args[1])
 				res, err := geomfn.CollectionExtract(g.Geometry, geopb.ShapeType(shapeType))
@@ -3128,7 +3127,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	"st_collectionhomogenize": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.CollectionHomogenize(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -3147,7 +3146,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	"st_forcecollection": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ForceCollection(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -3164,7 +3163,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	"st_linefrommultipoint": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				line, err := geomfn.LineStringFromMultiPoint(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -3181,7 +3180,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	"st_linemerge": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				line, err := geomfn.LineMerge(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -3201,7 +3200,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	"st_shiftlongitude": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ShiftLongitude(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -3279,7 +3278,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	"st_azimuth": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				azimuth, err := geomfn.Azimuth(a.Geometry, b.Geometry)
 				if err != nil {
 					return nil, err
@@ -3300,7 +3299,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			volatility.Immutable,
 		),
 		geographyOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeography) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeography) (tree.Datum, error) {
 				azimuth, err := geogfn.Azimuth(a.Geography, b.Geography)
 				if err != nil {
 					return nil, err
@@ -3325,7 +3324,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 	"st_distance": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.MinDistance(a.Geometry, b.Geometry)
 				if err != nil {
 					if geo.IsEmptyGeometryError(err) {
@@ -3342,7 +3341,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			volatility.Immutable,
 		),
 		geographyOverload2(
-			func(ctx *tree.EvalContext, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
+			func(ctx *eval.Context, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
 				ret, err := geogfn.Distance(a.Geography, b.Geography, geogfn.UseSpheroid)
 				if err != nil {
 					if geo.IsEmptyGeometryError(err) {
@@ -3366,7 +3365,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 				{"use_spheroid", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeography(args[0])
 				b := tree.MustBeDGeography(args[1])
 				useSpheroid := tree.MustBeDBool(args[2])
@@ -3390,7 +3389,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 	"st_distancesphere": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				aGeog, err := a.Geometry.AsGeography()
 				if err != nil {
 					return nil, err
@@ -3420,7 +3419,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 	"st_distancespheroid": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				aGeog, err := a.Geometry.AsGeography()
 				if err != nil {
 					return nil, err
@@ -3450,7 +3449,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 	"st_frechetdistance": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.FrechetDistance(a.Geometry, b.Geometry)
 				if err != nil {
 					return nil, err
@@ -3474,7 +3473,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 				{"densify_frac", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeometry(args[0])
 				b := tree.MustBeDGeometry(args[1])
 				densifyFrac := tree.MustBeDFloat(args[2])
@@ -3501,7 +3500,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 	"st_hausdorffdistance": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.HausdorffDistance(a.Geometry, b.Geometry)
 				if err != nil {
 					return nil, err
@@ -3525,7 +3524,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 				{"densify_frac", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeometry(args[0])
 				b := tree.MustBeDGeometry(args[1])
 				densifyFrac := tree.MustBeDFloat(args[2])
@@ -3550,7 +3549,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 	"st_maxdistance": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.MaxDistance(a.Geometry, b.Geometry)
 				if err != nil {
 					if geo.IsEmptyGeometryError(err) {
@@ -3571,7 +3570,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 	"st_longestline": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				longestLineString, err := geomfn.LongestLineString(a.Geometry, b.Geometry)
 				if err != nil {
 					if geo.IsEmptyGeometryError(err) {
@@ -3596,7 +3595,7 @@ Note if geometries are the same, it will return the LineString with the maximum 
 	"st_shortestline": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				shortestLineString, err := geomfn.ShortestLineString(a.Geometry, b.Geometry)
 				if err != nil {
 					if geo.IsEmptyGeometryError(err) {
@@ -3708,7 +3707,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				{"distance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeometry(args[0])
 				b := tree.MustBeDGeometry(args[1])
 				dist := tree.MustBeDFloat(args[2])
@@ -3750,7 +3749,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 	"st_normalize": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.Normalize(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -3824,7 +3823,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 	"st_relate": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.Relate(a.Geometry, b.Geometry)
 				if err != nil {
 					return nil, err
@@ -3845,7 +3844,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				{"pattern", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeometry(args[0])
 				b := tree.MustBeDGeometry(args[1])
 				pattern := tree.MustBeDString(args[2])
@@ -3868,7 +3867,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				{"bnr", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeometry(args[0])
 				b := tree.MustBeDGeometry(args[1])
 				bnr := tree.MustBeDInt(args[2])
@@ -3893,7 +3892,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				{"intersection_matrix", types.String},
 				{"pattern", types.String},
 			},
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				matrix := string(tree.MustBeDString(args[0]))
 				pattern := string(tree.MustBeDString(args[1]))
 
@@ -3918,7 +3917,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 	"st_isvalid": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.IsValid(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -3938,7 +3937,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				{"flags", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				flags := int(tree.MustBeDInt(args[1]))
 				validDetail, err := geomfn.IsValidDetail(g.Geometry, flags)
@@ -3961,7 +3960,7 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 	"st_isvalidreason": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.IsValidReason(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -3981,7 +3980,7 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 				{"flags", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				flags := int(tree.MustBeDInt(args[1]))
 				validDetail, err := geomfn.IsValidDetail(g.Geometry, flags)
@@ -4007,7 +4006,7 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 	"st_isvalidtrajectory": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.IsValidTrajectory(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -4026,7 +4025,7 @@ Note the geometry must be a LineString with M coordinates.`,
 	"st_makevalid": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				validGeom, err := geomfn.MakeValid(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -4049,7 +4048,7 @@ Note the geometry must be a LineString with M coordinates.`,
 	"st_boundary": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				centroid, err := geomfn.Boundary(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -4068,7 +4067,7 @@ Note the geometry must be a LineString with M coordinates.`,
 		defProps(),
 		append(
 			geographyOverload1WithUseSpheroid(
-				func(ctx *tree.EvalContext, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
+				func(ctx *eval.Context, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
 					ret, err := geogfn.Centroid(g.Geography, useSphereOrSpheroid)
 					if err != nil {
 						return nil, err
@@ -4082,7 +4081,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				volatility.Immutable,
 			),
 			geometryOverload1(
-				func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 					centroid, err := geomfn.Centroid(g.Geometry)
 					if err != nil {
 						return nil, err
@@ -4103,7 +4102,7 @@ Note the geometry must be a LineString with M coordinates.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"box2d", types.Box2D}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				bbox := tree.MustBeDBox2D(args[1])
 				ret, err := geomfn.ClipByRect(g.Geometry, bbox.CartesianBoundingBox)
@@ -4121,7 +4120,7 @@ Note the geometry must be a LineString with M coordinates.`,
 	"st_convexhull": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				convexHull, err := geomfn.ConvexHull(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -4139,7 +4138,7 @@ Note the geometry must be a LineString with M coordinates.`,
 	"st_difference": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				diff, err := geomfn.Difference(a.Geometry, b.Geometry)
 				if err != nil {
 					return nil, err
@@ -4157,7 +4156,7 @@ Note the geometry must be a LineString with M coordinates.`,
 	"st_pointonsurface": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				pointOnSurface, err := geomfn.PointOnSurface(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -4175,7 +4174,7 @@ Note the geometry must be a LineString with M coordinates.`,
 	"st_intersection": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
 				intersection, err := geomfn.Intersection(a.Geometry, b.Geometry)
 				if err != nil {
 					return nil, err
@@ -4190,7 +4189,7 @@ Note the geometry must be a LineString with M coordinates.`,
 			volatility.Immutable,
 		),
 		geographyOverload2(
-			func(ctx *tree.EvalContext, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
+			func(ctx *eval.Context, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
 				proj, err := geogfn.BestGeomProjection(a.Geography.BoundingRect().Union(b.Geography.BoundingRect()))
 				if err != nil {
 					return nil, err
@@ -4267,7 +4266,7 @@ Note the geometry must be a LineString with M coordinates.`,
 	"st_sharedpaths": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.SharedPaths(a.Geometry, b.Geometry)
 				if err != nil {
 					return nil, err
@@ -4289,7 +4288,7 @@ The paths themselves are given in the direction of the first geometry.`,
 	"st_closestpoint": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.ClosestPoint(a.Geometry, b.Geometry)
 				if err != nil {
 					if geo.IsEmptyGeometryError(err) {
@@ -4310,7 +4309,7 @@ The paths themselves are given in the direction of the first geometry.`,
 	"st_symdifference": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
 				ret, err := geomfn.SymDifference(a.Geometry, b.Geometry)
 				if err != nil {
 					return nil, err
@@ -4333,7 +4332,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"tolerance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := float64(tree.MustBeDFloat(args[1]))
 				// TODO(#spatial): post v21.1, use the geomfn.Simplify we have implemented internally.
@@ -4357,7 +4356,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"preserve_collapsed", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := float64(tree.MustBeDFloat(args[1]))
 				preserveCollapsed := bool(tree.MustBeDBool(args[2]))
@@ -4384,7 +4383,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"tolerance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := float64(tree.MustBeDFloat(args[1]))
 				ret, err := geomfn.SimplifyPreserveTopology(g.Geometry, tolerance)
@@ -4412,7 +4411,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"srid", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				srid := tree.MustBeDInt(args[1])
 				newGeom, err := g.Geometry.CloneWithSRID(geopb.SRID(srid))
@@ -4432,7 +4431,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"srid", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				srid := tree.MustBeDInt(args[1])
 				newGeom, err := g.Geography.CloneWithSRID(geopb.SRID(srid))
@@ -4455,7 +4454,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"srid", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
 
@@ -4485,7 +4484,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"to_proj_text", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				toProj := string(tree.MustBeDString(args[1]))
 
@@ -4517,7 +4516,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"to_proj_text", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				fromProj := string(tree.MustBeDString(args[1]))
 				toProj := string(tree.MustBeDString(args[2]))
@@ -4546,7 +4545,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"srid", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				fromProj := string(tree.MustBeDString(args[1]))
 				srid := geopb.SRID(tree.MustBeDInt(args[2]))
@@ -4582,7 +4581,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"delta_y", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				deltaX := float64(tree.MustBeDFloat(args[1]))
 				deltaY := float64(tree.MustBeDFloat(args[2]))
@@ -4607,7 +4606,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"delta_z", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				deltaX := float64(tree.MustBeDFloat(args[1]))
 				deltaY := float64(tree.MustBeDFloat(args[2]))
@@ -4639,7 +4638,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				{"y_off", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				ret, err := geomfn.Affine(
 					g.Geometry,
@@ -4683,7 +4682,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"z_off", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				ret, err := geomfn.Affine(
 					g.Geometry,
@@ -4721,7 +4720,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"y_factor", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				xFactor := float64(tree.MustBeDFloat(args[1]))
 				yFactor := float64(tree.MustBeDFloat(args[2]))
@@ -4744,7 +4743,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"factor", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				factor, err := tree.MustBeDGeometry(args[1]).AsGeomT()
 				if err != nil {
@@ -4781,7 +4780,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"origin", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				factor := tree.MustBeDGeometry(args[1])
 				origin := tree.MustBeDGeometry(args[2])
@@ -4807,7 +4806,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"angle_radians", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				rotRadians := float64(tree.MustBeDFloat(args[1]))
 
@@ -4831,7 +4830,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"origin_y", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				rotRadians := float64(tree.MustBeDFloat(args[1]))
 				x := float64(tree.MustBeDFloat(args[2]))
@@ -4854,7 +4853,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"origin_point", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				rotRadians := float64(tree.MustBeDFloat(args[1]))
 				originPoint := tree.MustBeDGeometry(args[2])
@@ -4883,7 +4882,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"angle_radians", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				rotRadians := float64(tree.MustBeDFloat(args[1]))
 
@@ -4908,7 +4907,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"angle_radians", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				rotRadians := float64(tree.MustBeDFloat(args[1]))
 
@@ -4933,7 +4932,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"angle_radians", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				rotRadians := float64(tree.MustBeDFloat(args[1]))
 
@@ -4959,7 +4958,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"index", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				lineString := tree.MustBeDGeometry(args[0])
 				point := tree.MustBeDGeometry(args[1])
 				index := int(tree.MustBeDInt(args[2]))
@@ -4982,7 +4981,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"point", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				lineString := tree.MustBeDGeometry(args[0])
 				point := tree.MustBeDGeometry(args[1])
 
@@ -5008,7 +5007,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"point", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				lineString := tree.MustBeDGeometry(args[0])
 				index := int(tree.MustBeDInt(args[1]))
 				point := tree.MustBeDGeometry(args[2])
@@ -5034,7 +5033,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"index", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				lineString := tree.MustBeDGeometry(args[0])
 				index := int(tree.MustBeDInt(args[1]))
 
@@ -5059,7 +5058,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"tolerance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := float64(tree.MustBeDFloat(args[1]))
 
@@ -5080,7 +5079,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				ret, err := geomfn.RemoveRepeatedPoints(g.Geometry, 0)
 				if err != nil {
@@ -5102,7 +5101,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geometry := tree.MustBeDGeometry(args[0])
 
 				ret, err := geomfn.Reverse(geometry.Geometry)
@@ -5126,7 +5125,7 @@ The matrix transformation will be applied as follows for each coordinate:
 				{"max_segment_length_meters", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				segmentMaxLength := float64(tree.MustBeDFloat(args[1]))
 				segGeography, err := geogfn.Segmentize(g.Geography, segmentMaxLength)
@@ -5149,7 +5148,7 @@ The calculations are done on a sphere.`,
 				{"max_segment_length", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				segmentMaxLength := float64(tree.MustBeDFloat(args[1]))
 				segGeometry, err := geomfn.Segmentize(g.Geometry, segmentMaxLength)
@@ -5173,7 +5172,7 @@ The calculations are done on a sphere.`,
 				{"size", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				size := float64(tree.MustBeDFloat(args[1]))
 				ret, err := geomfn.SnapToGrid(g.Geometry, geom.Coord{0, 0, 0, 0}, geom.Coord{size, size, 0, 0})
@@ -5195,7 +5194,7 @@ The calculations are done on a sphere.`,
 				{"size_y", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				sizeX := float64(tree.MustBeDFloat(args[1]))
 				sizeY := float64(tree.MustBeDFloat(args[2]))
@@ -5219,7 +5218,7 @@ The calculations are done on a sphere.`,
 				{"size_y", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				originX := float64(tree.MustBeDFloat(args[1]))
 				originY := float64(tree.MustBeDFloat(args[2]))
@@ -5246,7 +5245,7 @@ The calculations are done on a sphere.`,
 				{"size_m", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				origin := tree.MustBeDGeometry(args[1])
 				sizeX := float64(tree.MustBeDFloat(args[2]))
@@ -5291,7 +5290,7 @@ The calculations are done on a sphere.`,
 				{"tolerance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g1 := tree.MustBeDGeometry(args[0])
 				g2 := tree.MustBeDGeometry(args[1])
 				tolerance := tree.MustBeDFloat(args[2])
@@ -5317,7 +5316,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				{"distance", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				distance := tree.MustBeDInt(args[1])
 
@@ -5336,7 +5335,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				{"distance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				distance := tree.MustBeDFloat(args[1])
 
@@ -5355,7 +5354,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				{"distance", types.Decimal},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				distanceDec := tree.MustBeDDecimal(args[1])
 
@@ -5380,7 +5379,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				{"quad_segs", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				distance := tree.MustBeDFloat(args[1])
 				quadSegs := tree.MustBeDInt(args[2])
@@ -5405,7 +5404,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				{"buffer_style_params", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				distance := tree.MustBeDFloat(args[1])
 				paramsString := tree.MustBeDString(args[2])
@@ -5434,7 +5433,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				{"distance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				distance := tree.MustBeDFloat(args[1])
 
@@ -5460,7 +5459,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				{"quad_segs", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				distance := tree.MustBeDFloat(args[1])
 				quadSegs := tree.MustBeDInt(args[2])
@@ -5490,7 +5489,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				{"buffer_style_params", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geography),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeography(args[0])
 				distance := tree.MustBeDFloat(args[1])
 				paramsString := tree.MustBeDString(args[2])
@@ -5522,7 +5521,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 	"st_envelope": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				envelope, err := geomfn.Envelope(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -5545,7 +5544,7 @@ Bottom Left.`,
 				{"box2d", types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				bbox := tree.MustBeDBox2D(args[0]).CartesianBoundingBox
 				ret, err := geo.MakeGeometryFromGeomT(bbox.ToGeomT(0 /* SRID */))
 				if err != nil {
@@ -5566,7 +5565,7 @@ Bottom Left.`,
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 
 				ret, err := geomfn.FlipCoordinates(g.Geometry)
@@ -5596,7 +5595,7 @@ Bottom Left.`,
 				},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				cString := tree.MustBeDString(args[1])
 
@@ -5625,7 +5624,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 				{"point4", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g1 := tree.MustBeDGeometry(args[0]).Geometry
 				g2 := tree.MustBeDGeometry(args[1]).Geometry
 				g3 := tree.MustBeDGeometry(args[2]).Geometry
@@ -5652,7 +5651,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 				{"point3", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g1 := tree.MustBeDGeometry(args[0]).Geometry
 				g2 := tree.MustBeDGeometry(args[1]).Geometry
 				g3 := tree.MustBeDGeometry(args[2]).Geometry
@@ -5681,7 +5680,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 				{"line2", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g1 := tree.MustBeDGeometry(args[0]).Geometry
 				g2 := tree.MustBeDGeometry(args[1]).Geometry
 				angle, err := geomfn.AngleLineString(g1, g2)
@@ -5707,7 +5706,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0]).Geometry
 				s, err := geo.GeometryToEncodedPolyline(g, 5)
 				if err != nil {
@@ -5728,7 +5727,7 @@ Preserves 5 decimal places.`,
 				{"precision", types.Int4},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0]).Geometry
 				p := int(tree.MustBeDInt(args[1]))
 				s, err := geo.GeometryToEncodedPolyline(g, p)
@@ -5751,7 +5750,7 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 				{"encoded_polyline", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				p := 5
 				g, err := geo.ParseEncodedPolyline(s, p)
@@ -5775,7 +5774,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 				{"precision", types.Int4},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				p := int(tree.MustBeDInt(args[1]))
 				g, err := geo.ParseEncodedPolyline(s, p)
@@ -5797,7 +5796,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_unaryunion": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				res, err := geomfn.UnaryUnion(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -5814,7 +5813,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_node": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				res, err := geomfn.Node(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -5858,7 +5857,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	"st_makebox2d": makeBuiltin(
 		defProps(),
 		geometryOverload2(
-			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
+			func(ctx *eval.Context, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
 				if a.Geometry.SRID() != b.Geometry.SRID() {
 					return nil, geo.NewMismatchingSRIDsError(a.Geometry.SpatialObject(), b.Geometry.SpatialObject())
 				}
@@ -5899,7 +5898,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		tree.Overload{
 			Types:      tree.ArgTypes{{"box2d", types.Box2D}, {"geometry", types.Geometry}},
 			ReturnType: tree.FixedReturnType(types.Box2D),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[1] == tree.DNull {
 					return args[0], nil
 				}
@@ -5929,7 +5928,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		tree.Overload{
 			Types:      tree.ArgTypes{{"box2d", types.Box2D}, {"delta", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Box2D),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				bbox := tree.MustBeDBox2D(args[0])
 				delta := float64(tree.MustBeDFloat(args[1]))
 				bboxBuffered := bbox.Buffer(delta, delta)
@@ -5950,7 +5949,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 				{"delta_y", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				bbox := tree.MustBeDBox2D(args[0])
 				deltaX := float64(tree.MustBeDFloat(args[1]))
 				deltaY := float64(tree.MustBeDFloat(args[2]))
@@ -5968,7 +5967,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"delta", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				delta := float64(tree.MustBeDFloat(args[1]))
 				if g.Empty() {
@@ -5993,7 +5992,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 				{"delta_y", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				deltaX := float64(tree.MustBeDFloat(args[1]))
 				deltaY := float64(tree.MustBeDFloat(args[2]))
@@ -6030,7 +6029,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 				{"parent_only", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// TODO(#64257): implement by looking at statistics.
 				return tree.DNull, nil
 			},
@@ -6048,7 +6047,7 @@ The parent_only boolean is always ignored.`,
 				{"geocolumn_name", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// TODO(#64257): implement by looking at statistics.
 				return tree.DNull, nil
 			},
@@ -6063,7 +6062,7 @@ The parent_only boolean is always ignored.`,
 				{"geocolumn_name", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// TODO(#64257): implement by looking at statistics.
 				return tree.DNull, nil
 			},
@@ -6093,7 +6092,7 @@ The parent_only boolean is always ignored.`,
 				{"use_typmod", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *eval.Context, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					"", /* catalogName */
@@ -6105,8 +6104,8 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[4])),
 					bool(tree.MustBeDBool(args[5])),
 				)
-			},
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			}),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
 					"", /* catalogName */
@@ -6135,7 +6134,7 @@ The parent_only boolean is always ignored.`,
 				{"use_typmod", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *eval.Context, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					"", /* catalogName */
@@ -6147,8 +6146,8 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[5])),
 					bool(tree.MustBeDBool(args[6])),
 				)
-			},
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			}),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
 					"", /* catalogName */
@@ -6178,7 +6177,7 @@ The parent_only boolean is always ignored.`,
 				{"use_typmod", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *eval.Context, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					string(tree.MustBeDString(args[0])),
@@ -6190,8 +6189,8 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[6])),
 					bool(tree.MustBeDBool(args[7])),
 				)
-			},
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			}),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
 					string(tree.MustBeDString(args[0])),
@@ -6218,7 +6217,7 @@ The parent_only boolean is always ignored.`,
 				{"dimension", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *eval.Context, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					"", /* catalogName */
@@ -6230,8 +6229,8 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[4])),
 					true, /* useTypmod */
 				)
-			},
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			}),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
 					"", /* catalogName */
@@ -6259,7 +6258,7 @@ The parent_only boolean is always ignored.`,
 				{"dimension", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *eval.Context, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					"", /* catalogName */
@@ -6271,8 +6270,8 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[5])),
 					true, /* useTypmod */
 				)
-			},
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			}),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
 					"", /* catalogName */
@@ -6301,7 +6300,7 @@ The parent_only boolean is always ignored.`,
 				{"dimension", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *eval.Context, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					string(tree.MustBeDString(args[0])),
@@ -6313,8 +6312,8 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[6])),
 					true, /* useTypmod */
 				)
-			},
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			}),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
 					string(tree.MustBeDString(args[0])),
@@ -6343,7 +6342,7 @@ The parent_only boolean is always ignored.`,
 				{"distance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeometry(args[0])
 				b := tree.MustBeDGeometry(args[1])
 				dist := tree.MustBeDFloat(args[2])
@@ -6370,7 +6369,7 @@ The parent_only boolean is always ignored.`,
 				{"radius", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				point := tree.MustBeDGeometry(args[0])
 
 				geomT, err := point.AsGeomT()
@@ -6420,7 +6419,7 @@ The parent_only boolean is always ignored.`,
 				},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geo := tree.MustBeDGeometry(args[0])
 				return tree.NewDInt(tree.DInt(geo.Size())), nil
 			},
@@ -6441,7 +6440,7 @@ The parent_only boolean is always ignored.`,
 				},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				line := tree.MustBeDGeometry(args[0])
 				p := tree.MustBeDGeometry(args[1])
 
@@ -6461,14 +6460,14 @@ The parent_only boolean is always ignored.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}},
 			ReturnType: tree.FixedReturnType(minimumBoundingRadiusReturnType),
-			Generator:  makeMinimumBoundGenerator,
+			Generator:  eval.GeneratorOverload(makeMinimumBoundGenerator),
 			Info:       "Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.",
 			Volatility: volatility.Immutable,
 		}),
 
 	"st_minimumboundingcircle": makeBuiltin(defProps(),
 		geometryOverload1(
-			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			func(evalContext *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 				polygon, _, _, err := geomfn.MinimumBoundingCircle(g.Geometry)
 				if err != nil {
 					return nil, err
@@ -6488,7 +6487,7 @@ The parent_only boolean is always ignored.`,
 				info: "Returns the smallest circle polygon that can fully contain a geometry.",
 			}.String(),
 			Volatility: volatility.Immutable,
-			Fn: func(evalContext *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalContext *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				numOfSeg := tree.MustBeDInt(args[1])
 				_, centroid, radius, err := geomfn.MinimumBoundingCircle(g.Geometry)
@@ -6523,7 +6522,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: "Translates the geometry using the deltaX and deltaY args, then scales it using the XFactor, YFactor args, working in 2D only.",
 			}.String(),
-			Fn: func(_ *tree.EvalContext, datums tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, datums tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(datums[0])
 				deltaX := float64(tree.MustBeDFloat(datums[1]))
 				deltaY := float64(tree.MustBeDFloat(datums[2]))
@@ -6543,7 +6542,7 @@ The parent_only boolean is always ignored.`,
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				var env *geo.Geometry
 				ret, err := geomfn.VoronoiDiagram(g.Geometry, env, 0.0, false /* onlyEdges */)
@@ -6563,7 +6562,7 @@ The parent_only boolean is always ignored.`,
 				{"tolerance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := tree.MustBeDFloat(args[1])
 				var env *geo.Geometry
@@ -6585,7 +6584,7 @@ The parent_only boolean is always ignored.`,
 				{"extend_to", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := tree.MustBeDFloat(args[1])
 				env := tree.MustBeDGeometry(args[2])
@@ -6608,7 +6607,7 @@ The parent_only boolean is always ignored.`,
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				var env *geo.Geometry
 				ret, err := geomfn.VoronoiDiagram(g.Geometry, env, 0.0, true /* onlyEdges */)
@@ -6629,7 +6628,7 @@ The parent_only boolean is always ignored.`,
 				{"tolerance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := tree.MustBeDFloat(args[1])
 				var env *geo.Geometry
@@ -6652,7 +6651,7 @@ The parent_only boolean is always ignored.`,
 				{"extend_to", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := tree.MustBeDFloat(args[1])
 				env := tree.MustBeDGeometry(args[2])
@@ -6676,7 +6675,7 @@ The parent_only boolean is always ignored.`,
 				{"geometry", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				ret, err := geomfn.MinimumRotatedRectangle(g.Geometry)
 				if err != nil {
@@ -6704,7 +6703,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 			Info: infoBuilder{
 				info: "Return a linestring being a substring of the input one starting and ending at the given fractions of total 2D length. Second and third arguments are float8 values between 0 and 1.",
 			}.String(),
-			Fn: func(_ *tree.EvalContext, datums tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, datums tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(datums[0])
 				startFraction := float64(tree.MustBeDFloat(datums[1]))
 				endFraction := float64(tree.MustBeDFloat(datums[2]))
@@ -6726,7 +6725,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 			Info: infoBuilder{
 				info: "Return a linestring being a substring of the input one starting and ending at the given fractions of total 2D length. Second and third arguments are float8 values between 0 and 1.",
 			}.String(),
-			Fn: func(_ *tree.EvalContext, datums tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, datums tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(datums[0])
 				startFraction := tree.MustBeDDecimal(datums[1])
 				startFractionFloat, err := startFraction.Float64()
@@ -6758,7 +6757,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 				{"linestring_b", types.Geometry},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				linestringA := tree.MustBeDGeometry(args[0])
 				linestringB := tree.MustBeDGeometry(args[1])
 
@@ -6831,7 +6830,7 @@ func returnCompatibilityFixedStringBuiltin(ret string) builtinDefinition {
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *eval.Context, _ tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(ret), nil
 			},
 			Info: infoBuilder{
@@ -6844,7 +6843,7 @@ func returnCompatibilityFixedStringBuiltin(ret string) builtinDefinition {
 
 // geometryOverload1 hides the boilerplate for builtins operating on one geometry.
 func geometryOverload1(
-	f func(*tree.EvalContext, *tree.DGeometry) (tree.Datum, error),
+	f func(*eval.Context, *tree.DGeometry) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
 	volatility volatility.Volatility,
@@ -6854,7 +6853,7 @@ func geometryOverload1(
 			{"geometry", types.Geometry},
 		},
 		ReturnType: tree.FixedReturnType(returnType),
-		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			a := tree.MustBeDGeometry(args[0])
 			return f(ctx, a)
 		},
@@ -6869,7 +6868,7 @@ func geometryOverload1UnaryPredicate(
 	f func(geo.Geometry) (bool, error), ib infoBuilder,
 ) tree.Overload {
 	return geometryOverload1(
-		func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+		func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
 			ret, err := f(g.Geometry)
 			if err != nil {
 				return nil, err
@@ -6884,7 +6883,7 @@ func geometryOverload1UnaryPredicate(
 
 // geometryOverload2 hides the boilerplate for builtins operating on two geometries.
 func geometryOverload2(
-	f func(*tree.EvalContext, *tree.DGeometry, *tree.DGeometry) (tree.Datum, error),
+	f func(*eval.Context, *tree.DGeometry, *tree.DGeometry) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
 	volatility volatility.Volatility,
@@ -6895,7 +6894,7 @@ func geometryOverload2(
 			{"geometry_b", types.Geometry},
 		},
 		ReturnType: tree.FixedReturnType(returnType),
-		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			a := tree.MustBeDGeometry(args[0])
 			b := tree.MustBeDGeometry(args[1])
 			return f(ctx, a, b)
@@ -6911,7 +6910,7 @@ func geometryOverload2BinaryPredicate(
 	f func(geo.Geometry, geo.Geometry) (bool, error), ib infoBuilder,
 ) tree.Overload {
 	return geometryOverload2(
-		func(_ *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
+		func(_ *eval.Context, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
 			ret, err := f(a.Geometry, b.Geometry)
 			if err != nil {
 				return nil, err
@@ -6926,7 +6925,7 @@ func geometryOverload2BinaryPredicate(
 
 // geographyOverload1 hides the boilerplate for builtins operating on one geography.
 func geographyOverload1(
-	f func(*tree.EvalContext, *tree.DGeography) (tree.Datum, error),
+	f func(*eval.Context, *tree.DGeography) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
 	volatility volatility.Volatility,
@@ -6936,7 +6935,7 @@ func geographyOverload1(
 			{"geography", types.Geography},
 		},
 		ReturnType: tree.FixedReturnType(returnType),
-		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			a := tree.MustBeDGeography(args[0])
 			return f(ctx, a)
 		},
@@ -6948,7 +6947,7 @@ func geographyOverload1(
 // geographyOverload1WithUseSpheroid hides the boilerplate for builtins operating on one geography
 // with an optional spheroid argument.
 func geographyOverload1WithUseSpheroid(
-	f func(*tree.EvalContext, *tree.DGeography, geogfn.UseSphereOrSpheroid) (tree.Datum, error),
+	f func(*eval.Context, *tree.DGeography, geogfn.UseSphereOrSpheroid) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
 	volatility volatility.Volatility,
@@ -6965,7 +6964,7 @@ func geographyOverload1WithUseSpheroid(
 				{"geography", types.Geography},
 			},
 			ReturnType: tree.FixedReturnType(returnType),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeography(args[0])
 				return f(ctx, a, geogfn.UseSpheroid)
 			},
@@ -6978,7 +6977,7 @@ func geographyOverload1WithUseSpheroid(
 				{"use_spheroid", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(returnType),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeography(args[0])
 				b := tree.MustBeDBool(args[1])
 				return f(ctx, a, toUseSphereOrSpheroid(b))
@@ -6991,7 +6990,7 @@ func geographyOverload1WithUseSpheroid(
 
 // geographyOverload2 hides the boilerplate for builtins operating on two geographys.
 func geographyOverload2(
-	f func(*tree.EvalContext, *tree.DGeography, *tree.DGeography) (tree.Datum, error),
+	f func(*eval.Context, *tree.DGeography, *tree.DGeography) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
 	volatility volatility.Volatility,
@@ -7002,7 +7001,7 @@ func geographyOverload2(
 			{"geography_b", types.Geography},
 		},
 		ReturnType: tree.FixedReturnType(returnType),
-		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			a := tree.MustBeDGeography(args[0])
 			b := tree.MustBeDGeography(args[1])
 			return f(ctx, a, b)
@@ -7018,7 +7017,7 @@ func geographyOverload2BinaryPredicate(
 	f func(geo.Geography, geo.Geography) (bool, error), ib infoBuilder,
 ) tree.Overload {
 	return geographyOverload2(
-		func(_ *tree.EvalContext, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
+		func(_ *eval.Context, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
 			ret, err := f(a.Geography, b.Geography)
 			if err != nil {
 				return nil, err
@@ -7134,7 +7133,7 @@ func initGeoBuiltins() {
 // addGeometryColumnSQL returns the SQL statement that should be executed to
 // add a geometry column.
 func addGeometryColumnSQL(
-	ctx *tree.EvalContext,
+	ctx *eval.Context,
 	catalogName string,
 	schemaName string,
 	tableName string,
@@ -7170,7 +7169,7 @@ func addGeometryColumnSQL(
 // addGeometryColumnSummary returns metadata about the geometry column that
 // was added.
 func addGeometryColumnSummary(
-	ctx *tree.EvalContext,
+	ctx *eval.Context,
 	catalogName string,
 	schemaName string,
 	tableName string,
@@ -7207,7 +7206,7 @@ func lineInterpolatePointForRepeatOverload(repeat bool, builtinInfo string) tree
 			{"fraction", types.Float},
 		},
 		ReturnType: tree.FixedReturnType(types.Geometry),
-		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			g := tree.MustBeDGeometry(args[0])
 			fraction := float64(tree.MustBeDFloat(args[1]))
 			interpolatedPoints, err := geomfn.LineInterpolatePoints(g.Geometry, fraction, repeat)
@@ -7267,7 +7266,7 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 
 		// Wrap the overloads to cast to Geometry.
 		newOverload.Types = newArgTypes
-		newOverload.Fn = func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		newOverload.Fn = func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			for i, ok := argsToCast.Next(0); ok; i, ok = argsToCast.Next(i + 1) {
 				arg := string(tree.MustBeDString(args[i]))
 				g, err := geo.ParseGeometry(arg)
@@ -7276,7 +7275,7 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 				}
 				args[i] = tree.NewDGeometry(g)
 			}
-			return ov.Fn(ctx, args)
+			return ov.Fn.(eval.FnOverload)(ctx, args)
 		}
 
 		newOverload.Info += `
@@ -7294,7 +7293,7 @@ This variant will cast all geometry_str arguments into Geometry types.
 // stAsGeoJSONFromTuple returns a *tree.DString representing JSON output
 // for ST_AsGeoJSON.
 func stAsGeoJSONFromTuple(
-	ctx *tree.EvalContext, tuple *tree.DTuple, geoColumn string, numDecimalDigits int, pretty bool,
+	ctx *eval.Context, tuple *tree.DTuple, geoColumn string, numDecimalDigits int, pretty bool,
 ) (*tree.DString, error) {
 	typ := tuple.ResolvedType()
 	labels := typ.TupleLabels()
@@ -7409,7 +7408,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 				{"distance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeometry(args[0])
 				b := tree.MustBeDGeometry(args[1])
 				dist := tree.MustBeDFloat(args[2])
@@ -7432,7 +7431,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 				{"distance", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeography(args[0])
 				b := tree.MustBeDGeography(args[1])
 				dist := tree.MustBeDFloat(args[2])
@@ -7458,7 +7457,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 				{"use_spheroid", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				a := tree.MustBeDGeography(args[0])
 				b := tree.MustBeDGeography(args[1])
 				dist := tree.MustBeDFloat(args[2])
@@ -7482,7 +7481,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 }
 
 func applyGeoindexConfigStorageParams(
-	evalCtx *tree.EvalContext, cfg geoindex.Config, params string,
+	evalCtx *eval.Context, cfg geoindex.Config, params string,
 ) (geoindex.Config, error) {
 	indexDesc := &descpb.IndexDescriptor{GeoConfig: cfg}
 	stmt, err := parser.ParseOne(
