@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -133,6 +133,7 @@ type joinReader struct {
 		budgetLimit         int64
 		maxKeysPerRow       int
 		diskMonitor         *mon.BytesMonitor
+		diskBuffer          kvstreamer.ResultDiskBuffer
 	}
 
 	input execinfra.RowSource
@@ -1014,13 +1015,15 @@ func (jr *joinReader) Start(ctx context.Context) {
 			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
 				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
 			)
+			jr.streamerInfo.diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
+				jr.FlowCtx.Cfg.TempStorage, jr.streamerInfo.diskMonitor,
+			)
 		}
 		jr.streamerInfo.Streamer.Init(
 			mode,
 			kvstreamer.Hints{UniqueRequests: true},
 			jr.streamerInfo.maxKeysPerRow,
-			jr.FlowCtx.Cfg.TempStorage,
-			jr.streamerInfo.diskMonitor,
+			jr.streamerInfo.diskBuffer,
 		)
 	}
 	jr.runningState = jrReadingInput

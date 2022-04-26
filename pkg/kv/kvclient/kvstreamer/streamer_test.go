@@ -64,14 +64,14 @@ func TestStreamerLimitations(t *testing.T) {
 	t.Run("non-unique requests unsupported", func(t *testing.T) {
 		require.Panics(t, func() {
 			streamer := getStreamer()
-			streamer.Init(OutOfOrder, Hints{UniqueRequests: false}, 1 /* maxKeysPerRow */, nil /* engine */, nil /* diskMonitor */)
+			streamer.Init(OutOfOrder, Hints{UniqueRequests: false}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		})
 	})
 
 	t.Run("invalid enqueueKeys", func(t *testing.T) {
 		streamer := getStreamer()
 		defer streamer.Close(ctx)
-		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* engine */, nil /* diskMonitor */)
+		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		// Use a single request but two keys which is invalid.
 		reqs := []roachpb.RequestUnion{{Value: &roachpb.RequestUnion_Get{}}}
 		enqueueKeys := []int{0, 1}
@@ -81,7 +81,7 @@ func TestStreamerLimitations(t *testing.T) {
 	t.Run("pipelining unsupported", func(t *testing.T) {
 		streamer := getStreamer()
 		defer streamer.Close(ctx)
-		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* engine */, nil /* diskMonitor */)
+		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		get := roachpb.NewGet(roachpb.Key("key"), false /* forUpdate */)
 		reqs := []roachpb.RequestUnion{{
 			Value: &roachpb.RequestUnion_Get{
@@ -168,7 +168,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	getStreamer := func(limitBytes int64) *Streamer {
 		acc.Clear(ctx)
 		s := getStreamer(ctx, s, limitBytes, &acc)
-		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* engine */, nil /* diskMonitor */)
+		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
 	}
 
@@ -404,7 +404,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 	getStreamer := func() *Streamer {
 		s := getStreamer(ctx, s, math.MaxInt64, nil /* acc */)
 		// There are two column families in the table.
-		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */, nil /* engine */, nil /* diskMonitor */)
+		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
 	}
 
