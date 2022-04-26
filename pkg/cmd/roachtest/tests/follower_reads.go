@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
 	"github.com/stretchr/testify/require"
@@ -44,11 +43,14 @@ import (
 
 func registerFollowerReads(r registry.Registry) {
 	register := func(
-		survival survivalGoal, locality localitySetting, rc readConsistency, insufficientQuorum bool,
+		survival survivalGoal, locality localitySetting, rc readConsistency, insufficientQuorum bool, mixedVersion bool,
 	) {
 		name := fmt.Sprintf("follower-reads/survival=%s/locality=%s/reads=%s", survival, locality, rc)
 		if insufficientQuorum {
 			name = name + "/insufficient-quorum"
+		}
+		if mixedVersion {
+			name = name + "/mixed-version"
 		}
 		r.Add(registry.TestSpec{
 			Name:            name,
@@ -61,18 +63,23 @@ func registerFollowerReads(r registry.Registry) {
 				spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
 			),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{
 					multiRegion:       true,
 					locality:          locality,
 					survival:          survival,
 					deadPrimaryRegion: insufficientQuorum,
 				}
-				data := initFollowerReadsDB(ctx, t, c, topology)
-				runFollowerReadsTest(ctx, t, c, topology, rc, data)
+				if mixedVersion {
+					runFollowerReadsMixedVersion(ctx, t, c, topology, rc)
+				} else {
+					c.Put(ctx, t.Cockroach(), "./cockroach")
+					c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+					data := initFollowerReadsDB(ctx, t, c, topology)
+					runFollowerReadsTest(ctx, t, c, topology, rc, data)
+				}
 			},
-		})
+		},
+		)
 	}
 	for _, survival := range []survivalGoal{zone, region} {
 		for _, locality := range []localitySetting{regional, global} {
@@ -81,27 +88,35 @@ func registerFollowerReads(r registry.Registry) {
 					// Only GLOBAL tables can perform strongly consistent reads off followers.
 					continue
 				}
-				register(survival, locality, rc, false /* insufficientQuorum */)
+				register(survival, locality, rc, false /* insufficientQuorum */, false /* mixedVersion */)
+				register(survival, locality, rc, false /* insufficientQuorum */, true /* mixedVersion */)
 			}
 		}
 
-		// Register an additional variant that cuts off the primary region and
-		// verifies that bounded staleness reads are still available elsewhere.
-		register(survival, regional, boundedStaleness, true /* insufficientQuorum */)
+		// Register additional variants that cut off the primary region and verify
+		// that bounded staleness reads are still available elsewhere.
+		register(
+			survival, regional, boundedStaleness, true /* insufficientQuorum */, false, /* mixedVersion */
+		)
+		register(
+			survival, regional, boundedStaleness, true /* insufficientQuorum */, true, /* mixedVersion */
+		)
 	}
 
-	r.Add(registry.TestSpec{
-		Name:            "follower-reads/mixed-version/single-region",
-		Owner:           registry.OwnerKV,
-		RequiresLicense: true,
-		Cluster: r.MakeClusterSpec(
-			3, /* nodeCount */
-			spec.CPU(2),
-		),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, *t.BuildVersion())
+	r.Add(
+		registry.TestSpec{
+			Name:            "follower-reads/mixed-version/single-region",
+			Owner:           registry.OwnerKV,
+			RequiresLicense: true,
+			Cluster: r.MakeClusterSpec(
+				3, /* nodeCount */
+				spec.CPU(2),
+			),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c)
+			},
 		},
-	})
+	)
 }
 
 // The survival goal of a multi-region database: ZONE or REGION.
@@ -398,6 +413,7 @@ func runFollowerReadsTest(
 func initFollowerReadsDB(
 	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec,
 ) (data map[int]int64) {
+	t.L().Printf("initializing database and waiting for up-replication")
 	db := c.Conn(ctx, t.L(), 1)
 	// Disable load based splitting and range merging because splits and merges
 	// interfere with follower reads. This test's workload regularly triggers load
@@ -860,15 +876,13 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 	}, true
 }
 
-// runFollowerReadsMixedVersionSingleRegionTest runs a follower-reads test while
-// performing a cluster upgrade. The point is to exercise the closed-timestamp
-// mechanism in a mixed-version cluster. Running in a single region is
-// sufficient for this purpose; we're not testing non-voting replicas here
-// (which are used in multi-region tests).
-func runFollowerReadsMixedVersionSingleRegionTest(
-	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
+// runFollowerReadsMixedVersion runs a follower-reads test while performing a
+// cluster upgrade. The point is to exercise the closed-timestamp mechanism, and
+// zone config propagation in a mixed-version cluster.
+func runFollowerReadsMixedVersion(
+	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec, rc readConsistency,
 ) {
-	predecessorVersion, err := PredecessorVersion(buildVersion)
+	predecessorVersion, err := PredecessorVersion(*t.BuildVersion())
 	require.NoError(t, err)
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
@@ -878,15 +892,21 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	settings := install.MakeClusterSettings()
 	settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.All())
-	topology := topologySpec{multiRegion: false}
-	data := initFollowerReadsDB(ctx, t, c, topology)
 
-	// Upgrade one node to the new version and run the test.
+	// Randomly initialize the database (which waits for multi-region zone
+	// configs to take effect) before or after a node has been upgraded.
+	var data map[int]int64
 	randNode := 1 + rand.Intn(c.Spec().NodeCount)
-	t.L().Printf("upgrading n%d to current version", randNode)
-	nodeToUpgrade := c.Node(randNode)
-	upgradeNodes(ctx, nodeToUpgrade, curVersion, t, c)
-	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
+	if rand.Intn(2) == 0 {
+		data = initFollowerReadsDB(ctx, t, c, topology)
+		t.L().Printf("upgrading n%d to current version", randNode)
+		upgradeNodes(ctx, c.Node(randNode), curVersion, t, c)
+	} else {
+		t.L().Printf("upgrading n%d to current version", randNode)
+		upgradeNodes(ctx, c.Node(randNode), curVersion, t, c)
+		data = initFollowerReadsDB(ctx, t, c, topology)
+	}
+	runFollowerReadsTest(ctx, t, c, topology, rc, data)
 
 	// Upgrade the remaining nodes to the new version and run the test.
 	var remainingNodes option.NodeListOption
@@ -898,5 +918,16 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	}
 	t.L().Printf("upgrading nodes %s to current version", remainingNodes)
 	upgradeNodes(ctx, remainingNodes, curVersion, t, c)
-	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
+	runFollowerReadsTest(ctx, t, c, topology, rc, data)
+}
+
+// runFollowerReadsMixedVersionSingleRegionTest runs a follower-reads test while
+// performing a cluster upgrade. The point is to exercise the closed-timestamp
+// mechanism in a mixed-version cluster. Running in a single region is
+// sufficient for this purpose; we're not testing non-voting replicas here
+// (which are used in multi-region tests).
+func runFollowerReadsMixedVersionSingleRegionTest(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) {
+	runFollowerReadsMixedVersion(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness)
 }
