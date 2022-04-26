@@ -382,13 +382,31 @@ func GenerateRandInterestingTable(db *gosql.DB, dbName, tableName string) error 
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
 // column, with a random type and nullability.
 func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnTableDef {
+	typ := RandColumnType(rand)
 	columnDef := &tree.ColumnTableDef{
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		Name: tree.Name(fmt.Sprintf("col%d_%d", tableIdx, colIdx)),
-		Type: RandColumnType(rand),
+		Type: typ,
 	}
 	columnDef.Nullable.Nullability = tree.Nullability(rand.Intn(int(tree.SilentNull) + 1))
+	var nullOk bool
+	if columnDef.Nullable.Nullability != tree.NotNull {
+		nullOk = true
+	}
+	if rand.Intn(2) == 0 {
+		datum := RandDatum(rand, typ, nullOk)
+		expr, _ := randExpr(rand, datum, typ, false /* canChangeType */, false /* needsImmutable */, nullOk)
+		// Add a random DEFAULT expr.
+		columnDef.DefaultExpr.Expr = expr
+	}
+
+	if rand.Intn(4) == 0 {
+		datum := RandDatum(rand, typ, nullOk)
+		expr, _ := randExpr(rand, datum, typ, false /* canChangeType */, false /* needsImmutable */, nullOk)
+		// Add a random ON UPDATE expr.
+		columnDef.OnUpdateExpr.Expr = expr
+	}
 	return columnDef
 }
 
@@ -402,7 +420,14 @@ func randComputedColumnTableDef(
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = (rng.Intn(2) == 0)
 
-	expr, typ, nullability, _ := randExpr(rng, normalColDefs, true /* nullOk */)
+	// Clear any default or ON UPDATE expr, since we're going to switch the type
+	// of the definition.
+	newDef.DefaultExpr.Expr = nil
+	newDef.DefaultExpr.ConstraintName = ""
+	newDef.OnUpdateExpr.Expr = nil
+	newDef.OnUpdateExpr.ConstraintName = ""
+
+	expr, typ, nullability, _ := randColumnExpr(rng, normalColDefs, true /* nullOk */)
 	newDef.Computed.Expr = expr
 	newDef.Type = typ
 	newDef.Nullable.Nullability = nullability
@@ -456,7 +481,7 @@ func randIndexTableDefFromCols(
 			// Do not allow NULL in expressions to avoid expressions that have
 			// an ambiguous type.
 			var referencedCols map[tree.Name]struct{}
-			expr, semType, _, referencedCols = randExpr(rng, eligibleExprIndexRefs, false /* nullOk */)
+			expr, semType, _, referencedCols = randColumnExpr(rng, eligibleExprIndexRefs, false /* nullOk */)
 			removeColsFromExprIndexRefCols(referencedCols)
 			elem.Expr = expr
 			elem.Column = ""
