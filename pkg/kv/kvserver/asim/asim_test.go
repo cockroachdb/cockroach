@@ -116,16 +116,16 @@ func TestWorkloadApply(t *testing.T) {
 
 	// Assert that the leaseholder replica load correctly matches the number of
 	// requests made.
-	require.Equal(t, int64(100), r1.Leaseholder.ReplicaLoad.ReadKeys)
-	require.Equal(t, int64(1000), r2.Leaseholder.ReplicaLoad.ReadKeys)
-	require.Equal(t, int64(10000), r3.Leaseholder.ReplicaLoad.ReadKeys)
+	require.Equal(t, float64(100), r1.Leaseholder.ReplicaLoad.Load().QueriesPerSecond)
+	require.Equal(t, float64(1000), r2.Leaseholder.ReplicaLoad.Load().QueriesPerSecond)
+	require.Equal(t, float64(10000), r3.Leaseholder.ReplicaLoad.Load().QueriesPerSecond)
 
-	expectedLoad := asim.StoreLoad{ReadKeys: 100, LeaseCount: 1, RangeCount: 1}
+	expectedLoad := roachpb.StoreCapacity{QueriesPerSecond: 100, LeaseCount: 1, RangeCount: 1}
 
 	// Assert that the store load is also updated upon request GetStoreLoad.
-	require.Equal(t, expectedLoad, s.Nodes[n1].Stores[0].GetStoreLoad())
-	expectedLoad.ReadKeys *= 10
-	require.Equal(t, expectedLoad, s.Nodes[n2].Stores[0].GetStoreLoad())
-	expectedLoad.ReadKeys *= 10
-	require.Equal(t, expectedLoad, s.Nodes[n3].Stores[0].GetStoreLoad())
+	require.Equal(t, expectedLoad, s.Nodes[n1].Stores[0].Capacity())
+	expectedLoad.QueriesPerSecond *= 10
+	require.Equal(t, expectedLoad, s.Nodes[n2].Stores[0].Capacity())
+	expectedLoad.QueriesPerSecond *= 10
+	require.Equal(t, expectedLoad, s.Nodes[n3].Stores[0].Capacity())
 }
