@@ -107,16 +107,16 @@ type Result struct {
 		streamer  *Streamer
 		toRelease int64
 	}
-	// position tracks the ordinal among all originally enqueued requests that
+	// Position tracks the ordinal among all originally enqueued requests that
 	// this result satisfies. See singleRangeBatch.positions for more details.
 	//
 	// If Streamer.Enqueue() was called with nil enqueueKeys argument, then
-	// EnqueueKeysSatisfied will exactly contain position; if non-nil
-	// enqueueKeys argument was passed, then position is used as an ordinal to
+	// EnqueueKeysSatisfied will exactly contain Position; if non-nil
+	// enqueueKeys argument was passed, then Position is used as an ordinal to
 	// lookup into enqueueKeys to populate EnqueueKeysSatisfied.
 	// TODO(yuzefovich): this might need to be []int when non-unique requests
 	// are supported.
-	position int
+	Position int
 }
 
 // Hints provides different hints to the Streamer for optimization purposes.
@@ -1280,7 +1280,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 					// This currently only works because all requests are
 					// unique.
 					EnqueueKeysSatisfied: []int{enqueueKey},
-					position:             position,
+					Position:             position,
 				}
 				result.memoryTok.streamer = w.s
 				result.memoryTok.toRelease = getResponseSize(get)
@@ -1313,7 +1313,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 					// This currently only works because all requests
 					// are unique.
 					EnqueueKeysSatisfied: []int{enqueueKey},
-					position:             position,
+					Position:             position,
 				}
 				result.memoryTok.streamer = w.s
 				result.memoryTok.toRelease = scanResponseSize(scan)
@@ -1420,8 +1420,8 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 			if results[i].ScanResp.ScanResponse != nil {
 				if results[i].ScanResp.ResumeSpan == nil {
 					// The scan within the range is complete.
-					w.s.mu.numRangesLeftPerScanRequest[results[i].position]--
-					if w.s.mu.numRangesLeftPerScanRequest[results[i].position] == 0 {
+					w.s.mu.numRangesLeftPerScanRequest[results[i].Position]--
+					if w.s.mu.numRangesLeftPerScanRequest[results[i].Position] == 0 {
 						// The scan across all ranges is now complete too.
 						results[i].ScanResp.Complete = true
 					}
