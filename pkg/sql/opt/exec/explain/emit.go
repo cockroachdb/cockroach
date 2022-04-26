@@ -558,6 +558,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			}
 		}
 		ob.VAttr("key columns", strings.Join(cols, ", "))
+		e.emitLockingPolicy(a.Locking)
 
 	case groupByOp:
 		a := n.args.(*groupByArgs)
@@ -665,11 +666,13 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if n := len(a.LeftFixedVals); n > 0 {
 			ob.Attrf("left fixed values", "%d column%s", n, util.Pluralize(int64(n)))
 		}
+		e.emitLockingPolicyWithPrefix("left ", a.LeftLocking)
 		e.emitTableAndIndex("right table", a.RightTable, a.RightIndex)
 		ob.Attrf("right columns", "(%s)", printColumns(rightCols))
 		if n := len(a.RightFixedVals); n > 0 {
 			ob.Attrf("right fixed values", "%d column%s", n, util.Pluralize(int64(n)))
 		}
+		e.emitLockingPolicyWithPrefix("right ", a.RightLocking)
 
 	case invertedFilterOp:
 		a := n.args.(*invertedFilterArgs)
@@ -685,6 +688,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.OnCond != tree.DBoolTrue {
 			ob.Expr("on", a.OnCond, cols)
 		}
+		e.emitLockingPolicy(a.Locking)
 
 	case projectSetOp:
 		a := n.args.(*projectSetArgs)
@@ -941,13 +945,17 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 }
 
 func (e *emitter) emitLockingPolicy(locking opt.Locking) {
+	e.emitLockingPolicyWithPrefix("", locking)
+}
+
+func (e *emitter) emitLockingPolicyWithPrefix(keyPrefix string, locking opt.Locking) {
 	strength := descpb.ToScanLockingStrength(locking.Strength)
 	waitPolicy := descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	if strength != descpb.ScanLockingStrength_FOR_NONE {
-		e.ob.Attr("locking strength", strength.PrettyString())
+		e.ob.Attr(keyPrefix+"locking strength", strength.PrettyString())
 	}
 	if waitPolicy != descpb.ScanLockingWaitPolicy_BLOCK {
-		e.ob.Attr("locking wait policy", waitPolicy.PrettyString())
+		e.ob.Attr(keyPrefix+"locking wait policy", waitPolicy.PrettyString())
 	}
 }
 

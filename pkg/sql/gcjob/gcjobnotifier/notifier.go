@@ -86,8 +86,11 @@ func (n *Notifier) AddNotifyee(ctx context.Context) (onChange <-chan struct{}, c
 	if n.mu.deltaFilter == nil {
 		zoneCfgFilter := gossip.MakeSystemConfigDeltaFilter(n.prefix)
 		n.mu.deltaFilter = &zoneCfgFilter
-		// Initialize the filter with the current values.
-		n.mu.deltaFilter.ForModified(n.provider.GetSystemConfig(), func(kv roachpb.KeyValue) {})
+		// Initialize the filter with the current values, if they exist.
+		cfg := n.provider.GetSystemConfig()
+		if cfg != nil {
+			n.mu.deltaFilter.ForModified(cfg, func(kv roachpb.KeyValue) {})
+		}
 	}
 	c := make(chan struct{}, 1)
 	n.mu.notifyees[c] = struct{}{}

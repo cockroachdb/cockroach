@@ -249,6 +249,7 @@ define IndexJoin {
     KeyCols []exec.NodeColumnOrdinal
     TableCols exec.TableColumnOrdinalSet
     ReqOrdering exec.OutputOrdering
+    Locking opt.Locking
     LimitHint int64
 }
 
@@ -310,6 +311,7 @@ define InvertedJoin {
     OnCond tree.TypedExpr
     IsFirstJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
+    Locking opt.Locking
 }
 
 # ZigzagJoin performs a zigzag join.
@@ -334,6 +336,9 @@ define ZigzagJoin {
     # corresponding 1-1 to RightEqCols.
     LeftEqCols []exec.TableColumnOrdinal
 
+    # Left row-level locking properties.
+    LeftLocking opt.Locking
+
     # Right table and index.
     RightTable cat.Table
     RightIndex cat.Index
@@ -348,6 +353,9 @@ define ZigzagJoin {
     # RightEqCols are the right table columns that have equality constraints,
     # corresponding 1-1 to LeftEqCols.
     RightEqCols []exec.TableColumnOrdinal
+
+    # Right row-level locking properties.
+    RightLocking opt.Locking
 
     # OnCond is an extra filter that is evaluated on the results.
     # TODO(radu): remove this (it can be a separate Select).

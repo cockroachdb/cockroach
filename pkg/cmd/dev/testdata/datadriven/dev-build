@@ -60,7 +60,7 @@ cp sandbox/pkg/cmd/cockroach/cockroach_/cockroach crdb-checkout/cockroach
 exec
 dev build stress
 ----
-bazel build @com_github_cockroachdb_stress//:stress
+bazel build @com_github_cockroachdb_stress//:stress --//build/toolchains:nogo_disable_flag
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no

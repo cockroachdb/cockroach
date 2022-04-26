@@ -456,6 +456,13 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return rec.compose(shouldDistribute), nil
 
 	case *indexJoinNode:
+		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+			// Index joins that are performing row-level locking cannot
+			// currently be distributed because their locks would not be
+			// propagated back to the root transaction coordinator.
+			// TODO(nvanbenschoten): lift this restriction.
+			return cannotDistribute, cannotDistributeRowLevelLockingErr
+		}
 		// n.table doesn't have meaningful spans, but we need to check support (e.g.
 		// for any filtering expression).
 		if _, err := checkSupportForPlanNode(n.table); err != nil {
@@ -467,6 +474,13 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return checkSupportForInvertedFilterNode(n)
 
 	case *invertedJoinNode:
+		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+			// Inverted joins that are performing row-level locking cannot
+			// currently be distributed because their locks would not be
+			// propagated back to the root transaction coordinator.
+			// TODO(nvanbenschoten): lift this restriction.
+			return cannotDistribute, cannotDistributeRowLevelLockingErr
+		}
 		if err := checkExpr(n.onExpr); err != nil {
 			return cannotDistribute, err
 		}
@@ -622,6 +636,15 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return canDistribute, nil
 
 	case *zigzagJoinNode:
+		for _, side := range n.sides {
+			if side.scan.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+				// ZigZag joins that are performing row-level locking cannot
+				// currently be distributed because their locks would not be
+				// propagated back to the root transaction coordinator.
+				// TODO(nvanbenschoten): lift this restriction.
+				return cannotDistribute, cannotDistributeRowLevelLockingErr
+			}
+		}
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
@@ -2425,6 +2448,8 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		Type:                              n.joinType,
 		MaintainOrdering:                  len(n.reqOrdering) > 0,
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
+		LockingStrength:                   n.table.lockingStrength,
+		LockingWaitPolicy:                 n.table.lockingWaitPolicy,
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
@@ -2514,11 +2539,13 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		}
 
 		sides[i] = zigzagPlanningSide{
-			desc:        side.scan.desc,
-			index:       side.scan.index,
-			cols:        side.scan.cols,
-			eqCols:      side.eqCols,
-			fixedValues: valuesSpec,
+			desc:              side.scan.desc,
+			index:             side.scan.index,
+			cols:              side.scan.cols,
+			eqCols:            side.eqCols,
+			fixedValues:       valuesSpec,
+			lockingStrength:   side.scan.lockingStrength,
+			lockingWaitPolicy: side.scan.lockingWaitPolicy,
 		}
 	}
 
@@ -2531,11 +2558,13 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 }
 
 type zigzagPlanningSide struct {
-	desc        catalog.TableDescriptor
-	index       catalog.Index
-	cols        []catalog.Column
-	eqCols      []int
-	fixedValues *execinfrapb.ValuesCoreSpec
+	desc              catalog.TableDescriptor
+	index             catalog.Index
+	cols              []catalog.Column
+	eqCols            []int
+	fixedValues       *execinfrapb.ValuesCoreSpec
+	lockingStrength   descpb.ScanLockingStrength
+	lockingWaitPolicy descpb.ScanLockingWaitPolicy
 }
 
 type zigzagPlanningInfo struct {

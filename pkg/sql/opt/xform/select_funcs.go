@@ -34,6 +34,9 @@ func (c *CustomFuncs) IsLocking(scan *memo.ScanPrivate) bool {
 	return scan.IsLocking()
 }
 
+// Silence unused warning.
+var _ = (*CustomFuncs).IsLocking
+
 // GeneratePartialIndexScans generates unconstrained index scans over all
 // non-inverted, partial indexes with predicates that are implied by the
 // filters. Partial indexes with predicates which cannot be proven to be implied
@@ -1144,6 +1147,8 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 					RightEqCols:    rightEqCols,
 					LeftFixedCols:  leftFixedCols,
 					RightFixedCols: rightFixedCols,
+					LeftLocking:    scanPrivate.Locking,
+					RightLocking:   scanPrivate.Locking,
 				},
 			}
 
@@ -1205,6 +1210,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			indexJoin.KeyCols = pkCols
 			indexJoin.Cols = scanPrivate.Cols
 			indexJoin.LookupColsAreTableKey = true
+			indexJoin.Locking = scanPrivate.Locking
 
 			// Create the LookupJoin for the index join in the same group as the
 			// original select.
@@ -1450,10 +1456,12 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		zigzagJoin := memo.ZigzagJoinExpr{
 			On: filters,
 			ZigzagJoinPrivate: memo.ZigzagJoinPrivate{
-				LeftTable:  scanPrivate.Table,
-				LeftIndex:  index.Ordinal(),
-				RightTable: scanPrivate.Table,
-				RightIndex: index.Ordinal(),
+				LeftTable:    scanPrivate.Table,
+				LeftIndex:    index.Ordinal(),
+				RightTable:   scanPrivate.Table,
+				RightIndex:   index.Ordinal(),
+				LeftLocking:  scanPrivate.Locking,
+				RightLocking: scanPrivate.Locking,
 			},
 		}
 
@@ -1566,6 +1574,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = scanPrivate.Cols
 		indexJoin.LookupColsAreTableKey = true
+		indexJoin.Locking = scanPrivate.Locking
 
 		// Create the LookupJoin for the index join in the same group as the
 		// original select.

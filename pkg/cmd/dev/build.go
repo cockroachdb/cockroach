@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	crossFlag = "cross"
+	crossFlag       = "cross"
+	nogoDisableFlag = "--//build/toolchains:nogo_disable_flag"
 )
 
 type buildTarget struct {
@@ -316,6 +317,7 @@ func (d *dev) getBasicBuildArgs(
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
 
+	canDisableNogo := true
 	shouldBuildWithTestConfig := false
 	for _, target := range targets {
 		target = strings.TrimPrefix(target, "./")
@@ -338,6 +340,9 @@ func (d *dev) getBasicBuildArgs(
 				if typ == "go_test" || typ == "go_transition_test" || typ == "test_suite" {
 					shouldBuildWithTestConfig = true
 				}
+				if strings.HasPrefix(fullTargetName, "//") {
+					canDisableNogo = false
+				}
 			}
 			continue
 		}
@@ -354,6 +359,9 @@ func (d *dev) getBasicBuildArgs(
 		} else {
 			buildTargets = append(buildTargets, buildTarget{fullName: aliased, kind: "go_binary"})
 		}
+		if strings.HasPrefix(aliased, "//") {
+			canDisableNogo = false
+		}
 	}
 
 	// Add --config=with_ui iff we're building a target that needs it.
@@ -365,6 +373,9 @@ func (d *dev) getBasicBuildArgs(
 	}
 	if shouldBuildWithTestConfig {
 		args = append(args, "--config=test")
+	}
+	if canDisableNogo {
+		args = append(args, nogoDisableFlag)
 	}
 	return args, buildTargets, nil
 }

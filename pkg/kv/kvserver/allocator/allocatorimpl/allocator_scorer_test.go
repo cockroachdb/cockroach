@@ -1458,7 +1458,7 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 		{[]roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1, testStoreUSb, testStoreEurope}, 13.0 / 20.0},
 	}
 
-	// Ensure that rangeDiversityScore and diversityRebalanceFromScore return
+	// Ensure that RangeDiversityScore and diversityRebalanceFromScore return
 	// the same results for the same configurations, enabling their results
 	// to be directly compared with each other. The same is not true for
 	// diversityAllocateScore and diversityRemovalScore as of their initial
@@ -1469,9 +1469,9 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 			s := testStores[storeID]
 			existingLocalities[s.StoreID] = s.Locality()
 		}
-		rangeScore := rangeDiversityScore(existingLocalities)
+		rangeScore := RangeDiversityScore(existingLocalities)
 		if a, e := rangeScore, tc.expected; !scoresAlmostEqual(a, e) {
-			t.Errorf("rangeDiversityScore(%v) got %f, want %f", existingLocalities, a, e)
+			t.Errorf("RangeDiversityScore(%v) got %f, want %f", existingLocalities, a, e)
 		}
 		for _, storeID := range tc.stores {
 			s := testStores[storeID]
@@ -1483,7 +1483,7 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 					s, fromStoreID, existingLocalities, a, e)
 			}
 			if a, e := rebalanceScore, rangeScore; !scoresAlmostEqual(a, e) {
-				t.Errorf("diversityRebalanceFromScore(%v, %d, %v)=%f not equal to rangeDiversityScore(%v)=%f",
+				t.Errorf("diversityRebalanceFromScore(%v, %d, %v)=%f not equal to RangeDiversityScore(%v)=%f",
 					s, fromStoreID, existingLocalities, a, existingLocalities, e)
 			}
 		}
