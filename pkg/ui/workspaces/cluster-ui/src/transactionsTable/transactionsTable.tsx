@@ -33,7 +33,7 @@ import { transactionLink } from "./transactionsCells";
 import { FixLong, longToInt, TimestampToString } from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
-  getStatementsByFingerprintIdAndTime,
+  getStatementsByFingerprintId,
   collectStatementsText,
   statementFingerprintIdsToText,
   statementFingerprintIdsToSummarizedText,
@@ -41,7 +41,7 @@ import {
 import classNames from "classnames/bind";
 import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
 
-type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+export type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 interface TransactionsTable {
@@ -71,7 +71,7 @@ interface TransactionLinkTargetProps {
 export const TransactionLinkTarget = (
   props: TransactionLinkTargetProps,
 ): string => {
-  return `/transaction/${props.aggregatedTs}/${props.transactionFingerprintId}`;
+  return `/transaction/${props.transactionFingerprintId}`;
 };
 
 export function makeTransactionsColumns(
@@ -145,9 +145,8 @@ export function makeTransactionsColumns(
         }),
       sort: (item: TransactionInfo) =>
         collectStatementsText(
-          getStatementsByFingerprintIdAndTime(
+          getStatementsByFingerprintId(
             item.stats_data.statement_fingerprint_ids,
-            TimestampToString(item.stats_data.aggregated_ts),
             statements,
           ),
         ),

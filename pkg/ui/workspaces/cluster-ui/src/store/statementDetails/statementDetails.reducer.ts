@@ -16,18 +16,28 @@ import {
   StatementDetailsResponse,
   StatementDetailsResponseWithKey,
 } from "src/api/statementsApi";
+import { generateStmtDetailsToID } from "../../util";
 
 export type SQLDetailsStatsState = {
   data: StatementDetailsResponse;
   lastError: Error;
   valid: boolean;
+  inFlight: boolean;
 };
 
 export type SQLDetailsStatsReducerState = {
-  [id: string]: SQLDetailsStatsState;
+  cachedData: {
+    [id: string]: SQLDetailsStatsState;
+  };
+  latestQuery: string;
+  latestFormattedQuery: string;
 };
 
-const initialState: SQLDetailsStatsReducerState = {};
+const initialState: SQLDetailsStatsReducerState = {
+  cachedData: {},
+  latestQuery: "",
+  latestFormattedQuery: "",
+};
 
 const sqlDetailsStatsSlice = createSlice({
   name: `${DOMAIN_NAME}/sqlDetailsStats`,
@@ -37,30 +47,68 @@ const sqlDetailsStatsSlice = createSlice({
       state,
       action: PayloadAction<StatementDetailsResponseWithKey>,
     ) => {
-      state[action.payload.key] = {
+      state.cachedData[action.payload.key] = {
         data: action.payload.stmtResponse,
         valid: true,
         lastError: null,
+        inFlight: false,
       };
     },
     failed: (state, action: PayloadAction<ErrorWithKey>) => {
-      state[action.payload.key] = {
+      state.cachedData[action.payload.key] = {
         data: null,
         valid: false,
         lastError: action.payload.err,
+        inFlight: false,
       };
     },
     invalidated: (state, action: PayloadAction<{ key: string }>) => {
-      delete state[action.payload.key];
+      delete state.cachedData[action.payload.key];
     },
     invalidateAll: state => {
       const keys = Object.keys(state);
       for (const key in keys) {
-        delete state[key];
+        delete state.cachedData[key];
       }
     },
-    refresh: (_, action: PayloadAction<StatementDetailsRequest>) => {},
-    request: (_, action: PayloadAction<StatementDetailsRequest>) => {},
+    refresh: (state, action: PayloadAction<StatementDetailsRequest>) => {
+      const key = action?.payload
+        ? generateStmtDetailsToID(
+            action.payload.fingerprint_id,
+            action.payload.app_names.toString(),
+            action.payload.start,
+            action.payload.end,
+          )
+        : "";
+      state.cachedData[key] = {
+        data: null,
+        valid: false,
+        lastError: null,
+        inFlight: true,
+      };
+    },
+    request: (state, action: PayloadAction<StatementDetailsRequest>) => {
+      const key = action?.payload
+        ? generateStmtDetailsToID(
+            action.payload.fingerprint_id,
+            action.payload.app_names.toString(),
+            action.payload.start,
+            action.payload.end,
+          )
+        : "";
+      state.cachedData[key] = {
+        data: null,
+        valid: false,
+        lastError: null,
+        inFlight: true,
+      };
+    },
+    setLatestQuery: (state, action: PayloadAction<string>) => {
+      state.latestQuery = action.payload;
+    },
+    setLatestFormattedQuery: (state, action: PayloadAction<string>) => {
+      state.latestFormattedQuery = action.payload;
+    },
   },
 });
 
