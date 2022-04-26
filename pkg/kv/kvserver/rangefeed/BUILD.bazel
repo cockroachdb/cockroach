@@ -39,6 +39,7 @@ go_test(
     size = "small",
     srcs = [
         "catchup_scan_bench_test.go",
+        "catchup_scan_test.go",
         "processor_test.go",
         "registry_test.go",
         "resolved_timestamp_test.go",
