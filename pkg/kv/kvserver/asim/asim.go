@@ -105,30 +105,6 @@ func (rm *RangeMap) GetRange(key string) *Range {
 	return rng
 }
 
-// ReplicaLoad is the sum of all key accesses and size of bytes, both written
-// and read.
-// TODO(kvoli): In the non-simulated code, replica_stats currently maintains
-// this structure, which is rated. This datastructure needs to be adapated by
-// the user to be rated over time. In the future we should introduce a better
-// general pupose stucture that enables rating.
-type ReplicaLoad struct {
-	WriteKeys  int64
-	WriteBytes int64
-	ReadKeys   int64
-	ReadBytes  int64
-}
-
-// applyReplicaLoad applies a load event onto a replica.
-func (r *Replica) applyReplicaLoad(le LoadEvent) {
-	if le.isWrite {
-		r.ReplicaLoad.WriteBytes += le.size
-		r.ReplicaLoad.WriteKeys++
-	} else {
-		r.ReplicaLoad.ReadBytes += le.size
-		r.ReplicaLoad.ReadKeys++
-	}
-}
-
 // Replica represents a replica of a range.
 type Replica struct {
 	spanConf    *roachpb.SpanConfig
@@ -221,7 +197,7 @@ func (s *State) AddReplica(r *Range, node int) int {
 		spanConf:    &roachpb.SpanConfig{},
 		rangeDesc:   r.Desc,
 		replDesc:    &desc,
-		ReplicaLoad: ReplicaLoad{},
+		ReplicaLoad: &ReplicaLoadCounter{},
 	}
 
 	store := nodeImpl.Stores[0]
@@ -247,38 +223,6 @@ func (s *State) AddReplica(r *Range, node int) int {
 	return int(desc.ReplicaID)
 }
 
-// StoreLoad represents the current load of the store.
-type StoreLoad struct {
-	WriteKeys  int64
-	WriteBytes int64
-	ReadKeys   int64
-	ReadBytes  int64
-	RangeCount int64
-	LeaseCount int64
-}
-
-// GetStoreLoad returns the current store load. The values in Write(Read)
-// Bytes(Keys) represent the aggregation across all leaseholder replicas on
-// this store. These values are not rated, instead they are counters.
-// TODO(kvoli): We should separate out recording of workload against
-// replicas and stores into a separate file. The internal capture datastructure
-// is less important. Then define an interface that transforms the recorded
-// load into store descriptors and range usage info.
-func (s *Store) GetStoreLoad() StoreLoad {
-	storeLoad := StoreLoad{}
-	for _, repl := range s.Replicas {
-		if repl.leaseHolder {
-			storeLoad.LeaseCount++
-		}
-		storeLoad.RangeCount++
-		storeLoad.ReadKeys += repl.ReplicaLoad.ReadKeys
-		storeLoad.WriteKeys += repl.ReplicaLoad.WriteKeys
-		storeLoad.WriteBytes += repl.ReplicaLoad.WriteBytes
-		storeLoad.ReadBytes += repl.ReplicaLoad.ReadBytes
-	}
-	return storeLoad
-}
-
 // ApplyAllocatorAction updates the state with allocator ops such as
 // moving/adding/removing replicas.
 func (s *State) ApplyAllocatorAction(
@@ -292,14 +236,12 @@ func (s *State) ApplyAllocatorAction(
 // written and therefore reads never fail.
 func (s *State) ApplyLoad(ctx context.Context, le LoadEvent) {
 	r := s.Ranges.GetRange(fmt.Sprintf("%d", le.Key))
-
-	// Apply the load event to the leaseholder replica of the range this key is contained in.
-	//
-	//NB: Reads may occur in practice across follower replicas, however these
+	// NB: Reads may occur in practice across follower replicas, however these
 	// statistics are not currently considered in allocation decisions.
 	// Initially we ignore workload on followers.
 	// TODO(kvoli): Apply write/read load to followers.
-	r.Leaseholder.applyReplicaLoad(le)
+	leaseHolder := r.Leaseholder
+	leaseHolder.ReplicaLoad.ApplyLoad(le)
 }
 
 func shouldRun(time.Time) bool {
