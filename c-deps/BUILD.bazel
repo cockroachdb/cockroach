@@ -2,6 +2,10 @@
 load("@rules_foreign_cc//foreign_cc:cmake.bzl", "cmake")
 load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
 
+exports_files([
+    "REPOSITORIES.bzl",
+])
+
 # Define the build target for libjemalloc.
 configure_make(
     name = "libjemalloc",
