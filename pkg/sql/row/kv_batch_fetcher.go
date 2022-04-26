@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 )
 
 // getKVBatchSize returns the number of keys we request at a time.
@@ -631,9 +633,13 @@ func spansToRequests(
 			scans[curScan].req.ScanFormat = format
 			scans[curScan].req.KeyLocking = keyLocking
 			if format == roachpb.COL_BATCH_RESPONSE {
+				out, err := types.MarshalAny(colFormatArgs.Spec)
+				if err != nil {
+					colexecerror.InternalError(err)
+				}
 				scans[curScan].req.TenantId = colFormatArgs.TenantID.ToUint64()
 				scans[curScan].req.ScanSpec = &roachpb.ScanSpec{
-					ScanSpec: colFormatArgs.Spec,
+					ScanSpec: out,
 				}
 			}
 			scans[curScan].union.ReverseScan = &scans[curScan].req
@@ -660,9 +666,13 @@ func spansToRequests(
 			scans[curScan].req.ScanFormat = format
 			scans[curScan].req.KeyLocking = keyLocking
 			if format == roachpb.COL_BATCH_RESPONSE {
+				out, err := types.MarshalAny(colFormatArgs.Spec)
+				if err != nil {
+					colexecerror.InternalError(err)
+				}
 				scans[curScan].req.TenantId = colFormatArgs.TenantID.ToUint64()
 				scans[curScan].req.ScanSpec = &roachpb.ScanSpec{
-					ScanSpec: colFormatArgs.Spec,
+					ScanSpec: out,
 				}
 			}
 			scans[curScan].union.Scan = &scans[curScan].req

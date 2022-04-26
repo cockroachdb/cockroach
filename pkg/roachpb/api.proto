@@ -471,6 +471,7 @@ message ScanRequest {
 }
 
 message ScanSpec {
+  /*
   option (gogoproto.gostring) = false;
   option (gogoproto.equal) = false;
   option (gogoproto.stringer) =  false;
@@ -478,10 +479,13 @@ message ScanSpec {
   option (gogoproto.sizer) = false;
   option (gogoproto.unmarshaler) = false;
 
+   */
+
   // This "any type" field is a serialized ProcessorSpec, containing a
   // TableReaderSpec that can be used to initialize a columnar scan for MVCC.
   // We use this generic type to resolve some painful circular dependency issues.
-  bytes scan_spec = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "interface{}"];
+  // bytes scan_spec = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "interface{}"];
+  google.protobuf.Any scan_spec = 1;
 }
 
 // A ScanResponse is the return value from the Scan() method.

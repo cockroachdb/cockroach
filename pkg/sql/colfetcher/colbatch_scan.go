@@ -223,19 +223,15 @@ func newCFetcherWrapper(
 	wrapper := cfetcherWrapper{}
 	wrapper.fetcher = *fetcher
 	wrapper.fetcher.fetcher = nexter
+	wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs)
+	if err != nil {
+		return nil, err
+	}
+	wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
+	if err != nil {
+		return nil, err
+	}
 	return &wrapper, nil
-	/*
-		wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs)
-		if err != nil {
-			return nil, err
-		}
-		wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
-		if err != nil {
-			return nil, err
-		}
-		return &wrapper, nil
-
-	*/
 }
 
 type cfetcherWrapper struct {

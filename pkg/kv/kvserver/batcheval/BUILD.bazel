@@ -75,7 +75,6 @@ go_library(
         "//pkg/security",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql/execinfrapb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util",

@@ -766,6 +766,7 @@ func (ColBatches) Unmarshal(b []byte) error {
 	return nil
 }
 
+/*
 func (ScanSpec) Size() int { return 0 }
 
 func (ScanSpec) MarshalToSizedBuffer([]byte) (int, error) {
@@ -775,3 +776,6 @@ func (ScanSpec) MarshalToSizedBuffer([]byte) (int, error) {
 func (ScanSpec) Unmarshal([]byte) error {
 	panic("This should never be called (for now)")
 }
+
+
+*/

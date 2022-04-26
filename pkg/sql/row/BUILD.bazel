@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/seqexpr",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/kvstreamer",
         "//pkg/sql/pgwire/pgcode",
@@ -73,6 +74,7 @@ go_library(
         "//pkg/util/unique",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 

@@ -27,7 +27,6 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/colconv",
         "//pkg/sql/colencoding",
-        "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecspan",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
