@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -370,7 +371,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			col.Type,
 			"REGIONAL BY ROW DEFAULT",
 			params.p.SemaCtx(),
-			tree.VolatilityVolatile,
+			volatility.Volatile,
 		)
 		if err != nil {
 			return err

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -44,7 +45,7 @@ func ValidateUniqueWithoutIndexPredicate(
 		types.Bool,
 		"unique without index predicate",
 		semaCtx,
-		tree.VolatilityImmutable,
+		volatility.Immutable,
 		&tn,
 	)
 	if err != nil {

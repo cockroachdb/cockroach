@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -53,7 +54,7 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 					return tree.DBoolFalse, nil
 				},
 				Info:       notUsableInfo,
-				Volatility: tree.VolatilityVolatile,
+				Volatility: volatility.Volatile,
 			},
 		},
 	}
@@ -181,7 +182,7 @@ func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefin
 					return nil, errUnimplemented
 				},
 				Info:       notUsableInfo,
-				Volatility: tree.VolatilityVolatile,
+				Volatility: volatility.Volatile,
 				// Ignore validity checks for typeio builtins. We don't
 				// implement these anyway, and they are very hard to special
 				// case.
@@ -273,7 +274,7 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 			return r[0], nil
 		},
 		Info:       notUsableInfo,
-		Volatility: tree.VolatilityStable,
+		Volatility: volatility.Stable,
 	}
 }
 
@@ -298,7 +299,7 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Overload {
 			return r[0], nil
 		},
 		Info:       notUsableInfo,
-		Volatility: tree.VolatilityStable,
+		Volatility: volatility.Stable,
 	}
 }
 
@@ -322,7 +323,7 @@ func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Overload {
 			return r[0], nil
 		},
 		Info:       notUsableInfo,
-		Volatility: tree.VolatilityStable,
+		Volatility: volatility.Stable,
 	}
 }
 
@@ -438,7 +439,7 @@ func makePGPrivilegeInquiryDef(
 				}
 			},
 			Info:       fmt.Sprintf(infoFmt, infoDetail),
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		})
 	}
 	return builtinDefinition{
@@ -521,7 +522,7 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), typ, string(tree.MustBeDString(d[1]))), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	)
 }
@@ -548,7 +549,7 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 				return typOid, nil
 			},
 			Info:       helpText,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	)
 }
@@ -563,7 +564,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDInt(-1), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -581,7 +582,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.DNull, nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -599,7 +600,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return datEncodingUTF8ShortName, nil
 			},
 			Info:       "Returns the current encoding name used by the database.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -620,7 +621,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return args[0], nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -633,7 +634,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return args[0], nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -656,7 +657,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.DNull, nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -684,7 +685,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return t[0], nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -731,7 +732,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDString(sb.String()), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -774,7 +775,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDString(fmt.Sprintf(`%s.%s`, res.Schema(), res.Object())), nil
 			},
 			Info:       "Returns the name of the sequence used by the given column_name in the table table_name.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -806,7 +807,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info: "Returns the OID of the current session's temporary schema, " +
 				"or zero if it has none (because it has not created any temporary tables).",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -840,7 +841,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.DBoolTrue, nil
 			},
 			Info:       "Returns true if the given OID is the OID of another session's temporary schema. (This can be useful, for example, to exclude other sessions' temporary tables from a catalog display.)",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -853,7 +854,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDString(args[0].ResolvedType().SQLStandardName()), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -877,7 +878,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDString(fmt.Sprintf(`"%s"`, collation)), nil
 			},
 			Info:       "Returns the collation of the argument",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -903,7 +904,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return t[0], nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -938,7 +939,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDString(fmt.Sprintf("(%s,%s,%s,%s,%s,%s,%s)", seqstart, seqmin, seqmax, seqincrement, seqcycleStr, seqcache, seqtypid)), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -984,7 +985,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
 				"Currently, the type modifier is ignored.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1024,7 +1025,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 				return r[0], nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1036,7 +1037,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 				return getPgObjDesc(ctx, "", int(args[0].(*tree.DOid).DInt))
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
@@ -1048,7 +1049,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 				)
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1060,7 +1061,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 				return tree.NewDOid(*args[0].(*tree.DInt)), nil
 			},
 			Info:       "Converts an integer to an OID.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1099,7 +1100,7 @@ SELECT description
 				return r[0], nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1111,7 +1112,7 @@ SELECT description
 				return tree.DBoolTrue, nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -1123,7 +1124,7 @@ SELECT description
 				return tree.DBoolTrue, nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -1137,7 +1138,7 @@ SELECT description
 				return tree.NewDString("UTF8"), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1166,7 +1167,7 @@ SELECT description
 				return tree.DNull, nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 	// pg_table_is_visible returns true if the input oid corresponds to a table
@@ -1190,7 +1191,7 @@ SELECT description
 				return tree.MakeDBool(tree.DBool(isVisible)), nil
 			},
 			Info:       "Returns whether the table with the given OID belongs to one of the schemas on the search path.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1218,7 +1219,7 @@ SELECT description
 				return tree.MakeDBool(tree.DBool(isVisible)), nil
 			},
 			Info:       "Returns whether the type with the given OID belongs to one of the schemas on the search path.",
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1252,7 +1253,7 @@ SELECT description
 				return allUpdatableEvents, nil
 			},
 			Info:       `Returns the update events the relation supports.`,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1304,7 +1305,7 @@ SELECT description
 				return tree.MakeDBool(tree.DBool(!column.IsComputed())), nil
 			},
 			Info:       `Returns whether the given column can be updated.`,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1326,7 +1327,7 @@ SELECT description
 			Info: "pg_sleep makes the current session's process sleep until " +
 				"seconds seconds have elapsed. seconds is a value of type " +
 				"double precision, so fractional-second delays can be specified.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -1844,7 +1845,7 @@ SELECT description
 				return getSessionVar(ctx, string(tree.MustBeDString(args[0])), false /* missingOk */)
 			},
 			Info:       categorySystemInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"setting_name", types.String}, {"missing_ok", types.Bool}},
@@ -1853,7 +1854,7 @@ SELECT description
 				return getSessionVar(ctx, string(tree.MustBeDString(args[0])), bool(tree.MustBeDBool(args[1])))
 			},
 			Info:       categorySystemInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1876,7 +1877,7 @@ SELECT description
 				return getSessionVar(ctx, varName, false /* missingOk */)
 			},
 			Info:       categorySystemInfo,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -1899,7 +1900,7 @@ SELECT description
 				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1911,7 +1912,7 @@ SELECT description
 				return tree.DZero, nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1923,7 +1924,7 @@ SELECT description
 				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1935,7 +1936,7 @@ SELECT description
 				return tree.DZero, nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -1961,7 +1962,7 @@ SELECT description
 				return tree.NewDInt(tree.DInt(totalSize)), nil
 			},
 			Info:       "Return size in bytes of the column provided as an argument",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}),
 
 	// NOTE: these two builtins could be defined as user-defined functions, like
@@ -2025,7 +2026,7 @@ SELECT description
 				return tree.DNull, nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2072,7 +2073,7 @@ SELECT description
 				return r[0], nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -2109,7 +2110,7 @@ SELECT description
 				return tree.DNull, nil
 			},
 			Info:       "Returns the precision of the given type with type modifier",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2131,7 +2132,7 @@ SELECT description
 				}
 			},
 			Info:       "Returns the radix of the given type with type modifier",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -2159,7 +2160,7 @@ SELECT description
 				return tree.DNull, nil
 			},
 			Info:       "Returns the scale of the given type with type modifier",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 }
@@ -2368,7 +2369,7 @@ func pgTrueTypImpl(attrField, typField string, retType *types.T) builtinDefiniti
 				return pgAttrField, nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	)
 }

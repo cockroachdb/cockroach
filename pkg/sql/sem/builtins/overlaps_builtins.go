@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -24,21 +25,21 @@ import (
 // builtin, and also the function's volatility for this overload.
 type overlapsOverloadVolatility struct {
 	argTypes   []*types.T
-	volatility tree.Volatility
+	volatility volatility.V
 }
 
 var (
 	validOverlapsOverloadVolatility = []overlapsOverloadVolatility{
-		{[]*types.T{types.Timestamp, types.Timestamp, types.Timestamp, types.Timestamp}, tree.VolatilityImmutable},
-		{[]*types.T{types.Timestamp, types.Interval, types.Timestamp, types.Interval}, tree.VolatilityImmutable},
-		{[]*types.T{types.TimeTZ, types.TimeTZ, types.TimeTZ, types.TimeTZ}, tree.VolatilityImmutable},
-		{[]*types.T{types.TimeTZ, types.Interval, types.TimeTZ, types.Interval}, tree.VolatilityImmutable},
-		{[]*types.T{types.Time, types.Time, types.Time, types.Time}, tree.VolatilityImmutable},
-		{[]*types.T{types.Time, types.Interval, types.Time, types.Interval}, tree.VolatilityImmutable},
-		{[]*types.T{types.TimestampTZ, types.TimestampTZ, types.TimestampTZ, types.TimestampTZ}, tree.VolatilityImmutable},
-		{[]*types.T{types.TimestampTZ, types.Interval, types.TimestampTZ, types.Interval}, tree.VolatilityStable},
-		{[]*types.T{types.Date, types.Date, types.Date, types.Date}, tree.VolatilityImmutable},
-		{[]*types.T{types.Date, types.Interval, types.Date, types.Interval}, tree.VolatilityImmutable},
+		{[]*types.T{types.Timestamp, types.Timestamp, types.Timestamp, types.Timestamp}, volatility.Immutable},
+		{[]*types.T{types.Timestamp, types.Interval, types.Timestamp, types.Interval}, volatility.Immutable},
+		{[]*types.T{types.TimeTZ, types.TimeTZ, types.TimeTZ, types.TimeTZ}, volatility.Immutable},
+		{[]*types.T{types.TimeTZ, types.Interval, types.TimeTZ, types.Interval}, volatility.Immutable},
+		{[]*types.T{types.Time, types.Time, types.Time, types.Time}, volatility.Immutable},
+		{[]*types.T{types.Time, types.Interval, types.Time, types.Interval}, volatility.Immutable},
+		{[]*types.T{types.TimestampTZ, types.TimestampTZ, types.TimestampTZ, types.TimestampTZ}, volatility.Immutable},
+		{[]*types.T{types.TimestampTZ, types.Interval, types.TimestampTZ, types.Interval}, volatility.Stable},
+		{[]*types.T{types.Date, types.Date, types.Date, types.Date}, volatility.Immutable},
+		{[]*types.T{types.Date, types.Interval, types.Date, types.Interval}, volatility.Immutable},
 	}
 )
 

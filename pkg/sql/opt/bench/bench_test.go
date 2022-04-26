@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -426,7 +427,7 @@ func newHarness(tb testing.TB, query benchQuery) *harness {
 			typ,
 			"", /* context */
 			&h.semaCtx,
-			tree.VolatilityVolatile,
+			volatility.Volatile,
 		)
 		if err != nil {
 			tb.Fatalf("%v", err)

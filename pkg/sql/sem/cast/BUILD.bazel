@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cast",
+    srcs = ["cast.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/cast",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/oidext",
+        "//pkg/sql/sem/volatility",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+    ],
+)
+
+go_test(
+    name = "cast_test",
+    srcs = ["cast_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":cast"],
+    deps = [
+        "//pkg/sql/oidext",
+        "//pkg/sql/sem/volatility",
+        "//pkg/sql/types",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

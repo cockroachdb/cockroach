@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -104,7 +105,7 @@ var geomFromWKTOverload = stringOverload1(
 	},
 	types.Geometry,
 	infoBuilder{info: "Returns the Geometry from a WKT or EWKT representation."}.String(),
-	tree.VolatilityImmutable,
+	volatility.Immutable,
 )
 
 // geomFromWKBOverload converts a WKB bytea to its Geometry form.
@@ -118,7 +119,7 @@ var geomFromWKBOverload = bytesOverload1(
 	},
 	types.Geometry,
 	infoBuilder{info: "Returns the Geometry from a WKB (or EWKB) representation."}.String(),
-	tree.VolatilityImmutable,
+	volatility.Immutable,
 )
 
 // geometryFromTextCheckShapeBuiltin is used for the ST_<Shape>FromText builtins.
@@ -143,7 +144,7 @@ func geometryFromTextCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinit
 					shapeType.String(),
 				),
 			}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
@@ -166,7 +167,7 @@ func geometryFromTextCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefinit
 					shapeType.String(),
 				),
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	)
 }
@@ -193,7 +194,7 @@ func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefiniti
 					shapeType.String(),
 				),
 			}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"wkb", types.Bytes}, {"srid", types.Int}},
@@ -216,7 +217,7 @@ func geometryFromWKBCheckShapeBuiltin(shapeType geopb.ShapeType) builtinDefiniti
 					shapeType.String(),
 				),
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	)
 }
@@ -234,7 +235,7 @@ var areaOverloadGeometry1 = geometryOverload1(
 		info:         "Returns the area of the given geometry.",
 		libraryUsage: usesGEOS,
 	},
-	tree.VolatilityImmutable,
+	volatility.Immutable,
 )
 
 var lengthOverloadGeometry1 = geometryOverload1(
@@ -252,7 +253,7 @@ var lengthOverloadGeometry1 = geometryOverload1(
 Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.`,
 		libraryUsage: usesGEOS,
 	},
-	tree.VolatilityImmutable,
+	volatility.Immutable,
 )
 
 var perimeterOverloadGeometry1 = geometryOverload1(
@@ -270,7 +271,7 @@ var perimeterOverloadGeometry1 = geometryOverload1(
 Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 		libraryUsage: usesGEOS,
 	},
-	tree.VolatilityImmutable,
+	volatility.Immutable,
 )
 
 var stBufferInfoBuilder = infoBuilder{
@@ -480,7 +481,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			infoBuilder{
 				info: "Compatibility placeholder function with PostGIS. This does not perform any operation on the Geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"postgis_dropbbox": makeBuiltin(
@@ -493,7 +494,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			infoBuilder{
 				info: "Compatibility placeholder function with PostGIS. This does not perform any operation on the Geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"postgis_hasbbox": makeBuiltin(
@@ -512,7 +513,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			infoBuilder{
 				info: "Returns whether a given Geometry has a bounding box. False for points and empty geometries; always true otherwise.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"postgis_getbbox": makeBuiltin(
@@ -529,7 +530,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			infoBuilder{
 				info: "Returns a box2d encapsulating the given Geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"postgis_extensions_upgrade": returnCompatibilityFixedStringBuiltin(
@@ -572,7 +573,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			infoBuilder{
 				info: "Returns a geometry which represents the S2 covering used by the index using the default index configuration.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"settings", types.String}},
@@ -605,7 +606,7 @@ e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mo
 SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3').
 `,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		geographyOverload1(
 			func(evalCtx *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -620,7 +621,7 @@ SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3').
 			infoBuilder{
 				info: "Returns a geography which represents the S2 covering used by the index using the default index configuration.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geography", types.Geography}, {"settings", types.String}},
@@ -650,7 +651,7 @@ e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mo
 SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 `,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -676,7 +677,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: `Returns the Geometry from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_geomfromewkt": makeBuiltin(
@@ -691,7 +692,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an EWKT representation."}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_wkbtosql": makeBuiltin(defProps(), geomFromWKBOverload),
@@ -714,7 +715,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: `Returns the Geometry from a WKB (or EWKB) representation with the given SRID set.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_geomfromewkb": makeBuiltin(
@@ -729,7 +730,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an EWKB representation."}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_geomfromgeojson": makeBuiltin(
@@ -748,7 +749,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			// strings over JSON.
 			PreferredOverload: true,
 			Info:              infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
-			Volatility:        tree.VolatilityImmutable,
+			Volatility:        volatility.Immutable,
 		},
 		jsonOverload1(
 			func(_ *tree.EvalContext, s json.JSON) (tree.Datum, error) {
@@ -768,7 +769,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_makepoint": makeBuiltin(
@@ -786,7 +787,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				return tree.NewDGeometry(g), nil
 			},
 			Info:       infoBuilder{info: `Returns a new Point with the given X and Y coordinates.`}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}},
@@ -802,7 +803,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				return tree.NewDGeometry(g), nil
 			},
 			Info:       infoBuilder{info: `Returns a new Point with the given X, Y, and Z coordinates.`}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"x", types.Float}, {"y", types.Float}, {"z", types.Float}, {"m", types.Float}},
@@ -819,7 +820,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				return tree.NewDGeometry(g), nil
 			},
 			Info:       infoBuilder{info: `Returns a new Point with the given X, Y, Z, and M coordinates.`}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_makepointm": makeBuiltin(
@@ -838,7 +839,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				return tree.NewDGeometry(g), nil
 			},
 			Info:       infoBuilder{info: `Returns a new Point with the given X, Y, and M coordinates.`}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_makepolygon": makeBuiltin(
@@ -855,7 +856,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			infoBuilder{
 				info: `Returns a new Polygon with the given outer LineString.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -883,7 +884,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: `Returns a new Polygon with the given outer LineString and interior (hole) LineString(s).`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_polygon": makeBuiltin(
@@ -907,7 +908,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				info: `Returns a new Polygon from the given LineString and sets its SRID. It is equivalent ` +
 					`to ST_MakePolygon with a single argument followed by ST_SetSRID.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -956,7 +957,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from a WKT or EWKT representation."}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"srid", types.Int}},
@@ -973,7 +974,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: `Returns the Geography from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -989,7 +990,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an EWKT representation."}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_geogfromwkb": makeBuiltin(
@@ -1004,7 +1005,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from a WKB (or EWKB) representation."}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"bytes", types.Bytes}, {"srid", types.Int}},
@@ -1021,7 +1022,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: `Returns the Geography from a WKB (or EWKB) representation with the given SRID set.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_geogfromewkb": makeBuiltin(
@@ -1036,7 +1037,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an EWKB representation."}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_geogfromgeojson": makeBuiltin(
@@ -1051,7 +1052,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an GeoJSON representation."}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		jsonOverload1(
 			func(_ *tree.EvalContext, s json.JSON) (tree.Datum, error) {
@@ -1071,7 +1072,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an GeoJSON representation."}.String(),
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_point": makeBuiltin(
@@ -1089,7 +1090,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				return tree.NewDGeometry(g), nil
 			},
 			Info:       infoBuilder{info: `Returns a new Point with the given X and Y coordinates.`}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_pointfromgeohash": makeBuiltin(
@@ -1112,7 +1113,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Return a POINT Geometry from a GeoHash string with supplied precision.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1131,7 +1132,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Return a POINT Geometry from a GeoHash string with max precision.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_geomfromgeohash": makeBuiltin(
@@ -1158,7 +1159,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Return a POLYGON Geometry from a GeoHash string with supplied precision.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1181,7 +1182,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Return a POLYGON Geometry from a GeoHash string with max precision.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_box2dfromgeohash": makeBuiltin(
@@ -1215,7 +1216,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Return a Box2D from a GeoHash string with supplied precision.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1237,7 +1238,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Return a Box2D from a GeoHash string with max precision.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1256,7 +1257,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			infoBuilder{
 				info: fmt.Sprintf("Returns the WKT representation of a given Geometry. A maximum of %d decimal digits is used.", defaultWKTDecimalDigits),
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1273,7 +1274,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the `.`. Use -1 to print as many digits as required to rebuild the same number.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -1284,7 +1285,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			infoBuilder{
 				info: fmt.Sprintf("Returns the WKT representation of a given Geography. A default of %d decimal digits is used.", defaultWKTDecimalDigits),
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1301,7 +1302,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Returns the WKT representation of a given Geography. The max_decimal_digits parameter controls the maximum decimal digits to print after the `.`. Use -1 to print as many digits as required to rebuild the same number.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_asewkt": makeBuiltin(
@@ -1315,7 +1316,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			infoBuilder{
 				info: fmt.Sprintf("Returns the EWKT representation of a given Geometry. A maximum of %d decimal digits is used.", defaultWKTDecimalDigits),
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1332,7 +1333,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the `.`. Use -1 to print as many digits as required to rebuild the same number.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -1343,7 +1344,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			infoBuilder{
 				info: fmt.Sprintf("Returns the EWKT representation of a given Geography. A default of %d decimal digits is used.", defaultWKTDecimalDigits),
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1360,7 +1361,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Returns the EWKT representation of a given Geography. The max_decimal_digits parameter controls the maximum decimal digits to print after the `.`. Use -1 to print as many digits as required to rebuild the same number.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_asbinary": makeBuiltin(
@@ -1372,7 +1373,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Bytes,
 			infoBuilder{info: "Returns the WKB representation of a given Geometry."},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -1381,7 +1382,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Bytes,
 			infoBuilder{info: "Returns the WKB representation of a given Geography."},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1400,7 +1401,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				info: "Returns the WKB representation of a given Geometry. " +
 					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1419,7 +1420,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				info: "Returns the WKB representation of a given Geography. " +
 					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_asewkb": makeBuiltin(
@@ -1430,7 +1431,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Bytes,
 			infoBuilder{info: "Returns the EWKB representation of a given Geometry."},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -1438,7 +1439,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.Bytes,
 			infoBuilder{info: "Returns the EWKB representation of a given Geography."},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_ashexwkb": makeBuiltin(
@@ -1450,7 +1451,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.String,
 			infoBuilder{info: "Returns the WKB representation in hex of a given Geometry."},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -1459,7 +1460,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.String,
 			infoBuilder{info: "Returns the WKB representation in hex of a given Geography."},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_ashexewkb": makeBuiltin(
@@ -1470,7 +1471,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.String,
 			infoBuilder{info: "Returns the EWKB representation in hex of a given Geometry."},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -1478,7 +1479,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.String,
 			infoBuilder{info: "Returns the EWKB representation in hex of a given Geography."},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1511,7 +1512,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				info: "Returns the EWKB representation in hex of a given Geometry. " +
 					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1544,7 +1545,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 				info: "Returns the EWKB representation in hex of a given Geography. " +
 					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_astwkb": makeBuiltin(
@@ -1572,7 +1573,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Returns the TWKB representation of a given geometry.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1599,7 +1600,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Returns the TWKB representation of a given geometry.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1628,7 +1629,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Returns the TWKB representation of a given geometry.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_askml": makeBuiltin(
@@ -1640,7 +1641,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.String,
 			infoBuilder{info: "Returns the KML representation of a given Geometry."},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -1649,7 +1650,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			types.String,
 			infoBuilder{info: "Returns the KML representation of a given Geography."},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_geohash": makeBuiltin(
@@ -1666,7 +1667,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			infoBuilder{
 				info: "Returns a GeoHash representation of the geometry with full precision if a point is provided, or with variable precision based on the size of the feature. This will error any coordinates are outside the bounds of longitude/latitude.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1686,7 +1687,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Returns a GeoHash representation of the geometry with the supplied precision. This will error any coordinates are outside the bounds of longitude/latitude.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -1700,7 +1701,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			infoBuilder{
 				info: "Returns a GeoHash representation of the geeographywith full precision if a point is provided, or with variable precision based on the size of the feature.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1720,7 +1721,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Returns a GeoHash representation of the geography with the supplied precision.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_asgeojson": makeBuiltin(
@@ -1744,7 +1745,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 					geo.DefaultGeoJSONDecimalDigits,
 				),
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"row", types.AnyTuple}, {"geo_column", types.String}},
@@ -1765,7 +1766,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 					geo.DefaultGeoJSONDecimalDigits,
 				),
 			}.String(),
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1790,7 +1791,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 						"max_decimal_digits will be output for each coordinate value.",
 				),
 			}.String(),
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1816,7 +1817,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 						"max_decimal_digits will be output for each coordinate value. Output will be pretty printed in JSON if pretty is true.",
 				),
 			}.String(),
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
@@ -1830,7 +1831,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 					geo.DefaultGeoJSONDecimalDigits,
 				),
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1847,7 +1848,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: `Returns the GeoJSON representation of a given Geometry with max_decimal_digits output for each coordinate value.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1873,7 +1874,7 @@ Options is a flag that can be bitmasked. The options are:
 * 4: GeoJSON Long CRS (e.g urn:ogc:def:crs:EPSG::4326)
 * 8: GeoJSON Short CRS if not EPSG:4326 (default for Geometry)
 `}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -1887,7 +1888,7 @@ Options is a flag that can be bitmasked. The options are:
 					geo.DefaultGeoJSONDecimalDigits,
 				),
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1904,7 +1905,7 @@ Options is a flag that can be bitmasked. The options are:
 			Info: infoBuilder{
 				info: `Returns the GeoJSON representation of a given Geography with max_decimal_digits output for each coordinate value.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -1930,7 +1931,7 @@ Options is a flag that can be bitmasked. The options are:
 * 4: GeoJSON Long CRS (e.g urn:ogc:def:crs:EPSG::4326)
 * 8: GeoJSON Short CRS if not EPSG:4326
 `}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_project": makeBuiltin(
@@ -1964,7 +1965,7 @@ The azimuth (also known as heading or bearing) is given in radians. It is measur
 East is azimuth π/2 (90 degrees); south is azimuth π (180 degrees); west is azimuth 3π/2 (270 degrees).
 Negative azimuth values and values greater than 2π (360 degrees) are supported.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -1994,7 +1995,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 			infoBuilder{
 				info: "Returns the number of coordinate dimensions of a given Geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_dimension": makeBuiltin(
@@ -2011,7 +2012,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 			infoBuilder{
 				info: "Returns the number of topological dimensions of a given Geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_startpoint": makeBuiltin(
@@ -2042,7 +2043,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 			infoBuilder{
 				info: "Returns the first point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_summary": makeBuiltin(
@@ -2073,7 +2074,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 * S: has spatial reference system
 `,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		geographyOverload1(
 			func(ctx *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
@@ -2101,7 +2102,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 * S: has spatial reference system
 `,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_endpoint": makeBuiltin(
@@ -2132,7 +2133,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 			infoBuilder{
 				info: "Returns the last point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_generatepoints": makeBuiltin(
@@ -2157,7 +2158,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 				info: `Generates pseudo-random points until the requested number are found within the input area. Uses system time as a seed.
 The requested number of points must be not larger than 65336.`,
 			}.String(),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}, {"seed", types.Int4}},
@@ -2182,7 +2183,7 @@ The requested number of points must be not larger than 65336.`,
 				info: `Generates pseudo-random points until the requested number are found within the input area.
 The requested number of points must be not larger than 65336.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_numpoints": makeBuiltin(
@@ -2203,7 +2204,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the number of points in a LineString. Returns NULL if the Geometry is not a LineString.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_hasarc": makeBuiltin(
@@ -2217,7 +2218,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns whether there is a CIRCULARSTRING in the geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_npoints": makeBuiltin(
@@ -2234,7 +2235,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the number of points in a given Geometry. Works for any shape type.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_points": makeBuiltin(
@@ -2251,7 +2252,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns all coordinates in the given Geometry as a MultiPoint, including duplicates.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_exteriorring": makeBuiltin(
@@ -2283,7 +2284,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the exterior ring of a Polygon as a LineString. Returns NULL if the shape is not a Polygon.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_interiorringn": makeBuiltin(
@@ -2317,7 +2318,7 @@ The requested number of points must be not larger than 65336.`,
 			Info: infoBuilder{
 				info: `Returns the n-th (1-indexed) interior ring of a Polygon as a LineString. Returns NULL if the shape is not a Polygon, or the ring does not exist.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_pointn": makeBuiltin(
@@ -2351,7 +2352,7 @@ The requested number of points must be not larger than 65336.`,
 			Info: infoBuilder{
 				info: `Returns the n-th Point of a LineString (1-indexed). Returns NULL if out of bounds or not a LineString.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_geometryn": makeBuiltin(
@@ -2421,7 +2422,7 @@ The requested number of points must be not larger than 65336.`,
 			Info: infoBuilder{
 				info: `Returns the n-th Geometry (1-indexed). Returns NULL if out of bounds.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_minimumclearance": makeBuiltin(
@@ -2439,7 +2440,7 @@ The requested number of points must be not larger than 65336.`,
 				info: `Returns the minimum distance a vertex can move before producing an invalid geometry. ` +
 					`Returns Infinity if no minimum clearance can be found (e.g. for a single point).`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_minimumclearanceline": makeBuiltin(
@@ -2458,7 +2459,7 @@ The requested number of points must be not larger than 65336.`,
 					`an invalid geometry. If no minimum clearance can be found (e.g. for a single point), an ` +
 					`empty LINESTRING is returned.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_numinteriorrings": makeBuiltin(
@@ -2483,7 +2484,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the number of interior rings in a Polygon Geometry. Returns NULL if the shape is not a Polygon.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_nrings": makeBuiltin(
@@ -2504,7 +2505,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the number of rings in a Polygon Geometry. Returns 0 if the shape is not a Polygon.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_force2d": makeBuiltin(
@@ -2521,7 +2522,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns a Geometry that is forced into XY layout with any Z or M dimensions discarded.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	// TODO(ayang): see if it's possible to refactor default args
@@ -2541,7 +2542,7 @@ The requested number of points must be not larger than 65336.`,
 					"If a Z coordinate doesn't exist, it will be set to 0. " +
 					"If a M coordinate is present, it will be discarded.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
@@ -2559,7 +2560,7 @@ The requested number of points must be not larger than 65336.`,
 			Info: infoBuilder{info: "Returns a Geometry that is forced into XYZ layout. " +
 				"If a Z coordinate doesn't exist, it will be set to the specified default Z value. " +
 				"If a M coordinate is present, it will be discarded."}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_force3dm": makeBuiltin(
@@ -2578,7 +2579,7 @@ The requested number of points must be not larger than 65336.`,
 					"If a M coordinate doesn't exist, it will be set to 0. " +
 					"If a Z coordinate is present, it will be discarded.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultM", types.Float}},
@@ -2596,7 +2597,7 @@ The requested number of points must be not larger than 65336.`,
 			Info: infoBuilder{info: "Returns a Geometry that is forced into XYM layout. " +
 				"If a M coordinate doesn't exist, it will be set to the specified default M value. " +
 				"If a Z coordinate is present, it will be discarded."}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_force4d": makeBuiltin(
@@ -2615,7 +2616,7 @@ The requested number of points must be not larger than 65336.`,
 					"If a Z coordinate doesn't exist, it will be set to 0. " +
 					"If a M coordinate doesn't exist, it will be set to 0.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
@@ -2633,7 +2634,7 @@ The requested number of points must be not larger than 65336.`,
 			Info: infoBuilder{info: "Returns a Geometry that is forced into XYZ layout. " +
 				"If a Z coordinate doesn't exist, it will be set to the specified default Z value. " +
 				"If a M coordinate doesn't exist, it will be set to 0."}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}, {"defaultM", types.Float}},
@@ -2652,7 +2653,7 @@ The requested number of points must be not larger than 65336.`,
 			Info: infoBuilder{info: "Returns a Geometry that is forced into XYZ layout. " +
 				"If a Z coordinate doesn't exist, it will be set to the specified Z value. " +
 				"If a M coordinate doesn't exist, it will be set to the specified M value."}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_forcepolygoncw": makeBuiltin(
@@ -2669,7 +2670,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns a Geometry where all Polygon objects have exterior rings in the clockwise orientation and interior rings in the counter-clockwise orientation. Non-Polygon objects are unchanged.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_forcepolygonccw": makeBuiltin(
@@ -2686,7 +2687,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns a Geometry where all Polygon objects have exterior rings in the counter-clockwise orientation and interior rings in the clockwise orientation. Non-Polygon objects are unchanged.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_ispolygoncw": makeBuiltin(
@@ -2762,7 +2763,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the number of shapes inside a given Geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_x": makeBuiltin(
@@ -2787,7 +2788,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the X coordinate of a geometry if it is a Point.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_y": makeBuiltin(
@@ -2812,7 +2813,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the Y coordinate of a geometry if it is a Point.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_z": makeBuiltin(
@@ -2837,7 +2838,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the Z coordinate of a geometry if it is a Point.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_m": makeBuiltin(
@@ -2862,7 +2863,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the M coordinate of a geometry if it is a Point.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_zmflag": makeBuiltin(
@@ -2890,7 +2891,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns a code based on the ZM coordinate dimension of a geometry (XY = 0, XYM = 1, XYZ = 2, XYZM = 3).",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_area": makeBuiltin(
@@ -2908,7 +2909,7 @@ The requested number of points must be not larger than 65336.`,
 				infoBuilder{
 					info: "Returns the area of the given geography in meters^2.",
 				},
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			),
 			areaOverloadGeometry1,
 		)...,
@@ -2932,7 +2933,7 @@ The requested number of points must be not larger than 65336.`,
 				infoBuilder{
 					info: "Returns the length of the given geography in meters.",
 				},
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			),
 			lengthOverloadGeometry1,
 		)...,
@@ -2956,7 +2957,7 @@ The requested number of points must be not larger than 65336.`,
 				infoBuilder{
 					info: "Returns the perimeter of the given geography in meters.",
 				},
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			),
 			perimeterOverloadGeometry1,
 		)...,
@@ -2975,7 +2976,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the Spatial Reference Identifier (SRID) for the ST_Geography as defined in spatial_ref_sys table.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		geometryOverload1(
 			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
@@ -2985,7 +2986,7 @@ The requested number of points must be not larger than 65336.`,
 			infoBuilder{
 				info: "Returns the Spatial Reference Identifier (SRID) for the ST_Geometry as defined in spatial_ref_sys table.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"geometrytype": makeBuiltin(
@@ -2999,7 +3000,7 @@ The requested number of points must be not larger than 65336.`,
 				info:         "Returns the type of geometry as a string.",
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_geometrytype": makeBuiltin(
@@ -3013,7 +3014,7 @@ The requested number of points must be not larger than 65336.`,
 				info:         "Returns the type of geometry as a string prefixed with `ST_`.",
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_addmeasure": makeBuiltin(
@@ -3035,7 +3036,7 @@ The requested number of points must be not larger than 65336.`,
 			Info: infoBuilder{info: "Returns a copy of a LineString or MultiLineString with measure coordinates " +
 				"linearly interpolated between the specified start and end values. " +
 				"Any existing M coordinates will be overwritten."}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_lineinterpolatepoint": makeBuiltin(
@@ -3078,7 +3079,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 Note If the result has zero or one points, it will be returned as a POINT. If it has two or more points, it will be returned as a MULTIPOINT.`,
 				libraryUsage: usesGEOS,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_multi": makeBuiltin(
@@ -3096,7 +3097,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 				info: `Returns the geometry as a new multi-geometry, e.g converts a POINT to a MULTIPOINT. If the input ` +
 					`is already a multitype or collection, it is returned as is.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_collectionextract": makeBuiltin(
@@ -3121,7 +3122,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 					`If there are no elements of the given type, an EMPTY geometry is returned. Types are specified as ` +
 					`1=POINT, 2=LINESTRING, 3=POLYGON - other types are not supported.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_collectionhomogenize": makeBuiltin(
@@ -3140,7 +3141,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 					`type will be returned as an appopriate multitype, or a singleton if it only contains a ` +
 					`single geometry.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_forcecollection": makeBuiltin(
@@ -3157,7 +3158,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			infoBuilder{
 				info: `Converts the geometry into a GeometryCollection.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_linefrommultipoint": makeBuiltin(
@@ -3174,7 +3175,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			infoBuilder{
 				info: `Creates a LineString from a MultiPoint geometry.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_linemerge": makeBuiltin(
@@ -3194,7 +3195,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 					`an empty GeometryCollection is returned.`,
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_shiftlongitude": makeBuiltin(
@@ -3213,7 +3214,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 					`incremented by 360 if it is <0 and decremented by 360 if it is >180. The result is only meaningful ` +
 					`if the coordinates are in longitude/latitude.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -3296,7 +3297,7 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 
 The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		geographyOverload2(
 			func(ctx *tree.EvalContext, a, b *tree.DGeography) (tree.Datum, error) {
@@ -3318,7 +3319,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.`,
 				libraryUsage: usesGeographicLib,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_distance": makeBuiltin(
@@ -3338,7 +3339,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			infoBuilder{
 				info: `Returns the distance between the given geometries.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		geographyOverload2(
 			func(ctx *tree.EvalContext, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
@@ -3356,7 +3357,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 				info:         "Returns the distance in meters between geography_a and geography_b. " + usesSpheroidMessage + spheroidDistanceMessage,
 				libraryUsage: usesGeographicLib,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3383,7 +3384,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 				info:         "Returns the distance in meters between geography_a and geography_b." + spheroidDistanceMessage,
 				libraryUsage: usesGeographicLib | usesS2,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_distancesphere": makeBuiltin(
@@ -3413,7 +3414,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 					"represent lng/lat points on a sphere.",
 				libraryUsage: usesS2,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_distancespheroid": makeBuiltin(
@@ -3443,7 +3444,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 					"represent lng/lat points on a spheroid." + spheroidDistanceMessage,
 				libraryUsage: usesGeographicLib | usesS2,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_frechetdistance": makeBuiltin(
@@ -3464,7 +3465,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 				info:         `Returns the Frechet distance between the given geometries.`,
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3494,7 +3495,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 					"time and memory usage increases with the square of the number of subsegments.",
 				libraryUsage: usesGEOS,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_hausdorffdistance": makeBuiltin(
@@ -3515,7 +3516,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 				info:         `Returns the Hausdorff distance between the given geometries.`,
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3543,7 +3544,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 					`segment densification (range 0.0-1.0).`,
 				libraryUsage: usesGEOS,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_maxdistance": makeBuiltin(
@@ -3564,7 +3565,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 				info: `Returns the maximum distance across every pair of points comprising the given geometries. ` +
 					`Note if the geometries are the same, it will return the maximum distance between the geometry's vertexes.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_longestline": makeBuiltin(
@@ -3589,7 +3590,7 @@ Note if geometries are the same, it will return the LineString with the maximum 
 					`vertexes. The function will return the longest line that was discovered first when comparing maximum ` +
 					`distances if more than one is found.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_shortestline": makeBuiltin(
@@ -3614,7 +3615,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 					`vertexes. The function will return the shortest line that was discovered first when comparing minimum ` +
 					`distances if more than one is found.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -3721,7 +3722,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, inclusive. " +
 					"In other words, the ST_MaxDistance between geometry_a and geometry_b is less than or equal to distance units.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_dwithin": makeSTDWithinBuiltin(geo.FnInclusive),
@@ -3761,7 +3762,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info:         "Returns the geometry in its normalized form.",
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_intersects": makeBuiltin(
@@ -3835,7 +3836,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info:         `Returns the DE-9IM spatial relation between geometry_a and geometry_b.`,
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3858,7 +3859,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info:         `Returns whether the DE-9IM spatial relation between geometry_a and geometry_b matches the DE-9IM pattern.`,
 				libraryUsage: usesGEOS,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3882,7 +3883,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 					`boundary node rule (1:OGC/MOD2, 2:Endpoint, 3:MultivalentEndpoint, 4:MonovalentEndpoint).`,
 				libraryUsage: usesGEOS,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_relatematch": makeBuiltin(
@@ -3906,7 +3907,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			Info: infoBuilder{
 				info: "Returns whether the given DE-9IM intersection matrix satisfies the given pattern.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -3929,7 +3930,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info:         `Returns whether the geometry is valid as defined by the OGC spec.`,
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3954,7 +3955,7 @@ For flags=0, validity is defined by the OGC spec.
 For flags=1, validity considers self-intersecting rings forming holes as valid as per ESRI. This is not valid under OGC and CRDB spatial operations may not operate correctly.`,
 				libraryUsage: usesGEOS,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_isvalidreason": makeBuiltin(
@@ -3972,7 +3973,7 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 				info:         `Returns a string containing the reason the geometry is invalid along with the point of interest, or "Valid Geometry" if it is valid. Validity is defined by the OGC spec.`,
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4000,7 +4001,7 @@ For flags=0, validity is defined by the OGC spec.
 For flags=1, validity considers self-intersecting rings forming holes as valid as per ESRI. This is not valid under OGC and CRDB spatial operations may not operate correctly.`,
 				libraryUsage: usesGEOS,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_isvalidtrajectory": makeBuiltin(
@@ -4019,7 +4020,7 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 
 Note the geometry must be a LineString with M coordinates.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_makevalid": makeBuiltin(
@@ -4037,7 +4038,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				info:         "Returns a valid form of the given geometry according to the OGC spec.",
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -4060,7 +4061,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				info:         "Returns the closure of the combinatorial boundary of this Geometry.",
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_centroid": makeBuiltin(
@@ -4078,7 +4079,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				infoBuilder{
 					info: "Returns the centroid of given geography.",
 				},
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			),
 			geometryOverload1(
 				func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
@@ -4093,7 +4094,7 @@ Note the geometry must be a LineString with M coordinates.`,
 					info:         "Returns the centroid of the given geometry.",
 					libraryUsage: usesGEOS,
 				},
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			),
 		)...,
 	),
@@ -4114,7 +4115,7 @@ Note the geometry must be a LineString with M coordinates.`,
 			Info: infoBuilder{
 				info: "Clips the geometry to conform to the bounding box specified by box2d.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_convexhull": makeBuiltin(
@@ -4132,7 +4133,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				info:         "Returns a geometry that represents the Convex Hull of the given geometry.",
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_difference": makeBuiltin(
@@ -4150,7 +4151,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				info:         "Returns the difference of two Geometries.",
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_pointonsurface": makeBuiltin(
@@ -4168,7 +4169,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				info:         "Returns a point that intersects with the given Geometry.",
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_intersection": makeBuiltin(
@@ -4186,7 +4187,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				info:         "Returns the point intersections of the given geometries.",
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		geographyOverload2(
 			func(ctx *tree.EvalContext, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {
@@ -4260,7 +4261,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				info:         "Returns the point intersections of the given geographies." + usingBestGeomProjectionWarning,
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_sharedpaths": makeBuiltin(
@@ -4282,7 +4283,7 @@ Those going in the same direction are in the first element of the collection,
 those going in the opposite direction are in the second element.
 The paths themselves are given in the direction of the first geometry.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_closestpoint": makeBuiltin(
@@ -4303,7 +4304,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			infoBuilder{
 				info: `Returns the 2-dimensional point on geometry_a that is closest to geometry_b. This is the first point of the shortest line.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_symdifference": makeBuiltin(
@@ -4321,7 +4322,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				info:         "Returns the symmetric difference of both geometries.",
 				libraryUsage: usesGEOS,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_simplify": makeBuiltin(
@@ -4347,7 +4348,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				info:         `Simplifies the given geometry using the Douglas-Peucker algorithm.`,
 				libraryUsage: usesGEOS,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4372,7 +4373,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Info: infoBuilder{
 				info: `Simplifies the given geometry using the Douglas-Peucker algorithm, retaining objects that would be too small given the tolerance if preserve_collapsed is set to true.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_simplifypreservetopology": makeBuiltin(
@@ -4396,7 +4397,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				info:         `Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.`,
 				libraryUsage: usesGEOS,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -4423,7 +4424,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Info: infoBuilder{
 				info: `Sets a Geometry to a new SRID without transforming the coordinates.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4443,7 +4444,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Info: infoBuilder{
 				info: `Sets a Geography to a new SRID without transforming the coordinates.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_transform": makeBuiltin(
@@ -4476,7 +4477,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				info:         `Transforms a geometry into the given SRID coordinate reference system by projecting its coordinates.`,
 				libraryUsage: usesPROJ,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4507,7 +4508,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				info:         `Transforms a geometry into the coordinate reference system referenced by the projection text by projecting its coordinates.`,
 				libraryUsage: usesPROJ,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4536,7 +4537,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				info:         `Transforms a geometry into the coordinate reference system assuming the from_proj_text to the new to_proj_text by projecting its coordinates.`,
 				libraryUsage: usesPROJ,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4569,7 +4570,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				info:         `Transforms a geometry into the coordinate reference system assuming the from_proj_text to the new to_proj_text by projecting its coordinates. The supplied SRID is set on the new geometry.`,
 				libraryUsage: usesPROJ,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_translate": makeBuiltin(
@@ -4596,7 +4597,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Info: infoBuilder{
 				info: `Returns a modified Geometry translated by the given deltas.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4622,7 +4623,7 @@ The paths themselves are given in the direction of the first geometry.`,
 			Info: infoBuilder{
 				info: `Returns a modified Geometry translated by the given deltas.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_affine": makeBuiltin(
@@ -4663,7 +4664,7 @@ The matrix transformation will be applied as follows for each coordinate:
 \ 0  0      1 /  \ 0 /
 				`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4708,7 +4709,7 @@ The matrix transformation will be applied as follows for each coordinate:
 \ 0  0  0     1 /  \ 0 /
 				`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_scale": makeBuiltin(
@@ -4735,7 +4736,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a modified Geometry scaled by the given factors.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4771,7 +4772,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a modified Geometry scaled by taking in a Geometry as the factor.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4795,7 +4796,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a modified Geometry scaled by the Geometry factor relative to a false origin.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_rotate": makeBuiltin(
@@ -4820,7 +4821,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4844,7 +4845,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a modified Geometry whose coordinates are rotated around the provided origin by a rotation angle.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4871,7 +4872,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a modified Geometry whose coordinates are rotated around the provided origin by a rotation angle.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_rotatex": makeBuiltin(
@@ -4896,7 +4897,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a modified Geometry whose coordinates are rotated about the x axis by a rotation angle.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_rotatey": makeBuiltin(
@@ -4921,7 +4922,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a modified Geometry whose coordinates are rotated about the y axis by a rotation angle.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_rotatez": makeBuiltin(
@@ -4946,7 +4947,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a modified Geometry whose coordinates are rotated about the z axis by a rotation angle.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_addpoint": makeBuiltin(
@@ -4973,7 +4974,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Adds a Point to a LineString at the given 0-based index (-1 to append).`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4995,7 +4996,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Adds a Point to the end of a LineString.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_setpoint": makeBuiltin(
@@ -5022,7 +5023,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Sets the Point at the given 0-based index and returns the modified LineString geometry.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_removepoint": makeBuiltin(
@@ -5047,7 +5048,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Removes the Point at the given 0-based index and returns the modified LineString geometry.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_removerepeatedpoints": makeBuiltin(
@@ -5072,7 +5073,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a geometry with repeated points removed, within the given distance tolerance.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5091,7 +5092,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a geometry with repeated points removed.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_reverse": makeBuiltin(
@@ -5114,7 +5115,7 @@ The matrix transformation will be applied as follows for each coordinate:
 			Info: infoBuilder{
 				info: `Returns a modified geometry by reversing the order of its vertices.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_segmentize": makeBuiltin(
@@ -5140,7 +5141,7 @@ The matrix transformation will be applied as follows for each coordinate:
 The calculations are done on a sphere.`,
 				libraryUsage: usesS2,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5161,7 +5162,7 @@ The calculations are done on a sphere.`,
 				info: `Returns a modified Geometry having no segment longer than the given max_segment_length. ` +
 					`Length units are in units of spatial reference.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_snaptogrid": makeBuiltin(
@@ -5185,7 +5186,7 @@ The calculations are done on a sphere.`,
 				info: "Snap a geometry to a grid of the given size. " +
 					"The specified size is only used to snap X and Y coordinates.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5207,7 +5208,7 @@ The calculations are done on a sphere.`,
 			Info: infoBuilder{
 				info: "Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5233,7 +5234,7 @@ The calculations are done on a sphere.`,
 			Info: infoBuilder{
 				info: "Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y based on an origin of (origin_x, origin_y).",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5278,7 +5279,7 @@ The calculations are done on a sphere.`,
 				info: "Snap a geometry to a grid defined by the given origin and X, Y, Z, and M cell sizes. " +
 					"Any dimension with a 0 cell size will not be snapped.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_snap": makeBuiltin(
@@ -5305,7 +5306,7 @@ The calculations are done on a sphere.`,
 Tolerance is used to control where snapping is performed. The result geometry is the input geometry with the vertices snapped. 
 If no snapping occurs then the input geometry is returned unchanged.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_buffer": makeBuiltin(
@@ -5327,7 +5328,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				return tree.NewDGeometry(ret), nil
 			},
 			Info:       stBufferInfoBuilder.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5346,7 +5347,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				return tree.NewDGeometry(ret), nil
 			},
 			Info:       stBufferInfoBuilder.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5370,7 +5371,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				return tree.NewDGeometry(ret), nil
 			},
 			Info:       stBufferInfoBuilder.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5395,7 +5396,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				return tree.NewDGeometry(ret), nil
 			},
 			Info:       stBufferWithQuadSegInfoBuilder.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5425,7 +5426,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				return tree.NewDGeometry(ret), nil
 			},
 			Info:       stBufferWithParamsInfoBuilder.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5450,7 +5451,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				return tree.NewDGeography(ret), nil
 			},
 			Info:       stBufferInfoBuilder.String() + usingBestGeomProjectionWarning,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5480,7 +5481,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				return tree.NewDGeography(ret), nil
 			},
 			Info:       stBufferWithQuadSegInfoBuilder.String() + usingBestGeomProjectionWarning,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5515,7 +5516,7 @@ If no snapping occurs then the input geometry is returned unchanged.`,
 				return tree.NewDGeography(ret), nil
 			},
 			Info:       stBufferWithParamsInfoBuilder.String() + usingBestGeomProjectionWarning,
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_envelope": makeBuiltin(
@@ -5537,7 +5538,7 @@ or a horizontal or vertical line), a POINT or LINESTRING is returned. Otherwise,
 returned POLYGON will be ordered Bottom Left, Top Left, Top Right, Bottom Right,
 Bottom Left.`,
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5555,7 +5556,7 @@ Bottom Left.`,
 			Info: infoBuilder{
 				info: "Returns a bounding geometry for the given box.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_flipcoordinates": makeBuiltin(
@@ -5578,7 +5579,7 @@ Bottom Left.`,
 			Info: infoBuilder{
 				info: "Returns a new geometry with the X and Y axes flipped.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_swapordinates": makeBuiltin(
@@ -5610,7 +5611,7 @@ Bottom Left.`,
 				info: `Returns a version of the given geometry with given ordinates swapped.
 The swap_ordinate_string parameter is a 2-character string naming the ordinates to swap. Valid names are: x, y, z and m.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -5642,7 +5643,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 				info: `Returns the clockwise angle between the vectors formed by point1,point2 and point3,point4. ` +
 					`The arguments must be POINT geometries. Returns NULL if any vectors have 0 length.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5672,7 +5673,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 				info: `Returns the clockwise angle between the vectors formed by point2,point1 and point2,point3. ` +
 					`The arguments must be POINT geometries. Returns NULL if any vectors have 0 length.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5696,7 +5697,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 				info: `Returns the clockwise angle between two LINESTRING geometries, treating them as vectors ` +
 					`between their start- and endpoints. Returns NULL if any vectors have 0 length.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -5719,7 +5720,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 This format is used by Google Maps with precision=5 and by Open Source Routing Machine with precision=5 and 6.
 Preserves 5 decimal places.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5741,7 +5742,7 @@ Preserves 5 decimal places.`,
 This format is used by Google Maps with precision=5 and by Open Source Routing Machine with precision=5 and 6.
 Precision specifies how many decimal places will be preserved in Encoded Polyline. Value should be the same on encoding and decoding, or coordinates will be incorrect.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_linefromencodedpolyline": makeBuiltin(defProps(),
@@ -5766,7 +5767,7 @@ Returns valid results only if the polyline was encoded with 5 decimal places.
 
 See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5790,7 +5791,7 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 
 See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_unaryunion": makeBuiltin(
@@ -5807,7 +5808,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			infoBuilder{
 				info: "Returns a union of the components for any geometry or geometry collection provided. Dissolves boundaries of a multipolygon.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_node": makeBuiltin(
@@ -5824,7 +5825,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			infoBuilder{
 				info: "Adds a node on a geometry for each intersection. Resulting geometry is always a MultiLineString.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_subdivide": makeBuiltin(
@@ -5836,7 +5837,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			types.Geometry,
 			makeSubdividedGeometriesGeneratorFactory(false /* expectMaxVerticesArg */),
 			"Returns a geometry divided into parts, where each part contains no more than 256 vertices.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		makeGeneratorOverload(
 			tree.ArgTypes{
@@ -5846,7 +5847,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			types.Geometry,
 			makeSubdividedGeometriesGeneratorFactory(true /* expectMaxVerticesArg */),
 			"Returns a geometry divided into parts, where each part contains no more than the number of vertices provided.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 
@@ -5890,7 +5891,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			infoBuilder{
 				info: "Creates a box2d from two points. Errors if arguments are not two non-empty points.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"st_combinebbox": makeBuiltin(
@@ -5920,7 +5921,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Info: infoBuilder{
 				info: "Combines the current bounding box with the bounding box of the Geometry.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_expand": makeBuiltin(
@@ -5940,7 +5941,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Info: infoBuilder{
 				info: "Extends the box2d by delta units across all dimensions.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5962,7 +5963,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Info: infoBuilder{
 				info: "Extends the box2d by delta_x units in the x dimension and delta_y units in the y dimension.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"delta", types.Float}},
@@ -5983,7 +5984,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Info: infoBuilder{
 				info: "Extends the bounding box represented by the geometry by delta units across all dimensions, returning a Polygon representing the new bounding box.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6009,7 +6010,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 			Info: infoBuilder{
 				info: "Extends the bounding box represented by the geometry by delta_x units in the x dimension and delta_y units in the y dimension, returning a Polygon representing the new bounding box.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -6038,7 +6039,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 
 The parent_only boolean is always ignored.`,
 			}.String(),
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6054,7 +6055,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.`,
 			}.String(),
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6069,7 +6070,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.`,
 			}.String(),
-			Volatility: tree.VolatilityStable,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -6121,7 +6122,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6163,7 +6164,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6206,7 +6207,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6246,7 +6247,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6287,7 +6288,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6329,7 +6330,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"st_dwithinexclusive": makeSTDWithinBuiltin(geo.FnExclusive),
@@ -6356,7 +6357,7 @@ The parent_only boolean is always ignored.`,
 				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, exclusive. " +
 					"In other words, the ST_MaxDistance between geometry_a and geometry_b is less than distance units.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_pointinsidecircle": makeBuiltin(
@@ -6406,7 +6407,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: "Returns the true if the geometry is a point and is inside the circle. Returns false otherwise.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -6424,7 +6425,7 @@ The parent_only boolean is always ignored.`,
 				return tree.NewDInt(tree.DInt(geo.Size())), nil
 			},
 			Info:       "Returns the amount of memory space (in bytes) the geometry takes.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}),
 
 	"st_linelocatepoint": makeBuiltin(defProps(),
@@ -6453,7 +6454,7 @@ The parent_only boolean is always ignored.`,
 			},
 			Info: "Returns a float between 0 and 1 representing the location of the closest point " +
 				"on LineString to the given Point, as a fraction of total 2d line length.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}),
 
 	"st_minimumboundingradius": makeBuiltin(genProps(),
@@ -6462,7 +6463,7 @@ The parent_only boolean is always ignored.`,
 			ReturnType: tree.FixedReturnType(minimumBoundingRadiusReturnType),
 			Generator:  makeMinimumBoundGenerator,
 			Info:       "Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		}),
 
 	"st_minimumboundingcircle": makeBuiltin(defProps(),
@@ -6478,7 +6479,7 @@ The parent_only boolean is always ignored.`,
 			infoBuilder{
 				info: "Returns the smallest circle polygon that can fully contain a geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {" num_segs", types.Int}},
@@ -6486,7 +6487,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: "Returns the smallest circle polygon that can fully contain a geometry.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 			Fn: func(evalContext *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				numOfSeg := tree.MustBeDInt(args[1])
@@ -6518,7 +6519,7 @@ The parent_only boolean is always ignored.`,
 				{"y_factor", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 			Info: infoBuilder{
 				info: "Translates the geometry using the deltaX and deltaY args, then scales it using the XFactor, YFactor args, working in 2D only.",
 			}.String(),
@@ -6554,7 +6555,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6575,7 +6576,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6597,7 +6598,7 @@ The parent_only boolean is always ignored.`,
 			Info: infoBuilder{
 				info: `Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_voronoilines": makeBuiltin(
@@ -6620,7 +6621,7 @@ The parent_only boolean is always ignored.`,
 				info: `Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry as` +
 					`the boundaries between cells in that diagram as a MultiLineString.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6642,7 +6643,7 @@ The parent_only boolean is always ignored.`,
 				info: `Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry as` +
 					`the boundaries between cells in that diagram as a MultiLineString.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6665,7 +6666,7 @@ The parent_only boolean is always ignored.`,
 				info: `Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry as` +
 					`the boundaries between cells in that diagram as a MultiLineString.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_orientedenvelope": makeBuiltin(
@@ -6688,7 +6689,7 @@ The parent_only boolean is always ignored.`,
 Note that more than one minimum rotated rectangle may exist.
 May return a Point or LineString in the case of degenerate inputs.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_linesubstring": makeBuiltin(defProps(),
@@ -6699,7 +6700,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 				{"end_fraction", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 			Info: infoBuilder{
 				info: "Return a linestring being a substring of the input one starting and ending at the given fractions of total 2D length. Second and third arguments are float8 values between 0 and 1.",
 			}.String(),
@@ -6721,7 +6722,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 				{"end_fraction", types.Decimal},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 			Info: infoBuilder{
 				info: "Return a linestring being a substring of the input one starting and ending at the given fractions of total 2D length. Second and third arguments are float8 values between 0 and 1.",
 			}.String(),
@@ -6779,7 +6780,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 
 Note that the top vertex of the segment touching another line does not count as a crossing, but the bottom vertex of segment touching another line is considered a crossing.`,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 
@@ -6836,7 +6837,7 @@ func returnCompatibilityFixedStringBuiltin(ret string) builtinDefinition {
 			Info: infoBuilder{
 				info: "Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	)
 }
@@ -6846,7 +6847,7 @@ func geometryOverload1(
 	f func(*tree.EvalContext, *tree.DGeometry) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
-	volatility tree.Volatility,
+	volatility volatility.V,
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ArgTypes{
@@ -6877,7 +6878,7 @@ func geometryOverload1UnaryPredicate(
 		},
 		types.Bool,
 		ib,
-		tree.VolatilityImmutable,
+		volatility.Immutable,
 	)
 }
 
@@ -6886,7 +6887,7 @@ func geometryOverload2(
 	f func(*tree.EvalContext, *tree.DGeometry, *tree.DGeometry) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
-	volatility tree.Volatility,
+	volatility volatility.V,
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ArgTypes{
@@ -6919,7 +6920,7 @@ func geometryOverload2BinaryPredicate(
 		},
 		types.Bool,
 		ib,
-		tree.VolatilityImmutable,
+		volatility.Immutable,
 	)
 }
 
@@ -6928,7 +6929,7 @@ func geographyOverload1(
 	f func(*tree.EvalContext, *tree.DGeography) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
-	volatility tree.Volatility,
+	volatility volatility.V,
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ArgTypes{
@@ -6950,7 +6951,7 @@ func geographyOverload1WithUseSpheroid(
 	f func(*tree.EvalContext, *tree.DGeography, geogfn.UseSphereOrSpheroid) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
-	volatility tree.Volatility,
+	volatility volatility.V,
 ) []tree.Overload {
 	infoWithSphereAndSpheroid := ib
 	infoWithSphereAndSpheroid.libraryUsage = usesS2 | usesGeographicLib
@@ -6993,7 +6994,7 @@ func geographyOverload2(
 	f func(*tree.EvalContext, *tree.DGeography, *tree.DGeography) (tree.Datum, error),
 	returnType *types.T,
 	ib infoBuilder,
-	volatility tree.Volatility,
+	volatility volatility.V,
 ) tree.Overload {
 	return tree.Overload{
 		Types: tree.ArgTypes{
@@ -7026,7 +7027,7 @@ func geographyOverload2BinaryPredicate(
 		},
 		types.Bool,
 		ib,
-		tree.VolatilityImmutable,
+		volatility.Immutable,
 	)
 }
 
@@ -7219,7 +7220,7 @@ func lineInterpolatePointForRepeatOverload(repeat bool, builtinInfo string) tree
 			info:         builtinInfo,
 			libraryUsage: usesGEOS,
 		}.String(),
-		Volatility: tree.VolatilityImmutable,
+		Volatility: volatility.Immutable,
 	}
 }
 
@@ -7422,7 +7423,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 				info: "Returns true if any of geometry_a is within distance units of geometry_b" +
 					exclusivityStr,
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -7447,7 +7448,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 				libraryUsage: usesGeographicLib,
 				precision:    "1cm",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -7475,7 +7476,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 				libraryUsage: usesGeographicLib | usesS2,
 				precision:    "1cm",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	)
 }

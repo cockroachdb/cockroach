@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -425,7 +427,7 @@ func invalidCastError(castFrom, castTo *types.T) error {
 }
 
 // resolveCast checks that the cast from the two types is valid. If allowStable
-// is false, it also checks that the cast has VolatilityImmutable.
+// is false, it also checks that the cast has volatility.Immutable.
 //
 // On success, any relevant telemetry counters are incremented.
 func resolveCast(
@@ -493,15 +495,15 @@ func resolveCast(
 		return nil
 
 	default:
-		cast, ok := lookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
+		c, ok := cast.LookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
 		if !ok {
 			return invalidCastError(castFrom, castTo)
 		}
-		if !allowStable && cast.volatility >= VolatilityStable {
+		if !allowStable && c.Volatility >= volatility.Stable {
 			err := NewContextDependentOpsNotAllowedError(context)
 			err = pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, castTo)
-			if cast.volatilityHint != "" {
-				err = errors.WithHint(err, cast.volatilityHint)
+			if c.VolatilityHint != "" {
+				err = errors.WithHint(err, c.VolatilityHint)
 			}
 			return err
 		}
@@ -963,14 +965,14 @@ func NewContextDependentOpsNotAllowedError(context string) error {
 	)
 }
 
-// checkVolatility checks whether an operator with the given volatility is
+// checkVolatility checks whether an operator with the given Volatility is
 // allowed in the current context.
-func (sc *SemaContext) checkVolatility(v Volatility) error {
+func (sc *SemaContext) checkVolatility(v volatility.V) error {
 	if sc == nil {
 		return nil
 	}
 	switch v {
-	case VolatilityVolatile:
+	case volatility.Volatile:
 		if sc.Properties.required.rejectFlags&RejectVolatileFunctions != 0 {
 			// The code FeatureNotSupported is a bit misleading here,
 			// because we probably can't support the feature at all. However
@@ -978,7 +980,7 @@ func (sc *SemaContext) checkVolatility(v Volatility) error {
 			return pgerror.Newf(pgcode.FeatureNotSupported,
 				"volatile functions are not allowed in %s", sc.Properties.required.context)
 		}
-	case VolatilityStable:
+	case volatility.Stable:
 		if sc.Properties.required.rejectFlags&RejectStableOperators != 0 {
 			return NewContextDependentOpsNotAllowedError(sc.Properties.required.context)
 		}

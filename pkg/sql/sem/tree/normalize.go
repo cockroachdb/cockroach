@@ -11,8 +11,10 @@
 package tree
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -798,20 +800,20 @@ func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 func operatorIsImmutable(expr Expr, sd *sessiondata.SessionData) bool {
 	switch t := expr.(type) {
 	case *FuncExpr:
-		return t.fnProps.Class == NormalClass && t.fn.Volatility <= VolatilityImmutable
+		return t.fnProps.Class == NormalClass && t.fn.Volatility <= volatility.Immutable
 
 	case *CastExpr:
-		volatility, ok := LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ, sd)
-		return ok && volatility <= VolatilityImmutable
+		v, ok := cast.LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ, sd)
+		return ok && v <= volatility.Immutable
 
 	case *UnaryExpr:
-		return t.fn.Volatility <= VolatilityImmutable
+		return t.fn.Volatility <= volatility.Immutable
 
 	case *BinaryExpr:
-		return t.Fn.Volatility <= VolatilityImmutable
+		return t.Fn.Volatility <= volatility.Immutable
 
 	case *ComparisonExpr:
-		return t.Fn.Volatility <= VolatilityImmutable
+		return t.Fn.Volatility <= volatility.Immutable
 
 	default:
 		return true
@@ -959,10 +961,10 @@ func ReType(expr TypedExpr, wantedType *types.T) (_ TypedExpr, ok bool) {
 		return expr, true
 	}
 	// TODO(#75103): For legacy reasons, we check for a valid cast in the most
-	// permissive context, CastContextExplicit. To be consistent with Postgres,
+	// permissive context, cast.ContextExplicit. To be consistent with Postgres,
 	// we should check for a valid cast in the most restrictive context,
-	// CastContextImplicit.
-	if !ValidCast(resolvedType, wantedType, CastContextExplicit) {
+	// cast.ContextImplicit.
+	if !cast.ValidCast(resolvedType, wantedType, cast.ContextExplicit) {
 		return nil, false
 	}
 	res := &CastExpr{Expr: expr, Type: wantedType}

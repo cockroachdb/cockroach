@@ -12,6 +12,7 @@ package builtins
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -66,7 +67,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				"but instead returns the job id as soon as it has signaled the job to complete. " +
 				"This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the" +
 				" job has left the cluster in a consistent state.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -99,7 +100,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				"the specified tenant. The returned stream ID uniquely identifies created stream. " +
 				"The caller must periodically invoke crdb_internal.heartbeat_stream() function to " +
 				"notify that the replication is still ongoing.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -137,7 +138,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Info: "This function can be used on the consumer side to heartbeat its replication progress to " +
 				"a replication stream in the source cluster. The returns a StreamReplicationStatus message " +
 				"that indicates stream status (RUNNING, PAUSED, or STOPPED).",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 	"crdb_internal.stream_partition": makeBuiltin(
@@ -167,7 +168,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				)
 			},
 			"Stream partition data",
-			tree.VolatilityVolatile,
+			volatility.Volatile,
 		),
 	),
 
@@ -201,7 +202,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Info: "This function can be used on the consumer side to get a replication stream specification " +
 				"for the specified stream. The consumer will later call 'stream_partition' to a partition with " +
 				"the spec to start streaming.",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -229,7 +230,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			Info: "This function can be used on the producer side to complete and clean up a replication stream " +
 				"after the consumer receives a cutover event and finishes the ingestion",
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 	),
 }
