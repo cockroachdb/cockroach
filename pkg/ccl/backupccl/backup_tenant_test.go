@@ -122,7 +122,7 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "times out")
+	skip.UnderStressRace(t, "test is too heavy to run under stress")
 
 	tc, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /*numServers*/, base.TestingKnobs{},
@@ -138,36 +138,14 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	defer tSQL.Close()
 	tenSQLDB := sqlutils.MakeSQLRunner(tSQL)
 
-	waitForSettingToTakeEffect := func(expValue string) {
-		testutils.SucceedsSoon(t, func() error {
-			var val string
-			tenSQLDB.QueryRow(t,
-				fmt.Sprintf(
-					"SHOW CLUSTER SETTING %s", sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
-				),
-			).Scan(&val)
-
-			if val != expValue {
-				return errors.Newf("waiting for cluster setting to be set to %q", expValue)
-			}
-			return nil
-		})
-	}
-
-	setTenantReadOnlyClusterSetting := func(val string) {
-		sqlDB.Exec(
-			t,
-			fmt.Sprintf(
-				"ALTER TENANT $1 SET CLUSTER	SETTING %s = '%s'",
-				sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
-				val,
-			),
-			tenID.ToUint64(),
-		)
-	}
-
-	setTenantReadOnlyClusterSetting("true")
-	waitForSettingToTakeEffect("true")
+	setAndWaitForTenantReadOnlyClusterSetting(
+		t,
+		sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+		sqlDB,
+		tenSQLDB,
+		tenID,
+		"true",
+	)
 
 	// Setup.
 	const tenDst = "userfile:///ten_backup"
@@ -181,8 +159,14 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	{
 		// Flip the tenant-read only cluster setting; ensure database can be restored
 		// on the system tenant but not on the secondary tenant.
-		setTenantReadOnlyClusterSetting("false")
-		waitForSettingToTakeEffect("false")
+		setAndWaitForTenantReadOnlyClusterSetting(
+			t,
+			sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+			sqlDB,
+			tenSQLDB,
+			tenID,
+			"false",
+		)
 
 		tenSQLDB.Exec(t, "DROP DATABASE mrdb CASCADE")
 		tenSQLDB.ExpectErr(
@@ -199,8 +183,14 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	{
 		// Flip the tenant-read only cluster setting back to true and ensure the
 		// restore succeeds.
-		setTenantReadOnlyClusterSetting("true")
-		waitForSettingToTakeEffect("true")
+		setAndWaitForTenantReadOnlyClusterSetting(
+			t,
+			sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+			sqlDB,
+			tenSQLDB,
+			tenID,
+			"true",
+		)
 
 		tenSQLDB.Exec(t, fmt.Sprintf("RESTORE DATABASE mrdb FROM LATEST IN '%s'", tenDst))
 	}
@@ -214,8 +204,14 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 				"SET CLUSTER SETTING %s = 'us-east1'", sql.DefaultPrimaryRegionClusterSettingName,
 			),
 		)
-		setTenantReadOnlyClusterSetting("false")
-		waitForSettingToTakeEffect("false")
+		setAndWaitForTenantReadOnlyClusterSetting(
+			t,
+			sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+			sqlDB,
+			tenSQLDB,
+			tenID,
+			"false",
+		)
 
 		tenSQLDB.Exec(t, "CREATE DATABASE nonMrDB")
 		tenSQLDB.Exec(t, fmt.Sprintf("BACKUP DATABASE nonMrDB INTO '%s'", tenDst))
