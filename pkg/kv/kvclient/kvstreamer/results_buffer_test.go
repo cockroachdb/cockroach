@@ -29,7 +29,7 @@ import (
 )
 
 // TestInOrderResultsBuffer verifies that the inOrderResultsBuffer returns the
-// results in the correct order (with increasing 'position' values).
+// results in the correct order (with increasing 'Position' values).
 // Additionally, it randomly asks the buffer to spill to disk.
 func TestInOrderResultsBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -73,7 +73,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 			// Randomly choose between Get and Scan responses.
 			if rng.Float64() < 0.5 {
 				get := makeResultWithGetResp(rng, rng.Float64() < 0.1 /* empty */)
-				get.position = i
+				get.Position = i
 				results = append(results, get)
 			} else {
 				scan := makeResultWithScanResp(rng)
@@ -81,7 +81,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 				// responses spanning multiple ranges for a single original Scan
 				// request.
 				scan.ScanResp.Complete = true
-				scan.position = i
+				scan.Position = i
 				results = append(results, scan)
 			}
 			results[len(results)-1].memoryTok.toRelease = rng.Int63n(100)
@@ -117,7 +117,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 				spillingPriority := rng.Intn(numExpectedResponses)
 				var spillableSize int64
 				for _, buffered := range b.(*inOrderResultsBuffer).buffered {
-					if !buffered.onDisk && buffered.position > spillingPriority {
+					if !buffered.onDisk && buffered.Position > spillingPriority {
 						spillableSize += buffered.memoryTok.toRelease
 					}
 				}
