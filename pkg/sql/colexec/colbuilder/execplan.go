@@ -727,7 +727,7 @@ func NewColOperator(
 			estimatedRowCount := spec.EstimatedRowCount
 			var scanOp colfetcher.ScanOperator
 			var resultTypes []*types.T
-			if evalCtx.SessionData().LocalOnlySessionData.PlanDirectScan {
+			if flowCtx.EvalCtx.SessionData().LocalOnlySessionData.PlanDirectScan {
 				scan, err := colfetcher.NewColBatchDirectScan(
 					ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
 					flowCtx, core.TableReader, post, estimatedRowCount,
@@ -738,12 +738,12 @@ func NewColOperator(
 				resultTypes = scan.ResultTypes
 				scanOp = scan
 			} else {
-                scanOp, err := colfetcher.NewColBatchScan(
-                    ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
-                    flowCtx, core.TableReader, post, estimatedRowCount,
-                )
-                if err != nil {
-                    return r, err
+				scan, err := colfetcher.NewColBatchScan(
+					ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
+					flowCtx, core.TableReader, post, estimatedRowCount,
+				)
+				if err != nil {
+					return r, err
 				}
 				resultTypes = scan.ResultTypes
 				scanOp = scan

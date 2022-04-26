@@ -92,23 +92,23 @@ func NewKVFetcher(
 
 	kvBatchFetcher, err := MakeKVBatchFetcher(
 		ctx,
-		kvBatchFetcherArgs{
-			sendFn:                     sendFn,
-			spans:                      spans,
-			reverse:                    reverse,
-			batchBytesLimit:            batchBytesLimit,
-			firstBatchKeyLimit:         firstBatchLimit,
-		    format: roachpb.BATCH_RESPONSE,
-		    colFormatArgs: ColFormatArgs{
-			TenantID: roachpb.SystemTenantID,
-		},
-			lockStrength:               lockStrength,
-			lockWaitPolicy:             lockWaitPolicy,
-			lockTimeout:                lockTimeout,
-			acc:                        acc,
-			forceProductionKVBatchSize: forceProductionKVBatchSize,
-			requestAdmissionHeader:     txn.AdmissionHeader(),
-			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+		KVBatchFetcherArgs{
+			SendFn:             sendFn,
+			Spans:              spans,
+			Reverse:            reverse,
+			BatchBytesLimit:    batchBytesLimit,
+			FirstBatchKeyLimit: firstBatchLimit,
+			Format:             roachpb.BATCH_RESPONSE,
+			ColFormatArgs: ColFormatArgs{
+				TenantID: roachpb.SystemTenantID,
+			},
+			LockStrength:               lockStrength,
+			LockWaitPolicy:             lockWaitPolicy,
+			LockTimeout:                lockTimeout,
+			Acc:                        acc,
+			ForceProductionKVBatchSize: forceProductionKVBatchSize,
+			RequestAdmissionHeader:     txn.AdmissionHeader(),
+			ResponseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
 		},
 	)
 	return newKVFetcher(kvBatchFetcher), err

@@ -60,6 +60,10 @@ type NextKVer interface {
 	// GetBytesRead returns the number of bytes read by this fetcher. It is safe for
 	// concurrent use and is able to handle a case of uninitialized fetcher.
 	GetBytesRead() int64
+	// ResetBytesRead resets the number of bytes read by this fetcher and returns
+	// the number before the reset. It is safe for concurrent use and is able to
+	// handle a case of uninitialized fetcher.
+	ResetBytesRead() int64
 	// Close releases the resources held by this NextKVer.
 	Close(ctx context.Context)
 }
@@ -97,6 +101,11 @@ func (f *mvccScanFetchAdapter) Close(ctx context.Context) {}
 
 // GetBytesRead implements the NextKVer interface.
 func (f *mvccScanFetchAdapter) GetBytesRead() int64 {
+	return f.scanner.results.getBytes()
+}
+
+func (f *mvccScanFetchAdapter) ResetBytesRead() int64 {
+	// TODO(jordan): reset
 	return f.scanner.results.getBytes()
 }
 
@@ -198,7 +207,6 @@ func mvccScanToCols(
 		maxKeys:                opts.MaxKeys,
 		targetBytes:            opts.TargetBytes,
 		targetBytesAvoidExcess: opts.TargetBytesAvoidExcess,
-		targetBytesAllowEmpty:  opts.TargetBytesAllowEmpty,
 		maxIntents:             opts.MaxIntents,
 		inconsistent:           opts.Inconsistent,
 		tombstones:             opts.Tombstones,
@@ -237,7 +245,11 @@ func mvccScanToCols(
 	}
 	defer wrapper.Close(ctx)
 
-	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
+	var trackLastOffsets int
+	if opts.WholeRowsOfSize > 1 {
+		trackLastOffsets = int(opts.WholeRowsOfSize)
+	}
+	mvccScanner.init(opts.Txn, opts.Uncertainty, trackLastOffsets)
 	mvccScanner.results = &adapter.results
 
 	var res MVCCScanResult
@@ -276,7 +288,7 @@ func mvccScanToCols(
 	mvccScanner.maybeFailOnMoreRecent()
 
 	var resume *roachpb.Span
-	if mvccScanner.curExcluded || mvccScanner.advanceKey() {
+	if mvccScanner.advanceKey() {
 		if mvccScanner.reverse {
 			// curKey was not added to results, so it needs to be included in the
 			// resume span.

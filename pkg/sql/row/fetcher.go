@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -374,23 +373,23 @@ func (rf *Fetcher) StartScan(
 
 	f, err := MakeKVBatchFetcher(
 		ctx,
-		kvBatchFetcherArgs{
-			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
-			spans:                      spans,
-			reverse:                    rf.reverse,
-			batchBytesLimit:            batchBytesLimit,
-			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
-            format:                     roachpb.BATCH_RESPONSE,
-		    colFormatArgs:              ColFormatArgs{
-                TenantID: roachpb.SystemTenantID,
-            },
-			lockStrength:               rf.lockStrength,
-			lockWaitPolicy:             rf.lockWaitPolicy,
-			lockTimeout:                rf.lockTimeout,
-			acc:                        rf.kvFetcherMemAcc,
-			forceProductionKVBatchSize: forceProductionKVBatchSize,
-			requestAdmissionHeader:     txn.AdmissionHeader(),
-			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+		KVBatchFetcherArgs{
+			SendFn:             MakeKVBatchFetcherDefaultSendFunc(txn),
+			Spans:              spans,
+			Reverse:            rf.reverse,
+			BatchBytesLimit:    batchBytesLimit,
+			FirstBatchKeyLimit: rf.rowLimitToKeyLimit(rowLimitHint),
+			Format:             roachpb.BATCH_RESPONSE,
+			ColFormatArgs: ColFormatArgs{
+				TenantID: roachpb.SystemTenantID,
+			},
+			LockStrength:               rf.lockStrength,
+			LockWaitPolicy:             rf.lockWaitPolicy,
+			LockTimeout:                rf.lockTimeout,
+			Acc:                        rf.kvFetcherMemAcc,
+			ForceProductionKVBatchSize: forceProductionKVBatchSize,
+			RequestAdmissionHeader:     txn.AdmissionHeader(),
+			ResponseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
 		},
 	)
 	if err != nil {
@@ -481,21 +480,21 @@ func (rf *Fetcher) StartInconsistentScan(
 
 	f, err := MakeKVBatchFetcher(
 		ctx,
-		kvBatchFetcherArgs{
-			sendFn:                     sendFn,
-			spans:                      spans,
-			reverse:                    rf.reverse,
-			batchBytesLimit:            batchBytesLimit,
-			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
-		    format:                     roachpb.BATCH_RESPONSE,
-		    colFormatArgs:              ColFormatArgs{TenantID: roachpb.SystemTenantID},
-			lockStrength:               rf.lockStrength,
-			lockWaitPolicy:             rf.lockWaitPolicy,
-			lockTimeout:                rf.lockTimeout,
-			acc:                        rf.kvFetcherMemAcc,
-			forceProductionKVBatchSize: forceProductionKVBatchSize,
-			requestAdmissionHeader:     txn.AdmissionHeader(),
-			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+		KVBatchFetcherArgs{
+			SendFn:                     sendFn,
+			Spans:                      spans,
+			Reverse:                    rf.reverse,
+			BatchBytesLimit:            batchBytesLimit,
+			FirstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
+			Format:                     roachpb.BATCH_RESPONSE,
+			ColFormatArgs:              ColFormatArgs{TenantID: roachpb.SystemTenantID},
+			LockStrength:               rf.lockStrength,
+			LockWaitPolicy:             rf.lockWaitPolicy,
+			LockTimeout:                rf.lockTimeout,
+			Acc:                        rf.kvFetcherMemAcc,
+			ForceProductionKVBatchSize: forceProductionKVBatchSize,
+			RequestAdmissionHeader:     txn.AdmissionHeader(),
+			ResponseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
 		},
 	)
 	if err != nil {

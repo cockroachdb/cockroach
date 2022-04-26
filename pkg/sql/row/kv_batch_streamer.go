@@ -72,7 +72,7 @@ func NewTxnKVStreamer(
 		log.VEventf(ctx, 2, "Scan %s", spans)
 	}
 	keyLocking := getKeyLockingStrength(lockStrength)
-	reqs := spansToRequests(spans, false /* reverse */, keyLocking)
+	reqs := spansToRequests(spans, false /* reverse */, keyLocking, roachpb.BATCH_RESPONSE, ColFormatArgs{})
 	if err := streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */); err != nil {
 		return nil, err
 	}
@@ -123,26 +123,27 @@ func (f *TxnKVStreamer) releaseLastResult(ctx context.Context) {
 	f.lastResultState.Result = kvstreamer.Result{}
 }
 
-// nextBatch returns the next batch of key/value pairs. If there are none
+// NextBatch returns the next batch of key/value pairs. If there are none
 // available, a fetch is initiated. When there are no more keys, ok is false.
-func (f *TxnKVStreamer) nextBatch(
+func (f *TxnKVStreamer) NextBatch(
 	ctx context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResp []byte, err error) {
+) (ok bool, resp KVBatchFetcherResult, err error) {
 	// Check whether there are more batches in the current ScanResponse.
 	if len(f.lastResultState.remainingBatches) > 0 {
-		batchResp, f.lastResultState.remainingBatches = f.lastResultState.remainingBatches[0], f.lastResultState.remainingBatches[1:]
+		resp.BatchResponse, f.lastResultState.remainingBatches = f.lastResultState.remainingBatches[0],
+			f.lastResultState.remainingBatches[1:]
 		if len(f.lastResultState.remainingBatches) == 0 {
 			f.lastResultState.numEmitted++
 		}
-		return true, nil, batchResp, nil
+		return true, resp, nil
 	}
 
 	// Check whether the current result satisfies multiple requests.
 	if f.lastResultState.numEmitted < len(f.lastResultState.EnqueueKeysSatisfied) {
 		// Note that we should never get an error here since we're processing
 		// the same result again.
-		_, kvs, batchResp, err = f.proceedWithLastResult(ctx)
-		return true, kvs, batchResp, err
+		_, resp.KVs, resp.BatchResponse, err = f.proceedWithLastResult(ctx)
+		return true, resp, err
 	}
 
 	// Release the current result.
@@ -161,14 +162,14 @@ func (f *TxnKVStreamer) nextBatch(
 		f.results[0] = kvstreamer.Result{}
 		f.results = f.results[1:]
 		var skip bool
-		skip, kvs, batchResp, err = f.proceedWithLastResult(ctx)
+		skip, resp.KVs, resp.BatchResponse, err = f.proceedWithLastResult(ctx)
 		if err != nil {
-			return false, nil, nil, err
+			return false, resp, err
 		}
 		if skip {
 			continue
 		}
-		return true, kvs, batchResp, err
+		return true, resp, err
 	}
 
 	// Get more results from the streamer. This call will block until some
@@ -179,13 +180,13 @@ func (f *TxnKVStreamer) nextBatch(
 	// ourselves with the memory accounting here.
 	f.results, err = f.streamer.GetResults(ctx)
 	if len(f.results) == 0 || err != nil {
-		return false, nil, nil, err
+		return false, resp, err
 	}
-	return f.nextBatch(ctx)
+	return f.NextBatch(ctx)
 }
 
-// close releases the resources of this TxnKVStreamer.
-func (f *TxnKVStreamer) close(ctx context.Context) {
+// Close releases the resources of this TxnKVStreamer.
+func (f *TxnKVStreamer) Close(ctx context.Context) {
 	f.lastResultState.Release(ctx)
 	for _, r := range f.results {
 		r.Release(ctx)

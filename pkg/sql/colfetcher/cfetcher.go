@@ -491,8 +491,8 @@ func (cf *cFetcher) Init(
 	cf.table = table
 	cf.accountingHelper.Init(allocator, cf.table.typs)
 
-	rf.machine.state[0] = stateResetBatch
-	rf.machine.state[1] = stateInitFetch
+	cf.machine.state[0] = stateResetBatch
+	cf.machine.state[1] = stateInitFetch
 
 	return nil
 }

@@ -1761,7 +1761,7 @@ var varGen = map[string]sessionVar{
 			m.SetPlanDirectScan(b)
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) (string, error) {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().PlanDirectScan), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {

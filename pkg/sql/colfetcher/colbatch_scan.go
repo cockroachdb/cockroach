@@ -198,25 +198,8 @@ func newCFetcherWrapper(
 	if spec == nil {
 		return nil, errors.AssertionFailedf("expected a TableReaderSpec, but found a %s", proc.Core)
 	}
-	post := &proc.Post
-	// TODO(ajwerner): The need to construct an ImmutableTableDescriptor here
-	// indicates that we're probably doing this wrong. Instead we should be
-	// just seting the ID and Version in the spec or something like that and
-	// retrieving the hydrated ImmutableTableDescriptor from cache.
-	table := spec.BuildTableDescriptor()
-	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
-	tableArgs, idxMap, err := populateTableArgs(
-		ctx, &execinfra.FlowCtx{}, nil, table, table.ActiveIndexes()[spec.IndexIdx],
-		invertedColumn, spec.Visibility, spec.HasSystemColumns, post, nil,
-	)
+	tableArgs, err := populateTableArgs(ctx, &execinfra.FlowCtx{}, &spec.FetchSpec)
 	if err != nil {
-		return nil, err
-	}
-
-	if err = keepOnlyNeededColumns(
-		nil, tableArgs, idxMap, spec.NeededColumns, post, nil,
-		false, false,
-	); err != nil {
 		return nil, err
 	}
 
@@ -233,9 +216,7 @@ func newCFetcherWrapper(
 		allocateFreshBatches: true,
 	}
 
-	if err = fetcher.Init(
-		codec, colmem.NewAllocator(ctx, acc, coldata.StandardColumnFactory), acc,
-		tableArgs, spec.HasSystemColumns); err != nil {
+	if err = fetcher.Init(colmem.NewAllocator(ctx, acc, coldata.StandardColumnFactory), acc, tableArgs); err != nil {
 		fetcher.Release()
 		return nil, err
 	}
@@ -243,15 +224,18 @@ func newCFetcherWrapper(
 	wrapper.fetcher = *fetcher
 	wrapper.fetcher.fetcher = nexter
 	return &wrapper, nil
-	wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs)
-	if err != nil {
-		return nil, err
-	}
-	wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
-	if err != nil {
-		return nil, err
-	}
-	return &wrapper, nil
+	/*
+		wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs)
+		if err != nil {
+			return nil, err
+		}
+		wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
+		if err != nil {
+			return nil, err
+		}
+		return &wrapper, nil
+
+	*/
 }
 
 type cfetcherWrapper struct {

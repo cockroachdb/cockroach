@@ -17,14 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -50,14 +48,12 @@ func NewColBatchDirectScan(
 	allocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
-	evalCtx *tree.EvalContext,
-	helper *colexecargs.ExprHelper,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	estimatedRowCount uint64,
 ) (*ColBatchDirectScan, error) {
 	scan, err := NewColBatchScan(ctx, allocator, kvFetcherMemAcc, flowCtx,
-		evalCtx, helper, spec, post, estimatedRowCount)
+		spec, post, estimatedRowCount)
 	if err != nil {
 		return nil, err
 	}
@@ -103,42 +99,36 @@ func (c *ColBatchDirectScan) Init(ctx context.Context) {
 	// a very restrictive filter and actually have to retrieve a lot of rows).
 	firstBatchLimit := rowinfra.KeyLimit(c.limitHint)
 	if firstBatchLimit != 0 {
-		// Keep track of the maximum keys per row to accommodate a
-		// limitHint when StartScan is invoked.
-		table := c.spec.BuildTableDescriptor()
-		index := table.ActiveIndexes()[c.spec.IndexIdx]
-		keysPerRow, err := table.KeysPerRow(index.GetID())
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
 		// The limitHint is a row limit, but each row could be made up
 		// of more than one key. We take the maximum possible keys
 		// per row out of all the table rows we could potentially
 		// scan over.
-		firstBatchLimit = rowinfra.KeyLimit(int(c.limitHint) * keysPerRow)
+		firstBatchLimit = rowinfra.KeyLimit(int(c.limitHint) * int(c.spec.FetchSpec.MaxKeysPerRow))
 		// We need an extra key to make sure we form the last row.
 		firstBatchLimit++
 	}
 	c.fetcher, err = row.MakeKVBatchFetcher(
 		ctx,
-		row.MakeKVBatchFetcherDefaultSendFunc(c.flowCtx.Txn),
-		c.Spans,
-		c.spec.Reverse,
-		c.batchBytesLimit,
-		firstBatchLimit,
-		roachpb.COL_BATCH_RESPONSE,
-		row.ColFormatArgs{
-			Spec:     scanSpec,
-			TenantID: c.flowCtx.Codec().TenantID(),
-			Post:     c.post,
+		row.KVBatchFetcherArgs{
+			SendFn:             row.MakeKVBatchFetcherDefaultSendFunc(c.flowCtx.Txn),
+			Spans:              c.Spans,
+			Reverse:            c.spec.Reverse,
+			BatchBytesLimit:    c.batchBytesLimit,
+			FirstBatchKeyLimit: firstBatchLimit,
+			Format:             roachpb.COL_BATCH_RESPONSE,
+			ColFormatArgs: row.ColFormatArgs{
+				Spec:     scanSpec,
+				TenantID: c.flowCtx.Codec().TenantID(),
+				Post:     c.post,
+			},
+			LockStrength:               c.spec.LockingStrength,
+			LockWaitPolicy:             c.spec.LockingWaitPolicy,
+			LockTimeout:                c.flowCtx.EvalCtx.SessionData().LockTimeout,
+			Acc:                        c.kvFetcherMemAcc,
+			ForceProductionKVBatchSize: c.flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			RequestAdmissionHeader:     c.flowCtx.Txn.AdmissionHeader(),
+			ResponseAdmissionQ:         c.flowCtx.Txn.DB().SQLKVResponseAdmissionQ,
 		},
-		c.spec.LockingStrength,
-		c.spec.LockingWaitPolicy,
-		c.flowCtx.EvalCtx.SessionData().LockTimeout,
-		c.kvFetcherMemAcc,
-		c.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
-		c.flowCtx.Txn.AdmissionHeader(),
-		c.flowCtx.Txn.DB().SQLKVResponseAdmissionQ,
 	)
 	if err != nil {
 		colexecerror.InternalError(err)

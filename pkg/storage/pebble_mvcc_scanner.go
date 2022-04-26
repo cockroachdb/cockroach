@@ -57,6 +57,9 @@ type results interface {
 	getCount() int64
 	getBytes() int64
 	getLastKV() roachpb.KeyValue
+	continuesFirstRow(key roachpb.Key) bool
+	maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, error)
+	lastRowHasFinalColumnFamily() bool
 }
 
 type KeyValue struct {
@@ -68,6 +71,18 @@ type singleResults struct {
 	count, bytes int64
 	key          []byte
 	value        []byte
+}
+
+func (s *singleResults) continuesFirstRow(key roachpb.Key) bool {
+	panic("implement me")
+}
+
+func (s *singleResults) maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, error) {
+	panic("implement me")
+}
+
+func (s *singleResults) lastRowHasFinalColumnFamily() bool {
+	panic("implement me")
 }
 
 func (s *singleResults) clear() {
@@ -466,11 +481,12 @@ func (p *pebbleMVCCScanner) init(
 	txn *roachpb.Transaction, ui uncertainty.Interval, trackLastOffsets int,
 ) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
-	p.results = &pebbleResults{}
+	results := &pebbleResults{}
 	if trackLastOffsets > 0 {
-		p.results.lastOffsetsEnabled = true
-		p.results.lastOffsets = make([]int, trackLastOffsets)
+		results.lastOffsetsEnabled = true
+		results.lastOffsets = make([]int, trackLastOffsets)
 	}
+	p.results = results
 
 	if txn != nil {
 		p.txn = txn
@@ -517,7 +533,7 @@ func (p *pebbleMVCCScanner) seekToStartOfScan() error {
 func (p *pebbleMVCCScanner) scan(
 	ctx context.Context,
 ) (*roachpb.Span, roachpb.ResumeReason, int64, error) {
-	if p.wholeRows && !p.results.lastOffsetsEnabled {
+	if p.wholeRows && !p.results.(*pebbleResults).lastOffsetsEnabled {
 		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
 	}
 
@@ -1006,7 +1022,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 
 	// Check if adding the key would exceed a limit.
 	if p.targetBytes > 0 && (p.results.getBytes() >= p.targetBytes || (p.targetBytesAvoidExcess &&
-		p.results.bytes+int64(pebbleSizeOf(len(rawKey), len(val))) > p.targetBytes)) {
+		p.results.getBytes()+int64(pebbleSizeOf(len(rawKey), len(val))) > p.targetBytes)) {
 		p.resumeReason = roachpb.RESUME_BYTE_LIMIT
 		p.resumeNextBytes = int64(pebbleSizeOf(len(rawKey), len(val)))
 
