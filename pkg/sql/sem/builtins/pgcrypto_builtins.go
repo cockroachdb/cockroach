@@ -18,8 +18,11 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
+	_ "golang.org/x/crypto/bcrypt"
 	"hash"
+	"strconv"
 	"strings"
+	_ "unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -40,6 +43,24 @@ func initPgcryptoBuiltins() {
 }
 
 var pgcryptoBuiltins = map[string]builtinDefinition{
+	"crypt": makeBuiltin(
+		tree.FunctionProperties{Category: categoryCrypto},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"password", types.String}, {"salt", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				password := tree.MustBeDString(args[0])
+				salt := tree.MustBeDString(args[1])
+				hash, err := crypt(string(password), string(salt))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(hash), nil
+			},
+			Info:       "Generates hash based on a password and salt. The hash algorithma and number of rounds are encoded in the salt.",
+			Volatility: volatility.Volatile,
+		},
+	),
 	"digest": makeBuiltin(
 		tree.FunctionProperties{Category: categoryCrypto},
 		tree.Overload{
@@ -158,6 +179,131 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 	),
+}
+
+var invalidSalt = pgerror.New(pgcode.InvalidParameterValue, "Invalid salt")
+
+func crypt(password string, salt string) (string, error) {
+
+	var cryptFunc func([]byte, []byte) ([]byte, error)
+	if salt[0] == '$' {
+		if salt[1] == '1' &&
+			salt[2] == '$' {
+			cryptFunc = cryptMd5
+		} else if salt[1] == '2' &&
+			(salt[2] == 'a' || salt[2] == 'x') &&
+			salt[3] == '$' {
+			cryptFunc = cryptBlowfish
+		} else {
+			return "", invalidSalt
+		}
+	} else {
+		// todo des/xdes
+		return "", invalidSalt
+	}
+
+	output, err := cryptFunc([]byte(password), []byte(salt))
+	if err != nil {
+		return "", err
+	}
+
+	return string(output), nil
+}
+
+var md5CryptSwaps = [16]int{12, 6, 0, 13, 7, 1, 14, 8, 2, 15, 9, 3, 5, 10, 4, 11}
+
+func cryptMd5(password, fullSalt []byte) ([]byte, error) {
+
+	header := fullSalt[:3]
+	salt := fullSalt[3:]
+
+	md5_1 := md5.New()
+
+	md5_1.Write(password)
+	md5_1.Write(header)
+	md5_1.Write(salt)
+
+	md5_2 := md5.New()
+	md5_2.Write(password)
+	md5_2.Write(salt)
+	md5_2.Write(password)
+
+	for i, mixin := 0, md5_2.Sum(nil); i < len(password); i++ {
+		md5_1.Write([]byte{mixin[i%16]})
+	}
+
+	for i := len(password); i != 0; i >>= 1 {
+		if i%2 == 0 {
+			md5_1.Write([]byte{password[0]})
+		} else {
+			md5_1.Write([]byte{0})
+		}
+	}
+
+	final := md5_1.Sum(nil)
+
+	for i := 0; i < 1000; i++ {
+		d2 := md5.New()
+		if i&1 == 0 {
+			d2.Write(final)
+		} else {
+			d2.Write(password)
+		}
+
+		if i%3 != 0 {
+			d2.Write(salt)
+		}
+
+		if i%7 != 0 {
+			d2.Write(password)
+		}
+
+		if i%2 == 0 {
+			d2.Write(password)
+		} else {
+			d2.Write(final)
+		}
+		final = d2.Sum(nil)
+	}
+
+	output := make([]byte, 34)
+	copy(output, fullSalt)
+	i := len(fullSalt)
+	output[i] = '$'
+	i++
+	v := uint32(0)
+	bits := uint32(0)
+	for _, swapIndex := range md5CryptSwaps {
+		v |= uint32(final[swapIndex]) << bits
+		for bits = bits + 8; bits > 6; bits -= 6 {
+			output[i] = itoa64[v&0x3f]
+			i++
+			v >>= 6
+		}
+	}
+	output[i] = itoa64[v&0x3f]
+
+	return output, nil
+}
+
+// bcrypt.bcrypt is private so use this as a workaround to access it
+//go:linkname bcryptLinked golang.org/x/crypto/bcrypt.bcrypt
+func bcryptLinked(password []byte, cost int, salt []byte) ([]byte, error)
+
+func cryptBlowfish(password, salt []byte) ([]byte, error) {
+	if salt[6] != '$' {
+		return nil, invalidSalt
+	}
+	cost, err := strconv.Atoi(string(salt[4:6]))
+	if err != nil || cost < 4 || cost > 31 {
+		return nil, invalidSalt
+	}
+	hashBytes, err := bcryptLinked(password, cost, salt[7:])
+	if err != nil {
+		return nil, err
+	}
+	output := append(salt, hashBytes...)
+	return output, nil
 }
 
 // getHashFunc returns a function that will create a new hash.Hash using the

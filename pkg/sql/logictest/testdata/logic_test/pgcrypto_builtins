@@ -153,3 +153,34 @@ SELECT gen_salt('bf', 3)
 # invalid max rounds
 statement error pgcode 22023 Incorrect number of rounds
 SELECT gen_salt('bf', 32)
+
+subtest crypt_bf
+
+query T
+SELECT crypt(password, '$2a$06$Ukv6DxN3PpZo4YboQRrIVO')
+FROM (VALUES
+  (''),
+  ('password'),
+  ('012345678901234567890123456789012345678901234567890123456789012345678901'),
+  ('0123456789012345678901234567890123456789012345678901234567890123456789012')
+) AS t (password)
+----
+$2a$06$Ukv6DxN3PpZo4YboQRrIVOXwHbf79QsnJ4GoQyYv5vZozGSILtNUu
+$2a$06$Ukv6DxN3PpZo4YboQRrIVO6UrBIvyPUuhsGQvYZyAvmsIjt02Ze3O
+$2a$06$Ukv6DxN3PpZo4YboQRrIVOFJvN8pQPiHosPsBChWcAcl.FJsUH.Jq
+$2a$06$Ukv6DxN3PpZo4YboQRrIVOFJvN8pQPiHosPsBChWcAcl.FJsUH.Jq
+
+query T
+SELECT crypt('password', concat('$2a$', rounds, '$Ukv6DxN3PpZo4YboQRrIVO'))
+FROM (VALUES ('04'), ('10')) AS t (rounds)
+----
+$2a$04$Ukv6DxN3PpZo4YboQRrIVOSgyjUD9vDt2W.RjRVhm7XC2QTQrtLSK
+$2a$10$Ukv6DxN3PpZo4YboQRrIVOwLm63.TplP3REdrq258BBo3lUBnEbrm
+
+# invalid min rounds
+statement error pgcode 22023 Invalid salt
+SELECT crypt('password', '$2a$03$Ukv6DxN3PpZo4YboQRrIVO')
+
+# invalid max rounds
+statement error pgcode 22023 Invalid salt
+SELECT crypt('password', '$2a$32$Ukv6DxN3PpZo4YboQRrIVO')
