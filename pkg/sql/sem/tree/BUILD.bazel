@@ -51,6 +51,8 @@ go_library(
         "drop.go",
         "drop_owned_by.go",
         "eval.go",
+        "eval_binary_ops.go",
+        "eval_unary_ops.go",
         "explain.go",
         "export.go",
         "expr.go",
