@@ -87,6 +87,10 @@ func (r *Replica) readProtectedTimestampsRLocked(
 		if isValid := gcThreshold.LessEq(protectionTimestamp); !isValid {
 			continue
 		}
+
+		log.VEventf(ctx, 2, "span: %s has a protection policy protecting: %s",
+			sp.String(), protectionTimestamp.String())
+
 		if earliestTS.IsEmpty() || protectionTimestamp.Less(earliestTS) {
 			earliestTS = protectionTimestamp
 		}
