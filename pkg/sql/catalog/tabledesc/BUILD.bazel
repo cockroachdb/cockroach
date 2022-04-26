@@ -41,6 +41,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/cast",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",

@@ -351,7 +351,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 }
 
-func cast(p *tree.Placeholder, typ *types.T) tree.Expr {
+func castExpr(p *tree.Placeholder, typ *types.T) tree.Expr {
 	return &tree.CastExpr{Expr: p, Type: typ}
 }
 func annot(p *tree.Placeholder, typ *types.T) tree.Expr {
@@ -393,24 +393,24 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 		{ // 4
 			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
-				cast(newPlaceholder(0), intType),
-				cast(newPlaceholder(0), boolType),
+				castExpr(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(0), boolType),
 			},
 			tree.PlaceholderTypes{nil, nil},
 		},
 		{ // 5
 			tree.PlaceholderTypes{types.Float},
 			[]tree.Expr{
-				cast(newPlaceholder(0), intType),
-				cast(newPlaceholder(0), boolType),
+				castExpr(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(0), boolType),
 			},
 			tree.PlaceholderTypes{types.Float},
 		},
 		{ // 6
 			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
-				cast(newPlaceholder(0), intType),
-				cast(newPlaceholder(1), boolType),
+				castExpr(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(1), boolType),
 			},
 			tree.PlaceholderTypes{types.Int, types.Bool},
 		},
@@ -432,28 +432,28 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 		{ // 9
 			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
-				cast(newPlaceholder(0), intType),
-				cast(newPlaceholder(1), boolType),
-				cast(newPlaceholder(0), intType),
-				cast(newPlaceholder(1), intType),
+				castExpr(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(1), boolType),
+				castExpr(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(1), intType),
 			},
 			tree.PlaceholderTypes{types.Int, nil},
 		},
 		{ // 10
 			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
-				cast(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(0), intType),
 				annot(newPlaceholder(1), boolType),
-				cast(newPlaceholder(0), intType),
-				cast(newPlaceholder(1), intType),
+				castExpr(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(1), intType),
 			},
 			tree.PlaceholderTypes{types.Int, types.Bool},
 		},
 		{ // 11
 			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
-				cast(newPlaceholder(0), intType),
-				cast(newPlaceholder(1), boolType),
+				castExpr(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(1), boolType),
 				newPlaceholder(0),
 			},
 			tree.PlaceholderTypes{nil, types.Bool},
@@ -462,8 +462,8 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				newPlaceholder(0),
-				cast(newPlaceholder(0), intType),
-				cast(newPlaceholder(1), boolType),
+				castExpr(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(1), boolType),
 			},
 			tree.PlaceholderTypes{nil, types.Bool},
 		},
@@ -489,8 +489,8 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 			tree.PlaceholderTypes{types.Float, types.Bool},
 			[]tree.Expr{
 				newPlaceholder(0),
-				cast(newPlaceholder(0), intType),
-				cast(newPlaceholder(1), boolType),
+				castExpr(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(1), boolType),
 			},
 			tree.PlaceholderTypes{types.Float, types.Bool},
 		},
@@ -498,26 +498,26 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 			tree.PlaceholderTypes{types.Float, types.Float},
 			[]tree.Expr{
 				newPlaceholder(0),
-				cast(newPlaceholder(0), intType),
-				cast(newPlaceholder(1), boolType),
+				castExpr(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(1), boolType),
 			},
 			tree.PlaceholderTypes{types.Float, types.Float},
 		},
 		{ // 17
 			tree.PlaceholderTypes{nil},
 			[]tree.Expr{
-				cast(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(0), intType),
 				annot(newPlaceholder(0), intType),
-				cast(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(0), intType),
 			},
 			tree.PlaceholderTypes{types.Int},
 		},
 		{ // 18
 			tree.PlaceholderTypes{nil},
 			[]tree.Expr{
-				cast(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(0), intType),
 				annot(newPlaceholder(0), boolType),
-				cast(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(0), intType),
 			},
 			tree.PlaceholderTypes{types.Bool},
 		},
@@ -562,8 +562,8 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 			tree.PlaceholderTypes{nil, nil},
 			[]tree.Expr{
 				annot(newPlaceholder(0), floatType),
-				cast(newPlaceholder(0), floatType),
-				cast(newPlaceholder(1), floatType),
+				castExpr(newPlaceholder(0), floatType),
+				castExpr(newPlaceholder(1), floatType),
 				annot(newPlaceholder(0), intType),
 			},
 			"multiple conflicting type annotations around \\$1",
@@ -588,7 +588,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 		{
 			tree.PlaceholderTypes{types.Float},
 			[]tree.Expr{
-				cast(newPlaceholder(0), intType),
+				castExpr(newPlaceholder(0), intType),
 				annot(newPlaceholder(0), intType),
 			},
 			"type annotation around \\$1 conflicts with specified type float",
