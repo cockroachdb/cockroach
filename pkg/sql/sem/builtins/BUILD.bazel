@@ -114,6 +114,7 @@ go_library(
         "@com_github_lib_pq//oid",
         "@com_github_twpayne_go_geom//:go-geom",
         "@com_github_twpayne_go_geom//encoding/ewkb",
+        "@org_golang_x_crypto//bcrypt",
     ],
 )
 
