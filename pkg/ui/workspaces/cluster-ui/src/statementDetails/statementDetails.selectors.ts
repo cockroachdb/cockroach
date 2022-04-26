@@ -30,13 +30,16 @@ export const selectStatementDetails = createSelector(
   (_state: AppState, props: RouteComponentProps): string =>
     queryByName(props.location, appNamesAttr),
   (state: AppState): TimeScale => selectTimeScale(state),
-  (state: AppState) => state.adminUI.sqlDetailsStats,
+  (state: AppState) => state.adminUI.sqlDetailsStats.cachedData,
   (
     fingerprintID,
     appNames,
     timeScale,
-    statementDetailsStats,
-  ): StatementDetailsResponseMessage => {
+    statementDetailsStatsData,
+  ): {
+    statementDetails: StatementDetailsResponseMessage;
+    isLoading: boolean;
+  } => {
     // Since the aggregation interval is 1h, we want to round the selected timeScale to include
     // the full hour. If a timeScale is between 14:32 - 15:17 we want to search for values
     // between 14:00 - 16:00. We don't encourage the aggregation interval to be modified, but
@@ -49,10 +52,13 @@ export const selectStatementDetails = createSelector(
       Long.fromNumber(start.unix()),
       Long.fromNumber(end.unix()),
     );
-    if (Object.keys(statementDetailsStats).includes(key)) {
-      return statementDetailsStats[key].data;
+    if (Object.keys(statementDetailsStatsData).includes(key)) {
+      return {
+        statementDetails: statementDetailsStatsData[key].data,
+        isLoading: statementDetailsStatsData[key].inFlight,
+      };
     }
-    return null;
+    return { statementDetails: null, isLoading: true };
   },
 );
 

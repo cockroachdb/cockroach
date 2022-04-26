@@ -14,7 +14,7 @@ import { DOMAIN_NAME } from "../utils";
 import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../../timeScaleDropdown";
 
-type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
+export type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 
 export type SQLStatsState = {
   data: StatementsResponse;

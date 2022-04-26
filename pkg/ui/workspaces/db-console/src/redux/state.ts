@@ -30,6 +30,7 @@ import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { hoverReducer, HoverState } from "./hover";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
 import { metricsReducer, MetricsState } from "./metrics";
+import { sqlActivityReducer, SqlActivityState } from "src/redux/sqlActivity";
 import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
 import { timeScaleReducer, TimeScaleState } from "./timeScale";
 import { uiDataReducer, UIDataState } from "./uiData";
@@ -41,6 +42,8 @@ export interface AdminUIState {
   hover: HoverState;
   localSettings: LocalSettingsState;
   metrics: MetricsState;
+  sqlActivity: SqlActivityState;
+
   queryManager: QueryManagerState;
   router: RouterState;
   timeScale: TimeScaleState;
@@ -63,6 +66,8 @@ export function createAdminUIStore(historyInst: History<any>) {
       hover: hoverReducer,
       localSettings: localSettingsReducer,
       metrics: metricsReducer,
+      sqlActivity: sqlActivityReducer,
+
       queryManager: queryManagerReducer,
       router: routerReducer,
       timeScale: timeScaleReducer,

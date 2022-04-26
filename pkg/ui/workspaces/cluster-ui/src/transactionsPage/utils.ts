@@ -51,17 +51,12 @@ export const getTrxAppFilterOptions = (
 export const collectStatementsText = (statements: Statement[]): string =>
   statements.map(s => s.key.key_data.query).join("\n");
 
-export const getStatementsByFingerprintIdAndTime = (
+export const getStatementsByFingerprintId = (
   statementFingerprintIds: Long[],
-  timestamp: string | null,
   statements: Statement[],
 ): Statement[] => {
-  return statements?.filter(
-    s =>
-      (timestamp == null ||
-        (s.key?.aggregated_ts != null &&
-          timestamp == TimestampToString(s.key.aggregated_ts))) &&
-      statementFingerprintIds.some(id => id.eq(s.id)),
+  return statements?.filter(s =>
+    statementFingerprintIds.some(id => id.eq(s.id)),
   );
 };
 
@@ -125,9 +120,8 @@ export const searchTransactionsData = (
     search
       ? search.split(" ").every(val =>
           collectStatementsText(
-            getStatementsByFingerprintIdAndTime(
+            getStatementsByFingerprintId(
               t.stats_data.statement_fingerprint_ids,
-              TimestampToString(t.stats_data.aggregated_ts),
               statements,
             ),
           )
@@ -201,9 +195,8 @@ export const filterTransactions = (
       let foundRegion: boolean = regions.length == 0;
       let foundNode: boolean = nodes.length == 0;
 
-      getStatementsByFingerprintIdAndTime(
+      getStatementsByFingerprintId(
         t.stats_data.statement_fingerprint_ids,
-        TimestampToString(t.stats_data.aggregated_ts),
         statements,
       ).some(stmt => {
         stmt.stats.nodes &&
@@ -246,9 +239,8 @@ export const generateRegionNode = (
   // nodes and regions of all the statements to a single list of `region: nodes`
   // for the transaction.
   // E.g. {"gcp-us-east1" : [1,3,4]}
-  getStatementsByFingerprintIdAndTime(
+  getStatementsByFingerprintId(
     transaction.stats_data.statement_fingerprint_ids,
-    TimestampToString(transaction.stats_data.aggregated_ts),
     statements,
   ).forEach(stmt => {
     stmt.stats.nodes &&

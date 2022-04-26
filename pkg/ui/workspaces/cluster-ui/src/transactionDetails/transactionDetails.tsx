@@ -20,7 +20,8 @@ import {
   ISortedTablePagination,
   SortSetting,
 } from "../sortedtable";
-import { Tooltip } from "@cockroachlabs/ui-components";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { InlineAlert, Tooltip } from "@cockroachlabs/ui-components";
 import { Pagination } from "../pagination";
 import { TableStatistics } from "../tableStatistics";
 import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses";
@@ -29,7 +30,7 @@ import { tableClasses } from "../transactionsTable/transactionsTableClasses";
 import { SqlBox } from "../sql";
 import {
   aggregateStatements,
-  getStatementsByFingerprintIdAndTime,
+  getStatementsByFingerprintId,
   statementFingerprintIdsToText,
 } from "../transactionsPage/utils";
 import { Loading } from "../loading";
@@ -53,10 +54,14 @@ import {
   populateRegionNodeForStatements,
   makeStatementsColumns,
 } from "src/statementsTable/statementsTable";
-import { TransactionInfo } from "src/transactionsTable";
+import { Transaction } from "src/transactionsTable";
 import Long from "long";
 import { StatementsRequest } from "../api";
-import { TimeScale, toDateRange } from "../timeScaleDropdown";
+import {
+  TimeScale,
+  TimeScaleDropdown,
+  toDateRange,
+} from "../timeScaleDropdown";
 
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
@@ -67,20 +72,21 @@ const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 const transactionDetailsStylesCx = classNames.bind(transactionDetailsStyles);
 
 export interface TransactionDetailsStateProps {
-  aggregatedTs: string | null;
   timeScale: TimeScale;
   error?: Error | null;
   isTenant: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   nodeRegions: { [nodeId: string]: string };
   statements?: Statement[];
-  transaction: TransactionInfo;
+  transaction: Transaction;
   transactionFingerprintId: string;
+  isLoading: boolean;
 }
 
 export interface TransactionDetailsDispatchProps {
   refreshData: (req?: StatementsRequest) => void;
   refreshUserSQLRoles: () => void;
+  onTimeScaleChange: (ts: TimeScale) => void;
 }
 
 export type TransactionDetailsProps = TransactionDetailsStateProps &
@@ -90,8 +96,7 @@ export type TransactionDetailsProps = TransactionDetailsStateProps &
 interface TState {
   sortSetting: SortSetting;
   pagination: ISortedTablePagination;
-  statementsForTransaction: Statement[];
-  transactionText: string;
+  latestTransactionText: string;
 }
 
 function statementsRequestFromProps(
@@ -121,8 +126,7 @@ export class TransactionDetails extends React.Component<
         pageSize: 10,
         current: 1,
       },
-      statementsForTransaction: [],
-      transactionText: "",
+      latestTransactionText: "",
     };
   }
 
@@ -131,53 +135,52 @@ export class TransactionDetails extends React.Component<
     hasViewActivityRedactedRole: false,
   };
 
-  getTransactionStateInfo = (): void => {
-    const { transaction, aggregatedTs, statements } = this.props;
+  getTransactionStateInfo = (prevTransactionFingerprintId: string): void => {
+    const { transaction, transactionFingerprintId } = this.props;
+
     const statementFingerprintIds =
       transaction?.stats_data?.statement_fingerprint_ids;
-
-    const statementsForTransaction =
-      (statementFingerprintIds &&
-        getStatementsByFingerprintIdAndTime(
-          statementFingerprintIds,
-          aggregatedTs,
-          statements,
-        )) ||
-      [];
 
     const transactionText =
       (statementFingerprintIds &&
         statementFingerprintIdsToText(
           statementFingerprintIds,
-          statementsForTransaction,
+          this.getStatementsForTransaction(),
         )) ||
       "";
 
+    // If a new, non-empty-string transaction text is available (derived from the time-frame-specific endpoint
+    // response), cache the text.
     if (
-      statementsForTransaction?.toString() !=
-        this.state.statementsForTransaction?.toString() ||
-      transactionText != this.state.transactionText
+      transactionText &&
+      transactionText != this.state.latestTransactionText
     ) {
       this.setState({
-        statementsForTransaction,
-        transactionText,
+        latestTransactionText: transactionText,
+      });
+    }
+
+    // If the transactionFingerprintId (derived from the URL) changes, invalidate the cached transaction text
+    if (prevTransactionFingerprintId != transactionFingerprintId) {
+      this.setState({
+        latestTransactionText: "",
       });
     }
   };
 
-  refreshData = (): void => {
+  refreshData = (prevTransactionFingerprintId: string): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
-    this.getTransactionStateInfo();
+    this.getTransactionStateInfo(prevTransactionFingerprintId);
   };
 
   componentDidMount(): void {
-    this.refreshData();
+    this.refreshData("");
     this.props.refreshUserSQLRoles();
   }
 
-  componentDidUpdate(): void {
-    this.getTransactionStateInfo();
+  componentDidUpdate(prevProps: TransactionDetailsProps): void {
+    this.getTransactionStateInfo(prevProps.transactionFingerprintId);
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {
@@ -195,6 +198,19 @@ export class TransactionDetails extends React.Component<
     this.props.history.push("/sql-activity?tab=Transactions&view=fingerprints");
   };
 
+  getStatementsForTransaction = (): Statement[] => {
+    const { transaction, statements } = this.props;
+
+    const statementFingerprintIds =
+      transaction?.stats_data?.statement_fingerprint_ids;
+
+    return (
+      (statementFingerprintIds &&
+        getStatementsByFingerprintId(statementFingerprintIds, statements)) ||
+      []
+    );
+  };
+
   render(): React.ReactElement {
     const {
       error,
@@ -202,7 +218,8 @@ export class TransactionDetails extends React.Component<
       transaction,
       transactionFingerprintId,
     } = this.props;
-    const { transactionText, statementsForTransaction } = this.state;
+    const { latestTransactionText } = this.state;
+    const statementsForTransaction = this.getStatementsForTransaction();
     const transactionStats = transaction?.stats_data?.stats;
 
     return (
@@ -220,13 +237,43 @@ export class TransactionDetails extends React.Component<
           </Button>
           <h3 className={baseHeadingClasses.tableName}>Transaction Details</h3>
         </section>
+        <PageConfig>
+          <PageConfigItem>
+            <TimeScaleDropdown
+              currentScale={this.props.timeScale}
+              setTimeScale={this.props.onTimeScaleChange}
+            />
+          </PageConfigItem>
+        </PageConfig>
         <Loading
           error={error}
           page={"transaction details"}
-          loading={
-            statementsForTransaction.length == 0 || transactionText.length == 0
-          }
+          loading={this.props.isLoading}
           render={() => {
+            if (!transaction) {
+              return (
+                <section className={containerClass}>
+                  {latestTransactionText && (
+                    <Row
+                      gutter={16}
+                      className={transactionDetailsStylesCx("summary-columns")}
+                    >
+                      <Col span={16}>
+                        <SqlBox
+                          value={latestTransactionText}
+                          className={transactionDetailsStylesCx("summary-card")}
+                        />
+                      </Col>
+                    </Row>
+                  )}
+                  <InlineAlert
+                    intent="info"
+                    title="Data not available for this time frame. Select a different time frame."
+                  />
+                </section>
+              );
+            }
+
             const { isTenant, hasViewActivityRedactedRole } = this.props;
             const { sortSetting, pagination } = this.state;
             const txnScopedStmts = statementsForTransaction.filter(
@@ -269,7 +316,7 @@ export class TransactionDetails extends React.Component<
                   >
                     <Col span={16}>
                       <SqlBox
-                        value={transactionText}
+                        value={latestTransactionText}
                         className={transactionDetailsStylesCx("summary-card")}
                       />
                     </Col>

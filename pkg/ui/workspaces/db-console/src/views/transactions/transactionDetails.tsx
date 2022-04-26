@@ -13,7 +13,7 @@ import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { refreshStatements, refreshUserSQLRoles } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { aggregatedTsAttr, txnFingerprintIdAttr } from "src/util/constants";
+import { txnFingerprintIdAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
@@ -26,8 +26,8 @@ import {
   TransactionDetailsDispatchProps,
   TransactionDetailsProps,
   TransactionDetails,
-  util,
 } from "@cockroachlabs/cluster-ui";
+import { setCombinedStatementsTimeScaleAction } from "src/redux/statements";
 
 export const selectTransaction = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
@@ -35,24 +35,25 @@ export const selectTransaction = createSelector(
   (transactionState, props) => {
     const transactions = transactionState.data?.transactions;
     if (!transactions) {
-      return null;
+      return {
+        isLoading: true,
+        transaction: null,
+      };
     }
-    const aggregatedTs = getMatchParamByName(props.match, aggregatedTsAttr);
     const txnFingerprintId = getMatchParamByName(
       props.match,
       txnFingerprintIdAttr,
     );
 
-    return transactions
-      .filter(
-        txn =>
-          txn.stats_data.transaction_fingerprint_id.toString() ==
-          txnFingerprintId,
-      )
-      .filter(
-        txn =>
-          util.TimestampToString(txn.stats_data.aggregated_ts) == aggregatedTs,
-      )[0];
+    const transaction = transactions.filter(
+      txn =>
+        txn.stats_data.transaction_fingerprint_id.toString() ==
+        txnFingerprintId,
+    )[0];
+    return {
+      isLoading: false,
+      transaction: transaction,
+    };
   },
 );
 
@@ -62,9 +63,8 @@ export default withRouter(
       state: AdminUIState,
       props: TransactionDetailsProps,
     ): TransactionDetailsStateProps => {
-      const transaction = selectTransaction(state, props);
+      const { isLoading, transaction } = selectTransaction(state, props);
       return {
-        aggregatedTs: getMatchParamByName(props.match, aggregatedTsAttr),
         timeScale: statementsTimeScaleLocalSetting.selector(state),
         error: selectLastError(state),
         isTenant: false,
@@ -75,8 +75,13 @@ export default withRouter(
           props.match,
           txnFingerprintIdAttr,
         ),
+        isLoading: isLoading,
       };
     },
-    { refreshData: refreshStatements, refreshUserSQLRoles },
+    {
+      refreshData: refreshStatements,
+      refreshUserSQLRoles,
+      onTimeScaleChange: setCombinedStatementsTimeScaleAction,
+    },
   )(TransactionDetails),
 );

@@ -86,4 +86,23 @@ storiesOf("StatementDetails", module)
       ["tab", "execution-stats"],
     ]).toString();
     return <StatementDetails {...props} />;
+  })
+  .add("Loading", () => {
+    const props = getStatementDetailsPropsFixture();
+    props.statementDetails = null;
+    props.isLoading = true;
+    return <StatementDetails {...props} />;
+  })
+  .add(
+    "No data for this time frame; has statement cached from previous time frame",
+    () => {
+      const props = getStatementDetailsPropsFixture(false);
+      return <StatementDetails {...props} />;
+    },
+  )
+  .add("No data for this time frame; no cached statement", () => {
+    const props = getStatementDetailsPropsFixture(false);
+    props.latestQuery = "";
+    props.latestFormattedQuery = "";
+    return <StatementDetails {...props} />;
   });
