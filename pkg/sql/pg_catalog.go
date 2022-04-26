@@ -482,7 +482,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 	schema: vtable.PGCatalogCast,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		cast.ForEachCast(func(src, tgt oid.Oid, cCtx cast.CastContext, ctxOrigin cast.ContextOrigin, _ volatility.V) {
+		cast.ForEachCast(func(src, tgt oid.Oid, cCtx cast.Context, ctxOrigin cast.ContextOrigin, _ volatility.V) {
 			if ctxOrigin == cast.ContextOriginPgCast {
 				castCtx := cCtx.PGString()
 

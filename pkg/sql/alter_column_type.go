@@ -129,7 +129,7 @@ func AlterColumnType(
 			col.GetType().SQLString(), typ.SQLString())
 	case schemachange.ColumnConversionTrivial:
 		if col.HasDefault() {
-			if validCast := cast.ValidCast(col.GetType(), typ, cast.CastContextAssignment); !validCast {
+			if validCast := cast.ValidCast(col.GetType(), typ, cast.ContextAssignment); !validCast {
 				return pgerror.Wrapf(
 					err,
 					pgcode.DatatypeMismatch,
@@ -140,7 +140,7 @@ func AlterColumnType(
 			}
 		}
 		if col.HasOnUpdate() {
-			if validCast := cast.ValidCast(col.GetType(), typ, cast.CastContextAssignment); !validCast {
+			if validCast := cast.ValidCast(col.GetType(), typ, cast.ContextAssignment); !validCast {
 				return pgerror.Wrapf(
 					err,
 					pgcode.DatatypeMismatch,
@@ -363,7 +363,7 @@ func alterColumnTypeGeneral(
 	hasDefault := col.HasDefault()
 	hasUpdate := col.HasOnUpdate()
 	if hasDefault {
-		if validCast := cast.ValidCast(col.GetType(), toType, cast.CastContextAssignment); !validCast {
+		if validCast := cast.ValidCast(col.GetType(), toType, cast.ContextAssignment); !validCast {
 			return pgerror.Newf(
 				pgcode.DatatypeMismatch,
 				"default for column %q cannot be cast automatically to type %s",
@@ -373,7 +373,7 @@ func alterColumnTypeGeneral(
 		}
 	}
 	if hasUpdate {
-		if validCast := cast.ValidCast(col.GetType(), toType, cast.CastContextAssignment); !validCast {
+		if validCast := cast.ValidCast(col.GetType(), toType, cast.ContextAssignment); !validCast {
 			return pgerror.Newf(
 				pgcode.DatatypeMismatch,
 				"on update for column %q cannot be cast automatically to type %s",

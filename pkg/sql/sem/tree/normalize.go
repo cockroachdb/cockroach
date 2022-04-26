@@ -961,10 +961,10 @@ func ReType(expr TypedExpr, wantedType *types.T) (_ TypedExpr, ok bool) {
 		return expr, true
 	}
 	// TODO(#75103): For legacy reasons, we check for a valid cast in the most
-	// permissive context, CastContextExplicit. To be consistent with Postgres,
+	// permissive context, cast.ContextExplicit. To be consistent with Postgres,
 	// we should check for a valid cast in the most restrictive context,
-	// CastContextImplicit.
-	if !cast.ValidCast(resolvedType, wantedType, cast.CastContextExplicit) {
+	// cast.ContextImplicit.
+	if !cast.ValidCast(resolvedType, wantedType, cast.ContextExplicit) {
 		return nil, false
 	}
 	res := &CastExpr{Expr: expr, Type: wantedType}

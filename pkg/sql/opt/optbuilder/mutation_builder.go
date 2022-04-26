@@ -1258,7 +1258,7 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 
 		// Check if an assignment cast is available from the inScope column
 		// type to the out type.
-		if !cast.ValidCast(srcType, targetType, cast.CastContextAssignment) {
+		if !cast.ValidCast(srcType, targetType, cast.ContextAssignment) {
 			panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, string(targetCol.ColName())))
 		}
 
