@@ -50,11 +50,17 @@ type pubsubClient interface {
 	sendMessageToAllTopics(content []byte) error
 }
 
-// payload struct is sent to the sink
-type payload struct {
+type jsonPayload struct {
 	Key   json.RawMessage `json:"key"`
 	Value json.RawMessage `json:"value"`
 	Topic string          `json:"topic"`
+}
+
+// payload struct is sent to the sink
+type payload struct {
+	Key   []byte
+	Value []byte
+	Topic string
 }
 
 // pubsubMessage is sent to worker channels for workers to consume
@@ -91,6 +97,8 @@ type pubsubSink struct {
 
 	client     pubsubClient
 	topicNamer *TopicNamer
+
+	format changefeedbase.FormatType
 }
 
 // TODO: unify gcp credentials code with gcp cloud storage credentials code
@@ -142,8 +150,12 @@ func MakePubsubSink(
 	pubsubURL := sinkURL{URL: u, q: u.Query()}
 	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
 
+	var formatType changefeedbase.FormatType
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case changefeedbase.OptFormatJSON:
+		formatType = changefeedbase.OptFormatJSON
+	case changefeedbase.OptFormatCSV:
+		formatType = changefeedbase.OptFormatCSV
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
@@ -161,6 +173,7 @@ func MakePubsubSink(
 		workerCtx:   ctx,
 		numWorkers:  numOfWorkers,
 		exitWorkers: cancel,
+		format:      formatType,
 	}
 
 	// creates custom pubsub object based on scheme
@@ -341,12 +354,24 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 				// Signals a flush request, makes sure that the messages in eventsChans are finished sending
 				continue
 			}
-			m := msg.message
-			b, err := json.Marshal(m)
-			if err != nil {
-				p.exitWorkersWithError(err)
+
+			var content []byte
+			var err error
+			switch p.format {
+			case changefeedbase.OptFormatJSON:
+				content, err = json.Marshal(jsonPayload{
+					Key:   msg.message.Key,
+					Value: msg.message.Value,
+					Topic: msg.message.Topic,
+				})
+				if err != nil {
+					p.exitWorkersWithError(err)
+				}
+			case changefeedbase.OptFormatCSV:
+				content = msg.message.Value
 			}
-			err = p.client.sendMessage(b, msg.message.Topic, string(msg.message.Key))
+
+			err = p.client.sendMessage(content, msg.message.Topic, string(msg.message.Key))
 			if err != nil {
 				p.exitWorkersWithError(err)
 			}
