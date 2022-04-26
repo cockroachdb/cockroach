@@ -32,6 +32,8 @@ NULL
 statement error pgcode 22023 cannot use "made up alg", no such hash algorithm
 SELECT digest('cat', 'made up alg')
 
+subtest end
+
 subtest hmac
 
 # NB: These results were manually confirmed to match the hashed values
@@ -55,6 +57,8 @@ NULL  NULL  NULL
 statement error pgcode 22023 cannot use "made up alg", no such hash algorithm
 SELECT hmac('dog', 'key', 'made up alg')
 
+subtest end
+
 subtest gen_random_uuid
 
 query IB
@@ -62,6 +66,7 @@ SELECT length(gen_random_uuid()::BYTES), gen_random_uuid() = gen_random_uuid()
 ----
 16 false
 
+subtest end
 
 subtest gen_salt_invalid_algo
 
@@ -70,6 +75,8 @@ SELECT gen_salt('invalid')
 
 statement error pgcode 22023 unknown salt algorithm
 SELECT gen_salt('invalid', 0)
+
+subtest end
 
 subtest gen_salt_des
 
@@ -86,8 +93,10 @@ FROM (VALUES (0), (25)) AS t (rounds)
 2
 
 # invalid rounds
-statement error pgcode 22023 incorrect number of rounds
+statement error pgcode 22023 invalid number of rounds
 SELECT gen_salt('des', 1)
+
+subtest end
 
 subtest gen_salt_xdes
 
@@ -106,16 +115,18 @@ _/...  9
 _zzzz  9
 
 # invalid even rounds
-statement error pgcode 22023 incorrect number of rounds
+statement error pgcode 22023 invalid number of rounds
 SELECT gen_salt('xdes', 2)
 
 # invalid min rounds
-statement error pgcode 22023 incorrect number of rounds
+statement error pgcode 22023 invalid number of rounds
 SELECT gen_salt('xdes', -1)
 
 # invalid max rounds
-statement error pgcode 22023 incorrect number of rounds
+statement error pgcode 22023 invalid number of rounds
 SELECT gen_salt('xdes', 16777216)
+
+subtest end
 
 subtest gen_salt_md5
 
@@ -133,8 +144,10 @@ $1$ 11
 $1$ 11
 
 # invalid rounds
-statement error pgcode 22023 incorrect number of rounds
+statement error pgcode 22023 invalid number of rounds
 SELECT gen_salt('md5', 1)
+
+subtest end
 
 subtest gen_salt_bf
 
@@ -147,9 +160,131 @@ $2a$04$ 29
 $2a$31$ 29
 
 # invalid min rounds
-statement error pgcode 22023 incorrect number of rounds
+statement error pgcode 22023 invalid number of salt rounds
 SELECT gen_salt('bf', 3)
 
 # invalid max rounds
-statement error pgcode 22023 incorrect number of rounds
+statement error pgcode 22023 invalid number of salt rounds
 SELECT gen_salt('bf', 32)
+
+subtest crypt_invalid_algo
+
+# invalid header
+statement error pgcode 22023 invalid salt algorithm
+SELECT crypt('password', '')
+
+# invalid header
+statement error pgcode 22023 invalid salt algorithm
+SELECT crypt('password', '$')
+
+subtest end
+
+subtest crypt_md5
+
+query T
+SELECT crypt(password, '$1$aRnqRmeP')
+FROM (VALUES
+  (''),
+  ('0'),
+  ('password'),
+  (repeat('a', 50))
+) AS t (password)
+----
+$1$aRnqRmeP$.GKS2A8uOS7cKSGtb33BL0
+$1$aRnqRmeP$zSsYGTxby0DLjRezdRBT50
+$1$aRnqRmeP$79.GOqWdD1jolSFx6PGg5.
+$1$aRnqRmeP$Qtrye90cHoHamBO08sQKC1
+
+# salt is truncated to 11 chars
+query TB
+SELECT hash1, hash1 = hash2
+FROM (SELECT
+  crypt('password', '$1$aRnqRmeP') as hash1,
+  crypt('password', '$1$aRnqRmePextra') as hash2
+) as t
+----
+$1$aRnqRmeP$79.GOqWdD1jolSFx6PGg5.  true
+
+# random salt can be less than 8 characters
+query T
+SELECT crypt('password', '$1$')
+----
+$1$$I2o9Z7NcvQAKp7wyCTlia0
+
+subtest end
+
+subtest crypt_bf
+
+query T
+SELECT crypt(password, '$2a$06$Ukv6DxN3PpZo4YboQRrIVO')
+FROM (VALUES
+  (''),
+  ('0'),
+  ('password'),
+  (repeat('a', 50))
+) AS t (password)
+----
+$2a$06$Ukv6DxN3PpZo4YboQRrIVOXwHbf79QsnJ4GoQyYv5vZozGSILtNUu
+$2a$06$Ukv6DxN3PpZo4YboQRrIVOBxB6sdGuSnn.PViRLXxUFUiihB30ukm
+$2a$06$Ukv6DxN3PpZo4YboQRrIVO6UrBIvyPUuhsGQvYZyAvmsIjt02Ze3O
+$2a$06$Ukv6DxN3PpZo4YboQRrIVO9DZGS27nWDW5eSzsL/ckOByIGwpxf0a
+
+# password is truncated to 72 chars
+query TBB
+SELECT hash72, hash71 != hash72, hash72 = hash73
+FROM (SELECT
+  crypt(repeat('a', 71), salt) as hash71,
+  crypt(repeat('a', 72), salt) as hash72,
+  crypt(repeat('a', 73), salt) as hash73
+  FROM (SELECT '$2a$06$Ukv6DxN3PpZo4YboQRrIVO' as salt) as s
+) as t
+----
+$2a$06$Ukv6DxN3PpZo4YboQRrIVOIQPDI39RHxEgW32.ICmqRFFBxkR8ddC  true  true
+
+# salt is truncated to 29 chars
+query TB
+SELECT hash1, hash1 = hash2
+FROM (SELECT
+  crypt('password', '$2a$06$Ukv6DxN3PpZo4YboQRrIVO') as hash1,
+  crypt('password', '$2a$06$Ukv6DxN3PpZo4YboQRrIVOextra') as hash2
+) as t
+----
+$2a$06$Ukv6DxN3PpZo4YboQRrIVO6UrBIvyPUuhsGQvYZyAvmsIjt02Ze3O  true
+
+# test min and average num rounds (large num rounds take too long to run for a test)
+query T
+SELECT crypt('password', concat('$2a$', rounds, '$Ukv6DxN3PpZo4YboQRrIVO'))
+FROM (VALUES ('04'), ('10')) AS t (rounds)
+----
+$2a$04$Ukv6DxN3PpZo4YboQRrIVOSgyjUD9vDt2W.RjRVhm7XC2QTQrtLSK
+$2a$10$Ukv6DxN3PpZo4YboQRrIVOwLm63.TplP3REdrq258BBo3lUBnEbrm
+
+# invalid salt length
+statement error pgcode 22023 invalid salt length
+SELECT crypt('password', '$2a$06$')
+
+# invalid salt length
+statement error pgcode 22023 invalid salt length
+SELECT crypt('password', '$2a$06$Ukv6DxN3PpZo4YboQRrIV')
+
+# invalid round syntax
+statement error pgcode 22023 invalid salt rounds
+SELECT crypt('password', '$2a$AA$Ukv6DxN3PpZo4YboQRrIVO')
+
+# invalid min rounds
+statement error pgcode 22023 invalid number of salt rounds
+SELECT crypt('password', '$2a$03$Ukv6DxN3PpZo4YboQRrIVO')
+
+# invalid max rounds
+statement error pgcode 22023 invalid number of salt rounds
+SELECT crypt('password', '$2a$32$Ukv6DxN3PpZo4YboQRrIVO')
+
+# invalid salt formatting
+statement error pgcode 22023 invalid salt format
+SELECT crypt('password', '$2a$06AUkv6DxN3PpZo4YboQRrIVO')
+
+# invalid salt encoding
+statement error pgcode 22023 invalid salt encoding
+SELECT crypt('password', '$2a$06$#kv6DxN3PpZo4YboQRrIVO')
+
+subtest end
