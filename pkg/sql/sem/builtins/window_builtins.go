@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -57,7 +58,7 @@ var windows = map[string]builtinDefinition{
 			types.Int,
 			newRowNumberWindow,
 			"Calculates the number of the current row within its partition, counting from 1.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"rank": makeBuiltin(winProps(),
@@ -66,7 +67,7 @@ var windows = map[string]builtinDefinition{
 			types.Int,
 			newRankWindow,
 			"Calculates the rank of the current row with gaps; same as row_number of its first peer.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"dense_rank": makeBuiltin(winProps(),
@@ -75,7 +76,7 @@ var windows = map[string]builtinDefinition{
 			types.Int,
 			newDenseRankWindow,
 			"Calculates the rank of the current row without gaps; this function counts peer groups.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"percent_rank": makeBuiltin(winProps(),
@@ -84,7 +85,7 @@ var windows = map[string]builtinDefinition{
 			types.Float,
 			newPercentRankWindow,
 			"Calculates the relative rank of the current row: (rank - 1) / (total rows - 1).",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"cume_dist": makeBuiltin(winProps(),
@@ -94,7 +95,7 @@ var windows = map[string]builtinDefinition{
 			newCumulativeDistWindow,
 			"Calculates the relative rank of the current row: "+
 				"(number of rows preceding or peer with current row) / (total rows).",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"ntile": makeBuiltin(winProps(),
@@ -103,7 +104,7 @@ var windows = map[string]builtinDefinition{
 			types.Int,
 			newNtileWindow,
 			"Calculates an integer ranging from 1 to `n`, dividing the partition as equally as possible.",
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 	),
 	"lag": collectOverloads(
@@ -116,7 +117,7 @@ var windows = map[string]builtinDefinition{
 				makeLeadLagWindowConstructor(false, false, false),
 				"Returns `val` evaluated at the previous row within current row's partition; "+
 					"if there is no such row, instead returns null.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			)
 		},
 		func(t *types.T) tree.Overload {
@@ -126,7 +127,7 @@ var windows = map[string]builtinDefinition{
 				makeLeadLagWindowConstructor(false, true, false),
 				"Returns `val` evaluated at the row that is `n` rows before the current row within its partition; "+
 					"if there is no such row, instead returns null. `n` is evaluated with respect to the current row.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			)
 		},
 		// TODO(nvanbenschoten): We still have no good way to represent two parameters that
@@ -141,7 +142,7 @@ var windows = map[string]builtinDefinition{
 				"Returns `val` evaluated at the row that is `n` rows before the current row within its partition; "+
 					"if there is no such, row, instead returns `default` (which must be of the same type as `val`). "+
 					"Both `n` and `default` are evaluated with respect to the current row.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			)
 		},
 	),
@@ -153,7 +154,7 @@ var windows = map[string]builtinDefinition{
 				makeLeadLagWindowConstructor(true, false, false),
 				"Returns `val` evaluated at the following row within current row's partition; "+""+
 					"if there is no such row, instead returns null.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			)
 		},
 		func(t *types.T) tree.Overload {
@@ -163,7 +164,7 @@ var windows = map[string]builtinDefinition{
 				makeLeadLagWindowConstructor(true, true, false),
 				"Returns `val` evaluated at the row that is `n` rows after the current row within its partition; "+
 					"if there is no such row, instead returns null. `n` is evaluated with respect to the current row.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			)
 		},
 		func(t *types.T) tree.Overload {
@@ -176,7 +177,7 @@ var windows = map[string]builtinDefinition{
 				"Returns `val` evaluated at the row that is `n` rows after the current row within its partition; "+
 					"if there is no such, row, instead returns `default` (which must be of the same type as `val`). "+
 					"Both `n` and `default` are evaluated with respect to the current row.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			)
 		},
 	),
@@ -189,7 +190,7 @@ var windows = map[string]builtinDefinition{
 				t,
 				newFirstValueWindow,
 				"Returns `val` evaluated at the row that is the first row of the window frame.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			)
 		}),
 	"last_value": collectOverloads(
@@ -201,7 +202,7 @@ var windows = map[string]builtinDefinition{
 				t,
 				newLastValueWindow,
 				"Returns `val` evaluated at the row that is the last row of the window frame.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			)
 		}),
 	"nth_value": collectOverloads(winProps(), types.Scalar,
@@ -214,7 +215,7 @@ var windows = map[string]builtinDefinition{
 				newNthValueWindow,
 				"Returns `val` evaluated at the row that is the `n`th row of the window frame (counting from 1); "+
 					"null if no such row.",
-				tree.VolatilityImmutable,
+				volatility.Immutable,
 			)
 		}),
 }
@@ -224,7 +225,7 @@ func makeWindowOverload(
 	ret *types.T,
 	f func([]*types.T, *tree.EvalContext) tree.WindowFunc,
 	info string,
-	volatility tree.Volatility,
+	volatility volatility.Volatility,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      in,

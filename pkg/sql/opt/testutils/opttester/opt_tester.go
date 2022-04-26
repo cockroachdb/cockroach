@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1210,7 +1211,7 @@ func (ot *OptTester) AssignPlaceholders(
 			typ,
 			"", /* context */
 			&ot.semaCtx,
-			tree.VolatilityVolatile,
+			volatility.Volatile,
 		)
 		if err != nil {
 			return nil, err

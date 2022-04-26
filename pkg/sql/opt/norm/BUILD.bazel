@@ -44,6 +44,7 @@ go_library(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treewindow",
+        "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/arith",

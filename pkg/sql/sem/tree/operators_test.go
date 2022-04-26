@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,7 +57,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		name       string
 		leftType   oid.Oid
 		rightType  oid.Oid
-		volatility Volatility
+		volatility volatility.Volatility
 	}
 	var pgOps []pgOp
 	for {
@@ -83,7 +84,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		proleakproof := line[5]
 		require.Len(t, proleakproof, 1)
 
-		v, err := VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
+		v, err := volatility.FromPostgres(provolatile, proleakproof[0] == 't')
 		require.NoError(t, err)
 		pgOps = append(pgOps, pgOp{
 			name:       name,
@@ -93,9 +94,9 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		})
 	}
 
-	check := func(name string, leftType, rightType *types.T, volatility Volatility) {
+	check := func(name string, leftType, rightType *types.T, v volatility.Volatility) {
 		t.Helper()
-		if volatility == 0 {
+		if v == 0 {
 			t.Errorf("operator %s(%v,%v) has no volatility set", name, leftType, rightType)
 			return
 		}
@@ -115,10 +116,10 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		rightOid := rightType.Oid()
 		for _, o := range pgOps {
 			if o.name == pgName && o.leftType == leftOid && o.rightType == rightOid {
-				if o.volatility != volatility {
+				if o.volatility != v {
 					t.Errorf(
 						"operator %s(%v,%v) has volatility %s, corresponding pg operator has %s",
-						name, leftType, rightType, volatility, o.volatility,
+						name, leftType, rightType, v, o.volatility,
 					)
 				}
 				return
@@ -126,7 +127,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		}
 		if testing.Verbose() {
 			t.Logf("operator %s(%v,%v) %d %d with volatility %s has no corresponding pg operator",
-				name, leftType, rightType, leftOid, rightOid, volatility,
+				name, leftType, rightType, leftOid, rightOid, v,
 			)
 		}
 	}

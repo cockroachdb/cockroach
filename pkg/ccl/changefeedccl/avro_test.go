@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -113,7 +114,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 		for colIdx, expr := range rowTuple {
 			col := tableDesc.PublicColumns()[colIdx]
 			typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-				ctx, expr, col.GetType(), "avro", &semaCtx, tree.VolatilityStable)
+				ctx, expr, col.GetType(), "avro", &semaCtx, volatility.Stable)
 			if err != nil {
 				return nil, err
 			}

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -584,7 +585,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				ReturnType: tree.FixedReturnType(types.Int),
 				Fn:         importUniqueRowID,
 				Info:       "Returns a unique rowid based on row position and time",
-				Volatility: tree.VolatilityVolatile,
+				Volatility: volatility.Volatile,
 			},
 		),
 	},
@@ -600,7 +601,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				ReturnType: tree.FixedReturnType(types.Float),
 				Fn:         importRandom,
 				Info:       "Returns a random number between 0 and 1 based on row position and time.",
-				Volatility: tree.VolatilityVolatile,
+				Volatility: volatility.Volatile,
 			},
 		),
 	},
@@ -617,7 +618,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				Fn:         importGenUUID,
 				Info: "Generates a random UUID based on row position and time, " +
 					"and returns it as a value of UUID type.",
-				Volatility: tree.VolatilityVolatile,
+				Volatility: volatility.Volatile,
 			},
 		),
 	},
@@ -731,7 +732,7 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 		return expr
 	}
 	fn, ok := expr.(*tree.FuncExpr)
-	if !ok || fn.ResolvedOverload().Volatility <= tree.VolatilityImmutable {
+	if !ok || fn.ResolvedOverload().Volatility <= volatility.Immutable {
 		// If an expression is not a function, or is an immutable function, then
 		// we can use it as it is.
 		return expr
@@ -781,7 +782,7 @@ func sanitizeExprsForImport(
 
 	// If we have immutable expressions, then we can just return it right away.
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		ctx, expr, targetType, "import_default", &semaCtx, tree.VolatilityImmutable)
+		ctx, expr, targetType, "import_default", &semaCtx, volatility.Immutable)
 	if err == nil {
 		return typedExpr, overrideImmutable, nil
 	}

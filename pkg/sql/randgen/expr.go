@@ -217,7 +217,7 @@ func randExpr(
 
 	default:
 		volatility, ok := tree.LookupCastVolatility(xTyp, types.String, nil /* sessionData */)
-		if ok && volatility <= tree.VolatilityImmutable &&
+		if ok && volatility <= volatility.volatility.Immutable &&
 			!typeToStringCastHasIncorrectVolatility(xTyp) {
 			// We can cast to string; use lower(x::string)
 			typ = types.String
