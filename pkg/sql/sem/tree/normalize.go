@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -802,7 +803,7 @@ func operatorIsImmutable(expr Expr, sd *sessiondata.SessionData) bool {
 		return t.fnProps.Class == NormalClass && t.fn.Volatility <= volatility.Immutable
 
 	case *CastExpr:
-		v, ok := LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ, sd)
+		v, ok := cast.LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ, sd)
 		return ok && v <= volatility.Immutable
 
 	case *UnaryExpr:
@@ -963,7 +964,7 @@ func ReType(expr TypedExpr, wantedType *types.T) (_ TypedExpr, ok bool) {
 	// permissive context, CastContextExplicit. To be consistent with Postgres,
 	// we should check for a valid cast in the most restrictive context,
 	// CastContextImplicit.
-	if !ValidCast(resolvedType, wantedType, CastContextExplicit) {
+	if !cast.ValidCast(resolvedType, wantedType, cast.CastContextExplicit) {
 		return nil, false
 	}
 	res := &CastExpr{Expr: expr, Type: wantedType}

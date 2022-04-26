@@ -372,6 +372,7 @@ ALL_TESTS = [
     "//pkg/sql/schemachanger/scrun:scrun_test",
     "//pkg/sql/schemachanger:schemachanger_test",
     "//pkg/sql/sem/builtins:builtins_test",
+    "//pkg/sql/sem/cast:cast_test",
     "//pkg/sql/sem/tree/cast_test:cast_test_test",
     "//pkg/sql/sem/tree/eval_test:eval_test_test",
     "//pkg/sql/sem/tree:tree_test",
