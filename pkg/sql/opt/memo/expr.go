@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -698,7 +699,7 @@ func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 // SetConstraint sets the constraint in the ScanPrivate and caches the exact
 // prefix. This function should always be used instead of modifying the
 // constraint directly.
-func (s *ScanPrivate) SetConstraint(evalCtx *tree.EvalContext, c *constraint.Constraint) {
+func (s *ScanPrivate) SetConstraint(evalCtx *eval.Context, c *constraint.Constraint) {
 	s.Constraint = c
 	if c == nil {
 		s.ExactPrefix = 0
@@ -1077,7 +1078,7 @@ type CascadeBuilder interface {
 	Build(
 		ctx context.Context,
 		semaCtx *tree.SemaContext,
-		evalCtx *tree.EvalContext,
+		evalCtx *eval.Context,
 		catalog cat.Catalog,
 		factory interface{},
 		binding opt.WithID,

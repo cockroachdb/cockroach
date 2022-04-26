@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -358,7 +359,7 @@ func BenchmarkPhases(b *testing.B) {
 type harness struct {
 	ctx       context.Context
 	semaCtx   tree.SemaContext
-	evalCtx   tree.EvalContext
+	evalCtx   eval.Context
 	prepMemo  *memo.Memo
 	testCat   *testcat.Catalog
 	optimizer xform.Optimizer
@@ -368,7 +369,7 @@ func newHarness(tb testing.TB, query benchQuery) *harness {
 	h := &harness{
 		ctx:     context.Background(),
 		semaCtx: tree.MakeSemaContext(),
-		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 
 	// Set up the test catalog.

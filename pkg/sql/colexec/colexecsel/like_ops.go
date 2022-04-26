@@ -13,7 +13,7 @@ package colexecsel
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/errors"
 )
 
@@ -21,7 +21,7 @@ import (
 // pattern, or NOT LIKE if the negate argument is true. The implementation
 // varies depending on the complexity of the pattern.
 func GetLikeOperator(
-	ctx *tree.EvalContext, input colexecop.Operator, colIdx int, pattern string, negate bool,
+	ctx *eval.Context, input colexecop.Operator, colIdx int, pattern string, negate bool,
 ) (colexecop.Operator, error) {
 	likeOpType, patterns, err := colexeccmp.GetLikeOperatorType(pattern, negate)
 	if err != nil {
@@ -96,7 +96,7 @@ func GetLikeOperator(
 			constArg:       patterns,
 		}, nil
 	case colexeccmp.LikeRegexp:
-		re, err := tree.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
+		re, err := eval.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +105,7 @@ func GetLikeOperator(
 			constArg:       re,
 		}, nil
 	case colexeccmp.LikeRegexpNegate:
-		re, err := tree.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
+		re, err := eval.ConvertLikeToRegexp(ctx, string(patterns[0]), false, '\\')
 		if err != nil {
 			return nil, err
 		}

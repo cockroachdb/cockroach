@@ -11,6 +11,7 @@
 package builtins
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -44,7 +45,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				{"cutover_ts", types.TimestampTZ},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				mgr, err := streaming.GetStreamIngestManager(evalCtx)
 				if err != nil {
 					return nil, err
@@ -81,7 +82,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				{"tenant_id", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err
@@ -115,7 +116,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				{"frontier_ts", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err
@@ -156,7 +157,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				[]*types.T{types.Bytes},
 				[]string{"stream_event"},
 			),
-			func(evalCtx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+			func(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err
@@ -182,7 +183,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				{"stream_id", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err
@@ -216,7 +217,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				{"stream_id", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err

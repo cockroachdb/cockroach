@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -133,7 +134,7 @@ func (ef *execFactory) ConstructScan(
 }
 
 func generateScanSpans(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	codec keys.SQLCodec,
 	tabDesc catalog.TableDescriptor,
 	index catalog.Index,
@@ -1285,7 +1286,7 @@ func (ef *execFactory) ConstructInsert(
 	checkOrdSet exec.CheckOrdinalSet,
 	autoCommit bool,
 ) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Context
+	ctx := ef.planner.extendedEvalCtx.Ctx()
 
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1360,7 +1361,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	fkChecks []exec.InsertFastPathFKCheck,
 	autoCommit bool,
 ) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Context
+	ctx := ef.planner.extendedEvalCtx.Ctx()
 
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1449,7 +1450,7 @@ func (ef *execFactory) ConstructUpdate(
 	passthrough colinfo.ResultColumns,
 	autoCommit bool,
 ) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Context
+	ctx := ef.planner.extendedEvalCtx.Ctx()
 
 	// TODO(radu): the execution code has an annoying limitation that the fetch
 	// columns must be a superset of the update columns, even when the "old" value
@@ -1570,7 +1571,7 @@ func (ef *execFactory) ConstructUpsert(
 	checks exec.CheckOrdinalSet,
 	autoCommit bool,
 ) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Context
+	ctx := ef.planner.extendedEvalCtx.Ctx()
 
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1997,7 +1998,7 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 func (ef *execFactory) ConstructControlJobs(
 	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
 ) (exec.Node, error) {
-	reasonDatum, err := reason.Eval(ef.planner.EvalContext())
+	reasonDatum, err := eval.Expr(ef.planner.EvalContext(), reason)
 	if err != nil {
 		return nil, err
 	}
@@ -2046,7 +2047,7 @@ func (ef *execFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (
 
 // ConstructCreateStatistics is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Context
+	ctx := ef.planner.extendedEvalCtx.Ctx()
 	if err := featureflag.CheckEnabled(
 		ctx,
 		ef.planner.ExecCfg(),

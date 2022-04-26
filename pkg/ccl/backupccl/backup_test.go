@@ -73,7 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -3880,7 +3880,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	const dir = "nodelocal://0/"
-	preGC := tree.TimestampToDecimalDatum(tc.Server(0).Clock().Now()).String()
+	preGC := eval.TimestampToDecimalDatum(tc.Server(0).Clock().Now()).String()
 
 	gcr := roachpb.GCRequest{
 		// Bogus span to make it a valid request.
@@ -3896,7 +3896,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	postGC := tree.TimestampToDecimalDatum(tc.Server(0).Clock().Now()).String()
+	postGC := eval.TimestampToDecimalDatum(tc.Server(0).Clock().Now()).String()
 
 	lateFullTableBackup := dir + "/tbl-after-gc"
 	sqlDB.Exec(t, `BACKUP data.bank TO $1 WITH revision_history`, lateFullTableBackup)

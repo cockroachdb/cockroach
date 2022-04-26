@@ -1058,7 +1058,7 @@ func (mb *mutationBuilder) parseDefaultExpr(colID opt.ColumnID) tree.Expr {
 			// Synthesize default value for NOT NULL mutation column so that it can be
 			// set when in the write-only state. This is only used when no other value
 			// is possible (no default value available, NULL not allowed).
-			datum, err := tree.NewDefaultDatum(mb.b.evalCtx, col.DatumType())
+			datum, err := tree.NewDefaultDatum(&mb.b.evalCtx.CollationEnv, col.DatumType())
 			if err != nil {
 				panic(err)
 			}

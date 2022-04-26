@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",
     ],

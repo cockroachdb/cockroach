@@ -13,6 +13,7 @@ package builtins
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -90,7 +91,7 @@ func makeOverlapsOverloads() []tree.Overload {
 
 // overlapsBuiltinFunc checks if two time periods overlaps, and returns possible
 // error.
-func overlapsBuiltinFunc(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+func overlapsBuiltinFunc(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 	var err error
 	s1, e1, s2, e2 := args[0], args[1], args[2], args[3]
 	s1, e1, err = normalizeTimePeriodToEndpoints(ctx, s1, e1)
@@ -116,7 +117,7 @@ func overlapsBuiltinFunc(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, e
 // `s` represents `interval start`, `e` represents `interval end`.
 // `1/2` represents interval 1/2.
 func evalOverlaps(
-	ctx *tree.EvalContext, s1 tree.Datum, e1 tree.Datum, s2 tree.Datum, e2 tree.Datum,
+	ctx *eval.Context, s1 tree.Datum, e1 tree.Datum, s2 tree.Datum, e2 tree.Datum,
 ) (tree.Datum, error) {
 	compS1E1, err := s1.CompareError(ctx, e1)
 	if err != nil {
@@ -175,7 +176,7 @@ func evalOverlaps(
 // normalizeTimePeriodToEndpoints is to normalize a time period to a
 // representation of two endpoints.
 func normalizeTimePeriodToEndpoints(
-	ctx *tree.EvalContext, s tree.Datum, e tree.Datum,
+	ctx *eval.Context, s tree.Datum, e tree.Datum,
 ) (tree.Datum, tree.Datum, error) {
 	var err error
 	switch eType := e.(type) {

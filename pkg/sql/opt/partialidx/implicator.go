@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -124,7 +124,7 @@ import (
 type Implicator struct {
 	f       *norm.Factory
 	md      *opt.Metadata
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	// constraintCache stores constraints built from atoms. Caching the
 	// constraints prevents building constraints for the same atom multiple
@@ -141,7 +141,7 @@ type constraintCacheItem struct {
 
 // Init initializes an Implicator with the given factory, metadata, and eval
 // context. It also resets the constraint cache.
-func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *tree.EvalContext) {
+func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *eval.Context) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*im = Implicator{

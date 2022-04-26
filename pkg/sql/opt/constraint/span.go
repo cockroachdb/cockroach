@@ -13,6 +13,7 @@ package constraint
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -72,7 +73,7 @@ func (sp *Span) IsUnconstrained() bool {
 
 // HasSingleKey is true if the span contains exactly one key. This is true when
 // the start key is the same as the end key, and both boundaries are inclusive.
-func (sp *Span) HasSingleKey(evalCtx *tree.EvalContext) bool {
+func (sp *Span) HasSingleKey(evalCtx *eval.Context) bool {
 	l := sp.start.Length()
 	if l == 0 || l != sp.end.Length() {
 		return false
@@ -91,7 +92,7 @@ func (sp *Span) HasSingleKey(evalCtx *tree.EvalContext) bool {
 // Prefix returns the length of the longest prefix of values for which the
 // span has the same start and end values. For example, [/1/1/1 - /1/1/2]
 // has prefix 2.
-func (sp *Span) Prefix(evalCtx *tree.EvalContext) int {
+func (sp *Span) Prefix(evalCtx *eval.Context) int {
 	start := sp.StartKey()
 	end := sp.EndKey()
 

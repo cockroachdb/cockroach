@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -33,7 +34,7 @@ import (
 // method and then pass through that property in the buildChildPhysicalProps
 // method.
 func CanProvidePhysicalProps(
-	evalCtx *tree.EvalContext, e memo.RelExpr, required *physical.Required,
+	evalCtx *eval.Context, e memo.RelExpr, required *physical.Required,
 ) bool {
 	// All operators can provide the Presentation and LimitHint properties, so no
 	// need to check for that.

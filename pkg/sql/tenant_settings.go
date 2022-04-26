@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -141,7 +142,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		}
 	} else {
 		reportedValue = tree.AsStringWithFlags(n.value, tree.FmtBareStrings)
-		value, err := n.value.Eval(params.p.EvalContext())
+		value, err := eval.Expr(params.p.EvalContext(), n.value)
 		if err != nil {
 			return err
 		}
@@ -176,7 +177,7 @@ func (n *alterTenantSetClusterSettingNode) Values() tree.Datums            { ret
 func (n *alterTenantSetClusterSettingNode) Close(_ context.Context)        {}
 
 func resolveTenantID(p *planner, expr tree.TypedExpr) (uint64, tree.Datum, error) {
-	tenantIDd, err := expr.Eval(p.EvalContext())
+	tenantIDd, err := eval.Expr(p.EvalContext(), expr)
 	if err != nil {
 		return 0, nil, err
 	}

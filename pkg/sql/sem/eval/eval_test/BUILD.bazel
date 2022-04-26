@@ -7,7 +7,7 @@ go_test(
         "eval_test.go",
         "main_test.go",
     ],
-    data = ["//pkg/sql/sem/tree:testdata"],
+    data = ["//pkg/sql/sem/eval:testdata"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
@@ -26,6 +26,7 @@ go_test(
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",

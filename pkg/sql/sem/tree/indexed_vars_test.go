@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package tree_test
 
 import (
 	"context"
@@ -16,24 +16,26 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-type testVarContainer []Datum
+type testVarContainer []tree.Datum
 
-func (d testVarContainer) IndexedVarEval(idx int, ctx *EvalContext) (Datum, error) {
-	return d[idx].Eval(ctx)
+func (d testVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+	return d[idx].Eval(e)
 }
 
 func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return d[idx].ResolvedType()
 }
 
-func (d testVarContainer) IndexedVarNodeFormatter(idx int) NodeFormatter {
-	n := Name(fmt.Sprintf("var%d", idx))
+func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	n := tree.Name(fmt.Sprintf("var%d", idx))
 	return &n
 }
 
@@ -41,12 +43,12 @@ func TestIndexedVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	c := make(testVarContainer, 4)
-	c[0] = NewDInt(3)
-	c[1] = NewDInt(5)
-	c[2] = NewDInt(6)
-	c[3] = NewDInt(0)
+	c[0] = tree.NewDInt(3)
+	c[1] = tree.NewDInt(5)
+	c[2] = tree.NewDInt(6)
+	c[3] = tree.NewDInt(0)
 
-	h := MakeIndexedVarHelper(c, 4)
+	h := tree.MakeIndexedVarHelper(c, 4)
 
 	// We use only the first three variables.
 	v0 := h.IndexedVar(0)
@@ -58,14 +60,14 @@ func TestIndexedVars(t *testing.T) {
 			h.IndexedVarUsed(0), h.IndexedVarUsed(1), h.IndexedVarUsed(2), h.IndexedVarUsed(3))
 	}
 
-	binary := func(op treebin.BinaryOperator, left, right Expr) Expr {
-		return &BinaryExpr{Operator: op, Left: left, Right: right}
+	binary := func(op treebin.BinaryOperator, left, right tree.Expr) tree.Expr {
+		return &tree.BinaryExpr{Operator: op, Left: left, Right: right}
 	}
 	expr := binary(treebin.MakeBinaryOperator(treebin.Plus), v0, binary(treebin.MakeBinaryOperator(treebin.Mult), v1, v2))
 
 	// Verify the expression evaluates correctly.
 	ctx := context.Background()
-	semaContext := MakeSemaContext()
+	semaContext := tree.MakeSemaContext()
 	semaContext.IVarContainer = c
 	typedExpr, err := expr.TypeCheck(ctx, &semaContext, types.Any)
 	if err != nil {
@@ -79,10 +81,10 @@ func TestIndexedVars(t *testing.T) {
 	}
 
 	// Test formatting using the indexed var format interceptor.
-	f := NewFmtCtx(
-		FmtSimple,
-		FmtIndexedVarFormat(
-			func(ctx *FmtCtx, idx int) {
+	f := tree.NewFmtCtx(
+		tree.FmtSimple,
+		tree.FmtIndexedVarFormat(
+			func(ctx *tree.FmtCtx, idx int) {
 				ctx.Printf("customVar%d", idx)
 			}),
 	)
@@ -98,14 +100,14 @@ func TestIndexedVars(t *testing.T) {
 	if !typ.Equivalent(types.Int) {
 		t.Errorf("invalid expression type %s", typ)
 	}
-	evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	evalCtx.IVarContainer = c
-	d, err := typedExpr.Eval(evalCtx)
+	d, err := eval.Expr(evalCtx, typedExpr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Compare(evalCtx, NewDInt(3+5*6)) != 0 {
+	if d.Compare(evalCtx, tree.NewDInt(3+5*6)) != 0 {
 		t.Errorf("invalid result %s (expected %d)", d, 3+5*6)
 	}
 }

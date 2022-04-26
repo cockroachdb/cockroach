@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -258,7 +259,7 @@ func TestExtractCols(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	for _, tc := range cases {
 		cs := Unconstrained
 		for _, constraint := range tc.constraints {
@@ -322,7 +323,7 @@ func TestExtractConstColsForSet(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	for _, tc := range cases {
 		cs := Unconstrained
 		for _, constraint := range tc.constraints {
@@ -391,7 +392,7 @@ func TestHasSingleColumnConstValues(t *testing.T) {
 		},
 	}
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	for _, tc := range cases {
 		cs := Unconstrained
 		for _, constraint := range tc.constraints {

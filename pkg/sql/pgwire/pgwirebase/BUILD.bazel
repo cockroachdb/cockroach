@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql/oidext",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/bitarray",

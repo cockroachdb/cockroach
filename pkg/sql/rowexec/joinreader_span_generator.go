@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -84,7 +85,7 @@ type defaultSpanGenerator struct {
 }
 
 func (g *defaultSpanGenerator) init(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	codec keys.SQLCodec,
 	fetchSpec *descpb.IndexFetchSpec,
 	splitFamilyIDs []descpb.FamilyID,
@@ -364,7 +365,7 @@ func (g *multiSpanGenerator) maxLookupCols() int {
 // init must be called before the multiSpanGenerator can be used to generate
 // spans.
 func (g *multiSpanGenerator) init(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	codec keys.SQLCodec,
 	fetchSpec *descpb.IndexFetchSpec,
 	splitFamilyIDs []descpb.FamilyID,
@@ -773,7 +774,7 @@ type localityOptimizedSpanGenerator struct {
 // local and remote span generators could release their own when they are
 // close()d.
 func (g *localityOptimizedSpanGenerator) init(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	codec keys.SQLCodec,
 	fetchSpec *descpb.IndexFetchSpec,
 	splitFamilyIDs []descpb.FamilyID,

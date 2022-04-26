@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,7 +35,7 @@ func (ir indexedRows) Len() int {
 	return len(ir.rows)
 }
 
-func (ir indexedRows) GetRow(_ context.Context, idx int) (tree.IndexedRow, error) {
+func (ir indexedRows) GetRow(_ context.Context, idx int) (eval.IndexedRow, error) {
 	return ir.rows[idx], nil
 }
 
@@ -56,7 +57,7 @@ func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (tree.Datums, error)
 }
 
 func testSlidingWindow(t *testing.T, count int) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	wfr := makeTestWindowFrameRun(count)
 	wfr.Frame = &tree.WindowFrame{
@@ -71,12 +72,12 @@ func testSlidingWindow(t *testing.T, count int) {
 	testSumAndAvg(t, evalCtx, wfr)
 }
 
-func testMin(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) {
+func testMin(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 	for offset := 0; offset < maxOffset; offset += int(rand.Int31n(maxOffset / 10)) {
 		wfr.StartBoundOffset = tree.NewDInt(tree.DInt(offset))
 		wfr.EndBoundOffset = tree.NewDInt(tree.DInt(offset))
 		min := &slidingWindowFunc{}
-		min.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
+		min.sw = makeSlidingWindow(evalCtx, func(evalCtx *eval.Context, a, b tree.Datum) int {
 			return -a.Compare(evalCtx, b)
 		})
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
@@ -114,12 +115,12 @@ func testMin(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) 
 	}
 }
 
-func testMax(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) {
+func testMax(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 	for offset := 0; offset < maxOffset; offset += int(rand.Int31n(maxOffset / 10)) {
 		wfr.StartBoundOffset = tree.NewDInt(tree.DInt(offset))
 		wfr.EndBoundOffset = tree.NewDInt(tree.DInt(offset))
 		max := &slidingWindowFunc{}
-		max.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
+		max.sw = makeSlidingWindow(evalCtx, func(evalCtx *eval.Context, a, b tree.Datum) int {
 			return a.Compare(evalCtx, b)
 		})
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
@@ -157,7 +158,7 @@ func testMax(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) 
 	}
 }
 
-func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) {
+func testSumAndAvg(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 	for offset := 0; offset < maxOffset; offset += int(rand.Int31n(maxOffset / 10)) {
 		wfr.StartBoundOffset = tree.NewDInt(tree.DInt(offset))
 		wfr.EndBoundOffset = tree.NewDInt(tree.DInt(offset))
@@ -218,15 +219,15 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 	}
 }
 
-func makeTestWindowFrameRun(count int) *tree.WindowFrameRun {
-	return &tree.WindowFrameRun{
+func makeTestWindowFrameRun(count int) *eval.WindowFrameRun {
+	return &eval.WindowFrameRun{
 		Rows:         makeTestPartition(count),
 		ArgsIdxs:     []uint32{0},
 		FilterColIdx: tree.NoColumnIdx,
 	}
 }
 
-func makeTestPartition(count int) tree.IndexedRows {
+func makeTestPartition(count int) eval.IndexedRows {
 	partition := indexedRows{rows: make([]indexedRow, count)}
 	for idx := 0; idx < count; idx++ {
 		partition.rows[idx] = indexedRow{idx: idx, row: tree.Datums{tree.NewDInt(tree.DInt(rand.Int31n(maxInt)))}}
@@ -234,10 +235,10 @@ func makeTestPartition(count int) tree.IndexedRows {
 	return partition
 }
 
-func partitionToString(ctx context.Context, partition tree.IndexedRows) string {
+func partitionToString(ctx context.Context, partition eval.IndexedRows) string {
 	var buf bytes.Buffer
 	var err error
-	var row tree.IndexedRow
+	var row eval.IndexedRow
 	buf.WriteString("\n=====Partition=====\n")
 	for idx := 0; idx < partition.Len(); idx++ {
 		if row, err = partition.GetRow(ctx, idx); err != nil {

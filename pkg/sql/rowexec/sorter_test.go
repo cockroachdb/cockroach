@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -271,7 +271,7 @@ func TestSorter(t *testing.T) {
 					}
 					defer tempEngine.Close()
 
-					evalCtx := tree.MakeTestingEvalContext(st)
+					evalCtx := eval.MakeTestingEvalContext(st)
 					defer evalCtx.Stop(ctx)
 					diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 					defer diskMonitor.Stop(ctx)
@@ -345,7 +345,7 @@ func TestSortInvalidLimit(t *testing.T) {
 	t.Run("KZeroNoTopK", func(t *testing.T) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		evalCtx := tree.MakeTestingEvalContext(st)
+		evalCtx := eval.MakeTestingEvalContext(st)
 		defer evalCtx.Stop(ctx)
 		diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 		defer diskMonitor.Stop(ctx)
@@ -394,7 +394,7 @@ func BenchmarkSortAll(b *testing.B) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
@@ -437,7 +437,7 @@ func BenchmarkSortLimit(b *testing.B) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
@@ -485,7 +485,7 @@ func BenchmarkSortChunks(b *testing.B) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)

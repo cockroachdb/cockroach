@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -61,7 +62,7 @@ func TestStatsQuality(t *testing.T) {
 func TestCompositeSensitive(t *testing.T) {
 	datadriven.RunTest(t, testutils.TestDataPath(t, "composite_sensitive"), func(t *testing.T, d *datadriven.TestData) string {
 		semaCtx := tree.MakeSemaContext()
-		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		var f norm.Factory
 		f.Init(&evalCtx, nil /* catalog */)
@@ -106,7 +107,7 @@ func TestMemoInit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	var o xform.Optimizer
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE $1=10")
@@ -142,7 +143,7 @@ func TestMemoIsStale(t *testing.T) {
 	catalog.Table(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abc")).Revoked = true
 
 	// Initialize context with starting values.
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	evalCtx.SessionData().Database = "t"
 
 	var o xform.Optimizer
@@ -317,7 +318,7 @@ func TestMemoIsStale(t *testing.T) {
 // This test is here (instead of statistics_builder_test.go) to avoid import
 // cycles.
 func TestStatsAvailable(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	catalog := testcat.New()
 	if _, err := catalog.ExecuteDDL(
