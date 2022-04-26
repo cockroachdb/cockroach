@@ -14,6 +14,7 @@ go_library(
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",

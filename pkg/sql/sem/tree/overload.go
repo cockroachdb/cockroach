@@ -43,6 +43,47 @@ const (
 	SubstringStringIntInt
 )
 
+// AggregateOverload is an opaque type which is used to box an eval.AggregateOverload.
+type AggregateOverload interface {
+	// Aggregate is just a marker method so folks don't think you can just shove
+	// anything here. It ought to be an eval.AggregateOverload.
+	Aggregate() // marker interface
+}
+
+// WindowOverload is an opaque type which is used to box an eval.WindowOverload.
+type WindowOverload interface {
+	// Window is just a marker method so folks don't think you can just shove
+	// anything here. It ought to be an eval.WindowOverload.
+	Window()
+}
+
+// FnWithExprsOverload is an opaque type used to box an
+// eval.FnWithExprsOverload.
+type FnWithExprsOverload interface {
+	FnWithExprs()
+}
+
+// FnOverload is an opaque type used to box an eval.FnOverload.
+//
+// TODO(ajwerner): Give this a marker method and convert all usages.
+// This is onerous at time of writing because there are so many.
+type FnOverload interface{}
+
+// GeneratorOverload is an opaque type used to box an eval.GeneratorOverload.
+type GeneratorOverload interface {
+	Generator()
+}
+
+// GeneratorWithExprsOverload is an opaque type used to box an eval.GeneratorWithExprsOverload.
+type GeneratorWithExprsOverload interface {
+	GeneratorWithExprs()
+}
+
+// SQLFnOverload is an opaque type used to box an eval.SQLFnOverload.
+type SQLFnOverload interface {
+	SQLFn()
+}
+
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {
@@ -67,29 +108,31 @@ type Overload struct {
 	// might be more appropriate.
 	Info string
 
-	AggregateFunc func([]*types.T, *EvalContext, Datums) AggregateFunc
-	WindowFunc    func([]*types.T, *EvalContext) WindowFunc
+	AggregateFunc AggregateOverload
+	WindowFunc    WindowOverload
 
 	// Only one of the following three attributes can be set.
 
 	// Fn is the normal builtin implementation function. It's for functions that
 	// take in Datums and return a Datum.
-	Fn func(*EvalContext, Datums) (Datum, error)
+	//
+	// The opaque wrapper needs to be type asserted into eval.FnOverload.
+	Fn FnOverload
 
 	// FnWithExprs is for builtins that need access to their arguments as Exprs
 	// and not pre-evaluated Datums, but is otherwise identical to Fn.
-	FnWithExprs func(*EvalContext, Exprs) (Datum, error)
+	FnWithExprs FnWithExprsOverload
 
 	// Generator is for SRFs. SRFs take Datums and return multiple rows of Datums.
-	Generator GeneratorFactory
+	Generator GeneratorOverload
 
 	// GeneratorWithExprs is for SRFs that need access to their arguments as Exprs
 	// and not pre-evaluated Datums, but is otherwise identical to Generator.
-	GeneratorWithExprs GeneratorWithExprsFactory
+	GeneratorWithExprs GeneratorWithExprsOverload
 
 	// SQLFn must be set for overloads of type SQLClass. It should return a SQL
 	// statement which will be executed as a common table expression in the query.
-	SQLFn func(*EvalContext, Datums) (string, error)
+	SQLFn SQLFnOverload
 
 	// counter, if non-nil, should be incremented upon successful
 	// type check of expressions using this overload.

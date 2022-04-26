@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -43,7 +44,7 @@ func verifyRows(
 	ctx context.Context,
 	i RowIterator,
 	expectedRows rowenc.EncDatumRows,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	ordering colinfo.ColumnOrdering,
 ) error {
 	for i.Rewind(); ; i.Next() {
@@ -80,7 +81,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	makeRow := func(intVal int, strLen int) rowenc.EncDatumRow {
@@ -133,7 +134,7 @@ func TestRowContainerIterators(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	const numRows = 10
@@ -189,7 +190,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
@@ -344,7 +345,7 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
@@ -426,7 +427,7 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 // ordering.
 func verifyOrdering(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	src SortableRowContainer,
 	types []*types.T,
 	ordering colinfo.ColumnOrdering,
@@ -463,7 +464,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)
@@ -824,7 +825,7 @@ func (ir indexedRows) Len() int {
 // There are possibly couple of other duplicates as well in other files, so we
 // should refactor it and probably extract the code into a new package.
 type rowsSorter struct {
-	evalCtx  *tree.EvalContext
+	evalCtx  *eval.Context
 	rows     indexedRows
 	ordering colinfo.ColumnOrdering
 	err      error
@@ -906,7 +907,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
 	if err != nil {
 		b.Fatal(err)

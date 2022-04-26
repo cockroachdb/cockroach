@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -165,7 +166,7 @@ func (sr *SampleReservoir) retryMaybeResize(ctx context.Context, op func() error
 // SampleRow returns an error (any type of error), no additional calls to
 // SampleRow should be made as the failed samples will have introduced bias.
 func (sr *SampleReservoir) SampleRow(
-	ctx context.Context, evalCtx *tree.EvalContext, row rowenc.EncDatumRow, rank uint64,
+	ctx context.Context, evalCtx *eval.Context, row rowenc.EncDatumRow, rank uint64,
 ) error {
 	return sr.retryMaybeResize(ctx, func() error {
 		if len(sr.samples) < cap(sr.samples) {
@@ -240,7 +241,7 @@ func (sr *SampleReservoir) GetNonNullDatums(
 }
 
 func (sr *SampleReservoir) copyRow(
-	ctx context.Context, evalCtx *tree.EvalContext, dst, src rowenc.EncDatumRow,
+	ctx context.Context, evalCtx *eval.Context, dst, src rowenc.EncDatumRow,
 ) error {
 	for i := range src {
 		if !sr.sampleCols.Contains(i) {
@@ -285,7 +286,7 @@ const maxBytesPerSample = 400
 //
 // For example, if maxBytes=10, "Cockroach Labs" would be truncated to
 // "Cockroach ".
-func truncateDatum(evalCtx *tree.EvalContext, d tree.Datum, maxBytes int) tree.Datum {
+func truncateDatum(evalCtx *eval.Context, d tree.Datum, maxBytes int) tree.Datum {
 	switch t := d.(type) {
 	case *tree.DBitArray:
 		b := tree.DBitArray{BitArray: t.ToWidth(uint(maxBytes * 8))}
@@ -350,7 +351,7 @@ func truncateString(s string, maxBytes int) string {
 // Note: this function is currently only called for key-encoded datums. Update
 // the calling function if there is a need to call this for value-encoded
 // datums as well.
-func deepCopyDatum(evalCtx *tree.EvalContext, d tree.Datum) tree.Datum {
+func deepCopyDatum(evalCtx *eval.Context, d tree.Datum) tree.Datum {
 	switch t := d.(type) {
 	case *tree.DString:
 		return tree.NewDString(deepCopyString(string(*t)))

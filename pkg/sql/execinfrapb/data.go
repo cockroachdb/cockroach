@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -75,12 +76,12 @@ func ConvertToMappedSpecOrdering(
 // ExprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.
-func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
+func ExprFmtCtxBase(evalCtx *eval.Context) *tree.FmtCtx {
 	fmtCtx := evalCtx.FmtCtx(
 		tree.FmtCheckEquivalence,
 		tree.FmtPlaceholderFormat(
 			func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
-				d, err := p.Eval(evalCtx)
+				d, err := eval.Expr(evalCtx, p)
 				if err != nil {
 					panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
 				}

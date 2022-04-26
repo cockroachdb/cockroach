@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -271,7 +272,7 @@ var varGen = map[string]sessionVar{
 		GetStringVal: func(
 			ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn,
 		) (string, error) {
-			dbName, err := getStringVal(&evalCtx.EvalContext, `database`, values)
+			dbName, err := getStringVal(&evalCtx.Context, `database`, values)
 			if err != nil {
 				return "", err
 			}
@@ -1195,7 +1196,7 @@ var varGen = map[string]sessionVar{
 			comma := ""
 			var buf bytes.Buffer
 			for _, v := range values {
-				s, err := paramparse.DatumAsString(&evalCtx.EvalContext, "search_path", v)
+				s, err := paramparse.DatumAsString(&evalCtx.Context, "search_path", v)
 				if err != nil {
 					return "", err
 				}
@@ -2131,7 +2132,7 @@ func makePostgresBoolGetStringValFn(varName string) getStringValFn {
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		val, err := values[0].Eval(&evalCtx.EvalContext)
+		val, err := eval.Expr(&evalCtx.Context, values[0])
 		if err != nil {
 			return "", err
 		}
@@ -2267,7 +2268,7 @@ func makeBackwardsCompatBoolVar(varName string, displayValue bool) sessionVar {
 // the user to provide plain integer values to a SET variable.
 func makeIntGetStringValFn(name string) getStringValFn {
 	return func(ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn) (string, error) {
-		s, err := getIntVal(&evalCtx.EvalContext, name, values)
+		s, err := getIntVal(&evalCtx.Context, name, values)
 		if err != nil {
 			return "", err
 		}
@@ -2279,7 +2280,7 @@ func makeIntGetStringValFn(name string) getStringValFn {
 // the user to provide plain float values to a SET variable.
 func makeFloatGetStringValFn(name string) getStringValFn {
 	return func(ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn) (string, error) {
-		f, err := getFloatVal(&evalCtx.EvalContext, name, values)
+		f, err := getFloatVal(&evalCtx.Context, name, values)
 		if err != nil {
 			return "", err
 		}
@@ -2373,7 +2374,7 @@ func getCustomOptionSessionVar(varName string) (sv sessionVar, isCustom bool) {
 	return sessionVar{}, false
 }
 
-// GetSessionVar implements the EvalSessionAccessor interface.
+// GetSessionVar implements the eval.SessionAccessor interface.
 func (p *planner) GetSessionVar(
 	_ context.Context, varName string, missingOk bool,
 ) (bool, string, error) {
@@ -2386,7 +2387,7 @@ func (p *planner) GetSessionVar(
 	return true, val, err
 }
 
-// SetSessionVar implements the EvalSessionAccessor interface.
+// SetSessionVar implements the eval.SessionAccessor interface.
 func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string, isLocal bool) error {
 	name := strings.ToLower(varName)
 	_, v, err := getSessionVar(name, false /* missingOk */)

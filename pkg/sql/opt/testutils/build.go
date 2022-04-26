@@ -21,12 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // BuildQuery initializes an optimizer and builds the given sql statement.
 func BuildQuery(
-	t *testing.T, o *xform.Optimizer, catalog cat.Catalog, evalCtx *tree.EvalContext, sql string,
+	t *testing.T, o *xform.Optimizer, catalog cat.Catalog, evalCtx *eval.Context, sql string,
 ) {
 	stmt, err := parser.ParseOne(sql)
 	if err != nil {
@@ -48,7 +49,7 @@ func BuildQuery(
 
 // BuildScalar builds the given input string as a ScalarExpr and returns it.
 func BuildScalar(
-	t *testing.T, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, input string,
+	t *testing.T, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context, input string,
 ) opt.ScalarExpr {
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
@@ -67,7 +68,7 @@ func BuildScalar(
 // Calls a subset of the normalization rules that would apply if these filters
 // were built as part of a Select or Join.
 func BuildFilters(
-	t *testing.T, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, input string,
+	t *testing.T, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context, input string,
 ) memo.FiltersExpr {
 	if input == "" {
 		return memo.TrueFilter

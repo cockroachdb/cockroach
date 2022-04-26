@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -263,7 +264,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// prevent computed columns from depending on other computed columns.
 		params.EvalContext().PushIVarContainer(&u.run.iVarContainerForComputedCols)
 		for i := range u.run.computedCols {
-			d, err := u.run.computeExprs[i].Eval(params.EvalContext())
+			d, err := eval.Expr(params.EvalContext(), u.run.computeExprs[i])
 			if err != nil {
 				params.EvalContext().IVarContainer = nil
 				name := u.run.computedCols[i].GetName()

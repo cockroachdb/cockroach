@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -58,14 +59,14 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 func injectTableStats(tt *Table, statsExpr tree.Expr) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	typedExpr, err := tree.TypeCheckAndRequire(
 		ctx, statsExpr, &semaCtx, types.Jsonb, "INJECT STATISTICS",
 	)
 	if err != nil {
 		panic(err)
 	}
-	val, err := typedExpr.Eval(&evalCtx)
+	val, err := eval.Expr(&evalCtx, typedExpr)
 	if err != nil {
 		panic(err)
 	}

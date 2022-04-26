@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -295,12 +296,12 @@ func deserializeExprForFormatting(
 	if fmtFlags == tree.FmtPGCatalog {
 		sanitizedExpr, err := SanitizeVarFreeExpr(ctx, expr, typedExpr.ResolvedType(), "FORMAT", semaCtx,
 			volatility.Immutable)
-		// If the expr has no variables and has volatility.Immutable, we can evaluate
+		// If the expr has no variables and has Immutable, we can evaluate
 		// it and turn it into a constant.
 		if err == nil {
 			// An empty EvalContext is fine here since the expression has
-			// volatility.Immutable.
-			d, err := sanitizedExpr.Eval(&tree.EvalContext{})
+			// Immutable.
+			d, err := eval.Expr(&eval.Context{}, sanitizedExpr)
 			if err == nil {
 				return d, nil
 			}
@@ -313,7 +314,7 @@ func deserializeExprForFormatting(
 // nameResolver is used to replace unresolved names in expressions with
 // IndexedVars.
 type nameResolver struct {
-	evalCtx    *tree.EvalContext
+	evalCtx    *eval.Context
 	tableID    descpb.ID
 	source     *colinfo.DataSourceInfo
 	nrc        *nameResolverIVarContainer
@@ -322,7 +323,7 @@ type nameResolver struct {
 
 // newNameResolver creates and returns a nameResolver.
 func newNameResolver(
-	evalCtx *tree.EvalContext, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
+	evalCtx *eval.Context, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
 ) *nameResolver {
 	source := colinfo.NewSourceInfoForSingleTable(
 		*tn,
@@ -372,7 +373,7 @@ type nameResolverIVarContainer struct {
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
 // Evaluation is not support, so this function panics.
 func (nrc *nameResolverIVarContainer) IndexedVarEval(
-	idx int, ctx *tree.EvalContext,
+	idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
 	panic("unsupported")
 }

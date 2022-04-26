@@ -24,13 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // NewDatumsToInvertedExpr returns a new DatumsToInvertedExpr.
 func NewDatumsToInvertedExpr(
-	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, geoConfig geoindex.Config,
+	evalCtx *eval.Context, colTypes []*types.T, expr tree.TypedExpr, geoConfig geoindex.Config,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
 	if !geoConfig.IsEmpty() {
 		return NewGeoDatumsToInvertedExpr(evalCtx, colTypes, expr, geoConfig)
@@ -65,7 +66,7 @@ func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, inter
 // - pre-filterer state that can be used by the invertedFilterer operator to
 //   reduce the number of false positives returned by the span expression.
 func TryFilterInvertedIndex(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	factory *norm.Factory,
 	filters memo.FiltersExpr,
 	optionalFilters memo.FiltersExpr,
@@ -361,7 +362,7 @@ func evalInvertedExpr(
 // If the index is a single-column inverted index, there are no prefix columns
 // to constrain, and ok=true is returned.
 func constrainPrefixColumns(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	factory *norm.Factory,
 	filters memo.FiltersExpr,
 	optionalFilters memo.FiltersExpr,
@@ -438,7 +439,7 @@ type invertedFilterPlanner interface {
 	// - remaining filters that must be applied if the inverted expression is not
 	//   tight, and
 	// - pre-filterer state that can be used to reduce false positives.
-	extractInvertedFilterConditionFromLeaf(evalCtx *tree.EvalContext, expr opt.ScalarExpr) (
+	extractInvertedFilterConditionFromLeaf(evalCtx *eval.Context, expr opt.ScalarExpr) (
 		invertedExpr inverted.Expression,
 		remainingFilters opt.ScalarExpr,
 		_ *invertedexpr.PreFiltererStateForInvertedFilterer,
@@ -460,7 +461,7 @@ type invertedFilterPlanner interface {
 // - pre-filterer state that can be used to reduce false positives. This is
 //   only non-nil if filterCond is a leaf condition (i.e., has no ANDs or ORs).
 func extractInvertedFilterCondition(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	factory *norm.Factory,
 	filterCond opt.ScalarExpr,
 	filterPlanner invertedFilterPlanner,

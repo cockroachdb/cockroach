@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -93,7 +94,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {
 	ctx := context.Background()
 	semaCtx := makeTestSemaCtx()
-	evalCtx := &tree.EvalContext{}
+	evalCtx := &eval.Context{}
 
 	valuesStmt, err := parser.ParseOne(values)
 	if err != nil {
@@ -118,7 +119,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 			if err != nil {
 				return nil, err
 			}
-			datum, err := typedExpr.Eval(evalCtx)
+			datum, err := eval.Expr(evalCtx, typedExpr)
 			if err != nil {
 				return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 			}
@@ -172,7 +173,7 @@ func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, erro
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
 	ctx := context.Background()
 	semaCtx := makeTestSemaCtx()
-	cdd, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, &tree.EvalContext{})
+	cdd, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, &eval.Context{})
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +398,7 @@ func TestAvroSchema(t *testing.T) {
 			require.NoError(t, err)
 
 			for _, row := range rows {
-				evalCtx := &tree.EvalContext{
+				evalCtx := &eval.Context{
 					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 				}
 				serialized, err := origSchema.textualFromRow(row)

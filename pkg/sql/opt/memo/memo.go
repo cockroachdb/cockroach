@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
@@ -177,7 +177,7 @@ type Memo struct {
 // information about the context in which it is compiled from the evalContext
 // argument. If any of that changes, then the memo must be invalidated (see the
 // IsStale method for more details).
-func (m *Memo) Init(evalCtx *tree.EvalContext) {
+func (m *Memo) Init(evalCtx *eval.Context) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*m = Memo{
@@ -208,7 +208,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 // with the perturb-cost OptTester flag in order to update the query plan tree
 // after optimization is complete with the real computed cost, not the perturbed
 // cost.
-func (m *Memo) ResetLogProps(evalCtx *tree.EvalContext) {
+func (m *Memo) ResetLogProps(evalCtx *eval.Context) {
 	m.logPropsBuilder.init(evalCtx, m)
 }
 
@@ -303,7 +303,7 @@ func (m *Memo) HasPlaceholders() bool {
 // perform KV operations on behalf of the transaction associated with the
 // provided catalog, and those errors are required to be propagated.
 func (m *Memo) IsStale(
-	ctx context.Context, evalCtx *tree.EvalContext, catalog cat.Catalog,
+	ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog,
 ) (bool, error) {
 	// Memo is stale if fields from SessionData that can affect planning have
 	// changed.

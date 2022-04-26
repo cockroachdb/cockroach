@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -98,7 +99,7 @@ var _ tableWriter = &optTableUpserter{}
 
 // init is part of the tableWriter interface.
 func (tu *optTableUpserter) init(
-	ctx context.Context, txn *kv.Txn, evalCtx *tree.EvalContext, sv *settings.Values,
+	ctx context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
 ) error {
 	tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx, sv)
 

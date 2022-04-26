@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -334,7 +335,7 @@ var _ invertedFilterPlanner = &geoFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
 // interface.
 func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	evalCtx *tree.EvalContext, expr opt.ScalarExpr,
+	evalCtx *eval.Context, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
@@ -705,7 +706,7 @@ func (p *PreFilterer) PreFilter(
 // geoDatumsToInvertedExpr implements invertedexpr.DatumsToInvertedExpr for
 // geospatial columns.
 type geoDatumsToInvertedExpr struct {
-	evalCtx      *tree.EvalContext
+	evalCtx      *eval.Context
 	colTypes     []*types.T
 	invertedExpr tree.TypedExpr
 	indexConfig  geoindex.Config
@@ -724,13 +725,13 @@ var _ tree.IndexedVarContainer = &geoDatumsToInvertedExpr{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
 func (g *geoDatumsToInvertedExpr) IndexedVarEval(
-	idx int, ctx *tree.EvalContext,
+	idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
 	err := g.row[idx].EnsureDecoded(g.colTypes[idx], &g.alloc)
 	if err != nil {
 		return nil, err
 	}
-	return g.row[idx].Datum.Eval(ctx)
+	return g.row[idx].Datum.Eval(e)
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
@@ -746,7 +747,7 @@ func (g *geoDatumsToInvertedExpr) IndexedVarNodeFormatter(idx int) tree.NodeForm
 
 // NewGeoDatumsToInvertedExpr returns a new geoDatumsToInvertedExpr.
 func NewGeoDatumsToInvertedExpr(
-	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, config geoindex.Config,
+	evalCtx *eval.Context, colTypes []*types.T, expr tree.TypedExpr, config geoindex.Config,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
 	if config.IsEmpty() {
 		return nil, fmt.Errorf("inverted joins are currently only supported for geospatial indexes")
@@ -857,7 +858,7 @@ func (g *geoDatumsToInvertedExpr) Convert(
 				// We call Copy so the caller can modify the returned expression.
 				return t.invertedExpr.Copy(), nil
 			}
-			d, err := t.nonIndexParam.Eval(g.evalCtx)
+			d, err := eval.Expr(g.evalCtx, t.nonIndexParam)
 			if err != nil {
 				return nil, err
 			}

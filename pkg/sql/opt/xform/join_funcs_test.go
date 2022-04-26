@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -108,7 +109,7 @@ func TestCustomFuncs_makeRangeFilter(t *testing.T) {
 type testFilterBuilder struct {
 	t       *testing.T
 	semaCtx *tree.SemaContext
-	ctx     *tree.EvalContext
+	ctx     *eval.Context
 	o       *xform.Optimizer
 	f       *norm.Factory
 	tbl     opt.TableID
@@ -116,7 +117,7 @@ type testFilterBuilder struct {
 
 func makeFilterBuilder(t *testing.T) testFilterBuilder {
 	var o xform.Optimizer
-	ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	ctx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	o.Init(&ctx, nil)
 	f := o.Factory()
 	cat := testcat.New()

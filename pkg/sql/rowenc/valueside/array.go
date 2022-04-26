@@ -11,6 +11,7 @@
 package valueside
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -257,7 +258,7 @@ func checkElementType(paramType *types.T, elemType *types.T) error {
 // encodeArrayElement appends the encoded form of one array element to
 // the target byte buffer.
 func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
-	switch t := tree.UnwrapDatum(nil, d).(type) {
+	switch t := eval.UnwrapDatum(nil, d).(type) {
 	case *tree.DInt:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
 	case *tree.DString:

@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -309,7 +310,7 @@ type randOp struct {
 
 // DatumToGoSQL converts a datum to a Go type.
 func DatumToGoSQL(d tree.Datum) (interface{}, error) {
-	d = tree.UnwrapDatum(nil, d)
+	d = eval.UnwrapDatum(nil, d)
 	if d == tree.DNull {
 		return nil, nil
 	}

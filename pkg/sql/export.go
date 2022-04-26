@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -131,7 +132,7 @@ func (ef *execFactory) ConstructExport(
 		return nil, errors.Errorf("unsupported export format: %q", fileSuffix)
 	}
 
-	destinationDatum, err := fileName.Eval(ef.planner.EvalContext())
+	destinationDatum, err := eval.Expr(ef.planner.EvalContext(), fileName)
 	if err != nil {
 		return nil, err
 	}

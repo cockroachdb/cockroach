@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -282,7 +283,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 	case opt.LikeOp:
 		if s, ok := tree.AsDString(datum); ok {
 			// Normalize the like pattern to a regexp.
-			if pattern, err := tree.LikeEscape(string(s)); err == nil {
+			if pattern, err := eval.LikeEscape(string(s)); err == nil {
 				if re, err := regexp.Compile(pattern); err == nil {
 					prefix, complete := re.LiteralPrefix()
 					if complete {
@@ -298,7 +299,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 					// If pattern is simply prefix + .* the span is tight. Also pattern
 					// will have regexp special chars escaped and so prefix needs to be
 					// escaped too.
-					if prefixEscape, err := tree.LikeEscape(prefix); err == nil {
+					if prefixEscape, err := eval.LikeEscape(prefix); err == nil {
 						return strings.HasSuffix(pattern, ".*") && strings.TrimSuffix(pattern, ".*") == prefixEscape
 					}
 				}
@@ -308,7 +309,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 	case opt.SimilarToOp:
 		// a SIMILAR TO 'foo_*' -> prefix "foo"
 		if s, ok := tree.AsDString(datum); ok {
-			pattern := tree.SimilarEscape(string(s))
+			pattern := eval.SimilarEscape(string(s))
 			if re, err := regexp.Compile(pattern); err == nil {
 				prefix, complete := re.LiteralPrefix()
 				if complete {
@@ -1051,7 +1052,7 @@ func (ic *Instance) Init(
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
 	consolidate bool,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	factory *norm.Factory,
 	ps *partition.PrefixSorter,
 ) {
@@ -1152,7 +1153,7 @@ type indexConstraintCtx struct {
 
 	computedCols map[opt.ColumnID]opt.ScalarExpr
 
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	// We pre-initialize the KeyContext for each suffix of the index columns.
 	keyCtx []constraint.KeyContext
@@ -1164,7 +1165,7 @@ func (c *indexConstraintCtx) init(
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	factory *norm.Factory,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly

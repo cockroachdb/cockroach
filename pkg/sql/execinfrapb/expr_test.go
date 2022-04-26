@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,7 +28,7 @@ func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return types.Int
 }
 
-func (d testVarContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+func (d testVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
 	return nil, nil
 }
 
@@ -43,7 +44,7 @@ func TestProcessExpression(t *testing.T) {
 
 	h := tree.MakeIndexedVarHelper(testVarContainer{}, 4)
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	semaCtx := tree.MakeSemaContext()
 	expr, err := processExpression(e, &evalCtx, &semaCtx, &h)
 	if err != nil {
@@ -70,7 +71,7 @@ func TestProcessExpressionConstantEval(t *testing.T) {
 
 	h := tree.MakeIndexedVarHelper(nil, 0)
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	semaCtx := tree.MakeSemaContext()
 	expr, err := processExpression(e, &evalCtx, &semaCtx, &h)
 	if err != nil {

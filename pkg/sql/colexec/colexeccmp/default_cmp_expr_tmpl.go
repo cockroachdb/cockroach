@@ -22,13 +22,14 @@
 package colexeccmp
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
 type cmpExprAdapterBase struct {
-	fn      tree.TwoArgFn
-	evalCtx *tree.EvalContext
+	op      tree.BinaryEvalOp
+	evalCtx *eval.Context
 }
 
 // {{range .}}
@@ -48,7 +49,7 @@ func (c *_EXPR_NAME) Eval(left, right tree.Datum) (tree.Datum, error) {
 	// {{if .FlippedArgs}}
 	left, right = right, left
 	// {{end}}
-	d, err := c.fn(c.evalCtx, left, right)
+	d, err := eval.BinaryOp(c.evalCtx, c.op, left, right)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}
@@ -74,5 +75,5 @@ type cmpWithSubOperatorExprAdapter struct {
 var _ ComparisonExprAdapter = &cmpWithSubOperatorExprAdapter{}
 
 func (c *cmpWithSubOperatorExprAdapter) Eval(left, right tree.Datum) (tree.Datum, error) {
-	return tree.EvalComparisonExprWithSubOperator(c.evalCtx, c.expr, left, right)
+	return eval.ComparisonExprWithSubOperator(c.evalCtx, c.expr, left, right)
 }
