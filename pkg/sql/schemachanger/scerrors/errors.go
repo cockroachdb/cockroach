@@ -90,3 +90,26 @@ func ConcurrentSchemaChangeDescID(err error) descpb.ID {
 func ConcurrentSchemaChangeError(desc catalog.Descriptor) error {
 	return &concurrentSchemaChangeError{descID: desc.GetID()}
 }
+
+type schemaChangerUserError struct {
+	err error
+}
+
+// SchemaChangerUserError wraps an error as user consumable, which will surface
+// it from the declarative schema changer without any wrapping.
+func SchemaChangerUserError(err error) error {
+	return &schemaChangerUserError{err: err}
+}
+
+// HasSchemaChangerUserError returns true if the error is meant to be surfaced.
+func HasSchemaChangerUserError(err error) bool {
+	return errors.HasType(err, (*schemaChangerUserError)(nil))
+}
+
+func (e *schemaChangerUserError) Error() string {
+	return fmt.Sprintf("schema change operation encountered an error: %s", e.err.Error())
+}
+
+func (e *schemaChangerUserError) Unwrap() error {
+	return e.err
+}
