@@ -110,6 +110,18 @@ func (t *ConnTracker) getTenantIDs() []roachpb.TenantID {
 	return tenants
 }
 
+// listAssignments returns a snapshot of both the active and idle partitions
+// that contain ServerAssignment instances for the given tenant.
+func (t *ConnTracker) listAssignments(
+	tenantID roachpb.TenantID,
+) (activeList, idleList []*ServerAssignment) {
+	e := t.getEntry(tenantID, false /* allowCreate */)
+	if e == nil {
+		return nil, nil
+	}
+	return e.listAssignments()
+}
+
 // getEntry retrieves the tenantEntry instance for the given tenant. If
 // allowCreate is set to false, getEntry returns nil if the entry does not
 // exist for the given tenant. On the other hand, if allowCreate is set to
