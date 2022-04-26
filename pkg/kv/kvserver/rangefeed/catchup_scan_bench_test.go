@@ -132,8 +132,7 @@ func BenchmarkCatchUpScan(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			for _, useTBI := range []bool{true, false} {
 				b.Run(fmt.Sprintf("useTBI=%v", useTBI), func(b *testing.B) {
-					// TODO(ssd): withDiff isn't currently supported by the TBI optimization.
-					for _, withDiff := range []bool{false} {
+					for _, withDiff := range []bool{true, false} {
 						b.Run(fmt.Sprintf("withDiff=%v", withDiff), func(b *testing.B) {
 							for _, tsExcludePercent := range []float64{0.0, 0.50, 0.75, 0.95, 0.99} {
 								wallTime := int64((5 * (float64(numKeys)*tsExcludePercent + 1)))
