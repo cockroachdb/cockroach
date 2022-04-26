@@ -481,7 +481,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		var ignore bool
 		if err := errorFromResult(t.Result); err != nil {
 			ignore = kvserver.IsRetriableReplicationChangeError(err) ||
-				kvserver.IsIllegalReplicationChangeError(err)
+				kvserver.IsIllegalReplicationChangeError(err) ||
+				kvserver.IsReplicationChangeInProgressError(err)
 		}
 		if !ignore {
 			v.failIfError(op, t.Result)

@@ -64,6 +64,12 @@
     width: 20px;
     fill: $colors--functional-orange-3;
   }
+
+  &__closed {
+        height: 10px;
+        width: 20px;
+        fill: $colors--neutral-4;
+      }
 }
 
 .code {

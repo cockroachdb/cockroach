@@ -392,6 +392,11 @@ func makeCloudStorageSink(
 		// would require a bit of refactoring.
 		s.ext = `.ndjson`
 		s.rowDelimiter = []byte{'\n'}
+	case changefeedbase.OptFormatCSV:
+		// TODO(dan): It seems like these should be on the encoder, but that
+		// would require a bit of refactoring.
+		s.ext = `.csv`
+		s.rowDelimiter = []byte{'\n'}
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])

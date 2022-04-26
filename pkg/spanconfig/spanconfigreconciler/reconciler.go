@@ -138,14 +138,11 @@ func (r *Reconciler) Reconcile(
 	session sqlliveness.Session,
 	onCheckpoint func() error,
 ) error {
-	// TODO(irfansharif): Check system.{zones,descriptors} for last GC timestamp
-	// and avoid the full reconciliation pass if the startTS provided is
-	// visible to the rangefeed. Right now we're doing a full reconciliation
-	// pass every time the reconciliation job kicks us off.
-	_ = startTS
-
+	// TODO(irfansharif): Avoid the full reconciliation pass if the startTS
+	// provided is visible to the rangefeed. Right now we're doing a full
+	// reconciliation pass every time the reconciliation job kicks us off.
 	if fn := r.knobs.ReconcilerInitialInterceptor; fn != nil {
-		fn()
+		fn(startTS)
 	}
 
 	full := fullReconciler{

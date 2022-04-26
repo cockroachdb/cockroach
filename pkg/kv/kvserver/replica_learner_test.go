@@ -416,8 +416,6 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	require.NoError(t, err)
 	require.NotNil(t, leaseholderRepl)
 
-	time.Sleep(kvserver.RaftLogQueuePendingSnapshotGracePeriod)
-
 	if drainReceivingNode {
 		// Draining nodes shouldn't reject raft snapshots, so this should have no
 		// effect on the outcome of this test.
@@ -1246,6 +1244,82 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	require.Len(t, desc2.Replicas().FilterToDescriptors(predDemotingToLearner), 1)
 
 	checkFails()
+}
+
+// TestMergeQueueDoesNotInterruptReplicationChange verifies that the merge queue
+// will correctly ignore a range that has an in-flight snapshot to a learner
+// replica.
+func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var activateSnapshotTestingKnob int64
+	blockSnapshot := make(chan struct{})
+	tc := testcluster.StartTestCluster(
+		t, 2, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						// Disable load-based splitting, so that the absence of sufficient
+						// QPS measurements do not prevent ranges from merging.
+						DisableLoadBasedSplitting: true,
+						ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
+							if atomic.LoadInt64(&activateSnapshotTestingKnob) == 1 {
+								<-blockSnapshot
+							}
+							return nil
+						},
+					},
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	splitKey := scratchKey.Next()
+
+	// Split and then unsplit the range to clear the sticky bit, otherwise the
+	// mergeQueue will ignore the range.
+	tc.SplitRangeOrFatal(t, splitKey)
+	require.NoError(t, tc.Server(0).DB().AdminUnsplit(ctx, splitKey))
+
+	atomic.StoreInt64(&activateSnapshotTestingKnob, 1)
+	replicationChange := make(chan error)
+	err := tc.Stopper().RunAsyncTask(ctx, "test", func(ctx context.Context) {
+		_, err := tc.AddVoters(scratchKey, makeReplicationTargets(2)...)
+		replicationChange <- err
+	})
+	require.NoError(t, err)
+
+	select {
+	case <-time.After(100 * time.Millisecond):
+	// Continue.
+	case <-replicationChange:
+		t.Fatal("did not expect the replication change to complete")
+	}
+	defer func() {
+		// Unblock the replication change and ensure that it succeeds.
+		close(blockSnapshot)
+		require.NoError(t, <-replicationChange)
+	}()
+
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	// TestCluster currently overrides this when used with ReplicationManual.
+	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
+
+	testutils.SucceedsSoon(t, func() error {
+		// While this replication change is stalled, we'll trigger a merge and
+		// ensure that the merge correctly notices that there is a snapshot in
+		// flight and ignores the range.
+		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchKey)
+		_, processErr, enqueueErr := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+		require.NoError(t, enqueueErr)
+		require.True(t, kvserver.IsReplicationChangeInProgressError(processErr))
+		return nil
+	})
 }
 
 func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {

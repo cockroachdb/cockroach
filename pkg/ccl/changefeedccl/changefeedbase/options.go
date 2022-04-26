@@ -118,6 +118,7 @@ const (
 
 	OptFormatJSON FormatType = `json`
 	OptFormatAvro FormatType = `avro`
+	OptFormatCSV  FormatType = `csv`
 
 	OptFormatNative FormatType = `native`
 
@@ -258,6 +259,11 @@ var NoLongerExperimental = map[string]string{
 	DeprecatedSinkSchemeCloudStorageNodelocal: SinkSchemeCloudStorageNodelocal,
 	DeprecatedSinkSchemeCloudStorageS3:        SinkSchemeCloudStorageS3,
 }
+
+// InitialScanOnlyUnsupportedOptions is options that are not supported with the
+// initial scan only option
+var InitialScanOnlyUnsupportedOptions = makeStringSet(OptEndTime, OptResolvedTimestamps, OptDiff,
+	OptMVCCTimestamps, OptUpdatedTimestamps)
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
 // users to alter.
