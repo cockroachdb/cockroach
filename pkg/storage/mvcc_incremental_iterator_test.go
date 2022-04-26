@@ -774,6 +774,7 @@ func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
 		keyMax   = roachpb.KeyMax
 		testKey1 = roachpb.Key("/db1")
 		testKey2 = roachpb.Key("/db2")
+		testKey3 = roachpb.Key("/db3")
 
 		testValue1 = []byte("val1")
 		testValue2 = []byte("val2")
@@ -789,11 +790,12 @@ func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
 	inline1_1_1 := makeKVT(testKey1, testValue1, hlc.Timestamp{})
 	kv2_1_1 := makeKVT(testKey2, testValue1, ts1)
 	kv2_2_2 := makeKVT(testKey2, testValue2, ts2)
+	inline3_2_1 := makeKVT(testKey3, testValue2, hlc.Timestamp{})
 
 	for _, engineImpl := range mvccEngineImpls {
 		e := engineImpl.create()
 		defer e.Close()
-		for _, kv := range []MVCCKeyValue{inline1_1_1, kv2_1_1, kv2_2_2} {
+		for _, kv := range []MVCCKeyValue{inline1_1_1, kv2_1_1, kv2_2_2, inline3_2_1} {
 			v := roachpb.Value{RawBytes: kv.Value}
 			if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, v, nil); err != nil {
 				t.Fatal(err)
@@ -826,8 +828,33 @@ func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
 				expectKeyValue(t, iter, kv2_2_2)
 				iter.Next()
 				expectKeyValue(t, iter, kv2_1_1)
+				iter.Next()
+				expectInlineKeyValue(t, iter, inline3_2_1)
 
+				iter.SeekGE(MakeMVCCMetadataKey(testKey2))
+				expectKeyValue(t, iter, kv2_2_2)
+				iter.NextIgnoringTime()
+				expectKeyValue(t, iter, kv2_1_1)
+				iter.NextIgnoringTime()
+				expectInlineKeyValue(t, iter, inline3_2_1)
 			})
+			t.Run("PolicyError returns error on NextIgnoringTime if inline value is found",
+				func(t *testing.T) {
+					iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+						EndKey:       keyMax,
+						StartTime:    tsMin,
+						EndTime:      tsMax,
+						InlinePolicy: MVCCIncrementalIterInlinePolicyError,
+					})
+					defer iter.Close()
+					iter.SeekGE(MakeMVCCMetadataKey(testKey2))
+					expectKeyValue(t, iter, kv2_2_2)
+					iter.NextIgnoringTime()
+					expectKeyValue(t, iter, kv2_1_1)
+					iter.NextIgnoringTime()
+					_, err := iter.Valid()
+					assert.EqualError(t, err, "unexpected inline value found: \"/db3\"")
+				})
 		})
 	}
 }
@@ -909,6 +936,16 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 				}
 				_, err := iter.Valid()
 				assert.EqualError(t, err, intentErr.Error())
+
+				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
+				_, err = iter.Valid()
+				require.NoError(t, err)
+				for ; ; iter.NextIgnoringTime() {
+					if ok, err := iter.Valid(); !ok {
+						assert.EqualError(t, err, intentErr.Error())
+						break
+					}
+				}
 			})
 			t.Run("PolicyError ignores intents outside of time range", func(t *testing.T) {
 				iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
@@ -933,17 +970,20 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 					IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
 				})
 				defer iter.Close()
-				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
-				for _, kv := range []MVCCKeyValue{kv1_3_3, kv1_2_2, kv1_1_1} {
-					expectKeyValue(t, iter, kv)
-					iter.Next()
+				testIterWithNextFunc := func(nextFunc func()) {
+					iter.SeekGE(MakeMVCCMetadataKey(testKey1))
+					for _, kv := range []MVCCKeyValue{kv1_3_3, kv1_2_2, kv1_1_1} {
+						expectKeyValue(t, iter, kv)
+						nextFunc()
+					}
+					expectIntent(t, iter, intent2_2_2)
+					nextFunc()
+					expectKeyValue(t, iter, kv2_2_2)
+					nextFunc()
+					expectKeyValue(t, iter, kv2_1_1)
 				}
-				expectIntent(t, iter, intent2_2_2)
-				iter.Next()
-				expectKeyValue(t, iter, kv2_2_2)
-				iter.Next()
-				expectKeyValue(t, iter, kv2_1_1)
-
+				testIterWithNextFunc(iter.Next)
+				testIterWithNextFunc(iter.NextIgnoringTime)
 			})
 			t.Run("PolicyEmit ignores intents outside of time range", func(t *testing.T) {
 				iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
