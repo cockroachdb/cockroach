@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/nstree",
+        "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
