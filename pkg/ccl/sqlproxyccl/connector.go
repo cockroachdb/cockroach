@@ -85,16 +85,16 @@ type connector struct {
 	// Testing knobs for internal connector calls. If specified, these will
 	// be called instead of the actual logic.
 	testingKnobs struct {
-		dialTenantCluster func(ctx context.Context) (net.Conn, error)
+		dialTenantCluster func(ctx context.Context, requester balancer.ConnectionHandle) (net.Conn, error)
 		lookupAddr        func(ctx context.Context) (string, error)
-		dialSQLServer     func(serverAddr string) (net.Conn, error)
+		dialSQLServer     func(serverAssignment *balancer.ServerAssignment) (net.Conn, error)
 	}
 }
 
 // OpenTenantConnWithToken opens a connection to the tenant cluster using the
 // token-based authentication during connection migration.
 func (c *connector) OpenTenantConnWithToken(
-	ctx context.Context, token string,
+	ctx context.Context, requester balancer.ConnectionHandle, token string,
 ) (retServerConn net.Conn, retErr error) {
 	c.StartupMsg.Parameters[sessionRevivalTokenStartupParam] = token
 	defer func() {
@@ -102,7 +102,7 @@ func (c *connector) OpenTenantConnWithToken(
 		delete(c.StartupMsg.Parameters, sessionRevivalTokenStartupParam)
 	}()
 
-	serverConn, err := c.dialTenantCluster(ctx)
+	serverConn, err := c.dialTenantCluster(ctx, requester)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,10 @@ func (c *connector) OpenTenantConnWithToken(
 // sentToClient will be set to true if an error occurred during the
 // authenticator phase since errors would have already been sent to the client.
 func (c *connector) OpenTenantConnWithAuth(
-	ctx context.Context, clientConn net.Conn, throttleHook func(throttler.AttemptStatus) error,
+	ctx context.Context,
+	requester balancer.ConnectionHandle,
+	clientConn net.Conn,
+	throttleHook func(throttler.AttemptStatus) error,
 ) (retServerConn net.Conn, sentToClient bool, retErr error) {
 	// Just a safety check, but this shouldn't happen since we will block the
 	// startup param in the frontend admitter. The only case where we actually
@@ -148,7 +151,7 @@ func (c *connector) OpenTenantConnWithAuth(
 	// previously, but that wouldn't happen based on the current proxy logic.
 	delete(c.StartupMsg.Parameters, sessionRevivalTokenStartupParam)
 
-	serverConn, err := c.dialTenantCluster(ctx)
+	serverConn, err := c.dialTenantCluster(ctx, requester)
 	if err != nil {
 		return nil, false, err
 	}
@@ -174,9 +177,11 @@ func (c *connector) OpenTenantConnWithAuth(
 // dialTenantCluster returns a connection to the tenant cluster associated
 // with the connector. Once a connection has been established, the pgwire
 // startup message will be relayed to the server.
-func (c *connector) dialTenantCluster(ctx context.Context) (net.Conn, error) {
+func (c *connector) dialTenantCluster(
+	ctx context.Context, requester balancer.ConnectionHandle,
+) (net.Conn, error) {
 	if c.testingKnobs.dialTenantCluster != nil {
-		return c.testingKnobs.dialTenantCluster(ctx)
+		return c.testingKnobs.dialTenantCluster(ctx, requester)
 	}
 
 	// Repeatedly try to make a connection until context is canceled, or until
@@ -211,9 +216,20 @@ func (c *connector) dialTenantCluster(ctx context.Context) (net.Conn, error) {
 			}
 			return nil, err
 		}
+
 		// Make a connection to the SQL pod.
-		crdbConn, err = c.dialSQLServer(serverAddr)
+		//
+		// TODO(jaylim-crl): See comment above about moving lookupAddr into
+		// the balancer.
+		serverAssignment := balancer.NewServerAssignment(
+			c.TenantID, c.Balancer.GetTracker(), requester, serverAddr,
+		)
+		crdbConn, err = c.dialSQLServer(serverAssignment)
 		if err != nil {
+			// Clean up the server assignment in case of an error. If there
+			// was no error, the cleanup process is merged with net.Conn.Close().
+			serverAssignment.Close()
+
 			if isRetriableConnectorError(err) {
 				dialSQLServerErrs++
 				if dialSQLServerErr.ShouldLog() {
@@ -226,7 +242,7 @@ func (c *connector) dialTenantCluster(ctx context.Context) (net.Conn, error) {
 				// refresh any stale information that may have caused the
 				// problem.
 				if err = reportFailureToDirectoryCache(
-					ctx, c.TenantID, serverAddr, c.DirectoryCache,
+					ctx, c.TenantID, serverAssignment.Addr(), c.DirectoryCache,
 				); err != nil {
 					reportFailureErrs++
 					if reportFailureErr.ShouldLog() {
@@ -305,25 +321,27 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 	}
 }
 
-// dialSQLServer dials the given address for the SQL pod, and forwards the
-// startup message to it. If the connector specifies a TLS connection, it will
-// also attempt to upgrade the PG connection to use TLS.
+// dialSQLServer dials a SQL pod based on the given server assignment, and
+// forwards the startup message to the server. If the connector specifies a TLS
+// connection, it will also attempt to upgrade the PG connection to use TLS.
 //
 // This will be called within an infinite backoff loop. If an error is
 // transient, this will return an error that has been marked with
 // errRetryConnectorSentinel (i.e. markAsRetriableConnectorError).
-func (c *connector) dialSQLServer(serverAddr string) (net.Conn, error) {
+func (c *connector) dialSQLServer(
+	serverAssignment *balancer.ServerAssignment,
+) (_ net.Conn, retErr error) {
 	if c.testingKnobs.dialSQLServer != nil {
-		return c.testingKnobs.dialSQLServer(serverAddr)
+		return c.testingKnobs.dialSQLServer(serverAssignment)
 	}
 
 	// Use a TLS config if one was provided. If TLSConfig is nil, Clone will
 	// return nil.
 	tlsConf := c.TLSConfig.Clone()
 	if tlsConf != nil {
-		// serverAddr will always have a port. We use an empty string as the
-		// default port as we only care about extracting the host.
-		outgoingHost, _, err := addr.SplitHostPort(serverAddr, "" /* defaultPort */)
+		// serverAssignment.Addr() will always have a port. We use an empty
+		// string as the default port as we only care about extracting the host.
+		outgoingHost, _, err := addr.SplitHostPort(serverAssignment.Addr(), "" /* defaultPort */)
 		if err != nil {
 			return nil, err
 		}
@@ -332,7 +350,7 @@ func (c *connector) dialSQLServer(serverAddr string) (net.Conn, error) {
 		tlsConf.ServerName = outgoingHost
 	}
 
-	conn, err := BackendDial(c.StartupMsg, serverAddr, tlsConf)
+	conn, err := BackendDial(c.StartupMsg, serverAssignment.Addr(), tlsConf)
 	if err != nil {
 		var codeErr *codeError
 		if errors.As(err, &codeErr) && codeErr.code == codeBackendDown {
@@ -340,7 +358,27 @@ func (c *connector) dialSQLServer(serverAddr string) (net.Conn, error) {
 		}
 		return nil, err
 	}
-	return conn, nil
+
+	return &onConnectionClose{
+		Conn:     conn,
+		closerFn: serverAssignment.Close,
+	}, nil
+}
+
+// onConnectionClose is a net.Conn wrapper to ensure that our custom closerFn
+// gets invoked whenever Close is called. closerFn must be idempotent.
+type onConnectionClose struct {
+	net.Conn
+	closerFn func()
+}
+
+// Close invokes our custom closer function before closing the underlying
+// net.Conn instance.
+//
+// Close implements the net.Conn interface.
+func (cc *onConnectionClose) Close() error {
+	cc.closerFn()
+	return cc.Conn.Close()
 }
 
 // errRetryConnectorSentinel exists to allow more robust retection of retry
