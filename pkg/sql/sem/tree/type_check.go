@@ -494,15 +494,15 @@ func resolveCast(
 		return nil
 
 	default:
-		cast, ok := lookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
+		cast, ok := LookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
 		if !ok {
 			return invalidCastError(castFrom, castTo)
 		}
-		if !allowStable && cast.volatility >= volatility.Stable {
+		if !allowStable && cast.Volatility >= volatility.Stable {
 			err := NewContextDependentOpsNotAllowedError(context)
 			err = pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, castTo)
-			if cast.volatilityHint != "" {
-				err = errors.WithHint(err, cast.volatilityHint)
+			if cast.VolatilityHint != "" {
+				err = errors.WithHint(err, cast.VolatilityHint)
 			}
 			return err
 		}

@@ -131,14 +131,14 @@ func TestCastsMatchPostgres(t *testing.T) {
 			if !ok && testing.Verbose() {
 				t.Logf("cast %s::%s has no corresponding pg cast", oidStr(src), oidStr(tgt))
 			}
-			if ok && c.volatility != pgCast.volatility {
+			if ok && c.Volatility != pgCast.volatility {
 				t.Errorf("cast %s::%s has volatility %s; corresponding pg cast has volatility %s",
-					oidStr(src), oidStr(tgt), c.volatility, pgCast.volatility,
+					oidStr(src), oidStr(tgt), c.Volatility, pgCast.volatility,
 				)
 			}
-			if ok && c.maxContext != pgCast.context {
-				t.Errorf("cast %s::%s has maxContext %s; corresponding pg cast has context %s",
-					oidStr(src), oidStr(tgt), c.maxContext, pgCast.context,
+			if ok && c.MaxContext != pgCast.context {
+				t.Errorf("cast %s::%s has MaxContext %s; corresponding pg cast has context %s",
+					oidStr(src), oidStr(tgt), c.MaxContext, pgCast.context,
 				)
 			}
 		}
@@ -167,7 +167,7 @@ func TestCastsFromUnknown(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	for _, typ := range types.OidToType {
-		_, ok := lookupCast(types.Unknown, typ, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
+		_, ok := LookupCast(types.Unknown, typ, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
 		if !ok {
 			t.Errorf("cast from Unknown to %s does not exist", typ.String())
 		}
