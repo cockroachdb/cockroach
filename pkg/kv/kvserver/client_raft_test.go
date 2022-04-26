@@ -4253,8 +4253,11 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 		log.Errorf(ctx, "expected raft group to be uninitialized")
 	}
 	// Send an increment and verify that initializes the Raft group.
-	kv.SendWrapped(ctx,
+	_, pErr := kv.SendWrapped(ctx,
 		followerStore.TestSender(), incrementArgs(splitKey, 1))
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
 
 	if !repl.IsRaftGroupInitialized() {
 		t.Fatal("expected raft group to be initialized")

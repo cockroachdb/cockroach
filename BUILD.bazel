@@ -194,6 +194,7 @@ nogo(
             "//pkg/testutils/lint/passes/leaktestcall",
             "//pkg/testutils/lint/passes/nilness",
             "//pkg/testutils/lint/passes/nocopy",
+            "//pkg/testutils/lint/passes/returncheck",
             "//pkg/testutils/lint/passes/returnerrcheck",
             "//pkg/testutils/lint/passes/timer",
             "//pkg/testutils/lint/passes/unconvert",

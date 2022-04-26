@@ -118,10 +118,8 @@ func (ef *execFactory) ConstructScan(
 	}
 	scan.reqOrdering = ReqOrdering(reqOrdering)
 	scan.estimatedRowCount = uint64(params.EstimatedRowCount)
-	if params.Locking.IsLocking() {
-		scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
-		scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
-	}
+	scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
+	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	scan.localityOptimized = params.LocalityOptimized
 	if !ef.isExplain && !ef.planner.isInternalPlanner {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -597,6 +595,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	keyCols []exec.NodeColumnOrdinal,
 	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
+	locking opt.Locking,
 	limitHint int64,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
@@ -613,6 +612,8 @@ func (ef *execFactory) ConstructIndexJoin(
 	idx := tabDesc.GetPrimaryIndex()
 	tableScan.index = idx
 	tableScan.disableBatchLimit()
+	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 
 	if !ef.isExplain {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -671,10 +672,8 @@ func (ef *execFactory) ConstructLookupJoin(
 	}
 
 	tableScan.index = idx
-	if locking.IsLocking() {
-		tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
-		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
-	}
+	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 
 	if !ef.isExplain {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -794,6 +793,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	onCond tree.TypedExpr,
 	isFirstJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
+	locking opt.Locking,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
@@ -805,6 +805,8 @@ func (ef *execFactory) ConstructInvertedJoin(
 		return nil, err
 	}
 	tableScan.index = idx
+	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 
 	if !ef.isExplain {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -857,6 +859,7 @@ func (ef *execFactory) constructScanForZigzag(
 	index cat.Index,
 	cols exec.TableColumnOrdinalSet,
 	eqCols []exec.TableColumnOrdinal,
+	locking opt.Locking,
 ) (_ *scanNode, eqColOrdinals []int, _ error) {
 	colCfg := makeScanColumnsConfig(table, cols)
 
@@ -883,6 +886,8 @@ func (ef *execFactory) constructScanForZigzag(
 	}
 
 	scan.index = idxDesc
+	scan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 
 	return scan, eqColOrdinals, nil
 }
@@ -894,11 +899,13 @@ func (ef *execFactory) ConstructZigzagJoin(
 	leftCols exec.TableColumnOrdinalSet,
 	leftFixedVals []tree.TypedExpr,
 	leftEqCols []exec.TableColumnOrdinal,
+	leftLocking opt.Locking,
 	rightTable cat.Table,
 	rightIndex cat.Index,
 	rightCols exec.TableColumnOrdinalSet,
 	rightFixedVals []tree.TypedExpr,
 	rightEqCols []exec.TableColumnOrdinal,
+	rightLocking opt.Locking,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
@@ -911,11 +918,11 @@ func (ef *execFactory) ConstructZigzagJoin(
 		reqOrdering: ReqOrdering(reqOrdering),
 	}
 	var err error
-	n.sides[0].scan, n.sides[0].eqCols, err = ef.constructScanForZigzag(leftTable, leftIndex, leftCols, leftEqCols)
+	n.sides[0].scan, n.sides[0].eqCols, err = ef.constructScanForZigzag(leftTable, leftIndex, leftCols, leftEqCols, leftLocking)
 	if err != nil {
 		return nil, err
 	}
-	n.sides[1].scan, n.sides[1].eqCols, err = ef.constructScanForZigzag(rightTable, rightIndex, rightCols, rightEqCols)
+	n.sides[1].scan, n.sides[1].eqCols, err = ef.constructScanForZigzag(rightTable, rightIndex, rightCols, rightEqCols, rightLocking)
 	if err != nil {
 		return nil, err
 	}

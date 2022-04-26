@@ -570,6 +570,8 @@ func (b *Builder) scanParams(
 	}
 
 	// Raise error if row-level locking is part of a read-only transaction.
+	// TODO(nvanbenschoten): this check should be shared across all expressions
+	// that can perform row-level locking.
 	if locking.IsLocking() && b.evalCtx.TxnReadOnly {
 		return exec.ScanParams{}, opt.ColMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
 			"cannot execute %s in a read-only transaction", locking.Strength.String())
@@ -1720,9 +1722,15 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 
 	cols := join.Cols
 	needed, output := b.getColumns(cols, join.Table)
+
+	locking := join.Locking
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
+	}
+
 	res := execPlan{outputCols: output}
 	res.root, err = b.factory.ConstructIndexJoin(
-		input.root, tab, keyCols, needed, res.reqOrdering(join), join.RequiredPhysical().LimitHintInt64(),
+		input.root, tab, keyCols, needed, res.reqOrdering(join), locking, join.RequiredPhysical().LimitHintInt64(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1811,7 +1819,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
 
-	var locking opt.Locking
+	locking := join.Locking
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}
@@ -1926,6 +1934,11 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		return execPlan{}, err
 	}
 
+	locking := join.Locking
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
+	}
+
 	res.root, err = b.factory.ConstructInvertedJoin(
 		joinOpToJoinType(join.JoinType),
 		invertedExpr,
@@ -1937,6 +1950,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		onExpr,
 		join.IsFirstJoinInPairedJoiner,
 		res.reqOrdering(join),
+		locking,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1985,6 +1999,13 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	leftOrdinals, leftColMap := b.getColumns(leftCols, join.LeftTable)
 	rightOrdinals, rightColMap := b.getColumns(rightCols, join.RightTable)
 
+	leftLocking := join.LeftLocking
+	rightLocking := join.RightLocking
+	if b.forceForUpdateLocking {
+		leftLocking = forUpdateLocking
+		rightLocking = forUpdateLocking
+	}
+
 	allCols := joinOutputMap(leftColMap, rightColMap)
 
 	res := execPlan{outputCols: allCols}
@@ -2025,11 +2046,13 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 		leftOrdinals,
 		leftFixedVals,
 		leftEqCols,
+		leftLocking,
 		rightTable,
 		rightIndex,
 		rightOrdinals,
 		rightFixedVals,
 		rightEqCols,
+		rightLocking,
 		onExpr,
 		res.reqOrdering(join),
 	)

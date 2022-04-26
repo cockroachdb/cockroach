@@ -462,33 +462,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			tp.Child(b.String())
 		}
-		if private.Locking.IsLocking() {
-			strength := ""
-			switch private.Locking.Strength {
-			case tree.ForNone:
-			case tree.ForKeyShare:
-				strength = "for-key-share"
-			case tree.ForShare:
-				strength = "for-share"
-			case tree.ForNoKeyUpdate:
-				strength = "for-no-key-update"
-			case tree.ForUpdate:
-				strength = "for-update"
-			default:
-				panic(errors.AssertionFailedf("unexpected strength"))
-			}
-			wait := ""
-			switch private.Locking.WaitPolicy {
-			case tree.LockWaitBlock:
-			case tree.LockWaitSkip:
-				wait = ",skip-locked"
-			case tree.LockWaitError:
-				wait = ",nowait"
-			default:
-				panic(errors.AssertionFailedf("unexpected wait policy"))
-			}
-			tp.Childf("locking: %s%s", strength, wait)
-		}
+		f.formatLocking(tp, private.Locking)
 
 	case *InvertedFilterExpr:
 		var b strings.Builder
@@ -500,6 +474,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			n := tp.Childf("pre-filterer expression")
 			f.formatExpr(t.PreFiltererState.Expr, n)
 		}
+
+	case *IndexJoinExpr:
+		f.formatLocking(tp, t.Locking)
 
 	case *LookupJoinExpr:
 		if !t.Flags.Empty() {
@@ -532,6 +509,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if t.IsSecondJoinInPairedJoiner {
 			tp.Childf("second join in paired joiner")
 		}
+		f.formatLocking(tp, t.Locking)
 
 	case *InvertedJoinExpr:
 		if !t.Flags.Empty() {
@@ -550,6 +528,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 		n := tp.Child("inverted-expr")
 		f.formatExpr(t.InvertedExpr, n)
+		f.formatLocking(tp, t.Locking)
 
 	case *ZigzagJoinExpr:
 		if !f.HasFlags(ExprFmtHideColumns) {
@@ -567,6 +546,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("left fixed columns: %v = %v", t.LeftFixedCols, leftVals)
 			tp.Childf("right fixed columns: %v = %v", t.RightFixedCols, rightVals)
 		}
+		f.formatLockingWithPrefix(tp, "left ", t.LeftLocking)
+		f.formatLockingWithPrefix(tp, "right ", t.RightLocking)
 
 	case *MergeJoinExpr:
 		if !t.Flags.Empty() {
@@ -1413,6 +1394,45 @@ func (f *ExprFmtCtx) formatCol(label string, id opt.ColumnID, notNullCols opt.Co
 	if parenOpen {
 		f.Buffer.WriteByte(')')
 	}
+}
+
+// formatLocking adds a new treeprinter child for the row-level locking policy,
+// if the policy is configured to perform row-level locking.
+func (f *ExprFmtCtx) formatLocking(tp treeprinter.Node, locking opt.Locking) {
+	f.formatLockingWithPrefix(tp, "", locking)
+}
+
+func (f *ExprFmtCtx) formatLockingWithPrefix(
+	tp treeprinter.Node, labelPrefix string, locking opt.Locking,
+) {
+	if !locking.IsLocking() {
+		return
+	}
+	strength := ""
+	switch locking.Strength {
+	case tree.ForNone:
+	case tree.ForKeyShare:
+		strength = "for-key-share"
+	case tree.ForShare:
+		strength = "for-share"
+	case tree.ForNoKeyUpdate:
+		strength = "for-no-key-update"
+	case tree.ForUpdate:
+		strength = "for-update"
+	default:
+		panic(errors.AssertionFailedf("unexpected strength"))
+	}
+	wait := ""
+	switch locking.WaitPolicy {
+	case tree.LockWaitBlock:
+	case tree.LockWaitSkip:
+		wait = ",skip-locked"
+	case tree.LockWaitError:
+		wait = ",nowait"
+	default:
+		panic(errors.AssertionFailedf("unexpected wait policy"))
+	}
+	tp.Childf("%slocking: %s%s", labelPrefix, strength, wait)
 }
 
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to

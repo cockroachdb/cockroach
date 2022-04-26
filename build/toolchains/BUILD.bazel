@@ -412,6 +412,7 @@ config_setting(
     name = "nogo",
     flag_values = {
         ":nogo_flag": "true",
+        ":nogo_disable_flag": "false",
     },
 )
 
@@ -431,6 +432,14 @@ config_setting(
         ":nonogo_explicit_flag": "true",
     },
     visibility = ["//build/bazelutil:__pkg__"],
+)
+
+# Note: nogo_disable can be set to force nogo checks off even if
+# `build --config lintonbuild` is set in .bazelrc.
+bool_flag(
+    name = "nogo_disable_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
 )
 
 bool_flag(
