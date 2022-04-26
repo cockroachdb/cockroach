@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -82,6 +83,11 @@ const (
 	DateBasedIntoFolderName = "/2006/01/02-150405.00"
 	latestFileName          = "LATEST"
 )
+
+// On some cloud storage platforms (i.e. GS, S3), backups in a base bucket may
+// omit a leading slash. However, backups in a subdirectory of a base bucket
+// will contain one.
+var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupManifestName + "$")
 
 var errEncryptionInfoRead = errors.New(`ENCRYPTION-INFO not found`)
 
@@ -1057,13 +1063,12 @@ func ListFullBackupsInCollection(
 ) ([]string, error) {
 	var backupPaths []string
 	if err := store.List(ctx, "", listingDelimDataSlash, func(f string) error {
-		if ok, err := path.Match("/*/*/*/"+backupManifestName, f); err != nil {
-			return err
-		} else if ok {
+		if backupPathRE.MatchString(f) {
 			backupPaths = append(backupPaths, f)
 		}
 		return nil
 	}); err != nil {
+		// Can't happen, just required to handle the error for lint.
 		return nil, err
 	}
 	for i, backupPath := range backupPaths {
