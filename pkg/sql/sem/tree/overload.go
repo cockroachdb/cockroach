@@ -100,7 +100,7 @@ type Overload struct {
 	SpecializedVecBuiltin SpecializedVectorizedBuiltin
 
 	// IgnoreVolatilityCheck ignores checking the functions overload's
-	// volatility against Postgres's volatility at test time.
+	// Volatility against Postgres's Volatility at test time.
 	// This should be used with caution.
 	IgnoreVolatilityCheck bool
 
