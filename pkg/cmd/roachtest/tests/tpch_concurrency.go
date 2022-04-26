@@ -32,7 +32,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		ctx context.Context,
 		t test.Test,
 		c cluster.Cluster,
-		lowerRefreshSpanBytes bool,
+		lowerRefreshSpansBytes bool,
 	) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, numNodes-1))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
@@ -48,12 +48,12 @@ func registerTPCHConcurrency(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if lowerRefreshSpanBytes {
+		if lowerRefreshSpansBytes {
 			// Temporarily lower a KV setting to its previous default to confirm
 			// that the new value of 4MiB is, indeed, the root cause of the
 			// regression in the highest concurrency.
 			// TODO(yuzefovich): remove this.
-			if _, err := conn.Exec("SET CLUSTER SETTING kv.transaction.max_refresh_span_bytes = 256000"); err != nil {
+			if _, err := conn.Exec("SET CLUSTER SETTING kv.transaction.max_refresh_spans_bytes = 256000"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -178,9 +178,9 @@ func registerTPCHConcurrency(r registry.Registry) {
 		ctx context.Context,
 		t test.Test,
 		c cluster.Cluster,
-		lowerRefreshSpanBytes bool,
+		lowerRefreshSpansBytes bool,
 	) {
-		setupCluster(ctx, t, c, lowerRefreshSpanBytes)
+		setupCluster(ctx, t, c, lowerRefreshSpansBytes)
 		// TODO(yuzefovich): once we have a good grasp on the expected value for
 		// max supported concurrency, we should use search.Searcher instead of
 		// the binary search here. Additionally, we should introduce an
@@ -188,7 +188,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		// supported concurrency is always sustained and fail the test if it
 		// isn't.
 		minConcurrency, maxConcurrency := 48, 160
-		if !lowerRefreshSpanBytes {
+		if !lowerRefreshSpansBytes {
 			minConcurrency, maxConcurrency = 4, 64
 		}
 		// Run the binary search to find the largest concurrency that doesn't
@@ -221,7 +221,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCHConcurrency(ctx, t, c, true /* lowerRefreshSpanBytes */)
+			runTPCHConcurrency(ctx, t, c, true /* lowerRefreshSpansBytes */)
 		},
 		// By default, the timeout is 10 hours which might not be sufficient
 		// given that a single iteration of checkConcurrency might take on the
@@ -233,11 +233,11 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 	// TODO(yuzefovich): remove this once the regression is understood.
 	r.Add(registry.TestSpec{
-		Name:    "tpch_concurrency/high_refresh_span_bytes",
+		Name:    "tpch_concurrency/high_refresh_spans_bytes",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCHConcurrency(ctx, t, c, false /* lowerRefreshSpanBytes */)
+			runTPCHConcurrency(ctx, t, c, false /* lowerRefreshSpansBytes */)
 		},
 		// By default, the timeout is 10 hours which might not be sufficient
 		// given that a single iteration of checkConcurrency might take on the
