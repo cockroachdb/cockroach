@@ -2267,7 +2267,10 @@ func fillDatumRowInterval(
 }
 
 func cmpInInterval(
-	targetElem duration.Duration, targetCol coldata.Durations, filterRow []duration.Duration, hasNulls bool,
+	targetElem duration.Duration,
+	targetCol coldata.Durations,
+	filterRow []duration.Duration,
+	hasNulls bool,
 ) comparisonResult {
 	// Filter row input was already sorted in fillDatumRowInterval, so we can
 	// perform a binary search.

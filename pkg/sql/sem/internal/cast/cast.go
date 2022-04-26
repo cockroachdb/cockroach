@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -112,7 +112,7 @@ type Cast struct {
 	// the source value, or dependent on outside factors (such as parameter
 	// variables or table contents).
 	Volatility volatility.Volatility
-	// VolatilityHint is an optional string for volatility.Stable casts. When
+	// VolatilityHint is an optional string for Stable casts. When
 	// set, it is used as an error hint suggesting a possible workaround when
 	// stable casts are not allowed.
 	VolatilityHint string
@@ -1402,7 +1402,7 @@ func LookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 	return Cast{}, false
 }
 
-// LookupCastVolatility returns the volatility of a valid cast.
+// LookupCastVolatility returns the Volatility of a valid cast.
 func LookupCastVolatility(
 	from, to *types.T, sd *sessiondata.SessionData,
 ) (_ volatility.Volatility, ok bool) {

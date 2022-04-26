@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -339,7 +340,7 @@ func makeSortedPartition(testCfg *testConfig) (tree.Datums, *colexecutils.Spilli
 
 func initWindowFramers(
 	t *testing.T, testCfg *testConfig,
-) (windowFramer, *tree.WindowFrameRun, *colexecutils.SpillingBuffer) {
+) (windowFramer, *eval.WindowFrameRun, *colexecutils.SpillingBuffer) {
 	offsetType := types.Int
 	if testCfg.mode == treewindow.RANGE {
 		offsetType = GetOffsetTypeFromOrderColType(t, testCfg.typ)
@@ -403,7 +404,7 @@ func initWindowFramers(
 	if !testCfg.asc {
 		rowDir = encoding.Descending
 	}
-	rowWindowFramer := &tree.WindowFrameRun{
+	rowWindowFramer := &eval.WindowFrameRun{
 		Rows:         &indexedRows{partition: datums, orderColType: testCfg.typ},
 		ArgsIdxs:     []uint32{0},
 		FilterColIdx: tree.NoColumnIdx,
@@ -426,7 +427,7 @@ func initWindowFramers(
 		OrdColIdx:        orderCol,
 		OrdDirection:     rowDir,
 	}
-	rowWindowFramer.PlusOp, rowWindowFramer.MinusOp, _ = tree.WindowFrameRangeOps{}.LookupImpl(testCfg.typ, offsetType)
+	rowWindowFramer.PlusOp, rowWindowFramer.MinusOp, _ = eval.WindowFrameRangeOps{}.LookupImpl(testCfg.typ, offsetType)
 	require.NoError(t, rowWindowFramer.PeerHelper.Init(
 		rowWindowFramer,
 		&peerGroupChecker{partition: datums, ordered: testCfg.ordered}),
@@ -440,13 +441,13 @@ type indexedRows struct {
 	orderColType *types.T
 }
 
-var _ tree.IndexedRows = &indexedRows{}
+var _ eval.IndexedRows = &indexedRows{}
 
 func (ir indexedRows) Len() int {
 	return len(ir.partition)
 }
 
-func (ir indexedRows) GetRow(ctx context.Context, idx int) (tree.IndexedRow, error) {
+func (ir indexedRows) GetRow(ctx context.Context, idx int) (eval.IndexedRow, error) {
 	return indexedRow{row: tree.Datums{ir.partition[idx]}}, nil
 }
 
@@ -455,7 +456,7 @@ type indexedRow struct {
 	row tree.Datums
 }
 
-var _ tree.IndexedRow = &indexedRow{}
+var _ eval.IndexedRow = &indexedRow{}
 
 func (ir indexedRow) GetIdx() int {
 	return ir.idx
@@ -475,7 +476,7 @@ type peerGroupChecker struct {
 	ordered   bool
 }
 
-var _ tree.PeerGroupChecker = &peerGroupChecker{}
+var _ eval.PeerGroupChecker = &peerGroupChecker{}
 
 func (c *peerGroupChecker) InSameGroup(i, j int) (bool, error) {
 	if !c.ordered {

@@ -100,7 +100,7 @@ type TreeContextBuilder interface {
 	// SemaCtx returns a new tree.SemaContext.
 	SemaCtx() *tree.SemaContext
 
-	// EvalCtx returns a new tree.EvalContext.
+	// EvalCtx returns a new eval.Context.
 	EvalCtx() *tree.EvalContext
 }
 

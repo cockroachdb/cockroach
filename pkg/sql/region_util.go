@@ -1039,7 +1039,7 @@ func partitionByForRegionalByRow(
 	}
 }
 
-// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.DatabaseCatalog interface.
 func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
 		p.EvalContext().Ctx(),
@@ -1193,7 +1193,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	)
 }
 
-// CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
+// CurrentDatabaseRegionConfig is part of the eval.DatabaseCatalog interface.
 // CurrentDatabaseRegionConfig uses the cache to synthesize the RegionConfig
 // and as such is intended for DML use. It returns nil
 // if the current database is not multi-region enabled.

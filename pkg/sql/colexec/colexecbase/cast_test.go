@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -81,7 +82,7 @@ func TestRandomizedCast(t *testing.T) {
 				// We don't allow any NULL datums to be generated, so disable
 				// this ability in the RandDatum function.
 				fromDatum = randgen.RandDatum(rng, from, false)
-				toDatum, err = tree.PerformCast(&evalCtx, fromDatum, to)
+				toDatum, err = eval.PerformCast(&evalCtx, fromDatum, to)
 				if to.Oid() == oid.T_bpchar && string(*toDatum.(*tree.DString)) == "" {
 					// There is currently a problem when converting an empty
 					// string datum to a physical representation, so we skip

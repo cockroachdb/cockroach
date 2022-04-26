@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -348,7 +349,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		// Evaluate the new values. This must be done separately for
 		// each row so as to handle impure functions correctly.
 		for j, e := range cb.updateExprs {
-			val, err := e.Eval(cb.evalCtx)
+			val, err := eval.Expr(cb.evalCtx, e)
 			if err != nil {
 				return roachpb.Key{}, sqlerrors.NewInvalidSchemaDefinitionError(err)
 			}
@@ -885,7 +886,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			if !ok {
 				continue
 			}
-			val, err := texpr.Eval(ib.evalCtx)
+			val, err := eval.Expr(ib.evalCtx, texpr)
 			if err != nil {
 				return err
 			}
@@ -937,7 +938,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				// predicate expression evaluates to true.
 				texpr := ib.predicates[idx.GetID()]
 
-				val, err := texpr.Eval(ib.evalCtx)
+				val, err := eval.Expr(ib.evalCtx, texpr)
 				if err != nil {
 					return nil, nil, 0, err
 				}

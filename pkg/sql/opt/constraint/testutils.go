@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -96,8 +97,8 @@ func ParseSpan(evalCtx *tree.EvalContext, str string, typs ...types.Family) Span
 	}
 
 	var sp Span
-	startVals := tree.ParseDatumPath(evalCtx, keys[0], typs)
-	endVals := tree.ParseDatumPath(evalCtx, keys[1], typs)
+	startVals := partition.ParseDatumPath(evalCtx, keys[0], typs)
+	endVals := partition.ParseDatumPath(evalCtx, keys[1], typs)
 	sp.Init(
 		MakeCompositeKey(startVals...), boundary[s],
 		MakeCompositeKey(endVals...), boundary[e],

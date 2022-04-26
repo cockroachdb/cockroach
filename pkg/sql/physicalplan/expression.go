@@ -23,7 +23,7 @@ import (
 // ExprContext is an interface containing objects necessary for creating
 // execinfrapb.Expressions.
 type ExprContext interface {
-	// EvalContext returns the tree.EvalContext for planning.
+	// EvalContext returns the eval.Context for planning.
 	EvalContext() *tree.EvalContext
 
 	// IsLocal returns true if the current plan is local.

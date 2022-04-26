@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -64,7 +66,7 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				return fmt.Sprint(err)
 			}
-			r, err := e.Eval(evalCtx)
+			r, err := eval.Expr(evalCtx, e)
 			if err != nil {
 				return fmt.Sprint(err)
 			}
@@ -86,7 +88,7 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return evalCtx.NormalizeExpr(typedExpr)
+			return normalize.Expr(evalCtx, typedExpr)
 		})
 	})
 }
@@ -204,7 +206,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		r, err := typedExpr.Eval(ctx)
+		r, err := eval.Expr(ctx, typedExpr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -243,7 +245,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		r, err = typedExpr.Eval(ctx)
+		r, err = eval.Expr(ctx, typedExpr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -364,7 +366,7 @@ func TestEvalError(t *testing.T) {
 		if err == nil {
 			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
-			_, err = typedExpr.Eval(evalCtx)
+			_, err = eval.Expr(evalCtx, typedExpr)
 		}
 		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)

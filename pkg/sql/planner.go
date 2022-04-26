@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -47,7 +48,7 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// extendedEvalContext extends tree.EvalContext with fields that are needed for
+// extendedEvalContext extends eval.Context with fields that are needed for
 // distsql planning.
 type extendedEvalContext struct {
 	tree.EvalContext
@@ -580,7 +581,7 @@ func (p *planner) SpanConfigReconciler() spanconfig.Reconciler {
 	return p.execCfg.SpanConfigReconciler
 }
 
-// GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.
+// GetTypeFromValidSQLSyntax implements the eval.Planner interface.
 // We define this here to break the dependency from eval.go to the parser.
 func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 	ref, err := parser.GetTypeFromValidSQLSyntax(sql)
@@ -590,7 +591,7 @@ func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 	return tree.ResolveType(context.TODO(), ref, p.semaCtx.GetTypeResolver())
 }
 
-// ParseQualifiedTableName implements the tree.EvalDatabase interface.
+// ParseQualifiedTableName implements the eval.DatabaseCatalog interface.
 // This exists to get around a circular dependency between sql/sem/tree and
 // sql/parser. sql/parser depends on tree to make objects, so tree cannot import
 // ParseQualifiedTableName even though some builtins need that function.
@@ -599,7 +600,7 @@ func (p *planner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return parser.ParseQualifiedTableName(sql)
 }
 
-// ResolveTableName implements the tree.EvalDatabase interface.
+// ResolveTableName implements the eval.DatabaseCatalog interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
 	_, desc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
@@ -660,7 +661,7 @@ func (p *planner) TypeAsStringOrNull(
 
 func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, error) {
 	return func() (bool, string, error) {
-		d, err := typedE.Eval(p.EvalContext())
+		d, err := eval.Expr(p.EvalContext(), typedE)
 		if err != nil {
 			return false, "", err
 		}
@@ -698,7 +699,7 @@ func evalStringOptions(
 		if !ok {
 			return nil, errors.Errorf("invalid option %q", k)
 		}
-		val, err := opt.Value.Eval(evalCtx)
+		val, err := eval.Expr(evalCtx, opt.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -758,7 +759,7 @@ func (p *planner) TypeAsStringOpts(
 				res[name] = ""
 				continue
 			}
-			d, err := e.Eval(p.EvalContext())
+			d, err := eval.Expr(p.EvalContext(), e)
 			if err != nil {
 				return nil, err
 			}
@@ -790,7 +791,7 @@ func (p *planner) TypeAsStringArray(
 	fn := func() ([]string, error) {
 		strs := make([]string, len(exprs))
 		for i := range exprs {
-			d, err := typedExprs[i].Eval(p.EvalContext())
+			d, err := eval.Expr(p.EvalContext(), typedExprs[i])
 			if err != nil {
 				return nil, err
 			}
@@ -820,7 +821,7 @@ func (p *planner) Ann() *tree.Annotations {
 	return p.ExtendedEvalContext().EvalContext.Annotations
 }
 
-// ExecutorConfig implements EvalPlanner interface.
+// ExecutorConfig implements Planner interface.
 func (p *planner) ExecutorConfig() interface{} {
 	return p.execCfg
 }

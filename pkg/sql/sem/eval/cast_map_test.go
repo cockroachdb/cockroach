@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree_test
+package eval_test
 
 import (
 	"testing"
@@ -18,7 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	cast2 "github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -38,7 +39,7 @@ func TestCastMap(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
 
-	cast2.ForEachCast(func(src, tgt oid.Oid, _ volatility.Volatility) {
+	cast.ForEachCast(func(src, tgt oid.Oid, _ volatility.Volatility) {
 		srcType := types.OidToType[src]
 		tgtType := types.OidToType[tgt]
 		srcDatum := randgen.RandDatum(rng, srcType, false /* nullOk */)
@@ -53,7 +54,7 @@ func TestCastMap(t *testing.T) {
 			}
 		}
 
-		_, err := tree.PerformCast(&evalCtx, srcDatum, tgtType)
+		_, err := eval.PerformCast(&evalCtx, srcDatum, tgtType)
 		// If the error is a CannotCoerce error, then PerformCast does not
 		// support casting from src to tgt. The one exception is negative
 		// integers to bit types which return the same error code (see the TODO

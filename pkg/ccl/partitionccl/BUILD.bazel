@@ -20,6 +20,8 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/schemachanger/scdeps",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/normalize",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sem/volatility",

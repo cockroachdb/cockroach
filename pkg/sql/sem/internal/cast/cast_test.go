@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -132,7 +132,7 @@ func TestCastsMatchPostgres(t *testing.T) {
 				t.Logf("cast %s::%s has no corresponding pg cast", oidStr(src), oidStr(tgt))
 			}
 			if ok && c.Volatility != pgCast.volatility {
-				t.Errorf("cast %s::%s has volatility %s; corresponding pg cast has volatility %s",
+				t.Errorf("cast %s::%s has Volatility %s; corresponding pg cast has Volatility %s",
 					oidStr(src), oidStr(tgt), c.Volatility, pgCast.volatility,
 				)
 			}
@@ -158,6 +158,14 @@ func castContextFromPostgres(castcontext string) (Context, error) {
 	default:
 		return 0, errors.AssertionFailedf("invalid castcontext %s", castcontext)
 	}
+}
+
+func oidStr(o oid.Oid) string {
+	res, ok := oidext.TypeName(o)
+	if !ok {
+		res = fmt.Sprintf("%d", o)
+	}
+	return res
 }
 
 // TestCastsFromUnknown verifies that there is a cast from Unknown defined for
@@ -228,12 +236,4 @@ func TestTupleCastVolatility(t *testing.T) {
 			t.Errorf("from: %s  to: %s  expected: %s  got: %s", &from, &to, tc.exp, res)
 		}
 	}
-}
-
-func oidStr(o oid.Oid) string {
-	res, ok := oidext.TypeName(o)
-	if !ok {
-		res = fmt.Sprintf("%d", o)
-	}
-	return res
 }

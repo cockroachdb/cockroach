@@ -92,12 +92,12 @@ const opsTemplateStr = header + `
 
 // UnaryEvalOp is a unary operation which can be evaluated.
 type UnaryEvalOp interface {
-	EvalOp(OpEvaluator, Datum) (Datum, error)
+	Eval(OpEvaluator, Datum) (Datum, error)
 }
 
 // BinaryEvalOp is a binary operation which can be evaluated.
 type BinaryEvalOp interface {
-	EvalOp(OpEvaluator, Datum, Datum) (Datum, error)
+	Eval(OpEvaluator, Datum, Datum) (Datum, error)
 }
 
 // OpEvaluator is an evaluator for UnaryEvalOp and BinaryEvalOp operations.
@@ -122,12 +122,12 @@ type BinaryOpEvaluator interface {
 
 {{ range .UnaryOps }}
 // Eval is part of the UnaryEvalOp interface.
-func (op *{{.}}) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *{{.}}) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.Eval{{.}}(op, v)
 }
 {{ end }}{{ range .BinaryOps }}
 // Eval is part of the BinaryEvalOp interface.
-func (op *{{.}}) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *{{.}}) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.Eval{{.}}(op, a, b)
 }
 {{ end }}

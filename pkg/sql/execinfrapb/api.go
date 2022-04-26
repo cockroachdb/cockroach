@@ -50,7 +50,7 @@ func (f FlowID) IsUnset() bool {
 // DistSQLVersion identifies DistSQL engine versions.
 type DistSQLVersion uint32
 
-// MakeEvalContext serializes some of the fields of a tree.EvalContext into a
+// MakeEvalContext serializes some of the fields of a eval.Context into a
 // execinfrapb.EvalContext proto.
 func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 	sessionDataProto := evalCtx.SessionData().SessionData

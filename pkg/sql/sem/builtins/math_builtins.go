@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -144,10 +145,10 @@ var mathBuiltins = map[string]builtinDefinition{
 
 	"cbrt": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
-			return tree.Cbrt(x)
+			return eval.Cbrt(x)
 		}, "Calculates the cube root (∛) of `val`.", volatility.Immutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-			return tree.DecimalCbrt(x)
+			return eval.DecimalCbrt(x)
 		}, "Calculates the cube root (∛) of `val`.", volatility.Immutable),
 	),
 
@@ -277,7 +278,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
 		}, "Calculates the natural log of `val`.", volatility.Immutable),
-		decimalLogFn(tree.DecimalCtx.Ln, "Calculates the natural log of `val`.", volatility.Immutable),
+		decimalLogFn(tree.DecimalCtx.Ln, "Calculates the natural log of `val`."),
 	),
 
 	"log": makeBuiltin(defProps(),
@@ -299,7 +300,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			}
 			return tree.NewDFloat(tree.DFloat(math.Log10(x) / math.Log10(b))), nil
 		}, "Calculates the base `b` log of `val`.", volatility.Immutable),
-		decimalLogFn(tree.DecimalCtx.Log10, "Calculates the base 10 log of `val`.", volatility.Immutable),
+		decimalLogFn(tree.DecimalCtx.Log10, "Calculates the base 10 log of `val`."),
 		decimalOverload2("b", "x", func(b, x *apd.Decimal) (tree.Datum, error) {
 			switch x.Sign() {
 			case -1:
@@ -489,10 +490,10 @@ var mathBuiltins = map[string]builtinDefinition{
 
 	"sqrt": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
-			return tree.Sqrt(x)
+			return eval.Sqrt(x)
 		}, "Calculates the square root of `val`.", volatility.Immutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-			return tree.DecimalSqrt(x)
+			return eval.DecimalSqrt(x)
 		}, "Calculates the square root of `val`.", volatility.Immutable),
 	),
 
@@ -628,7 +629,7 @@ var powImpls = makeBuiltin(defProps(),
 		},
 		ReturnType: tree.FixedReturnType(types.Int),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			return tree.IntPow(tree.MustBeDInt(args[0]), tree.MustBeDInt(args[1]))
+			return eval.IntPow(tree.MustBeDInt(args[0]), tree.MustBeDInt(args[1]))
 		},
 		Info:       "Calculates `x`^`y`.",
 		Volatility: volatility.Immutable,
@@ -636,9 +637,7 @@ var powImpls = makeBuiltin(defProps(),
 )
 
 func decimalLogFn(
-	logFn func(*apd.Decimal, *apd.Decimal) (apd.Condition, error),
-	info string,
-	volatility volatility.Volatility,
+	logFn func(*apd.Decimal, *apd.Decimal) (apd.Condition, error), info string,
 ) tree.Overload {
 	return decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
 		switch x.Sign() {
@@ -650,7 +649,7 @@ func decimalLogFn(
 		dd := &tree.DDecimal{}
 		_, err := logFn(&dd.Decimal, x)
 		return dd, err
-	}, info, volatility.volatility.Immutable)
+	}, info, volatility.Immutable)
 }
 
 func floatOverload1(

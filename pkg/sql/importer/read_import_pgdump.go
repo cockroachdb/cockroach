@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -796,8 +797,8 @@ func readPostgresStmt(
 					}
 					ov := expr.ResolvedOverload()
 					// Search for a SQLFn, which returns a SQL string to execute.
-					fn := ov.SQLFn
-					if fn == nil {
+					fn, ok := ov.SQLFn.(eval.SQLFnOverload)
+					if !ok {
 						err := errors.Errorf("unsupported function call: %s in stmt: %s",
 							expr.Func.String(), stmt.String())
 						if ignoreUnsupportedStmts {
@@ -1163,7 +1164,7 @@ func (m *pgDumpReader) readFile(
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
 					}
-					converted, err := typed.Eval(conv.EvalCtx)
+					converted, err := eval.Expr(conv.EvalCtx, typed)
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)

@@ -1576,7 +1576,7 @@ func (*scope) VisitPost(expr tree.Expr) tree.Expr {
 var _ tree.IndexedVarContainer = &scope{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
-func (s *scope) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+func (s *scope) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarEval"))
 }
 

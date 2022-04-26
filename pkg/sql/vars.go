@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -2128,7 +2129,7 @@ func makePostgresBoolGetStringValFn(varName string) getStringValFn {
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		val, err := values[0].Eval(&evalCtx.EvalContext)
+		val, err := eval.Expr(&evalCtx.EvalContext, values[0])
 		if err != nil {
 			return "", err
 		}
@@ -2370,7 +2371,7 @@ func getCustomOptionSessionVar(varName string) (sv sessionVar, isCustom bool) {
 	return sessionVar{}, false
 }
 
-// GetSessionVar implements the EvalSessionAccessor interface.
+// GetSessionVar implements the eval.SessionAccessor interface.
 func (p *planner) GetSessionVar(
 	_ context.Context, varName string, missingOk bool,
 ) (bool, string, error) {
@@ -2383,7 +2384,7 @@ func (p *planner) GetSessionVar(
 	return true, val, err
 }
 
-// SetSessionVar implements the EvalSessionAccessor interface.
+// SetSessionVar implements the eval.SessionAccessor interface.
 func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string, isLocal bool) error {
 	name := strings.ToLower(varName)
 	_, v, err := getSessionVar(name, false /* missingOk */)

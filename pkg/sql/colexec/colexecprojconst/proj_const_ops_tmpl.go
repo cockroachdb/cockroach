@@ -258,7 +258,7 @@ func GetProjection_CONST_SIDEConstOperator(
 	constArg tree.Datum,
 	outputIdx int,
 	evalCtx *tree.EvalContext,
-	binFn tree.TwoArgFn,
+	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
@@ -310,7 +310,7 @@ func GetProjection_CONST_SIDEConstOperator(
 								// {{end}}
 							}
 							// {{if .NeedsBinaryOverloadHelper}}
-							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinOp: binOp, EvalCtx: evalCtx}
 							// {{end}}
 							return op, nil
 							// {{end}}

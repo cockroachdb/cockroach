@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
@@ -36,7 +37,7 @@ func UnresolvedNameToStrVal(expr tree.Expr) tree.Expr {
 
 // DatumAsFloat transforms a tree.TypedExpr containing a Datum into a float.
 func DatumAsFloat(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (float64, error) {
-	val, err := value.Eval(evalCtx)
+	val, err := eval.Expr(evalCtx, value)
 	if err != nil {
 		return 0, err
 	}
@@ -62,7 +63,7 @@ func DatumAsFloat(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) 
 func DatumAsDuration(
 	evalCtx *tree.EvalContext, name string, value tree.TypedExpr,
 ) (time.Duration, error) {
-	val, err := value.Eval(evalCtx)
+	val, err := eval.Expr(evalCtx, value)
 	if err != nil {
 		return 0, err
 	}
@@ -96,7 +97,7 @@ func DatumAsDuration(
 
 // DatumAsInt transforms a tree.TypedExpr containing a Datum into an int.
 func DatumAsInt(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (int64, error) {
-	val, err := value.Eval(evalCtx)
+	val, err := eval.Expr(evalCtx, value)
 	if err != nil {
 		return 0, err
 	}
@@ -113,7 +114,7 @@ func DatumAsInt(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (i
 
 // DatumAsString transforms a tree.TypedExpr containing a Datum into a string.
 func DatumAsString(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (string, error) {
-	val, err := value.Eval(evalCtx)
+	val, err := eval.Expr(evalCtx, value)
 	if err != nil {
 		return "", err
 	}

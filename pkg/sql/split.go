@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -110,10 +112,10 @@ func getRowKey(
 func parseExpirationTime(
 	evalCtx *tree.EvalContext, expireExpr tree.TypedExpr,
 ) (hlc.Timestamp, error) {
-	if !tree.IsConst(evalCtx, expireExpr) {
+	if !eval.IsConst(evalCtx, expireExpr) {
 		return hlc.Timestamp{}, errors.Errorf("SPLIT AT: only constant expressions are allowed for expiration")
 	}
-	d, err := expireExpr.Eval(evalCtx)
+	d, err := eval.Expr(evalCtx, expireExpr)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
@@ -121,7 +123,7 @@ func parseExpirationTime(
 		return hlc.MaxTimestamp, nil
 	}
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
-	ts, err := tree.DatumToHLC(evalCtx, stmtTimestamp, d)
+	ts, err := asof.DatumToHLC(evalCtx, stmtTimestamp, d)
 	if err != nil {
 		return ts, errors.Wrap(err, "SPLIT AT")
 	}

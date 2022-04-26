@@ -1381,7 +1381,7 @@ func createNonDropDatabaseChangeJob(
 
 	jobID := p.ExecCfg().JobRegistry.MakeJobID()
 	return p.ExecCfg().JobRegistry.CreateJobWithTxn(
-		p.ExtendedEvalContext().Context,
+		p.ExtendedEvalContext().Ctx(),
 		jobRecord,
 		jobID,
 		txn,

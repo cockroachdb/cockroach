@@ -15,12 +15,12 @@ package tree
 
 // UnaryEvalOp is a unary operation which can be evaluated.
 type UnaryEvalOp interface {
-	EvalOp(OpEvaluator, Datum) (Datum, error)
+	Eval(OpEvaluator, Datum) (Datum, error)
 }
 
 // BinaryEvalOp is a binary operation which can be evaluated.
 type BinaryEvalOp interface {
-	EvalOp(OpEvaluator, Datum, Datum) (Datum, error)
+	Eval(OpEvaluator, Datum, Datum) (Datum, error)
 }
 
 // OpEvaluator is an evaluator for UnaryEvalOp and BinaryEvalOp operations.
@@ -175,682 +175,682 @@ type BinaryOpEvaluator interface {
 
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *CbrtDecimalOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *CbrtDecimalOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalCbrtDecimalOp(op, v)
 }
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *CbrtFloatOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *CbrtFloatOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalCbrtFloatOp(op, v)
 }
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *ComplementINetOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *ComplementINetOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalComplementINetOp(op, v)
 }
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *ComplementIntOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *ComplementIntOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalComplementIntOp(op, v)
 }
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *ComplementVarBitOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *ComplementVarBitOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalComplementVarBitOp(op, v)
 }
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *SqrtDecimalOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *SqrtDecimalOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalSqrtDecimalOp(op, v)
 }
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *SqrtFloatOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *SqrtFloatOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalSqrtFloatOp(op, v)
 }
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *UnaryMinusDecimalOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *UnaryMinusDecimalOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalUnaryMinusDecimalOp(op, v)
 }
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *UnaryMinusFloatOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *UnaryMinusFloatOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalUnaryMinusFloatOp(op, v)
 }
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *UnaryMinusIntOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *UnaryMinusIntOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalUnaryMinusIntOp(op, v)
 }
 
 // Eval is part of the UnaryEvalOp interface.
-func (op *UnaryMinusIntervalOp) EvalOp(e OpEvaluator, v Datum) (Datum, error) {
+func (op *UnaryMinusIntervalOp) Eval(e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalUnaryMinusIntervalOp(op, v)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *AppendToMaybeNullArrayOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *AppendToMaybeNullArrayOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalAppendToMaybeNullArrayOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *BitAndINetOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *BitAndINetOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalBitAndINetOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *BitAndIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *BitAndIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalBitAndIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *BitAndVarBitOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *BitAndVarBitOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalBitAndVarBitOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *BitOrINetOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *BitOrINetOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalBitOrINetOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *BitOrIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *BitOrIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalBitOrIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *BitOrVarBitOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *BitOrVarBitOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalBitOrVarBitOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *BitXorIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *BitXorIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalBitXorIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *BitXorVarBitOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *BitXorVarBitOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalBitXorVarBitOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *CompareBox2DOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *CompareBox2DOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalCompareBox2DOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *CompareScalarOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *CompareScalarOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalCompareScalarOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *CompareTupleOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *CompareTupleOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalCompareTupleOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ConcatArraysOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ConcatArraysOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalConcatArraysOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ConcatBytesOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ConcatBytesOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalConcatBytesOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ConcatJsonbOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ConcatJsonbOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalConcatJsonbOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ConcatOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ConcatOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalConcatOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ConcatStringOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ConcatStringOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalConcatStringOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ConcatVarBitOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ConcatVarBitOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalConcatVarBitOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ContainedByArrayOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ContainedByArrayOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainedByArrayOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ContainedByJsonbOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ContainedByJsonbOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainedByJsonbOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ContainsArrayOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ContainsArrayOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainsArrayOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ContainsJsonbOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ContainsJsonbOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainsJsonbOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *DivDecimalIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *DivDecimalIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalDivDecimalIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *DivDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *DivDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalDivDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *DivFloatOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *DivFloatOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalDivFloatOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *DivIntDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *DivIntDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalDivIntDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *DivIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *DivIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalDivIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *DivIntervalFloatOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *DivIntervalFloatOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalDivIntervalFloatOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *DivIntervalIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *DivIntervalIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalDivIntervalIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *FloorDivDecimalIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *FloorDivDecimalIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalFloorDivDecimalIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *FloorDivDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *FloorDivDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalFloorDivDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *FloorDivFloatOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *FloorDivFloatOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalFloorDivFloatOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *FloorDivIntDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *FloorDivIntDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalFloorDivIntDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *FloorDivIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *FloorDivIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalFloorDivIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *InTupleOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *InTupleOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalInTupleOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *JSONAllExistsOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *JSONAllExistsOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalJSONAllExistsOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *JSONExistsOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *JSONExistsOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalJSONExistsOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *JSONFetchTextIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *JSONFetchTextIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalJSONFetchTextIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *JSONFetchTextPathOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *JSONFetchTextPathOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalJSONFetchTextPathOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *JSONFetchTextStringOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *JSONFetchTextStringOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalJSONFetchTextStringOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *JSONFetchValIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *JSONFetchValIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalJSONFetchValIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *JSONFetchValPathOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *JSONFetchValPathOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalJSONFetchValPathOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *JSONFetchValStringOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *JSONFetchValStringOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalJSONFetchValStringOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *JSONSomeExistsOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *JSONSomeExistsOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalJSONSomeExistsOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *LShiftINetOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *LShiftINetOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalLShiftINetOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *LShiftIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *LShiftIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalLShiftIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *LShiftVarBitIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *LShiftVarBitIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalLShiftVarBitIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MatchLikeOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MatchLikeOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMatchLikeOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MatchRegexpOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MatchRegexpOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMatchRegexpOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusDateIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusDateIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusDateIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusDateIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusDateIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusDateIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusDateOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusDateOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusDateOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusDateTimeOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusDateTimeOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusDateTimeOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusDecimalIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusDecimalIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusDecimalIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusFloatOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusFloatOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusFloatOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusINetIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusINetIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusINetIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusINetOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusINetOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusINetOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusIntDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusIntDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusIntDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusJsonbIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusJsonbIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusJsonbIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusJsonbStringArrayOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusJsonbStringArrayOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusJsonbStringArrayOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusJsonbStringOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusJsonbStringOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusJsonbStringOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusTimeIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusTimeIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimeIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusTimeOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusTimeOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimeOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusTimeTZIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusTimeTZIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimeTZIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusTimestampIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusTimestampIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimestampIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusTimestampOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusTimestampOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimestampOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusTimestampTZIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusTimestampTZIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimestampTZIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusTimestampTZOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusTimestampTZOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimestampTZOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusTimestampTZTimestampOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusTimestampTZTimestampOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimestampTZTimestampOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MinusTimestampTimestampTZOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MinusTimestampTimestampTZOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimestampTimestampTZOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ModDecimalIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ModDecimalIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalModDecimalIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ModDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ModDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalModDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ModFloatOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ModFloatOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalModFloatOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ModIntDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ModIntDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalModIntDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ModIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *ModIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalModIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultDecimalIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultDecimalIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultDecimalIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultDecimalIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultDecimalIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultDecimalIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultFloatIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultFloatIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultFloatIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultFloatOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultFloatOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultFloatOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultIntDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultIntDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultIntDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultIntIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultIntIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultIntIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultIntervalDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultIntervalDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultIntervalDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultIntervalFloatOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultIntervalFloatOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultIntervalFloatOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *MultIntervalIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *MultIntervalIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMultIntervalIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *OverlapsArrayOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *OverlapsArrayOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalOverlapsArrayOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *OverlapsINetOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *OverlapsINetOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalOverlapsINetOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusDateIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusDateIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusDateIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusDateIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusDateIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusDateIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusDateTimeOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusDateTimeOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusDateTimeOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusDateTimeTZOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusDateTimeTZOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusDateTimeTZOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusDecimalIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusDecimalIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusDecimalIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusFloatOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusFloatOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusFloatOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusINetIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusINetIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusINetIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusIntDateOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusIntDateOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntDateOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusIntDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusIntDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusIntINetOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusIntINetOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntINetOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusIntervalDateOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusIntervalDateOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntervalDateOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusIntervalTimeOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusIntervalTimeOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntervalTimeOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusIntervalTimeTZOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusIntervalTimeTZOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntervalTimeTZOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusIntervalTimestampOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusIntervalTimestampOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntervalTimestampOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusIntervalTimestampTZOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusIntervalTimestampTZOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntervalTimestampTZOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusTimeDateOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusTimeDateOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusTimeDateOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusTimeIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusTimeIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusTimeIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusTimeTZDateOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusTimeTZDateOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusTimeTZDateOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusTimeTZIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusTimeTZIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusTimeTZIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusTimestampIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusTimestampIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusTimestampIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PlusTimestampTZIntervalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PlusTimestampTZIntervalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusTimestampTZIntervalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PowDecimalIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PowDecimalIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPowDecimalIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PowDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PowDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPowDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PowFloatOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PowFloatOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPowFloatOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PowIntDecimalOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PowIntDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPowIntDecimalOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PowIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PowIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPowIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *PrependToMaybeNullArrayOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *PrependToMaybeNullArrayOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPrependToMaybeNullArrayOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *RShiftINetOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *RShiftINetOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalRShiftINetOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *RShiftIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *RShiftIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalRShiftIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *RShiftVarBitIntOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *RShiftVarBitIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalRShiftVarBitIntOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *SimilarToOp) EvalOp(e OpEvaluator, a, b Datum) (Datum, error) {
+func (op *SimilarToOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalSimilarToOp(op, a, b)
 }
 

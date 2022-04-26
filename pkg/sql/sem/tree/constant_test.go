@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -605,7 +606,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			typedExpr, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType)
 			var res tree.Datum
 			if err == nil {
-				res, err = typedExpr.Eval(evalCtx)
+				res, err = eval.Expr(evalCtx, typedExpr)
 			}
 			if err != nil {
 				if !strings.Contains(err.Error(), "could not parse") &&

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -192,13 +193,13 @@ var _ tree.IndexedVarContainer = &jsonOrArrayDatumsToInvertedExpr{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
 func (g *jsonOrArrayDatumsToInvertedExpr) IndexedVarEval(
-	idx int, ctx *tree.EvalContext,
+	idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
 	err := g.row[idx].EnsureDecoded(g.colTypes[idx], &g.alloc)
 	if err != nil {
 		return nil, err
 	}
-	return g.row[idx].Datum.Eval(ctx)
+	return g.row[idx].Datum.Eval(e)
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
@@ -287,7 +288,7 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 				// We call Copy so the caller can modify the returned expression.
 				return t.spanExpr.Copy(), nil
 			}
-			d, err := t.nonIndexParam.Eval(g.evalCtx)
+			d, err := eval.Expr(g.evalCtx, t.nonIndexParam)
 			if err != nil {
 				return nil, err
 			}

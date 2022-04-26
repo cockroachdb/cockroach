@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1169,7 +1170,7 @@ func (ti *Index) partitionByListExprToDatums(
 		if err != nil {
 			panic(err)
 		}
-		d[i], err = cTyped.Eval(evalCtx)
+		d[i], err = eval.Expr(evalCtx, cTyped)
 		if err != nil {
 			panic(err)
 		}

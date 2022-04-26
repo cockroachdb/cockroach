@@ -24,11 +24,7 @@ import (
 // getTypeIDs returns the set of type ids from
 // crdb_internal.show_create_all_types for a specified database.
 func getTypeIDs(
-	ctx context.Context,
-	evalPlanner tree.EvalPlanner,
-	txn *kv.Txn,
-	dbName string,
-	acc *mon.BoundAccount,
+	ctx context.Context, evalPlanner tree.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
 ) ([]int64, error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
@@ -68,7 +64,7 @@ func getTypeIDs(
 // getTypeCreateStatement gets the create statement to recreate a type (ignoring fks)
 // for a given type id in a database.
 func getTypeCreateStatement(
-	ctx context.Context, evalPlanner tree.EvalPlanner, txn *kv.Txn, id int64, dbName string,
+	ctx context.Context, evalPlanner tree.Planner, txn *kv.Txn, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT

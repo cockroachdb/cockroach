@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -373,7 +374,7 @@ func fitMaxDecimalDigitsToBounds(maxDecimalDigits int) int {
 
 func makeMinimumBoundGenerator(
 	ctx *tree.EvalContext, args tree.Datums,
-) (tree.ValueGenerator, error) {
+) (eval.ValueGenerator, error) {
 	geometry := tree.MustBeDGeometry(args[0])
 
 	_, center, radius, err := geomfn.MinimumBoundingCircle(geometry.Geometry)
@@ -421,10 +422,10 @@ func (m *minimumBoundRadiusGen) Values() (tree.Datums, error) {
 
 func (m *minimumBoundRadiusGen) Close(_ context.Context) {}
 
-func makeSubdividedGeometriesGeneratorFactory(expectMaxVerticesArg bool) tree.GeneratorFactory {
+func makeSubdividedGeometriesGeneratorFactory(expectMaxVerticesArg bool) eval.GeneratorOverload {
 	return func(
 		ctx *tree.EvalContext, args tree.Datums,
-	) (tree.ValueGenerator, error) {
+	) (eval.ValueGenerator, error) {
 		geometry := tree.MustBeDGeometry(args[0])
 		var maxVertices int
 		if expectMaxVerticesArg {
@@ -6096,7 +6097,7 @@ The parent_only boolean is always ignored.`,
 				{"use_typmod", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					"", /* catalogName */
@@ -6108,7 +6109,7 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[4])),
 					bool(tree.MustBeDBool(args[5])),
 				)
-			},
+			}),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
@@ -6138,7 +6139,7 @@ The parent_only boolean is always ignored.`,
 				{"use_typmod", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					"", /* catalogName */
@@ -6150,7 +6151,7 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[5])),
 					bool(tree.MustBeDBool(args[6])),
 				)
-			},
+			}),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
@@ -6181,7 +6182,7 @@ The parent_only boolean is always ignored.`,
 				{"use_typmod", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					string(tree.MustBeDString(args[0])),
@@ -6193,7 +6194,7 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[6])),
 					bool(tree.MustBeDBool(args[7])),
 				)
-			},
+			}),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
@@ -6221,7 +6222,7 @@ The parent_only boolean is always ignored.`,
 				{"dimension", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					"", /* catalogName */
@@ -6233,7 +6234,7 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[4])),
 					true, /* useTypmod */
 				)
-			},
+			}),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
@@ -6262,7 +6263,7 @@ The parent_only boolean is always ignored.`,
 				{"dimension", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					"", /* catalogName */
@@ -6274,7 +6275,7 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[5])),
 					true, /* useTypmod */
 				)
-			},
+			}),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
@@ -6304,7 +6305,7 @@ The parent_only boolean is always ignored.`,
 				{"dimension", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			SQLFn: func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
+			SQLFn: eval.SQLFnOverload(func(ctx *tree.EvalContext, args tree.Datums) (string, error) {
 				return addGeometryColumnSQL(
 					ctx,
 					string(tree.MustBeDString(args[0])),
@@ -6316,7 +6317,7 @@ The parent_only boolean is always ignored.`,
 					int(tree.MustBeDInt(args[6])),
 					true, /* useTypmod */
 				)
-			},
+			}),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return addGeometryColumnSummary(
 					ctx,
@@ -6464,7 +6465,7 @@ The parent_only boolean is always ignored.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}},
 			ReturnType: tree.FixedReturnType(minimumBoundingRadiusReturnType),
-			Generator:  makeMinimumBoundGenerator,
+			Generator:  eval.GeneratorOverload(makeMinimumBoundGenerator),
 			Info:       "Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.",
 			Volatility: volatility.Immutable,
 		}),
@@ -7282,7 +7283,7 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 				}
 				args[i] = tree.NewDGeometry(g)
 			}
-			return ov.Fn(ctx, args)
+			return ov.Fn.(eval.FnOverload)(ctx, args)
 		}
 
 		newOverload.Info += `

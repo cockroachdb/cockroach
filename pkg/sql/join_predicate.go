@@ -105,8 +105,8 @@ func makePredicate(joinType descpb.JoinType, left, right colinfo.ResultColumns) 
 }
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	return p.curRow[idx].Eval(ctx)
+func (p *joinPredicate) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+	return p.curRow[idx].Eval(e)
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -744,7 +745,7 @@ func stringToDatum(val string, typ *types.T, evalCtx *tree.EvalContext) tree.Dat
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	d, err := typedExpr.Eval(evalCtx)
+	d, err := eval.Expr(evalCtx, typedExpr)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}

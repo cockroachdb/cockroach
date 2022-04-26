@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -292,7 +293,7 @@ func TestNormalizeExpr(t *testing.T) {
 			rOrig := typedExpr.String()
 			ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer ctx.Mon.Stop(context.Background())
-			r, err := ctx.NormalizeExpr(typedExpr)
+			r, err := normalize.Expr(ctx, typedExpr)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
@@ -300,7 +301,7 @@ func TestNormalizeExpr(t *testing.T) {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
 			// Normalizing again should be a no-op.
-			r2, err := ctx.NormalizeExpr(r)
+			r2, err := normalize.Expr(ctx, r)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}

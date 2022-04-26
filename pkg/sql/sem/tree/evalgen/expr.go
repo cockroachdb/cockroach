@@ -57,7 +57,7 @@ type ExprEvaluator interface {
 
 {{ range . }}
 // Eval is part of the TypedExpr interface.
-func (node {{ template "name" . }}) EvalExpr(v ExprEvaluator) (Datum, error) {
+func (node {{ template "name" . }}) Eval(v ExprEvaluator) (Datum, error) {
 	{{ if isDatum . }}return node, nil{{ else }}return v.Eval{{.}}(node){{ end }}
 }
 {{ end }}

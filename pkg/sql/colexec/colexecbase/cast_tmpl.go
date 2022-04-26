@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -396,7 +397,7 @@ func setNativeToDatumCast(
 		outputNulls.SetNull(outputIdx)
 		continue
 	}
-	res, err := tree.PerformCast(evalCtx, converted, toType)
+	res, err := eval.PerformCast(evalCtx, converted, toType)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}

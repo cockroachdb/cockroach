@@ -12,6 +12,7 @@ package rowenc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -56,6 +57,6 @@ func parseAsTyp(evalCtx *tree.EvalContext, typ *types.T, s string) (tree.Datum, 
 	if err != nil {
 		return nil, err
 	}
-	datum, err := typedExpr.Eval(evalCtx)
+	datum, err := eval.Expr(evalCtx, typedExpr)
 	return datum, err
 }

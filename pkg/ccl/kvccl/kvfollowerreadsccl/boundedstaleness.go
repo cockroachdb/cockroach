@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -39,7 +40,7 @@ func evalMaxStaleness(ctx *tree.EvalContext, d duration.Duration) (time.Time, er
 		return time.Time{}, pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			"interval duration for %s must be greater or equal to 0",
-			tree.WithMaxStalenessFunctionName,
+			asof.WithMaxStalenessFunctionName,
 		)
 	}
 	return duration.Add(ctx.GetStmtTimestamp(), d.Mul(-1)), nil
@@ -55,7 +56,7 @@ func evalMinTimestamp(ctx *tree.EvalContext, t time.Time) (time.Time, error) {
 			pgerror.Newf(
 				pgcode.InvalidParameterValue,
 				"timestamp for %s must be less than or equal to statement_timestamp()",
-				tree.WithMinTimestampFunctionName,
+				asof.WithMinTimestampFunctionName,
 			),
 			"statement timestamp: %d, min_timestamp: %d",
 			stmtTimestamp.UnixNano(),

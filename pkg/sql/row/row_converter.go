@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -113,7 +114,7 @@ func GenerateInsertRow(
 				rowVals[i] = tree.DNull
 				continue
 			}
-			d, err := defaultExprs[i].Eval(evalCtx)
+			d, err := eval.Expr(evalCtx, defaultExprs[i])
 			if err != nil {
 				return nil, err
 			}
@@ -135,7 +136,7 @@ func GenerateInsertRow(
 			if !col.IsComputed() {
 				continue
 			}
-			d, err := computeExprs[computeIdx].Eval(evalCtx)
+			d, err := eval.Expr(evalCtx, computeExprs[computeIdx])
 			if err != nil {
 				name := col.GetName()
 				return nil, errors.Wrapf(err,
@@ -259,7 +260,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 
 	var seqNameToMetadata map[string]*SequenceMetadata
 	var seqIDToMetadata map[descpb.ID]*SequenceMetadata
-	// TODO(postamar): give the tree.EvalContext a useful interface
+	// TODO(postamar): give the eval.Context a useful interface
 	// instead of cobbling a descs.Collection in this way.
 	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
 	descsCol := cf.MakeCollection(evalCtx.Context, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack), nil /* monitor */)
@@ -403,7 +404,7 @@ func NewDatumRowConverter(
 				if volatile == overrideImmutable {
 					// This default expression isn't volatile, so we can evaluate once
 					// here and memoize it.
-					c.defaultCache[i], err = c.defaultCache[i].Eval(c.EvalCtx)
+					c.defaultCache[i], err = eval.Expr(c.EvalCtx, c.defaultCache[i])
 					if err != nil {
 						return nil, errors.Wrapf(err, "error evaluating default expression")
 					}
@@ -468,7 +469,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 			// number of instances the function random() appears in a row.
 			// TODO (anzoteh96): Optimize this part of code when there's no expression
 			// involving random(), gen_random_uuid(), or anything like that.
-			datum, err := c.defaultCache[i].Eval(c.EvalCtx)
+			datum, err := eval.Expr(c.EvalCtx, c.defaultCache[i])
 			if !c.TargetColOrds.Contains(i) {
 				if err != nil {
 					return errors.Wrapf(

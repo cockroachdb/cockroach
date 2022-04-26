@@ -25,7 +25,7 @@ func NewComparisonExprAdapter(
 	expr *tree.ComparisonExpr, evalCtx *tree.EvalContext,
 ) ComparisonExprAdapter {
 	base := cmpExprAdapterBase{
-		fn:      expr.Fn.Fn,
+		op:      expr.Op.EvalOp,
 		evalCtx: evalCtx,
 	}
 	op := expr.Operator
@@ -35,7 +35,7 @@ func NewComparisonExprAdapter(
 			expr:               expr,
 		}
 	}
-	nullable := expr.Fn.NullableArgs
+	nullable := expr.Op.NullableArgs
 	_, _, _, flipped, negate := tree.FoldComparisonExpr(op, nil /* left */, nil /* right */)
 	if nullable {
 		if flipped {

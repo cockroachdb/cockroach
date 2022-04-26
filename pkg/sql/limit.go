@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -61,7 +62,7 @@ func evalLimit(
 
 	for _, datum := range data {
 		if datum.src != nil {
-			dstDatum, err := datum.src.Eval(evalCtx)
+			dstDatum, err := eval.Expr(evalCtx, datum.src)
 			if err != nil {
 				return count, offset, err
 			}

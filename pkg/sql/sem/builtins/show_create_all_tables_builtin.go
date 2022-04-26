@@ -48,11 +48,7 @@ const foreignKeyValidationWarning = "-- Validate foreign key constraints. These 
 // the table that uses the sequence).
 // The tables are sorted by table id first to guarantee stable ordering.
 func getTopologicallySortedTableIDs(
-	ctx context.Context,
-	evalPlanner tree.EvalPlanner,
-	txn *kv.Txn,
-	dbName string,
-	acc *mon.BoundAccount,
+	ctx context.Context, evalPlanner tree.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
 ) ([]int64, error) {
 	ids, err := getTableIDs(ctx, evalPlanner, txn, dbName, acc)
 	if err != nil {
@@ -152,11 +148,7 @@ func getTopologicallySortedTableIDs(
 // getTableIDs returns the set of table ids from
 // crdb_internal.show_create_all_tables for a specified database.
 func getTableIDs(
-	ctx context.Context,
-	evalPlanner tree.EvalPlanner,
-	txn *kv.Txn,
-	dbName string,
-	acc *mon.BoundAccount,
+	ctx context.Context, evalPlanner tree.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
 ) ([]int64, error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
@@ -246,7 +238,7 @@ func topologicalSort(
 // getCreateStatement gets the create statement to recreate a table (ignoring fks)
 // for a given table id in a database.
 func getCreateStatement(
-	ctx context.Context, evalPlanner tree.EvalPlanner, txn *kv.Txn, id int64, dbName string,
+	ctx context.Context, evalPlanner tree.Planner, txn *kv.Txn, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT
@@ -273,7 +265,7 @@ func getCreateStatement(
 // foreign keys for a given table id in a database.
 func getAlterStatements(
 	ctx context.Context,
-	evalPlanner tree.EvalPlanner,
+	evalPlanner tree.Planner,
 	txn *kv.Txn,
 	id int64,
 	dbName string,

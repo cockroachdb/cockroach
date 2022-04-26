@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -78,7 +79,7 @@ type windower struct {
 	partition                  *rowcontainer.DiskBackedIndexedRowContainer
 	orderOfWindowFnsProcessing []int
 	windowFns                  []*windowFunc
-	builtins                   []tree.WindowFunc
+	builtins                   []eval.WindowFunc
 
 	populated           bool
 	partitionIdx        int
@@ -113,7 +114,7 @@ func newWindower(
 	w.partitionBy = spec.PartitionBy
 	windowFns := spec.WindowFns
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
-	w.builtins = make([]tree.WindowFunc, 0, len(windowFns))
+	w.builtins = make([]eval.WindowFunc, 0, len(windowFns))
 	// windower passes through all of its input columns and appends an output
 	// column for each of window functions it is computing.
 	w.outputTypes = make([]*types.T, len(w.inputTypes)+len(windowFns))
@@ -439,7 +440,7 @@ func (w *windower) processPartition(
 		// partition and populating it below for a custom window frame is
 		// suboptimal. Consider extracting this logic into the constructor of
 		// the windower and reusing the same objects between partitions.
-		frameRun := &tree.WindowFrameRun{
+		frameRun := &eval.WindowFrameRun{
 			ArgsIdxs:     windowFn.argsIdxs,
 			FilterColIdx: windowFn.filterColIdx,
 		}
@@ -502,7 +503,7 @@ func (w *windower) processPartition(
 					// For datetime related ordering columns, offset must be an Interval.
 					offsetTyp = types.Interval
 				}
-				plusOp, minusOp, found := tree.WindowFrameRangeOps{}.LookupImpl(colTyp, offsetTyp)
+				plusOp, minusOp, found := eval.WindowFrameRangeOps{}.LookupImpl(colTyp, offsetTyp)
 				if !found {
 					return pgerror.Newf(pgcode.Windowing,
 						"given logical offset cannot be combined with ordering column")

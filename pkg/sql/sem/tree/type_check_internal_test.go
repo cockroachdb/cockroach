@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -72,7 +73,7 @@ func TestTypeCheckNormalize(t *testing.T) {
 			}
 			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
-			typedExpr, err := evalCtx.NormalizeExpr(typeChecked)
+			typedExpr, err := normalize.Expr(evalCtx, typeChecked)
 			if err != nil {
 				t.Fatal(err)
 			}

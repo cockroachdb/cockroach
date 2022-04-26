@@ -38,7 +38,9 @@ func (m *MockInternalClient) EXPECT() *MockInternalClientMockRecorder {
 }
 
 // Batch mocks base method.
-func (m *MockInternalClient) Batch(arg0 context.Context, arg1 *roachpb.BatchRequest, arg2 ...grpc.CallOption) (*roachpb.BatchResponse, error) {
+func (m *MockInternalClient) Batch(
+	arg0 context.Context, arg1 *roachpb.BatchRequest, arg2 ...grpc.CallOption,
+) (*roachpb.BatchResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -51,14 +53,20 @@ func (m *MockInternalClient) Batch(arg0 context.Context, arg1 *roachpb.BatchRequ
 }
 
 // Batch indicates an expected call of Batch.
-func (mr *MockInternalClientMockRecorder) Batch(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) Batch(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Batch", reflect.TypeOf((*MockInternalClient)(nil).Batch), varargs...)
 }
 
 // GetAllSystemSpanConfigsThatApply mocks base method.
-func (m *MockInternalClient) GetAllSystemSpanConfigsThatApply(arg0 context.Context, arg1 *roachpb.GetAllSystemSpanConfigsThatApplyRequest, arg2 ...grpc.CallOption) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
+func (m *MockInternalClient) GetAllSystemSpanConfigsThatApply(
+	arg0 context.Context,
+	arg1 *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
+	arg2 ...grpc.CallOption,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -71,14 +79,18 @@ func (m *MockInternalClient) GetAllSystemSpanConfigsThatApply(arg0 context.Conte
 }
 
 // GetAllSystemSpanConfigsThatApply indicates an expected call of GetAllSystemSpanConfigsThatApply.
-func (mr *MockInternalClientMockRecorder) GetAllSystemSpanConfigsThatApply(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) GetAllSystemSpanConfigsThatApply(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllSystemSpanConfigsThatApply", reflect.TypeOf((*MockInternalClient)(nil).GetAllSystemSpanConfigsThatApply), varargs...)
 }
 
 // GetSpanConfigs mocks base method.
-func (m *MockInternalClient) GetSpanConfigs(arg0 context.Context, arg1 *roachpb.GetSpanConfigsRequest, arg2 ...grpc.CallOption) (*roachpb.GetSpanConfigsResponse, error) {
+func (m *MockInternalClient) GetSpanConfigs(
+	arg0 context.Context, arg1 *roachpb.GetSpanConfigsRequest, arg2 ...grpc.CallOption,
+) (*roachpb.GetSpanConfigsResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -91,14 +103,18 @@ func (m *MockInternalClient) GetSpanConfigs(arg0 context.Context, arg1 *roachpb.
 }
 
 // GetSpanConfigs indicates an expected call of GetSpanConfigs.
-func (mr *MockInternalClientMockRecorder) GetSpanConfigs(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) GetSpanConfigs(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSpanConfigs", reflect.TypeOf((*MockInternalClient)(nil).GetSpanConfigs), varargs...)
 }
 
 // GossipSubscription mocks base method.
-func (m *MockInternalClient) GossipSubscription(arg0 context.Context, arg1 *roachpb.GossipSubscriptionRequest, arg2 ...grpc.CallOption) (roachpb.Internal_GossipSubscriptionClient, error) {
+func (m *MockInternalClient) GossipSubscription(
+	arg0 context.Context, arg1 *roachpb.GossipSubscriptionRequest, arg2 ...grpc.CallOption,
+) (roachpb.Internal_GossipSubscriptionClient, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -111,14 +127,18 @@ func (m *MockInternalClient) GossipSubscription(arg0 context.Context, arg1 *roac
 }
 
 // GossipSubscription indicates an expected call of GossipSubscription.
-func (mr *MockInternalClientMockRecorder) GossipSubscription(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) GossipSubscription(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GossipSubscription", reflect.TypeOf((*MockInternalClient)(nil).GossipSubscription), varargs...)
 }
 
 // Join mocks base method.
-func (m *MockInternalClient) Join(arg0 context.Context, arg1 *roachpb.JoinNodeRequest, arg2 ...grpc.CallOption) (*roachpb.JoinNodeResponse, error) {
+func (m *MockInternalClient) Join(
+	arg0 context.Context, arg1 *roachpb.JoinNodeRequest, arg2 ...grpc.CallOption,
+) (*roachpb.JoinNodeResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -131,14 +151,18 @@ func (m *MockInternalClient) Join(arg0 context.Context, arg1 *roachpb.JoinNodeRe
 }
 
 // Join indicates an expected call of Join.
-func (mr *MockInternalClientMockRecorder) Join(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) Join(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Join", reflect.TypeOf((*MockInternalClient)(nil).Join), varargs...)
 }
 
 // RangeFeed mocks base method.
-func (m *MockInternalClient) RangeFeed(arg0 context.Context, arg1 *roachpb.RangeFeedRequest, arg2 ...grpc.CallOption) (roachpb.Internal_RangeFeedClient, error) {
+func (m *MockInternalClient) RangeFeed(
+	arg0 context.Context, arg1 *roachpb.RangeFeedRequest, arg2 ...grpc.CallOption,
+) (roachpb.Internal_RangeFeedClient, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -151,14 +175,18 @@ func (m *MockInternalClient) RangeFeed(arg0 context.Context, arg1 *roachpb.Range
 }
 
 // RangeFeed indicates an expected call of RangeFeed.
-func (mr *MockInternalClientMockRecorder) RangeFeed(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) RangeFeed(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeed", reflect.TypeOf((*MockInternalClient)(nil).RangeFeed), varargs...)
 }
 
 // RangeLookup mocks base method.
-func (m *MockInternalClient) RangeLookup(arg0 context.Context, arg1 *roachpb.RangeLookupRequest, arg2 ...grpc.CallOption) (*roachpb.RangeLookupResponse, error) {
+func (m *MockInternalClient) RangeLookup(
+	arg0 context.Context, arg1 *roachpb.RangeLookupRequest, arg2 ...grpc.CallOption,
+) (*roachpb.RangeLookupResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -171,14 +199,18 @@ func (m *MockInternalClient) RangeLookup(arg0 context.Context, arg1 *roachpb.Ran
 }
 
 // RangeLookup indicates an expected call of RangeLookup.
-func (mr *MockInternalClientMockRecorder) RangeLookup(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) RangeLookup(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeLookup", reflect.TypeOf((*MockInternalClient)(nil).RangeLookup), varargs...)
 }
 
 // ResetQuorum mocks base method.
-func (m *MockInternalClient) ResetQuorum(arg0 context.Context, arg1 *roachpb.ResetQuorumRequest, arg2 ...grpc.CallOption) (*roachpb.ResetQuorumResponse, error) {
+func (m *MockInternalClient) ResetQuorum(
+	arg0 context.Context, arg1 *roachpb.ResetQuorumRequest, arg2 ...grpc.CallOption,
+) (*roachpb.ResetQuorumResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -191,14 +223,18 @@ func (m *MockInternalClient) ResetQuorum(arg0 context.Context, arg1 *roachpb.Res
 }
 
 // ResetQuorum indicates an expected call of ResetQuorum.
-func (mr *MockInternalClientMockRecorder) ResetQuorum(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) ResetQuorum(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetQuorum", reflect.TypeOf((*MockInternalClient)(nil).ResetQuorum), varargs...)
 }
 
 // TenantSettings mocks base method.
-func (m *MockInternalClient) TenantSettings(arg0 context.Context, arg1 *roachpb.TenantSettingsRequest, arg2 ...grpc.CallOption) (roachpb.Internal_TenantSettingsClient, error) {
+func (m *MockInternalClient) TenantSettings(
+	arg0 context.Context, arg1 *roachpb.TenantSettingsRequest, arg2 ...grpc.CallOption,
+) (roachpb.Internal_TenantSettingsClient, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -211,14 +247,18 @@ func (m *MockInternalClient) TenantSettings(arg0 context.Context, arg1 *roachpb.
 }
 
 // TenantSettings indicates an expected call of TenantSettings.
-func (mr *MockInternalClientMockRecorder) TenantSettings(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) TenantSettings(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TenantSettings", reflect.TypeOf((*MockInternalClient)(nil).TenantSettings), varargs...)
 }
 
 // TokenBucket mocks base method.
-func (m *MockInternalClient) TokenBucket(arg0 context.Context, arg1 *roachpb.TokenBucketRequest, arg2 ...grpc.CallOption) (*roachpb.TokenBucketResponse, error) {
+func (m *MockInternalClient) TokenBucket(
+	arg0 context.Context, arg1 *roachpb.TokenBucketRequest, arg2 ...grpc.CallOption,
+) (*roachpb.TokenBucketResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -231,14 +271,18 @@ func (m *MockInternalClient) TokenBucket(arg0 context.Context, arg1 *roachpb.Tok
 }
 
 // TokenBucket indicates an expected call of TokenBucket.
-func (mr *MockInternalClientMockRecorder) TokenBucket(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) TokenBucket(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TokenBucket", reflect.TypeOf((*MockInternalClient)(nil).TokenBucket), varargs...)
 }
 
 // UpdateSpanConfigs mocks base method.
-func (m *MockInternalClient) UpdateSpanConfigs(arg0 context.Context, arg1 *roachpb.UpdateSpanConfigsRequest, arg2 ...grpc.CallOption) (*roachpb.UpdateSpanConfigsResponse, error) {
+func (m *MockInternalClient) UpdateSpanConfigs(
+	arg0 context.Context, arg1 *roachpb.UpdateSpanConfigsRequest, arg2 ...grpc.CallOption,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -251,7 +295,9 @@ func (m *MockInternalClient) UpdateSpanConfigs(arg0 context.Context, arg1 *roach
 }
 
 // UpdateSpanConfigs indicates an expected call of UpdateSpanConfigs.
-func (mr *MockInternalClientMockRecorder) UpdateSpanConfigs(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockInternalClientMockRecorder) UpdateSpanConfigs(
+	arg0, arg1 interface{}, arg2 ...interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSpanConfigs", reflect.TypeOf((*MockInternalClient)(nil).UpdateSpanConfigs), varargs...)
@@ -297,7 +343,7 @@ func (mr *MockInternal_RangeFeedClientMockRecorder) CloseSend() *gomock.Call {
 // Context mocks base method.
 func (m *MockInternal_RangeFeedClient) Context() context.Context {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Context")
+	ret := m.ctrl.Call(m, "EvalContext")
 	ret0, _ := ret[0].(context.Context)
 	return ret0
 }
@@ -305,7 +351,7 @@ func (m *MockInternal_RangeFeedClient) Context() context.Context {
 // Context indicates an expected call of Context.
 func (mr *MockInternal_RangeFeedClientMockRecorder) Context() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockInternal_RangeFeedClient)(nil).Context))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvalContext", reflect.TypeOf((*MockInternal_RangeFeedClient)(nil).Context))
 }
 
 // Header mocks base method.

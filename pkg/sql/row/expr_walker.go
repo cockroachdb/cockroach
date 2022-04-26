@@ -704,7 +704,7 @@ type unsafeErrExpr struct {
 var _ tree.TypedExpr = &unsafeErrExpr{}
 
 // Eval implements the TypedExpr interface.
-func (e *unsafeErrExpr) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+func (e *unsafeErrExpr) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
 	return nil, e.err
 }
 

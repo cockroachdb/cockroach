@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -52,11 +54,11 @@ func prepareExpr(t *testing.T, datumExpr string) tree.Datum {
 	// Normalization ensures that casts are processed.
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
+	typedExpr, err = normalize.Expr(evalCtx, typedExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
-	d, err := typedExpr.Eval(evalCtx)
+	d, err := eval.Expr(evalCtx, typedExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
@@ -1328,7 +1330,7 @@ func TestNewDefaultDatum(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("#%d %s", i, tc.t.SQLString()), func(t *testing.T) {
-			datum, err := tree.NewDefaultDatum(evalCtx, tc.t)
+			datum, err := tree.NewDefaultDatum(&evalCtx.CollationEnv, tc.t)
 			if err != nil {
 				t.Errorf("unexpected error: %s", err)
 			}

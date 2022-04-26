@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1984,7 +1985,7 @@ func planProjectionOperators(
 		}
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, t.Fn.Fn, nil /* cmpExpr */, releasables,
+			columnTypes, input, acc, factory, t.Op.EvalOp, nil /* cmpExpr */, releasables,
 		)
 	case *tree.CaseExpr:
 		allocator := colmem.NewAllocator(ctx, acc, factory)
@@ -2300,7 +2301,7 @@ func planProjectionExpr(
 	input colexecop.Operator,
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
-	binFn tree.TwoArgFn,
+	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
 	releasables *[]execreleasable.Releasable,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
@@ -2339,7 +2340,7 @@ func planProjectionExpr(
 		// appended to the input batch.
 		op, err = colexecprojconst.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
-			rightIdx, lConstArg, resultIdx, evalCtx, binFn, cmpExpr,
+			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr,
 		)
 	} else {
 		var leftIdx int
@@ -2416,7 +2417,7 @@ func planProjectionExpr(
 				// all other projection operators.
 				op, err = colexecprojconst.GetProjectionRConstOperator(
 					allocator, typs, right.ResolvedType(), outputType, projOp,
-					input, leftIdx, rConstArg, resultIdx, evalCtx, binFn, cmpExpr,
+					input, leftIdx, rConstArg, resultIdx, evalCtx, binOp, cmpExpr,
 				)
 			}
 		} else {
@@ -2431,7 +2432,7 @@ func planProjectionExpr(
 			resultIdx = len(typs)
 			op, err = colexecproj.GetProjectionOperator(
 				allocator, typs, outputType, projOp, input, leftIdx, rightIdx,
-				resultIdx, evalCtx, binFn, cmpExpr,
+				resultIdx, evalCtx, binOp, cmpExpr,
 			)
 		}
 	}
@@ -2578,7 +2579,7 @@ func evalTupleIfConst(evalCtx *tree.EvalContext, t *tree.Tuple) (_ tree.Datum, o
 			return nil, false
 		}
 	}
-	tuple, err := t.Eval(evalCtx)
+	tuple, err := eval.Expr(evalCtx, t)
 	if err != nil {
 		return nil, false
 	}

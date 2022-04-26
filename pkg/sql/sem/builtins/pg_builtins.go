@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -540,7 +541,7 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 				if int > 0 {
 					return tree.DNull, nil
 				}
-				typOid, err := tree.ParseDOid(ctx, string(typName), typ)
+				typOid, err := eval.ParseDOid(ctx, string(typName), typ)
 				if err != nil {
 					//nolint:returnerrcheck
 					return tree.DNull, nil
@@ -1490,7 +1491,7 @@ SELECT description
 			switch t := oidArg.(type) {
 			case *tree.DString:
 				var err error
-				oid, err = tree.ParseDOid(ctx, string(*t), types.RegProcedure)
+				oid, err = eval.ParseDOid(ctx, string(*t), types.RegProcedure)
 				if err != nil {
 					return tree.HasNoPrivilege, err
 				}
@@ -1743,7 +1744,7 @@ SELECT description
 			switch t := oidArg.(type) {
 			case *tree.DString:
 				var err error
-				oid, err = tree.ParseDOid(ctx, string(*t), types.RegType)
+				oid, err = eval.ParseDOid(ctx, string(*t), types.RegType)
 				if err != nil {
 					return tree.HasNoPrivilege, err
 				}

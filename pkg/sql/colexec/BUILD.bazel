@@ -70,6 +70,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/memsize",
         "//pkg/sql/rowenc",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",  # keep

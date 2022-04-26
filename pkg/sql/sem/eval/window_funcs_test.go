@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package eval
 
 import (
 	"bytes"
@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,7 +32,7 @@ const maxOffset = 100
 const probabilityOfNewNumber = 0.5
 
 func testRangeMode(t *testing.T, count int) {
-	evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	wfr := &WindowFrameRun{
@@ -60,23 +61,23 @@ func testRangeMode(t *testing.T, count int) {
 }
 
 func testStartPreceding(
-	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
+	t *testing.T, evalCtx *tree.EvalContext, wfr *WindowFrameRun, offsetType *types.T,
 ) {
-	wfr.Frame = &WindowFrame{
+	wfr.Frame = &tree.WindowFrame{
 		Mode:   treewindow.RANGE,
-		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: treewindow.OffsetPreceding}},
+		Bounds: tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetPreceding}},
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
-		var typedOffset Datum
+		var typedOffset tree.Datum
 		switch offsetType.Family() {
 		case types.IntFamily:
-			typedOffset = NewDInt(DInt(offset))
+			typedOffset = tree.NewDInt(tree.DInt(offset))
 		case types.FloatFamily:
-			typedOffset = NewDFloat(DFloat(offset))
+			typedOffset = tree.NewDFloat(tree.DFloat(offset))
 		case types.DecimalFamily:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
-			typedOffset = &DDecimal{Decimal: decimal}
+			typedOffset = &tree.DDecimal{Decimal: decimal}
 		default:
 			t.Fatal("unsupported offset type")
 		}
@@ -110,23 +111,23 @@ func testStartPreceding(
 }
 
 func testStartFollowing(
-	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
+	t *testing.T, evalCtx *tree.EvalContext, wfr *WindowFrameRun, offsetType *types.T,
 ) {
-	wfr.Frame = &WindowFrame{
+	wfr.Frame = &tree.WindowFrame{
 		Mode:   treewindow.RANGE,
-		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: treewindow.OffsetFollowing}, EndBound: &WindowFrameBound{BoundType: treewindow.OffsetFollowing}},
+		Bounds: tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetFollowing}, EndBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetFollowing}},
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
-		var typedOffset Datum
+		var typedOffset tree.Datum
 		switch offsetType.Family() {
 		case types.IntFamily:
-			typedOffset = NewDInt(DInt(offset))
+			typedOffset = tree.NewDInt(tree.DInt(offset))
 		case types.FloatFamily:
-			typedOffset = NewDFloat(DFloat(offset))
+			typedOffset = tree.NewDFloat(tree.DFloat(offset))
 		case types.DecimalFamily:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
-			typedOffset = &DDecimal{Decimal: decimal}
+			typedOffset = &tree.DDecimal{Decimal: decimal}
 		default:
 			t.Fatal("unsupported offset type")
 		}
@@ -169,23 +170,23 @@ func testStartFollowing(
 }
 
 func testEndPreceding(
-	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
+	t *testing.T, evalCtx *tree.EvalContext, wfr *WindowFrameRun, offsetType *types.T,
 ) {
-	wfr.Frame = &WindowFrame{
+	wfr.Frame = &tree.WindowFrame{
 		Mode:   treewindow.RANGE,
-		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: treewindow.OffsetPreceding}, EndBound: &WindowFrameBound{BoundType: treewindow.OffsetPreceding}},
+		Bounds: tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetPreceding}, EndBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetPreceding}},
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
-		var typedOffset Datum
+		var typedOffset tree.Datum
 		switch offsetType.Family() {
 		case types.IntFamily:
-			typedOffset = NewDInt(DInt(offset))
+			typedOffset = tree.NewDInt(tree.DInt(offset))
 		case types.FloatFamily:
-			typedOffset = NewDFloat(DFloat(offset))
+			typedOffset = tree.NewDFloat(tree.DFloat(offset))
 		case types.DecimalFamily:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
-			typedOffset = &DDecimal{Decimal: decimal}
+			typedOffset = &tree.DDecimal{Decimal: decimal}
 		default:
 			t.Fatal("unsupported offset type")
 		}
@@ -219,23 +220,23 @@ func testEndPreceding(
 }
 
 func testEndFollowing(
-	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
+	t *testing.T, evalCtx *tree.EvalContext, wfr *WindowFrameRun, offsetType *types.T,
 ) {
-	wfr.Frame = &WindowFrame{
+	wfr.Frame = &tree.WindowFrame{
 		Mode:   treewindow.RANGE,
-		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: treewindow.OffsetPreceding}, EndBound: &WindowFrameBound{BoundType: treewindow.OffsetFollowing}},
+		Bounds: tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetPreceding}, EndBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetFollowing}},
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
-		var typedOffset Datum
+		var typedOffset tree.Datum
 		switch offsetType.Family() {
 		case types.IntFamily:
-			typedOffset = NewDInt(DInt(offset))
+			typedOffset = tree.NewDInt(tree.DInt(offset))
 		case types.FloatFamily:
-			typedOffset = NewDFloat(DFloat(offset))
+			typedOffset = tree.NewDFloat(tree.DFloat(offset))
 		case types.DecimalFamily:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
-			typedOffset = &DDecimal{Decimal: decimal}
+			typedOffset = &tree.DDecimal{Decimal: decimal}
 		default:
 			t.Fatal("unsupported offset type")
 		}
@@ -276,7 +277,7 @@ func makeIntSortedPartition(count int) indexedRows {
 		if r.Float64() < probabilityOfNewNumber {
 			number += r.Intn(10)
 		}
-		partition.rows[idx] = indexedRow{idx: idx, row: Datums{NewDInt(DInt(number))}}
+		partition.rows[idx] = indexedRow{idx: idx, row: tree.Datums{tree.NewDInt(tree.DInt(number))}}
 	}
 	return partition
 }
@@ -289,7 +290,7 @@ func makeFloatSortedPartition(count int) indexedRows {
 		if r.Float64() < probabilityOfNewNumber {
 			number += r.Float64() * 10
 		}
-		partition.rows[idx] = indexedRow{idx: idx, row: Datums{NewDFloat(DFloat(number))}}
+		partition.rows[idx] = indexedRow{idx: idx, row: tree.Datums{tree.NewDFloat(tree.DFloat(number))}}
 	}
 	return partition
 }
@@ -297,7 +298,7 @@ func makeFloatSortedPartition(count int) indexedRows {
 func makeDecimalSortedPartition(t *testing.T, count int) indexedRows {
 	partition := indexedRows{rows: make([]indexedRow, count)}
 	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	number := &DDecimal{}
+	number := &tree.DDecimal{}
 	for idx := 0; idx < count; idx++ {
 		tmp := apd.Decimal{}
 		if r.Float64() < probabilityOfNewNumber {
@@ -305,21 +306,21 @@ func makeDecimalSortedPartition(t *testing.T, count int) indexedRows {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			_, err = ExactCtx.Add(&number.Decimal, &number.Decimal, &tmp)
+			_, err = tree.ExactCtx.Add(&number.Decimal, &number.Decimal, &tmp)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		}
-		value := &DDecimal{}
+		value := &tree.DDecimal{}
 		_, err := tmp.SetFloat64(0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		_, err = ExactCtx.Add(&value.Decimal, &number.Decimal, &tmp)
+		_, err = tree.ExactCtx.Add(&value.Decimal, &number.Decimal, &tmp)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		partition.rows[idx] = indexedRow{idx: idx, row: Datums{value}}
+		partition.rows[idx] = indexedRow{idx: idx, row: tree.Datums{value}}
 	}
 	return partition
 }
@@ -365,7 +366,7 @@ func (ir indexedRows) GetRow(_ context.Context, idx int) (IndexedRow, error) {
 // indexedRow is a row with a corresponding index.
 type indexedRow struct {
 	idx int
-	row Datums
+	row tree.Datums
 }
 
 // GetIdx implements IndexedRow interface.
@@ -374,12 +375,12 @@ func (ir indexedRow) GetIdx() int {
 }
 
 // GetDatum implements IndexedRow interface.
-func (ir indexedRow) GetDatum(colIdx int) (Datum, error) {
+func (ir indexedRow) GetDatum(colIdx int) (tree.Datum, error) {
 	return ir.row[colIdx], nil
 }
 
 // GetDatums implements IndexedRow interface.
-func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (Datums, error) {
+func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) (tree.Datums, error) {
 	return ir.row[firstColIdx:lastColIdx], nil
 }
 

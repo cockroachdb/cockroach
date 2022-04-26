@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package volatility defines terms used to describe the properties of
-// functions.
 package volatility
 
 import "github.com/cockroachdb/errors"
@@ -39,7 +37,7 @@ const (
 	// expressions out of a CASE). In the future, they may even run on rows that
 	// the user doesn't have permission to access.
 	//
-	// Note: LeakProof is strictly stronger than volatility.Immutable. In
+	// Note: LeakProof is strictly stronger than Immutable. In
 	// principle it could be possible to have leak-proof stable or volatile
 	// functions (perhaps now()); but this is not useful in practice as very few
 	// operators are marked leak-proof.

@@ -19,6 +19,6 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 // `_overloadHelper` of this type must be declared before the inlined
 // overloaded code.
 type BinaryOverloadHelper struct {
-	BinFn   tree.TwoArgFn
+	BinOp   tree.BinaryEvalOp
 	EvalCtx *tree.EvalContext
 }

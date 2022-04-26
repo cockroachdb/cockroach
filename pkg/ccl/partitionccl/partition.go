@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -107,11 +109,11 @@ func valueEncodePartitionTuple(
 		if err != nil {
 			return nil, err
 		}
-		if !tree.IsConst(evalCtx, typedExpr) {
+		if !eval.IsConst(evalCtx, typedExpr) {
 			return nil, pgerror.Newf(pgcode.Syntax,
 				"%s: partition values must be constant", typedExpr)
 		}
-		datum, err := typedExpr.Eval(evalCtx)
+		datum, err := eval.Expr(evalCtx, typedExpr)
 		if err != nil {
 			return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 		}
@@ -436,7 +438,7 @@ func selectPartitionExprs(
 	}
 
 	var err error
-	expr, err = evalCtx.NormalizeExpr(expr)
+	expr, err = normalize.Expr(evalCtx, expr)
 	if err != nil {
 		return nil, err
 	}

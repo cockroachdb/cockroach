@@ -62,6 +62,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1868,7 +1870,7 @@ var builtins = map[string]builtinDefinition{
 		stringOverload3(
 			"unescaped", "pattern", "escape",
 			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
-				return tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, false)
+				return eval.MatchLikeEscape(evalCtx, unescaped, pattern, escape, false)
 			},
 			types.Bool,
 			"Matches `unescaped` with `pattern` using `escape` as an escape token.",
@@ -1880,7 +1882,7 @@ var builtins = map[string]builtinDefinition{
 		stringOverload3(
 			"unescaped", "pattern", "escape",
 			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
-				dmatch, err := tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, false)
+				dmatch, err := eval.MatchLikeEscape(evalCtx, unescaped, pattern, escape, false)
 				if err != nil {
 					return dmatch, err
 				}
@@ -1896,7 +1898,7 @@ var builtins = map[string]builtinDefinition{
 		stringOverload3(
 			"unescaped", "pattern", "escape",
 			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
-				return tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, true)
+				return eval.MatchLikeEscape(evalCtx, unescaped, pattern, escape, true)
 			},
 			types.Bool,
 			"Matches case insensetively `unescaped` with `pattern` using `escape` as an escape token.",
@@ -1907,7 +1909,7 @@ var builtins = map[string]builtinDefinition{
 		stringOverload3(
 			"unescaped", "pattern", "escape",
 			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
-				dmatch, err := tree.MatchLikeEscape(evalCtx, unescaped, pattern, escape, true)
+				dmatch, err := eval.MatchLikeEscape(evalCtx, unescaped, pattern, escape, true)
 				if err != nil {
 					return dmatch, err
 				}
@@ -1932,7 +1934,7 @@ var builtins = map[string]builtinDefinition{
 			stringOverload3(
 				"unescaped", "pattern", "escape",
 				func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
-					return tree.SimilarToEscape(evalCtx, unescaped, pattern, escape)
+					return eval.SimilarToEscape(evalCtx, unescaped, pattern, escape)
 				},
 				types.Bool,
 				"Matches `unescaped` with `pattern` using `escape` as an escape token.",
@@ -1945,7 +1947,7 @@ var builtins = map[string]builtinDefinition{
 		stringOverload3(
 			"unescaped", "pattern", "escape",
 			func(evalCtx *tree.EvalContext, unescaped, pattern, escape string) (tree.Datum, error) {
-				dmatch, err := tree.SimilarToEscape(evalCtx, unescaped, pattern, escape)
+				dmatch, err := eval.SimilarToEscape(evalCtx, unescaped, pattern, escape)
 				if err != nil {
 					return dmatch, err
 				}
@@ -1998,7 +2000,7 @@ var builtins = map[string]builtinDefinition{
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
 				// and only then quotes. We can't use (Datum).String() directly.
 				d := tree.UnwrapDatum(ctx, args[0])
-				strD, err := tree.PerformCast(ctx, d, types.String)
+				strD, err := eval.PerformCast(ctx, d, types.String)
 				if err != nil {
 					return nil, err
 				}
@@ -2039,7 +2041,7 @@ var builtins = map[string]builtinDefinition{
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
 				// and only then quotes. We can't use (Datum).String() directly.
 				d := tree.UnwrapDatum(ctx, args[0])
-				strD, err := tree.PerformCast(ctx, d, types.String)
+				strD, err := eval.PerformCast(ctx, d, types.String)
 				if err != nil {
 					return nil, err
 				}
@@ -2197,7 +2199,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -2237,7 +2239,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -2298,7 +2300,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -2337,7 +2339,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -2388,7 +2390,7 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.HomogeneousType{},
 			ReturnType: tree.FirstNonNullReturnType(),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.PickFromTuple(ctx, true /* greatest */, args)
+				return eval.PickFromTuple(ctx, true /* greatest */, args)
 			},
 			Info:       "Returns the element with the greatest value.",
 			Volatility: volatility.Immutable,
@@ -2404,7 +2406,7 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.HomogeneousType{},
 			ReturnType: tree.FirstNonNullReturnType(),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.PickFromTuple(ctx, false /* greatest */, args)
+				return eval.PickFromTuple(ctx, false /* greatest */, args)
 			},
 			Info:       "Returns the element with the lowest value.",
 			Volatility: volatility.Immutable,
@@ -2672,7 +2674,7 @@ months and years, use the timestamptz subtraction operator.`,
 		},
 	),
 
-	tree.FollowerReadTimestampFunctionName: makeBuiltin(
+	asof.FollowerReadTimestampFunctionName: makeBuiltin(
 		tree.FunctionProperties{},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -2694,18 +2696,18 @@ nearest replica.`, defaultFollowerReadDuration),
 		},
 	),
 
-	tree.FollowerReadTimestampExperimentalFunctionName: makeBuiltin(
+	asof.FollowerReadTimestampExperimentalFunctionName: makeBuiltin(
 		tree.FunctionProperties{},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn:         followerReadTimestamp,
-			Info:       fmt.Sprintf("Same as %s. This name is deprecated.", tree.FollowerReadTimestampFunctionName),
+			Info:       fmt.Sprintf("Same as %s. This name is deprecated.", asof.FollowerReadTimestampFunctionName),
 			Volatility: volatility.Volatile,
 		},
 	),
 
-	tree.WithMinTimestampFunctionName: makeBuiltin(
+	asof.WithMinTimestampFunctionName: makeBuiltin(
 		tree.FunctionProperties{},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -2732,7 +2734,7 @@ nearest replica.`, defaultFollowerReadDuration),
 		},
 	),
 
-	tree.WithMaxStalenessFunctionName: makeBuiltin(
+	asof.WithMaxStalenessFunctionName: makeBuiltin(
 		tree.FunctionProperties{},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3053,7 +3055,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				return ts.EvalAtTimeZone(ctx, loc)
+				return ts.EvalAtTimeZone(loc)
 			},
 			Info:       "Convert given time stamp with time zone to the new time zone, with no time zone designation.",
 			Volatility: volatility.Stable,
@@ -3098,7 +3100,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				return ts.EvalAtTimeZone(ctx, loc)
+				return ts.EvalAtTimeZone(loc)
 			},
 			Info:       "Convert given time stamp with time zone to the new time zone, with no time zone designation.",
 			Volatility: volatility.Immutable,
@@ -3915,7 +3917,7 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(e *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.JSONExistsAny(e, tree.MustBeDJSON(args[0]), tree.MustBeDArray(args[1]))
+				return tree.JSONExistsAny(tree.MustBeDJSON(args[0]), tree.MustBeDArray(args[1]))
 			},
 			Info:       "Returns whether any of the strings in the text array exist as top-level keys or array elements",
 			Volatility: volatility.Immutable,
@@ -5012,7 +5014,7 @@ value if you rely on the HLC for accuracy.`,
 						newDatum = tree.DNull
 					} else {
 						expectedTyp := col.GetType()
-						newDatum, err = tree.PerformCast(ctx, d, expectedTyp)
+						newDatum, err = eval.PerformCast(ctx, d, expectedTyp)
 						if err != nil {
 							return nil, errors.WithHint(err, "try to explicitly cast each value to the corresponding column type")
 						}
@@ -5556,7 +5558,7 @@ value if you rely on the HLC for accuracy.`,
 				tableID := int(tree.MustBeDInt(args[0]))
 				indexID := int(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeography(args[2])
-				// TODO(postamar): give the tree.EvalContext a useful interface
+				// TODO(postamar): give the eval.Context a useful interface
 				// instead of cobbling a descs.Collection in this way.
 				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
 				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack), nil /* monitor */)
@@ -5594,7 +5596,7 @@ value if you rely on the HLC for accuracy.`,
 				tableID := int(tree.MustBeDInt(args[0]))
 				indexID := int(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeometry(args[2])
-				// TODO(postamar): give the tree.EvalContext a useful interface
+				// TODO(postamar): give the eval.Context a useful interface
 				// instead of cobbling a descs.Collection in this way.
 				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
 				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack), nil /* monitor */)
@@ -5745,14 +5747,16 @@ value if you rely on the HLC for accuracy.`,
 				{"type", types.Any},
 			},
 			ReturnType: tree.IdentityReturnType(1),
-			FnWithExprs: func(evalCtx *tree.EvalContext, args tree.Exprs) (tree.Datum, error) {
+			FnWithExprs: eval.FnWithExprsOverload(func(
+				evalCtx *tree.EvalContext, args tree.Exprs,
+			) (tree.Datum, error) {
 				targetType := args[1].(tree.TypedExpr).ResolvedType()
-				val, err := args[0].(tree.TypedExpr).Eval(evalCtx)
+				val, err := eval.Expr(evalCtx, args[0].(tree.TypedExpr))
 				if err != nil {
 					return nil, err
 				}
-				return tree.PerformAssignmentCast(evalCtx, val, targetType)
-			},
+				return eval.PerformAssignmentCast(evalCtx, val, targetType)
+			}),
 			Info: "This function is used internally to perform assignment casts during mutations.",
 			// The volatility of an assignment cast depends on the argument
 			// types, so we set it to the maximum volatility of all casts.
@@ -6685,7 +6689,7 @@ in the current database. Returns an error if validation fails.`,
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
+				dOid, err := eval.ParseDOid(evalCtx, string(name), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -6710,7 +6714,7 @@ table. Returns an error if validation fails.`,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				tableName := tree.MustBeDString(args[0])
 				constraintName := tree.MustBeDString(args[1])
-				dOid, err := tree.ParseDOid(evalCtx, string(tableName), types.RegClass)
+				dOid, err := eval.ParseDOid(evalCtx, string(tableName), types.RegClass)
 				if err != nil {
 					return nil, err
 				}
@@ -7857,7 +7861,7 @@ var similarOverloads = []tree.Overload{
 				return tree.DNull, nil
 			}
 			pattern := string(tree.MustBeDString(args[0]))
-			return tree.SimilarPattern(pattern, "")
+			return eval.SimilarPattern(pattern, "")
 		},
 		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern`.",
 		Volatility: volatility.Immutable,
@@ -7871,10 +7875,10 @@ var similarOverloads = []tree.Overload{
 			}
 			pattern := string(tree.MustBeDString(args[0]))
 			if args[1] == tree.DNull {
-				return tree.SimilarPattern(pattern, "")
+				return eval.SimilarPattern(pattern, "")
 			}
 			escape := string(tree.MustBeDString(args[1]))
-			return tree.SimilarPattern(pattern, escape)
+			return eval.SimilarPattern(pattern, escape)
 		},
 		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using `escape` as an escape token.",
 		Volatility: volatility.Immutable,
@@ -9370,7 +9374,7 @@ var (
 		return time.Time{}, pgerror.Newf(
 			pgcode.CCLRequired,
 			"%s can only be used with a CCL distribution",
-			tree.WithMinTimestampFunctionName,
+			asof.WithMinTimestampFunctionName,
 		)
 	}
 	// WithMaxStaleness is an injectable function containing the implementation of the
@@ -9379,7 +9383,7 @@ var (
 		return time.Time{}, pgerror.Newf(
 			pgcode.CCLRequired,
 			"%s can only be used with a CCL distribution",
-			tree.WithMaxStalenessFunctionName,
+			asof.WithMaxStalenessFunctionName,
 		)
 	}
 )

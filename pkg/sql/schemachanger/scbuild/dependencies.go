@@ -38,12 +38,12 @@ type Dependencies interface {
 	AuthorizationAccessor() AuthorizationAccessor
 
 	// ClusterID returns the ID of the cluster.
-	// So far this is used only to build a tree.EvalContext, for the purpose
+	// So far this is used only to build a eval.Context, for the purpose
 	// of checking whether CCL features are enabled.
 	ClusterID() uuid.UUID
 
 	// Codec returns the current session data, as in execCfg.
-	// So far this is used only to build a tree.EvalContext.
+	// So far this is used only to build a eval.Context.
 	Codec() keys.SQLCodec
 
 	// Statements returns the statements behind this schema change.

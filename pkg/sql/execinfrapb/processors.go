@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -156,7 +157,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 	}
 	if b.StartBound.HasOffset() {
 		typedStartOffset := b.StartBound.OffsetExpr.(tree.TypedExpr)
-		dStartOffset, err := typedStartOffset.Eval(evalCtx)
+		dStartOffset, err := eval.Expr(evalCtx, typedStartOffset)
 		if err != nil {
 			return err
 		}
@@ -200,7 +201,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 		}
 		if b.EndBound.HasOffset() {
 			typedEndOffset := b.EndBound.OffsetExpr.(tree.TypedExpr)
-			dEndOffset, err := typedEndOffset.Eval(evalCtx)
+			dEndOffset, err := eval.Expr(evalCtx, typedEndOffset)
 			if err != nil {
 				return err
 			}

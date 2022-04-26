@@ -255,21 +255,21 @@ func (i importDatabaseRegionConfig) PrimaryRegionString() string {
 
 var _ tree.DatabaseRegionConfig = &importDatabaseRegionConfig{}
 
-// CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
+// CurrentDatabaseRegionConfig is part of the eval.DatabaseCatalog interface.
 func (so *importRegionOperator) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (tree.DatabaseRegionConfig, error) {
 	return importDatabaseRegionConfig{primaryRegion: so.primaryRegion}, nil
 }
 
-// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.DatabaseCatalog interface.
 func (so *importRegionOperator) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 	_ context.Context,
 ) error {
 	return errors.WithStack(errRegionOperator)
 }
 
-// ResetMultiRegionZoneConfigsForTable is part of the tree.EvalDatabase
+// ResetMultiRegionZoneConfigsForTable is part of the eval.DatabaseCatalog
 // interface.
 func (so *importRegionOperator) ResetMultiRegionZoneConfigsForTable(
 	_ context.Context, _ int64,
@@ -277,7 +277,7 @@ func (so *importRegionOperator) ResetMultiRegionZoneConfigsForTable(
 	return errors.WithStack(errRegionOperator)
 }
 
-// ResetMultiRegionZoneConfigsForDatabase is part of the tree.EvalDatabase
+// ResetMultiRegionZoneConfigsForDatabase is part of the eval.DatabaseCatalog
 // interface.
 func (so *importRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
 	_ context.Context, _ int64,
@@ -285,17 +285,17 @@ func (so *importRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
 	return errors.WithStack(errRegionOperator)
 }
 
-// Implements the tree.SequenceOperators interface.
+// Implements the eval.SequenceOperators interface.
 type importSequenceOperators struct{}
 
-// GetSerialSequenceNameFromColumn is part of the tree.SequenceOperators interface.
+// GetSerialSequenceNameFromColumn is part of the eval.SequenceOperators interface.
 func (so *importSequenceOperators) GetSerialSequenceNameFromColumn(
 	ctx context.Context, tn *tree.TableName, columnName tree.Name,
 ) (*tree.TableName, error) {
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
-// ParseQualifiedTableName implements the tree.EvalDatabase interface.
+// ParseQualifiedTableName implements the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	name, err := parser.ParseTableName(sql)
 	if err != nil {
@@ -305,35 +305,35 @@ func (so *importSequenceOperators) ParseQualifiedTableName(sql string) (*tree.Ta
 	return &tn, nil
 }
 
-// ResolveTableName implements the tree.EvalDatabase interface.
+// ResolveTableName implements the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) ResolveTableName(
 	ctx context.Context, tn *tree.TableName,
 ) (tree.ID, error) {
 	return 0, errSequenceOperators
 }
 
-// SchemaExists implements the tree.EvalDatabase interface.
+// SchemaExists implements the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) SchemaExists(
 	ctx context.Context, dbName, scName string,
 ) (bool, error) {
 	return false, errSequenceOperators
 }
 
-// IsTableVisible is part of the tree.EvalDatabase interface.
+// IsTableVisible is part of the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) IsTableVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
 ) (bool, bool, error) {
 	return false, false, errors.WithStack(errSequenceOperators)
 }
 
-// IsTypeVisible is part of the tree.EvalDatabase interface.
+// IsTypeVisible is part of the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) IsTypeVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 ) (bool, bool, error) {
 	return false, false, errors.WithStack(errSequenceOperators)
 }
 
-// HasAnyPrivilege is part of the tree.EvalDatabase interface.
+// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) HasAnyPrivilege(
 	ctx context.Context,
 	specifier tree.HasPrivilegeSpecifier,
@@ -343,21 +343,21 @@ func (so *importSequenceOperators) HasAnyPrivilege(
 	return tree.HasNoPrivilege, errors.WithStack(errSequenceOperators)
 }
 
-// IncrementSequenceByID implements the tree.SequenceOperators interface.
+// IncrementSequenceByID implements the eval.SequenceOperators interface.
 func (so *importSequenceOperators) IncrementSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
 	return 0, errSequenceOperators
 }
 
-// GetLatestValueInSessionForSequenceByID implements the tree.SequenceOperators interface.
+// GetLatestValueInSessionForSequenceByID implements the eval.SequenceOperators interface.
 func (so *importSequenceOperators) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
 	return 0, errSequenceOperators
 }
 
-// SetSequenceValueByID implements the tree.SequenceOperators interface.
+// SetSequenceValueByID implements the eval.SequenceOperators interface.
 func (so *importSequenceOperators) SetSequenceValueByID(
 	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {

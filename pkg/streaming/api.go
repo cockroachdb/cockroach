@@ -13,6 +13,7 @@ package streaming
 import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -59,7 +60,7 @@ type ReplicationStreamManager interface {
 		evalCtx *tree.EvalContext,
 		streamID StreamID,
 		opaqueSpec []byte,
-	) (tree.ValueGenerator, error)
+	) (eval.ValueGenerator, error)
 
 	// GetReplicationStreamSpec gets a stream replication spec on the producer side.
 	GetReplicationStreamSpec(

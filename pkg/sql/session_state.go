@@ -135,7 +135,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 			"can only deserialize matching session users",
 		)
 	}
-	if err := p.checkCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
+	if err := p.checkCanBecomeUser(evalCtx.Ctx(), sd.User()); err != nil {
 		return nil, err
 	}
 
@@ -172,7 +172,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 		}
 
 		_, err = evalCtx.statementPreparer.addPreparedStmt(
-			evalCtx.Context,
+			evalCtx.Ctx(),
 			prepStmt.Name, stmt, placeholderTypes, prepStmt.PlaceholderTypeHints,
 			PreparedStatementOriginSessionMigration,
 		)

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -84,7 +85,7 @@ type IndexedRowContainer interface {
 	ReorderableRowContainer
 
 	// GetRow returns a row at the given index or an error.
-	GetRow(ctx context.Context, idx int) (tree.IndexedRow, error)
+	GetRow(ctx context.Context, idx int) (eval.IndexedRow, error)
 }
 
 // DeDupingRowContainer is a container that de-duplicates rows added to the
@@ -325,7 +326,7 @@ func (mc *MemRowContainer) NewFinalIterator(ctx context.Context) RowIterator {
 }
 
 // GetRow implements IndexedRowContainer.
-func (mc *MemRowContainer) GetRow(ctx context.Context, pos int) (tree.IndexedRow, error) {
+func (mc *MemRowContainer) GetRow(ctx context.Context, pos int) (eval.IndexedRow, error) {
 	return IndexedRow{Idx: pos, Row: mc.EncRow(pos)}, nil
 }
 
@@ -771,7 +772,7 @@ const maxIndexedRowsCacheSize = 4096
 // iterator along with the index of the row it currently points at.
 func (f *DiskBackedIndexedRowContainer) GetRow(
 	ctx context.Context, pos int,
-) (tree.IndexedRow, error) {
+) (eval.IndexedRow, error) {
 	var rowWithIdx rowenc.EncDatumRow
 	var err error
 	if f.UsingDisk() {
@@ -785,7 +786,7 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 		if pos >= f.firstCachedRowPos && pos < f.nextPosToCache {
 			requestedRowCachePos := pos - f.firstCachedRowPos
 			f.hitCount++
-			return f.indexedRowsCache.Get(requestedRowCachePos).(tree.IndexedRow), nil
+			return f.indexedRowsCache.Get(requestedRowCachePos).(eval.IndexedRow), nil
 		}
 		f.missCount++
 		if f.diskRowIter == nil {
@@ -862,7 +863,7 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 					return nil, errors.Errorf("unexpected last column type: should be DInt but found %T", idx)
 				}
 				if f.idxRowIter == pos {
-					return f.indexedRowsCache.GetLast().(tree.IndexedRow), nil
+					return f.indexedRowsCache.GetLast().(eval.IndexedRow), nil
 				}
 			}
 			f.idxRowIter++
@@ -928,7 +929,7 @@ func (f *DiskBackedIndexedRowContainer) reuseFirstRowInCache(
 // NOTE: this method should only be used for testing purposes.
 func (f *DiskBackedIndexedRowContainer) getRowWithoutCache(
 	ctx context.Context, pos int,
-) tree.IndexedRow {
+) eval.IndexedRow {
 	if !f.UsingDisk() {
 		panic(errors.Errorf("getRowWithoutCache is called when the container is using memory"))
 	}

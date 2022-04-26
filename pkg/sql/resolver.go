@@ -158,7 +158,7 @@ func (p *planner) LookupSchema(
 	}, nil
 }
 
-// SchemaExists implements the tree.EvalDatabase interface.
+// SchemaExists implements the eval.DatabaseCatalog interface.
 func (p *planner) SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error) {
 	found, _, err = p.LookupSchema(ctx, dbName, scName)
 	return found, err
@@ -209,7 +209,7 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	}
 }
 
-// IsTableVisible is part of the tree.EvalDatabase interface.
+// IsTableVisible is part of the eval.DatabaseCatalog interface.
 func (p *planner) IsTableVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
 ) (isVisible, exists bool, err error) {
@@ -257,7 +257,7 @@ func (p *planner) IsTableVisible(
 	return false, true, nil
 }
 
-// IsTypeVisible is part of the tree.EvalDatabase interface.
+// IsTypeVisible is part of the eval.DatabaseCatalog interface.
 func (p *planner) IsTypeVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 ) (isVisible bool, exists bool, err error) {
@@ -299,7 +299,7 @@ func (p *planner) IsTypeVisible(
 	return false, true, nil
 }
 
-// HasAnyPrivilege is part of the tree.EvalDatabase interface.
+// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
 func (p *planner) HasAnyPrivilege(
 	ctx context.Context,
 	specifier tree.HasPrivilegeSpecifier,

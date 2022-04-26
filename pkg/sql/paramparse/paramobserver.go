@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -55,10 +57,10 @@ func SetStorageParameters(
 		if err != nil {
 			return err
 		}
-		if typedExpr, err = evalCtx.NormalizeExpr(typedExpr); err != nil {
+		if typedExpr, err = normalize.Expr(evalCtx, typedExpr); err != nil {
 			return err
 		}
-		datum, err := typedExpr.Eval(evalCtx)
+		datum, err := eval.Expr(evalCtx, typedExpr)
 		if err != nil {
 			return err
 		}

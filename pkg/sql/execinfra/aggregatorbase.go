@@ -15,13 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
 // AggregateConstructor is a function that creates an aggregate function.
-type AggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+type AggregateConstructor func(*tree.EvalContext, tree.Datums) eval.AggregateFunc
 
 // GetAggregateInfo returns the aggregate constructor and the return type for
 // the given aggregate function when applied on the given type.
@@ -55,8 +56,8 @@ func GetAggregateInfo(
 		}
 		if match {
 			// Found!
-			constructAgg := func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-				return b.AggregateFunc(inputTypes, evalCtx, arguments)
+			constructAgg := func(evalCtx *tree.EvalContext, arguments tree.Datums) eval.AggregateFunc {
+				return b.AggregateFunc.(eval.AggregateOverload)(inputTypes, evalCtx, arguments)
 			}
 			colTyp := b.InferReturnTypeFromInputArgTypes(inputTypes)
 			return constructAgg, colTyp, nil
@@ -110,7 +111,7 @@ func GetAggregateConstructor(
 // when given fn is applied to given inputTypes.
 func GetWindowFunctionInfo(
 	fn execinfrapb.WindowerSpec_Func, inputTypes ...*types.T,
-) (windowConstructor func(*tree.EvalContext) tree.WindowFunc, returnType *types.T, err error) {
+) (windowConstructor func(*tree.EvalContext) eval.WindowFunc, returnType *types.T, err error) {
 	if fn.AggregateFunc != nil && *fn.AggregateFunc == execinfrapb.AnyNotNull {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
@@ -148,8 +149,8 @@ func GetWindowFunctionInfo(
 		}
 		if match {
 			// Found!
-			constructAgg := func(evalCtx *tree.EvalContext) tree.WindowFunc {
-				return b.WindowFunc(inputTypes, evalCtx)
+			constructAgg := func(evalCtx *tree.EvalContext) eval.WindowFunc {
+				return b.WindowFunc.(eval.WindowOverload)(inputTypes, evalCtx)
 			}
 			colTyp := b.InferReturnTypeFromInputArgTypes(inputTypes)
 			return constructAgg, colTyp, nil

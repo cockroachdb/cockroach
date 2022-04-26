@@ -166,6 +166,6 @@ func ParsePartitionKey(evalCtx *tree.EvalContext, str string, typs ...types.Fami
 		typs = tree.InferTypes(key)
 	}
 
-	vals := tree.ParseDatumPath(evalCtx, expr, typs)
+	vals := ParseDatumPath(evalCtx, expr, typs)
 	return vals
 }

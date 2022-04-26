@@ -287,7 +287,7 @@ type mdVarContainer struct {
 var _ tree.IndexedVarContainer = &mdVarContainer{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
-func (c *mdVarContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+func (c *mdVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
 	return nil, errors.AssertionFailedf("no eval allowed in mdVarContainer")
 }
 

@@ -11,6 +11,7 @@
 package builtins
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -156,7 +157,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				[]*types.T{types.Bytes},
 				[]string{"stream_event"},
 			),
-			func(evalCtx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+			func(evalCtx *tree.EvalContext, args tree.Datums) (eval.ValueGenerator, error) {
 				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err

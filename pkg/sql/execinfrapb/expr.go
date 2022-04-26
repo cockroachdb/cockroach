@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -89,7 +91,7 @@ func processExpression(
 	//
 	// TODO(solon): It would be preferable to enhance our expression serialization
 	// format so this wouldn't be necessary.
-	c := tree.MakeConstantEvalVisitor(evalCtx)
+	c := normalize.MakeConstantEvalVisitor(evalCtx)
 	expr, _ = tree.WalkExpr(&c, typedExpr)
 	if err := c.Err(); err != nil {
 		return nil, err
@@ -131,12 +133,12 @@ func (eh *ExprHelper) IndexedVarResolvedType(idx int) *types.T {
 }
 
 // IndexedVarEval is part of the tree.IndexedVarContainer interface.
-func (eh *ExprHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+func (eh *ExprHelper) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
 	err := eh.Row[idx].EnsureDecoded(eh.Types[idx], &eh.datumAlloc)
 	if err != nil {
 		return nil, err
 	}
-	return eh.Row[idx].Datum.Eval(ctx)
+	return eh.Row[idx].Datum.Eval(e)
 }
 
 // IndexedVarNodeFormatter is part of the parser.IndexedVarContainer interface.
@@ -212,7 +214,7 @@ func RunFilter(filter tree.TypedExpr, evalCtx *tree.EvalContext) (bool, error) {
 		return true, nil
 	}
 
-	d, err := filter.Eval(evalCtx)
+	d, err := eval.Expr(evalCtx, filter)
 	if err != nil {
 		return false, err
 	}
@@ -230,7 +232,7 @@ func (eh *ExprHelper) Eval(row rowenc.EncDatumRow) (tree.Datum, error) {
 	eh.Row = row
 
 	eh.evalCtx.PushIVarContainer(eh)
-	d, err := eh.Expr.Eval(eh.evalCtx)
+	d, err := eval.Expr(eh.evalCtx, eh.Expr)
 	eh.evalCtx.PopIVarContainer()
 	return d, err
 }

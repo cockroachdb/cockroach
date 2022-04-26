@@ -24,11 +24,7 @@ import (
 // getSchemaIDs returns the set of schema ids from
 // crdb_internal.show_create_all_schemas for a specified database.
 func getSchemaIDs(
-	ctx context.Context,
-	evalPlanner tree.EvalPlanner,
-	txn *kv.Txn,
-	dbName string,
-	acc *mon.BoundAccount,
+	ctx context.Context, evalPlanner tree.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
 ) ([]int64, error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
@@ -68,7 +64,7 @@ func getSchemaIDs(
 // getSchemaCreateStatement gets the create statement to recreate a schema (ignoring fks)
 // for a given schema id in a database.
 func getSchemaCreateStatement(
-	ctx context.Context, evalPlanner tree.EvalPlanner, txn *kv.Txn, id int64, dbName string,
+	ctx context.Context, evalPlanner tree.Planner, txn *kv.Txn, id int64, dbName string,
 ) (tree.Datum, error) {
 	query := fmt.Sprintf(`
 		SELECT

@@ -84,17 +84,17 @@ func (vs *VolatilitySet) Add(v volatility.Volatility) {
 	*vs |= volatilityBit(v)
 }
 
-// AddImmutable is a convenience shorthand for adding volatility.Immutable.
+// AddImmutable is a convenience shorthand for adding Immutable.
 func (vs *VolatilitySet) AddImmutable() {
 	vs.Add(volatility.Immutable)
 }
 
-// AddStable is a convenience shorthand for adding volatility.Stable.
+// AddStable is a convenience shorthand for adding Stable.
 func (vs *VolatilitySet) AddStable() {
 	vs.Add(volatility.Stable)
 }
 
-// AddVolatile is a convenience shorthand for adding volatility.Volatile.
+// AddVolatile is a convenience shorthand for adding Volatile.
 func (vs *VolatilitySet) AddVolatile() {
 	vs.Add(volatility.Volatile)
 }
@@ -105,17 +105,17 @@ func (vs *VolatilitySet) UnionWith(other VolatilitySet) {
 }
 
 // IsLeakProof returns true if the set is empty or only contains
-// volatility.LeakProof.
+// LeakProof.
 func (vs VolatilitySet) IsLeakProof() bool {
 	return vs == 0 || vs == volatilityBit(volatility.LeakProof)
 }
 
-// HasStable returns true if the set contains volatility.Stable.
+// HasStable returns true if the set contains Stable.
 func (vs VolatilitySet) HasStable() bool {
 	return (vs & volatilityBit(volatility.Stable)) != 0
 }
 
-// HasVolatile returns true if the set contains volatility.Volatile.
+// HasVolatile returns true if the set contains Volatile.
 func (vs VolatilitySet) HasVolatile() bool {
 	return (vs & volatilityBit(volatility.Volatile)) != 0
 }

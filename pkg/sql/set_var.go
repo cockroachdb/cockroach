@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -128,7 +129,7 @@ func (n *setVarNode) startExec(params runParams) error {
 	}
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
-			d, err := v.Eval(params.EvalContext())
+			d, err := eval.Expr(params.EvalContext(), v)
 			if err != nil {
 				return err
 			}
@@ -267,7 +268,7 @@ func timeZoneVarGetStringVal(
 	if len(values) != 1 {
 		return "", newSingleArgVarError("timezone")
 	}
-	d, err := values[0].Eval(&evalCtx.EvalContext)
+	d, err := eval.Expr(&evalCtx.EvalContext, values[0])
 	if err != nil {
 		return "", err
 	}
@@ -341,7 +342,7 @@ func makeTimeoutVarGetter(
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		d, err := values[0].Eval(&evalCtx.EvalContext)
+		d, err := eval.Expr(&evalCtx.EvalContext, values[0])
 		if err != nil {
 			return "", err
 		}
