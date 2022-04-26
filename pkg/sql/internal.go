@@ -731,6 +731,9 @@ func (ie *InternalExecutor) execInternal(
 	// errCallback is called if an error is returned from the connExecutor's
 	// run() loop.
 	errCallback := func(err error) {
+		// The connExecutor exited its run() loop, so the stmtBuf must have been
+		// closed. Still, since Close() is idempotent, we'll call it here too.
+		stmtBuf.Close()
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
 	beforeRun := func() {}
