@@ -20,6 +20,7 @@ import moment from "moment";
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 type ISession = cockroach.server.serverpb.Session;
+type Status = cockroach.server.serverpb.Session.Status;
 
 import { TerminateSessionModalRef } from "./terminateSessionModal";
 import { TerminateQueryModalRef } from "./terminateQueryModal";
@@ -117,13 +118,33 @@ function formatStatementStart(session: ISession): string {
 
   return start.format(formatStr);
 }
+
+export function getStatusString(status: Status): string {
+  switch (status) {
+    case 0:
+      return "Active";
+    case 1:
+      return "Closed";
+    case 2:
+      return "Idle";
+  }
+}
+
+export function getStatusClassname(status: Status): string {
+  switch (status) {
+    case 0:
+      return "session-status-icon__active";
+    case 1:
+      return "session-status-icon__closed";
+    case 2:
+      return "session-status-icon__idle";
+  }
+}
+
 const SessionStatus = (props: { session: ISession }) => {
   const { session } = props;
-  const status = session.active_queries.length > 0 ? "Active" : "Idle";
-  const classname =
-    session.active_queries.length > 0
-      ? "session-status-icon__active"
-      : "session-status-icon__idle";
+  const status = getStatusString(session.status);
+  const classname = getStatusClassname(session.status);
   return (
     <div>
       <CircleFilled className={cx(classname)} />

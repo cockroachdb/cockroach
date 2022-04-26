@@ -12,6 +12,7 @@ import { createMemoryHistory } from "history";
 import { SessionDetailsProps } from "./sessionDetails";
 import {
   activeSession,
+  closedSession,
   idleSession,
   idleTransactionSession,
 } from "./sessionsPage.fixture";
@@ -67,6 +68,11 @@ export const sessionDetailsActiveTxnPropsFixture: SessionDetailsProps = {
 export const sessionDetailsActiveStmtPropsFixture: SessionDetailsProps = {
   ...sessionDetailsPropsBase,
   session: activeSession,
+};
+
+export const sessionDetailsClosedPropsFixture: SessionDetailsProps = {
+  ...sessionDetailsPropsBase,
+  session: closedSession,
 };
 
 export const sessionDetailsNotFound: SessionDetailsProps = {
