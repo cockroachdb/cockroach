@@ -30,6 +30,7 @@ import {
   nodeRegionsByIDSelector,
 } from "../store/nodes";
 import { actions as sqlDetailsStatsActions } from "src/store/statementDetails";
+import { actions as sqlStatsActions } from "src/store/sqlStats";
 import {
   actions as statementDiagnosticsActions,
   selectDiagnosticsReportsByStatementFingerprint,
@@ -41,6 +42,8 @@ import { actions as nodeLivenessActions } from "../store/liveness";
 import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { StatementDetailsRequest } from "../api";
+import { TimeScale } from "../timeScaleDropdown";
+import { getMatchParamByName, statementAttr } from "../util";
 type IDuration = google.protobuf.IDuration;
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
@@ -53,10 +56,13 @@ const CancelStatementDiagnosticsReportRequest =
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
 const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
-  const statementDetails = selectStatementDetails(state, props);
-  const statementFingerprint = statementDetails?.statement.metadata.query;
+  const { statementDetails, isLoading } = selectStatementDetails(state, props);
   return {
+    statementFingerprintID: getMatchParamByName(props.match, statementAttr),
     statementDetails,
+    isLoading,
+    latestQuery: state.adminUI.sqlDetailsStats.latestQuery,
+    latestFormattedQuery: state.adminUI.sqlDetailsStats.latestFormattedQuery,
     statementsError: state.adminUI.sqlStats.lastError,
     timeScale: selectTimeScale(state),
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
@@ -66,7 +72,7 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
         ? []
         : selectDiagnosticsReportsByStatementFingerprint(
             state,
-            statementFingerprint,
+            state.adminUI.sqlDetailsStats.latestQuery,
           ),
     uiConfig: selectStatementDetailsUiConfig(state),
     isTenant: selectIsTenant(state),
@@ -84,6 +90,13 @@ const mapDispatchToProps = (
   refreshNodes: () => dispatch(nodesActions.refresh()),
   refreshNodesLiveness: () => dispatch(nodeLivenessActions.refresh()),
   refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
+  onTimeScaleChange: (ts: TimeScale) => {
+    dispatch(
+      sqlStatsActions.updateTimeScale({
+        ts: ts,
+      }),
+    );
+  },
   dismissStatementDiagnosticsAlertMessage: () =>
     dispatch(
       localStorageActions.update({
@@ -143,6 +156,14 @@ const mapDispatchToProps = (
         page: "Statement Details",
         action: "Cancelled",
       }),
+    );
+  },
+  onStatementDetailsQueryChange: (latestQuery: string) => {
+    dispatch(sqlDetailsStatsActions.setLatestQuery(latestQuery));
+  },
+  onStatementDetailsFormattedQueryChange: (latestFormattedQuery: string) => {
+    dispatch(
+      sqlDetailsStatsActions.setLatestFormattedQuery(latestFormattedQuery),
     );
   },
   onSortingChange: (tableName, columnName) =>

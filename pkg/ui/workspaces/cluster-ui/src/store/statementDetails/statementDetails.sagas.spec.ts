@@ -26,7 +26,7 @@ import {
 import {
   actions,
   reducer,
-  SQLDetailsStatsState,
+  SQLDetailsStatsReducerState,
 } from "./statementDetails.reducer";
 export type StatementDetailsRequest = cockroach.server.serverpb.StatementDetailsRequest;
 
@@ -657,12 +657,17 @@ describe("SQLDetailsStats sagas", () => {
           }),
         )
         .withReducer(reducer)
-        .hasFinalState<Record<string, SQLDetailsStatsState>>({
-          "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0": {
-            data: SQLDetailsStatsResponse,
-            lastError: null,
-            valid: true,
+        .hasFinalState<SQLDetailsStatsReducerState>({
+          cachedData: {
+            "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0": {
+              data: SQLDetailsStatsResponse,
+              lastError: null,
+              valid: true,
+              inFlight: false,
+            },
           },
+          latestQuery: "",
+          latestFormattedQuery: "",
         })
         .run();
     });
@@ -678,12 +683,17 @@ describe("SQLDetailsStats sagas", () => {
           }),
         )
         .withReducer(reducer)
-        .hasFinalState<Record<string, SQLDetailsStatsState>>({
-          "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0": {
-            data: null,
-            lastError: error,
-            valid: false,
+        .hasFinalState<SQLDetailsStatsReducerState>({
+          cachedData: {
+            "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0": {
+              data: null,
+              lastError: error,
+              valid: false,
+              inFlight: false,
+            },
           },
+          latestQuery: "",
+          latestFormattedQuery: "",
         })
         .run();
     });
