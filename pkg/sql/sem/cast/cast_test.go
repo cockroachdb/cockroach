@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCastsMatchPostgres checks that the Volatility and CastContext of our
+// TestCastsMatchPostgres checks that the Volatility and Context of our
 // defined casts match Postgres' casts.
 //
 // The command for generating pg_cast_dump.csv from psql is below. We ignore
@@ -89,7 +89,7 @@ func TestCastsMatchPostgres(t *testing.T) {
 
 	type pgCastValue struct {
 		volatility volatility.Volatility
-		context    CastContext
+		context    Context
 	}
 
 	pgCastMap := make(map[pgCastKey]pgCastValue)
@@ -145,16 +145,16 @@ func TestCastsMatchPostgres(t *testing.T) {
 	}
 }
 
-// castContextFromPostgres returns a CastContext that matches the castcontext
+// castContextFromPostgres returns a Context that matches the castcontext
 // setting in Postgres's pg_cast table.
-func castContextFromPostgres(castcontext string) (CastContext, error) {
+func castContextFromPostgres(castcontext string) (Context, error) {
 	switch castcontext {
 	case "e":
-		return CastContextExplicit, nil
+		return ContextExplicit, nil
 	case "a":
-		return CastContextAssignment, nil
+		return ContextAssignment, nil
 	case "i":
-		return CastContextImplicit, nil
+		return ContextImplicit, nil
 	default:
 		return 0, errors.AssertionFailedf("invalid castcontext %s", castcontext)
 	}

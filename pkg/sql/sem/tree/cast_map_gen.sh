@@ -58,9 +58,9 @@ PG_CAST_QUERY="
     ),
     (
       CASE castcontext
-      WHEN 'e' THEN 'CastContextExplicit'
-      WHEN 'a' THEN 'CastContextAssignment'
-      WHEN 'i' THEN 'CastContextImplicit'
+      WHEN 'e' THEN 'ContextExplicit'
+      WHEN 'a' THEN 'ContextAssignment'
+      WHEN 'i' THEN 'ContextImplicit'
       END
     )
   FROM pg_cast
