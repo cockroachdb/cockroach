@@ -190,6 +190,12 @@ func TestRemoveDeadReplicas(t *testing.T) {
 
 					s := sqlutils.MakeSQLRunner(tc.Conns[0])
 
+					// Reduce the time until nodes are marked as dead. Final upreplication
+					// won't trigger until this duration passes. 1m15s is a hardcoded
+					// minimum, to allow for gossip propagation delays. Overriding the
+					// setting with a lower value causes test failures.
+					s.Exec(t, `SET CLUSTER SETTING server.time_until_store_dead = '1m15s'`)
+
 					// Set the replication factor on all zones.
 					func() {
 						rows := s.Query(t, "show all zone configurations")
