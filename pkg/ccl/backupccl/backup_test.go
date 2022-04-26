@@ -3659,8 +3659,18 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 	beforeDir := LocalFoo + `/beforeTs`
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, beforeDir, beforeTs))
+
 	equalDir := LocalFoo + `/equalTs`
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, equalDir, equalTs))
+	{
+		// testing UX guardrails for AS OF SYSTEM TIME backups in collections
+		sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO '%s' AS OF SYSTEM TIME %s`, equalDir, equalTs))
+
+		sqlDB.ExpectErr(t, "`AS OF SYSTEM TIME` .* must be greater than the previous backup's end time of",
+			fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN '%s' AS OF SYSTEM TIME %s`,
+				equalDir,
+				beforeTs))
+	}
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 	sqlDB.Exec(t, `RESTORE data.* FROM $1`, beforeDir)

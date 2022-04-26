@@ -725,6 +725,12 @@ func backupPlanHook(
 			if err := requireEnterprise("incremental"); err != nil {
 				return err
 			}
+			lastEndTime := prevBackups[len(prevBackups)-1].EndTime
+			if endTime.Less(lastEndTime) {
+				return errors.Newf("`AS OF SYSTEM TIME` %s must be greater than "+
+					"the previous backup's end time of %s.",
+					endTime.GoTime(), lastEndTime.GoTime())
+			}
 			startTime = prevBackups[len(prevBackups)-1].EndTime
 		}
 
