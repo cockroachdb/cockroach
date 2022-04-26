@@ -67,7 +67,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 // value. The one exception to this is casts to the special "char" type which
 // are truncated.
 func PerformAssignmentCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
-	if !cast.ValidCast(d.ResolvedType(), t, cast.CastContextAssignment) {
+	if !cast.ValidCast(d.ResolvedType(), t, cast.ContextAssignment) {
 		return nil, pgerror.Newf(
 			pgcode.CannotCoerce,
 			"invalid assignment cast: %s -> %s", d.ResolvedType(), t,
