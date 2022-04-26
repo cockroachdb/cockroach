@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -52,7 +53,7 @@ func TestRandomizedCast(t *testing.T) {
 				// below).
 				continue
 			}
-			if _, ok := tree.LookupCastVolatility(from, to, nil /* sessiondata */); ok {
+			if _, ok := cast.LookupCastVolatility(from, to, nil /* sessiondata */); ok {
 				if colexecbase.IsCastSupported(from, to) {
 					return from, to
 				}

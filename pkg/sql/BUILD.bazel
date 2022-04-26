@@ -376,6 +376,7 @@ go_library(
         "//pkg/sql/schemachanger/scrun",
         "//pkg/sql/scrub",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/cast",
         "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",

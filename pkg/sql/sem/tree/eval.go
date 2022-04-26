@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -520,7 +521,7 @@ func initNonArrayToNonArrayConcatenation() {
 		})
 	}
 	fromTypeToVolatility := make(map[oid.Oid]volatility.V)
-	ForEachCast(func(src, tgt oid.Oid, _ CastContext, _ ContextOrigin, v volatility.V) {
+	cast.ForEachCast(func(src, tgt oid.Oid, _ cast.CastContext, _ cast.ContextOrigin, v volatility.V) {
 		if tgt == oid.T_text {
 			fromTypeToVolatility[src] = v
 		}

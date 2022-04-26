@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -1257,7 +1258,7 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 
 		// Check if an assignment cast is available from the inScope column
 		// type to the out type.
-		if !tree.ValidCast(srcType, targetType, tree.CastContextAssignment) {
+		if !cast.ValidCast(srcType, targetType, cast.CastContextAssignment) {
 			panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, string(targetCol.ColName())))
 		}
 

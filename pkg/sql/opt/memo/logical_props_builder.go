@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -1618,7 +1619,7 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *tree.EvalContex
 	case *CastExpr, *AssignmentCastExpr:
 		from := e.Child(0).(opt.ScalarExpr).DataType()
 		to := e.Private().(*types.T)
-		volatility, ok := tree.LookupCastVolatility(from, to, evalCtx.SessionData())
+		volatility, ok := cast.LookupCastVolatility(from, to, evalCtx.SessionData())
 		if !ok {
 			panic(errors.AssertionFailedf("no volatility for cast %s::%s", from, to))
 		}
