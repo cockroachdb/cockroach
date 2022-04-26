@@ -623,6 +623,63 @@ func TestInternalExecutorWithUndefinedQoSOverridePanics(t *testing.T) {
 	})
 }
 
+func TestInternalExecNoSentryReport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
+
+	queryCtx, queryCancel := context.WithCancel(context.Background())
+
+	const opName = "test-query"
+	sem := make(chan struct{})
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		BeforeInternalExecutorPushesCommands: func(opNameString string) {
+			if opNameString == opName {
+				<-sem
+			}
+		},
+		InternalExecutorOnNewGoroutineSpinUp: func(opNameString string) {
+			if opNameString == opName {
+				queryCancel()
+			}
+		},
+		InternalExecutorBeforeNewGoroutineExits: func(opNameString string) {
+			if opNameString == opName {
+				sem <- struct{}{}
+			}
+		},
+	}
+
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	ie := sql.MakeInternalExecutor(
+		context.Background(),
+		s.(*server.TestServer).Server.PGServer().SQLServer,
+		sql.MemoryMetrics{},
+		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+	)
+
+	errChan := make(chan error)
+	go func() {
+		_, err := ie.Exec(
+			queryCtx,
+			opName,
+			nil, /* txn */
+			"SELECT 1",
+		)
+		if err != nil {
+			errChan <- err
+			return
+		}
+	}()
+
+	err := <-errChan
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 // TODO(andrei): Test that descriptor leases are released by the
 // InternalExecutor, with and without a higher-level txn. When there is no
 // higher-level txn, the leases are released normally by the txn finishing. When

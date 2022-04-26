@@ -1462,6 +1462,10 @@ type ExecutorTestingKnobs struct {
 	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
 	// is written.
 	AfterBackupCheckpoint func()
+
+	BeforeInternalExecutorPushesCommands    func(opName string)
+	InternalExecutorOnNewGoroutineSpinUp    func(opName string)
+	InternalExecutorBeforeNewGoroutineExits func(opName string)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

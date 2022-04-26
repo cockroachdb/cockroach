@@ -145,6 +145,8 @@ func (ie *InternalExecutor) initConnEx(
 	wg *sync.WaitGroup,
 	syncCallback func([]resWithPos),
 	errCallback func(error),
+	beforeRun func(),
+	beforeExit func(),
 ) {
 	clientComm := &internalClientComm{
 		w: w,
@@ -202,6 +204,8 @@ func (ie *InternalExecutor) initConnEx(
 
 	wg.Add(1)
 	go func() {
+		defer beforeExit()
+		beforeRun()
 		if err := ex.run(ctx, ie.mon, mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
 			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 			errCallback(err)
@@ -729,7 +733,23 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	beforeRun := func() {}
+	beforeExit := func() {}
+	if f := ie.s.cfg.TestingKnobs.InternalExecutorOnNewGoroutineSpinUp; f != nil {
+		beforeRun = func() {
+			f(opName)
+		}
+	}
+	if f := ie.s.cfg.TestingKnobs.InternalExecutorBeforeNewGoroutineExits; f != nil {
+		beforeExit = func() {
+			f(opName)
+		}
+	}
+	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback, beforeRun, beforeExit)
+
+	if f := ie.s.cfg.TestingKnobs.BeforeInternalExecutorPushesCommands; f != nil {
+		f(opName)
+	}
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
