@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -128,7 +129,7 @@ func AlterColumnType(
 			col.GetType().SQLString(), typ.SQLString())
 	case schemachange.ColumnConversionTrivial:
 		if col.HasDefault() {
-			if validCast := tree.ValidCast(col.GetType(), typ, tree.CastContextAssignment); !validCast {
+			if validCast := cast.ValidCast(col.GetType(), typ, cast.CastContextAssignment); !validCast {
 				return pgerror.Wrapf(
 					err,
 					pgcode.DatatypeMismatch,
@@ -139,7 +140,7 @@ func AlterColumnType(
 			}
 		}
 		if col.HasOnUpdate() {
-			if validCast := tree.ValidCast(col.GetType(), typ, tree.CastContextAssignment); !validCast {
+			if validCast := cast.ValidCast(col.GetType(), typ, cast.CastContextAssignment); !validCast {
 				return pgerror.Wrapf(
 					err,
 					pgcode.DatatypeMismatch,
@@ -362,7 +363,7 @@ func alterColumnTypeGeneral(
 	hasDefault := col.HasDefault()
 	hasUpdate := col.HasOnUpdate()
 	if hasDefault {
-		if validCast := tree.ValidCast(col.GetType(), toType, tree.CastContextAssignment); !validCast {
+		if validCast := cast.ValidCast(col.GetType(), toType, cast.CastContextAssignment); !validCast {
 			return pgerror.Newf(
 				pgcode.DatatypeMismatch,
 				"default for column %q cannot be cast automatically to type %s",
@@ -372,7 +373,7 @@ func alterColumnTypeGeneral(
 		}
 	}
 	if hasUpdate {
-		if validCast := tree.ValidCast(col.GetType(), toType, tree.CastContextAssignment); !validCast {
+		if validCast := cast.ValidCast(col.GetType(), toType, cast.CastContextAssignment); !validCast {
 			return pgerror.Newf(
 				pgcode.DatatypeMismatch,
 				"on update for column %q cannot be cast automatically to type %s",

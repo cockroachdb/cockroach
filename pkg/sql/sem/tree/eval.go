@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -520,9 +521,9 @@ func initNonArrayToNonArrayConcatenation() {
 		})
 	}
 	fromTypeToVolatility := make(map[oid.Oid]volatility.Volatility)
-	ForEachCast(func(src, tgt oid.Oid) {
+	cast.ForEachCast(func(src, tgt oid.Oid, v volatility.Volatility) {
 		if tgt == oid.T_text {
-			fromTypeToVolatility[src] = castMap[src][tgt].Volatility
+			fromTypeToVolatility[src] = v
 		}
 	})
 	// We allow tuple + string concatenation, as well as any scalar types.

@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,7 +38,7 @@ func TestCastMap(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
 
-	tree.ForEachCast(func(src, tgt oid.Oid) {
+	cast.ForEachCast(func(src, tgt oid.Oid, _ volatility.Volatility) {
 		srcType := types.OidToType[src]
 		tgtType := types.OidToType[tgt]
 		srcDatum := randgen.RandDatum(rng, srcType, false /* nullOk */)

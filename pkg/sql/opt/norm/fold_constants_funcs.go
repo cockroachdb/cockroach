@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/internal/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -357,7 +358,7 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 		return nil, false
 	}
 
-	volatility, ok := tree.LookupCastVolatility(input.DataType(), typ, c.f.evalCtx.SessionData())
+	volatility, ok := cast.LookupCastVolatility(input.DataType(), typ, c.f.evalCtx.SessionData())
 	if !ok || !c.CanFoldOperator(volatility) {
 		return nil, false
 	}
@@ -385,7 +386,7 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 func (c *CustomFuncs) FoldAssignmentCast(
 	input opt.ScalarExpr, typ *types.T,
 ) (_ opt.ScalarExpr, ok bool) {
-	volatility, ok := tree.LookupCastVolatility(input.DataType(), typ, c.f.evalCtx.SessionData())
+	volatility, ok := cast.LookupCastVolatility(input.DataType(), typ, c.f.evalCtx.SessionData())
 	if !ok || !c.CanFoldOperator(volatility) {
 		return nil, false
 	}
