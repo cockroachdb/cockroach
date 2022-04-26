@@ -1312,32 +1312,34 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 		return nil, err
 	}
 
-	if fn := r.store.TestingKnobs().BeforeRemovingDemotedLearner; fn != nil {
+	if fn := r.store.TestingKnobs().BeforeRemovingLearners; fn != nil {
 		fn()
 	}
-	// Now the config isn't joint any more, but we may have demoted some voters
-	// into learners. These learners should go as well.
-	learners := desc.Replicas().LearnerDescriptors()
-	if len(learners) == 0 {
-		return desc, nil
-	}
-	targets := make([]roachpb.ReplicationTarget, len(learners))
-	for i := range learners {
-		targets[i].NodeID = learners[i].NodeID
-		targets[i].StoreID = learners[i].StoreID
-	}
-	log.VEventf(ctx, 2, `removing learner replicas %v from %v`, targets, desc)
 	// NB: unroll the removals because at the time of writing, we can't atomically
 	// remove multiple learners. This will be fixed in:
 	//
 	// https://github.com/cockroachdb/cockroach/pull/40268
 	origDesc := desc
 	store := r.store
-	for _, target := range targets {
+	// Now the config isn't joint any more, but we may have demoted some voters
+	// into learners. These learners should go as well.
+	for {
+		// We loop until we've removed all learners. After every call to
+		// `execChangeReplicasTxn`, we re-check if there are any learners to be
+		// removed. This is to guarantee that when this method returns a non-error
+		// response, it will never return a `desc` that has learners.
+		learners := desc.Replicas().LearnerDescriptors()
+		if len(learners) == 0 {
+			return desc, nil
+		}
+		removalTarget := roachpb.ReplicationTarget{
+			NodeID: learners[0].NodeID, StoreID: learners[0].StoreID,
+		}
 		var err error
+		log.VEventf(ctx, 2, `removing learner replica %v from %v`, removalTarget, desc)
 		desc, err = execChangeReplicasTxn(
 			ctx, desc, kvserverpb.ReasonAbandonedLearner, "",
-			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
+			[]internalReplicationChange{{target: removalTarget, typ: internalChangeTypeRemoveLearner}},
 			changeReplicasTxnArgs{db: store.DB(),
 				liveAndDeadReplicas:                  store.cfg.StorePool.LiveAndDeadReplicas,
 				logChange:                            store.logChange,
@@ -1349,7 +1351,6 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
 		}
 	}
-	return desc, nil
 }
 
 // validateAdditionsPerStore ensures that we're not trying to add the same type

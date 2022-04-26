@@ -1096,7 +1096,7 @@ func TestDemotedLearnerRemovalHandlesRace(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						BeforeRemovingDemotedLearner: func() {
+						BeforeRemovingLearners: func() {
 							if atomic.LoadInt64(&activateTestingKnob) == 1 {
 								// Signal to the test that the rebalance is now trying to remove
 								// the demoted learner.
@@ -1291,7 +1291,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.NoError(t, processErr)
 		formattedTrace := trace.String()
 		expectedMessages := []string{
-			`removing learner replicas \[n2,s2\]`,
+			`removing learner replica.*n2,s2`,
 			`merging to produce range: /Table/Max-/Max`,
 		}
 		if err := testutils.MatchInOrder(formattedTrace, expectedMessages...); err != nil {
