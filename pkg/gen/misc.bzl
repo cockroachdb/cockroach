@@ -18,6 +18,8 @@ MISC_SRCS = [
   "//pkg/sql/schemachanger/scop:validation_visitor_generated.go",
   "//pkg/sql/schemachanger/scpb:elements_generated.go",
   "//pkg/sql/schemachanger/scpb:uml/table.puml",
+  "//pkg/sql/sem/tree:eval_expr_generated.go",
+  "//pkg/sql/sem/tree:eval_op_generated.go",
   "//pkg/sql:txnstatetransitions_diagram.gv",
   "//pkg/sql:txnstatetransitions_report.txt",
   "//pkg/util/interval/generic:example_interval_btree.go",

@@ -59,6 +59,8 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+//go:generate go run ./evalgen *.go
+
 var (
 	// ErrIntOutOfRange is reported when integer arithmetic overflows.
 	ErrIntOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range")

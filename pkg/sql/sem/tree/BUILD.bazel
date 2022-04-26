@@ -51,6 +51,8 @@ go_library(
         "drop.go",
         "drop_owned_by.go",
         "eval.go",
+        "eval_binary_ops.go",
+        "eval_unary_ops.go",
         "explain.go",
         "export.go",
         "expr.go",
@@ -117,6 +119,7 @@ go_library(
         "window_funcs_util.go",
         "with.go",
         "zone.go",
+        ":eval-generated",  # keep
         ":gen-createtypevariety-stringer",  # keep
         ":gen-statementreturntype-stringer",  # keep
         ":gen-statementtype-stringer",  # keep
@@ -294,4 +297,24 @@ stringer(
     name = "gen-statementtype-stringer",
     src = "stmt.go",
     typ = "StatementType",
+)
+
+eval_generated = [
+    "eval_expr_generated.go",
+    "eval_op_generated.go",
+]
+
+genrule(
+    name = "eval-generated",
+    srcs = glob(
+        ["*.go"],
+        exclude = eval_generated,
+    ),
+    outs = eval_generated,
+    cmd = "$(location //pkg/sql/sem/tree/evalgen) --out $(@D) $(SRCS)",
+    tools = ["//pkg/sql/sem/tree/evalgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
