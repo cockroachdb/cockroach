@@ -19,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -60,7 +58,8 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	defer diskMonitor.Stop(ctx)
 
 	budget := newBudget(nil /* acc */, math.MaxInt /* limitBytes */)
-	b := newInOrderResultsBuffer(budget, tempEngine, diskMonitor)
+	diskBuffer := TestResultDiskBufferConstructor(tempEngine, diskMonitor)
+	b := newInOrderResultsBuffer(budget, diskBuffer)
 	defer b.close(ctx)
 
 	for run := 0; run < 10; run++ {
@@ -149,41 +148,6 @@ func TestInOrderResultsBuffer(t *testing.T) {
 			b.releaseOne()
 		}
 	}
-}
-
-// TestRoundTripResult verifies that we can serialize and deserialize a Result
-// without any corruption. Note that fields that are kept in-memory
-// ('ScanResp.Complete', 'memoryTok', and 'position') aren't set on the test
-// Results.
-func TestRoundTripResult(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	rng, _ := randutil.NewTestRand()
-	scratchRow := make(rowenc.EncDatumRow, len(inOrderResultsBufferSpillTypeSchema))
-	var da tree.DatumAlloc
-
-	assertRoundTrips := func(original Result) {
-		var actual Result
-		require.NoError(t, original.serialize(scratchRow, &da))
-		require.NoError(t, deserialize(&actual, scratchRow, &da))
-		require.Equal(t, original, actual)
-	}
-
-	t.Run("get", func(t *testing.T) {
-		r := makeResultWithGetResp(rng, false /* empty */)
-		assertRoundTrips(r)
-	})
-
-	t.Run("empty get", func(t *testing.T) {
-		r := makeResultWithGetResp(rng, true /* empty */)
-		assertRoundTrips(r)
-	})
-
-	t.Run("scan", func(t *testing.T) {
-		r := makeResultWithScanResp(rng)
-		assertRoundTrips(r)
-	})
 }
 
 func fillEnqueueKeys(r *Result, rng *rand.Rand) {

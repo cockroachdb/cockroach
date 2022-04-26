@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -332,15 +331,9 @@ func NewStreamer(
 // maxKeysPerRow indicates the maximum number of KV pairs that comprise a single
 // SQL row (i.e. the number of column families in the index being scanned).
 //
-// In InOrder mode, engine and diskMonitor arguments must be non-nil and will be
-// used to instantiate a temporary disk-backed container for some of buffered
-// results.
+// In InOrder mode, diskBuffer argument must be non-nil.
 func (s *Streamer) Init(
-	mode OperationMode,
-	hints Hints,
-	maxKeysPerRow int,
-	engine diskmap.Factory,
-	diskMonitor *mon.BytesMonitor,
+	mode OperationMode, hints Hints, maxKeysPerRow int, diskBuffer ResultDiskBuffer,
 ) {
 	s.mode = mode
 	if mode == OutOfOrder {
@@ -348,7 +341,7 @@ func (s *Streamer) Init(
 		s.results = newOutOfOrderResultsBuffer(s.budget)
 	} else {
 		s.requestsToServe = newInOrderRequestsProvider()
-		s.results = newInOrderResultsBuffer(s.budget, engine, diskMonitor)
+		s.results = newInOrderResultsBuffer(s.budget, diskBuffer)
 	}
 	if !hints.UniqueRequests {
 		panic(errors.AssertionFailedf("only unique requests are currently supported"))

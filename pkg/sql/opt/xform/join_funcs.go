@@ -372,7 +372,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		// an equality with another column or a constant.
 		numIndexKeyCols := index.LaxKeyColumnCount()
 
-		var constFilters memo.FiltersExpr
+		var constraintFilters memo.FiltersExpr
 		allFilters := append(onFilters, optionalFilters...)
 
 		// Check if the first column in the index either:
@@ -459,7 +459,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 					c.e.f.ConstructConstVal(foundVals[0], idxColType),
 					constColID,
 				))
-				constFilters = append(constFilters, allFilters[allIdx])
+				constraintFilters = append(constraintFilters, allFilters[allIdx])
 				lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 				rightSideCols = append(rightSideCols, idxCol)
 				continue
@@ -508,10 +508,10 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 					leftCol, rightCol, inputProps.OutputCols, rightCols, on,
 				)
 			}
-			eqFilters, constFilters, rightSideCols = c.findFiltersForIndexLookup(
+			eqFilters, constraintFilters, rightSideCols = c.findFiltersForIndexLookup(
 				allFilters, scanPrivate.Table, index, leftEq, rightEq, extractEqualityFilter,
 			)
-			lookupJoin.LookupExpr = append(eqFilters, constFilters...)
+			lookupJoin.LookupExpr = append(eqFilters, constraintFilters...)
 
 			// Reset KeyCols since we're not using it anymore.
 			lookupJoin.KeyCols = opt.ColList{}
@@ -547,8 +547,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			lookupJoin.On = memo.ExtractRemainingJoinFilters(lookupJoin.On, lookupJoin.KeyCols, rightSideCols)
 		}
 		lookupJoin.On = lookupJoin.On.Difference(lookupJoin.LookupExpr)
-		lookupJoin.On = lookupJoin.On.Difference(constFilters)
-		lookupJoin.ConstFilters = constFilters
+		lookupJoin.On = lookupJoin.On.Difference(constraintFilters)
+		lookupJoin.ConstFilters = constraintFilters
 
 		// Add input columns and lookup expression columns, since these will be
 		// needed for all join types and cases.
@@ -745,15 +745,16 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	})
 }
 
-// findFiltersForIndexLookup finds the equality and constant filters in
-// filters that can be used to constrain the given index.
+// findFiltersForIndexLookup finds the equality and constraint filters in
+// filters that can be used to constrain the given index. Constraint filters
+// can be either constants or inequality conditions.
 func (c *CustomFuncs) findFiltersForIndexLookup(
 	filters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
 	leftEq, rightEq opt.ColList,
 	extractEqualityFilter func(opt.ColumnID, opt.ColumnID) memo.FiltersItem,
-) (eqFilters, constFilters memo.FiltersExpr, rightSideCols opt.ColList) {
+) (eqFilters, constraintFilters memo.FiltersExpr, rightSideCols opt.ColList) {
 	numIndexKeyCols := index.LaxKeyColumnCount()
 
 	eqFilters = make(memo.FiltersExpr, 0, len(filters))
@@ -774,8 +775,8 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 		// constant values. We cannot use a NULL value because the lookup
 		// join implements logic equivalent to simple equality between
 		// columns (where NULL never equals anything).
-		values, allIdx, ok := c.findJoinFilterConstants(filters, idxCol)
-		if !ok {
+		values, allIdx, foundConstFilter := c.findJoinFilterConstants(filters, idxCol)
+		if !foundConstFilter {
 			// If there's no const filters look for an inequality range.
 			allIdx, foundRange = c.findJoinFilterRange(filters, idxCol)
 			if !foundRange {
@@ -783,25 +784,25 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 			}
 		}
 
-		if constFilters == nil {
-			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
+		if constraintFilters == nil {
+			constraintFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
 		}
 
 		// Construct a constant filter as an equality, IN expression, or
 		// inequality. These are the only types of expressions currently
 		// supported by the lookupJoiner for building lookup spans.
-		constFilter := filters[allIdx]
-		if !c.isCanonicalLookupJoinFilter(constFilter) {
-			if len(values) > 0 {
+		if foundConstFilter {
+			constFilter := filters[allIdx]
+			if !c.isCanonicalLookupJoinFilter(constFilter) {
 				constFilter = c.makeConstFilter(idxCol, values)
-			} else if foundRange {
-				constFilter = c.makeRangeFilter(idxCol, constFilter)
 			}
+			constraintFilters = append(constraintFilters, constFilter)
 		}
-		constFilters = append(constFilters, constFilter)
-
-		// Generating additional columns after a range isn't helpful so stop here.
+		// Non-canonical range filters aren't supported and are already filtered
+		// out by findJoinFilterRange above.
 		if foundRange {
+			constraintFilters = append(constraintFilters, filters[allIdx])
+			// Generating additional columns after a range isn't helpful so stop here.
 			break
 		}
 	}
@@ -811,7 +812,7 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 		return nil, nil, nil
 	}
 
-	return eqFilters, constFilters, rightSideCols
+	return eqFilters, constraintFilters, rightSideCols
 }
 
 // isCanonicalLookupJoinFilter returns true for the limited set of expr's that are
@@ -870,59 +871,6 @@ func (c *CustomFuncs) makeConstFilter(col opt.ColumnID, values tree.Datums) memo
 		c.e.f.ConstructVariable(col),
 		c.e.f.ConstructTuple(elems, types.MakeTuple(elemTypes)),
 	))
-}
-
-// makeRangeFilter builds a filter from a constrained column, we assume the
-// column is constrained by at least 1 tight constraint. This code doesn't
-// handle descending columns.
-func (c *CustomFuncs) makeRangeFilter(col opt.ColumnID, filter memo.FiltersItem) memo.FiltersItem {
-	props := filter.ScalarProps()
-	if props.Constraints.Length() == 0 ||
-		props.Constraints.Constraint(0).Spans.Count() != 1 ||
-		props.Constraints.Constraint(0).Columns.Get(0).Descending() {
-		panic(errors.AssertionFailedf("makeRangeFilter needs at least one ascending constraint with one span"))
-	}
-	span := props.Constraints.Constraint(0).Spans.Get(0)
-	return c.makeRangeFilterFromSpan(col, span)
-}
-
-// makeRangeFilterFromSpan constructs a filter from a constraint.Span.
-func (c *CustomFuncs) makeRangeFilterFromSpan(
-	col opt.ColumnID, span *constraint.Span,
-) memo.FiltersItem {
-	variable := c.e.f.ConstructVariable(col)
-	var left, right opt.ScalarExpr
-
-	// Here and below we need to check for IsEmpty and IsNull because sometimes
-	// Null is used for unbounded spans.  Found empirically by forcing
-	// findFiltersForIndexLookup to always wrap the filters with makeRangeFilter.
-	if !span.StartKey().IsEmpty() && !span.StartKey().IsNull() {
-		val := span.StartKey().Value(0)
-		if span.StartBoundary() == constraint.IncludeBoundary {
-			left = c.e.f.ConstructGe(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
-		} else {
-			left = c.e.f.ConstructGt(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
-		}
-	}
-
-	if !span.EndKey().IsEmpty() && !span.EndKey().IsNull() {
-		val := span.EndKey().Value(0)
-		if span.EndBoundary() == constraint.IncludeBoundary {
-			right = c.e.f.ConstructLe(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
-		} else {
-			right = c.e.f.ConstructLt(variable, c.e.f.ConstructConstVal(val, val.ResolvedType()))
-		}
-	}
-
-	if left != nil && right != nil {
-		return c.e.f.ConstructFiltersItem(c.e.f.ConstructRange(c.e.f.ConstructAnd(right, left)))
-	} else if left != nil {
-		return c.e.f.ConstructFiltersItem(left)
-	} else if right != nil {
-		return c.e.f.ConstructFiltersItem(right)
-	}
-
-	panic(errors.AssertionFailedf("Constraint needs a valid start or end key"))
 }
 
 // constructContinuationColumnForPairedJoin constructs a continuation column
@@ -1367,9 +1315,13 @@ func (c *CustomFuncs) findJoinFilterRange(
 		if props.TightConstraints && props.Constraints.Length() > 0 {
 			constraintObj := props.Constraints.Constraint(0)
 			constraintCol := constraintObj.Columns.Get(0)
-			// See comment in findFiltersForIndexLookup for why we check filter here.
-			// We only support 1 span in the execution engine so check that.
-			if constraintCol.ID() != col || constraintObj.Spans.Count() != 1 {
+			// Non-canonical filters aren't yet supported for range spans like
+			// they are for const spans so filter those out here (const spans
+			// from non-canonical filters can be turned into a canonical filter,
+			// see makeConstFilter). We only support 1 span in the execution
+			// engine so check that.
+			if constraintCol.ID() != col || constraintObj.Spans.Count() != 1 ||
+				!c.isCanonicalLookupJoinFilter(filters[filterIdx]) {
 				continue
 			}
 			span := constraintObj.Spans.Get(0)
@@ -1400,7 +1352,7 @@ func (c *CustomFuncs) findJoinFilterRange(
 			return filterIdx, true
 		}
 	}
-	return 0, false
+	return -1, false
 }
 
 // constructJoinWithConstants constructs a cross join that joins every row in

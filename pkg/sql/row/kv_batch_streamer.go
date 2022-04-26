@@ -14,11 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -32,7 +32,7 @@ func CanUseStreamer(ctx context.Context, settings *cluster.Settings) bool {
 // useStreamerEnabled determines whether the Streamer API should be used.
 // TODO(yuzefovich): remove this in 22.2.
 var useStreamerEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.TenantReadOnly,
 	"sql.distsql.use_streamer.enabled",
 	"determines whether the usage of the Streamer API is allowed. "+
 		"Enabling this will increase the speed of lookup/index joins "+
