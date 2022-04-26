@@ -58,6 +58,8 @@ func registerKV(r registry.Registry) {
 		sequential               bool
 		admissionControlDisabled bool
 		concMultiplier           int
+		ssds                     int
+		raid0                    bool
 		duration                 time.Duration
 		tracing                  bool // `trace.debug.enable`
 		tags                     []string
@@ -81,6 +83,9 @@ func registerKV(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		startOpts := option.DefaultStartOpts()
+		if opts.ssds > 1 && !opts.raid0 {
+			startOpts.RoachprodOpts.StoreCount = opts.ssds
+		}
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
 		db := c.Conn(ctx, t.L(), 1)
@@ -199,6 +204,11 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 96, readPercent: 95},
 		{nodes: 4, cpus: 96, readPercent: 50, batchSize: 64},
 
+		// Configs for comparing single store and multi store clusters.
+		{nodes: 4, cpus: 8, readPercent: 95},
+		{nodes: 4, cpus: 8, readPercent: 95, ssds: 8},
+		{nodes: 4, cpus: 8, readPercent: 95, ssds: 8, raid0: true},
+
 		// Configs with encryption.
 		{nodes: 1, cpus: 8, readPercent: 0, encryption: true},
 		{nodes: 1, cpus: 8, readPercent: 95, encryption: true},
@@ -251,6 +261,12 @@ func registerKV(r registry.Registry) {
 		if opts.concMultiplier != 0 { // support legacy test name which didn't include this multiplier
 			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
 		}
+		if opts.ssds > 1 {
+			nameParts = append(nameParts, fmt.Sprintf("ssds=%d", opts.ssds))
+		}
+		if opts.raid0 {
+			nameParts = append(nameParts, "raid0")
+		}
 		if opts.disableLoadSplits {
 			nameParts = append(nameParts, "no-load-splitting")
 		}
@@ -268,7 +284,7 @@ func registerKV(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:    strings.Join(nameParts, "/"),
 			Owner:   owner,
-			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus)),
+			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds), spec.RAID0(opts.raid0)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
