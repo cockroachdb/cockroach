@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -173,6 +174,16 @@ func pkChangeMutationExists(desc catalog.TableDescriptor) bool {
 	for _, m := range desc.AllMutations() {
 		if m.Adding() && m.AsPrimaryKeySwap() != nil {
 			return true
+		}
+	}
+	// For declarative schema changer check if we are trying to add
+	// a primary index.
+	if desc.GetDeclarativeSchemaChangerState() != nil {
+		for idx, target := range desc.GetDeclarativeSchemaChangerState().Targets {
+			if target.PrimaryIndex != nil &&
+				desc.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] != scpb.Status_PUBLIC {
+				return true
+			}
 		}
 	}
 	return false
