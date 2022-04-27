@@ -213,7 +213,7 @@ func setCliContextDefaults() {
 	cliCtx.IsInteractive = false
 	cliCtx.EmbeddedMode = false
 	cliCtx.cmdTimeout = 0 // no timeout
-	cliCtx.clientOpts.ServerHost = ""
+	cliCtx.clientOpts.ServerHost = getDefaultHost()
 	cliCtx.clientOpts.ServerPort = base.DefaultPort
 	cliCtx.certPrincipalMap = nil
 	cliCtx.clientOpts.ExplicitURL = nil
