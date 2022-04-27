@@ -719,6 +719,13 @@ func NewReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) st
 	return makeSpanSetReadWriterAt(rw, spans, ts)
 }
 
+var _ storage.DisableReaderAssertionsI = (*ReadWriter)(nil)
+
+// DisableReaderAssertions implements storage.DisableReaderAssertionsI.
+func (r *ReadWriter) DisableReaderAssertions() (next storage.Reader) {
+	return r.r
+}
+
 type spanSetBatch struct {
 	ReadWriter
 	b     storage.Batch
@@ -729,25 +736,31 @@ type spanSetBatch struct {
 }
 
 var _ storage.Batch = spanSetBatch{}
+var _ storage.DisableReaderAssertionsI = (*spanSetBatch)(nil)
 
-func (s spanSetBatch) Commit(sync bool) error {
-	return s.b.Commit(sync)
+// DisableReaderAssertions implements storage.DisableReaderAssertionsI.
+func (b *spanSetBatch) DisableReaderAssertions() (next storage.Reader) {
+	return b.r
 }
 
-func (s spanSetBatch) Empty() bool {
-	return s.b.Empty()
+func (b spanSetBatch) Commit(sync bool) error {
+	return b.b.Commit(sync)
 }
 
-func (s spanSetBatch) Count() uint32 {
-	return s.b.Count()
+func (b spanSetBatch) Empty() bool {
+	return b.b.Empty()
 }
 
-func (s spanSetBatch) Len() int {
-	return s.b.Len()
+func (b spanSetBatch) Count() uint32 {
+	return b.b.Count()
 }
 
-func (s spanSetBatch) Repr() []byte {
-	return s.b.Repr()
+func (b spanSetBatch) Len() int {
+	return b.b.Len()
+}
+
+func (b spanSetBatch) Repr() []byte {
+	return b.b.Repr()
 }
 
 // NewBatch returns a storage.Batch that asserts access of the underlying
@@ -771,19 +784,6 @@ func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch
 		b:          b,
 		spans:      spans,
 		ts:         ts,
-	}
-}
-
-// DisableReaderAssertions unwraps any storage.Reader implementations that may
-// assert access against a given SpanSet.
-func DisableReaderAssertions(reader storage.Reader) storage.Reader {
-	switch v := reader.(type) {
-	case ReadWriter:
-		return DisableReaderAssertions(v.r)
-	case *spanSetBatch:
-		return DisableReaderAssertions(v.r)
-	default:
-		return reader
 	}
 }
 

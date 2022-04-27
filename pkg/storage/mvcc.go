@@ -3546,7 +3546,9 @@ func MVCCGarbageCollect(
 
 	// Bound the iterator appropriately for the set of keys we'll be garbage
 	// collecting.
-	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+	// Disable spanset assertions as we intentionally (but safely) call SeekLT(key)
+	// where we only own a point latch for `key`.
+	iter := DisableReaderAssertions(rw).NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: keys[0].Key,
 		UpperBound: keys[len(keys)-1].Key.Next(),
 	})
