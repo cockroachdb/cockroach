@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgconn"
 	"github.com/marusama/semaphore"
 	"github.com/spf13/cobra"
 )
@@ -354,12 +354,12 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {
 				return cErr
 			}
-			var pqErr *pq.Error
-			if !errors.As(sqlErr, &pqErr) {
+			var pgErr = (*pgconn.PgError)(nil)
+			if !errors.As(sqlErr, &pgErr) {
 				// Not a SQL error. Nothing to retry.
 				break
 			}
-			if pgcode.MakeCode(string(pqErr.Code)) != pgcode.SerializationFailure {
+			if pgcode.MakeCode(pgErr.Code) != pgcode.SerializationFailure {
 				// A non-retry error. We've printed the error, and
 				// there's nothing to retry. Stop here.
 				break

@@ -220,7 +220,7 @@ func setCliContextDefaults() {
 	cliCtx.IsInteractive = false
 	cliCtx.EmbeddedMode = false
 	cliCtx.cmdTimeout = 0 // no timeout
-	cliCtx.clientConnHost = ""
+	cliCtx.clientConnHost = "localhost"
 	cliCtx.clientConnPort = base.DefaultPort
 	cliCtx.certPrincipalMap = nil
 	cliCtx.sqlConnURL = nil

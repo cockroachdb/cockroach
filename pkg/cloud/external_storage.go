@@ -12,7 +12,6 @@ package cloud
 
 import (
 	"context"
-	"database/sql/driver"
 	"io"
 	"net/url"
 
@@ -105,13 +104,6 @@ type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStora
 // ExternalStorageFromURIFactory describes a factory function for ExternalStorage given a URI.
 type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
 	user username.SQLUsername, opts ...ExternalStorageOption) (ExternalStorage, error)
-
-// SQLConnI encapsulates the interfaces which will be implemented by the network
-// backed SQLConn which is used to interact with the userfile tables.
-type SQLConnI interface {
-	driver.QueryerContext
-	driver.ExecerContext
-}
 
 // ErrFileDoesNotExist is a sentinel error for indicating that a specified
 // bucket/object/key/file (depending on storage terminology) does not exist.

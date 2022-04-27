@@ -15,6 +15,8 @@ import (
 	"database/sql/driver"
 	"reflect"
 	"time"
+
+	"github.com/jackc/pgx/v4"
 )
 
 // Conn represents a connection to a SQL server.
@@ -24,7 +26,7 @@ type Conn interface {
 	Close() error
 
 	// EnsureConn (re-)establishes the connection to the server.
-	EnsureConn() error
+	EnsureConn(ctx context.Context) error
 
 	// Exec executes a statement.
 	Exec(ctx context.Context, query string, args ...interface{}) error
@@ -85,9 +87,9 @@ type Conn interface {
 	// The sql argument is the SQL query to use to retrieve the value.
 	GetServerValue(ctx context.Context, what, sql string) (driver.Value, string, bool)
 
-	// GetDriverConn exposes the underlying SQL driver connection object
+	// GetPGXConn exposes the underlying PGX driver connection object
 	// for use by the cli package.
-	GetDriverConn() DriverConn
+	GetPGXConn() *pgx.Conn
 }
 
 // Rows describes a result set.
@@ -97,6 +99,8 @@ type Rows interface {
 	Close() error
 
 	// Columns returns the column labels of the current result set.
+	// The implementation of this method should cache the result so that the
+	// result does not need to be constructed on each invocation.
 	Columns() []string
 
 	// ColumnTypeScanType returns the natural Go type of values at the
@@ -111,11 +115,8 @@ type Rows interface {
 	// columns.
 	ColumnTypeNames() []string
 
-	// Result retrieves the underlying driver result object.
-	Result() driver.Result
-
 	// Tag retrieves the statement tag for the current result set.
-	Tag() string
+	Tag() (CommandTag, error)
 
 	// Next populates values with the next row of results. []byte values are copied
 	// so that subsequent calls to Next and Close do not mutate values. This
@@ -128,6 +129,12 @@ type Rows interface {
 	//
 	// TODO(mjibson): clean this up after 1.8 is released.
 	NextResultSet() (bool, error)
+}
+
+// CommandTag represents the result of a SQL command.
+type CommandTag interface {
+	RowsAffected() int64
+	String() string
 }
 
 // QueryStatsDuration represents a duration value retrieved by
