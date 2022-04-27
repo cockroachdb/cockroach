@@ -162,6 +162,7 @@ func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteClose
 		path.Join(g.prefix, basename))})
 
 	w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
+	w.ChunkSize = int(cloud.WriteChunkSize.Get(&g.settings.SV))
 	if !gcsChunkingEnabled.Get(&g.settings.SV) {
 		w.ChunkSize = 0
 	}
