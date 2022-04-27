@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -31,14 +32,17 @@ import (
 
 type raftRequestInfo struct {
 	req        *kvserverpb.RaftMessageRequest
+	size       int64 // size of req in bytes
 	respStream RaftMessageResponseStream
 }
 
 type raftReceiveQueue struct {
 	mu struct { // not to be locked directly
+		destroyed bool
 		syncutil.Mutex
 		infos []raftRequestInfo
 	}
+	acc mon.BoundAccount
 }
 
 // Len returns the number of requests in the queue.
@@ -62,7 +66,18 @@ func (q *raftReceiveQueue) drainLocked() ([]raftRequestInfo, bool) {
 	}
 	infos := q.mu.infos
 	q.mu.infos = nil
+	q.acc.Clear(context.Background())
 	return infos, true
+}
+
+func (q *raftReceiveQueue) Delete() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.drainLocked()
+	if err := q.acc.ResizeTo(context.Background(), 0); err != nil {
+		panic(err) // TODO(tbg)
+	}
+	q.mu.destroyed = true
 }
 
 // Recycle makes a slice that the caller knows will no longer be accessed
@@ -83,28 +98,29 @@ func (q *raftReceiveQueue) Recycle(processed []raftRequestInfo) {
 
 func (q *raftReceiveQueue) Append(
 	req *kvserverpb.RaftMessageRequest, s RaftMessageResponseStream,
-) (shouldQueue, appended bool) {
+) (shouldQueue bool, size int64, appended bool) {
+	size = int64(req.Size())
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if len(q.mu.infos) >= replicaRequestQueueSize {
-		return false, false
+	if q.mu.destroyed || len(q.mu.infos) >= replicaRequestQueueSize {
+		return false, size, false
+	}
+	if q.acc.Grow(context.Background(), size) != nil {
+		return false, size, false
 	}
 	q.mu.infos = append(q.mu.infos, raftRequestInfo{
 		req:        req,
 		respStream: s,
+		size:       size,
 	})
 	// The operation that enqueues the first message will
 	// be put in charge of triggering a drain of the queue.
-	return len(q.mu.infos) == 1, true
+	return len(q.mu.infos) == 1, size, true
 }
 
 type raftReceiveQueues struct {
-	m syncutil.IntMap // RangeID -> *raftReceiveQueue
-	// delMu is held while deleting an entry from `m`. This
-	// is necessary since `IntMap` does not return the element
-	// being removed (if any) and we want stronger synchronization
-	// to prevent memory accounting leaks.
-	delMu syncutil.Mutex
+	mon *mon.BytesMonitor
+	m   syncutil.IntMap // RangeID -> *raftReceiveQueue
 }
 
 func (qs *raftReceiveQueues) Load(rangeID roachpb.RangeID) (*raftReceiveQueue, bool) {
@@ -115,28 +131,22 @@ func (qs *raftReceiveQueues) Load(rangeID roachpb.RangeID) (*raftReceiveQueue, b
 func (qs *raftReceiveQueues) LoadOrCreate(
 	rangeID roachpb.RangeID,
 ) (_ *raftReceiveQueue, loaded bool) {
+
 	if q, ok := qs.Load(rangeID); ok {
 		return q, ok // fast path
 	}
 	q := &raftReceiveQueue{}
+	q.acc.Init(context.Background(), qs.mon)
 	value, loaded := qs.m.LoadOrStore(int64(rangeID), unsafe.Pointer(q))
 	return (*raftReceiveQueue)(value), loaded
 }
 
+// Delete drains the queue and marks it as deleted. Future Appends
+// will result in appended=false.
 func (qs *raftReceiveQueues) Delete(rangeID roachpb.RangeID) {
-	qs.delMu.Lock()
-	defer qs.delMu.Unlock()
 	if q, ok := qs.Load(rangeID); ok {
+		q.Delete()
 		qs.m.Delete(int64(rangeID))
-		// NB: this is inconsequential today but in the future will
-		// allow for sane memory accounting.
-		// Also, we want to make `q` refuse further additions, since
-		// `Delete` is called from the replica removal path which is
-		// not under the raft scheduler. So we may delete this queue
-		// but the scheduler may be adding a request to it after due
-		// to loose synchronization. This would similarly upset mem
-		// accounting (and also today it leaks memory when it happens).
-		q.Drain()
 	}
 }
 
@@ -292,11 +302,12 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	s.metrics.RaftRcvdMessages[req.Message.Type].Inc(1)
 
 	q, _ := s.raftRecvQueues.LoadOrCreate(req.RangeID)
-	enqueue, appended := q.Append(req, respStream)
+	enqueue, size, appended := q.Append(req, respStream)
 	if !appended {
 		// TODO(peter): Return an error indicating the request was dropped. Note
 		// that dropping the request is safe. Raft will retry.
-		s.metrics.RaftRcvdMsgDropped.Inc(1)
+		s.metrics.RaftRcvdDropped.Inc(1)
+		s.metrics.RaftRcvdDroppedBytes.Inc(size)
 		return false
 	}
 	return enqueue
@@ -551,6 +562,7 @@ func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.scheduler.EnqueueRaftReady(rangeID)
 }
 
+// TODO(tbg): rename this to processRecvQueue.
 func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID) bool {
 	q, ok := s.raftRecvQueues.Load(rangeID)
 	if !ok {
@@ -577,6 +589,8 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 				log.VEventf(ctx, 1, "error sending error: %s", err)
 			}
 		}
+		s.metrics.RaftRcvdSteppedBytes.Inc(info.size)
+		infos[i] = raftRequestInfo{}
 	}
 
 	if hadError {
@@ -590,6 +604,14 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		// forgiving.
 		//
 		// See https://github.com/cockroachdb/cockroach/issues/30951#issuecomment-428010411.
+		//
+		// TODO(tbg): for adding actual memory accounting, we need more clarity about
+		// the contract. For example, it would be a problem if the queue got deleted
+		// (as a result of the replica getting deleted) but then getting recreated errantly.
+		// In that case, we would "permanently" leak an allocation, which over time could
+		// eat up the budget. We must ensure, essentially, that we create a queue only
+		// when the replica is alive (according to its destroyStatus) and ensure it is
+		// destroyed once that changes.
 		if _, exists := s.mu.replicasByRangeID.Load(rangeID); !exists && q.Len() == 0 {
 			s.raftRecvQueues.Delete(rangeID)
 		}
