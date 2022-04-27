@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -27,6 +28,8 @@ func TestChangefeedNemeses(t *testing.T) {
 	skip.UnderRace(t, "takes >1 min under race")
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		disableDeclarativeSchemaChangesForTest(t, sqlDB)
 		// TODO(dan): Ugly hack to disable `eventPause` in sinkless feeds. See comment in
 		// `RunNemesis` for details.
 		isSinkless := strings.Contains(t.Name(), "sinkless")
