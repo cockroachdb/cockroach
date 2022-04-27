@@ -957,6 +957,7 @@ INSERT INTO t VALUES (NULL)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
+t  t_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
 
 statement ok
 ALTER TABLE t ALTER COLUMN a DROP NOT NULL
@@ -987,8 +988,9 @@ INSERT INTO t VALUES (NULL)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  a_auto_not_null   CHECK  CHECK ((a IS NOT NULL))  true
-t  a_auto_not_null1  CHECK  CHECK ((a IS NOT NULL))  true
+t  a_auto_not_null   CHECK        CHECK ((a IS NOT NULL))  true
+t  a_auto_not_null1  CHECK        CHECK ((a IS NOT NULL))  true
+t  t_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
 
 statement ok
 DROP TABLE t
@@ -1012,8 +1014,9 @@ ALTER TABLE t ADD CHECK (a < 16) NOT VALID
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK  CHECK ((a < 100))           true
-t  check_a1  CHECK  CHECK ((a < 16)) NOT VALID  false
+t  check_a   CHECK        CHECK ((a < 100))           true
+t  check_a1  CHECK        CHECK ((a < 16)) NOT VALID  false
+t  t_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)     true
 
 query error pq: failed to satisfy CHECK constraint \(a < 16:::INT8\)
 INSERT INTO t VALUES (20)
@@ -1030,8 +1033,9 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a1
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK  CHECK ((a < 100))  true
-t  check_a1  CHECK  CHECK ((a < 16))   true
+t  check_a   CHECK        CHECK ((a < 100))        true
+t  check_a1  CHECK        CHECK ((a < 16))         true
+t  t_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
 
 subtest regression_42858
 
@@ -1597,6 +1601,7 @@ unique_without_index  unique_c                    UNIQUE           UNIQUE WITHOU
 unique_without_index  unique_d                    UNIQUE           UNIQUE WITHOUT INDEX (d)                true
 unique_without_index  unique_d_e                  UNIQUE           UNIQUE WITHOUT INDEX (d, e)             true
 unique_without_index  unique_without_index_c_key  UNIQUE           UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey   PRIMARY KEY      PRIMARY KEY (rowid ASC)                 true
 
 statement ok
 ALTER TABLE unique_without_index RENAME COLUMN a TO aa
@@ -1613,17 +1618,18 @@ ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_2
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_e2                UNIQUE  UNIQUE WITHOUT INDEX (e) NOT VALID      false
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)            true
-unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_b_2                  UNIQUE  UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
+unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_e2                UNIQUE       UNIQUE WITHOUT INDEX (e) NOT VALID      false
+unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_a_b                  UNIQUE       UNIQUE WITHOUT INDEX (aa, b)            true
+unique_without_index  unique_b_1                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_b_2                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
@@ -1642,15 +1648,16 @@ ALTER TABLE unique_without_index DROP CONSTRAINT my_unique_e2
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)            true
-unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
+unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_a_b                  UNIQUE       UNIQUE WITHOUT INDEX (aa, b)            true
+unique_without_index  unique_b_1                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
+unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 # Dropping a column in a unique constraint drops the constraint.
 statement ok
@@ -1659,13 +1666,14 @@ ALTER TABLE unique_without_index DROP COLUMN b
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
+unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
+unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
+unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 query TTTTB
 SHOW CONSTRAINTS FROM uwi_child
@@ -1673,6 +1681,7 @@ SHOW CONSTRAINTS FROM uwi_child
 uwi_child  fk_d_e            FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
 uwi_child  fk_e_d            FOREIGN KEY  FOREIGN KEY (e, d) REFERENCES unique_without_index(e, d)  true
 uwi_child  uwi_child_d_fkey  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
+uwi_child  uwi_child_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)                                   true
 
 # Attempting to drop a column with a foreign key reference fails.
 statement error pq: "unique_d" is referenced by foreign key from table "uwi_child"
@@ -1685,15 +1694,17 @@ ALTER TABLE unique_without_index DROP COLUMN d CASCADE
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE  UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                          true
+unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
+unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
+unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
+unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
+unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
+unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 query TTTTB
 SHOW CONSTRAINTS FROM uwi_child
 ----
+uwi_child  uwi_child_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
 
 # Regression for #54629.
 statement ok

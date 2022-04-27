@@ -255,11 +255,12 @@ CREATE TABLE test.dupe_generated (
 query TTTTB colnames
 SHOW CONSTRAINTS FROM test.dupe_generated
 ----
-table_name      constraint_name  constraint_type  details             validated
-dupe_generated  check_bar        CHECK            CHECK ((bar > 2))   true
-dupe_generated  check_foo        CHECK            CHECK ((foo > 2))   true
-dupe_generated  check_foo1       CHECK            CHECK ((foo < 10))  true
-dupe_generated  check_foo2       CHECK            CHECK ((foo > 1))   true
+table_name      constraint_name      constraint_type  details                  validated
+dupe_generated  check_bar            CHECK            CHECK ((bar > 2))        true
+dupe_generated  check_foo            CHECK            CHECK ((foo > 2))        true
+dupe_generated  check_foo1           CHECK            CHECK ((foo < 10))       true
+dupe_generated  check_foo2           CHECK            CHECK ((foo > 1))        true
+dupe_generated  dupe_generated_pkey  PRIMARY KEY      PRIMARY KEY (rowid ASC)  true
 
 statement ok
 CREATE TABLE test.named_constraints (

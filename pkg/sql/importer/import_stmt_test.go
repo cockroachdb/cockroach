@@ -841,7 +841,10 @@ END;
 
 				// Verify the constraint is unvalidated.
 				`SHOW CONSTRAINTS FROM weather
-				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities(city) NOT VALID", "false"}},
+				`: {
+					{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities(city) NOT VALID", "false"},
+					{"weather", "weather_pkey", "PRIMARY KEY", "PRIMARY KEY (rowid ASC)", "true"},
+				},
 			},
 		},
 		{
@@ -906,7 +909,9 @@ END;
 				},
 				// Verify the constraint is skipped.
 				`SELECT dependson_name FROM crdb_internal.backward_dependencies`: {},
-				`SHOW CONSTRAINTS FROM weather`:                                  {},
+				`SHOW CONSTRAINTS FROM weather`: {
+					{"weather", "weather_pkey", "PRIMARY KEY", "PRIMARY KEY (rowid ASC)", "true"},
+				},
 			},
 		},
 		{

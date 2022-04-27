@@ -855,6 +855,23 @@ func populateTableConstraints(
 		var err error
 		switch con.Kind {
 		case descpb.ConstraintTypePK:
+			if !p.SessionData().ShowPrimaryKeyConstraintOnNotVisibleColumns {
+				colHiddenMap := make(map[descpb.ColumnID]bool, len(table.AllColumns()))
+				for i := range table.AllColumns() {
+					col := table.AllColumns()[i]
+					colHiddenMap[col.GetID()] = col.IsHidden()
+				}
+				allHidden := true
+				for _, colIdx := range con.Index.KeyColumnIDs {
+					if !colHiddenMap[colIdx] {
+						allHidden = false
+						break
+					}
+				}
+				if allHidden {
+					continue
+				}
+			}
 			oid = h.PrimaryKeyConstraintOid(db.GetID(), scName, table.GetID(), con.Index)
 			contype = conTypePKey
 			conindid = h.IndexOid(table.GetID(), con.Index.ID)

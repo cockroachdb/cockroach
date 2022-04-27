@@ -1175,6 +1175,9 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 				NextFamilyID: 1,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, ConstraintID: 1, Name: "primary", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}},
 				UniqueWithoutIndexConstraints: []descpb.UniqueWithoutIndexConstraint{
 					{
 						TableID:   2,
@@ -2675,9 +2678,12 @@ func TestValidateConstraintID(t *testing.T) {
 				Families: []descpb.ColumnFamilyDescriptor{
 					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
 				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, ConstraintID: 1, Name: "primary", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}},
 				Indexes: []descpb.IndexDescriptor{
 					{
-						ID: 1, Name: "secondary", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
+						ID: 2, Name: "secondary", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
 						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 						Unique:              true,
 					},
@@ -2702,6 +2708,9 @@ func TestValidateConstraintID(t *testing.T) {
 				Families: []descpb.ColumnFamilyDescriptor{
 					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
 				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, ConstraintID: 1, Name: "primary", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}},
 				UniqueWithoutIndexConstraints: []descpb.UniqueWithoutIndexConstraint{
 					{Name: "bad"},
 				},
@@ -2725,6 +2734,9 @@ func TestValidateConstraintID(t *testing.T) {
 				Families: []descpb.ColumnFamilyDescriptor{
 					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
 				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, ConstraintID: 1, Name: "primary", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}},
 				Checks: []*descpb.TableDescriptor_CheckConstraint{
 					{Name: "bad"},
 				},
