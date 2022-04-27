@@ -71,7 +71,7 @@ func RecomputeStats(
 
 	// Disable the assertions which check that all reads were previously declared.
 	// See the comment in `declareKeysRecomputeStats` for details on this.
-	reader = spanset.DisableReaderAssertions(reader)
+	reader = storage.DisableReaderAssertions(reader)
 
 	actualMS, err := rditer.ComputeStatsForRange(desc, reader, cArgs.Header.Timestamp.WallTime)
 	if err != nil {

@@ -686,6 +686,11 @@ func NewReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) st
 	return makeSpanSetReadWriterAt(rw, spans, ts)
 }
 
+// DisableReaderAssertions implements storage.DisableReaderAssertionsI.
+func (r *ReadWriter) DisableReaderAssertions() (next storage.Reader) {
+	return r.r
+}
+
 type spanSetBatch struct {
 	ReadWriter
 	b     storage.Batch
@@ -696,6 +701,11 @@ type spanSetBatch struct {
 }
 
 var _ storage.Batch = spanSetBatch{}
+
+// DisableReaderAssertions implements storage.DisableReaderAssertionsI.
+func (b *spanSetBatch) DisableReaderAssertions() (next storage.Reader) {
+	return b.r
+}
 
 func (s spanSetBatch) Commit(sync bool) error {
 	return s.b.Commit(sync)
@@ -738,19 +748,6 @@ func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch
 		b:          b,
 		spans:      spans,
 		ts:         ts,
-	}
-}
-
-// DisableReaderAssertions unwraps any storage.Reader implementations that may
-// assert access against a given SpanSet.
-func DisableReaderAssertions(reader storage.Reader) storage.Reader {
-	switch v := reader.(type) {
-	case ReadWriter:
-		return DisableReaderAssertions(v.r)
-	case *spanSetBatch:
-		return DisableReaderAssertions(v.r)
-	default:
-		return reader
 	}
 }
 
