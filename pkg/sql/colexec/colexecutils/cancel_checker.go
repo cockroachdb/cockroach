@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -35,6 +36,8 @@ type CancelChecker struct {
 }
 
 var _ colexecop.Operator = &CancelChecker{}
+
+var _ colexeccmp.LikeOpType
 
 // NewCancelChecker creates a new CancelChecker.
 func NewCancelChecker(op colexecop.Operator) *CancelChecker {

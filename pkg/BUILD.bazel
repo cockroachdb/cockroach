@@ -265,6 +265,7 @@ ALL_TESTS = [
     "//pkg/sql/colexec/colexecspan:colexecspan_disallowed_imports_test",
     "//pkg/sql/colexec/colexecspan:colexecspan_test",
     "//pkg/sql/colexec/colexectestutils:colexectestutils_test",
+    "//pkg/sql/colexec/colexecutils:colexecutils_disallowed_imports_test",
     "//pkg/sql/colexec/colexecutils:colexecutils_test",
     "//pkg/sql/colexec/colexecwindow:colexecwindow_disallowed_imports_test",
     "//pkg/sql/colexec/colexecwindow:colexecwindow_test",
