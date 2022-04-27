@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -188,7 +189,7 @@ func TestPostProcess(t *testing.T) {
 
 			var out execinfra.ProcOutputHelper
 			semaCtx := tree.MakeSemaContext()
-			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			if err := out.Init(&tc.post, inBuf.OutputTypes(), &semaCtx, evalCtx); err != nil {
 				t.Fatal(err)
@@ -318,7 +319,7 @@ func TestProcessorBaseContext(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	runTest := func(t *testing.T, f func(noop *noopProcessor)) {
-		evalCtx := tree.MakeTestingEvalContext(st)
+		evalCtx := eval.MakeTestingEvalContext(st)
 		flowCtx := &execinfra.FlowCtx{
 			Cfg:     &execinfra.ServerConfig{Settings: st},
 			EvalCtx: &evalCtx,

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
@@ -593,7 +594,7 @@ func (s *scope) setTableAlias(alias tree.Name) {
 
 // See (*scope).findExistingCol.
 func findExistingColInList(
-	expr tree.TypedExpr, cols []scopeColumn, allowSideEffects bool, evalCtx *tree.EvalContext,
+	expr tree.TypedExpr, cols []scopeColumn, allowSideEffects bool, evalCtx *eval.Context,
 ) *scopeColumn {
 	exprStr := symbolicExprStr(expr)
 	for i := range cols {
@@ -1576,7 +1577,7 @@ func (*scope) VisitPost(expr tree.Expr) tree.Expr {
 var _ tree.IndexedVarContainer = &scope{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
-func (s *scope) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+func (s *scope) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarEval"))
 }
 

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -361,7 +362,7 @@ func TestMysqlValueToDatum(t *testing.T) {
 		{raw: mysql.NewStrLiteral([]byte("2010-01-01 00:00:00")), typ: types.Timestamp, want: ts("2010-01-01 00:00:00")},
 	}
 	st := cluster.MakeTestingClusterSettings()
-	evalContext := tree.NewTestingEvalContext(st)
+	evalContext := eval.NewTestingEvalContext(st)
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%v", tc.raw), func(t *testing.T) {
 			got, err := mysqlValueToDatum(tc.raw, tc.typ, evalContext)

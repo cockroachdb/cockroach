@@ -15,7 +15,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -125,18 +124,22 @@ lo}`, types.String, Datums{NewDString(`hel`), NewDString(`lo`)}},
 					t.Fatal(err)
 				}
 			}
-			evalContext := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			// TODO(radu): check the dependsOnContext result.
-			actual, _, err := ParseDArrayFromString(evalContext, td.str, td.typ)
+			actual, _, err := ParseDArrayFromString(nil /* ParseTimeContext */, td.str, td.typ)
 			if err != nil {
 				t.Fatalf("ARRAY %s: got error %s, expected %s", td.str, err.Error(), expected)
 			}
-			if actual.Compare(evalContext, expected) != 0 {
+			if actual.Compare(noopUnwrapCompareContext{}, expected) != 0 {
 				t.Fatalf("ARRAY %s: got %s, expected %s", td.str, actual, expected)
 			}
 		})
 	}
 }
+
+type noopUnwrapCompareContext struct {
+	CompareContext
+}
+
+func (noopUnwrapCompareContext) UnwrapDatum(d Datum) Datum { return d }
 
 const randomArrayIterations = 1000
 const randomArrayMaxLength = 10
@@ -179,7 +182,8 @@ func TestParseArrayRandomParseArray(t *testing.T) {
 		buf.WriteByte('}')
 
 		parsed, _, err := ParseDArrayFromString(
-			NewTestingEvalContext(cluster.MakeTestingClusterSettings()), buf.String(), types.String)
+			nil /* ParseTimeContext */, buf.String(), types.String,
+		)
 		if err != nil {
 			t.Fatalf(`got error: "%s" for elem "%s"`, err, buf.String())
 		}
@@ -227,8 +231,7 @@ func TestParseArrayError(t *testing.T) {
 	}
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {
-			_, _, err := ParseDArrayFromString(
-				NewTestingEvalContext(cluster.MakeTestingClusterSettings()), td.str, td.typ)
+			_, _, err := ParseDArrayFromString(nil /* ParseTimeContext */, td.str, td.typ)
 			if err == nil {
 				t.Fatalf("expected %#v to error with message %#v", td.str, td.expectedError)
 			}

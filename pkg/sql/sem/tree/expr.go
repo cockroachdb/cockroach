@@ -51,6 +51,11 @@ type Expr interface {
 // TypedExpr represents a well-typed expression.
 type TypedExpr interface {
 	Expr
+
+	// ResolvedType provides the type of the TypedExpr, which is the type of Datum
+	// that the TypedExpr will return when evaluated.
+	ResolvedType() *types.T
+
 	// Eval evaluates an SQL expression. Expression evaluation is a
 	// mostly straightforward walk over the parse tree. The only
 	// significant complexity is the handling of types and implicit
@@ -61,10 +66,7 @@ type TypedExpr interface {
 	// should be replaced prior to expression evaluation by an
 	// appropriate WalkExpr. For example, Placeholder should be replaced
 	// by the argument passed from the client.
-	Eval(*EvalContext) (Datum, error)
-	// ResolvedType provides the type of the TypedExpr, which is the type of Datum
-	// that the TypedExpr will return when evaluated.
-	ResolvedType() *types.T
+	Eval(ExprEvaluator) (Datum, error)
 }
 
 // VariableExpr is an Expr that may change per row. It is used to
@@ -361,7 +363,7 @@ type ComparisonExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
-	Fn *CmpOp
+	Op *CmpOp
 }
 
 func (*ComparisonExpr) operatorExpr() {}
@@ -392,7 +394,7 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 func NewTypedComparisonExpr(op treecmp.ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, Left: left, Right: right}
 	node.typ = types.Bool
-	node.memoizeFn()
+	MemoizeComparisonExprOp(node)
 	return node
 }
 
@@ -402,7 +404,7 @@ func NewTypedComparisonExprWithSubOp(
 ) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, SubOperator: subOp, Left: left, Right: right}
 	node.typ = types.Bool
-	node.memoizeFn()
+	MemoizeComparisonExprOp(node)
 	return node
 }
 
@@ -451,7 +453,12 @@ func NewTypedIfErrExpr(cond, orElse, errCode TypedExpr) *IfErrExpr {
 	return node
 }
 
-func (node *ComparisonExpr) memoizeFn() {
+// MemoizeComparisonExprOp populates the Op field of the ComparisonExpr.
+//
+// TODO(ajwerner): It feels dangerous to leave this to the caller to set.
+// Should we rework the construction and access to the underlying Op to
+// enforce safety?
+func MemoizeComparisonExprOp(node *ComparisonExpr) {
 	fOp, fLeft, fRight, _, _ := FoldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
 	switch node.Operator.Symbol {
@@ -481,7 +488,7 @@ func (node *ComparisonExpr) memoizeFn() {
 		panic(errors.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
 	}
-	node.Fn = fn
+	node.Op = fn
 }
 
 // TypedLeft returns the ComparisonExpr's left expression as a TypedExpr.
@@ -985,11 +992,6 @@ func (node *TypedDummy) TypeCheck(context.Context, *SemaContext, *types.T) (Type
 // Walk implements the Expr interface.
 func (node *TypedDummy) Walk(Visitor) Expr { return node }
 
-// Eval implements the TypedExpr interface.
-func (node *TypedDummy) Eval(*EvalContext) (Datum, error) {
-	return nil, errors.AssertionFailedf("should not eval typed dummy")
-}
-
 // binaryOpPrio follows the precedence order in the grammar. Used for pretty-printing.
 var binaryOpPrio = [...]int{
 	treebin.Pow:  1,
@@ -1021,7 +1023,7 @@ type BinaryExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
-	Fn *BinOp
+	Op *BinOp
 }
 
 // TypedLeft returns the BinaryExpr's left expression as a TypedExpr.
@@ -1037,7 +1039,7 @@ func (node *BinaryExpr) TypedRight() TypedExpr {
 // ResolvedBinOp returns the resolved binary op overload; can only be called
 // after Resolve (which happens during TypeCheck).
 func (node *BinaryExpr) ResolvedBinOp() *BinOp {
-	return node.Fn
+	return node.Op
 }
 
 // NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
@@ -1046,38 +1048,39 @@ func NewTypedBinaryExpr(
 ) *BinaryExpr {
 	node := &BinaryExpr{Operator: op, Left: left, Right: right}
 	node.typ = typ
-	node.memoizeFn()
+	node.memoizeOp()
 	return node
 }
 
 func (*BinaryExpr) operatorExpr() {}
 
-func (node *BinaryExpr) memoizeFn() {
+func (node *BinaryExpr) memoizeOp() {
 	leftRet, rightRet := node.Left.(TypedExpr).ResolvedType(), node.Right.(TypedExpr).ResolvedType()
-	fn, ok := BinOps[node.Operator.Symbol].lookupImpl(leftRet, rightRet)
+	fn, ok := BinOps[node.Operator.Symbol].LookupImpl(leftRet, rightRet)
 	if !ok {
 		panic(errors.AssertionFailedf("lookup for BinaryExpr %s's BinOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
 	}
-	node.Fn = fn
+	node.Op = fn
 }
 
-// newBinExprIfValidOverload constructs a new BinaryExpr if and only
+// NewBinExprIfValidOverload constructs a new BinaryExpr if and only
 // if the pair of arguments have a valid implementation for the given
 // BinaryOperator.
-func newBinExprIfValidOverload(
+func NewBinExprIfValidOverload(
 	op treebin.BinaryOperator, left TypedExpr, right TypedExpr,
 ) *BinaryExpr {
 	leftRet, rightRet := left.ResolvedType(), right.ResolvedType()
-	fn, ok := BinOps[op.Symbol].lookupImpl(leftRet, rightRet)
+	fn, ok := BinOps[op.Symbol].LookupImpl(leftRet, rightRet)
 	if ok {
 		expr := &BinaryExpr{
 			Operator: op,
 			Left:     left,
 			Right:    right,
-			Fn:       fn,
+			Op:       fn,
 		}
 		expr.typ = returnTypeToFixedType(fn.returnType(), []TypedExpr{left, right})
+		expr.memoizeOp()
 		return expr
 	}
 	return nil
@@ -1147,10 +1150,15 @@ type UnaryExpr struct {
 	Expr     Expr
 
 	typeAnnotation
-	fn *UnaryOp
+	op *UnaryOp
 }
 
 func (*UnaryExpr) operatorExpr() {}
+
+// GetOp exposes the underlying UnaryOp.
+func (node *UnaryExpr) GetOp() *UnaryOp {
+	return node.op
+}
 
 // Format implements the NodeFormatter interface.
 func (node *UnaryExpr) Format(ctx *FmtCtx) {
@@ -1181,7 +1189,7 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ *types.T) *UnaryExp
 	for _, o := range UnaryOps[op.Symbol] {
 		o := o.(*UnaryOp)
 		if innerType.Equivalent(o.Typ) && node.typ.Equivalent(o.ReturnType) {
-			node.fn = o
+			node.op = o
 			return node
 		}
 	}
@@ -1239,6 +1247,14 @@ func NewTypedFuncExpr(
 // Resolve (which happens during TypeCheck).
 func (node *FuncExpr) ResolvedOverload() *Overload {
 	return node.fn
+}
+
+// IsGeneratorClass returns true if the resolved overload metadata is of
+// the GeneratorClass.
+//
+// TODO(ajwerner): Figure out how this differs from IsGeneratorApplication.
+func (node *FuncExpr) IsGeneratorClass() bool {
+	return node.fnProps != nil && node.fnProps.Class == GeneratorClass
 }
 
 // IsGeneratorApplication returns true iff the function applied is a generator (SRF).

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	. "github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -170,7 +171,7 @@ func TestIndexKey(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		tableDesc, colMap := makeTableDescForTest(test)
 		// Add the default family to each test, since secondary indexes support column families.
@@ -406,7 +407,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		{`{2, NULL}`, `{NULL}`, false, true},
 	}
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parseArray := func(s string) tree.Datum {
 		arr, _, err := tree.ParseDArrayFromString(&evalCtx, s, types.Int)
 		if err != nil {
@@ -541,7 +542,7 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 		{`{2, NULL}`, `{1, NULL}`, false, false, false},
 	}
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parseArray := func(s string) tree.Datum {
 		arr, _, err := tree.ParseDArrayFromString(&evalCtx, s, types.Int)
 		if err != nil {
@@ -788,7 +789,7 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 		{`{2, NULL}`, `{1, NULL}`, true, false, true},
 	}
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parseArray := func(s string) tree.Datum {
 		if s == "NULL" {
 			return tree.DNull
@@ -878,7 +879,7 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 
 // Determines if the input array contains only one or more entries of the
 // same non-null element. NULL entries are not considered.
-func containsNonNullUniqueElement(ctx *tree.EvalContext, valArr *tree.DArray) bool {
+func containsNonNullUniqueElement(ctx *eval.Context, valArr *tree.DArray) bool {
 	var lastVal tree.Datum = tree.DNull
 	for _, val := range valArr.Array {
 		if val != tree.DNull {

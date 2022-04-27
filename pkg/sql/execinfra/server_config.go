@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -166,11 +166,11 @@ type ServerConfig struct {
 
 	// SQLStatsController is an interface used to reset SQL stats without the need to
 	// introduce dependency on the sql package.
-	SQLStatsController tree.SQLStatsController
+	SQLStatsController eval.SQLStatsController
 
 	// IndexUsageStatsController is an interface used to reset index usage stats without
 	// the need to introduce dependency on the sql package.
-	IndexUsageStatsController tree.IndexUsageStatsController
+	IndexUsageStatsController eval.IndexUsageStatsController
 
 	// SQLSQLResponseAdmissionQ is the admission queue to use for
 	// SQLSQLResponseWork.

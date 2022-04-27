@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -49,7 +50,7 @@ func (sm *streamMerger) start(ctx context.Context) {
 // the right stream, all matching on the equality columns. One of the sets can
 // be empty.
 func (sm *streamMerger) NextBatch(
-	ctx context.Context, evalCtx *tree.EvalContext,
+	ctx context.Context, evalCtx *eval.Context,
 ) ([]rowenc.EncDatumRow, []rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if sm.leftGroup == nil {
 		var meta *execinfrapb.ProducerMetadata
@@ -112,7 +113,7 @@ func CompareEncDatumRowForMerge(
 	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 	nullEquality bool,
 	da *tree.DatumAlloc,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (int, error) {
 	if lhs == nil && rhs == nil {
 		return 0, nil

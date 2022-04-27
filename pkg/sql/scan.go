@@ -134,7 +134,7 @@ func (p *planner) Scan() *scanNode {
 // scanNode implements tree.IndexedVarContainer.
 var _ tree.IndexedVarContainer = &scanNode{}
 
-func (n *scanNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+func (n *scanNode) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
 	panic("scanNode can't be run in local mode")
 }
 

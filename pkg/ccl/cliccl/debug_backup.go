@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -678,7 +679,7 @@ func processEntryFiles(
 		for i, datum := range datums {
 
 			if debugBackupArgs.withRevisions && i == datums.Len()-1 {
-				approx, err := tree.DecimalToInexactDTimestamp(datum.(*tree.DDecimal))
+				approx, err := eval.DecimalToInexactDTimestamp(datum.(*tree.DDecimal))
 				if err != nil {
 					return errors.Wrapf(err, "convert datum %s to mvcc timestamp", datum)
 				}

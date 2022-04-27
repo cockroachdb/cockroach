@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -594,7 +595,7 @@ func generateNewProgress(
 		return prevProgress, prevStatementTime, errors.Errorf(
 			`cannot perform initial scan on newly added targets while the checkpoint is non-empty, `+
 				`please unpause the changefeed and wait until the high watermark progresses past the current value %s to add these targets.`,
-			tree.TimestampToDecimalDatum(*prevHighWater).Decimal.String(),
+			eval.TimestampToDecimalDatum(*prevHighWater).Decimal.String(),
 		)
 	}
 

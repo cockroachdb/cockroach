@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetSerialSequenceNameFromColumn is part of the tree.SequenceOperators interface.
+// GetSerialSequenceNameFromColumn is part of the eval.SequenceOperators interface.
 func (p *planner) GetSerialSequenceNameFromColumn(
 	ctx context.Context, tn *tree.TableName, columnName tree.Name,
 ) (*tree.TableName, error) {
@@ -74,7 +74,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 	return nil, colinfo.NewUndefinedColumnError(string(columnName))
 }
 
-// IncrementSequenceByID implements the tree.SequenceOperators interface.
+// IncrementSequenceByID implements the eval.SequenceOperators interface.
 func (p *planner) IncrementSequenceByID(ctx context.Context, seqID int64) (int64, error) {
 	if p.EvalContext().TxnReadOnly {
 		return 0, readOnlyError("nextval()")
@@ -232,7 +232,7 @@ func boundsExceededError(descriptor catalog.TableDescriptor) error {
 		tree.ErrString((*tree.Name)(&name)), value)
 }
 
-// GetLatestValueInSessionForSequenceByID implements the tree.SequenceOperators interface.
+// GetLatestValueInSessionForSequenceByID implements the eval.SequenceOperators interface.
 func (p *planner) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
@@ -267,7 +267,7 @@ func getLatestValueInSessionForSequenceHelper(
 	return val, nil
 }
 
-// SetSequenceValueByID implements the tree.SequenceOperators interface.
+// SetSequenceValueByID implements the eval.SequenceOperators interface.
 func (p *planner) SetSequenceValueByID(
 	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {

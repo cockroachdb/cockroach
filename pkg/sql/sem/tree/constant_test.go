@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -352,7 +353,7 @@ func mustParseDVarBit(t *testing.T, s string) tree.Datum {
 }
 func mustParseDArrayOfType(typ *types.T) func(t *testing.T, s string) tree.Datum {
 	return func(t *testing.T, s string) tree.Datum {
-		evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalContext := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 		d, _, err := tree.ParseDArrayFromString(&evalContext, s, typ)
 		if err != nil {
 			t.Fatal(err)
@@ -586,7 +587,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 	}
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for i, test := range testCases {
 		parseableCount := 0
@@ -605,7 +606,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			typedExpr, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType)
 			var res tree.Datum
 			if err == nil {
-				res, err = typedExpr.Eval(evalCtx)
+				res, err = eval.Expr(evalCtx, typedExpr)
 			}
 			if err != nil {
 				if !strings.Contains(err.Error(), "could not parse") &&

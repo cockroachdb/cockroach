@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -42,7 +43,7 @@ import (
 func compareRows(
 	lTypes []*types.T,
 	l, r rowenc.EncDatumRow,
-	e *tree.EvalContext,
+	e *eval.Context,
 	d *tree.DatumAlloc,
 	ordering colinfo.ColumnOrdering,
 ) (int, error) {
@@ -106,7 +107,7 @@ func TestDiskRowContainer(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
@@ -335,7 +336,7 @@ func TestDiskRowContainer(t *testing.T) {
 // 0), hence it also returns the actual returned count (to remind the caller).
 func makeUniqueRows(
 	t *testing.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	rng *rand.Rand,
 	numRows int,
 	types []*types.T,
@@ -409,7 +410,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	alloc := &tree.DatumAlloc{}
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
 		t.Fatal(err)

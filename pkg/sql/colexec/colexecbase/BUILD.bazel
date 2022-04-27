@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",  # keep
+        "//pkg/sql/sem/eval",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
         "//pkg/util",  # keep
@@ -70,6 +71,7 @@ go_test(
         "//pkg/sql/faketreeeval",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/cast",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/skip",

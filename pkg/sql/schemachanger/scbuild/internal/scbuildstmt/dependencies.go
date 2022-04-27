@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -100,8 +101,8 @@ type TreeContextBuilder interface {
 	// SemaCtx returns a new tree.SemaContext.
 	SemaCtx() *tree.SemaContext
 
-	// EvalCtx returns a new tree.EvalContext.
-	EvalCtx() *tree.EvalContext
+	// EvalCtx returns a new eval.Context.
+	EvalCtx() *eval.Context
 }
 
 // TreeAnnotator provides interfaces to be able to modify the AST safely,

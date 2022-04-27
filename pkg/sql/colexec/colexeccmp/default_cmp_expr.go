@@ -10,7 +10,10 @@
 
 package colexeccmp
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 // ComparisonExprAdapter is a utility interface that is implemented by several
 // structs that behave as an adapter from tree.ComparisonExpr to a vectorized
@@ -22,10 +25,10 @@ type ComparisonExprAdapter interface {
 // NewComparisonExprAdapter returns a new ComparisonExprAdapter for the provided
 // expression.
 func NewComparisonExprAdapter(
-	expr *tree.ComparisonExpr, evalCtx *tree.EvalContext,
+	expr *tree.ComparisonExpr, evalCtx *eval.Context,
 ) ComparisonExprAdapter {
 	base := cmpExprAdapterBase{
-		fn:      expr.Fn.Fn,
+		op:      expr.Op.EvalOp,
 		evalCtx: evalCtx,
 	}
 	op := expr.Operator
@@ -35,7 +38,7 @@ func NewComparisonExprAdapter(
 			expr:               expr,
 		}
 	}
-	nullable := expr.Fn.NullableArgs
+	nullable := expr.Op.NullableArgs
 	_, _, _, flipped, negate := tree.FoldComparisonExpr(op, nil /* left */, nil /* right */)
 	if nullable {
 		if flipped {

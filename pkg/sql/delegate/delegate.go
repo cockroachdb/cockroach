@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
@@ -31,7 +32,7 @@ import (
 // can be rewritten as a lower level query. If it can, returns a new AST which
 // is equivalent to the original statement. Otherwise, returns nil.
 func TryDelegate(
-	ctx context.Context, catalog cat.Catalog, evalCtx *tree.EvalContext, stmt tree.Statement,
+	ctx context.Context, catalog cat.Catalog, evalCtx *eval.Context, stmt tree.Statement,
 ) (tree.Statement, error) {
 	d := delegator{
 		ctx:     ctx,
@@ -190,7 +191,7 @@ func TryDelegate(
 type delegator struct {
 	ctx     context.Context
 	catalog cat.Catalog
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 }
 
 func parse(sql string) (tree.Statement, error) {

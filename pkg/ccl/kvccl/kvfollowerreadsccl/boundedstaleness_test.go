@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -136,7 +136,7 @@ func (ev *boundedStalenessTraceEvent) EventOutput() string {
 type boundedStalenessRetryEvent struct {
 	nodeIdx int
 	*roachpb.MinTimestampBoundUnsatisfiableError
-	asOf tree.AsOfSystemTime
+	asOf eval.AsOfSystemTime
 }
 
 func (ev *boundedStalenessRetryEvent) EventOutput() string {
@@ -215,7 +215,7 @@ func (bse *boundedStalenessEvents) validate(t *testing.T) {
 }
 
 func (bse *boundedStalenessEvents) onTxnRetry(
-	nodeIdx int, autoRetryReason error, evalCtx *tree.EvalContext,
+	nodeIdx int, autoRetryReason error, evalCtx *eval.Context,
 ) {
 	bse.mu.Lock()
 	defer bse.mu.Unlock()
@@ -278,7 +278,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 					WithStatementTrace: func(trace tracing.Recording, stmt string) {
 						bse.onStmtTrace(i, trace, stmt)
 					},
-					OnTxnRetry: func(err error, evalCtx *tree.EvalContext) {
+					OnTxnRetry: func(err error, evalCtx *eval.Context) {
 						bse.onTxnRetry(i, err, evalCtx)
 					},
 				},

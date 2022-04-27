@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -145,7 +146,7 @@ func (spec *WindowerSpec_Frame_Exclusion) initFromAST(e treewindow.WindowFrameEx
 // If offset exprs are present, we evaluate them and save the encoded results
 // in the spec.
 func (spec *WindowerSpec_Frame_Bounds) initFromAST(
-	b tree.WindowFrameBounds, m treewindow.WindowFrameMode, evalCtx *tree.EvalContext,
+	b tree.WindowFrameBounds, m treewindow.WindowFrameMode, evalCtx *eval.Context,
 ) error {
 	if b.StartBound == nil {
 		return errors.Errorf("unexpected: Start Bound is nil")
@@ -156,7 +157,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 	}
 	if b.StartBound.HasOffset() {
 		typedStartOffset := b.StartBound.OffsetExpr.(tree.TypedExpr)
-		dStartOffset, err := typedStartOffset.Eval(evalCtx)
+		dStartOffset, err := eval.Expr(evalCtx, typedStartOffset)
 		if err != nil {
 			return err
 		}
@@ -200,7 +201,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 		}
 		if b.EndBound.HasOffset() {
 			typedEndOffset := b.EndBound.OffsetExpr.(tree.TypedExpr)
-			dEndOffset, err := typedEndOffset.Eval(evalCtx)
+			dEndOffset, err := eval.Expr(evalCtx, typedEndOffset)
 			if err != nil {
 				return err
 			}
@@ -242,7 +243,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 }
 
 // isNegative returns whether offset is negative.
-func isNegative(evalCtx *tree.EvalContext, offset tree.Datum) bool {
+func isNegative(evalCtx *eval.Context, offset tree.Datum) bool {
 	switch o := offset.(type) {
 	case *tree.DInt:
 		return *o < 0
@@ -259,7 +260,7 @@ func isNegative(evalCtx *tree.EvalContext, offset tree.Datum) bool {
 
 // InitFromAST initializes the spec based on tree.WindowFrame. It will evaluate
 // offset expressions if present in the frame.
-func (spec *WindowerSpec_Frame) InitFromAST(f *tree.WindowFrame, evalCtx *tree.EvalContext) error {
+func (spec *WindowerSpec_Frame) InitFromAST(f *tree.WindowFrame, evalCtx *eval.Context) error {
 	if err := spec.Mode.initFromAST(f.Mode); err != nil {
 		return err
 	}

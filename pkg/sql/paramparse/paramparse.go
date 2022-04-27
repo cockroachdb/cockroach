@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
@@ -35,12 +36,12 @@ func UnresolvedNameToStrVal(expr tree.Expr) tree.Expr {
 }
 
 // DatumAsFloat transforms a tree.TypedExpr containing a Datum into a float.
-func DatumAsFloat(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (float64, error) {
-	val, err := value.Eval(evalCtx)
+func DatumAsFloat(evalCtx *eval.Context, name string, value tree.TypedExpr) (float64, error) {
+	val, err := eval.Expr(evalCtx, value)
 	if err != nil {
 		return 0, err
 	}
-	switch v := tree.UnwrapDatum(evalCtx, val).(type) {
+	switch v := eval.UnwrapDatum(evalCtx, val).(type) {
 	case *tree.DString:
 		return strconv.ParseFloat(string(*v), 64)
 	case *tree.DInt:
@@ -60,14 +61,14 @@ func DatumAsFloat(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) 
 // DatumAsDuration transforms a tree.TypedExpr containing a Datum into a
 // time.Duration.
 func DatumAsDuration(
-	evalCtx *tree.EvalContext, name string, value tree.TypedExpr,
+	evalCtx *eval.Context, name string, value tree.TypedExpr,
 ) (time.Duration, error) {
-	val, err := value.Eval(evalCtx)
+	val, err := eval.Expr(evalCtx, value)
 	if err != nil {
 		return 0, err
 	}
 	var d duration.Duration
-	switch v := tree.UnwrapDatum(evalCtx, val).(type) {
+	switch v := eval.UnwrapDatum(evalCtx, val).(type) {
 	case *tree.DString:
 		datum, err := tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), string(*v))
 		if err != nil {
@@ -95,8 +96,8 @@ func DatumAsDuration(
 }
 
 // DatumAsInt transforms a tree.TypedExpr containing a Datum into an int.
-func DatumAsInt(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (int64, error) {
-	val, err := value.Eval(evalCtx)
+func DatumAsInt(evalCtx *eval.Context, name string, value tree.TypedExpr) (int64, error) {
+	val, err := eval.Expr(evalCtx, value)
 	if err != nil {
 		return 0, err
 	}
@@ -112,8 +113,8 @@ func DatumAsInt(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (i
 }
 
 // DatumAsString transforms a tree.TypedExpr containing a Datum into a string.
-func DatumAsString(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (string, error) {
-	val, err := value.Eval(evalCtx)
+func DatumAsString(evalCtx *eval.Context, name string, value tree.TypedExpr) (string, error) {
+	val, err := eval.Expr(evalCtx, value)
 	if err != nil {
 		return "", err
 	}

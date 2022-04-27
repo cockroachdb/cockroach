@@ -32,9 +32,7 @@ type RowIndexedVarContainer struct {
 var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}
 
 // IndexedVarEval implements tree.IndexedVarContainer.
-func (r *RowIndexedVarContainer) IndexedVarEval(
-	idx int, ctx *tree.EvalContext,
-) (tree.Datum, error) {
+func (r *RowIndexedVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
 	rowIdx, ok := r.Mapping.Get(r.Cols[idx].GetID())
 	if !ok {
 		return tree.DNull, nil

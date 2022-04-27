@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -455,7 +456,7 @@ type parallelImportContext struct {
 	numWorkers       int                     // Parallelism.
 	batchSize        int                     // Number of records to batch.
 	semaCtx          *tree.SemaContext       // Semantic analysis context.
-	evalCtx          *tree.EvalContext       // Evaluation context.
+	evalCtx          *eval.Context           // Evaluation context.
 	tableDesc        catalog.TableDescriptor // Table descriptor we're importing into.
 	targetCols       tree.NameList           // List of columns to import.  nil if importing all columns.
 	kvCh             chan row.KVBatch        // Channel for sending KV batches.

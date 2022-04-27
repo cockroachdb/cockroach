@@ -60,7 +60,7 @@ go_test(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/rowenc",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/span",
         "//pkg/sql/types",
         "//pkg/testutils/skip",

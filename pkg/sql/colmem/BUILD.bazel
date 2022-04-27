@@ -32,6 +32,7 @@ go_test(
         "//pkg/sql/colexecerror",
         "//pkg/sql/execinfra",
         "//pkg/sql/randgen",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/skip",

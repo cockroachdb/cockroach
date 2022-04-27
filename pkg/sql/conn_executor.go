@@ -42,6 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -2641,7 +2643,7 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 // NOTE: this cannot live in pkg/sql/sem/tree due to the call to WrapFunction,
 // which fails before the pkg/sql/sem/builtins package has been initialized.
 var followerReadTimestampExpr = &tree.FuncExpr{
-	Func: tree.WrapFunction(tree.FollowerReadTimestampFunctionName),
+	Func: tree.WrapFunction(asof.FollowerReadTimestampFunctionName),
 }
 
 func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.AsOfClause {
@@ -2659,7 +2661,7 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 // statement, to reinitialize other fields.
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
 	*evalCtx = extendedEvalContext{
-		EvalContext: tree.EvalContext{
+		Context: eval.Context{
 			Planner:                   p,
 			PrivilegedAccessor:        p,
 			SessionAccessor:           p,
@@ -2711,7 +2713,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil
-	evalCtx.Context = ex.Ctx()
+	evalCtx.Context.Context = ex.Ctx()
 	evalCtx.Txn = txn
 	evalCtx.Mon = ex.state.mon
 	evalCtx.PrepareOnly = false

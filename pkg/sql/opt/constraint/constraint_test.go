@@ -18,13 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestConstraintUnion(t *testing.T) {
-	test := func(t *testing.T, evalCtx *tree.EvalContext, left, right *Constraint, expected string) {
+	test := func(t *testing.T, evalCtx *eval.Context, left, right *Constraint, expected string) {
 		t.Helper()
 		clone := *left
 		clone.UnionWith(evalCtx, right)
@@ -36,7 +37,7 @@ func TestConstraintUnion(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	data := newConstraintTestData(&evalCtx)
 
 	// Union constraint with itself.
@@ -98,7 +99,7 @@ func TestConstraintUnion(t *testing.T) {
 }
 
 func TestConstraintIntersect(t *testing.T) {
-	test := func(t *testing.T, evalCtx *tree.EvalContext, left, right *Constraint, expected string) {
+	test := func(t *testing.T, evalCtx *eval.Context, left, right *Constraint, expected string) {
 		t.Helper()
 		clone := *left
 		clone.IntersectWith(evalCtx, right)
@@ -109,7 +110,7 @@ func TestConstraintIntersect(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	data := newConstraintTestData(&evalCtx)
 
 	// Intersect constraint with itself.
@@ -160,7 +161,7 @@ func TestConstraintIntersect(t *testing.T) {
 
 func TestConstraintContains(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		a        string
@@ -311,7 +312,7 @@ func TestConstraintContains(t *testing.T) {
 
 func TestConstraintContainsSpan(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	// Each test case has a bunch of spans that are expected to be contained, and
 	// a bunch of spans that are expected not to be contained.
@@ -361,7 +362,7 @@ func TestConstraintContainsSpan(t *testing.T) {
 
 func TestConstraintIntersectsSpan(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	// Each test case has a bunch of spans that are expected to intersect the
 	// constraint, and a bunch of spans that are expected not to.
@@ -410,7 +411,7 @@ func TestConstraintIntersectsSpan(t *testing.T) {
 
 func TestConstraintCombine(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		a, b, e string
@@ -462,7 +463,7 @@ func TestConstraintCombine(t *testing.T) {
 func TestConsolidateSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		s string
@@ -526,7 +527,7 @@ func TestConsolidateSpans(t *testing.T) {
 func TestConsolidateLocalAndRemoteSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		spanInputs string
@@ -634,7 +635,7 @@ func TestConsolidateLocalAndRemoteSpans(t *testing.T) {
 func TestExactPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		s string
@@ -699,7 +700,7 @@ func TestExactPrefix(t *testing.T) {
 func TestPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		s string
@@ -774,7 +775,7 @@ type constraintTestData struct {
 	mangoStrawberry Constraint // [/'mango'/false - /'strawberry']
 }
 
-func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
+func newConstraintTestData(evalCtx *eval.Context) *constraintTestData {
 	data := &constraintTestData{}
 
 	key1 := MakeKey(tree.NewDInt(1))
@@ -843,7 +844,7 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 
 func TestExtractConstCols(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		c string
@@ -925,7 +926,7 @@ func TestExtractConstCols(t *testing.T) {
 
 func TestExtractNotNullCols(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		c string
@@ -1006,7 +1007,7 @@ func TestExtractNotNullCols(t *testing.T) {
 }
 
 func TestCollectFirstColumnValues(t *testing.T) {
-	test := func(t *testing.T, evalCtx *tree.EvalContext, testConstraint *Constraint, expected string, hasNull bool) {
+	test := func(t *testing.T, evalCtx *eval.Context, testConstraint *Constraint, expected string, hasNull bool) {
 		t.Helper()
 
 		var values tree.Datums
@@ -1031,7 +1032,7 @@ func TestCollectFirstColumnValues(t *testing.T) {
 		}
 	}
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		spans          string

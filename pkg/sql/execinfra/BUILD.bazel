@@ -49,6 +49,7 @@ go_library(
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/rowinfra",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlliveness",

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -29,7 +30,7 @@ import (
 // Builder is a single struct for generating key spans from Constraints, Datums,
 // encDatums, and InvertedSpans.
 type Builder struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 	codec   keys.SQLCodec
 
 	keyAndPrefixCols []descpb.IndexFetchSpec_KeyColumn
@@ -41,10 +42,7 @@ type Builder struct {
 
 // Init initializes a Builder with a table and index.
 func (s *Builder) Init(
-	evalCtx *tree.EvalContext,
-	codec keys.SQLCodec,
-	table catalog.TableDescriptor,
-	index catalog.Index,
+	evalCtx *eval.Context, codec keys.SQLCodec, table catalog.TableDescriptor, index catalog.Index,
 ) {
 	s.evalCtx = evalCtx
 	s.codec = codec
@@ -54,7 +52,7 @@ func (s *Builder) Init(
 
 // InitWithFetchSpec creates a Builder using IndexFetchSpec.
 func (s *Builder) InitWithFetchSpec(
-	evalCtx *tree.EvalContext, codec keys.SQLCodec, spec *descpb.IndexFetchSpec,
+	evalCtx *eval.Context, codec keys.SQLCodec, spec *descpb.IndexFetchSpec,
 ) {
 	s.evalCtx = evalCtx
 	s.codec = codec

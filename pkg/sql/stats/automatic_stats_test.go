@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -48,7 +49,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
@@ -130,7 +131,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
@@ -378,7 +379,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
@@ -436,7 +437,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
@@ -468,7 +469,7 @@ func TestMutationsChannel(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
@@ -501,7 +502,7 @@ func TestDefaultColumns(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
-	evalCtx := tree.NewTestingEvalContext(st)
+	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)

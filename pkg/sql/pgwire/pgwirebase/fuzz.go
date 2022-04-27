@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -41,7 +41,7 @@ func FuzzDecodeDatum(data []byte) int {
 	code := FormatCode(data[0]) % (FormatBinary + 1)
 	b := data[2:]
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	_, err := DecodeDatum(evalCtx, typ, code, b)

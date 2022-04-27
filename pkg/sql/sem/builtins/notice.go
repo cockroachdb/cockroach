@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -21,9 +22,7 @@ import (
 // crdbInternalSendNotice sends a notice.
 // Note this is extracted to a different file to prevent churn on the pgwire
 // test, which records line numbers.
-func crdbInternalSendNotice(
-	ctx *tree.EvalContext, severity string, msg string,
-) (tree.Datum, error) {
+func crdbInternalSendNotice(ctx *eval.Context, severity string, msg string) (tree.Datum, error) {
 	if ctx.ClientNoticeSender == nil {
 		return nil, errors.AssertionFailedf("notice sender not set")
 	}

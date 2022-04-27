@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
 func TestOrdinalityProvided(t *testing.T) {
@@ -74,7 +74,7 @@ func TestOrdinalityProvided(t *testing.T) {
 	for tcIdx, tc := range testCases {
 		t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
-			evalCtx := tree.NewTestingEvalContext(st)
+			evalCtx := eval.NewTestingEvalContext(st)
 			var f norm.Factory
 			f.Init(evalCtx, nil /* catalog */)
 			input := &testexpr.Instance{

@@ -8,13 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package tree_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,22 +50,22 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		{treecmp.NotRegIMatch, `abc`, `(b|c).`, 1},
 	}
 	for _, d := range testExprs {
-		expr := &ComparisonExpr{
+		expr := &tree.ComparisonExpr{
 			Operator: treecmp.MakeComparisonOperator(d.op),
-			Left:     NewDString(d.left),
-			Right:    NewDString(d.right),
+			Left:     tree.NewDString(d.left),
+			Right:    tree.NewDString(d.right),
 		}
-		ctx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer ctx.Mon.Stop(context.Background())
-		ctx.ReCache = NewRegexpCache(8)
-		typedExpr, err := TypeCheck(context.Background(), expr, nil, types.Any)
+		ctx.ReCache = tree.NewRegexpCache(8)
+		typedExpr, err := tree.TypeCheck(context.Background(), expr, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}
-		if _, err := typedExpr.Eval(ctx); err != nil {
+		if _, err := eval.Expr(ctx, typedExpr); err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}
-		if typedExpr.(*ComparisonExpr).Fn.Fn == nil {
+		if typedExpr.(*tree.ComparisonExpr).Op.EvalOp == nil {
 			t.Errorf("%s: expected the comparison function to be looked up and memoized, but it wasn't", expr)
 		}
 		if count := ctx.ReCache.Len(); count != d.cacheCount {

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -35,7 +35,7 @@ import (
 // 1. Tracks the liveness of the replication stream consumption
 // 2. TODO(casper): Updates the protected timestamp for spans being replicated
 func startReplicationStreamJob(
-	evalCtx *tree.EvalContext, txn *kv.Txn, tenantID uint64,
+	evalCtx *eval.Context, txn *kv.Txn, tenantID uint64,
 ) (streaming.StreamID, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
@@ -137,7 +137,7 @@ func updateReplicationStreamProgress(
 // heartbeatReplicationStream updates replication stream progress and advances protected timestamp
 // record to the specified frontier.
 func heartbeatReplicationStream(
-	evalCtx *tree.EvalContext, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
+	evalCtx *eval.Context, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
 ) (streampb.StreamReplicationStatus, error) {
 
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
@@ -150,7 +150,7 @@ func heartbeatReplicationStream(
 
 // getReplicationStreamSpec gets a replication stream specification for the specified stream.
 func getReplicationStreamSpec(
-	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
+	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 	// Returns error if the replication stream is not active
@@ -202,7 +202,7 @@ func getReplicationStreamSpec(
 }
 
 func completeReplicationStream(
-	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
+	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID,
 ) error {
 	// Update the producer job that a cutover happens on the consumer side.
 	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry

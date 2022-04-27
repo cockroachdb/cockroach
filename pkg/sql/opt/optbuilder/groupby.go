@@ -267,7 +267,7 @@ func (a aggregateInfo) isCommutative() bool {
 }
 
 // Eval is part of the tree.TypedExpr interface.
-func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+func (a *aggregateInfo) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("aggregateInfo must be replaced before evaluation"))
 }
 

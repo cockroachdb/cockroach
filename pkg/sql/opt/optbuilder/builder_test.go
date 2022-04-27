@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	tu "github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -76,7 +77,7 @@ func TestBuilder(t *testing.T) {
 
 				ctx := context.Background()
 				semaCtx := tree.MakeSemaContext()
-				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+				evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				evalCtx.SessionData().OptimizerUseHistograms = true
 				evalCtx.SessionData().OptimizerUseMultiColStats = true
 				evalCtx.SessionData().LocalityOptimizedSearch = true

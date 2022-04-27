@@ -94,10 +94,10 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		})
 	}
 
-	check := func(name string, leftType, rightType *types.T, v volatility.V) {
+	check := func(name string, leftType, rightType *types.T, volatility volatility.V) {
 		t.Helper()
-		if v == 0 {
-			t.Errorf("operator %s(%v,%v) has no Volatility set", name, leftType, rightType)
+		if volatility == 0 {
+			t.Errorf("operator %s(%v,%v) has no volatility set", name, leftType, rightType)
 			return
 		}
 
@@ -116,18 +116,18 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		rightOid := rightType.Oid()
 		for _, o := range pgOps {
 			if o.name == pgName && o.leftType == leftOid && o.rightType == rightOid {
-				if o.volatility != v {
+				if o.volatility != volatility {
 					t.Errorf(
-						"operator %s(%v,%v) has Volatility %s, corresponding pg operator has %s",
-						name, leftType, rightType, v, o.volatility,
+						"operator %s(%v,%v) has volatility %s, corresponding pg operator has %s",
+						name, leftType, rightType, volatility, o.volatility,
 					)
 				}
 				return
 			}
 		}
 		if testing.Verbose() {
-			t.Logf("operator %s(%v,%v) %d %d with Volatility %s has no corresponding pg operator",
-				name, leftType, rightType, leftOid, rightOid, v,
+			t.Logf("operator %s(%v,%v) %d %d with volatility %s has no corresponding pg operator",
+				name, leftType, rightType, leftOid, rightOid, volatility,
 			)
 		}
 	}

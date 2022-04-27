@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -64,7 +65,7 @@ func TestOutbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
@@ -229,7 +230,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
@@ -302,7 +303,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			}
 
 			st := cluster.MakeTestingClusterSettings()
-			evalCtx := tree.MakeTestingEvalContext(st)
+			evalCtx := eval.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(ctx)
 
 			clientRPC := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
@@ -380,7 +381,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	clientRPC := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
@@ -439,7 +440,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -512,7 +513,7 @@ func BenchmarkOutbox(b *testing.B) {
 		}
 		b.Run(fmt.Sprintf("numCols=%d", numCols), func(b *testing.B) {
 			streamID := execinfrapb.StreamID(42)
-			evalCtx := tree.MakeTestingEvalContext(st)
+			evalCtx := eval.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(bgCtx)
 
 			clientRPC := rpc.NewInsecureTestingContextWithClusterID(bgCtx, clock, stopper, clusterID)

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1130,13 +1131,13 @@ func makeKafkaFeedFactoryForCluster(
 }
 
 func exprAsString(expr tree.Expr) (string, error) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	semaCtx := tree.MakeSemaContext()
 	te, err := expr.TypeCheck(context.Background(), &semaCtx, types.String)
 	if err != nil {
 		return "", err
 	}
-	datum, err := te.Eval(evalCtx)
+	datum, err := eval.Expr(evalCtx, te)
 	if err != nil {
 		return "", err
 	}

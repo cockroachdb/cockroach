@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -30,7 +31,7 @@ type datumVec struct {
 	// data is the underlying data stored in datumVec.
 	data []tree.Datum
 	// evalCtx is required for most of the methods of tree.Datum interface.
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	scratch []byte
 	da      tree.DatumAlloc
@@ -39,7 +40,7 @@ type datumVec struct {
 var _ coldata.DatumVec = &datumVec{}
 
 // newDatumVec returns a datumVec struct with capacity of n.
-func newDatumVec(t *types.T, n int, evalCtx *tree.EvalContext) coldata.DatumVec {
+func newDatumVec(t *types.T, n int, evalCtx *eval.Context) coldata.DatumVec {
 	return &datumVec{
 		t:       t,
 		data:    make([]tree.Datum, n),

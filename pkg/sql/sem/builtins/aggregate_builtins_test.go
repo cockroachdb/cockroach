@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -25,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-// testAggregateResultDeepCopy verifies that tree.Datum returned from tree.AggregateFunc's
+// testAggregateResultDeepCopy verifies that tree.Datum returned from eval.AggregateFunc's
 // Result() method are not mutated during future accumulation. It verifies this by
 // printing all values to strings immediately after calling Result(), and later
 // printing all values to strings once the accumulation has finished. If the string
@@ -33,11 +34,11 @@ import (
 // accumulation, which violates the "deep copy of any internal state" condition.
 func testAggregateResultDeepCopy(
 	t *testing.T,
-	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	aggFunc func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 	firstArgs []tree.Datum,
 	otherArgs ...[]tree.Datum,
 ) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	argTypes := []*types.T{firstArgs[0].ResolvedType()}
 	otherArgs = flattenArgs(otherArgs...)
@@ -379,7 +380,7 @@ func TestRegressionAvgY(t *testing.T) {
 // testRegressionAggregateFunctionResultDeepCopy is a helper function
 // for testing regression aggregate functions.
 func testRegressionAggregateFunctionResultDeepCopy(
-	t *testing.T, aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	t *testing.T, aggFunc func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 ) {
 	defer leaktest.AfterTest(t)()
 	t.Run("float float", func(t *testing.T) {
@@ -568,11 +569,11 @@ func testArrayAggAliasedTypeOverload(ctx context.Context, t *testing.T, expected
 
 func runBenchmarkAggregate(
 	b *testing.B,
-	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	aggFunc func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 	firstArgs []tree.Datum,
 	otherArgs ...[]tree.Datum,
 ) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	argTypes := []*types.T{firstArgs[0].ResolvedType()}
 	otherArgs = flattenArgs(otherArgs...)
@@ -845,7 +846,7 @@ func BenchmarkRegressionAvgYAggregate(b *testing.B) {
 // runRegressionAggregateBenchmarks is a helper function for running
 // benchmarks for regression aggregate functions.
 func runRegressionAggregateBenchmarks(
-	b *testing.B, aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	b *testing.B, aggFunc func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 ) {
 	b.Run(fmt.Sprintf("Ints count=%d", aggregateBuiltinsBenchmarkCount), func(b *testing.B) {
 		runBenchmarkAggregate(

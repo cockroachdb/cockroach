@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -557,7 +558,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	}
 
 	// If this statement doesn't have placeholders and we have not constant-folded
-	// any volatility.Stable operators, add it to the cache.
+	// any VolatilityStable operators, add it to the cache.
 	// Note that non-prepared statements from pgwire clients cannot have
 	// placeholders.
 	if opc.useCache && !bld.HadPlaceholders && !bld.DisableMemoReuse &&
@@ -583,7 +584,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	stmt *Statement,
 	f exec.Factory,
 	mem *memo.Memo,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	allowAutoCommit bool,
 ) error {
 	var result *planComponents

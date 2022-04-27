@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -33,7 +34,7 @@ func (*tableUpdater) desc() string { return "updater" }
 
 // init is part of the tableWriter interface.
 func (tu *tableUpdater) init(
-	_ context.Context, txn *kv.Txn, evalCtx *tree.EvalContext, sv *settings.Values,
+	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
 ) error {
 	tu.tableWriterBase.init(txn, tu.tableDesc(), evalCtx, sv)
 	return nil
