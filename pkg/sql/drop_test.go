@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -56,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1163,6 +1165,87 @@ WHERE
 	_, err = txn.Exec("DROP INDEX foo@j_idx")
 	require.Truef(t, isRetryableErr(err), "drop index error: %v", err)
 	require.NoError(t, txn.Rollback())
+}
+
+// TestDropIndexOnHashShardedIndexWithStoredShardColumn tests the case when attempt to drop a hash-sharded index with
+// a stored shard column (all hash-sharded index created in 21.2 and prior will have a stored shard column) without
+// cascade, we skip dropping the shard column.
+func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start a test server and connect to it with notice handler (so we can get and check notices from running queries).
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+	base, err := pq.NewConnector(url.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	actualNotices := make([]string, 0)
+	connector := pq.ConnectorWithNoticeHandler(base, func(n *pq.Error) {
+		actualNotices = append(actualNotices, n.Message)
+	})
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+	tdb := sqlutils.MakeSQLRunner(dbWithHandler)
+
+	// Create a table with a stored column with the same name as the shard column so that the hash-sharded
+	// index will just use that column. This is the trick we use to be able to create a hash-shard index with
+	// a STORED column.
+	query :=
+		`
+		CREATE TABLE tbl (
+			a INT,
+			crdb_internal_a_shard_7 INT NOT VISIBLE AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 7:::INT)) STORED,
+			INDEX idx (a) USING HASH WITH BUCKET_COUNT=7
+		)
+		`
+	tdb.Exec(t, query)
+
+	// Assert that the table has two indexes and the shard index uses the stored column as its shard column.
+	var tableID descpb.ID
+	var tableDesc catalog.TableDescriptor
+	query = `SELECT id FROM system.namespace WHERE name = 'tbl'`
+	tdb.QueryRow(t, query).Scan(&tableID)
+	require.NoError(t, sql.TestingDescsTxn(ctx, s,
+		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+			tableDesc, err = col.Direct().MustGetTableDescByID(ctx, txn, tableID)
+			return err
+		}))
+	shardIdx, err := tableDesc.FindIndexWithName("idx")
+	require.NoError(t, err)
+	require.True(t, shardIdx.IsSharded())
+	require.Equal(t, "crdb_internal_a_shard_7", shardIdx.GetShardColumnName())
+	shardCol, err := tableDesc.FindColumnWithName("crdb_internal_a_shard_7")
+	require.NoError(t, err)
+	require.False(t, shardCol.IsVirtual())
+
+	// Drop the hash-sharded index.
+	query = `DROP INDEX idx`
+	tdb.Exec(t, query)
+
+	// Assert that the index is dropped but the shard column remains after dropping the index.
+	require.NoError(t, sql.TestingDescsTxn(ctx, s,
+		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+			tableDesc, err = col.Direct().MustGetTableDescByID(ctx, txn, tableID)
+			return err
+		}))
+	_, err = tableDesc.FindIndexWithName("idx")
+	require.Error(t, err)
+	shardCol, err = tableDesc.FindColumnWithName("crdb_internal_a_shard_7")
+	require.NoError(t, err)
+	require.False(t, shardCol.IsVirtual())
+
+	// Assert that we get the expected notice.
+	expectedNotice := "The accompanying shard column \"crdb_internal_a_shard_7\" is a physical column and dropping it " +
+		"can be expensive, so, we dropped the index \"idx\" but skipped dropping \"crdb_internal_a_shard_7\". Issue " +
+		"another 'ALTER TABLE tbl DROP COLUMN crdb_internal_a_shard_7' query if you want to drop column" +
+		" \"crdb_internal_a_shard_7\"."
+	require.Contains(t, actualNotices, expectedNotice)
 }
 
 // TestDropDatabaseWithForeignKeys tests that databases containing tables with
