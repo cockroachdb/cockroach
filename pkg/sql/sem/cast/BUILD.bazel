@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cast",
-    srcs = ["cast.go"],
+    srcs = [
+        "cast.go",
+        "cast_map.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/cast",
     visibility = ["//visibility:public"],
     deps = [
