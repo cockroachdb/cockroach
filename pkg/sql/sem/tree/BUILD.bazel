@@ -278,8 +278,11 @@ genrule(
 disallowed_imports_test(
     "tree",
     disallowed_list = [
-        "//pkg/sql/sessiondata",
+        "//pkg/kv",
         "//pkg/security",
+        "//pkg/server",
+        "//pkg/sql/sessiondata",
+        "//pkg/storage",
     ],
     disallowed_prefixes = [
         "pkg/sql/catalog",
