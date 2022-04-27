@@ -378,6 +378,7 @@ go_library(
         "//pkg/sql/sem/asof",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/cast",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",

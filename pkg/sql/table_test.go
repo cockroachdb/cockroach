@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -540,7 +541,7 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 	typDesc := desctestutils.TestingGetTypeDescriptor(
 		kvDB, keys.SystemSQLCodec, "test", "public", "greeting",
 	)
-	oid := fmt.Sprintf("%d", typedesc.TypeIDToOID(typDesc.GetID()))
+	oid := fmt.Sprintf("%d", catid.TypeIDToOID(typDesc.GetID()))
 	for _, tc := range testdata {
 		create := "CREATE TABLE t (" + tc.colSQL + ")"
 		if _, err := sqlDB.Exec(create); err != nil {
@@ -607,7 +608,7 @@ func TestSerializedUDTsInView(t *testing.T) {
 	typDesc := desctestutils.TestingGetTypeDescriptor(
 		kvDB, keys.SystemSQLCodec, "test", "public", "greeting",
 	)
-	oid := fmt.Sprintf("%d", typedesc.TypeIDToOID(typDesc.GetID()))
+	oid := fmt.Sprintf("%d", catid.TypeIDToOID(typDesc.GetID()))
 	for _, tc := range testdata {
 		create := "CREATE VIEW v AS (" + tc.viewQuery + ")"
 		if _, err := sqlDB.Exec(create); err != nil {

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -1714,7 +1715,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 			// Generate a row for each member of the enum. We don't represent enums
 			// internally using floats for ordering like Postgres, so just pick a
 			// float entry for the rows.
-			typOID := tree.NewDOid(tree.DInt(typedesc.TypeIDToOID(typDesc.GetID())))
+			typOID := tree.NewDOid(tree.DInt(catid.TypeIDToOID(typDesc.GetID())))
 			for i := 0; i < typDesc.NumEnumMembers(); i++ {
 				if err := addRow(
 					h.EnumEntryOid(typOID, typDesc.GetMemberPhysicalRepresentation(i)),
@@ -2806,7 +2807,7 @@ func tableIDToTypeOID(table catalog.TableDescriptor) tree.Datum {
 	// We re-use the type ID to OID logic, as type IDs and table IDs share the
 	// same ID space.
 	if !table.IsVirtualTable() {
-		return tree.NewDOid(tree.DInt(typedesc.TypeIDToOID(table.GetID())))
+		return tree.NewDOid(tree.DInt(catid.TypeIDToOID(table.GetID())))
 	}
 	// Virtual table OIDs start at max UInt32, so doing OID math would overflow.
 	// As such, just use the virtual table ID.
