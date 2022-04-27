@@ -219,6 +219,8 @@ type DatumRowConverter struct {
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
 	FractionFn     func() float32
+
+	db *kv.DB
 }
 
 var kvDatumRowConverterBatchSize = util.ConstantWithMetamorphicTestValue(
@@ -264,7 +266,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 	// instead of cobbling a descs.Collection in this way.
 	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
 	descsCol := cf.MakeCollection(evalCtx.Context, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack), nil /* monitor */)
-	err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
+	err := c.db.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)
 		if err := txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()}); err != nil {
@@ -297,11 +299,13 @@ func NewDatumRowConverter(
 	kvCh chan<- KVBatch,
 	seqChunkProvider *SeqChunkProvider,
 	metrics *rowinfra.Metrics,
+	db *kv.DB,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,
 		KvCh:      kvCh,
 		EvalCtx:   evalCtx.Copy(),
+		db:        db,
 	}
 
 	var targetCols []catalog.Column

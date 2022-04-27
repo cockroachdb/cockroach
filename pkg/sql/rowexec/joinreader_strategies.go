@@ -51,13 +51,10 @@ type joinReaderStrategy interface {
 	// getLookupRowsBatchSizeHint returns the size in bytes of the batch of lookup
 	// rows.
 	getLookupRowsBatchSizeHint(*sessiondata.SessionData) int64
-	// getMaxLookupKeyCols returns the maximum number of key columns used to
-	// lookup into the index.
-	getMaxLookupKeyCols() int
 	// generateRemoteSpans generates spans targeting remote nodes for the current
 	// batch of input rows. Returns an error if this is not a locality optimized
 	// lookup join.
-	generateRemoteSpans() (roachpb.Spans, error)
+	generateRemoteSpans() (roachpb.Spans, []int, error)
 	// generatedRemoteSpans returns true if generateRemoteSpans has been called on
 	// the current batch of input rows.
 	generatedRemoteSpans() bool
@@ -67,14 +64,14 @@ type joinReaderStrategy interface {
 	// The returned spans are not accounted for, so it is the caller's
 	// responsibility to register the spans memory usage with our memory
 	// accounting system.
-	processLookupRows(rows []rowenc.EncDatumRow) (roachpb.Spans, error)
+	processLookupRows(rows []rowenc.EncDatumRow) (roachpb.Spans, []int, error)
 	// processLookedUpRow processes a looked up row. A joinReaderState is returned
 	// to indicate the next state to transition to. If this next state is
 	// jrPerformingLookup, processLookedUpRow will be called again if the looked
 	// up rows have not been exhausted. A transition to jrStateUnknown is
 	// unsupported, but if an error is returned, the joinReader will transition
 	// to draining.
-	processLookedUpRow(ctx context.Context, row rowenc.EncDatumRow, key roachpb.Key) (joinReaderState, error)
+	processLookedUpRow(ctx context.Context, row rowenc.EncDatumRow, spanID int) (joinReaderState, error)
 	// prepareToEmit informs the strategy implementation that all looked up rows
 	// have been read, and that it should prepare for calls to nextRowToEmit.
 	prepareToEmit(ctx context.Context)
@@ -158,14 +155,10 @@ func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint(*sessiondata.S
 	return 2 << 20 /* 2 MiB */
 }
 
-func (s *joinReaderNoOrderingStrategy) getMaxLookupKeyCols() int {
-	return s.maxLookupCols()
-}
-
-func (s *joinReaderNoOrderingStrategy) generateRemoteSpans() (roachpb.Spans, error) {
+func (s *joinReaderNoOrderingStrategy) generateRemoteSpans() (roachpb.Spans, []int, error) {
 	gen, ok := s.joinReaderSpanGenerator.(*localityOptimizedSpanGenerator)
 	if !ok {
-		return nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
+		return nil, nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
 	}
 	s.remoteSpansGenerated = true
 	return gen.generateRemoteSpans(s.Ctx, s.inputRows)
@@ -177,7 +170,7 @@ func (s *joinReaderNoOrderingStrategy) generatedRemoteSpans() bool {
 
 func (s *joinReaderNoOrderingStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
-) (roachpb.Spans, error) {
+) (roachpb.Spans, []int, error) {
 	s.inputRows = rows
 	s.remoteSpansGenerated = false
 	s.emitState.unmatchedInputRowIndicesInitialized = false
@@ -185,12 +178,9 @@ func (s *joinReaderNoOrderingStrategy) processLookupRows(
 }
 
 func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
-	_ context.Context, row rowenc.EncDatumRow, key roachpb.Key,
+	_ context.Context, row rowenc.EncDatumRow, spanID int,
 ) (joinReaderState, error) {
-	matchingInputRowIndices, err := s.getMatchingRowIndices(key)
-	if err != nil {
-		return jrStateUnknown, err
-	}
+	matchingInputRowIndices := s.getMatchingRowIndices(spanID)
 	if s.isPartialJoin {
 		// In the case of partial joins, only process input rows that have not been
 		// matched yet. Make a copy of the matching input row indices to avoid
@@ -368,12 +358,8 @@ func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint(*sessiondata.Se
 	return 4 << 20 /* 4 MB */
 }
 
-func (s *joinReaderIndexJoinStrategy) getMaxLookupKeyCols() int {
-	return s.maxLookupCols()
-}
-
-func (s *joinReaderIndexJoinStrategy) generateRemoteSpans() (roachpb.Spans, error) {
-	return nil, errors.AssertionFailedf("generateRemoteSpans called on an index join")
+func (s *joinReaderIndexJoinStrategy) generateRemoteSpans() (roachpb.Spans, []int, error) {
+	return nil, nil, errors.AssertionFailedf("generateRemoteSpans called on an index join")
 }
 
 func (s *joinReaderIndexJoinStrategy) generatedRemoteSpans() bool {
@@ -382,13 +368,13 @@ func (s *joinReaderIndexJoinStrategy) generatedRemoteSpans() bool {
 
 func (s *joinReaderIndexJoinStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
-) (roachpb.Spans, error) {
+) (roachpb.Spans, []int, error) {
 	s.inputRows = rows
 	return s.generateSpans(s.Ctx, s.inputRows)
 }
 
 func (s *joinReaderIndexJoinStrategy) processLookedUpRow(
-	_ context.Context, row rowenc.EncDatumRow, _ roachpb.Key,
+	_ context.Context, row rowenc.EncDatumRow, _ int,
 ) (joinReaderState, error) {
 	s.emitState.processingLookupRow = true
 	s.emitState.lookedUpRow = row
@@ -541,14 +527,10 @@ func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint(sd *sessiondata.
 	return sd.JoinReaderOrderingStrategyBatchSize
 }
 
-func (s *joinReaderOrderingStrategy) getMaxLookupKeyCols() int {
-	return s.maxLookupCols()
-}
-
-func (s *joinReaderOrderingStrategy) generateRemoteSpans() (roachpb.Spans, error) {
+func (s *joinReaderOrderingStrategy) generateRemoteSpans() (roachpb.Spans, []int, error) {
 	gen, ok := s.joinReaderSpanGenerator.(*localityOptimizedSpanGenerator)
 	if !ok {
-		return nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
+		return nil, nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
 	}
 	s.remoteSpansGenerated = true
 	return gen.generateRemoteSpans(s.Ctx, s.inputRows)
@@ -560,7 +542,7 @@ func (s *joinReaderOrderingStrategy) generatedRemoteSpans() bool {
 
 func (s *joinReaderOrderingStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
-) (roachpb.Spans, error) {
+) (roachpb.Spans, []int, error) {
 	// Reset s.inputRowIdxToLookedUpRowIndices. This map will be populated in
 	// processedLookedUpRow(), as lookup results are received (possibly out of
 	// order).
@@ -595,7 +577,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 	sliceOverhead := memsize.IntSliceOverhead*int64(cap(s.inputRowIdxToLookedUpRowIndices)) +
 		memsize.Int64*int64(cap(s.accountedFor.inputRowIdxToLookedUpRowIndices))
 	if err := s.growMemoryAccount(sliceOverhead - s.accountedFor.sliceOverhead); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	s.accountedFor.sliceOverhead = sliceOverhead
 
@@ -605,12 +587,9 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 }
 
 func (s *joinReaderOrderingStrategy) processLookedUpRow(
-	ctx context.Context, row rowenc.EncDatumRow, key roachpb.Key,
+	ctx context.Context, row rowenc.EncDatumRow, spanID int,
 ) (joinReaderState, error) {
-	matchingInputRowIndices, err := s.getMatchingRowIndices(key)
-	if err != nil {
-		return jrStateUnknown, err
-	}
+	matchingInputRowIndices := s.getMatchingRowIndices(spanID)
 	var containerIdx int
 	if !s.isPartialJoin {
 		// Replace missing values with nulls to appease the row container.

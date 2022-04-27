@@ -494,7 +494,8 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 
 	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(ij.indexSpans))
 	if err = ij.fetcher.StartScan(
-		ij.Ctx, ij.FlowCtx.Txn, ij.indexSpans, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
+		ij.Ctx, ij.FlowCtx.Txn, ij.indexSpans, nil, /* spanIDs */
+		rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
 		ij.FlowCtx.TraceKV, ij.EvalCtx.TestingKnobs.ForceProductionValues,
 	); err != nil {
 		ij.MoveToDraining(err)
@@ -509,7 +510,7 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 	// Read the entire set of rows that are part of the scan.
 	for {
 		// Fetch the next row and copy it into the row container.
-		fetchedRow, err := ij.fetcher.NextRow(ij.Ctx)
+		fetchedRow, _, err := ij.fetcher.NextRow(ij.Ctx)
 		if err != nil {
 			ij.MoveToDraining(scrub.UnwrapScrubError(err))
 			return ijStateUnknown, ij.DrainHelper()

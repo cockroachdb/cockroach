@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -159,7 +160,7 @@ func IsTenantCertificate(cert *x509.Certificate) bool {
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
 func UserAuthPasswordHook(
-	insecureMode bool, password string, hashedPassword PasswordHash,
+	insecureMode bool, passwordStr string, hashedPassword password.PasswordHash,
 ) UserAuthHook {
 	return func(ctx context.Context, systemIdentity SQLUsername, clientConnection bool) error {
 		if systemIdentity.Undefined() {
@@ -175,10 +176,10 @@ func UserAuthPasswordHook(
 		}
 
 		// If the requested user has an empty password, disallow authentication.
-		if len(password) == 0 {
+		if len(passwordStr) == 0 {
 			return NewErrPasswordUserAuthFailed(systemIdentity)
 		}
-		ok, err := CompareHashAndCleartextPassword(ctx, hashedPassword, password)
+		ok, err := password.CompareHashAndCleartextPassword(ctx, hashedPassword, passwordStr)
 		if err != nil {
 			return err
 		}

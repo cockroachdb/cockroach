@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -496,6 +497,7 @@ func newAvroInputReader(
 	walltime int64,
 	parallelism int,
 	evalCtx *eval.Context,
+	db *kv.DB,
 ) (*avroInputReader, error) {
 
 	return &avroInputReader{
@@ -506,6 +508,7 @@ func newAvroInputReader(
 			evalCtx:    evalCtx,
 			tableDesc:  tableDesc,
 			kvCh:       kvCh,
+			db:         db,
 		},
 		opts: avroOpts,
 	}, nil

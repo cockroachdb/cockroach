@@ -5065,7 +5065,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		INTEGER NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		maxDescIDKeyVal, err := p.extendedEvalCtx.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
+		maxDescIDKeyVal, err := p.execCfg.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
 		if err != nil {
 			return err
 		}
@@ -5094,7 +5094,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			scanRequest := roachpb.NewScan(unusedDescSpan.Key, unusedDescSpan.EndKey, false).(*roachpb.ScanRequest)
 			scanRequest.ScanFormat = roachpb.BATCH_RESPONSE
 			b.AddRawRequest(scanRequest)
-			err = p.extendedEvalCtx.DB.Run(ctx, &b)
+			err = p.execCfg.DB.Run(ctx, &b)
 			if err != nil {
 				return err
 			}
@@ -5110,7 +5110,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 					scanRequest.ScanFormat = roachpb.BATCH_RESPONSE
 					b.AddRawRequest(scanRequest)
 				}
-				err = p.extendedEvalCtx.DB.Run(ctx, &b)
+				err = p.execCfg.DB.Run(ctx, &b)
 				if err != nil {
 					return err
 				}

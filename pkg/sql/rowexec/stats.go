@@ -96,13 +96,14 @@ func (c *rowFetcherStatCollector) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
 ) error {
 	start := timeutil.Now()
-	err := c.fetcher.StartScan(ctx, txn, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize)
+	err := c.fetcher.StartScan(ctx, txn, spans, spanIDs, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
@@ -140,14 +141,14 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 }
 
 // NextRow is part of the rowFetcher interface.
-func (c *rowFetcherStatCollector) NextRow(ctx context.Context) (rowenc.EncDatumRow, error) {
+func (c *rowFetcherStatCollector) NextRow(ctx context.Context) (rowenc.EncDatumRow, int, error) {
 	start := timeutil.Now()
-	row, err := c.fetcher.NextRow(ctx)
+	row, spanID, err := c.fetcher.NextRow(ctx)
 	if row != nil {
 		c.stats.NumTuples.Add(1)
 	}
 	c.stats.WaitTime.Add(timeutil.Since(start))
-	return row, err
+	return row, spanID, err
 }
 
 // NextRowInto is part of the rowFetcher interface.
@@ -161,11 +162,6 @@ func (c *rowFetcherStatCollector) NextRowInto(
 	}
 	c.stats.WaitTime.Add(timeutil.Since(start))
 	return ok, err
-}
-
-// PartialKey is part of the rowFetcher interface.
-func (c *rowFetcherStatCollector) PartialKey(nCols int) (roachpb.Key, error) {
-	return c.fetcher.PartialKey(nCols)
 }
 
 func (c *rowFetcherStatCollector) Reset() {

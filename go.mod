@@ -140,6 +140,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/twpayne/go-geom v1.4.1
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
+	github.com/xdg-go/pbkdf2 v1.0.0
 	github.com/xdg-go/scram v1.0.2
 	github.com/xdg-go/stringprep v1.0.2
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
@@ -316,7 +317,6 @@ require (
 	github.com/twitchtv/twirp v8.1.0+incompatible // indirect
 	github.com/twpayne/go-kml v1.5.2 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
-	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	go.mongodb.org/mongo-driver v1.5.1 // indirect
 	go.opencensus.io v0.23.0 // indirect
