@@ -81,6 +81,7 @@ type storeView struct {
 	StoreID roachpb.StoreID `yaml:"StoreID"`
 
 	Descriptors []storeDescriptorView `yaml:"Descriptors"`
+	LocalData   []localDataView       `yaml:"LocalData"`
 }
 
 // storeDescriptorView contains important fields from the range
@@ -117,6 +118,12 @@ func (r replicaDescriptorView) asReplicaDescriptor() roachpb.ReplicaDescriptor {
 		ReplicaID: r.ReplicaID,
 		Type:      r.ReplicaType,
 	}
+}
+
+// localDataView contains interesting local store data for each range.
+type localDataView struct {
+	RangeID       roachpb.RangeID `yaml:"RangeID"`
+	RaftReplicaID int             `yaml:"RaftReplicaID"`
 }
 
 // Store with its owning NodeID for easier grouping by owning nodes.
@@ -195,7 +202,8 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 			replica.NodeID = roachpb.NodeID(replica.StoreID)
 		}
 
-		key, desc, replicaState, hardState, raftLog := buildReplicaDescriptorFromTestData(t, replica)
+		replicaID, key, desc, replicaState, hardState, raftLog :=
+			buildReplicaDescriptorFromTestData(t, replica)
 
 		eng := e.getOrCreateStore(ctx, t, replica.StoreID, replica.NodeID)
 		if err = storage.MVCCPutProto(ctx, eng, nil, key, clock.Now(), nil, /* txn */
@@ -209,6 +217,9 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 		}
 		if err := sl.SetHardState(ctx, eng, hardState); err != nil {
 			t.Fatalf("failed to save raft hard state: %v", err)
+		}
+		if err := sl.SetRaftReplicaID(ctx, eng, replicaID); err != nil {
+			t.Fatalf("failed to set raft replica ID: %v", err)
 		}
 		for i, entry := range raftLog {
 			value, err := protoutil.Marshal(&entry)
@@ -227,6 +238,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 func buildReplicaDescriptorFromTestData(
 	t *testing.T, replica testReplicaInfo,
 ) (
+	roachpb.ReplicaID,
 	roachpb.Key,
 	roachpb.RangeDescriptor,
 	kvserverpb.ReplicaState,
@@ -239,12 +251,16 @@ func buildReplicaDescriptorFromTestData(
 	endKey := parsePrettyKey(t, replica.EndKey)
 	key := keys.RangeDescriptorKey(startKey)
 	var replicas []roachpb.ReplicaDescriptor
+	var replicaID roachpb.ReplicaID
 	maxReplicaID := replica.Replicas[0].ReplicaID
 	for _, r := range replica.Replicas {
 		if r.ReplicaID > maxReplicaID {
 			maxReplicaID = r.ReplicaID
 		}
 		replicas = append(replicas, r.asReplicaDescriptor())
+		if r.NodeID == replica.NodeID && r.StoreID == replica.StoreID {
+			replicaID = r.ReplicaID
+		}
 	}
 	if replica.Generation == 0 {
 		replica.Generation = roachpb.RangeGeneration(maxReplicaID)
@@ -292,7 +308,7 @@ func buildReplicaDescriptorFromTestData(
 		entry := raftLogFromPendingDescriptorUpdate(t, replica, u, desc, uint64(i))
 		raftLog = append(raftLog, enginepb.MVCCMetadata{RawBytes: entry.RawBytes})
 	}
-	return key, desc, replicaState, hardState, raftLog
+	return replicaID, key, desc, replicaState, hardState, raftLog
 }
 
 func raftLogFromPendingDescriptorUpdate(
@@ -520,10 +536,21 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 	var storesView []storeView
 	for _, storeID := range stores {
 		var descriptorViews []storeDescriptorView
+		var localDataViews []localDataView
 		store := e.stores[storeID]
 		err := kvserver.IterateRangeDescriptorsFromDisk(ctx, store.engine,
 			func(desc roachpb.RangeDescriptor) error {
 				descriptorViews = append(descriptorViews, descriptorView(desc))
+
+				sl := stateloader.Make(desc.RangeID)
+				raftReplicaID, _, err := sl.LoadRaftReplicaID(ctx, store.engine)
+				if err != nil {
+					t.Fatalf("failed to load Raft replica ID: %v", err)
+				}
+				localDataViews = append(localDataViews, localDataView{
+					RangeID:       desc.RangeID,
+					RaftReplicaID: int(raftReplicaID.ReplicaID),
+				})
 				return nil
 			})
 		if err != nil {
@@ -533,6 +560,7 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 			NodeID:      e.stores[storeID].nodeID,
 			StoreID:     storeID,
 			Descriptors: descriptorViews,
+			LocalData:   localDataViews,
 		})
 	}
 	out, err := yaml.Marshal(storesView)
