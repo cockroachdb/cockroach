@@ -98,10 +98,10 @@ SET
 	}
 
 	expectedRows := [][]string{
-		{`parentID`, `INT8`, `false`, `NULL`, ``, `{primary}`, `false`},
-		{`parentSchemaID`, `INT8`, `false`, `NULL`, ``, `{primary}`, `false`},
-		{`name`, `STRING`, `false`, `NULL`, ``, `{primary}`, `false`},
-		{`id`, `INT8`, `true`, `NULL`, ``, `{primary}`, `false`},
+		{`parentID`, `INT8`, `f`, `NULL`, ``, `{primary}`, `f`},
+		{`parentSchemaID`, `INT8`, `f`, `NULL`, ``, `{primary}`, `f`},
+		{`name`, `STRING`, `f`, `NULL`, ``, `{primary}`, `f`},
+		{`id`, `INT8`, `t`, `NULL`, ``, `{primary}`, `f`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
@@ -115,10 +115,10 @@ SET
 	expected = `
    column_name   | data_type | is_nullable | column_default | generation_expression |  indices  | is_hidden
 -----------------+-----------+-------------+----------------+-----------------------+-----------+------------
-  parentID       | INT8      |    false    | NULL           |                       | {primary} |   false
-  parentSchemaID | INT8      |    false    | NULL           |                       | {primary} |   false
-  name           | STRING    |    false    | NULL           |                       | {primary} |   false
-  id             | INT8      |    true     | NULL           |                       | {primary} |   false
+  parentID       | INT8      |      f      | NULL           |                       | {primary} |     f
+  parentSchemaID | INT8      |      f      | NULL           |                       | {primary} |     f
+  name           | STRING    |      f      | NULL           |                       | {primary} |     f
+  id             | INT8      |      t      | NULL           |                       | {primary} |     f
 (4 rows)
 `
 
