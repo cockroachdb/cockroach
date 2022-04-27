@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1751,7 +1752,7 @@ func (p *planner) makeSessionsRequest(
 func getSessionID(session serverpb.Session) tree.Datum {
 	// TODO(knz): serverpb.Session is always constructed with an ID
 	// set from a 16-byte session ID. Yet we get crash reports
-	// that fail in BytesToClusterWideID() with a byte slice that's
+	// that fail in IDFromBytes() with a byte slice that's
 	// too short. See #32517.
 	var sessionID tree.Datum
 	if session.ID == nil {
@@ -1767,7 +1768,7 @@ func getSessionID(session serverpb.Session) tree.Datum {
 			pgerror.NewInternalTrackingError(32517 /* issue */, fmt.Sprintf("len=%d", len(session.ID))))
 		sessionID = tree.NewDString("<invalid>")
 	} else {
-		clusterSessionID := BytesToClusterWideID(session.ID)
+		clusterSessionID := clusterunique.IDFromBytes(session.ID)
 		sessionID = tree.NewDString(clusterSessionID.String())
 	}
 	return sessionID
