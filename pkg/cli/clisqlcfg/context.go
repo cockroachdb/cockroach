@@ -170,7 +170,7 @@ func (c *Context) MakeConn(url string) (clisqlclient.Conn, error) {
 	// ensures that if the server was not initialized or there is some
 	// network issue, the client will not be left to hang forever.
 	//
-	// This is a lib/pq feature.
+	// This is a pgx feature.
 	if baseURL.GetOption("connect_timeout") == "" && c.ConnectTimeout != 0 {
 		_ = baseURL.SetOption("connect_timeout", strconv.Itoa(c.ConnectTimeout))
 	}
@@ -181,18 +181,28 @@ func (c *Context) MakeConn(url string) (clisqlclient.Conn, error) {
 	conn := c.ConnCtx.MakeSQLConn(c.CmdOut, c.CmdErr, url)
 	conn.SetMissingPassword(!usePw || !pwdSet)
 
+	// By default, all connections will use the underlying driver to infer
+	// result types. This should be set back to false for any use case where the
+	// results are only shown for textual display.
+	conn.SetAlwaysInferResultTypes(true)
+
 	return conn, nil
 }
 
 // Run executes the SQL shell.
-func (c *Context) Run(conn clisqlclient.Conn) error {
+func (c *Context) Run(ctx context.Context, conn clisqlclient.Conn) error {
 	if !c.opened {
 		return errors.AssertionFailedf("programming error: Open not called yet")
 	}
 
+	// Anything using a SQL shell (e.g. `cockroach sql` or `demo`), only needs
+	// to show results in text format, so the underlying driver doesn't need to
+	// infer types.
+	conn.SetAlwaysInferResultTypes(false)
+
 	// Open the connection to make sure everything is OK before running any
 	// statements. Performs authentication.
-	if err := conn.EnsureConn(); err != nil {
+	if err := conn.EnsureConn(ctx); err != nil {
 		return err
 	}
 
