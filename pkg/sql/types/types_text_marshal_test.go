@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +23,7 @@ import (
 // marshal a protobuf struct has child field of type EnumMetadata
 func TestDescriptorProtoString(t *testing.T) {
 	enumMembers := []string{"hi", "hello"}
-	enumType := types.MakeEnum(typedesc.TypeIDToOID(500), typedesc.TypeIDToOID(100500))
+	enumType := types.MakeEnum(catid.TypeIDToOID(500), catid.TypeIDToOID(100500))
 	enumType.TypeMeta = types.UserDefinedTypeMetadata{
 		Name: &types.UserDefinedTypeName{
 			Schema: "test",

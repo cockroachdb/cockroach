@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -111,11 +112,6 @@ func UpdateCachedFieldsOnModifiedMutable(desc catalog.TypeDescriptor) (*Mutable,
 	}
 	mutable.immutable = *mutable.ImmutableCopy().(*immutable)
 	return mutable, nil
-}
-
-// TypeIDToOID converts a type descriptor ID into a type OID.
-func TypeIDToOID(id descpb.ID) oid.Oid {
-	return oid.Oid(id) + oidext.CockroachPredefinedOIDMax
 }
 
 // UserDefinedTypeOIDToID converts a user defined type OID into a
@@ -787,7 +783,7 @@ func (desc *immutable) MakeTypesT(
 ) (*types.T, error) {
 	switch t := desc.Kind; t {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		typ := types.MakeEnum(TypeIDToOID(desc.GetID()), TypeIDToOID(desc.ArrayTypeID))
+		typ := types.MakeEnum(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID))
 		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
 			return nil, err
 		}

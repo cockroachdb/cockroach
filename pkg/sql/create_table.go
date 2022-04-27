@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -48,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -1377,7 +1377,7 @@ func NewTableDesc(
 					if err != nil {
 						return nil, errors.Wrap(err, "error resolving REGIONAL BY ROW column type")
 					}
-					if t.Oid() != typedesc.TypeIDToOID(regionConfig.RegionEnumID()) {
+					if t.Oid() != catid.TypeIDToOID(regionConfig.RegionEnumID()) {
 						err = pgerror.Newf(
 							pgcode.InvalidTableDefinition,
 							"cannot use column %s which has type %s in REGIONAL BY ROW",
@@ -1386,7 +1386,7 @@ func NewTableDesc(
 						)
 						if t, terr := vt.ResolveTypeByOID(
 							ctx,
-							typedesc.TypeIDToOID(regionConfig.RegionEnumID()),
+							catid.TypeIDToOID(regionConfig.RegionEnumID()),
 						); terr == nil {
 							if n.Locality.RegionalByRowColumn != tree.RegionalByRowRegionNotSpecifiedName {
 								// In this case, someone used REGIONAL BY ROW AS <col> where
@@ -1422,7 +1422,7 @@ func NewTableDesc(
 					regionalByRowCol.String(),
 				)
 			}
-			oid := typedesc.TypeIDToOID(regionConfig.RegionEnumID())
+			oid := catid.TypeIDToOID(regionConfig.RegionEnumID())
 			n.Defs = append(
 				n.Defs,
 				regionalByRowDefaultColDef(
