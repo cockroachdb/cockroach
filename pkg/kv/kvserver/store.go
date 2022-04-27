@@ -911,12 +911,12 @@ type Store struct {
 		m map[roachpb.RangeID]struct{}
 	}
 
-	// replicaQueues is a map of per-Replica incoming request queues. These
+	// raftRecvQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
 	// avoid reworking the locking in getOrCreateReplica which requires
 	// Replica.raftMu to be held while a replica is being inserted into
 	// Store.mu.replicas.
-	replicaQueues syncutil.IntMap // map[roachpb.RangeID]*raftRequestQueue
+	raftRecvQueues syncutil.IntMap // map[roachpb.RangeID]*raftReceiveQueue
 
 	scheduler *raftScheduler
 

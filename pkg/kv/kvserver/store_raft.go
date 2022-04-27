@@ -33,12 +33,12 @@ type raftRequestInfo struct {
 	respStream RaftMessageResponseStream
 }
 
-type raftRequestQueue struct {
+type raftReceiveQueue struct {
 	syncutil.Mutex
 	infos []raftRequestInfo
 }
 
-func (q *raftRequestQueue) drain() ([]raftRequestInfo, bool) {
+func (q *raftReceiveQueue) drain() ([]raftRequestInfo, bool) {
 	q.Lock()
 	defer q.Unlock()
 	if len(q.infos) == 0 {
@@ -49,7 +49,7 @@ func (q *raftRequestQueue) drain() ([]raftRequestInfo, bool) {
 	return infos, true
 }
 
-func (q *raftRequestQueue) recycle(processed []raftRequestInfo) {
+func (q *raftReceiveQueue) recycle(processed []raftRequestInfo) {
 	if cap(processed) > 4 {
 		return // cap recycled slice lengths
 	}
@@ -166,11 +166,11 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	// count them.
 	s.metrics.RaftRcvdMessages[req.Message.Type].Inc(1)
 
-	value, ok := s.replicaQueues.Load(int64(req.RangeID))
+	value, ok := s.raftRecvQueues.Load(int64(req.RangeID))
 	if !ok {
-		value, _ = s.replicaQueues.LoadOrStore(int64(req.RangeID), unsafe.Pointer(&raftRequestQueue{}))
+		value, _ = s.raftRecvQueues.LoadOrStore(int64(req.RangeID), unsafe.Pointer(&raftReceiveQueue{}))
 	}
-	q := (*raftRequestQueue)(value)
+	q := (*raftReceiveQueue)(value)
 	q.Lock()
 	defer q.Unlock()
 	if len(q.infos) >= replicaRequestQueueSize {
@@ -440,11 +440,11 @@ func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID) bool {
-	value, ok := s.replicaQueues.Load(int64(rangeID))
+	value, ok := s.raftRecvQueues.Load(int64(rangeID))
 	if !ok {
 		return false
 	}
-	q := (*raftRequestQueue)(value)
+	q := (*raftReceiveQueue)(value)
 	infos, ok := q.drain()
 	if !ok {
 		return false
@@ -482,7 +482,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		if _, exists := s.mu.replicasByRangeID.Load(rangeID); !exists {
 			q.Lock()
 			if len(q.infos) == 0 {
-				s.replicaQueues.Delete(int64(rangeID))
+				s.raftRecvQueues.Delete(int64(rangeID))
 			}
 			q.Unlock()
 		}
