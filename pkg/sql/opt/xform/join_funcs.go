@@ -370,9 +370,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			return
 		}
 
-		keyCols, lookupExpr, inputProjections, constFilters, rightSideCols :=
-			cb.Build(index, onFilters, optionalFilters)
-		if len(keyCols) == 0 && len(lookupExpr) == 0 {
+		lookupConstraint := cb.Build(index, onFilters, optionalFilters)
+		if lookupConstraint.IsUnconstrained() {
 			// We couldn't find equality columns or a lookup expression to
 			// perform a lookup join on this index.
 			return
@@ -384,15 +383,15 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = index.Ordinal()
 		lookupJoin.Locking = scanPrivate.Locking
-		lookupJoin.KeyCols = keyCols
-		lookupJoin.LookupExpr = lookupExpr
+		lookupJoin.KeyCols = lookupConstraint.KeyCols
+		lookupJoin.LookupExpr = lookupConstraint.LookupExpr
 
 		// Wrap the input in a Project if any projections are required. The
 		// lookup join will project away these synthesized columns.
-		if len(inputProjections) > 0 {
+		if len(lookupConstraint.InputProjections) > 0 {
 			lookupJoin.Input = c.e.f.ConstructProject(
 				lookupJoin.Input,
-				inputProjections,
+				lookupConstraint.InputProjections,
 				lookupJoin.Input.Relational().OutputCols,
 			)
 		}
@@ -400,17 +399,17 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		tableFDs := memo.MakeTableFuncDep(md, scanPrivate.Table)
 		// A lookup join will drop any input row which contains NULLs, so a lax key
 		// is sufficient.
-		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(rightSideCols.ToSet())
+		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(lookupConstraint.RightSideCols.ToSet())
 
 		// Remove redundant filters from the ON condition if columns were
 		// constrained by equality filters or constant filters.
 		lookupJoin.On = onFilters
 		if len(lookupJoin.KeyCols) > 0 {
-			lookupJoin.On = memo.ExtractRemainingJoinFilters(lookupJoin.On, lookupJoin.KeyCols, rightSideCols)
+			lookupJoin.On = memo.ExtractRemainingJoinFilters(lookupJoin.On, lookupJoin.KeyCols, lookupConstraint.RightSideCols)
 		}
 		lookupJoin.On = lookupJoin.On.Difference(lookupJoin.LookupExpr)
-		lookupJoin.On = lookupJoin.On.Difference(constFilters)
-		lookupJoin.ConstFilters = constFilters
+		lookupJoin.On = lookupJoin.On.Difference(lookupConstraint.ConstFilters)
+		lookupJoin.ConstFilters = lookupConstraint.ConstFilters
 
 		// Add input columns and lookup expression columns, since these will be
 		// needed for all join types and cases.
