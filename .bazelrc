@@ -74,7 +74,10 @@ build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh aarch
 build:crosslinuxarm --config=crosslinuxarmbase
 build:crosslinuxarmbase --platforms=//build/toolchains:cross_linux_arm
 build:crosslinuxarmbase --config=cross
-
+build:crosslinuxs390x '--workspace_status_command=./build/bazelutil/stamp.sh s390x-unknown-linux-gnu'
+build:crosslinuxs390x --config=crosslinuxs390xbase
+build:crosslinuxs390xbase --platforms=//build/toolchains:cross_linux_s390x
+build:crosslinuxs390xbase --config=cross
 # Developer configurations. Add e.g. --config=devdarwinx86_64 to turn these on.
 # NB: This is consumed in `BUILD` files (see build/toolchains/BUILD.bazel).
 build:devdarwinx86_64 --platforms=//build/toolchains:darwin_x86_64
