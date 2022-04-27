@@ -96,49 +96,135 @@ sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references 
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
 sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed
 sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed
-sql.defaults.cost_scans_with_default_col_size.enabled	boolean	false	setting to true uses the same size for all columns to compute scan cost
-sql.defaults.datestyle	enumeration	iso, mdy	default value for DateStyle session setting [iso, mdy = 0, iso, dmy = 1, iso, ymd = 2]
-sql.defaults.default_hash_sharded_index_bucket_count	integer	16	used as bucket count if bucket count is not specified in hash sharded index definition
-sql.defaults.default_int_size	integer	8	the size, in bytes, of an INT type
-sql.defaults.disallow_full_table_scans.enabled	boolean	false	setting to true rejects queries that have planned a full table scan
-sql.defaults.distsql	enumeration	auto	default distributed SQL execution mode [off = 0, auto = 1, on = 2, always = 3]
-sql.defaults.experimental_alter_column_type.enabled	boolean	false	default value for experimental_alter_column_type session setting; enables the use of ALTER COLUMN TYPE for general conversions
-sql.defaults.experimental_auto_rehoming.enabled	boolean	false	default value for experimental_enable_auto_rehoming; allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE
-sql.defaults.experimental_distsql_planning	enumeration	off	default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning [off = 0, on = 1]
-sql.defaults.experimental_enable_unique_without_index_constraints.enabled	boolean	false	default value for experimental_enable_unique_without_index_constraints session setting;disables unique without index constraints by default
-sql.defaults.experimental_implicit_column_partitioning.enabled	boolean	false	default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning
-sql.defaults.experimental_stream_replication.enabled	boolean	false	default value for experimental_stream_replication session setting;enables the ability to setup a replication stream
-sql.defaults.experimental_temporary_tables.enabled	boolean	false	default value for experimental_enable_temp_tables; allows for use of temporary tables by default
-sql.defaults.foreign_key_cascades_limit	integer	10000	default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query
-sql.defaults.idle_in_session_timeout	duration	0s	default value for the idle_in_session_timeout; default value for the idle_in_session_timeout session setting; controls the duration a session is permitted to idle before the session is terminated; if set to 0, there is no timeout
-sql.defaults.idle_in_transaction_session_timeout	duration	0s	default value for the idle_in_transaction_session_timeout; controls the duration a session is permitted to idle in a transaction before the session is terminated; if set to 0, there is no timeout
-sql.defaults.implicit_select_for_update.enabled	boolean	true	default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements
-sql.defaults.insert_fast_path.enabled	boolean	true	default value for enable_insert_fast_path session setting; enables a specialized insert path
-sql.defaults.intervalstyle	enumeration	postgres	default value for IntervalStyle session setting [postgres = 0, iso_8601 = 1, sql_standard = 2]
-sql.defaults.large_full_scan_rows	float	1000	default value for large_full_scan_rows session setting which determines the maximum table size allowed for a full scan when disallow_full_table_scans is set to true
-sql.defaults.locality_optimized_partitioned_index_scan.enabled	boolean	true	default value for locality_optimized_partitioned_index_scan session setting; enables searching for rows in the current region before searching remote regions
-sql.defaults.lock_timeout	duration	0s	default value for the lock_timeout; default value for the lock_timeout session setting; controls the duration a query is permitted to wait while attempting to acquire a lock on a key or while blocking on an existing lock in order to perform a non-locking read on a key; if set to 0, there is no timeout
-sql.defaults.on_update_rehome_row.enabled	boolean	true	default value for on_update_rehome_row; enables ON UPDATE rehome_row() expressions to trigger on updates
-sql.defaults.optimizer_use_histograms.enabled	boolean	true	default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default
-sql.defaults.optimizer_use_multicol_stats.enabled	boolean	true	default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default
-sql.defaults.override_alter_primary_region_in_super_region.enabled	boolean	false	default value for override_alter_primary_region_in_super_region; allows for altering the primary region even if the primary region is a member of a super region
-sql.defaults.override_multi_region_zone_config.enabled	boolean	false	default value for override_multi_region_zone_config; allows for overriding the zone configs of a multi-region table or database
-sql.defaults.prefer_lookup_joins_for_fks.enabled	boolean	false	default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible
-sql.defaults.primary_region	string		if not empty, all databases created without a PRIMARY REGION will implicitly have the given PRIMARY REGION
-sql.defaults.reorder_joins_limit	integer	8	default number of joins to reorder
-sql.defaults.require_explicit_primary_keys.enabled	boolean	false	default value for requiring explicit primary keys in CREATE TABLE statements
-sql.defaults.results_buffer.size	byte size	16 KiB	default size of the buffer that accumulates results for a statement or a batch of statements before they are sent to the client. This can be overridden on an individual connection with the 'results_buffer_size' parameter. Note that auto-retries generally only happen while no results have been delivered to the client, so reducing this size can increase the number of retriable errors a client receives. On the other hand, increasing the buffer size can increase the delay until the client receives the first result row. Updating the setting only affects new connections. Setting to 0 disables any buffering.
-sql.defaults.serial_normalization	enumeration	rowid	default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2, sql_sequence_cached = 3, unordered_rowid = 4]
-sql.defaults.statement_timeout	duration	0s	default value for the statement_timeout; default value for the statement_timeout session setting; controls the duration a query is permitted to run before it is canceled; if set to 0, there is no timeout
-sql.defaults.stub_catalog_tables.enabled	boolean	true	default value for stub_catalog_tables session setting
-sql.defaults.super_regions.enabled	boolean	false	default value for enable_super_regions; allows for the usage of super regions
-sql.defaults.transaction_rows_read_err	integer	0	the limit for the number of rows read by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
-sql.defaults.transaction_rows_read_log	integer	0	the threshold for the number of rows read by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
-sql.defaults.transaction_rows_written_err	integer	0	the limit for the number of rows written by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
-sql.defaults.transaction_rows_written_log	integer	0	the threshold for the number of rows written by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
-sql.defaults.use_declarative_schema_changer	enumeration	on	default value for use_declarative_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe = 2, unsafe_always = 3]
-sql.defaults.vectorize	enumeration	on	default vectorize mode [on = 0, on = 2, experimental_always = 3, off = 4]
-sql.defaults.zigzag_join.enabled	boolean	true	default value for enable_zigzag_join session setting; allows use of zig-zag join by default
+sql.defaults.cost_scans_with_default_col_size.enabled	boolean	false	"setting to true uses the same size for all columns to compute scan cost
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.datestyle	enumeration	iso, mdy	"default value for DateStyle session setting [iso, mdy = 0, iso, dmy = 1, iso, ymd = 2]
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.default_hash_sharded_index_bucket_count	integer	16	"used as bucket count if bucket count is not specified in hash sharded index definition
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.default_int_size	integer	8	"the size, in bytes, of an INT type
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.disallow_full_table_scans.enabled	boolean	false	"setting to true rejects queries that have planned a full table scan
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.distsql	enumeration	auto	"default distributed SQL execution mode [off = 0, auto = 1, on = 2, always = 3]
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.experimental_alter_column_type.enabled	boolean	false	"default value for experimental_alter_column_type session setting; enables the use of ALTER COLUMN TYPE for general conversions
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.experimental_auto_rehoming.enabled	boolean	false	"default value for experimental_enable_auto_rehoming; allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.experimental_distsql_planning	enumeration	off	"default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning [off = 0, on = 1]
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.experimental_enable_unique_without_index_constraints.enabled	boolean	false	"default value for experimental_enable_unique_without_index_constraints session setting;disables unique without index constraints by default
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.experimental_implicit_column_partitioning.enabled	boolean	false	"default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.experimental_stream_replication.enabled	boolean	false	"default value for experimental_stream_replication session setting;enables the ability to setup a replication stream
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.experimental_temporary_tables.enabled	boolean	false	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.foreign_key_cascades_limit	integer	10000	"default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.idle_in_session_timeout	duration	0s	"default value for the idle_in_session_timeout; default value for the idle_in_session_timeout session setting; controls the duration a session is permitted to idle before the session is terminated; if set to 0, there is no timeout
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.idle_in_transaction_session_timeout	duration	0s	"default value for the idle_in_transaction_session_timeout; controls the duration a session is permitted to idle in a transaction before the session is terminated; if set to 0, there is no timeout
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.implicit_select_for_update.enabled	boolean	true	"default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.insert_fast_path.enabled	boolean	true	"default value for enable_insert_fast_path session setting; enables a specialized insert path
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.intervalstyle	enumeration	postgres	"default value for IntervalStyle session setting [postgres = 0, iso_8601 = 1, sql_standard = 2]
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.large_full_scan_rows	float	1000	"default value for large_full_scan_rows session setting which determines the maximum table size allowed for a full scan when disallow_full_table_scans is set to true
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.locality_optimized_partitioned_index_scan.enabled	boolean	true	"default value for locality_optimized_partitioned_index_scan session setting; enables searching for rows in the current region before searching remote regions
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.lock_timeout	duration	0s	"default value for the lock_timeout; default value for the lock_timeout session setting; controls the duration a query is permitted to wait while attempting to acquire a lock on a key or while blocking on an existing lock in order to perform a non-locking read on a key; if set to 0, there is no timeout
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.on_update_rehome_row.enabled	boolean	true	"default value for on_update_rehome_row; enables ON UPDATE rehome_row() expressions to trigger on updates
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.optimizer_use_histograms.enabled	boolean	true	"default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.optimizer_use_multicol_stats.enabled	boolean	true	"default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.override_alter_primary_region_in_super_region.enabled	boolean	false	"default value for override_alter_primary_region_in_super_region; allows for altering the primary region even if the primary region is a member of a super region
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.override_multi_region_zone_config.enabled	boolean	false	"default value for override_multi_region_zone_config; allows for overriding the zone configs of a multi-region table or database
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.prefer_lookup_joins_for_fks.enabled	boolean	false	"default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.primary_region	string		"if not empty, all databases created without a PRIMARY REGION will implicitly have the given PRIMARY REGION
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.reorder_joins_limit	integer	8	"default number of joins to reorder
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.require_explicit_primary_keys.enabled	boolean	false	"default value for requiring explicit primary keys in CREATE TABLE statements
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.results_buffer.size	byte size	16 KiB	"default size of the buffer that accumulates results for a statement or a batch of statements before they are sent to the client. This can be overridden on an individual connection with the 'results_buffer_size' parameter. Note that auto-retries generally only happen while no results have been delivered to the client, so reducing this size can increase the number of retriable errors a client receives. On the other hand, increasing the buffer size can increase the delay until the client receives the first result row. Updating the setting only affects new connections. Setting to 0 disables any buffering.
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.serial_normalization	enumeration	rowid	"default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2, sql_sequence_cached = 3, unordered_rowid = 4]
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.statement_timeout	duration	0s	"default value for the statement_timeout; default value for the statement_timeout session setting; controls the duration a query is permitted to run before it is canceled; if set to 0, there is no timeout
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.stub_catalog_tables.enabled	boolean	true	"default value for stub_catalog_tables session setting
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.super_regions.enabled	boolean	false	"default value for enable_super_regions; allows for the usage of super regions
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.transaction_rows_read_err	integer	0	"the limit for the number of rows read by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.transaction_rows_read_log	integer	0	"the threshold for the number of rows read by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.transaction_rows_written_err	integer	0	"the limit for the number of rows written by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.transaction_rows_written_log	integer	0	"the threshold for the number of rows written by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.use_declarative_schema_changer	enumeration	on	"default value for use_declarative_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe = 2, unsafe_always = 3]
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.vectorize	enumeration	on	"default vectorize mode [on = 0, on = 2, experimental_always = 3, off = 4]
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
+sql.defaults.zigzag_join.enabled	boolean	true	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: https://www.cockroachlabs.com/docs/dev/alter-role.html"
 sql.distsql.max_running_flows	integer	-128	the value - when positive - used as is, or the value - when negative - multiplied by the number of CPUs on a node, to determine the maximum number of concurrent remote flows that can be run on the node
 sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage
 sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable

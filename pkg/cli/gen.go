@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
@@ -239,7 +240,18 @@ Output the list of cluster settings known to this binary.
 					defaultVal = override
 				}
 			}
-			row := []string{wrapCode(name), typ, wrapCode(defaultVal), setting.Description()}
+
+			settingDesc := setting.Description()
+			if strings.Contains(name, "sql.defaults") {
+				settingDesc = fmt.Sprintf(`%s
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default can now be configured using ALTER ROLE: %s`,
+					setting.Description(),
+					docs.URL("alter-role.html"),
+				)
+			}
+
+			row := []string{wrapCode(name), typ, wrapCode(defaultVal), settingDesc}
 			rows = append(rows, row)
 		}
 
