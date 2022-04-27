@@ -147,36 +147,35 @@ func TestLookupConstraints(t *testing.T) {
 
 				var cb lookupjoin.ConstraintBuilder
 				cb.Init(&f, md, f.EvalContext(), rightTable, leftCols, rightCols, leftEq, rightEq)
-				keyCols, lookupExpr, inputProjections, _, _ :=
-					cb.Build(index, filters, optionalFilters)
+				lookupConstraint := cb.Build(index, filters, optionalFilters)
 				var b strings.Builder
-				if len(keyCols) == 0 && len(lookupExpr) == 0 {
+				if lookupConstraint.IsUnconstrained() {
 					b.WriteString("lookup join not possible")
 				}
-				if len(keyCols) > 0 {
+				if len(lookupConstraint.KeyCols) > 0 {
 					b.WriteString("key cols:\n")
-					for i := range keyCols {
+					for i := range lookupConstraint.KeyCols {
 						b.WriteString("  ")
 						b.WriteString(string(index.Column(i).ColName()))
 						b.WriteString(" = ")
-						b.WriteString(md.ColumnMeta(keyCols[i]).Alias)
+						b.WriteString(md.ColumnMeta(lookupConstraint.KeyCols[i]).Alias)
 						b.WriteString("\n")
 					}
 				}
-				if len(inputProjections) > 0 {
+				if len(lookupConstraint.InputProjections) > 0 {
 					b.WriteString("input projections:\n")
-					for i := range inputProjections {
-						col := inputProjections[i].Col
+					for i := range lookupConstraint.InputProjections {
+						col := lookupConstraint.InputProjections[i].Col
 						b.WriteString("  ")
 						b.WriteString(md.ColumnMeta(col).Alias)
 						b.WriteString(" = ")
-						b.WriteString(formatScalar(inputProjections[i].Element, &f, &evalCtx))
+						b.WriteString(formatScalar(lookupConstraint.InputProjections[i].Element, &f, &evalCtx))
 						b.WriteString("\n")
 					}
 				}
-				if len(lookupExpr) > 0 {
+				if len(lookupConstraint.LookupExpr) > 0 {
 					b.WriteString("lookup expression:\n  ")
-					b.WriteString(formatScalar(&lookupExpr, &f, &evalCtx))
+					b.WriteString(formatScalar(&lookupConstraint.LookupExpr, &f, &evalCtx))
 					b.WriteString("\n")
 				}
 				return b.String()
