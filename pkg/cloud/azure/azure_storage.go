@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -65,9 +66,26 @@ type azureStorage struct {
 	container azblob.ContainerURL
 	prefix    string
 	settings  *cluster.Settings
+	mon       *mon.BytesMonitor
 }
 
 var _ cloud.ExternalStorage = &azureStorage{}
+
+// azureStorageWriter wraps the underlying azure cloud storage writer.
+type azureStorageWriter struct {
+	io.WriteCloser
+
+	ctx    context.Context
+	memAcc *mon.BoundAccount
+}
+
+// Close implements the WriteCloser interface.
+func (w *azureStorageWriter) Close() error {
+	if w.memAcc != nil {
+		w.memAcc.Close(w.ctx)
+	}
+	return w.WriteCloser.Close()
+}
 
 func makeAzureStorage(
 	_ context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
@@ -121,15 +139,36 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.Writer: %s",
 		path.Join(s.prefix, basename))})
 	blob := s.getBlob(basename)
-	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+
+	// The BufferSize determines how much the client will buffer while uploading
+	// chunks to storage. This buffering is to enable retrying uploads in the face
+	// of transient errors. We should account for this buffer size in our memory
+	// monitor.
+	var memAcc *mon.BoundAccount
+	bufferSize := int(cloud.WriteChunkSize.Get(&s.settings.SV))
+	if s.mon != nil {
+		acc := s.mon.MakeBoundAccount()
+		memAcc = &acc
+		if err := memAcc.Grow(ctx, int64(bufferSize)); err != nil {
+			return nil, err
+		}
+	}
+
+	w := cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		defer sp.Finish()
 		_, err := azblob.UploadStreamToBlockBlob(
 			ctx, r, blob, azblob.UploadStreamToBlockBlobOptions{
-				BufferSize: int(cloud.WriteChunkSize.Get(&s.settings.SV)),
+				BufferSize: bufferSize,
 			},
 		)
 		return err
-	}), nil
+	})
+
+	return &azureStorageWriter{
+		WriteCloser: w,
+		ctx:         ctx,
+		memAcc:      memAcc,
+	}, nil
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.

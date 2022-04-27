@@ -565,12 +565,9 @@ func TestBackupRestoreAppend(t *testing.T) {
 			// Find the backup times in the collection and try RESTORE'ing to each, and
 			// within each also check if we can restore to individual times captured with
 			// incremental backups that were appended to that backup.
-			store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///0",
-				base.ExternalIODirConfig{},
-				tc.Servers[0].ClusterSettings(),
-				blobs.TestEmptyBlobClientFactory,
-				security.RootUserName(),
-				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil)
+			store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///0", base.ExternalIODirConfig{},
+				tc.Servers[0].ClusterSettings(), blobs.TestEmptyBlobClientFactory, security.RootUserName(),
+				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil, nil)
 			require.NoError(t, err)
 			defer store.Close()
 			var files []string
@@ -8044,12 +8041,9 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	defer dirCleanupFn()
 
 	st := cluster.MakeTestingClusterSettings()
-	storage, err := cloud.ExternalStorageFromURI(ctx,
-		"nodelocal://0/test",
-		base.ExternalIODirConfig{},
-		st,
-		blobs.TestBlobServiceClient(dir),
-		security.RootUserName(), nil, nil, nil)
+	storage, err := cloud.ExternalStorageFromURI(ctx, "nodelocal://0/test",
+		base.ExternalIODirConfig{}, st, blobs.TestBlobServiceClient(dir),
+		security.RootUserName(), nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	m := mon.NewMonitor("test-monitor", mon.MemoryResource, nil, nil, 0, 0, st)

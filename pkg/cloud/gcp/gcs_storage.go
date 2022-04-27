@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -75,9 +76,26 @@ type gcsStorage struct {
 	ioConf   base.ExternalIODirConfig
 	prefix   string
 	settings *cluster.Settings
+	mon      *mon.BytesMonitor
 }
 
 var _ cloud.ExternalStorage = &gcsStorage{}
+
+// gcsStorageWriter wraps the underlying google cloud storage writer.
+type gcsStorageWriter struct {
+	io.WriteCloser
+
+	ctx    context.Context
+	memAcc *mon.BoundAccount
+}
+
+// Close implements the WriteCloser interface.
+func (w *gcsStorageWriter) Close() error {
+	if w.memAcc != nil {
+		w.memAcc.Close(w.ctx)
+	}
+	return w.WriteCloser.Close()
+}
 
 func (g *gcsStorage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
@@ -152,6 +170,7 @@ func makeGCSStorage(
 		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
 		settings: args.Settings,
+		mon:      args.Mon,
 	}, nil
 }
 
@@ -166,7 +185,25 @@ func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteClose
 	if !gcsChunkingEnabled.Get(&g.settings.SV) {
 		w.ChunkSize = 0
 	}
-	return w, nil
+
+	// The ChunkSize determines how much the client will buffer while uploading
+	// chunks to storage. This buffering is to enable retrying uploads in the face
+	// of transient errors. We should account for this buffer size in our memory
+	// monitor.
+	var memAcc *mon.BoundAccount
+	if g.mon != nil {
+		acc := g.mon.MakeBoundAccount()
+		memAcc = &acc
+		if err := memAcc.Grow(ctx, int64(w.ChunkSize)); err != nil {
+			return nil, err
+		}
+	}
+
+	return &gcsStorageWriter{
+		WriteCloser: w,
+		ctx:         ctx,
+		memAcc:      memAcc,
+	}, nil
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.

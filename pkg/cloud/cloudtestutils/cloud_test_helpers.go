@@ -117,7 +117,7 @@ func storeFromURI(
 	}
 	// Setup a sink for the given args.
 	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		clientFactory, ie, kvDB, nil)
+		clientFactory, ie, kvDB, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,8 @@ func CheckExportStore(
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, kvDB, nil)
+	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, kvDB,
+		nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -493,9 +494,8 @@ func uploadData(
 	data := randutil.RandBytes(rnd, 16<<20)
 	ctx := context.Background()
 
-	s, err := cloud.MakeExternalStorage(
-		ctx, dest, base.ExternalIODirConfig{}, testSettings,
-		nil, nil, nil, nil)
+	s, err := cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{}, testSettings,
+		nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.NoError(t, cloud.WriteFile(ctx, s, basename, bytes.NewReader(data)))
 	return data, func() {
@@ -536,7 +536,7 @@ func CheckAntagonisticRead(
 	ctx := context.Background()
 	s, err := cloud.MakeExternalStorage(
 		ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		nil, nil, nil, nil)
+		nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	defer s.Close()
 

@@ -73,18 +73,6 @@ func MakeLocalStorageURI(path string) string {
 	return fmt.Sprintf("nodelocal://0/%s", path)
 }
 
-// TestingMakeLocalStorage is used by tests.
-func TestingMakeLocalStorage(
-	ctx context.Context,
-	cfg roachpb.ExternalStorage_LocalFilePath,
-	settings *cluster.Settings,
-	blobClientFactory blobs.BlobClientFactory,
-	ioConf base.ExternalIODirConfig,
-) (cloud.ExternalStorage, error) {
-	args := cloud.ExternalStorageContext{IOConf: ioConf, BlobClientFactory: blobClientFactory, Settings: settings}
-	return makeLocalStorage(ctx, args, roachpb.ExternalStorage{LocalFile: cfg})
-}
-
 func makeLocalStorage(
 	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {

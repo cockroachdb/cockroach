@@ -68,14 +68,9 @@ func TestMetadataSST(t *testing.T) {
 func checkMetadata(
 	ctx context.Context, t *testing.T, tc *testcluster.TestCluster, backupLoc string,
 ) {
-	store, err := cloud.ExternalStorageFromURI(
-		ctx,
-		backupLoc,
-		base.ExternalIODirConfig{},
-		tc.Servers[0].ClusterSettings(),
-		blobs.TestEmptyBlobClientFactory,
-		security.RootUserName(),
-		tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil)
+	store, err := cloud.ExternalStorageFromURI(ctx, backupLoc, base.ExternalIODirConfig{},
+		tc.Servers[0].ClusterSettings(), blobs.TestEmptyBlobClientFactory, security.RootUserName(),
+		tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -35,9 +35,9 @@ func GetStorage(ctx context.Context, cfg FixtureConfig) (cloud.ExternalStorage, 
 		return nil, errors.AssertionFailedf("unsupported external storage provider; valid providers are gs, s3, and azure")
 	}
 
-	s, err := cloud.ExternalStorageFromURI(ctx, cfg.ObjectPathToURI(),
-		base.ExternalIODirConfig{}, clustersettings.MakeClusterSettings(),
-		nil, security.SQLUsername{}, nil, nil, nil)
+	s, err := cloud.ExternalStorageFromURI(ctx, cfg.ObjectPathToURI(), base.ExternalIODirConfig{},
+		clustersettings.MakeClusterSettings(), nil, security.SQLUsername{},
+		nil, nil, nil, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, storageError)
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 )
@@ -141,12 +142,14 @@ func ExternalStorageFromURI(
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 	limiters Limiters,
+	mon *mon.BytesMonitor,
 ) (ExternalStorage, error) {
 	conf, err := ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return nil, err
 	}
-	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB, limiters)
+	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB,
+		limiters, mon)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -193,6 +196,7 @@ func MakeExternalStorage(
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 	limiters Limiters,
+	mon *mon.BytesMonitor,
 ) (ExternalStorage, error) {
 	args := ExternalStorageContext{
 		IOConf:            conf,
@@ -200,6 +204,7 @@ func MakeExternalStorage(
 		BlobClientFactory: blobClientFactory,
 		InternalExecutor:  ie,
 		DB:                kvDB,
+		Mon:               mon,
 	}
 	if conf.DisableOutbound && dest.Provider != roachpb.ExternalStorageProvider_userfile {
 		return nil, errors.New("external network access is disabled")

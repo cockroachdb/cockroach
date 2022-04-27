@@ -22,14 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
 // externalStorageBuilder is a wrapper around the ExternalStorage factory
 // methods. It allows us to separate the creation and initialization of the
 // builder between NewServer() and Start() respectively.
-// TODO(adityamaru): Consider moving this to pkg/cloud/impl at a future
-// stage of the ongoing refactor.
+//
+// TODO(adityamaru): Consider moving this to pkg/cloud/impl.
 type externalStorageBuilder struct {
 	conf              base.ExternalIODirConfig
 	settings          *cluster.Settings
@@ -38,33 +39,39 @@ type externalStorageBuilder struct {
 	ie                *sql.InternalExecutor
 	db                *kv.DB
 	limiters          cloud.Limiters
+	mon               *mon.BytesMonitor
 }
 
-func (e *externalStorageBuilder) init(
-	ctx context.Context,
-	conf base.ExternalIODirConfig,
-	settings *cluster.Settings,
-	nodeIDContainer *base.NodeIDContainer,
-	nodeDialer *nodedialer.Dialer,
-	testingKnobs base.TestingKnobs,
-	ie *sql.InternalExecutor,
-	db *kv.DB,
-) {
+// externalStorageBuilderConfig contains the information needed to initialize an
+// externalStorageBuilder.
+type externalStorageBuilderConfig struct {
+	conf            base.ExternalIODirConfig
+	settings        *cluster.Settings
+	nodeIDContainer *base.NodeIDContainer
+	nodeDialer      *nodedialer.Dialer
+	ie              *sql.InternalExecutor
+	db              *kv.DB
+	mon             *mon.BytesMonitor
+	knobs           base.TestingKnobs
+}
+
+func (e *externalStorageBuilder) init(ctx context.Context, cfg *externalStorageBuilderConfig) {
 	var blobClientFactory blobs.BlobClientFactory
-	if p, ok := testingKnobs.Server.(*TestingKnobs); ok && p.BlobClientFactory != nil {
+	if p, ok := cfg.knobs.Server.(*TestingKnobs); ok && p.BlobClientFactory != nil {
 		blobClientFactory = p.BlobClientFactory
 	}
 	if blobClientFactory == nil {
-		blobClientFactory = blobs.NewBlobClientFactory(nodeIDContainer, nodeDialer, settings.ExternalIODir)
+		blobClientFactory = blobs.NewBlobClientFactory(cfg.nodeIDContainer,
+			cfg.nodeDialer, cfg.settings.ExternalIODir)
 	}
-	e.conf = conf
-	e.settings = settings
+	e.conf = cfg.conf
+	e.settings = cfg.settings
 	e.blobClientFactory = blobClientFactory
 	e.initCalled = true
-	e.ie = ie
-	e.db = db
-	e.limiters = cloud.MakeLimiters(ctx, &settings.SV)
-
+	e.ie = cfg.ie
+	e.db = cfg.db
+	e.limiters = cloud.MakeLimiters(ctx, &cfg.settings.SV)
+	e.mon = cfg.mon
 }
 
 func (e *externalStorageBuilder) makeExternalStorage(
@@ -74,7 +81,7 @@ func (e *externalStorageBuilder) makeExternalStorage(
 		return nil, errors.New("cannot create external storage before init")
 	}
 	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie,
-		e.db, e.limiters)
+		e.db, e.limiters, e.mon)
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
@@ -83,5 +90,6 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
-	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db, e.limiters)
+	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user,
+		e.ie, e.db, e.limiters, e.mon)
 }
