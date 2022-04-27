@@ -235,6 +235,7 @@ SHOW CONSTRAINTS FROM t11
 table_name  constraint_name  constraint_type  details                       validated
 t11         t11_a_key        UNIQUE           UNIQUE (a ASC) WHERE (b > 0)  true
 t11         t11_b_key        UNIQUE           UNIQUE (b ASC) WHERE (a > 0)  true
+t11         t11_pkey         PRIMARY KEY      PRIMARY KEY (rowid ASC)       true
 
 # Update a non-indexed column referenced by the predicate.
 
