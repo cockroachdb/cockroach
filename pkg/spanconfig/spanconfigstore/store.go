@@ -106,10 +106,7 @@ func (s *Store) GetSpanConfigForKey(
 func (s *Store) getSpanConfigForKeyRLocked(
 	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, error) {
-	conf, found, err := s.mu.spanConfigStore.getSpanConfigForKey(ctx, key)
-	if err != nil {
-		return roachpb.SpanConfig{}, err
-	}
+	conf, found := s.mu.spanConfigStore.getSpanConfigForKey(ctx, key)
 	if !found {
 		conf = s.fallback
 	}
@@ -120,7 +117,7 @@ func (s *Store) getSpanConfigForKeyRLocked(
 func (s *Store) Apply(
 	ctx context.Context, dryrun bool, updates ...spanconfig.Update,
 ) (deleted []spanconfig.Target, added []spanconfig.Record) {
-	deleted, added, err := s.applyInternal(dryrun, updates...)
+	deleted, added, err := s.applyInternal(ctx, dryrun, updates...)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
@@ -133,12 +130,12 @@ func (s *Store) ForEachOverlappingSpanConfig(
 ) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.mu.spanConfigStore.forEachOverlapping(span, func(entry spanConfigEntry) error {
-		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(entry.span.Key))
+	return s.mu.spanConfigStore.forEachOverlapping(span, func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(sp.Key))
 		if err != nil {
 			return err
 		}
-		return f(entry.span, config)
+		return f(sp, config)
 	})
 }
 
@@ -154,7 +151,7 @@ func (s *Store) Copy(ctx context.Context) *Store {
 }
 
 func (s *Store) applyInternal(
-	dryrun bool, updates ...spanconfig.Update,
+	ctx context.Context, dryrun bool, updates ...spanconfig.Update,
 ) (deleted []spanconfig.Target, added []spanconfig.Record, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -174,7 +171,7 @@ func (s *Store) applyInternal(
 			return nil, nil, errors.AssertionFailedf("unknown target type")
 		}
 	}
-	deletedSpans, addedEntries, err := s.mu.spanConfigStore.apply(dryrun, spanStoreUpdates...)
+	deletedSpans, addedEntries, err := s.mu.spanConfigStore.apply(ctx, dryrun, spanStoreUpdates...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -184,8 +181,10 @@ func (s *Store) applyInternal(
 	}
 
 	for _, entry := range addedEntries {
-		record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(entry.span),
-			entry.config)
+		record, err := spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSpan(entry.span),
+			entry.conf(s.mu.spanConfigStore.interner),
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -216,8 +215,8 @@ func (s *Store) Iterate(f func(spanconfig.Record) error) error {
 	}
 	return s.mu.spanConfigStore.forEachOverlapping(
 		keys.EverythingSpan,
-		func(s spanConfigEntry) error {
-			record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(s.span), s.config)
+		func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+			record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(sp), conf)
 			if err != nil {
 				return err
 			}

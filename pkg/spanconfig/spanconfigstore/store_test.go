@@ -29,9 +29,9 @@ import (
 
 // TestingApplyInternal exports an internal method for testing purposes.
 func (s *Store) TestingApplyInternal(
-	dryrun bool, updates ...spanconfig.Update,
+	ctx context.Context, dryrun bool, updates ...spanconfig.Update,
 ) (deleted []spanconfig.Target, added []spanconfig.Record, err error) {
-	return s.applyInternal(dryrun, updates...)
+	return s.applyInternal(ctx, dryrun, updates...)
 }
 
 // TestingSplitKeys returns the computed list of range split points between
@@ -114,6 +114,7 @@ func TestDataDriven(t *testing.T) {
 			cluster.MakeTestingClusterSettings(),
 			&spanconfig.TestingKnobs{
 				StoreIgnoreCoalesceAdjacentExceptions: true,
+				StoreInternConfigsInDryRuns:           true,
 			},
 		)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -122,7 +123,7 @@ func TestDataDriven(t *testing.T) {
 			case "apply":
 				updates := spanconfigtestutils.ParseStoreApplyArguments(t, d.Input)
 				dryrun := d.HasArg("dryrun")
-				deleted, added, err := store.TestingApplyInternal(dryrun, updates...)
+				deleted, added, err := store.TestingApplyInternal(ctx, dryrun, updates...)
 				if err != nil {
 					return fmt.Sprintf("err: %v", err)
 				}
@@ -294,15 +295,14 @@ func BenchmarkStoreComputeSplitKey(b *testing.B) {
 			query := spanconfigtestutils.ParseSpan(b,
 				fmt.Sprintf("[%08d, %08d)", 0, numEntries))
 
-			// XXX: Uncomment.
-			//overlapping := 0
-			//require.NoError(b, store.ForEachOverlappingSpanConfig(ctx, makeQueryEntry,
-			//	func(_ roachpb.Span, _ roachpb.SpanConfig) error {
-			//		overlapping++
-			//		return nil
-			//	},
-			//))
-			//require.Equal(b, overlapping, numEntries)
+			overlapping := 0
+			require.NoError(b, store.ForEachOverlappingSpanConfig(ctx, query,
+				func(_ roachpb.Span, _ roachpb.SpanConfig) error {
+					overlapping++
+					return nil
+				},
+			))
+			require.Equal(b, overlapping, numEntries)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

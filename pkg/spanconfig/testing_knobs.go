@@ -117,6 +117,10 @@ type TestingKnobs struct {
 	// spanconfig.{host,tenant}_coalesce_adjacent.enabled. It also allows
 	// coalescing system database ranges for the host tenant.
 	StoreIgnoreCoalesceAdjacentExceptions bool
+
+	// StoreInternConfigsInDryRuns, if set, will intern span configs even when
+	// applying mutations in dry run mode.
+	StoreInternConfigsInDryRuns bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
