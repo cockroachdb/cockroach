@@ -535,9 +535,17 @@ func (tc *TestCluster) WaitForNStores(t testing.TB, n int, g *gossip.Gossip) {
 	defer unregister()
 
 	// Wait for the store descriptors to be gossiped.
-	for err := range storesDone {
-		if err != nil {
+	var seen int
+	for {
+		select {
+		case err := <-storesDone:
+			seen++
+			if err == nil {
+				return // done
+			}
 			t.Fatal(err)
+		case <-time.After(testutils.DefaultSucceedsSoonDuration):
+			t.Fatalf("timed out waiting for %d store descriptors: %v", n-seen, stores)
 		}
 	}
 }
