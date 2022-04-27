@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -49,6 +50,7 @@ import (
 // also verifies that the version is correct after a restart
 func TestTenantUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
@@ -172,7 +174,7 @@ func TestTenantUpgrade(t *testing.T) {
 
 }
 
-// Returns two versions v0, v1, v2 which correspond to adjacent releases. v1 will
+// Returns two versions v0, v1, v2 which correspond to adjacent releases. v0 will
 // equal the TestingBinaryMinSupportedVersion to avoid rot in tests using this
 // (as we retire old versions).
 func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
@@ -196,6 +198,7 @@ func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
 // between version upgrades.
 func TestTenantUpgradeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Contains information for starting a tenant
 	// and maintaining a stopper.
 	type tenantInfo struct {
@@ -205,8 +208,8 @@ func TestTenantUpgradeFailure(t *testing.T) {
 	v0, v1, v2 := v0v1v2()
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
+		v2,
+		v0,
 		false, // initializeVersion
 	)
 	// Initialize the version to the BinaryMinSupportedVersion.
@@ -216,7 +219,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+					BinaryVersionOverride:          v0,
 				},
 			},
 		},
@@ -245,7 +248,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		v2onMigrationStopper := stop.NewStopper()
 		// Initialize the version to the minimum it could be.
 		require.NoError(t, clusterversion.Initialize(ctx,
-			clusterversion.TestingBinaryMinSupportedVersion, &settings.SV))
+			v0, &settings.SV))
 		tenantArgs := base.TestTenantArgs{
 			Stopper:  v2onMigrationStopper,
 			TenantID: roachpb.MakeTenantID(id),
@@ -298,15 +301,9 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		initialTenantRunner := sqlutils.MakeSQLRunner(tenant)
 		// Ensure that the tenant works.
 		initialTenantRunner.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
-			[][]string{{clusterversion.TestingBinaryMinSupportedVersion.String()}})
+			[][]string{{v0.String()}})
 		initialTenantRunner.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
 		initialTenantRunner.Exec(t, "INSERT INTO t VALUES (1), (2)")
-		// Upgrade the host cluster and have it crash on v1.
-		sqlutils.MakeSQLRunner(tc.ServerConn(0)).Exec(t,
-			"SET CLUSTER SETTING version = $1",
-			v2.String())
-		// Ensure that the tenant still works.
-		initialTenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
 		// Use to wait for tenant crash leading to a clean up.
 		waitForTenantClose := make(chan struct{})
 		// Cause the upgrade to crash on v1.
@@ -316,12 +313,17 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			tenantInfo.v2onMigrationStopper.Stop(ctx)
 			waitForTenantClose <- struct{}{}
 		}()
-		// Upgrade the tenant cluster, but the upgrade
-		// will fail on v1.
+		// Upgrade the host cluster to the latest version.
+		sqlutils.MakeSQLRunner(tc.ServerConn(0)).Exec(t,
+			"SET CLUSTER SETTING version = $1",
+			clusterversion.TestingBinaryVersion.String())
+		// Ensure that the tenant still works.
+		initialTenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
+		// Upgrade the tenant cluster, but the migration will fail on v1.
 		initialTenantRunner.ExpectErr(t,
 			".*(database is closed|failed to connect|closed network connection)+",
 			"SET CLUSTER SETTING version = $1",
-			clusterversion.TestingBinaryVersion.String())
+			v2.String())
 		<-waitForTenantClose
 		cleanup()
 		tenantInfo = mkTenant(t, initialTenantID, true /*existing*/)
@@ -354,7 +356,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		// Upgrade the tenant cluster.
 		initialTenantRunner.Exec(t,
 			"SET CLUSTER SETTING version = $1",
-			clusterversion.TestingBinaryVersion.String())
+			v2.String())
 		close(tenantStopperChannel)
 		// Validate the target version has been reached.
 		initialTenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
@@ -368,6 +370,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 // appropriate view of the GC TTL.
 func TestTenantSystemConfigUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
