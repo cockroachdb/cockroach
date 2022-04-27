@@ -305,7 +305,7 @@ func TestAlterChangefeedErrors(t *testing.T) {
 
 		sqlDB.Exec(t, `ALTER TABLE bar ADD COLUMN b INT`)
 		var alterTableJobID jobspb.JobID
-		sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'`).Scan(&alterTableJobID)
+		sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'NEW SCHEMA CHANGE'`).Scan(&alterTableJobID)
 		sqlDB.ExpectErr(t,
 			fmt.Sprintf(`job %d is not changefeed job`, alterTableJobID),
 			fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, alterTableJobID),
@@ -984,6 +984,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
+		disableDeclarativeSchemaChangesForTest(t, sqlDB)
 
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).

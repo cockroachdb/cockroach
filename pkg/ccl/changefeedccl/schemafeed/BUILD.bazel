@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/execinfra",
+        "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
