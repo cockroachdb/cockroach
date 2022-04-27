@@ -108,10 +108,11 @@ func registerIndexBackfill(r registry.Registry) {
 		// Create index using old index backfiller after workload has finished.
 		time.Sleep(duration / 10)
 		createStmt := fmt.Sprintf(randTest.createFmt, oldIdx)
-		alterCmd := `SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false; %s;`
-
 		t.Status("creating index using old index backfiller")
-		if _, err := db.ExecContext(ctx, fmt.Sprintf(alterCmd, createStmt)); err != nil {
+		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(ctx, createStmt); err != nil {
 			t.Fatal(err)
 		}
 
