@@ -282,25 +282,27 @@ func BenchmarkStoreComputeSplitKey(b *testing.B) {
 					StoreIgnoreCoalesceAdjacentExceptions: true,
 				},
 			)
+			var updates []spanconfig.Update
 			for i := 0; i < numEntries; i++ {
-				updates := spanconfigtestutils.ParseStoreApplyArguments(b,
-					fmt.Sprintf("set [%08d,%08d):X", i, i+1))
-				deleted, added := store.Apply(ctx, false, updates...)
-				require.Len(b, deleted, 0)
-				require.Len(b, added, 1)
+				updates = append(updates, spanconfigtestutils.ParseStoreApplyArguments(b,
+					fmt.Sprintf("set [%08d,%08d):X", i, i+1))...)
 			}
+			deleted, added := store.Apply(ctx, false, updates...)
+			require.Len(b, deleted, 0)
+			require.Len(b, added, numEntries)
 
 			query := spanconfigtestutils.ParseSpan(b,
 				fmt.Sprintf("[%08d, %08d)", 0, numEntries))
 
-			overlapping := 0
-			require.NoError(b, store.ForEachOverlappingSpanConfig(ctx, query,
-				func(_ roachpb.Span, _ roachpb.SpanConfig) error {
-					overlapping++
-					return nil
-				},
-			))
-			require.Equal(b, overlapping, numEntries)
+			// XXX: Uncomment.
+			//overlapping := 0
+			//require.NoError(b, store.ForEachOverlappingSpanConfig(ctx, makeQueryEntry,
+			//	func(_ roachpb.Span, _ roachpb.SpanConfig) error {
+			//		overlapping++
+			//		return nil
+			//	},
+			//))
+			//require.Equal(b, overlapping, numEntries)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
