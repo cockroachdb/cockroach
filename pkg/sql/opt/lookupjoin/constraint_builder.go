@@ -24,6 +24,49 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
+// Constraint is used to constrain a lookup join. There are two types of
+// constraints:
+//
+//   1. Constraints with KeyCols use columns from the input to directly
+//      constrain lookups into a target index.
+//   2. Constraints with a LookupExpr build multiple spans from an expression
+//      that is evaluated for each input row. These spans are used to perform
+//      lookups into a target index.
+//
+// A constraint is not constraining if both KeyCols and LookupExpr are empty.
+// See IsUnconstrained.
+type Constraint struct {
+	// KeyCols is an ordered list of columns from the left side of the join to
+	// be used as lookup join key columns. This list corresponds to the columns
+	// in RightSideCols. It will be nil if LookupExpr is nil.
+	KeyCols opt.ColList
+
+	// RightSideCols is an ordered list of prefix index columns that are
+	// constrained by this constraint. It corresponds 1:1 with the columns in
+	// KeyCols if KeyCols is non-nil. Otherwise, it includes the prefix of index
+	// columns constrained by LookupExpr.
+	RightSideCols opt.ColList
+
+	// LookupExpr is a lookup expression for multi-span lookup joins. It will be
+	// nil if KeyCols is non-nil.
+	LookupExpr memo.FiltersExpr
+
+	// InputProjections contains constant values and computed columns that must
+	// be projected on the lookup join's input.
+	InputProjections memo.ProjectionsExpr
+
+	// ConstFilters contains constant equalities and ranges in either KeyCols or
+	// LookupExpr that are used to aid selectivity estimation. See
+	// memo.LookupJoinPrivate.ConstFilters.
+	ConstFilters memo.FiltersExpr
+}
+
+// IsUnconstrained returns true if the constraint does not constrain a lookup
+// join.
+func (c *Constraint) IsUnconstrained() bool {
+	return len(c.KeyCols) == 0 && len(c.LookupExpr) == 0
+}
+
 // ConstraintBuilder determines how to constrain index key columns for a lookup
 // join. See Build for more details.
 type ConstraintBuilder struct {
@@ -73,33 +116,11 @@ func (b *ConstraintBuilder) Init(
 	}
 }
 
-// Build determines how to constrain index key columns for a lookup join. It
-// returns either a list of key columns or a lookup expression. It has several
-// return values:
-//
-//   keyCols          - An ordered list of columns from the left side of the
-//   					join that correspond to a prefix of columns in the given
-//   					index.
-//   lookupExpr       - A lookup expression for multi-span lookup joins.
-//   inputProjections - Projections of constant values and computed columns that
-//                      must be projected on the lookup join's input.
-//   constFilters     - Filters representing constant equalities and ranges in
-//                      either keyCols or lookupExpr that are used to aid
-//                      selectivity estimation.
-//   rightSideCols    - A list of constrained index columns.
-//
-// Build will return either non-nil keyCols or a non-nil lookupExpr, but not
-// both. If both keyCols and lookupExpr are nil, then the index cannot be used
-// for a lookup join.
+// Build returns a Constraint that constrains a lookup join on the given index.
+// The constraint returned may be unconstrained if no constraint could be built.
 func (b *ConstraintBuilder) Build(
 	index cat.Index, onFilters, optionalFilters memo.FiltersExpr,
-) (
-	keyCols opt.ColList,
-	lookupExpr memo.FiltersExpr,
-	inputProjections memo.ProjectionsExpr,
-	constFilters memo.FiltersExpr,
-	rightSideCols opt.ColList,
-) {
+) Constraint {
 	allFilters := append(onFilters, optionalFilters...)
 
 	// Check if the first column in the index either:
@@ -115,7 +136,7 @@ func (b *ConstraintBuilder) Build(
 	if _, ok := b.rightEq.Find(firstIdxCol); !ok {
 		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, b.rightEqSet); !ok {
 			if _, _, ok := b.findJoinFilterConstants(allFilters, firstIdxCol); !ok {
-				return
+				return Constraint{}
 			}
 		}
 	}
@@ -124,8 +145,11 @@ func (b *ConstraintBuilder) Build(
 	// an equality with another column or a constant.
 	numIndexKeyCols := index.LaxKeyColumnCount()
 
-	keyCols = make(opt.ColList, 0, numIndexKeyCols)
-	rightSideCols = make(opt.ColList, 0, numIndexKeyCols)
+	keyCols := make(opt.ColList, 0, numIndexKeyCols)
+	rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
+	var inputProjections memo.ProjectionsExpr
+	var lookupExpr memo.FiltersExpr
+	var constFilters memo.FiltersExpr
 	shouldBuildMultiSpanLookupJoin := false
 
 	// All the lookup conditions must apply to the prefix of the index and so
@@ -237,12 +261,21 @@ func (b *ConstraintBuilder) Build(
 
 		// A multi-span lookup join with a lookup expression has no key columns
 		// and requires no projections on the input.
-		return nil /* keyCols */, lookupExpr, nil /* inputProjections */, constFilters, rightSideCols
+		return Constraint{
+			RightSideCols: rightSideCols,
+			LookupExpr:    lookupExpr,
+			ConstFilters:  constFilters,
+		}
 	}
 
 	// If we did not build a lookup expression, return the key columns we found,
 	// if any.
-	return keyCols, nil /* lookupExpr */, inputProjections, constFilters, rightSideCols
+	return Constraint{
+		KeyCols:          keyCols,
+		RightSideCols:    rightSideCols,
+		InputProjections: inputProjections,
+		ConstFilters:     constFilters,
+	}
 }
 
 // findComputedColJoinEquality returns the computed column expression of col and
