@@ -943,8 +943,15 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
-	if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+	eng := r.store.engine.(*storage.Pebble)
+	ss, err := eng.IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs())
+	if err != nil {
 		return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
+	}
+	if ss.ApproxIngestedIntoL0Bytes > 0 {
+		log.Warningf(ctx, "XXX ingestion into L0: %+v", ss)
+	} else {
+		log.Infof(ctx, "YYY ingestion below L0: %+v", ss)
 	}
 	stats.ingestion = timeutil.Now()
 
