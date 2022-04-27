@@ -262,8 +262,8 @@ func (i *MVCCIncrementalIterator) NextKey() {
 // maybeSkipKeys checks if any keys can be skipped by using a time-bound
 // iterator. If keys can be skipped, it will update the main iterator to point
 // to the earliest version of the next candidate key.
-// It is expected that TBI is at a key <= main iterator key when calling
-// maybeSkipKeys().
+// It is expected (but not required) that TBI is at a key <= main iterator key
+// when calling maybeSkipKeys().
 func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 	if i.timeBoundIter == nil {
 		// If there is no time bound iterator, we cannot skip any keys.
@@ -274,16 +274,15 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 	if iterKey.Compare(tbiKey) > 0 {
 		// If the iterKey got ahead of the TBI key, advance the TBI Key.
 		//
-		// The case where iterKey == tbiKey, after this call, is the fast-path is
-		// when the TBI and the main iterator are in lockstep. In this case, the
-		// main iterator was referencing the next key that would be visited by the
-		// TBI. This means that for the incremental iterator to perform a Next or
-		// NextKey will require only 1 extra NextKey invocation while they remain in
-		// lockstep. This could be common if most keys are modified or the
-		// modifications are clustered in keyspace.
-		//
-		// NB: The Seek() below is expensive, so we aim to avoid it if both
-		// iterators remain in lockstep as described above.
+		// We fast-path the case where the main iterator is referencing the next
+		// key that would be visited by the TBI. In that case, after the following
+		// NextKey call, we will have iterKey == tbiKey. This means that for the
+		// incremental iterator to perform a Next or NextKey will require only 1
+		// extra NextKey invocation while they remain in lockstep. This case will
+		// be common if most keys are modified, or the modifications are clustered
+		// in keyspace, which makes the incremental iterator optimization
+		// ineffective. And so in this case we want to minimize the extra cost of
+		// using the incremental iterator, by avoiding a SeekGE.
 		i.timeBoundIter.NextKey()
 		if ok, err := i.timeBoundIter.Valid(); !ok {
 			i.err = err
@@ -315,7 +314,9 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			// same as the main iterator, we may be able to skip over a large group
 			// of keys. The main iterator is seeked to the TBI in hopes that many
 			// keys were skipped. Note that a Seek is an order of magnitude more
-			// expensive than a Next call.
+			// expensive than a Next call, but the engine has low-level
+			// optimizations that attempt to make it cheaper if the seeked key is
+			// "nearby" (within the same sstable block).
 			seekKey := MakeMVCCMetadataKey(tbiKey)
 			i.iter.SeekGE(seekKey)
 			if !i.checkValidAndSaveErr() {
@@ -339,7 +340,7 @@ func (i *MVCCIncrementalIterator) initMetaAndCheckForIntentOrInlineError() error
 	}
 
 	// The key is a metakey (an intent or inline meta). If an inline meta, we
-	// will error below. If an intent meta, then this is used later to see if
+	// will handle below. If an intent meta, then this is used later to see if
 	// the timestamp of this intent is within the incremental iterator's time
 	// bounds.
 	if i.err = protoutil.Unmarshal(i.iter.UnsafeValue(), &i.meta); i.err != nil {
@@ -421,6 +422,8 @@ func (i *MVCCIncrementalIterator) advance() {
 			return
 		}
 
+		// INVARIANT: we have an intent or an MVCC value.
+
 		if i.meta.Txn != nil {
 			switch i.intentPolicy {
 			case MVCCIncrementalIterIntentPolicyEmit:
@@ -442,7 +445,7 @@ func (i *MVCCIncrementalIterator) advance() {
 
 		// Note that MVCC keys are sorted by key, then by _descending_ timestamp
 		// order with the exception of the metakey (timestamp 0) being sorted
-		// first. See mvcc.h for more information.
+		// first.
 		metaTimestamp := i.meta.Timestamp.ToTimestamp()
 		if i.endTime.Less(metaTimestamp) {
 			i.iter.Next()
@@ -513,7 +516,7 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 			continue
 		}
 
-		// We have a valid KV or an intent to emit.
+		// We have a valid KV or an intent or an inline value to emit.
 		return
 	}
 }
@@ -522,6 +525,15 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 // in a non-incremental iteration by moving the underlying non-TBI iterator
 // forward. Intents in the time range (startTime,EndTime] and inline values are
 // handled according to the iterator policy.
+//
+// TODO(sumeer): consider removing this method since it is never used, and it
+// isn't clear what purpose it can serve in the future. We have two current
+// use cases that want to do a next-ignoring-time (a) want to see the next
+// older version of the same roachpb.Key regardless of time, (b) want to know
+// if there are any intermediate keys (even with a different roachpb.Key) with
+// a version outside the time bounds (so as to interrupt any optimization that
+// attempts to use an engine range tombstone). Both these use cases use
+// NextIgnoringTime.
 func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
 	i.iter.NextKey()
 	for {
@@ -541,7 +553,7 @@ func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
 			continue
 		}
 
-		// We have a valid KV or an intent to emit.
+		// We have a valid KV or an intent or an inline value to emit.
 		return
 	}
 }

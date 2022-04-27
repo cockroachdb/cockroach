@@ -1312,6 +1312,13 @@ type ExecutorConfig struct {
 	// SessionData and other ExtraTxnState.
 	// This is currently only for builtin functions where we need to execute sql.
 	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+
+	// ConsistencyChecker is to generate the results in calls to
+	// crdb_internal.check_consistency.
+	ConsistencyChecker eval.ConsistencyCheckRunner
+
+	// RangeProber is used in calls to crdb_internal.probe_ranges.
+	RangeProber eval.RangeProber
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

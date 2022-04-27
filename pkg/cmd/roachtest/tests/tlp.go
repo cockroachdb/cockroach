@@ -36,12 +36,13 @@ const statementTimeout = time.Minute
 
 func registerTLP(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "tlp",
-		Owner:   registry.OwnerSQLQueries,
-		Timeout: time.Hour * 1,
-		Tags:    nil,
-		Cluster: r.MakeClusterSpec(1),
-		Run:     runTLP,
+		Name:            "tlp",
+		Owner:           registry.OwnerSQLQueries,
+		Timeout:         time.Hour * 1,
+		RequiresLicense: true,
+		Tags:            nil,
+		Cluster:         r.MakeClusterSpec(1),
+		Run:             runTLP,
 	})
 }
 

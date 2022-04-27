@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -6624,7 +6624,7 @@ table's zone configuration this will return NULL.`,
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				arg := []byte(tree.MustBeDBytes(args[0]))
 				ctx := evalCtx.Ctx()
-				isHashed, _, _, schemeName, _, err := security.CheckPasswordHashValidity(ctx, arg)
+				isHashed, _, _, schemeName, _, err := password.CheckPasswordHashValidity(ctx, arg)
 				if err != nil {
 					return tree.DNull, pgerror.WithCandidateCode(err, pgcode.Syntax)
 				}

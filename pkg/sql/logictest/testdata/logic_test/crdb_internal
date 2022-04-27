@@ -1130,3 +1130,8 @@ statement ok
 CREATE TABLE t69684(a NAME);
 INSERT INTO t69684 VALUES ('foo');
 SELECT * FROM t69684 WHERE crdb_internal.increment_feature_counter(a)
+
+# Just verify that crdb_internal.probe_ranges doesn't error when called.
+# The output is non-deterministic.
+statement ok
+SELECT crdb_internal.probe_ranges(INTERVAL '1000ms', 'write')

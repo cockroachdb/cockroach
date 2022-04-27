@@ -1666,6 +1666,7 @@ func TestLint(t *testing.T) {
 
 				stream.GrepNot("type name will be used as row.RowLimit by other packages, and that stutters; consider calling this Limit"),
 				stream.GrepNot("type name will be used as tracing.TracingMode by other packages, and that stutters; consider calling this Mode"),
+				stream.GrepNot("type name will be used as password.PasswordHash by other packages, and that stutters; consider calling this Hash"),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {

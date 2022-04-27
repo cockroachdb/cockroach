@@ -209,8 +209,8 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			ctx, tr.FlowCtx.Txn, tr.Spans, bytesLimit, tr.limitHint,
-			tr.FlowCtx.TraceKV,
+			ctx, tr.FlowCtx.Txn, tr.Spans, nil /* spanIDs */, bytesLimit,
+			tr.limitHint, tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 	} else {
@@ -270,7 +270,7 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 			return nil, meta
 		}
 
-		row, err := tr.fetcher.NextRow(tr.Ctx)
+		row, _, err := tr.fetcher.NextRow(tr.Ctx)
 		if row == nil || err != nil {
 			tr.MoveToDraining(err)
 			break

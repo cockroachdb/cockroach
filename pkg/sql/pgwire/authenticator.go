@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 )
 
 // Authenticator is a component of an AuthMethod that determines if the
@@ -31,6 +32,6 @@ type Authenticator = func(
 // authentication.
 type PasswordRetrievalFn = func(context.Context) (
 	expired bool,
-	pwHash security.PasswordHash,
+	pwHash password.PasswordHash,
 	_ error,
 )

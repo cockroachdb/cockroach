@@ -985,6 +985,7 @@ func newPgDumpReader(
 	walltime int64,
 	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *eval.Context,
+	db *kv.DB,
 ) (*pgDumpReader, error) {
 	tableDescs := make(map[string]catalog.TableDescriptor, len(descs))
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
@@ -1001,7 +1002,7 @@ func newPgDumpReader(
 				colSubMap[col.GetName()] = i
 			}
 			conv, err := row.NewDatumRowConverter(ctx, semaCtx, tableDesc, targetCols, evalCtx, kvCh,
-				nil /* seqChunkProvider */, nil /* metrics */)
+				nil /* seqChunkProvider */, nil /* metrics */, db)
 			if err != nil {
 				return nil, err
 			}
