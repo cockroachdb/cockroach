@@ -85,6 +85,7 @@ var buildTargetMapping = map[string]string{
 	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
 	"oss":              "//pkg/cmd/cockroach-oss:cockroach-oss",
 	"langgen":          "//pkg/sql/opt/optgen/cmd/langgen:langgen",
+	"reduce":           "//pkg/cmd/reduce:reduce",
 	"roachprod":        "//pkg/cmd/roachprod:roachprod",
 	"roachprod-stress": "//pkg/cmd/roachprod-stress:roachprod-stress",
 	"roachtest":        "//pkg/cmd/roachtest:roachtest",
