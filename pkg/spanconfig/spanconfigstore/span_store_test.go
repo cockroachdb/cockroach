@@ -243,7 +243,7 @@ func TestRandomized(t *testing.T) {
 
 			// The config at the first split key must not be identical to the first
 			// overlapping span's if the first overlapping span key is the same as the
-			// query start key.
+			// makeQueryEntry start key.
 			if firstOverlappingWithQuerySp.span.Key.Equal(querySpan.Key) {
 				require.Falsef(t, confAtCurSplitKey.Equal(firstOverlappingWithQuerySp.config),
 					"expected non-identical configs, found %s:%s and %s:%s",
