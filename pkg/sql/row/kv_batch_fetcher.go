@@ -55,33 +55,68 @@ type sendFunc func(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error)
 
+// identifiableSpans is a helper for keeping track of the roachpb.Spans with the
+// corresponding spanIDs (when necessary).
+type identifiableSpans struct {
+	roachpb.Spans
+	spanIDs []int
+}
+
+// swap swaps two spans as well as their span IDs.
+func (s *identifiableSpans) swap(i, j int) {
+	s.Spans.Swap(i, j)
+	if s.spanIDs != nil {
+		s.spanIDs[i], s.spanIDs[j] = s.spanIDs[j], s.spanIDs[i]
+	}
+}
+
+// pop removes the first span as well as its span ID from s and returns them.
+func (s *identifiableSpans) pop() (roachpb.Span, int) {
+	origSpan := s.Spans[0]
+	s.Spans[0] = roachpb.Span{}
+	s.Spans = s.Spans[1:]
+	var spanID int
+	if s.spanIDs != nil {
+		spanID = s.spanIDs[0]
+		s.spanIDs = s.spanIDs[1:]
+	}
+	return origSpan, spanID
+}
+
+// push appends the given span as well as its span ID to s.
+func (s *identifiableSpans) push(span roachpb.Span, spanID int) {
+	s.Spans = append(s.Spans, span)
+	if s.spanIDs != nil {
+		s.spanIDs = append(s.spanIDs, spanID)
+	}
+}
+
+// reset sets up s for reuse - the underlying will be overwritten with future
+// calls to push().
+func (s *identifiableSpans) reset() {
+	s.Spans = s.Spans[:0]
+	s.spanIDs = s.spanIDs[:0]
+}
+
 // txnKVFetcher handles retrieval of key/values.
 type txnKVFetcher struct {
 	// "Constant" fields, provided by the caller.
 	sendFn sendFunc
+
 	// spans is the list of Spans that will be read by this KV Fetcher. If an
 	// individual Span has only a start key, it will be interpreted as a
 	// single-key fetch and may use a GetRequest under the hood.
-	spans roachpb.Spans
+	spans identifiableSpans
 	// spansScratch is the initial state of spans (given to the fetcher when
-	// starting the scan) that we need to hold on to since we're slicing off
-	// spans in nextBatch(). Any resume spans are copied into this slice when
+	// starting the scan) that we need to hold on to since we're poping off
+	// spans in nextBatch(). Any resume spans are copied into this struct when
 	// processing each response.
-	spansScratch roachpb.Spans
-	// newFetchSpansIdx tracks the number of resume spans we have copied into
-	// spansScratch after the last fetch.
-	newFetchSpansIdx int
+	//
+	// scratchSpans.Len() is the number of resume spans we have accumulated
+	// during the last fetch.
+	scratchSpans identifiableSpans
 
-	// spanIDs, if non-nil, is a slice of the caller-provided integers that are
-	// associated with the corresponding spans in the spans slice. The caller
-	// will be able to identify the input span that produced a particular kv
-	// because the corresponding span ID is included in the
-	// kvBatchFetcherResponse.
-	spanIDs []int
-	// spanIDsScratch is the initial state of spanIDs. See the comment on
-	// spansScratch for why this is needed.
-	spanIDsScratch []int
-	curSpanID      int
+	curSpanID int
 
 	// If firstBatchKeyLimit is set, the first batch is limited in number of keys
 	// to this value and subsequent batches are larger (up to a limit, see
@@ -318,26 +353,24 @@ func makeKVBatchFetcher(ctx context.Context, args kvBatchFetcherArgs) (txnKVFetc
 	// perform the deep copy. Notably, the spans might be modified (when the
 	// fetcher receives the resume spans), but the fetcher will always keep the
 	// memory accounting up to date.
-	f.spans = args.spans
-	f.spanIDs = args.spanIDs
+	f.spans = identifiableSpans{
+		Spans:   args.spans,
+		spanIDs: args.spanIDs,
+	}
 	if args.reverse {
 		// Reverse scans receive the spans in decreasing order. Note that we
 		// need to be this tricky since we're updating the spans and spanIDs
 		// slices in place.
-		i, j := 0, len(args.spans)-1
+		i, j := 0, f.spans.Len()-1
 		for i < j {
-			f.spans[i], f.spans[j] = f.spans[j], f.spans[i]
-			if args.spanIDs != nil {
-				f.spanIDs[i], f.spanIDs[j] = f.spanIDs[j], f.spanIDs[i]
-			}
+			f.spans.swap(i, j)
 			i++
 			j--
 		}
 	}
-	// Keep the reference to the full spans and spanIDs slices. We will never
-	// need larger slices when processing the resume spans.
-	f.spansScratch = f.spans
-	f.spanIDsScratch = f.spanIDs
+	// Keep the reference to the full identifiable spans. We will never need
+	// larger slices when processing the resume spans.
+	f.scratchSpans = f.spans
 
 	return f, nil
 }
@@ -350,7 +383,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = spansToRequests(f.spans, f.reverse, f.lockStrength)
+	ba.Requests = spansToRequests(f.spans.Spans, f.reverse, f.lockStrength)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", f.spans)
@@ -425,7 +458,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	}
 
 	f.batchIdx++
-	f.newFetchSpansIdx = 0
+	f.scratchSpans.reset()
 	f.alreadyFetched = true
 
 	// TODO(radu): We should fetch the next chunk in the background instead of waiting for the next
@@ -474,33 +507,22 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherRespon
 		f.responses = f.responses[1:]
 		// Get the original span right away since we might overwrite it with the
 		// resume span below.
-		origSpan := f.spans[0]
-		f.spans[0] = roachpb.Span{}
-		f.spans = f.spans[1:]
-		if f.spanIDs != nil {
-			f.curSpanID = f.spanIDs[0]
-			f.spanIDs = f.spanIDs[1:]
-			// Opportunistically set the span ID for the current span in case it
-			// has a resume span in the response. If it doesn't, then
-			// newFetchSpansIdx won't advance below, and the same slot will be
-			// overwritten in the future.
-			f.spanIDsScratch[f.newFetchSpansIdx] = f.curSpanID
-		}
+		var origSpan roachpb.Span
+		origSpan, f.curSpanID = f.spans.pop()
 
 		// Check whether we need to resume scanning this span.
 		header := reply.Header()
-		if header.NumKeys > 0 && f.newFetchSpansIdx > 0 {
+		if header.NumKeys > 0 && f.scratchSpans.Len() > 0 {
 			return kvBatchFetcherResponse{}, errors.Errorf(
 				"span with results after resume span; it shouldn't happen given that "+
 					"we're only scanning non-overlapping spans. New spans: %s",
-				catalogkeys.PrettySpans(nil, f.spans, 0 /* skip */))
+				catalogkeys.PrettySpans(nil, f.spans.Spans, 0 /* skip */))
 		}
 
 		// Any requests that were not fully completed will have the ResumeSpan set.
 		// Here we accumulate all of them.
 		if resumeSpan := header.ResumeSpan; resumeSpan != nil {
-			f.spansScratch[f.newFetchSpansIdx] = *resumeSpan
-			f.newFetchSpansIdx++
+			f.scratchSpans.push(*resumeSpan, f.curSpanID)
 		}
 
 		ret := kvBatchFetcherResponse{
@@ -559,16 +581,13 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherRespon
 	}
 	// No more responses from the last BatchRequest.
 	if f.alreadyFetched {
-		if f.newFetchSpansIdx == 0 {
+		if f.scratchSpans.Len() == 0 {
 			// If we are out of keys, we can return and we're finished with the
 			// fetch.
 			return kvBatchFetcherResponse{moreKVs: false}, nil
 		}
 		// We have some resume spans.
-		f.spans = f.spansScratch[:f.newFetchSpansIdx]
-		if f.spanIDsScratch != nil {
-			f.spanIDs = f.spanIDsScratch[:f.newFetchSpansIdx]
-		}
+		f.spans = f.scratchSpans
 		if f.acc != nil {
 			newSpansMemUsage := f.spans.MemUsage()
 			if err := f.acc.Resize(ctx, f.spansAccountedFor, newSpansMemUsage); err != nil {
@@ -589,10 +608,8 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherRespon
 func (f *txnKVFetcher) close(ctx context.Context) {
 	f.responses = nil
 	f.remainingBatches = nil
-	f.spans = nil
-	f.spansScratch = nil
-	f.spanIDs = nil
-	f.spanIDsScratch = nil
+	f.spans = identifiableSpans{}
+	f.scratchSpans = identifiableSpans{}
 	// Release only the allocations made by this fetcher.
 	f.acc.Shrink(ctx, f.batchResponseAccountedFor+f.spansAccountedFor)
 }
