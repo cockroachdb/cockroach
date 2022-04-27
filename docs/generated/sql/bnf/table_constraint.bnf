@@ -1,17 +1,17 @@
 table_constraint ::=
 	'CONSTRAINT' constraint_name 'CHECK' '(' a_expr ')'
-	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')' 'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' |  ) 'BY' partition_by_inner | ) opt_where_clause
-	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')' 'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' |  ) 'BY' partition_by_inner | ) opt_where_clause
-	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')' 'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' |  ) 'BY' partition_by_inner | ) opt_where_clause
-	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')'  ( 'PARTITION' ( 'ALL' |  ) 'BY' partition_by_inner | ) opt_where_clause
+	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')' 'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_where_clause
+	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')' 'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_where_clause
+	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')' 'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_where_clause
+	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')'  ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_where_clause
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' '(' index_params ')' 'USING' 'HASH' opt_with_storage_parameter_list
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' '(' index_params ')'  opt_with_storage_parameter_list
 	| 'CONSTRAINT' constraint_name 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
 	| 'CHECK' '(' a_expr ')'
-	| 'UNIQUE' '(' index_params ')' 'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' |  ) 'BY' partition_by_inner | ) opt_where_clause
-	| 'UNIQUE' '(' index_params ')' 'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' |  ) 'BY' partition_by_inner | ) opt_where_clause
-	| 'UNIQUE' '(' index_params ')' 'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' |  ) 'BY' partition_by_inner | ) opt_where_clause
-	| 'UNIQUE' '(' index_params ')'  ( 'PARTITION' ( 'ALL' |  ) 'BY' partition_by_inner | ) opt_where_clause
+	| 'UNIQUE' '(' index_params ')' 'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_where_clause
+	| 'UNIQUE' '(' index_params ')' 'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_where_clause
+	| 'UNIQUE' '(' index_params ')' 'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_where_clause
+	| 'UNIQUE' '(' index_params ')'  ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_where_clause
 	| 'PRIMARY' 'KEY' '(' index_params ')' 'USING' 'HASH' opt_with_storage_parameter_list
 	| 'PRIMARY' 'KEY' '(' index_params ')'  opt_with_storage_parameter_list
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
