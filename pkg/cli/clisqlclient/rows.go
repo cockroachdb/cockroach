@@ -12,62 +12,65 @@ package clisqlclient
 
 import (
 	"database/sql/driver"
+	"io"
 	"reflect"
+	"strings"
+	"time"
 
-	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 )
 
 type sqlRows struct {
-	rows sqlRowsI
-	conn *sqlConn
+	rows     pgx.Rows
+	connInfo *pgtype.ConnInfo
+	conn     *sqlConn
 }
 
 var _ Rows = (*sqlRows)(nil)
 
-type sqlRowsI interface {
-	driver.RowsColumnTypeScanType
-	driver.RowsColumnTypeDatabaseTypeName
-	Result() driver.Result
-	Tag() string
-
-	// Go 1.8 multiple result set interfaces.
-	// TODO(mjibson): clean this up after 1.8 is released.
-	HasNextResultSet() bool
-	NextResultSet() error
-}
-
 func (r *sqlRows) Columns() []string {
-	return r.rows.Columns()
+	fields := r.rows.FieldDescriptions()
+	columnNames := make([]string, len(fields))
+	for i, fd := range fields {
+		columnNames[i] = string(fd.Name)
+	}
+	return columnNames
 }
 
-func (r *sqlRows) Result() driver.Result {
-	return r.rows.Result()
-}
-
-func (r *sqlRows) Tag() string {
-	return r.rows.Tag()
+func (r *sqlRows) Tag() (CommandTag, error) {
+	return r.rows.CommandTag(), r.rows.Err()
 }
 
 func (r *sqlRows) Close() error {
 	r.conn.flushNotices()
-	err := r.rows.Close()
-	if errors.Is(err, driver.ErrBadConn) {
+	r.rows.Close()
+	if r.conn.conn.IsClosed() {
 		r.conn.reconnecting = true
 		r.conn.silentClose()
 	}
-	return err
+	return nil
 }
 
 // Next implements the Rows interface.
 func (r *sqlRows) Next(values []driver.Value) error {
-	err := r.rows.Next(values)
-	if errors.Is(err, driver.ErrBadConn) {
+	if r.conn.conn.IsClosed() {
 		r.conn.reconnecting = true
 		r.conn.silentClose()
 	}
-	for i, v := range values {
-		if b, ok := v.([]byte); ok {
+	if !r.rows.Next() {
+		return io.EOF
+	}
+	rawVals, err := r.rows.Values()
+	if err != nil {
+		return err
+	}
+	for i, v := range rawVals {
+		if b, ok := (v).([]byte); ok {
+			// Copy byte slices as per the comment on Rows.Next.
 			values[i] = append([]byte{}, b...)
+		} else {
+			values[i] = v
 		}
 	}
 	// After the first row was received, we want to delay all
@@ -78,18 +81,52 @@ func (r *sqlRows) Next(values []driver.Value) error {
 
 // NextResultSet prepares the next result set for reading.
 func (r *sqlRows) NextResultSet() (bool, error) {
-	if !r.rows.HasNextResultSet() {
-		return false, nil
-	}
-	return true, r.rows.NextResultSet()
+	return false, nil
 }
 
 func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
-	return r.rows.ColumnTypeScanType(index)
+	o := r.rows.FieldDescriptions()[index].DataTypeOID
+	switch o {
+	case pgtype.Int8OID:
+		return reflect.TypeOf(int64(0))
+	case pgtype.Int4OID:
+		return reflect.TypeOf(int32(0))
+	case pgtype.Int2OID:
+		return reflect.TypeOf(int16(0))
+	case pgtype.VarcharOID, pgtype.TextOID:
+		return reflect.TypeOf("")
+	case pgtype.BoolOID:
+		return reflect.TypeOf(false)
+	case pgtype.DateOID, pgtype.TimeOID, 1266, pgtype.TimestampOID, pgtype.TimestamptzOID:
+		// 1266 is the OID for TimeTZ.
+		// TODO(rafi): Add TimetzOID to pgtype.
+		return reflect.TypeOf(time.Time{})
+	case pgtype.ByteaOID:
+		return reflect.TypeOf([]byte(nil))
+	default:
+		return reflect.TypeOf(new(interface{})).Elem()
+	}
 }
 
 func (r *sqlRows) ColumnTypeDatabaseTypeName(index int) string {
-	return r.rows.ColumnTypeDatabaseTypeName(index)
+	fieldOID := r.rows.FieldDescriptions()[index].DataTypeOID
+	dataType, ok := r.connInfo.DataTypeForOID(fieldOID)
+	if !ok {
+		// TODO(rafi): remove special logic once jackc/pgtype includes these types.
+		switch fieldOID {
+		case 1002:
+			return "_CHAR"
+		case 1003:
+			return "_NAME"
+		case 1266:
+			return "TIMETZ"
+		case 1270:
+			return "_TIMETZ"
+		default:
+			return ""
+		}
+	}
+	return strings.ToUpper(dataType.Name)
 }
 
 func (r *sqlRows) ColumnTypeNames() []string {

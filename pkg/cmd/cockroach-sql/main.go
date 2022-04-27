@@ -14,6 +14,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -134,5 +135,5 @@ func runSQL(_ *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
-	return cfg.Run(conn)
+	return cfg.Run(context.Background(), conn)
 }

@@ -972,7 +972,7 @@ func TestClientConnSettings(t *testing.T) {
 		args         []string
 		expectedAddr string
 	}{
-		{[]string{"quit"}, ":" + base.DefaultPort},
+		{[]string{"quit"}, "localhost:" + base.DefaultPort},
 		{[]string{"quit", "--host", "127.0.0.1"}, "127.0.0.1:" + base.DefaultPort},
 		{[]string{"quit", "--host", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort},
 		{[]string{"quit", "--host", ":12345"}, ":12345"},
@@ -986,7 +986,7 @@ func TestClientConnSettings(t *testing.T) {
 			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort},
 
 		// Deprecated syntax.
-		{[]string{"quit", "--port", "12345"}, ":12345"},
+		{[]string{"quit", "--port", "12345"}, "localhost:12345"},
 		{[]string{"quit", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345"},
 	}
 

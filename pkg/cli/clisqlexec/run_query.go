@@ -12,7 +12,6 @@ package clisqlexec
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"io"
 	"strings"
@@ -54,7 +53,7 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 		err = errors.CombineErrors(err, closeErr)
 	}()
 	for {
-		// lib/pq is not able to tell us before the first call to Next()
+		// pgx is not able to tell us before the first call to Next()
 		// whether a statement returns either
 		// - a rows result set with zero rows (e.g. SELECT on an empty table), or
 		// - no rows result set, but a valid value for RowsAffected (e.g. INSERT), or
@@ -65,57 +64,30 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 		// when Next() has completed its work and no rows where observed, to decide
 		// what to do.
 		noRowsHook := func() (bool, error) {
-			res := rows.Result()
-			if ra, ok := res.(driver.RowsAffected); ok {
-				nRows, err := ra.RowsAffected()
-				if err != nil {
-					return false, err
-				}
-
-				// This may be either something like INSERT with a valid
-				// RowsAffected value, or a statement like SET. The pq driver
-				// uses both driver.RowsAffected for both.  So we need to be a
-				// little more manual.
-				tag := rows.Tag()
-				if tag == "SELECT" && nRows == 0 {
-					// As explained above, the pq driver unhelpfully does not
-					// distinguish between a statement returning zero rows and a
-					// statement returning an affected row count of zero.
-					// noRowsHook is called non-discriminatingly for both
-					// situations.
-					//
-					// TODO(knz): meanwhile, there are rare, non-SELECT
-					// statements that have tag "SELECT" but are legitimately of
-					// type RowsAffected. CREATE TABLE AS is one. pq's inability
-					// to distinguish those two cases means that any non-SELECT
-					// statement that legitimately returns 0 rows affected, and
-					// for which the user would expect to see "SELECT 0", will
-					// be incorrectly displayed as an empty row result set
-					// instead. This needs to be addressed by ensuring pq can
-					// distinguish the two cases, or switching to an entirely
-					// different driver altogether.
-					//
-					return false, nil
-				} else if _, ok := tagsWithRowsAffected[tag]; ok {
-					// INSERT, DELETE, etc.: print the row count.
-					nRows, err := ra.RowsAffected()
-					if err != nil {
-						return false, err
-					}
-					fmt.Fprintf(w, "%s %d\n", tag, nRows)
-				} else {
-					// SET, etc.: just print the tag, or OK if there's no tag.
-					if tag == "" {
-						tag = "OK"
-					}
-					fmt.Fprintln(w, tag)
-				}
-				return true, nil
+			tag, err := rows.Tag()
+			if err != nil {
+				return false, err
 			}
-			// Other cases: this is a statement with a rows result set, but
-			// zero rows (e.g. SELECT on empty table). Let the reporter
-			// handle it.
-			return false, nil
+			nRows := tag.RowsAffected()
+			tagString := tag.String()
+
+			// This may be either something like INSERT with a valid
+			// RowsAffected value, or a statement like SET.
+			if strings.HasPrefix(tagString, "SELECT") && nRows == 0 {
+				// As explained above, the pgx driver unhelpfully does not
+				// distinguish between a statement returning zero rows and a
+				// statement returning an affected row count of zero.
+				// noRowsHook is called non-discriminatingly for both
+				// situations.
+				return false, nil
+			}
+			// SET, etc.: just print the tag, or OK if there's no tag.
+			// INSERT, DELETE, etc. all contain the row count in the tag itself.
+			if tagString == "" {
+				tagString = "OK"
+			}
+			fmt.Fprintln(w, tagString)
+			return true, nil
 		}
 
 		cols := getColumnStrings(rows, true)
@@ -136,11 +108,12 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 			return err
 		}
 
-		sqlExecCtx.maybeShowTimes(ctx, conn, w, ew, isMultiStatementQuery, startTime, queryCompleteTime)
-
 		if more, err := rows.NextResultSet(); err != nil {
 			return err
 		} else if !more {
+			// We must call maybeShowTimes after rows has been closed, which is after
+			// NextResultSet returns false.
+			sqlExecCtx.maybeShowTimes(ctx, conn, w, ew, isMultiStatementQuery, startTime, queryCompleteTime)
 			return nil
 		}
 	}
@@ -272,20 +245,6 @@ func (sqlExecCtx *Context) maybeShowTimes(
 		fmt.Fprint(&stats, ")")
 	}
 	fmt.Fprintln(w, stats.String())
-}
-
-// All tags where the RowsAffected value should be reported to
-// the user.
-var tagsWithRowsAffected = map[string]struct{}{
-	"INSERT":    {},
-	"UPDATE":    {},
-	"DELETE":    {},
-	"MOVE":      {},
-	"DROP USER": {},
-	"COPY":      {},
-	// This one is used with e.g. CREATE TABLE AS (other SELECT
-	// statements have type Rows, not RowsAffected).
-	"SELECT": {},
 }
 
 // sqlRowsToStrings turns 'rows' into a list of rows, each of which

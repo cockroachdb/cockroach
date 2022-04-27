@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/jackc/pgx/v4"
 )
 
 const (
@@ -135,7 +136,7 @@ func makeFileTableStorage(
 // interact with the underlying FileToTableSystem. It only supports a subset of
 // methods compared to the internal SQL connection backed FileTableStorage.
 func MakeSQLConnFileTableStorage(
-	ctx context.Context, cfg roachpb.ExternalStorage_FileTable, conn cloud.SQLConnI,
+	ctx context.Context, cfg roachpb.ExternalStorage_FileTable, conn *pgx.Conn,
 ) (cloud.ExternalStorage, error) {
 	executor := filetable.MakeSQLConnFileToTableExecutor(conn)
 

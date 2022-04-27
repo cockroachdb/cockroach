@@ -64,7 +64,7 @@ thenshort`,
 	// thenshort" int, "κόσμε" int, "a|b" int, ܈85 int)
 	// CREATE TABLE
 	// sql -e insert into t.u values (0, 0, 0, 0, 0, 0, 0, 0)
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e show columns from t.u
 	// column_name	data_type	is_nullable	column_default	generation_expression	indices
 	// "f""oo"	INT	true	NULL		{}
@@ -193,7 +193,11 @@ func Example_sql_empty_table() {
 
 	// Output:
 	// sql -e create database t;create table t.norows(x int);create table t.nocolsnorows();create table t.nocols(); insert into t.nocols(rowid) values (1),(2),(3);
-	// INSERT 3
+	// CREATE DATABASE
+	// CREATE TABLE
+	// CREATE TABLE
+	// CREATE TABLE
+	// INSERT 0 3
 	// sql --format=tsv -e select * from t.norows
 	// x
 	// sql --format=csv -e select * from t.norows
@@ -489,25 +493,26 @@ func Example_sql_table() {
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
+	// CREATE DATABASE
 	// CREATE TABLE
 	// sql -e insert into t.t values (e'foo', 'printable ASCII')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'"foo', 'printable ASCII with quotes')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'\\foo', 'printable ASCII with backslash')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'foo\x0abar', 'non-printable ASCII')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values ('κόσμε', 'printable UTF8')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'\xc3\xb1', 'printable UTF8 using escapes')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'\x01', 'non-printable UTF8 string')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'\xdc\x88\x38\x35', 'UTF8 string with RTL char')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'a\tb\tc\n12\t123123213\t12313', 'tabs')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
 	// ERROR: lexical error: invalid UTF-8 byte sequence
 	// SQLSTATE: 42601

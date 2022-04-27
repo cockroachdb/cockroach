@@ -17,14 +17,16 @@ import (
 	"io"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/lib/pq/auth/kerberos"
 	_ "github.com/otan/gopgkrb5" // need a comment until the dependency is used
@@ -42,13 +44,13 @@ type sqlConn struct {
 	connCtx *Context
 
 	url          string
-	conn         DriverConn
+	conn         *pgx.Conn
 	reconnecting bool
 
 	// passwordMissing is true iff the url is missing a password.
 	passwordMissing bool
 
-	pendingNotices []*pq.Error
+	pendingNotices []*pgconn.Notice
 
 	// delayNotices, if set, makes notices accumulate for printing
 	// when the SQL execution completes. The default (false)
@@ -82,6 +84,10 @@ type sqlConn struct {
 
 var _ Conn = (*sqlConn)(nil)
 
+// ErrConnectionClosed is returned when an operation fails because the
+// connection was closed.
+var ErrConnectionClosed = errors.New("connection closed unexpectedly")
+
 // wrapConnError detects TCP EOF errors during the initial SQL handshake.
 // These are translated to a message "perhaps this is not a CockroachDB node"
 // at the top level.
@@ -98,13 +104,13 @@ func wrapConnError(err error) error {
 
 func (c *sqlConn) flushNotices() {
 	for _, notice := range c.pendingNotices {
-		clierror.OutputError(c.errw, notice, true /*showSeverity*/, false /*verbose*/)
+		clierror.OutputError(c.errw, (*pgconn.PgError)(notice), true /*showSeverity*/, false /*verbose*/)
 	}
 	c.pendingNotices = nil
 	c.delayNotices = false
 }
 
-func (c *sqlConn) handleNotice(notice *pq.Error) {
+func (c *sqlConn) handleNotice(notice *pgconn.Notice) {
 	c.pendingNotices = append(c.pendingNotices, notice)
 	if !c.delayNotices {
 		c.flushNotices()
@@ -121,8 +127,8 @@ func (c *sqlConn) SetURL(url string) {
 	c.url = url
 }
 
-// GetDriverConn implements the Conn interface.
-func (c *sqlConn) GetDriverConn() DriverConn {
+// GetPGXConn implements the Conn interface.
+func (c *sqlConn) GetPGXConn() *pgx.Conn {
 	return c.conn
 }
 
@@ -137,38 +143,29 @@ func (c *sqlConn) SetMissingPassword(missing bool) {
 }
 
 // EnsureConn (re-)establishes the connection to the server.
-func (c *sqlConn) EnsureConn() error {
+func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	if c.conn != nil {
 		return nil
 	}
-	ctx := context.Background()
 
 	if c.reconnecting && c.connCtx.IsInteractive() {
 		fmt.Fprintf(c.errw, "warning: connection lost!\n"+
 			"opening new connection: all session settings will be lost\n")
 	}
-	base, err := pq.NewConnector(c.url)
+	base, err := pgx.ParseConfig(c.url)
 	if err != nil {
 		return wrapConnError(err)
 	}
 	// Add a notice handler - re-use the cliOutputError function in this case.
-	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+	base.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
 		c.handleNotice(notice)
-	})
-	// TODO(cli): we can't thread ctx through ensureConn usages, as it needs
-	// to follow the gosql.DB interface. We should probably look at initializing
-	// connections only once instead. The context is only used for dialing.
-	conn, err := connector.Connect(ctx)
+	}
+	conn, err := pgx.ConnectConfig(ctx, base)
 	if err != nil {
 		// Connection failed: if the failure is due to a missing
 		// password, we're going to fill the password here.
-		//
-		// TODO(knz): CockroachDB servers do not properly fill SQLSTATE
-		// (28P01) for password auth errors, so we have to "make do"
-		// with a string match. This should be cleaned up by adding
-		// the missing code server-side.
-		errStr := strings.TrimPrefix(err.Error(), "pq: ")
-		if strings.HasPrefix(errStr, "password authentication failed") && c.passwordMissing {
+		pgErr := (*pgconn.PgError)(nil)
+		if errors.As(err, &pgErr) && pgErr.Code == pgcode.InvalidPassword.String() && c.passwordMissing {
 			if pErr := c.fillPassword(); pErr != nil {
 				return errors.CombineErrors(err, pErr)
 			}
@@ -177,19 +174,18 @@ func (c *sqlConn) EnsureConn() error {
 			// The recursion only occurs once because fillPassword()
 			// resets c.passwordMissing, so we cannot get into this
 			// conditional a second time.
-			return c.EnsureConn()
+			return c.EnsureConn(ctx)
 		}
 		// Not a password auth error, or password already set. Simply fail.
 		return wrapConnError(err)
 	}
 	if c.reconnecting && c.dbName != "" {
 		// Attempt to reset the current database.
-		if _, err := conn.(DriverConn).ExecContext(ctx, `SET DATABASE = $1`,
-			[]driver.NamedValue{{Value: c.dbName}}); err != nil {
+		if _, err := conn.Exec(ctx, `SET DATABASE = $1`, c.dbName); err != nil {
 			fmt.Fprintf(c.errw, "warning: unable to restore current database: %v\n", err)
 		}
 	}
-	c.conn = conn.(DriverConn)
+	c.conn = conn
 	if err := c.checkServerMetadata(ctx); err != nil {
 		err = errors.CombineErrors(err, c.Close())
 		return wrapConnError(err)
@@ -246,8 +242,8 @@ func (c *sqlConn) GetServerMetadata(
 ) (nodeID int32, version, clusterID string, err error) {
 	// Retrieve the node ID and server build info.
 	rows, err := c.Query(ctx, "SELECT * FROM crdb_internal.node_build_info")
-	if errors.Is(err, driver.ErrBadConn) {
-		return 0, "", "", err
+	if c.conn.IsClosed() {
+		return 0, "", "", errors.CombineErrors(ErrConnectionClosed, err)
 	}
 	if err != nil {
 		return 0, "", "", err
@@ -352,8 +348,8 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 	}
 
 	_, newServerVersion, newClusterID, err := c.GetServerMetadata(ctx)
-	if errors.Is(err, driver.ErrBadConn) {
-		return err
+	if c.conn.IsClosed() {
+		return errors.CombineErrors(ErrConnectionClosed, err)
 	}
 	if err != nil {
 		// It is not an error that the server version cannot be retrieved.
@@ -509,45 +505,62 @@ func (c *sqlConn) ExecTxn(
 }
 
 func (c *sqlConn) Exec(ctx context.Context, query string, args ...interface{}) error {
-	dVals, err := convertArgs(args)
-	if err != nil {
-		return err
-	}
-	if err := c.EnsureConn(); err != nil {
+	if err := c.EnsureConn(ctx); err != nil {
 		return err
 	}
 	if c.connCtx.Echo {
 		fmt.Fprintln(c.errw, ">", query)
 	}
-	_, err = c.conn.ExecContext(ctx, query, dVals)
+	_, err := c.conn.Exec(ctx, query, args...)
 	c.flushNotices()
-	if errors.Is(err, driver.ErrBadConn) {
+	if c.conn.IsClosed() {
 		c.reconnecting = true
 		c.silentClose()
+		return errors.CombineErrors(ErrConnectionClosed, err)
 	}
 	return err
 }
 
 func (c *sqlConn) Query(ctx context.Context, query string, args ...interface{}) (Rows, error) {
-	dVals, err := convertArgs(args)
-	if err != nil {
-		return nil, err
-	}
-	if err := c.EnsureConn(); err != nil {
+	if err := c.EnsureConn(ctx); err != nil {
 		return nil, err
 	}
 	if c.connCtx.Echo {
 		fmt.Fprintln(c.errw, ">", query)
 	}
-	rows, err := c.conn.QueryContext(ctx, query, dVals)
-	if errors.Is(err, driver.ErrBadConn) {
+
+	// If there are placeholder args, then we must use a prepared statement,
+	// which is only possible using pgx.Conn.
+	if len(args) > 0 {
+		rows, err := c.conn.Query(ctx, query, args...)
+		if c.conn.IsClosed() {
+			c.reconnecting = true
+			c.silentClose()
+			return nil, errors.CombineErrors(ErrConnectionClosed, err)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return &sqlRows{rows: rows, connInfo: c.conn.ConnInfo(), conn: c}, nil
+	}
+
+	// Otherwise, we use pgconn. This allows us to add support for multiple
+	// queries in a single string, which wouldn't be possible at the pgx level.
+	multiResultReader := c.conn.PgConn().Exec(ctx, query)
+	if c.conn.IsClosed() {
 		c.reconnecting = true
 		c.silentClose()
+		return nil, errors.CombineErrors(ErrConnectionClosed, multiResultReader.Close())
 	}
-	if err != nil {
+	rs := &sqlRowsMultiResultSet{
+		rows:     multiResultReader,
+		connInfo: c.conn.ConnInfo(),
+		conn:     c,
+	}
+	if _, err := rs.NextResultSet(); err != nil {
 		return nil, err
 	}
-	return &sqlRows{rows: rows.(sqlRowsI), conn: c}, nil
+	return rs, nil
 }
 
 func (c *sqlConn) QueryRow(
@@ -587,7 +600,7 @@ func (c *sqlConn) queryRowInternal(
 func (c *sqlConn) Close() error {
 	c.flushNotices()
 	if c.conn != nil {
-		err := c.conn.Close()
+		err := c.conn.Close(context.Background())
 		if err != nil {
 			return err
 		}
@@ -598,7 +611,7 @@ func (c *sqlConn) Close() error {
 
 func (c *sqlConn) silentClose() {
 	if c.conn != nil {
-		_ = c.conn.Close()
+		_ = c.conn.Close(context.Background())
 		c.conn = nil
 	}
 }
