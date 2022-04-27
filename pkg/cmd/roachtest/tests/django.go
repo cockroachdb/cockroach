@@ -71,15 +71,15 @@ func registerDjango(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential`,
+			`sudo apt-get -qq install make python3.8 libpq-dev python3.8-dev gcc python3-virtualenv python3-setuptools python-setuptools build-essential python3.8-distutils python3-apt libmemcached-dev`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "set python3.7 as default", `
+			ctx, t, c, node, "set python3.8 as default", `
     		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
-    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2
+    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 2
     		sudo update-alternatives --config python3`,
 		); err != nil {
 			t.Fatal(err)
@@ -87,7 +87,15 @@ func registerDjango(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "install pip",
-			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7`,
+			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.8`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, t, c, node, "create virtualenv",
+			`virtualenv venv &&
+				source venv/bin/activate`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -98,7 +106,7 @@ func registerDjango(r registry.Registry) {
 			c,
 			node,
 			"install pytest",
-			`sudo pip3 install pytest pytest-xdist psycopg2`,
+			`pip3 install pytest pytest-xdist psycopg2`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -154,9 +162,9 @@ func registerDjango(r registry.Registry) {
 		if err := repeatRunE(
 			ctx, t, c, node, "install django's dependencies", `
 				cd /mnt/data1/django/tests &&
-				sudo pip3 install -e .. &&
-				sudo pip3 install -r requirements/py3.txt &&
-				sudo pip3 install -r requirements/postgres.txt`,
+				pip3 install -e .. &&
+				pip3 install -r requirements/py3.txt &&
+				pip3 install -r requirements/postgres.txt`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +172,7 @@ func registerDjango(r registry.Registry) {
 		if err := repeatRunE(
 			ctx, t, c, node, "install django-cockroachdb", `
 					cd /mnt/data1/django/tests/django-cockroachdb/ &&
-					sudo pip3 install .`,
+					pip3 install .`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -285,4 +293,6 @@ class NonDescribingDiscoverRunner(DiscoverRunner):
             'verbosity': self.verbosity,
             'descriptions': False,
         }
+
+USE_TZ = False
 `
