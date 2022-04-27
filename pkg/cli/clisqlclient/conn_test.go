@@ -12,7 +12,6 @@ package clisqlclient_test
 
 import (
 	"context"
-	"database/sql/driver"
 	"io/ioutil"
 	"net/url"
 	"testing"
@@ -70,8 +69,8 @@ func TestConnRecover(t *testing.T) {
 			if closeErr := sqlRows.Close(); closeErr != nil {
 				t.Fatal(closeErr)
 			}
-		} else if !errors.Is(err, driver.ErrBadConn) {
-			return errors.Newf("expected ErrBadConn, got %v", err) // nolint:errwrap
+		} else if !errors.Is(err, clisqlclient.ErrConnectionClosed) {
+			return errors.Newf("expected ErrConnectionClosed, got %v", err) // nolint:errwrap
 		}
 		return nil
 	})
@@ -90,8 +89,8 @@ func TestConnRecover(t *testing.T) {
 
 	// Ditto from Query().
 	testutils.SucceedsSoon(t, func() error {
-		if err := conn.Exec(ctx, `SELECT 1`); !errors.Is(err, driver.ErrBadConn) {
-			return errors.Newf("expected ErrBadConn, got %v", err) // nolint:errwrap
+		if err := conn.Exec(ctx, `SELECT 1`); !errors.Is(err, clisqlclient.ErrConnectionClosed) {
+			return errors.Newf("expected ErrConnectionClosed, got %v", err) // nolint:errwrap
 		}
 		return nil
 	})

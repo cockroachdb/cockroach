@@ -132,7 +132,7 @@ start_test "Check that the client-side connect cmd can change users with certs u
 # first test that it can recover from an invalid database
 send "\\c postgres://root@localhost:26257/invaliddb?sslmode=require&sslcert=$certs_dir%2Fclient.root.crt&sslkey=$certs_dir%2Fclient.root.key&sslrootcert=$certs_dir%2Fca.crt\r"
 eexpect "using new connection URL"
-eexpect "error retrieving the database name: pq: database \"invaliddb\" does not exist"
+eexpect "error retrieving the database name: ERROR: database \"invaliddb\" does not exist"
 eexpect root@
 eexpect "?>"
 

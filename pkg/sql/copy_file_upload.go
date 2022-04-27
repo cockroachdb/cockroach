@@ -168,11 +168,11 @@ func CopyInFileStmt(destination, schema, table string) string {
 }
 
 func (f *fileUploadMachine) run(ctx context.Context) error {
-	err := f.c.run(ctx)
-	if err != nil && f.cancel != nil {
+	runErr := f.c.run(ctx)
+	err := errors.CombineErrors(f.w.Close(), runErr)
+	if runErr != nil && f.cancel != nil {
 		f.cancel()
 	}
-	err = errors.CombineErrors(f.w.Close(), err)
 
 	if err != nil {
 		f.failureCleanup()

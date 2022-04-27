@@ -201,13 +201,17 @@ func MakeInternalExecutorInflightTraceZipper(
 
 var _ InflightTraceZipper = &InternalInflightTraceZipper{}
 
+type queryI interface {
+	Query(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
+}
+
 // SQLConnInflightTraceZipper is the InflightTraceZipper which uses a network
 // backed SQL connection to collect cluster wide traces.
 type SQLConnInflightTraceZipper struct {
 	traceStrBuf         *bytes.Buffer
 	nodeTraceCollection *tracing.TraceCollection
 	z                   *memzipper.Zipper
-	sqlConn             driver.QueryerContext
+	sqlConn             queryI
 }
 
 func (s *SQLConnInflightTraceZipper) getNodeTraceCollection() *tracing.TraceCollection {
@@ -234,7 +238,7 @@ func (s *SQLConnInflightTraceZipper) reset() {
 // into text, and jaegerJSON formats before creating a zip with per-node trace
 // files.
 func (s *SQLConnInflightTraceZipper) Zip(ctx context.Context, traceID int64) ([]byte, error) {
-	rows, err := s.sqlConn.QueryContext(ctx, fmt.Sprintf(inflightTracesQuery, traceID), nil /* args */)
+	rows, err := s.sqlConn.Query(ctx, fmt.Sprintf(inflightTracesQuery, traceID))
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +345,7 @@ func (s *SQLConnInflightTraceZipper) populateInflightTraceRow(
 
 // MakeSQLConnInflightTraceZipper returns an instance of
 // SQLConnInflightTraceZipper.
-func MakeSQLConnInflightTraceZipper(sqlConn driver.QueryerContext) *SQLConnInflightTraceZipper {
+func MakeSQLConnInflightTraceZipper(sqlConn queryI) *SQLConnInflightTraceZipper {
 	t := &SQLConnInflightTraceZipper{
 		traceStrBuf:         &bytes.Buffer{},
 		nodeTraceCollection: nil,
