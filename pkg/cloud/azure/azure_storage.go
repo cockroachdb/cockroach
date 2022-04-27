@@ -125,7 +125,7 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 		defer sp.Finish()
 		_, err := azblob.UploadStreamToBlockBlob(
 			ctx, r, blob, azblob.UploadStreamToBlockBlobOptions{
-				BufferSize: 4 << 20,
+				BufferSize: int(cloud.WriteChunkSize.Get(&s.settings.SV)),
 			},
 		)
 		return err
