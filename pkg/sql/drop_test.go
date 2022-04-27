@@ -13,8 +13,10 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -56,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1163,6 +1167,111 @@ WHERE
 	_, err = txn.Exec("DROP INDEX foo@j_idx")
 	require.Truef(t, isRetryableErr(err), "drop index error: %v", err)
 	require.NoError(t, txn.Rollback())
+}
+
+// TestDropIndexOnHashShardedIndexWithStoredShardColumn tests the case when attempt to drop a hash-sharded index with
+// a stored shard column (all hash-sharded index created in 21.2 and prior will have a stored shard column) without
+// cascade, we skip dropping the shard column.
+func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Retrieve the current database id and its `public` schema id.
+	var parentID, parentSchemaID descpb.ID
+	tdb.Exec(t, "CREATE TABLE temp_tbl(a int)")
+	query := `SELECT "parentID", "parentSchemaID" FROM system.namespace WHERE name = 'temp_tbl'`
+	tdb.QueryRow(t, query).Scan(&parentID, &parentSchemaID)
+
+	// This is a real table descriptor pulled from system.descriptor in a demo cluster running v21.2.
+	// It's a table named 'tbl' with one hash-shard index and a `STORED` shard column.
+	descBytes, err := hex.DecodeString(`0a90060a0374626c1835203228013a0042260a016110011a0c0801104018003000501460002001300068007000780080010088010098010042760a17637264625f696e7465726e616c5f615f73686172645f3810021a0c080110201800300050176000200030015a386d6f6428666e7633322822637264625f696e7465726e616c2e646174756d735f746f5f627974657322286129292c20383a3a3a494e543829680070007800800100880100980100423a0a05726f77696410031a0c08011040180030005014600020002a0e756e697175655f726f77696428293001680070007800800100880100980100480452700a077072696d617279100118012205726f7769642a01612a17637264625f696e7465726e616c5f615f73686172645f38300340004a10080010001a00200028003000380040005a00700170027a0408002000800100880100900104980101a20106080012001800a80100b20100ba01005a87010a0974626c5f615f696478100218002217637264625f696e7465726e616c5f615f73686172645f38220161300230013803400040004a10080010001a00200028003000380040005a007a0408002000800100880100900103980100a2012008011217637264625f696e7465726e616c5f615f73686172645f381808220161a80100b20100ba010060036a1d0a090a0561646d696e10020a080a04726f6f7410021204726f6f741802800101880103980100a20194010a6b637264625f696e7465726e616c5f615f73686172645f3820494e2028303a3a3a494e54382c20313a3a3a494e54382c20323a3a3a494e54382c20333a3a3a494e54382c20343a3a3a494e54382c20353a3a3a494e54382c20363a3a3a494e54382c20373a3a3a494e543829121d636865636b5f637264625f696e7465726e616c5f615f73686172645f381800280230003801b201360a077072696d61727910001a01611a17637264625f696e7465726e616c5f615f73686172645f381a05726f7769642001200220032800b80101c20100e80100f2010408001200f801008002009202009a0200b20200b80200c0021dc80200e00200f00200`)
+	require.NoError(t, err)
+	var descProto descpb.Descriptor
+	require.NoError(t, protoutil.Unmarshal(descBytes, &descProto))
+
+	// Run migration changes on this descriptor.
+	b := descbuilder.NewBuilder(&descProto)
+	err = b.RunPostDeserializationChanges()
+	require.NoError(t, err)
+
+	// Adjust further its parent id and parent schema id to the current database id and its 'public' schema id.
+	toBeInsertDesc := b.BuildCreatedMutable()
+	toBeInsertDesc.(catalog.TableDescriptor).TableDesc().ParentID = parentID
+	toBeInsertDesc.(catalog.TableDescriptor).TableDesc().UnexposedParentSchemaID = parentSchemaID
+
+	// Table descriptor preparation is completed. Ready to insert it!
+	// Insert it to both the system.namespace table and system.descriptor table.
+	descBytes, err = protoutil.Marshal(toBeInsertDesc.DescriptorProto())
+	require.NoError(t, err)
+	query = fmt.Sprintf("SELECT crdb_internal.unsafe_upsert_namespace_entry(%v, %v, '%v', %v, true)",
+		parentID, parentSchemaID, toBeInsertDesc.GetName(), toBeInsertDesc.GetID())
+	tdb.Exec(t, query)
+	query = fmt.Sprintf("SELECT crdb_internal.unsafe_upsert_descriptor(%v, decode('%s', 'hex'), false);",
+		toBeInsertDesc.GetID(), hex.EncodeToString(descBytes))
+	tdb.Exec(t, query)
+
+	// Sanity Check: The inserted table is indeed inserted properly.
+	var tableDesc catalog.TableDescriptor
+	require.NoError(t, sql.TestingDescsTxn(ctx, s,
+		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+			tableDesc, err = col.Direct().MustGetTableDescByID(ctx, txn, toBeInsertDesc.GetID())
+			return err
+		}))
+
+	var shardIndexName string
+	var shardColName string
+	require.Equal(t, toBeInsertDesc.GetID(), tableDesc.GetID())
+	require.Equal(t, toBeInsertDesc.GetName(), tableDesc.GetName())
+	require.Equal(t, 2, len(tableDesc.AllIndexes()))
+	for _, idx := range tableDesc.AllIndexes() {
+		if idx.IsSharded() {
+			require.Equal(t, "", shardIndexName) // there should be only one shard index.
+			shardIndexName = idx.GetName()
+			shardColName = idx.GetShardColumnName()
+			shardCol, err := tableDesc.FindColumnWithName(tree.Name(idx.GetShardColumnName()))
+			require.NoError(t, err)
+			require.False(t, shardCol.IsVirtual())
+		}
+	}
+
+	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+	base, err := pq.NewConnector(url.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	actualNotice := "(no notice)"
+	connector := pq.ConnectorWithNoticeHandler(base, func(n *pq.Error) {
+		actualNotice = n.Message
+	})
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+	tdb = sqlutils.MakeSQLRunner(dbWithHandler)
+
+	// Drop the index without CASCADE and assert that index is dropped but the stored column is not.
+	query = fmt.Sprintf("DROP INDEX %v", shardIndexName)
+	tdb.Exec(t, query)
+
+	require.NoError(t, sql.TestingDescsTxn(ctx, s,
+		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+			tableDesc, err = col.Direct().MustGetTableDescByID(ctx, txn, toBeInsertDesc.GetID())
+			return err
+		}))
+	require.Equal(t, 1, len(tableDesc.AllIndexes()))
+	_, err = tableDesc.FindColumnWithName(tree.Name(shardColName))
+	require.NoError(t, err)
+
+	// We also assert that we get the expected notice.
+	expectedNotice := fmt.Sprintf("The accompanying shard column %q is a physical column and dropping it can be "+
+		"expensive, so, we dropped the index %q but skipped dropping %q. Issue another "+
+		"`ALTER TABLE %v DROP COLUMN %v` statement if you want to drop column %q.", shardColName, shardIndexName,
+		shardColName, tableDesc.GetName(), shardColName, shardColName)
+	require.Equal(t, expectedNotice, actualNotice)
 }
 
 // TestDropDatabaseWithForeignKeys tests that databases containing tables with
