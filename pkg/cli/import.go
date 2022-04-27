@@ -111,7 +111,7 @@ func runImport(
 	importFormat, source, tableName string,
 	mode importMode,
 ) error {
-	if err := conn.EnsureConn(); err != nil {
+	if err := conn.EnsureConn(ctx); err != nil {
 		return err
 	}
 
@@ -150,7 +150,7 @@ func runImport(
 		<-importCLIKnobs.pauseAfterUpload
 	}
 
-	ex := conn.GetDriverConn()
+	ex := conn.GetPGXConn()
 	importCompletedMesssage := func() {
 		switch mode {
 		case singleTable:
@@ -216,7 +216,7 @@ func runImport(
 		return nil
 	}
 
-	_, err = ex.ExecContext(ctx, importQuery, nil)
+	_, err = ex.Exec(ctx, importQuery)
 	if err != nil {
 		return err
 	}

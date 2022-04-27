@@ -14,12 +14,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"io"
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -29,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v4"
 )
 
 // ChunkDefaultSize is the default size of each chunk a file will be broken into
@@ -42,7 +41,7 @@ var payloadTableNameSuffix = "_upload_payload"
 // InternalFileToTableExecutor and SQLConnFileToTableExecutor output their rows.
 type FileToTableExecutorRows struct {
 	internalExecResultsIterator sqlutil.InternalRows
-	sqlConnExecResults          driver.Rows
+	sqlConnExecResults          pgx.Rows
 }
 
 // FileToTableSystemExecutor is the interface which defines the methods for the
@@ -99,14 +98,14 @@ func (i *InternalFileToTableExecutor) Exec(
 // SQLConnFileToTableExecutor is the SQL query executor which uses a network
 // backed SQL connection to interact with the database.
 type SQLConnFileToTableExecutor struct {
-	executor cloud.SQLConnI
+	executor *pgx.Conn
 }
 
 var _ FileToTableSystemExecutor = &SQLConnFileToTableExecutor{}
 
 // MakeSQLConnFileToTableExecutor returns an instance of a
 // SQLConnFileToTableExecutor.
-func MakeSQLConnFileToTableExecutor(executor cloud.SQLConnI) *SQLConnFileToTableExecutor {
+func MakeSQLConnFileToTableExecutor(executor *pgx.Conn) *SQLConnFileToTableExecutor {
 	return &SQLConnFileToTableExecutor{executor: executor}
 }
 
@@ -116,18 +115,8 @@ func (i *SQLConnFileToTableExecutor) Query(
 ) (*FileToTableExecutorRows, error) {
 	result := FileToTableExecutorRows{}
 
-	argVals := make([]driver.NamedValue, len(qargs))
-	for i, qarg := range qargs {
-		namedVal := driver.NamedValue{
-			// Ordinal position is 1 indexed.
-			Ordinal: i + 1,
-			Value:   qarg,
-		}
-		argVals[i] = namedVal
-	}
-
 	var err error
-	result.sqlConnExecResults, err = i.executor.QueryContext(ctx, query, argVals)
+	result.sqlConnExecResults, err = i.executor.Query(ctx, query, qargs...)
 	if err != nil {
 		return nil, err
 	}
@@ -138,16 +127,7 @@ func (i *SQLConnFileToTableExecutor) Query(
 func (i *SQLConnFileToTableExecutor) Exec(
 	ctx context.Context, _, query string, _ username.SQLUsername, qargs ...interface{},
 ) error {
-	argVals := make([]driver.NamedValue, len(qargs))
-	for i, qarg := range qargs {
-		namedVal := driver.NamedValue{
-			// Ordinal position is 1 indexed.
-			Ordinal: i + 1,
-			Value:   qarg,
-		}
-		argVals[i] = namedVal
-	}
-	_, err := i.executor.ExecContext(ctx, query, argVals)
+	_, err := i.executor.Exec(ctx, query, qargs...)
 	return err
 }
 
@@ -334,6 +314,11 @@ filename`, f.GetFQFileTableName())
 	case *InternalFileToTableExecutor:
 		// Verify that all the filenames are strings and aggregate them.
 		it := rows.internalExecResultsIterator
+		defer func() {
+			if err := it.Close(); err != nil {
+				log.Warningf(ctx, "failed to close %+v", err)
+			}
+		}()
 		var ok bool
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			files = append(files, string(tree.MustBeDString(it.Cur()[0])))
@@ -342,19 +327,14 @@ filename`, f.GetFQFileTableName())
 			return nil, err
 		}
 	case *SQLConnFileToTableExecutor:
-		vals := make([]driver.Value, 1)
-		for {
-			if err := rows.sqlConnExecResults.Next(vals); err == io.EOF {
-				break
-			} else if err != nil {
+		defer rows.sqlConnExecResults.Close()
+		for rows.sqlConnExecResults.Next() {
+			vals, err := rows.sqlConnExecResults.Values()
+			if err != nil {
 				return files, errors.Wrap(err, "failed to list files from file table")
 			}
 			filename := vals[0].(string)
 			files = append(files, filename)
-		}
-
-		if err = rows.sqlConnExecResults.Close(); err != nil {
-			return nil, err
 		}
 	default:
 		return []string{}, errors.New("unsupported executor type in FileSize")
@@ -683,19 +663,16 @@ func newFileTableReader(
 			sz = int64(tree.MustBeDInt(it.Cur()[1]))
 		}
 	case *SQLConnFileToTableExecutor:
-		defer func() {
-			if err := metaRows.sqlConnExecResults.Close(); err != nil {
-				log.Warningf(ctx, "failed to close %+v", err)
-			}
-		}()
-		vals := make([]driver.Value, 2)
-		err := metaRows.sqlConnExecResults.Next(vals)
-		if err == io.EOF {
+		defer metaRows.sqlConnExecResults.Close()
+		if !metaRows.sqlConnExecResults.Next() {
 			return nil, 0, os.ErrNotExist
-		} else if err != nil {
+		}
+		vals, err := metaRows.sqlConnExecResults.Values()
+		if err != nil {
 			return nil, 0, errors.Wrap(err, "failed to read returned file metadata")
 		}
-		fileID = vals[0].([]byte)
+		uuidBytes := vals[0].([16]byte)
+		fileID = uuidBytes[:]
 		if vals[1] != nil {
 			sz = vals[1].(int64)
 		}
@@ -742,15 +719,12 @@ func newFileTableReader(
 			}
 			block = []byte(tree.MustBeDBytes(it.Cur()[0]))
 		case *SQLConnFileToTableExecutor:
-			defer func() {
-				if err := rows.sqlConnExecResults.Close(); err != nil {
-					log.Warningf(ctx, "failed to close %+v", err)
-				}
-			}()
-			vals := make([]driver.Value, 1)
-			if err := rows.sqlConnExecResults.Next(vals); err == io.EOF {
-				return 0, io.EOF
-			} else if err != nil {
+			defer rows.sqlConnExecResults.Close()
+			if !rows.sqlConnExecResults.Next() {
+				return 0, os.ErrNotExist
+			}
+			vals, err := rows.sqlConnExecResults.Values()
+			if err != nil {
 				return 0, errors.Wrap(err, "failed to read returned file content")
 			}
 			block = vals[0].([]byte)

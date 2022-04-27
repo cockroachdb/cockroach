@@ -186,7 +186,8 @@ func Example_sql_watch() {
 
 	// Output:
 	// sql -e create table d(x int); insert into d values(3)
-	// INSERT 1
+	// CREATE TABLE
+	// INSERT 0 1
 	// sql --watch .1s -e update d set x=x-1 returning 1/x as dec
 	// dec
 	// 0.50000000000000000000
@@ -266,13 +267,13 @@ func Example_pretty_print_numerical_strings() {
 	// sql -e create database t; create table t.t (s string, d string);
 	// CREATE TABLE
 	// sql -e insert into t.t values (e'0', 'positive numerical string')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'-1', 'negative numerical string')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'1.0', 'decimal numerical string')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e insert into t.t values (e'aaaaa', 'non-numerical string')
-	// INSERT 1
+	// INSERT 0 1
 	// sql --format=table -e select * from t.t
 	//     s   |             d
 	// --------+----------------------------

@@ -170,7 +170,7 @@ func (c *Context) MakeConn(url string) (clisqlclient.Conn, error) {
 	// ensures that if the server was not initialized or there is some
 	// network issue, the client will not be left to hang forever.
 	//
-	// This is a lib/pq feature.
+	// This is a pgx feature.
 	if baseURL.GetOption("connect_timeout") == "" && c.ConnectTimeout != 0 {
 		_ = baseURL.SetOption("connect_timeout", strconv.Itoa(c.ConnectTimeout))
 	}
@@ -192,7 +192,7 @@ func (c *Context) Run(conn clisqlclient.Conn) error {
 
 	// Open the connection to make sure everything is OK before running any
 	// statements. Performs authentication.
-	if err := conn.EnsureConn(); err != nil {
+	if err := conn.EnsureConn(context.Background()); err != nil {
 		return err
 	}
 

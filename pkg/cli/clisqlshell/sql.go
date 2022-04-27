@@ -2204,7 +2204,7 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 // query cancellation for a little while more until we switch the shell
 // to use pgx instead.
 // See: https://github.com/cockroachdb/cockroach/issues/76483
-const queryCancelEnabled = false
+const queryCancelEnabled = true
 
 func (c *cliState) maybeHandleInterrupt() func() {
 	if !c.cliCtx.IsInteractive {

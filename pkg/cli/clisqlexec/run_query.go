@@ -136,11 +136,12 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 			return err
 		}
 
-		sqlExecCtx.maybeShowTimes(ctx, conn, w, ew, isMultiStatementQuery, startTime, queryCompleteTime)
-
 		if more, err := rows.NextResultSet(); err != nil {
 			return err
 		} else if !more {
+			// We must call maybeShowTimes after rows has been closed, which is after
+			// NextResultSet returns false.
+			sqlExecCtx.maybeShowTimes(ctx, conn, w, ew, isMultiStatementQuery, startTime, queryCompleteTime)
 			return nil
 		}
 	}
