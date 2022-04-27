@@ -113,7 +113,11 @@ describe("<TimeScaleDropdown>", function() {
     );
 
     const title = getTimeRangeTitle(currentWindow, state.currentScale);
-    assert.deepEqual(title, { title: "Past 10 Minutes", timeLabel: "10m" });
+    assert.deepEqual(title, {
+      title: "Past 10 Minutes",
+      timeLabel: "10m",
+      timeWindow: currentWindow,
+    });
   });
 
   describe("getTimeRangeTitle", () => {
@@ -137,6 +141,7 @@ describe("<TimeScaleDropdown>", function() {
         timeEnd,
         title: "Custom",
         timeLabel: "10m",
+        timeWindow: currentWindow,
       });
     });
 
@@ -177,6 +182,7 @@ describe("<TimeScaleDropdown>", function() {
         timeEnd,
         title: "Custom",
         timeLabel: "1d",
+        timeWindow: currentWindow,
       });
     });
   });

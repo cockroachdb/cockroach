@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, DatePicker, Form, Input, Popover, TimePicker } from "antd";
 import moment, { Moment } from "moment";
 import classNames from "classnames/bind";
@@ -51,6 +51,14 @@ export function DateRangeMenu({
     startInit || moment.utc(),
   );
   const [endMoment, setEndMoment] = useState<Moment>(endInit || moment.utc());
+
+  useEffect(() => {
+    setStartMoment(startInit);
+  }, [startInit]);
+
+  useEffect(() => {
+    setEndMoment(endInit);
+  }, [endInit]);
 
   const onChangeStart = (m?: Moment) => {
     m && setStartMoment(m);
