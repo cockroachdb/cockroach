@@ -826,7 +826,10 @@ func backupPlanHook(
 			return err
 		}
 
-		if len(backupManifest.Spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.EnableProtectedTimestampsForTenant) {
+			protectedtsID := uuid.MakeV4()
+			backupDetails.ProtectedTimestampRecord = &protectedtsID
+		} else if len(backupManifest.Spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
 			protectedtsID := uuid.MakeV4()
 			backupDetails.ProtectedTimestampRecord = &protectedtsID
 		}
@@ -851,10 +854,12 @@ func backupPlanHook(
 			p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(), "",
 		) != nil
 
-		if err := protectTimestampForBackup(
-			ctx, p.ExecCfg(), plannerTxn, jobID, backupManifest, backupDetails,
-		); err != nil {
-			return err
+		if backupDetails.ProtectedTimestampRecord != nil {
+			if err := protectTimestampForBackup(
+				ctx, p.ExecCfg(), plannerTxn, jobID, backupManifest, backupDetails,
+			); err != nil {
+				return err
+			}
 		}
 
 		if backupStmt.Options.Detached {
@@ -1311,32 +1316,23 @@ func protectTimestampForBackup(
 	backupManifest BackupManifest,
 	backupDetails jobspb.BackupDetails,
 ) error {
-	if backupDetails.ProtectedTimestampRecord == nil {
-		return nil
+	tsToProtect := backupManifest.EndTime
+	if !backupManifest.StartTime.IsEmpty() {
+		tsToProtect = backupManifest.StartTime
 	}
-	if len(backupManifest.Spans) > 0 {
-		tsToProtect := backupManifest.EndTime
-		if !backupManifest.StartTime.IsEmpty() {
-			tsToProtect = backupManifest.StartTime
-		}
 
-		// Resolve the target that the PTS record will protect as part of this
-		// backup.
-		target := getProtectedTimestampTargetForBackup(backupManifest)
+	// Resolve the target that the PTS record will protect as part of this
+	// backup.
+	target := getProtectedTimestampTargetForBackup(backupManifest)
 
-		// Records written by the backup job should be ignored when making GC
-		// decisions on any table that has been marked as
-		// `exclude_data_from_backup`. This ensures that the backup job does not
-		// holdup GC on that table span for the duration of execution.
-		target.IgnoreIfExcludedFromBackup = true
-		rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, int64(jobID),
-			tsToProtect, backupManifest.Spans, jobsprotectedts.Jobs, target)
-		err := execCfg.ProtectedTimestampProvider.Protect(ctx, txn, rec)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	// Records written by the backup job should be ignored when making GC
+	// decisions on any table that has been marked as
+	// `exclude_data_from_backup`. This ensures that the backup job does not
+	// holdup GC on that table span for the duration of execution.
+	target.IgnoreIfExcludedFromBackup = true
+	rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, int64(jobID),
+		tsToProtect, backupManifest.Spans, jobsprotectedts.Jobs, target)
+	return execCfg.ProtectedTimestampProvider.Protect(ctx, txn, rec)
 }
 
 // checkForNewDatabases returns an error if any new complete databases were

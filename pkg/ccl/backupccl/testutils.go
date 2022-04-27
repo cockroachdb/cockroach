@@ -504,25 +504,98 @@ func thresholdFromTrace(t *testing.T, traceString string) hlc.Timestamp {
 	return thresh
 }
 
+func setAndWaitForTenantReadOnlyClusterSetting(
+	t *testing.T,
+	setting string,
+	systemTenantRunner *sqlutils.SQLRunner,
+	tenantRunner *sqlutils.SQLRunner,
+	tenantID roachpb.TenantID,
+	val string,
+) {
+	t.Helper()
+	systemTenantRunner.Exec(
+		t,
+		fmt.Sprintf(
+			"ALTER TENANT $1 SET CLUSTER	SETTING %s = '%s'",
+			setting,
+			val,
+		),
+		tenantID.ToUint64(),
+	)
+
+	testutils.SucceedsSoon(t, func() error {
+		var currentVal string
+		tenantRunner.QueryRow(t,
+			fmt.Sprintf(
+				"SHOW CLUSTER SETTING %s", setting,
+			),
+		).Scan(&currentVal)
+
+		if currentVal != val {
+			return errors.Newf("waiting for cluster setting to be set to %q", val)
+		}
+		return nil
+	})
+}
+
+// runGCAndCheckTrace manually enqueues the replica with
+// start_pretty=startPretty and runs `checkGCTrace` until it succeeds.
+func runGCAndCheckTraceForSecondaryTenant(
+	ctx context.Context,
+	t *testing.T,
+	tc *testcluster.TestCluster,
+	runner *sqlutils.SQLRunner,
+	skipShouldQueue bool,
+	startPretty string,
+	checkGCTrace func(traceStr string) error,
+) {
+	t.Helper()
+	var startKey roachpb.Key
+	testutils.SucceedsSoon(t, func() error {
+		err := runner.DB.QueryRowContext(ctx, fmt.Sprintf(`
+SELECT start_key FROM crdb_internal.ranges_no_leases
+WHERE start_pretty LIKE '%s' ORDER BY start_key ASC`, startPretty)).Scan(&startKey)
+		if err != nil {
+			return errors.Wrap(err, "failed to query start_key")
+		}
+		return nil
+	})
+
+	r := tc.LookupRangeOrFatal(t, startKey)
+	l, _, err := tc.FindRangeLease(r, nil)
+	require.NoError(t, err)
+	lhServer := tc.Server(int(l.Replica.NodeID) - 1)
+	s, repl := getFirstStoreReplica(t, lhServer, startKey)
+	testutils.SucceedsSoon(t, func() error {
+		trace, _, err := s.ManuallyEnqueue(ctx, "mvccGC", repl, skipShouldQueue)
+		require.NoError(t, err)
+		return checkGCTrace(trace.String())
+	})
+}
+
 // runGCAndCheckTrace manually enqueues the replica corresponding to
 // `databaseName.tableName`, and runs `checkGCTrace` until it succeeds.
 func runGCAndCheckTrace(
 	ctx context.Context,
 	t *testing.T,
 	tc *testcluster.TestCluster,
-	conn *gosql.DB,
+	runner *sqlutils.SQLRunner,
 	skipShouldQueue bool,
-	tableName, databaseName string,
+	databaseName, tableName string,
 	checkGCTrace func(traceStr string) error,
 ) {
 	t.Helper()
 	var startKey roachpb.Key
-	err := conn.QueryRow("SELECT start_key"+
-		" FROM crdb_internal.ranges_no_leases"+
-		" WHERE table_name = $1"+
-		" AND database_name = $2"+
-		" ORDER BY start_key ASC", tableName, databaseName).Scan(&startKey)
-	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		err := runner.DB.QueryRowContext(ctx, `
+SELECT start_key FROM crdb_internal.ranges_no_leases
+WHERE table_name = $1 AND database_name = $2
+ORDER BY start_key ASC`, tableName, databaseName).Scan(&startKey)
+		if err != nil {
+			return errors.Wrap(err, "failed to query start_key ")
+		}
+		return nil
+	})
 	r := tc.LookupRangeOrFatal(t, startKey)
 	l, _, err := tc.FindRangeLease(r, nil)
 	require.NoError(t, err)
