@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -57,10 +58,11 @@ func runTerm(cmd *cobra.Command, args []string) (resErr error) {
 	if err != nil {
 		return err
 	}
+	conn.SetAlwaysInferResultTypes(false)
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	sqlCtx.ShellCtx.ParseURL = makeURLParser(cmd)
-	return sqlCtx.Run(conn)
+	return sqlCtx.Run(context.Background(), conn)
 }
 
 func makeURLParser(cmd *cobra.Command) clisqlshell.URLParser {

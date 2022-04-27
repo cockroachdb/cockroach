@@ -48,3 +48,16 @@ func SendReport(ctx context.Context, sv *settings.Values, err error) {
 	event, extraDetails := errors.BuildSentryReport(err)
 	logcrash.SendReport(ctx, logcrash.ReportTypeError, event, extraDetails)
 }
+
+// CombineErrorsWithMark is a mix of errors.Combine() and errors.Mark().
+// If err1 is nil, the result is like errors.CombineErrors().
+// If err2 is non-nil, the result is that of errors.Mark().
+//
+// In both cases, if err2 is non-nil, errors.Is returns true on the
+// result with err2 as marker.
+func CombineErrorsWithMark(err1, err2 error) error {
+	if err1 == nil {
+		return err2
+	}
+	return errors.Mark(err1, err2)
+}

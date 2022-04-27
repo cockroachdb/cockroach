@@ -196,7 +196,7 @@ func (u urlParser) setInternal(v string, warn bool) error {
 		if u.sslStrict {
 			// The "sslStrict" flag means the client command is using our
 			// certificate manager instead of the certificate handler in
-			// lib/pq.
+			// pgx.
 			//
 			// Our certificate manager is peculiar in that it requires
 			// every file in the same directory (the "certs dir") and also
@@ -205,7 +205,7 @@ func (u urlParser) setInternal(v string, warn bool) error {
 			// Meanwhile, the URL format for security flags consists
 			// of 3 options (sslrootcert, sslcert, sslkey) that *may*
 			// refer to arbitrary files in arbitrary directories.
-			// Regular SQL drivers are fine with that (including lib/pq)
+			// Regular SQL drivers are fine with that (including pgx)
 			// but our cert manager definitely not (or, at least, not yet).
 			//
 			// So here we have to reverse-engineer the parameters needed

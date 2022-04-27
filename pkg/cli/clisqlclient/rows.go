@@ -12,62 +12,66 @@ package clisqlclient
 
 import (
 	"database/sql/driver"
+	"io"
 	"reflect"
 
-	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 )
 
 type sqlRows struct {
-	rows sqlRowsI
-	conn *sqlConn
+	rows     pgx.Rows
+	connInfo *pgtype.ConnInfo
+	conn     *sqlConn
+	colNames []string
 }
 
 var _ Rows = (*sqlRows)(nil)
 
-type sqlRowsI interface {
-	driver.RowsColumnTypeScanType
-	driver.RowsColumnTypeDatabaseTypeName
-	Result() driver.Result
-	Tag() string
-
-	// Go 1.8 multiple result set interfaces.
-	// TODO(mjibson): clean this up after 1.8 is released.
-	HasNextResultSet() bool
-	NextResultSet() error
-}
-
 func (r *sqlRows) Columns() []string {
-	return r.rows.Columns()
+	if r.colNames == nil {
+		fields := r.rows.FieldDescriptions()
+		r.colNames = make([]string, len(fields))
+		for i, fd := range fields {
+			r.colNames[i] = string(fd.Name)
+		}
+	}
+	return r.colNames
 }
 
-func (r *sqlRows) Result() driver.Result {
-	return r.rows.Result()
-}
-
-func (r *sqlRows) Tag() string {
-	return r.rows.Tag()
+func (r *sqlRows) Tag() (CommandTag, error) {
+	return r.rows.CommandTag(), r.rows.Err()
 }
 
 func (r *sqlRows) Close() error {
 	r.conn.flushNotices()
-	err := r.rows.Close()
-	if errors.Is(err, driver.ErrBadConn) {
+	r.rows.Close()
+	if r.conn.conn.IsClosed() {
 		r.conn.reconnecting = true
 		r.conn.silentClose()
 	}
-	return err
+	return nil
 }
 
 // Next implements the Rows interface.
 func (r *sqlRows) Next(values []driver.Value) error {
-	err := r.rows.Next(values)
-	if errors.Is(err, driver.ErrBadConn) {
+	if r.conn.conn.IsClosed() {
 		r.conn.reconnecting = true
 		r.conn.silentClose()
 	}
-	for i, v := range values {
-		if b, ok := v.([]byte); ok {
+	if !r.rows.Next() {
+		return io.EOF
+	}
+	rawVals, err := r.rows.Values()
+	if err != nil {
+		return err
+	}
+	for i, v := range rawVals {
+		if b, ok := (v).([]byte); ok {
+			// Copy byte slices as per the comment on Rows.Next.
 			values[i] = append([]byte{}, b...)
+		} else {
+			values[i] = v
 		}
 	}
 	// After the first row was received, we want to delay all
@@ -78,18 +82,18 @@ func (r *sqlRows) Next(values []driver.Value) error {
 
 // NextResultSet prepares the next result set for reading.
 func (r *sqlRows) NextResultSet() (bool, error) {
-	if !r.rows.HasNextResultSet() {
-		return false, nil
-	}
-	return true, r.rows.NextResultSet()
+	return false, nil
 }
 
 func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
-	return r.rows.ColumnTypeScanType(index)
+	o := r.rows.FieldDescriptions()[index].DataTypeOID
+	n := r.ColumnTypeDatabaseTypeName(index)
+	return scanType(o, n)
 }
 
 func (r *sqlRows) ColumnTypeDatabaseTypeName(index int) string {
-	return r.rows.ColumnTypeDatabaseTypeName(index)
+	fieldOID := r.rows.FieldDescriptions()[index].DataTypeOID
+	return databaseTypeName(r.connInfo, fieldOID)
 }
 
 func (r *sqlRows) ColumnTypeNames() []string {

@@ -38,12 +38,22 @@ func Example_sql_format() {
 	c.RunWithArgs([]string{"sql", "-e", `select '{"(n,1)","(\n,2)","(\\n,3)"}'::tup[]`})
 	c.RunWithArgs([]string{"sql", "-e", `create type e as enum('a', '\n')`})
 	c.RunWithArgs([]string{"sql", "-e", `select '\n'::e, '{a, "\\n"}'::e[]`})
+	// Check that intervals are formatted correctly.
+	c.RunWithArgs([]string{"sql", "-e", `select '1 day 2 minutes'::interval`})
+	c.RunWithArgs([]string{"sql", "-e", `select '{3 months 4 days 2 hours, 4 years 1 second}'::interval[]`})
+	c.RunWithArgs([]string{"sql", "-e", `SET intervalstyle = sql_standard; select '1 day 2 minutes'::interval`})
+	c.RunWithArgs([]string{"sql", "-e", `SET intervalstyle = sql_standard; select '{3 months 4 days 2 hours,4 years 1 second}'::interval[]`})
+	c.RunWithArgs([]string{"sql", "-e", `SET intervalstyle = iso_8601; select '1 day 2 minutes'::interval`})
+	c.RunWithArgs([]string{"sql", "-e", `SET intervalstyle = iso_8601; select '{3 months 4 days 2 hours,4 years 1 second}'::interval[]`})
+	// Check that UUIDs are formatted correctly.
+	c.RunWithArgs([]string{"sql", "-e", `select 'f2b046d8-dc59-11ec-8b22-cbf9a9dd2f5f'::uuid`})
 
 	// Output:
 	// sql -e create database t; create table t.times (bare timestamp, withtz timestamptz)
+	// CREATE DATABASE
 	// CREATE TABLE
 	// sql -e insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e select bare from t.times; select withtz from t.times
 	// bare
 	// 2016-01-25 10:10:10
@@ -62,7 +72,7 @@ func Example_sql_format() {
 	// float4
 	// 0.33333334
 	// float8
-	// 0.3333333333333333
+	// 0.333333333333333
 	// float8
 	// -Infinity
 	// sql -e select array['哈哈'::TEXT], array['哈哈'::NAME], array['哈哈'::VARCHAR]
@@ -98,4 +108,29 @@ func Example_sql_format() {
 	// sql -e select '\n'::e, '{a, "\\n"}'::e[]
 	// e	e
 	// \n	"{a,""\\n""}"
+	// sql -e select '1 day 2 minutes'::interval
+	// interval
+	// 1 day 00:02:00
+	// sql -e select '{3 months 4 days 2 hours, 4 years 1 second}'::interval[]
+	// interval
+	// "{""3 mons 4 days 02:00:00"",""4 years 00:00:01""}"
+	// sql -e SET intervalstyle = sql_standard; select '1 day 2 minutes'::interval
+	// SET
+	// interval
+	// 1 0:02:00
+	// sql -e SET intervalstyle = sql_standard; select '{3 months 4 days 2 hours,4 years 1 second}'::interval[]
+	// SET
+	// interval
+	// "{""+0-3 +4 +2:00:00"",""+4-0 +0 +0:00:01""}"
+	// sql -e SET intervalstyle = iso_8601; select '1 day 2 minutes'::interval
+	// SET
+	// interval
+	// P1DT2M
+	// sql -e SET intervalstyle = iso_8601; select '{3 months 4 days 2 hours,4 years 1 second}'::interval[]
+	// SET
+	// interval
+	// {P3M4DT2H,P4YT1S}
+	// sql -e select 'f2b046d8-dc59-11ec-8b22-cbf9a9dd2f5f'::uuid
+	// uuid
+	// f2b046d8-dc59-11ec-8b22-cbf9a9dd2f5f
 }

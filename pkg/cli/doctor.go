@@ -40,7 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgtype"
 	"github.com/spf13/cobra"
 )
 
@@ -120,6 +121,7 @@ Run the doctor tool system data from a live cluster specified by --url.
 		RunE: clierrorplus.MaybeDecorateError(
 			func(cmd *cobra.Command, args []string) (resErr error) {
 				sqlConn, err := makeSQLClient("cockroach doctor", useSystemDb)
+				sqlConn.SetAlwaysInferResultTypes(true)
 				if err != nil {
 					return errors.Wrap(err, "could not establish connection to cluster")
 				}
@@ -198,6 +200,10 @@ func fromCluster(
 	retErr error,
 ) {
 	ctx := context.Background()
+	if err := sqlConn.EnsureConn(ctx); err != nil {
+		return nil, nil, nil, err
+	}
+
 	if timeout != 0 {
 		if err := sqlConn.Exec(ctx,
 			`SET statement_timeout = $1`, timeout.String()); err != nil {
@@ -211,8 +217,8 @@ FROM system.descriptor ORDER BY id`
 	_, err := sqlConn.QueryRow(ctx, checkColumnExistsStmt)
 	// On versions before 20.2, the system.descriptor won't have the builtin
 	// crdb_internal_mvcc_timestamp. If we can't find it, use NULL instead.
-	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-		if pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedColumn {
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+		if pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedColumn {
 			stmt = `
 SELECT id, descriptor, NULL AS mod_time_logical
 FROM system.descriptor ORDER BY id`
@@ -236,8 +242,12 @@ FROM system.descriptor ORDER BY id`
 		}
 		if vals[2] == nil {
 			row.ModTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		} else if mt, ok := vals[2].([]byte); ok {
-			decimal, _, err := apd.NewFromString(string(mt))
+		} else if mt, ok := vals[2].(pgtype.Numeric); ok {
+			buf, err := mt.EncodeText(nil, nil)
+			if err != nil {
+				return err
+			}
+			decimal, _, err := apd.NewFromString(string(buf))
 			if err != nil {
 				return err
 			}
@@ -261,8 +271,8 @@ FROM system.descriptor ORDER BY id`
 	_, err = sqlConn.QueryRow(ctx, checkColumnExistsStmt)
 	// On versions before 20.1, table system.namespace does not have this column.
 	// In that case the ParentSchemaID for tables is 29 and for databases is 0.
-	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-		if pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedColumn {
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+		if pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedColumn {
 			stmt = `
 SELECT "parentID", CASE WHEN "parentID" = 0 THEN 0 ELSE 29 END AS "parentSchemaID", name, id
 FROM system.namespace`

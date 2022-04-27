@@ -93,6 +93,7 @@ func createAuthSessionToken(
 	username string,
 ) (sessionID int64, httpCookie *http.Cookie, resErr error) {
 	sqlConn, err := makeSQLClient("cockroach auth-session login", useSystemDb)
+
 	if err != nil {
 		return -1, nil, err
 	}
