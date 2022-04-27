@@ -916,7 +916,7 @@ type Store struct {
 	// avoid reworking the locking in getOrCreateReplica which requires
 	// Replica.raftMu to be held while a replica is being inserted into
 	// Store.mu.replicas.
-	raftRecvQueues syncutil.IntMap // map[roachpb.RangeID]*raftReceiveQueue
+	raftRecvQueues raftReceiveQueues
 
 	scheduler *raftScheduler
 
