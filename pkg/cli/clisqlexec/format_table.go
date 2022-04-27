@@ -181,13 +181,13 @@ func render(
 	iter RowStrIter,
 	completedHook func(),
 	noRowsHook func() (bool, error),
-) (err error) {
+) (retErr error) {
 	described := false
 	nRows := 0
 	defer func() {
 		// If the column headers are not printed yet, do it now.
 		if !described {
-			err = errors.WithSecondaryError(err, r.describe(w, cols))
+			retErr = errors.CombineErrors(retErr, r.describe(w, cols))
 		}
 
 		// completedHook, if provided, is called unconditionally of error.
@@ -198,18 +198,20 @@ func render(
 		// We need to call doneNoRows/doneRows also unconditionally.
 		var handled bool
 		if nRows == 0 && noRowsHook != nil {
-			handled, err = noRowsHook()
-			if err != nil {
+			var noRowsErr error
+			handled, noRowsErr = noRowsHook()
+			if noRowsErr != nil {
+				retErr = errors.CombineErrors(retErr, noRowsErr)
 				return
 			}
 		}
 		if handled {
-			err = errors.WithSecondaryError(err, r.doneNoRows(w))
+			retErr = errors.CombineErrors(retErr, r.doneNoRows(w))
 		} else {
-			err = errors.WithSecondaryError(err, r.doneRows(w, nRows))
+			retErr = errors.CombineErrors(retErr, r.doneRows(w, nRows))
 		}
 
-		if err != nil && nRows > 0 {
+		if retErr != nil && nRows > 0 {
 			fmt.Fprintf(ew, "(error encountered after some results were delivered)\n")
 		}
 	}()
