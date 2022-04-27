@@ -6958,6 +6958,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 // after an existing mutation on the column.
 func TestDropColumnAfterMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 76843, "flaky test")
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	var jobControlMu syncutil.Mutex
