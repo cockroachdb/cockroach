@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -145,28 +146,28 @@ func (p *planner) CreateSchemaNamespaceEntry(
 // temporarySchemaName returns the session specific temporary schema name given
 // the sessionID. When the session creates a temporary object for the first
 // time, it must create a schema with the name returned by this function.
-func temporarySchemaName(sessionID ClusterWideID) string {
+func temporarySchemaName(sessionID clusterunique.ID) string {
 	return fmt.Sprintf("pg_temp_%d_%d", sessionID.Hi, sessionID.Lo)
 }
 
 // temporarySchemaSessionID returns the sessionID of the given temporary schema.
-func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
+func temporarySchemaSessionID(scName string) (bool, clusterunique.ID, error) {
 	if !strings.HasPrefix(scName, "pg_temp_") {
-		return false, ClusterWideID{}, nil
+		return false, clusterunique.ID{}, nil
 	}
 	parts := strings.Split(scName, "_")
 	if len(parts) != 4 {
-		return false, ClusterWideID{}, errors.Errorf("malformed temp schema name %s", scName)
+		return false, clusterunique.ID{}, errors.Errorf("malformed temp schema name %s", scName)
 	}
 	hi, err := strconv.ParseUint(parts[2], 10, 64)
 	if err != nil {
-		return false, ClusterWideID{}, err
+		return false, clusterunique.ID{}, err
 	}
 	lo, err := strconv.ParseUint(parts[3], 10, 64)
 	if err != nil {
-		return false, ClusterWideID{}, err
+		return false, clusterunique.ID{}, err
 	}
-	return true, ClusterWideID{uint128.Uint128{Hi: hi, Lo: lo}}, nil
+	return true, clusterunique.ID{Uint128: uint128.Uint128{Hi: hi, Lo: lo}}, nil
 }
 
 // cleanupSessionTempObjects removes all temporary objects (tables, sequences,
@@ -178,7 +179,7 @@ func cleanupSessionTempObjects(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	ie sqlutil.InternalExecutor,
-	sessionID ClusterWideID,
+	sessionID clusterunique.ID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
 	return cf.Txn(ctx, ie, db, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
@@ -529,7 +530,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		return err
 	}
 
-	sessionIDs := make(map[ClusterWideID]struct{})
+	sessionIDs := make(map[clusterunique.ID]struct{})
 	for _, dbDesc := range allDbDescs {
 		var schemaEntries map[descpb.ID]resolver.SchemaEntryForDB
 		if err := retryFunc(ctx, func() error {

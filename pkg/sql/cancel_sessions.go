@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,7 +50,7 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 		return false, errors.AssertionFailedf("%q: expected *DString, found %T", datum, datum)
 	}
 
-	sessionID, err := StringToClusterWideID(string(sessionIDString))
+	sessionID, err := clusterunique.IDFromString(string(sessionIDString))
 	if err != nil {
 		return false, pgerror.Wrapf(err, pgcode.Syntax, "invalid session ID %s", datum)
 	}

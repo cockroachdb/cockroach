@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -193,7 +194,7 @@ func (t *tenantStatusServer) CancelQuery(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	queryID, err := sql.StringToClusterWideID(req.QueryID)
+	queryID, err := clusterunique.IDFromString(req.QueryID)
 	if err != nil {
 		return &serverpb.CancelQueryResponse{
 			Canceled: false,
@@ -300,7 +301,7 @@ func (t *tenantStatusServer) CancelSession(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	sessionID := sql.BytesToClusterWideID(req.SessionID)
+	sessionID := clusterunique.IDFromBytes(req.SessionID)
 	instanceID := base.SQLInstanceID(sessionID.GetNodeID())
 
 	// This request needs to be forwarded to another instance.

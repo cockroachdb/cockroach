@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
@@ -924,7 +925,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
-	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
+	ex.mu.ActiveQueries = make(map[clusterunique.ID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
 	ex.sessionTracing.ex = ex
@@ -1445,7 +1446,7 @@ type connExecutor struct {
 		syncutil.RWMutex
 
 		// ActiveQueries contains all queries in flight.
-		ActiveQueries map[ClusterWideID]*queryMeta
+		ActiveQueries map[clusterunique.ID]*queryMeta
 
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
@@ -1469,7 +1470,7 @@ type connExecutor struct {
 	// pgwire cancellation protocol.
 	queryCancelKey pgwirecancel.BackendKeyData
 
-	sessionID ClusterWideID
+	sessionID clusterunique.ID
 
 	// activated determines whether activate() was called already.
 	// When this is set, close() must be called to release resources.
@@ -2442,8 +2443,8 @@ func stmtHasNoData(stmt tree.Statement) bool {
 // generateID generates a unique ID based on the SQL instance ID and its current
 // HLC timestamp. These IDs are either scoped at the query level or at the
 // session level.
-func (ex *connExecutor) generateID() ClusterWideID {
-	return GenerateClusterWideID(ex.server.cfg.Clock.Now(), ex.server.cfg.NodeID.SQLInstanceID())
+func (ex *connExecutor) generateID() clusterunique.ID {
+	return clusterunique.GenerateID(ex.server.cfg.Clock.Now(), ex.server.cfg.NodeID.SQLInstanceID())
 }
 
 // commitPrepStmtNamespace deallocates everything in
@@ -2992,7 +2993,7 @@ func (ex *connExecutor) initStatementResult(
 }
 
 // cancelQuery is part of the registrySession interface.
-func (ex *connExecutor) cancelQuery(queryID ClusterWideID) bool {
+func (ex *connExecutor) cancelQuery(queryID clusterunique.ID) bool {
 	ex.mu.Lock()
 	defer ex.mu.Unlock()
 	if queryMeta, exists := ex.mu.ActiveQueries[queryID]; exists {

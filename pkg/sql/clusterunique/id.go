@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package clusterunique
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -16,40 +16,40 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
-// ClusterWideID represents an identifier that is guaranteed to be unique across
+// ID represents an identifier that is guaranteed to be unique across
 // a cluster. It is a wrapper around a uint128. It logically consists of 96 bits
 // of HLC timestamp, and 32 bits of node ID.
-type ClusterWideID struct {
+type ID struct {
 	uint128.Uint128
 }
 
-// GenerateClusterWideID takes a timestamp and SQLInstanceID, and generates a
-// ClusterWideID.
-func GenerateClusterWideID(timestamp hlc.Timestamp, instID base.SQLInstanceID) ClusterWideID {
+// GenerateID takes a timestamp and SQLInstanceID, and generates a
+// ID.
+func GenerateID(timestamp hlc.Timestamp, instID base.SQLInstanceID) ID {
 	loInt := (uint64)(instID)
 	loInt = loInt | ((uint64)(timestamp.Logical) << 32)
 
-	return ClusterWideID{Uint128: uint128.FromInts((uint64)(timestamp.WallTime), loInt)}
+	return ID{Uint128: uint128.FromInts((uint64)(timestamp.WallTime), loInt)}
 }
 
-// StringToClusterWideID converts a string to a ClusterWideID. If the string is
+// IDFromString converts a string to a ID. If the string is
 // not a valid uint128, an error is returned.
-func StringToClusterWideID(s string) (ClusterWideID, error) {
+func IDFromString(s string) (ID, error) {
 	id, err := uint128.FromString(s)
 	if err != nil {
-		return ClusterWideID{}, err
+		return ID{}, err
 	}
-	return ClusterWideID{Uint128: id}, nil
+	return ID{Uint128: id}, nil
 }
 
-// BytesToClusterWideID converts raw bytes into a ClusterWideID.
+// IDFromBytes converts raw bytes into a ID.
 // The caller is responsible for ensuring the byte slice contains 16 bytes.
-func BytesToClusterWideID(b []byte) ClusterWideID {
+func IDFromBytes(b []byte) ID {
 	id := uint128.FromBytes(b)
-	return ClusterWideID{Uint128: id}
+	return ID{Uint128: id}
 }
 
-// GetNodeID extracts the node ID from a ClusterWideID.
-func (id ClusterWideID) GetNodeID() int32 {
+// GetNodeID extracts the node ID from a ID.
+func (id ID) GetNodeID() int32 {
 	return int32(0xFFFFFFFF & id.Lo)
 }
