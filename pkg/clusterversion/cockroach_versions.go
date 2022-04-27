@@ -349,6 +349,11 @@ const (
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
 
+	// v22.2 versions.
+	//
+	// Start22_2 demarcates work towards CockroachDB v22.2.
+	Start22_2
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -602,6 +607,12 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     V22_1,
 		Version: roachpb.Version{Major: 22, Minor: 1},
+	},
+
+	// v22.2 versions.
+	{
+		Key:     Start22_2,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 100},
 	},
 
 	// *************************************************
