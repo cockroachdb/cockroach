@@ -42,7 +42,6 @@ type llrbNode struct {
 }
 
 var _ Tree = (*llrbTree)(nil)
-var _ LLRBTree = (*llrbTree)(nil)
 
 // llrbTree an interval tree based on an augmented Left-Leaning Red Black tree.
 type llrbTree struct {
