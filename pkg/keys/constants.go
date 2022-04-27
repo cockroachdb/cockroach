@@ -460,7 +460,6 @@ const (
 	TenantUsageTableID                  = 45
 	SQLInstancesTableID                 = 46
 	SpanConfigurationsTableID           = 47
-	HotRangesTableID                    = 48
 )
 
 // CommentType the type of the schema object on which a comment has been

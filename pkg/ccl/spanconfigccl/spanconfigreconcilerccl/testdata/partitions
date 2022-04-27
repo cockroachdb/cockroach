@@ -13,8 +13,8 @@ mutations discard
 state offset=47
 ----
 ...
-/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
+/Table/5{1-2}                              database system (host)
 
 exec-sql
 CREATE DATABASE db;
@@ -34,8 +34,8 @@ upsert /Table/10{6-7}                      range default
 state offset=47
 ----
 ...
-/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
+/Table/5{1-2}                              database system (host)
 /Table/10{6-7}                             range default
 
 # All parent schema zone config changes cascade to the entire table's span.
@@ -52,8 +52,8 @@ upsert /Table/10{6-7}                      num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
-/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
+/Table/5{1-2}                              database system (host)
 /Table/10{6-7}                             num_replicas=7 num_voters=5
 
 # Apply a zone configuration on one of the partitions, `one_two`, which
@@ -75,8 +75,8 @@ upsert /Table/10{6/1/3-7}                  num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
-/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
+/Table/5{1-2}                              database system (host)
 /Table/106{-/1/1}                          num_replicas=7 num_voters=5
 /Table/106/1/{1-2}                         global_reads=true num_replicas=7 num_voters=5
 /Table/106/1/{2-3}                         global_reads=true num_replicas=7 num_voters=5
@@ -98,8 +98,8 @@ upsert /Table/10{6/1/5-7}                  num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
-/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
+/Table/5{1-2}                              database system (host)
 /Table/106{-/1/1}                          num_replicas=7 num_voters=5
 /Table/106/1/{1-2}                         global_reads=true num_replicas=7 num_voters=5
 /Table/106/1/{2-3}                         global_reads=true num_replicas=7 num_voters=5
@@ -135,8 +135,8 @@ upsert /Table/10{6/2-7}                    num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
-/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
+/Table/5{1-2}                              database system (host)
 /Table/106{-/1}                            num_replicas=7 num_voters=5
 /Table/106/1{-/1}                          num_replicas=7 num_voters=6
 /Table/106/1/{1-2}                         global_reads=true num_replicas=7 num_voters=5
@@ -170,8 +170,8 @@ upsert /Table/10{6/2-7}                    num_replicas=7
 state offset=47
 ----
 ...
-/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
+/Table/5{1-2}                              database system (host)
 /Table/106{-/1}                            num_replicas=7
 /Table/106/1{-/1}                          num_replicas=7 num_voters=6
 /Table/106/1/{1-2}                         global_reads=true num_replicas=7
@@ -199,5 +199,5 @@ delete /Table/10{6/2-7}
 state offset=47
 ----
 ...
-/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
+/Table/5{1-2}                              database system (host)

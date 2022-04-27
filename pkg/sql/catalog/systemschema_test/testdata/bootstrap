@@ -353,12 +353,6 @@ CREATE TABLE public.span_configurations (
 	CONSTRAINT "primary" PRIMARY KEY (start_key ASC),
 	CONSTRAINT check_bounds CHECK (start_key < end_key)
 );
-CREATE TABLE public.hot_ranges (
-	sample_ts TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
-	tenant_id INT8 NOT NULL,
-	info BYTES NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (sample_ts ASC, tenant_id ASC)
-);
 CREATE TABLE public.tenant_settings (
 	tenant_id INT8 NOT NULL,
 	name STRING NOT NULL,
@@ -368,4 +362,10 @@ CREATE TABLE public.tenant_settings (
 	reason STRING NULL,
 	CONSTRAINT "primary" PRIMARY KEY (tenant_id ASC, name ASC),
 	FAMILY fam_0_tenant_id_name_value_last_updated_value_type_reason (tenant_id, name, value, last_updated, value_type, reason)
+);
+CREATE TABLE public.hot_ranges (
+	sample_ts TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+	tenant_id INT8 NOT NULL,
+	info BYTES NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (sample_ts ASC, tenant_id ASC)
 );

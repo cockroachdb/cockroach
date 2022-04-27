@@ -2410,7 +2410,7 @@ var (
 		HotRangesTableSchema,
 		systemTable(
 			catconstants.HotRangesTableName,
-			keys.HotRangesTableID,
+			descpb.InvalidID, // dynamically assigned
 			[]descpb.ColumnDescriptor{
 				{Name: "sample_ts", ID: 1, Type: types.TimestampTZ, DefaultExpr: &nowTZString, Nullable: false},
 				{Name: "tenant_id", ID: 2, Type: types.Int, Nullable: false},
