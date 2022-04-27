@@ -1608,12 +1608,37 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Organization: [][]string{{ReplicationLayer, "Raft", "Receive Queue"}},
 		Charts: []chartDescription{
 			{
-				Title:   "Dropped",
-				Metrics: []string{"raft.rcvd.dropped"},
+				Title: "Dropped Entry Count",
+				Metrics: []string{
+					"raft.rcvd.dropped",
+				},
 			},
+			{
+				Title: "Dropped Entry Bytes",
+				Metrics: []string{
+					"raft.rcvd.dropped_bytes",
+				},
+			},
+			{
+				Title: "Entry Bytes in Queue",
+				Metrics: []string{
+					"raft.rcvd.queued_bytes",
+				},
+			},
+			{
+				Title: "Entry Bytes Stepped into Raft",
+				Metrics: []string{
+					"raft.rcvd.stepped_bytes",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Charts: []chartDescription{
 			{
 				Title:   "Heartbeat Count",
 				Metrics: []string{"raft.rcvd.heartbeat"},
