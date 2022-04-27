@@ -777,10 +777,37 @@ of processing.
 	}
 	metaRaftRcvdDropped = metric.Metadata{
 		Name:        "raft.rcvd.dropped",
-		Help:        "Number of dropped incoming Raft messages",
+		Help:        "Number of incoming Raft messages dropped (due to queue length or size)",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftRcvdDroppedBytes = metric.Metadata{
+		Name:        "raft.rcvd.dropped_bytes",
+		Help:        "Bytes of dropped incoming Raft messages",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftRcvdQueuedBytes = metric.Metadata{
+		Name:        "raft.rcvd.queued_bytes",
+		Help:        "Number of bytes in messages currently waiting for raft processing",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftRcvdSteppedBytes = metric.Metadata{
+		Name: "raft.rcvd.stepped_bytes",
+		Help: `Number of bytes in messages processed by Raft.
+
+Messages reflected here have been handed to Raft (via RawNode.Step). This does not imply that the
+messages are no longer held in memory or that IO has been performed. Raft delegates IO activity to
+Raft ready handling, which occurs asynchronously. Since handing messages to Raft serializes with
+Raft ready handling and size the size of an entry is dominated by the contained pebble WriteBatch,
+on average the rate at which this metric increases is a good proxy for the rate at which Raft ready
+handling consumes writes.
+`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+
 	metaRaftEnqueuedPending = metric.Metadata{
 		Name: "raft.enqueued.pending",
 		Help: `Number of pending outgoing messages in the Raft Transport queue.
@@ -1480,8 +1507,11 @@ type StoreMetrics struct {
 	// Raft message metrics.
 	//
 	// An array for conveniently finding the appropriate metric.
-	RaftRcvdMessages   [maxRaftMsgType + 1]*metric.Counter
-	RaftRcvdMsgDropped *metric.Counter
+	RaftRcvdMessages     [maxRaftMsgType + 1]*metric.Counter
+	RaftRcvdDropped      *metric.Counter
+	RaftRcvdDroppedBytes *metric.Counter
+	RaftRcvdQueuedBytes  *metric.Gauge
+	RaftRcvdSteppedBytes *metric.Counter
 
 	// Raft log metrics.
 	RaftLogFollowerBehindCount *metric.Gauge
@@ -1945,7 +1975,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			raftpb.MsgTransferLeader: metric.NewCounter(metaRaftRcvdTransferLeader),
 			raftpb.MsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
 		},
-		RaftRcvdMsgDropped: metric.NewCounter(metaRaftRcvdDropped),
+		RaftRcvdDropped:      metric.NewCounter(metaRaftRcvdDropped),
+		RaftRcvdDroppedBytes: metric.NewCounter(metaRaftRcvdDroppedBytes),
+		RaftRcvdQueuedBytes:  metric.NewGauge(metaRaftRcvdQueuedBytes),
+		RaftRcvdSteppedBytes: metric.NewCounter(metaRaftRcvdSteppedBytes),
 
 		// Raft log metrics.
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
