@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -846,6 +847,7 @@ func TestShowBackupCheckFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const numAccounts = 11
+	skip.UnderStressRace(t, "multinode cluster setup times out under stressrace, likely due to resource starvation.")
 
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts,
 		InitManualReplication)
@@ -939,14 +941,19 @@ func TestShowBackupCheckFiles(t *testing.T) {
 			}
 			require.NotEmpty(t, fileDest, "could not find file locality")
 
-			// Remove the "COCKROACH_LOCALITY_'locality'" portion of the
-			// URI, as it's not included in the error message.
-			fileDest = strings.Split(backupDest[0], "?")[0]
+			// The full error message looks like "Error checking file
+			// data/756930828574818306.sst in nodelocal://0/full/2022/04/27-134916.90".
+			//
+			// Note that the expected error message excludes the path to the data file
+			// to avoid a test flake for locality aware backups where two different
+			// nodelocal URI's read to the same place. In this scenario, the test
+			// expects the backup to be in nodelocal://1/foo and the actual error
+			// message resolves the uri to nodelocal://0/foo. While both are correct,
+			// the test fails.
 
-			// Remove stray single quotes, an artifact of how the URIs are defined for this test
-			fileDest = strings.Replace(fileDest, "'", "", -1)
-
-			errorMsg := fmt.Sprintf("Error checking file %s", fileDest+file)
+			// Get Path after /data dir
+			toFile := "data" + strings.Split(file, "/data")[1]
+			errorMsg := fmt.Sprintf("Error checking file %s", toFile)
 			sqlDB.ExpectErr(t, errorMsg, checkQuery)
 
 			if err := os.Rename(badPath, fullPath); err != nil {

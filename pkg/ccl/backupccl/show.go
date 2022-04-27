@@ -508,11 +508,17 @@ func checkBackupFiles(
 		for _, metaFile := range []string{
 			fileInfoPath,
 			metadataSSTName,
-			backupStatisticsFileName,
 			backupManifestName + backupManifestChecksumSuffix} {
 			if _, err := defaultStore.Size(ctx, metaFile); err != nil {
 				return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
 					info.defaultURIs[layer], metaFile)
+			}
+		}
+		// Check stat files.
+		for _, statFile := range info.manifests[layer].StatisticsFilenames {
+			if _, err := defaultStore.Size(ctx, statFile); err != nil {
+				return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
+					info.defaultURIs[layer], statFile)
 			}
 		}
 
@@ -535,17 +541,11 @@ func checkBackupFiles(
 			}
 			sz, err := store.Size(ctx, f.Path)
 			if err != nil {
-				uriNoLocality := strings.Split(uri, "?")[0]
-				return nil, errors.Wrapf(err, "Error checking file %s/%s", uriNoLocality, f.Path)
+				return nil, errors.Wrapf(err, "Error checking file %s in %s", f.Path, uri)
 			}
 			fileSizes[i] = sz
 		}
 		return fileSizes, nil
-	}
-
-	// check LATEST file exists
-	if _, err := readLatestFile(ctx, info.collectionURI, storeFactory, user); err != nil {
-		return nil, errors.Wrap(err, "read LATEST path")
 	}
 
 	manifestFileSizes := make([][]int64, len(info.manifests))
@@ -812,6 +812,24 @@ type descriptorSize struct {
 	fileSize int64
 }
 
+// getLogicalSSTSize gets the total logical bytes stored in each SST. Note that a
+// BackupManifest_File identifies a span in an SST and there can be multiple
+// spans stored in an SST.
+func getLogicalSSTSize(files []BackupManifest_File) map[string]int64 {
+	sstDataSize := make(map[string]int64)
+	for _, file := range files {
+		sstDataSize[file.Path] += file.EntryCounts.DataSize
+	}
+	return sstDataSize
+}
+
+// approximateTablePhysicalSize approximates the number bytes written to disk for the table.
+func approximateTablePhysicalSize(
+	logicalTableSize int64, logicalFileSize int64, sstFileSize int64,
+) int64 {
+	return int64(float64(sstFileSize) * (float64(logicalTableSize) / float64(logicalFileSize)))
+}
+
 // getTableSizes gathers row and size count for each table in the manifest
 func getTableSizes(
 	files []BackupManifest_File, fileSizes []int64,
@@ -825,6 +843,8 @@ func getTableSizes(
 		return nil, err
 	}
 	showCodec := keys.MakeSQLCodec(tenantID)
+
+	logicalSSTSize := getLogicalSSTSize(files)
 
 	for i, file := range files {
 		// TODO(dan): This assumes each file in the backup only
@@ -843,7 +863,7 @@ func getTableSizes(
 		s := tableSizes[descpb.ID(tableID)]
 		s.rowCount.Add(file.EntryCounts)
 		if len(fileSizes) > 0 {
-			s.fileSize += fileSizes[i]
+			s.fileSize = approximateTablePhysicalSize(s.rowCount.DataSize, logicalSSTSize[file.Path], fileSizes[i])
 		}
 		tableSizes[descpb.ID(tableID)] = s
 	}
@@ -967,6 +987,8 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 				if manifest.isIncremental() {
 					backupType = "incremental"
 				}
+
+				sstDataSize := getLogicalSSTSize(manifest.Files)
 				for j, file := range manifest.Files {
 					filePath := file.Path
 					if inCol != nil {
@@ -974,17 +996,14 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 					}
 					locality := "NULL"
 					if localityAware {
-						locality = file.LocalityKV
-
-						// A file stored in the default locality has file.LocalityKV == NULL.
-						// For the SHOW FILES display, set the locality to default.
-						if file.LocalityKV == "NULL" {
-							locality = "default"
+						locality = "default"
+						if _, ok := info.localityInfo[i].URIsByOriginalLocalityKV[file.LocalityKV]; ok {
+							locality = file.LocalityKV
 						}
 					}
 					sz := int64(-1)
 					if len(info.fileSizes) > 0 {
-						sz = info.fileSizes[i][j]
+						sz = approximateTablePhysicalSize(info.fileSizes[i][j], file.EntryCounts.DataSize, sstDataSize[file.Path])
 					}
 					rows = append(rows, tree.Datums{
 						tree.NewDString(filePath),
