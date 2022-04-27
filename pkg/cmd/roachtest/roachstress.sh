@@ -138,7 +138,7 @@ a="${abase}/$(date '+%H%M%S')"
 if [ ! -f "${cr}" ] || [ "${force_build}" = "y" ]; then
   if [ -z "${local}" ]; then
     ./dev build "cockroach${short}" --cross=linux
-    cp "artifacts/cockroach${artifact_suffix}" "${cr}"
+    cp "artifacts/cockroach${short}" "${cr}"
   else
     ./dev build "cockroach${short}"
     cp "cockroach${short}" "${cr}"

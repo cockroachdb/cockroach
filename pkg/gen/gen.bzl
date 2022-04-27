@@ -131,24 +131,12 @@ _no_prefix = rule(
 # TODO(ajwerner): If this script proves slow, we could rewrite it to depend
 # on a go program which can perform the file IO in parallel.
 def _hoist_files_impl(ctx):
-  cp_file_cmd_fmt = """\
-cp {src} {dst}
-chmod 0644 {dst}\
-"""
-
-  script_fmt = """\
-#!/bin/bash
-set -euo pipefail
-
-{cleanup_tasks}
-{cmds}
-"""
-  cleanup_tasks = []
-  cmds = []
+  cleanup_cmds = []
+  src_dst_pairs = []
   generated_files = {}
   for set in ctx.attr.data:
     gfi = set[_GeneratedFileInfo]
-    cleanup_tasks += gfi.cleanup_tasks if hasattr(gfi, "cleanup_tasks") else []
+    cleanup_cmds += gfi.cleanup_tasks if hasattr(gfi, "cleanup_tasks") else []
     for prefix, files in gfi.generated_files.items():
       if prefix not in generated_files:
         generated_files[prefix] = []
@@ -156,24 +144,55 @@ set -euo pipefail
         dst = '"${{BUILD_WORKSPACE_DIRECTORY}}/{}"'.format(
           file.short_path[len(prefix):]
         )
-        cmd = cp_file_cmd_fmt.format(src=file.short_path, dst=dst)
-        cmds.append(cmd)
+        src_dst_pairs.append((file.short_path, dst))
         generated_files[prefix].append(file)
 
   executable = ctx.actions.declare_file(ctx.label.name)
-  script = script_fmt.format(
-      cleanup_tasks = "\n".join(cleanup_tasks),
-      cmds = "\n".join(cmds),
+  ctx.actions.write(
+    executable,
+     _make_hoist_script(cleanup_cmds, src_dst_pairs),
+    is_executable = True,
   )
-  ctx.actions.write(executable, script, is_executable=True)
   runfiles = ctx.runfiles(files = [file for files in generated_files.values() for file in files])
   return [
     DefaultInfo(executable = executable, runfiles=runfiles),
     _GeneratedFileInfo(
       generated_files = generated_files,
-      cleanup_tasks = cleanup_tasks,
+      cleanup_tasks = cleanup_cmds,
     )
   ]
+
+def _make_hoist_script(cleanup_cmds, files_to_copy):
+  return """\
+#!/bin/bash
+set -euo pipefail
+
+# Use a temporary directory to stage the file and update its permissions
+# before ultimately copying it to its final destination. This avoids any
+# issues with files making it to the repo but not having the right permissions.
+
+TMP_DIR="$(mktemp -d)"
+
+cleanup() {
+  rm -rf "$TMP_DIR"
+}
+
+trap cleanup EXIT
+
+cp_file() {
+  TMP_FILE="$TMP_DIR/$(basename -- $2)"
+  cp "$1" "$TMP_FILE"
+  chmod 0644 "$TMP_FILE"
+  mv "$TMP_FILE" "$2"
+}
+
+""" + """
+{cleanup}
+{hoist}
+""".format(
+    cleanup = "\n".join(cleanup_cmds),
+    hoist = "\n".join(["cp_file {0} {1}".format(*p) for p in files_to_copy])
+  )
 
 _hoist_files = rule(
     implementation = _hoist_files_impl,

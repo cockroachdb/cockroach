@@ -44,6 +44,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",

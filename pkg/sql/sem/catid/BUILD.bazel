@@ -5,4 +5,8 @@ go_library(
     srcs = ["ids.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/oidext",
+        "@com_github_lib_pq//oid",
+    ],
 )

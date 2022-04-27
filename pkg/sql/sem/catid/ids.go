@@ -11,6 +11,11 @@
 // Package catid is a low-level package exporting ID types.
 package catid
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
+	"github.com/lib/pq/oid"
+)
+
 // DescID is a custom type for {Database,Table}Descriptor IDs.
 type DescID uint32
 
@@ -19,6 +24,11 @@ const InvalidDescID DescID = 0
 
 // SafeValue implements the redact.SafeValue interface.
 func (DescID) SafeValue() {}
+
+// TypeIDToOID converts a type descriptor ID into a type OID.
+func TypeIDToOID(id DescID) oid.Oid {
+	return oid.Oid(id) + oidext.CockroachPredefinedOIDMax
+}
 
 // ColumnID is a custom type for Column IDs.
 type ColumnID uint32
