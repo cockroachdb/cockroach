@@ -119,7 +119,7 @@ func TestRandomized(t *testing.T) {
 	})
 	for i := 0; i < numOps; i++ {
 		updates := getRandomUpdates()
-		_, _, err := store.apply(false /* dryrun */, updates...)
+		_, _, err := store.apply(ctx, false /* dryrun */, updates...)
 		require.NoError(t, err)
 		for _, update := range updates {
 			if testSpan.Overlaps(update.GetTarget().GetSpan()) {
@@ -134,8 +134,8 @@ func TestRandomized(t *testing.T) {
 
 	if !expFound {
 		_ = store.forEachOverlapping(testSpan,
-			func(entry spanConfigEntry) error {
-				record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(entry.span), entry.config)
+			func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+				record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(sp), conf)
 				require.NoError(t, err)
 				t.Fatalf("found unexpected entry: %s",
 					spanconfigtestutils.PrintSpanConfigRecord(t, record))
@@ -143,19 +143,22 @@ func TestRandomized(t *testing.T) {
 			},
 		)
 	} else {
-		var foundEntry spanConfigEntry
+		var foundSpanConfigPair spanConfigPair
 		_ = store.forEachOverlapping(testSpan,
-			func(entry spanConfigEntry) error {
-				if !foundEntry.isEmpty() {
-					record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(entry.span), entry.config)
+			func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+				if !foundSpanConfigPair.isEmpty() {
+					record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(sp), conf)
 					require.NoError(t, err)
 					t.Fatalf("expected single overlapping entry, found second: %s",
 						spanconfigtestutils.PrintSpanConfigRecord(t, record))
 				}
-				foundEntry = entry
+				foundSpanConfigPair = spanConfigPair{
+					span:   sp,
+					config: conf,
+				}
 
 				// Check that the entry is exactly what we'd expect.
-				gotSpan, gotConfig := entry.span, entry.config
+				gotSpan, gotConfig := sp, conf
 				require.Truef(t, gotSpan.Contains(testSpan),
 					"improper result: expected retrieved span (%s) to contain test span (%s)",
 					spanconfigtestutils.PrintSpan(gotSpan), spanconfigtestutils.PrintSpan(testSpan))
@@ -170,39 +173,41 @@ func TestRandomized(t *testing.T) {
 
 		// Ensure that the config accessed through the StoreReader interface is
 		// the same as above.
-		storeReaderConfig, found, err := store.getSpanConfigForKey(ctx, roachpb.RKey(testSpan.Key))
-		require.NoError(t, err)
+		storeReaderConfig, found := store.getSpanConfigForKey(ctx, roachpb.RKey(testSpan.Key))
 		require.True(t, found)
-		require.True(t, foundEntry.config.Equal(storeReaderConfig))
+		require.True(t, foundSpanConfigPair.config.Equal(storeReaderConfig))
 	}
 
 	everythingSpan := spanconfigtestutils.ParseSpan(t, fmt.Sprintf("[%s,%s)",
 		string(alphabet[0]), string(alphabet[len(alphabet)-1])))
 
-	var lastOverlapping spanConfigEntry
+	var lastOverlapping spanConfigPair
 	require.NoError(t, store.forEachOverlapping(everythingSpan,
-		func(cur spanConfigEntry) error {
-			log.Infof(ctx, "set %s:%s", spanconfigtestutils.PrintSpan(cur.span), spanconfigtestutils.PrintSpanConfig(cur.config))
+		func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+			log.Infof(ctx, "set %s:%s", spanconfigtestutils.PrintSpan(sp), spanconfigtestutils.PrintSpanConfig(conf))
 
 			// All spans are expected to be valid.
-			require.True(t, cur.span.Valid(),
+			require.True(t, sp.Valid(),
 				"expected to only find valid spans, found %s",
-				spanconfigtestutils.PrintSpan(cur.span),
+				spanconfigtestutils.PrintSpan(sp),
 			)
 
 			if !lastOverlapping.isEmpty() {
 				// Span configs are returned in strictly sorted order.
-				require.True(t, lastOverlapping.span.Key.Compare(cur.span.Key) < 0,
+				require.True(t, lastOverlapping.span.Key.Compare(sp.Key) < 0,
 					"expected to find spans in strictly sorted order, found %s then %s",
-					spanconfigtestutils.PrintSpan(lastOverlapping.span), spanconfigtestutils.PrintSpan(cur.span))
+					spanconfigtestutils.PrintSpan(lastOverlapping.span), spanconfigtestutils.PrintSpan(sp))
 
 				// Span configs must also be non-overlapping.
-				require.Falsef(t, lastOverlapping.span.Overlaps(cur.span),
+				require.Falsef(t, lastOverlapping.span.Overlaps(sp),
 					"expected non-overlapping spans, found %s and %s",
-					spanconfigtestutils.PrintSpan(lastOverlapping.span), spanconfigtestutils.PrintSpan(cur.span))
+					spanconfigtestutils.PrintSpan(lastOverlapping.span), spanconfigtestutils.PrintSpan(sp))
 			}
 
-			lastOverlapping = cur
+			lastOverlapping = spanConfigPair{
+				span:   sp,
+				config: conf,
+			}
 			return nil
 		},
 	))
@@ -214,14 +219,20 @@ func TestRandomized(t *testing.T) {
 	)
 
 	numOverlappingWithQuerySp := 0
-	var firstOverlappingWithQuerySp, lastOverlappingWithQuerySp spanConfigEntry
+	var firstOverlappingWithQuerySp, lastOverlappingWithQuerySp spanConfigPair
 	require.NoError(t, store.forEachOverlapping(querySpan,
-		func(cur spanConfigEntry) error {
+		func(sp roachpb.Span, conf roachpb.SpanConfig) error {
 			if numOverlappingWithQuerySp == 0 {
-				firstOverlappingWithQuerySp = cur
+				firstOverlappingWithQuerySp = spanConfigPair{
+					span:   sp,
+					config: conf,
+				}
 			}
 			numOverlappingWithQuerySp++
-			lastOverlappingWithQuerySp = cur
+			lastOverlappingWithQuerySp = spanConfigPair{
+				span:   sp,
+				config: conf,
+			}
 			return nil
 		},
 	))
@@ -232,8 +243,7 @@ func TestRandomized(t *testing.T) {
 		require.Truef(t, querySpan.ProperlyContainsKey(curSplitKey.AsRawKey()),
 			"invalid split key %s (over span %s)", curSplitKey, querySpan)
 
-		confAtCurSplitKey, found, err := store.getSpanConfigForKey(ctx, curSplitKey)
-		require.NoError(t, err)
+		confAtCurSplitKey, found := store.getSpanConfigForKey(ctx, curSplitKey)
 		require.True(t, found)
 
 		if i == 0 {
@@ -269,11 +279,11 @@ func TestRandomized(t *testing.T) {
 			require.NoError(t, store.forEachOverlapping(roachpb.Span{
 				Key:    lastSplitKey.AsRawKey(),
 				EndKey: curSplitKey.AsRawKey(),
-			}, func(entry spanConfigEntry) error {
-				require.Truef(t, confAtLastSplitKey.Equal(entry.config),
+			}, func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+				require.Truef(t, confAtLastSplitKey.Equal(conf),
 					"expected identical configs, found %s:%s and %s:%s",
 					lastSplitKey, spanconfigtestutils.PrintSpanConfig(confAtLastSplitKey),
-					entry.span.Key, spanconfigtestutils.PrintSpanConfig(entry.config),
+					sp.Key, spanconfigtestutils.PrintSpanConfig(conf),
 				)
 				return nil
 			}))
