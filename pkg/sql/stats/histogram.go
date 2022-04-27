@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -78,7 +79,7 @@ Please add new entries at the top.
 // HistogramData.HistogramData_Bucket is non-nil, otherwise a nil
 // []cat.HistogramBucket.
 func EquiDepthHistogram(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	colType *types.T,
 	samples tree.Datums,
 	numRows, distinctCount int64,
@@ -168,9 +169,7 @@ type histogram struct {
 
 // adjustCounts adjusts the row count and number of distinct values per bucket
 // based on the total row count and estimated distinct count.
-func (h *histogram) adjustCounts(
-	evalCtx *tree.EvalContext, rowCountTotal, distinctCountTotal float64,
-) {
+func (h *histogram) adjustCounts(evalCtx *eval.Context, rowCountTotal, distinctCountTotal float64) {
 	// Calculate the current state of the histogram so we can adjust it as needed.
 	// The number of rows and distinct values represented by the histogram should
 	// be adjusted so they equal rowCountTotal and distinctCountTotal.
@@ -294,7 +293,7 @@ func (h *histogram) adjustCounts(
 // also increments the counters rowCountEq, distinctCountEq, rowCountRange, and
 // distinctCountRange as needed.
 func (h *histogram) addOuterBuckets(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	remDistinctCount float64,
 	rowCountEq, distinctCountEq, rowCountRange, distinctCountRange *float64,
 ) {
@@ -413,7 +412,7 @@ func (h histogram) toHistogramData(colType *types.T) (HistogramData, error) {
 // equal to numRange. If they are countable, we can estimate the distinct count
 // based on the total number of distinct values in the range.
 func estimatedDistinctValuesInRange(
-	evalCtx *tree.EvalContext, numRange float64, lowerBound, upperBound tree.Datum,
+	evalCtx *eval.Context, numRange float64, lowerBound, upperBound tree.Datum,
 ) float64 {
 	if numRange == 0 {
 		return 0
@@ -428,7 +427,7 @@ func estimatedDistinctValuesInRange(
 	return numRange
 }
 
-func getNextLowerBound(evalCtx *tree.EvalContext, currentUpperBound tree.Datum) tree.Datum {
+func getNextLowerBound(evalCtx *eval.Context, currentUpperBound tree.Datum) tree.Datum {
 	nextLowerBound, ok := currentUpperBound.Next(evalCtx)
 	if !ok {
 		nextLowerBound = currentUpperBound
@@ -440,7 +439,7 @@ func getNextLowerBound(evalCtx *tree.EvalContext, currentUpperBound tree.Datum) 
 // range, excluding both lowerBound and upperBound. Returns countable=true if
 // the returned value is countable.
 func maxDistinctRange(
-	evalCtx *tree.EvalContext, lowerBound, upperBound tree.Datum,
+	evalCtx *eval.Context, lowerBound, upperBound tree.Datum,
 ) (_ float64, countable bool) {
 	if maxDistinct, ok := tree.MaxDistinctCount(evalCtx, lowerBound, upperBound); ok {
 		// Remove 2 for the upper and lower boundaries.

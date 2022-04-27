@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -169,7 +170,7 @@ func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error)
 	return details, nil
 }
 
-func scheduleFirstRun(evalCtx *tree.EvalContext, opts map[string]string) (*time.Time, error) {
+func scheduleFirstRun(evalCtx *eval.Context, opts map[string]string) (*time.Time, error) {
 	if v, ok := opts[optFirstRun]; ok {
 		firstRun, _, err := tree.ParseDTimestampTZ(evalCtx, v, time.Microsecond)
 		if err != nil {
@@ -415,7 +416,7 @@ func doCreateBackupSchedules(
 		}
 	}
 
-	evalCtx := &p.ExtendedEvalContext().EvalContext
+	evalCtx := &p.ExtendedEvalContext().Context
 	firstRun, err := scheduleFirstRun(evalCtx, scheduleOptions)
 	if err != nil {
 		return err

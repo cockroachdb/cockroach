@@ -20,12 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestCanFilter(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	// The histogram column ID is 1 for all test cases. CanFilter should only
 	// return true for constraints in which column ID 1 is part of the exact
@@ -107,7 +108,7 @@ func TestCanFilter(t *testing.T) {
 }
 
 func TestHistogram(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	//   0  1  3  3   4  5   0  0   40  35
 	// <--- 1 --- 10 --- 25 --- 30 ---- 42
@@ -332,7 +333,7 @@ func TestHistogram(t *testing.T) {
 }
 
 func TestFilterBucket(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	keyCtx := constraint.KeyContext{EvalCtx: &evalCtx}
 	col := opt.ColumnID(1)
 

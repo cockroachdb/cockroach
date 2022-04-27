@@ -1,0 +1,79 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package normalize
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
+)
+
+// ConstantEvalVisitor replaces constant TypedExprs with the result of Eval.
+type ConstantEvalVisitor struct {
+	ctx *eval.Context
+	err error
+
+	fastIsConstVisitor fastIsConstVisitor
+}
+
+var _ tree.Visitor = &ConstantEvalVisitor{}
+
+// MakeConstantEvalVisitor creates a ConstantEvalVisitor instance.
+func MakeConstantEvalVisitor(ctx *eval.Context) ConstantEvalVisitor {
+	return ConstantEvalVisitor{ctx: ctx, fastIsConstVisitor: fastIsConstVisitor{ctx: ctx}}
+}
+
+// Err retrieves the error field in the ConstantEvalVisitor.
+func (v *ConstantEvalVisitor) Err() error { return v.err }
+
+// VisitPre implements the Visitor interface.
+func (v *ConstantEvalVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if v.err != nil {
+		return false, expr
+	}
+	return true, expr
+}
+
+// VisitPost implements the Visitor interface.
+func (v *ConstantEvalVisitor) VisitPost(expr tree.Expr) tree.Expr {
+	if v.err != nil {
+		return expr
+	}
+
+	typedExpr, ok := expr.(tree.TypedExpr)
+	if !ok || !v.isConst(expr) {
+		return expr
+	}
+
+	value, err := eval.Expr(v.ctx, typedExpr)
+	if err != nil {
+		// Ignore any errors here (e.g. division by zero), so they can happen
+		// during execution where they are correctly handled. Note that in some
+		// cases we might not even get an error (if this particular expression
+		// does not get evaluated when the query runs, e.g. it's inside a CASE).
+		return expr
+	}
+	if value == tree.DNull {
+		// We don't want to return an expression that has a different type; cast
+		// the NULL if necessary.
+		retypedNull, ok := eval.ReType(tree.DNull, typedExpr.ResolvedType())
+		if !ok {
+			v.err = errors.AssertionFailedf("failed to retype NULL to %s", typedExpr.ResolvedType())
+			return expr
+		}
+		return retypedNull
+	}
+	return value
+}
+
+func (v *ConstantEvalVisitor) isConst(expr tree.Expr) bool {
+	return v.fastIsConstVisitor.run(expr)
+}

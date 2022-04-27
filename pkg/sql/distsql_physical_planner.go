@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -773,11 +774,11 @@ func (p *PlanningCtx) NewPhysicalPlan() *PhysicalPlan {
 }
 
 // EvalContext returns the associated EvalContext, or nil if there isn't one.
-func (p *PlanningCtx) EvalContext() *tree.EvalContext {
+func (p *PlanningCtx) EvalContext() *eval.Context {
 	if p.ExtendedEvalCtx == nil {
 		return nil
 	}
-	return &p.ExtendedEvalCtx.EvalContext
+	return &p.ExtendedEvalCtx.Context
 }
 
 // IsLocal returns true if this PlanningCtx is being used to plan a query that
@@ -1405,7 +1406,7 @@ func (dsp *DistSQLPlanner) maybeParallelizeLocalScans(
 	// - there is still quota for running more parallel local TableReaders,
 	// then we will split all spans according to the leaseholder boundaries and
 	// will create a separate TableReader for each node.
-	sd := planCtx.ExtendedEvalCtx.EvalContext.SessionData()
+	sd := planCtx.ExtendedEvalCtx.SessionData()
 	// If we have locality optimized search enabled and we won't use the
 	// vectorized engine, using the parallel scans might actually be
 	// significantly worse, so we prohibit it. This is the case because if we
@@ -3248,7 +3249,7 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 	planCtx *PlanningCtx, tuples [][]tree.TypedExpr, resultTypes []*types.T,
 ) (*execinfrapb.ValuesCoreSpec, error) {
 	var a tree.DatumAlloc
-	evalCtx := &planCtx.ExtendedEvalCtx.EvalContext
+	evalCtx := &planCtx.ExtendedEvalCtx.Context
 	numRows := len(tuples)
 	if len(resultTypes) == 0 {
 		// Optimization for zero-column sets.
@@ -3259,7 +3260,7 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 	for rowIdx, tuple := range tuples {
 		var buf []byte
 		for colIdx, typedExpr := range tuple {
-			datum, err := typedExpr.Eval(evalCtx)
+			datum, err := eval.Expr(evalCtx, typedExpr)
 			if err != nil {
 				return nil, err
 			}

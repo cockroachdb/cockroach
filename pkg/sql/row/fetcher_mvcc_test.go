@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -123,7 +124,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 			}
 			row := rowWithMVCCMetadata{
 				RowIsDeleted:    rf.RowIsDeleted(),
-				RowLastModified: tree.TimestampToDecimalDatum(rf.RowLastModified()).String(),
+				RowLastModified: eval.TimestampToDecimalDatum(rf.RowLastModified()).String(),
 			}
 			for _, datum := range datums {
 				if datum == tree.DNull {

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -422,7 +423,7 @@ func (e *virtualDefEntry) Desc() catalog.Descriptor {
 	return e.desc
 }
 
-func canQueryVirtualTable(evalCtx *tree.EvalContext, e *virtualDefEntry) bool {
+func canQueryVirtualTable(evalCtx *eval.Context, e *virtualDefEntry) bool {
 	return !e.unimplemented ||
 		evalCtx == nil ||
 		evalCtx.SessionData() == nil ||
@@ -631,7 +632,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 				break
 			}
 			constraintDatum := span.StartKey().Value(0)
-			unwrappedConstraint := tree.UnwrapDatum(p.EvalContext(), constraintDatum)
+			unwrappedConstraint := eval.UnwrapDatum(p.EvalContext(), constraintDatum)
 			virtualIndex := def.getIndex(index.GetID())
 			// NULL constraint will not match any row.
 			matched := unwrappedConstraint != tree.DNull

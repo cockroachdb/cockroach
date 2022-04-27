@@ -10,66 +10,35 @@
 
 package tree
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+)
 
-// ConstantEvalVisitor replaces constant TypedExprs with the result of Eval.
-type ConstantEvalVisitor struct {
-	ctx *EvalContext
-	err error
+// OperatorIsImmutable returns true if the given expression corresponds to a
+// constant operator. Note importantly that this will return true for all
+// expr types other than FuncExpr, CastExpr, UnaryExpr, BinaryExpr, and
+// ComparisonExpr. It does not do any recursive searching.
+func OperatorIsImmutable(expr Expr, sd *sessiondata.SessionData) bool {
+	switch t := expr.(type) {
+	case *FuncExpr:
+		return t.fnProps.Class == NormalClass && t.fn.Volatility <= volatility.Immutable
 
-	fastIsConstVisitor fastIsConstVisitor
-}
+	case *CastExpr:
+		v, ok := cast.LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ, sd)
+		return ok && v <= volatility.Immutable
 
-var _ Visitor = &ConstantEvalVisitor{}
+	case *UnaryExpr:
+		return t.op.Volatility <= volatility.Immutable
 
-// MakeConstantEvalVisitor creates a ConstantEvalVisitor instance.
-func MakeConstantEvalVisitor(ctx *EvalContext) ConstantEvalVisitor {
-	return ConstantEvalVisitor{ctx: ctx, fastIsConstVisitor: fastIsConstVisitor{ctx: ctx}}
-}
+	case *BinaryExpr:
+		return t.Op.Volatility <= volatility.Immutable
 
-// Err retrieves the error field in the ConstantEvalVisitor.
-func (v *ConstantEvalVisitor) Err() error { return v.err }
+	case *ComparisonExpr:
+		return t.Op.Volatility <= volatility.Immutable
 
-// VisitPre implements the Visitor interface.
-func (v *ConstantEvalVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if v.err != nil {
-		return false, expr
+	default:
+		return true
 	}
-	return true, expr
-}
-
-// VisitPost implements the Visitor interface.
-func (v *ConstantEvalVisitor) VisitPost(expr Expr) Expr {
-	if v.err != nil {
-		return expr
-	}
-
-	typedExpr, ok := expr.(TypedExpr)
-	if !ok || !v.isConst(expr) {
-		return expr
-	}
-
-	value, err := typedExpr.Eval(v.ctx)
-	if err != nil {
-		// Ignore any errors here (e.g. division by zero), so they can happen
-		// during execution where they are correctly handled. Note that in some
-		// cases we might not even get an error (if this particular expression
-		// does not get evaluated when the query runs, e.g. it's inside a CASE).
-		return expr
-	}
-	if value == DNull {
-		// We don't want to return an expression that has a different type; cast
-		// the NULL if necessary.
-		retypedNull, ok := ReType(DNull, typedExpr.ResolvedType())
-		if !ok {
-			v.err = errors.AssertionFailedf("failed to retype NULL to %s", typedExpr.ResolvedType())
-			return expr
-		}
-		return retypedNull
-	}
-	return value
-}
-
-func (v *ConstantEvalVisitor) isConst(expr Expr) bool {
-	return v.fastIsConstVisitor.run(expr)
 }

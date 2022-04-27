@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -142,7 +142,7 @@ func TestLikeOperators(t *testing.T) {
 		colexectestutils.RunTests(
 			t, testAllocator, []colexectestutils.Tuples{tc.tups}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+				ctx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)
 			})
 	}

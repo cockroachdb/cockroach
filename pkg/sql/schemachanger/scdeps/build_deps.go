@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -280,7 +281,7 @@ func (d *buildDeps) IndexPartitioningCCLCallback() scbuild.CreatePartitioningCCL
 		return func(
 			_ context.Context,
 			_ *cluster.Settings,
-			_ *tree.EvalContext,
+			_ *eval.Context,
 			_ func(tree.Name) (catalog.Column, error),
 			_ int,
 			_ []string,

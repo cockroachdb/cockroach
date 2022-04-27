@@ -193,6 +193,9 @@ func (expr *ComparisonExpr) Walk(v Visitor) Expr {
 		exprCopy := *expr
 		exprCopy.Left = left
 		exprCopy.Right = right
+		// TODO(ajwerner): Should this be updating the memoized op? It seems like
+		// it could need to change in some cases, but it also seems painful to know
+		// which ones.
 		return &exprCopy
 	}
 	return expr

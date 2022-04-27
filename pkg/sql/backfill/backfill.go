@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -76,7 +77,7 @@ type ColumnBackfiller struct {
 	// updateCols is a slice of all column descriptors that are being modified.
 	updateCols  []catalog.Column
 	updateExprs []tree.TypedExpr
-	evalCtx     *tree.EvalContext
+	evalCtx     *eval.Context
 
 	fetcher     row.Fetcher
 	fetcherCols []descpb.ColumnID
@@ -106,7 +107,7 @@ func (cb *ColumnBackfiller) initCols(desc catalog.TableDescriptor) {
 // init performs initialization operations that are shared across the local
 // and distributed initialization procedures for the ColumnBackfiller.
 func (cb *ColumnBackfiller) init(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	defaultExprs []tree.TypedExpr,
 	computedExprs []tree.TypedExpr,
 	desc catalog.TableDescriptor,
@@ -165,7 +166,7 @@ func (cb *ColumnBackfiller) init(
 // is occurring on the gateway as part of the user's transaction.
 func (cb *ColumnBackfiller) InitForLocalUse(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
@@ -348,7 +349,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		// Evaluate the new values. This must be done separately for
 		// each row so as to handle impure functions correctly.
 		for j, e := range cb.updateExprs {
-			val, err := e.Eval(cb.evalCtx)
+			val, err := eval.Expr(cb.evalCtx, e)
 			if err != nil {
 				return roachpb.Key{}, sqlerrors.NewInvalidSchemaDefinitionError(err)
 			}
@@ -419,7 +420,7 @@ type IndexBackfiller struct {
 
 	types   []*types.T
 	rowVals tree.Datums
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	// cols are all of the writable (PUBLIC and DELETE_AND_WRITE_ONLY) columns in
 	// the descriptor.
@@ -472,7 +473,7 @@ func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 // on the gateway as part of the user's transaction.
 func (ib *IndexBackfiller) InitForLocalUse(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
@@ -514,7 +515,7 @@ func constructExprs(
 	desc catalog.TableDescriptor,
 	addedIndexes []catalog.Index,
 	cols, addedCols, computedCols []catalog.Column,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 ) (
 	predicates map[descpb.IndexID]tree.TypedExpr,
@@ -755,7 +756,7 @@ func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIn
 
 // init completes the initialization of an IndexBackfiller.
 func (ib *IndexBackfiller) init(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	predicateExprs map[descpb.IndexID]tree.TypedExpr,
 	colExprs map[descpb.ColumnID]tree.TypedExpr,
 	mon *mon.BytesMonitor,
@@ -885,7 +886,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			if !ok {
 				continue
 			}
-			val, err := texpr.Eval(ib.evalCtx)
+			val, err := eval.Expr(ib.evalCtx, texpr)
 			if err != nil {
 				return err
 			}
@@ -937,7 +938,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				// predicate expression evaluates to true.
 				texpr := ib.predicates[idx.GetID()]
 
-				val, err := texpr.Eval(ib.evalCtx)
+				val, err := eval.Expr(ib.evalCtx, texpr)
 				if err != nil {
 					return nil, nil, 0, err
 				}

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -51,7 +52,7 @@ type tableWriter interface {
 
 	// init provides the tableWriter with a Txn and optional monitor to write to
 	// and returns an error if it was misconfigured.
-	init(context.Context, *kv.Txn, *tree.EvalContext, *settings.Values) error
+	init(context.Context, *kv.Txn, *eval.Context, *settings.Values) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
@@ -152,10 +153,7 @@ var maxBatchBytes = settings.RegisterByteSizeSetting(
 )
 
 func (tb *tableWriterBase) init(
-	txn *kv.Txn,
-	tableDesc catalog.TableDescriptor,
-	evalCtx *tree.EvalContext,
-	settings *settings.Values,
+	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context, settings *settings.Values,
 ) {
 	tb.txn = txn
 	tb.desc = tableDesc

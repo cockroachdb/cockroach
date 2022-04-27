@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -608,7 +609,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	eval := tree.MakeTestingEvalContext(nil)
+	ec := eval.MakeTestingEvalContext(nil)
 
 	var smither *sqlsmith.Smither
 	testRandomSyntax(t, true, "", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
@@ -657,7 +658,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
-		datum1, err := typed1.Eval(&eval)
+		datum1, err := eval.Expr(&ec, typed1)
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
@@ -671,7 +672,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
-		datum2, err := typed2.Eval(&eval)
+		datum2, err := eval.Expr(&ec, typed2)
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
@@ -680,7 +681,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if serialized1 != serialized2 {
 			panic(errors.Errorf("serialized didn't match:\nexpr: %s\nfirst: %s\nsecond: %s", generated, serialized1, serialized2))
 		}
-		if datum1.Compare(&eval, datum2) != 0 {
+		if datum1.Compare(&ec, datum2) != 0 {
 			panic(errors.Errorf("%s [%[1]T] != %s [%[2]T] (original expr: %s)", serialized1, serialized2, serializedGen))
 		}
 		return nil

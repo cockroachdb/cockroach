@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -81,7 +82,7 @@ type IndexBackfillMerger struct {
 
 	flowCtx *execinfra.FlowCtx
 
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	output execinfra.RowReceiver
 

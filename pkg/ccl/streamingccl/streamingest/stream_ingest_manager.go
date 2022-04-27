@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -23,16 +23,13 @@ type streamIngestManagerImpl struct{}
 
 // CompleteStreamIngestion implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) CompleteStreamIngestion(
-	evalCtx *tree.EvalContext,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
-	cutoverTimestamp hlc.Timestamp,
+	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID, cutoverTimestamp hlc.Timestamp,
 ) error {
 	return completeStreamIngestion(evalCtx, txn, streamID, cutoverTimestamp)
 }
 
 func newStreamIngestManagerWithPrivilegesCheck(
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (streaming.StreamIngestManager, error) {
 	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
 	if err != nil {
