@@ -228,3 +228,21 @@ query I
 SELECT * FROM view_from_seq
 ----
 1
+
+# Regression test for #79015.
+user testuser
+
+statement ok
+BEGIN
+
+user root
+
+statement ok
+SELECT * FROM system.descriptor;
+
+user testuser
+
+statement ok
+CREATE SEQUENCE seq_2;
+CREATE MATERIALIZED VIEW view_from_seq_2 AS (SELECT nextval('seq_2'));
+COMMIT
