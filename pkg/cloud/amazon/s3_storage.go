@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -84,6 +85,25 @@ type s3Storage struct {
 
 	opts   s3ClientConfig
 	cached *s3Client
+	mon    *mon.BytesMonitor
+}
+
+var _ cloud.ExternalStorage = &s3Storage{}
+
+// s3StorageWriter wraps the underlying s3 cloud storage writer.
+type s3StorageWriter struct {
+	io.WriteCloser
+
+	ctx    context.Context
+	memAcc *mon.BoundAccount
+}
+
+// Close implements the WriteCloser interface.
+func (w *s3StorageWriter) Close() error {
+	if w.memAcc != nil {
+		w.memAcc.Close(w.ctx)
+	}
+	return w.WriteCloser.Close()
 }
 
 // s3Client wraps an SDK client and uploader for a given session.
@@ -130,8 +150,6 @@ var s3ClientCache struct {
 	key    s3ClientConfig
 	client *s3Client
 }
-
-var _ cloud.ExternalStorage = &s3Storage{}
 
 type serverSideEncMode string
 
@@ -199,8 +217,8 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 	return conf, nil
 }
 
-// MakeS3Storage returns an instance of S3 ExternalStorage.
-func MakeS3Storage(
+// makeS3Storage returns an instance of S3 ExternalStorage.
+func makeS3Storage(
 	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.s3")
@@ -289,6 +307,7 @@ func MakeS3Storage(
 		prefix:   conf.Prefix,
 		settings: args.Settings,
 		opts:     clientConfig(conf),
+		mon:      args.Mon,
 	}
 
 	reuse := reuseSession.Get(&args.Settings.SV)
@@ -448,14 +467,28 @@ func (s *s3Storage) Settings() *cluster.Settings {
 }
 
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "s3.Writer")
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))})
+
+	// The PartSize determines how much the uploader will buffer while uploading
+	// chunks to storage. This buffering is to enable retrying uploads in the face
+	// of transient errors. We should account for this buffer size in our memory
+	// monitor.
+	var memAcc *mon.BoundAccount
+	if s.mon != nil {
+		acc := s.mon.MakeBoundAccount()
+		memAcc = &acc
+		if err := memAcc.Grow(ctx, cloud.WriteChunkSize.Get(&s.settings.SV)); err != nil {
+			return nil, err
+		}
+	}
+
 	uploader, err := s.getUploader(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, sp := tracing.ChildSpan(ctx, "s3.Writer")
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))})
-	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+	w := cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		defer sp.Finish()
 		// Upload the file to S3.
 		// TODO(dt): test and tune the uploader parameters.
@@ -468,7 +501,13 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 			StorageClass:         nilIfEmpty(s.conf.StorageClass),
 		})
 		return errors.Wrap(err, "upload failed")
-	}), nil
+	})
+
+	return &s3StorageWriter{
+		WriteCloser: w,
+		ctx:         ctx,
+		memAcc:      memAcc,
+	}, nil
 }
 
 func (s *s3Storage) openStreamAt(
@@ -656,5 +695,5 @@ func s3ErrDelay(err error) time.Duration {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_s3,
-		parseS3URL, MakeS3Storage, cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam), "s3")
+		parseS3URL, makeS3Storage, cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam), "s3")
 }

@@ -24,6 +24,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/ioctx",
         "//pkg/util/log",
+        "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/retry",
         "//pkg/util/sysutil",

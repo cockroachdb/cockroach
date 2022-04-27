@@ -2555,7 +2555,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 		// Write to userfile storage now that testuser has CREATE privileges.
 		ie := tc.Server(0).InternalExecutor().(*sql.InternalExecutor)
 		fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.TestUserName(), ie, tc.Server(0).DB(), nil)
+			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.TestUserName(), ie, tc.Server(0).DB(), nil, nil)
 		require.NoError(t, err)
 		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte(data))))
 	}
@@ -5742,7 +5742,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			tc.Server(0).ClusterSettings(),
 			blobs.TestEmptyBlobClientFactory,
 			username.RootUserName(),
-			tc.Server(0).InternalExecutor().(*sql.InternalExecutor), tc.Server(0).DB(), nil)
+			tc.Server(0).InternalExecutor().(*sql.InternalExecutor), tc.Server(0).DB(), nil, nil)
 		require.NoError(t, err)
 		defer store.Close()
 

@@ -37,7 +37,7 @@ func GetStorage(ctx context.Context, cfg FixtureConfig) (cloud.ExternalStorage, 
 
 	s, err := cloud.ExternalStorageFromURI(ctx, cfg.ObjectPathToURI(),
 		base.ExternalIODirConfig{}, clustersettings.MakeClusterSettings(),
-		nil, username.SQLUsername{}, nil, nil, nil)
+		nil, username.SQLUsername{}, nil, nil, nil, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, storageError)
 	}

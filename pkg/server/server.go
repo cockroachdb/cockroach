@@ -982,16 +982,24 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Initialize the external storage builders configuration params now that the
 	// engines have been created. The object can be used to create ExternalStorage
 	// objects hereafter.
-	fileTableInternalExecutor := sql.MakeInternalExecutor(ctx, s.PGServer().SQLServer, sql.MemoryMetrics{}, s.st)
-	s.externalStorageBuilder.init(
-		ctx,
-		s.cfg.ExternalIODirConfig,
-		s.st,
-		s.nodeIDContainer,
-		s.nodeDialer,
-		s.cfg.TestingKnobs,
-		&fileTableInternalExecutor,
-		s.db)
+	fileTableInternalExecutor := sql.MakeInternalExecutor(ctx,
+		s.PGServer().SQLServer, sql.MemoryMetrics{}, s.st)
+	externalStorageMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		"external-storage-mem", 0 /* limit */, s.sqlServer.execCfg.RootMemoryMonitor)
+	externalStorageMemoryMonitor.Start(ctx, s.sqlServer.execCfg.RootMemoryMonitor, mon.BoundAccount{})
+	s.externalStorageBuilder.init(ctx, &externalStorageBuilderConfig{
+		conf:            s.cfg.ExternalIODirConfig,
+		settings:        s.st,
+		nodeIDContainer: s.nodeIDContainer,
+		nodeDialer:      s.nodeDialer,
+		ie:              &fileTableInternalExecutor,
+		db:              s.db,
+		mon:             externalStorageMemoryMonitor,
+		knobs:           s.cfg.TestingKnobs,
+	})
+	s.stopper.AddCloser(stop.CloserFn(func() {
+		externalStorageMemoryMonitor.Stop(ctx)
+	}))
 
 	// Filter out self from the gossip bootstrap addresses.
 	filtered := s.cfg.FilterGossipBootstrapAddresses(ctx)

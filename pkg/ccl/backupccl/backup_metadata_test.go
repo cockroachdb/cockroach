@@ -75,7 +75,7 @@ func checkMetadata(
 		tc.Servers[0].ClusterSettings(),
 		blobs.TestEmptyBlobClientFactory,
 		username.RootUserName(),
-		tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil)
+		tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

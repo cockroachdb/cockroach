@@ -46,7 +46,7 @@ func makeS3Storage(
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		clientFactory, nil, nil, nil)
+		clientFactory, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -75,8 +75,8 @@ func TestPutS3(t *testing.T) {
 	user := username.RootUserName()
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
 		_, err := cloud.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
-			"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
-			blobs.TestEmptyBlobClientFactory, user, nil, nil, nil)
+			"backup-test-default"), base.ExternalIODirConfig{}, testSettings, blobs.TestEmptyBlobClientFactory,
+			user, nil, nil, nil, nil)
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
 			cloud.AuthParam,
@@ -161,7 +161,7 @@ func TestPutS3(t *testing.T) {
 			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
 			"unsupported-algorithm")
 
-		_, err = makeS3Storage(ctx, invalidSSEModeURI, user)
+		_, err = testingMakeS3Storage(ctx, invalidSSEModeURI, user)
 		require.True(t, testutils.IsError(err, "unsupported server encryption mode unsupported-algorithm. Supported values are `aws:kms` and `AES256"))
 
 		// Specify aws:kms encryption mode but don't specify kms ID.
@@ -170,7 +170,7 @@ func TestPutS3(t *testing.T) {
 			bucket, "backup-test-sse-256",
 			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
 			"aws:kms")
-		_, err = makeS3Storage(ctx, invalidKMSURI, user)
+		_, err = testingMakeS3Storage(ctx, invalidKMSURI, user)
 		require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
 	})
 }
@@ -260,7 +260,7 @@ func TestPutS3Endpoint(t *testing.T) {
 func TestS3DisallowCustomEndpoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	dest := roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{Endpoint: "http://do.not.go.there/"}}
-	s3, err := MakeS3Storage(context.Background(),
+	s3, err := makeS3Storage(context.Background(),
 		cloud.ExternalStorageContext{
 			IOConf: base.ExternalIODirConfig{DisableHTTP: true},
 		},
@@ -276,7 +276,7 @@ func TestS3DisallowImplicitCredentials(t *testing.T) {
 
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	s3, err := MakeS3Storage(context.Background(),
+	s3, err := makeS3Storage(context.Background(),
 		cloud.ExternalStorageContext{
 			IOConf:   base.ExternalIODirConfig{DisableImplicitCredentials: true},
 			Settings: testSettings,
@@ -329,8 +329,8 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		clientFactory, nil, nil, nil)
+	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
+		testSettings, clientFactory, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

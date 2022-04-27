@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -149,6 +150,7 @@ type ExternalStorageContext struct {
 	BlobClientFactory blobs.BlobClientFactory
 	InternalExecutor  sqlutil.InternalExecutor
 	DB                *kv.DB
+	Mon               *mon.BytesMonitor
 }
 
 // ExternalStorageConstructor is a function registered to create instances

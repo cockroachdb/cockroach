@@ -128,9 +128,8 @@ func TestFileDoesNotExist(t *testing.T) {
 		conf, err := cloud.ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
-		s, err := cloud.MakeExternalStorage(
-			context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
-			nil, nil, nil, nil)
+		s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{},
+			testSettings, nil, nil, nil, nil, nil)
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
 		require.Error(t, err, "")
@@ -143,9 +142,8 @@ func TestFileDoesNotExist(t *testing.T) {
 		conf, err := cloud.ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
-		s, err := cloud.MakeExternalStorage(
-			context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,
-			nil, nil, nil)
+		s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{},
+			testSettings, nil, nil, nil, nil, nil)
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
 		require.Error(t, err, "")
@@ -173,9 +171,11 @@ func TestCompressedGCS(t *testing.T) {
 	conf2, err := cloud.ExternalStorageConfFromURI(gsFile2, user)
 	require.NoError(t, err)
 
-	s1, err := cloud.MakeExternalStorage(ctx, conf1, base.ExternalIODirConfig{}, testSettings, nil, nil, nil, nil)
+	s1, err := cloud.MakeExternalStorage(ctx, conf1, base.ExternalIODirConfig{}, testSettings,
+		nil, nil, nil, nil, nil)
 	require.NoError(t, err)
-	s2, err := cloud.MakeExternalStorage(ctx, conf2, base.ExternalIODirConfig{}, testSettings, nil, nil, nil, nil)
+	s2, err := cloud.MakeExternalStorage(ctx, conf2, base.ExternalIODirConfig{}, testSettings,
+		nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	reader1, err := s1.ReadFile(context.Background(), "")

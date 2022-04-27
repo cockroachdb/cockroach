@@ -18,6 +18,7 @@ go_library(
         "//pkg/util/contextutil",
         "//pkg/util/ioctx",
         "//pkg/util/log",
+        "//pkg/util/mon",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "@com_github_aws_aws_sdk_go//aws",

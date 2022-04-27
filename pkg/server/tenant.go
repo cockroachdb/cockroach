@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -143,6 +144,32 @@ func startTenantInternal(
 		histogramWindowInterval: args.HistogramWindowInterval(),
 		settings:                args.Settings,
 	})
+
+	// Setup the factories that can be used to initialize an ExternalStorage
+	// object to interact with ExternalStorage sinks.
+	esb := &externalStorageBuilder{}
+	args.externalStorage = esb.makeExternalStorage
+	args.externalStorageFromURI = esb.makeExternalStorageFromURI
+
+	externalStorageMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		"external-storage-mem", 0 /* limit */, args.monitorAndMetrics.rootSQLMemoryMonitor)
+	externalStorageMemoryMonitor.Start(ctx, args.monitorAndMetrics.rootSQLMemoryMonitor, mon.BoundAccount{})
+	esb.init(
+		ctx,
+		&externalStorageBuilderConfig{
+			conf:            sqlCfg.ExternalIODirConfig,
+			settings:        baseCfg.Settings,
+			nodeIDContainer: baseCfg.IDContainer,
+			nodeDialer:      args.nodeDialer,
+			ie:              args.circularInternalExecutor,
+			db:              args.db,
+			mon:             externalStorageMemoryMonitor,
+			knobs:           baseCfg.TestingKnobs,
+		})
+	stopper.AddCloser(stop.CloserFn(func() {
+		externalStorageMemoryMonitor.Stop(ctx)
+	}))
+
 	closedSessionCache := sql.NewClosedSessionCache(
 		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 	args.closedSessionCache = closedSessionCache
@@ -509,21 +536,6 @@ func makeTenantSQLServerArgs(
 	runtime := status.NewRuntimeStatSampler(startupCtx, clock)
 	registry.AddMetricStruct(runtime)
 
-	esb := &externalStorageBuilder{}
-	externalStorage := esb.makeExternalStorage
-	externalStorageFromURI := esb.makeExternalStorageFromURI
-
-	esb.init(
-		startupCtx,
-		sqlCfg.ExternalIODirConfig,
-		baseCfg.Settings,
-		baseCfg.IDContainer,
-		nodeDialer,
-		baseCfg.TestingKnobs,
-		circularInternalExecutor,
-		db,
-	)
-
 	grpcServer := newGRPCServer(rpcContext)
 	// In a SQL-only server, there is no separate node initialization
 	// phase. Start RPC immediately in the operational state.
@@ -540,8 +552,6 @@ func makeTenantSQLServerArgs(
 			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
-			externalStorage:        externalStorage,
-			externalStorageFromURI: externalStorageFromURI,
 			// Set instance ID to 0 and node ID to nil to indicate
 			// that the instance ID will be bound later during preStart.
 			nodeIDContainer:      instanceIDContainer,
