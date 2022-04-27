@@ -11,8 +11,8 @@
 package cli
 
 import (
+	"bytes"
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"io"
 	"io/fs"
@@ -241,7 +241,7 @@ func runUserFileGet(cmd *cobra.Command, args []string) (resErr error) {
 	pattern := fullPath[len(conf.Path):]
 	displayPath := strings.TrimPrefix(conf.Path, "/")
 
-	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.GetDriverConn().(cloud.SQLConnI))
+	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.GetPGXConn())
 	if err != nil {
 		return err
 	}
@@ -399,7 +399,7 @@ func constructUserfileListURI(glob string, user username.SQLUsername) string {
 func getUserfileConf(
 	ctx context.Context, conn clisqlclient.Conn, glob string,
 ) (roachpb.ExternalStorage_FileTable, error) {
-	if err := conn.EnsureConn(); err != nil {
+	if err := conn.EnsureConn(ctx); err != nil {
 		return roachpb.ExternalStorage_FileTable{}, err
 	}
 
@@ -434,7 +434,7 @@ func listUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]s
 	conf.Path = cloud.GetPrefixBeforeWildcard(fullPath)
 	pattern := fullPath[len(conf.Path):]
 
-	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.GetDriverConn().(cloud.SQLConnI))
+	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.GetPGXConn())
 	if err != nil {
 		return nil, err
 	}
@@ -482,7 +482,7 @@ func downloadUserfile(
 }
 
 func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]string, error) {
-	if err := conn.EnsureConn(); err != nil {
+	if err := conn.EnsureConn(ctx); err != nil {
 		return nil, err
 	}
 
@@ -511,8 +511,7 @@ func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([
 	userFileTableConf.FileTableConfig.Path = cloud.GetPrefixBeforeWildcard(fullPath)
 	pattern := fullPath[len(userFileTableConf.FileTableConfig.Path):]
 
-	f, err := userfile.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
-		conn.GetDriverConn().(cloud.SQLConnI))
+	f, err := userfile.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig, conn.GetPGXConn())
 	if err != nil {
 		return nil, err
 	}
@@ -543,39 +542,16 @@ func renameUserFile(
 	ctx context.Context, conn clisqlclient.Conn, oldFilename,
 	newFilename, qualifiedTableName string,
 ) error {
-	if err := conn.EnsureConn(); err != nil {
+	if err := conn.EnsureConn(ctx); err != nil {
 		return err
 	}
+	pgxConn := conn.GetPGXConn()
 
-	ex := conn.GetDriverConn()
-	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
-		return err
-	}
-
-	stmt, err := conn.GetDriverConn().Prepare(fmt.Sprintf(`UPDATE %s SET filename=$1 WHERE filename=$2`,
-		qualifiedTableName+fileTableNameSuffix))
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if stmt != nil {
-			_ = stmt.Close()
-			_, _ = ex.ExecContext(ctx, `ROLLBACK`, nil)
-		}
-	}()
-	//lint:ignore SA1019 DriverConn doesn't support go 1.8 API
-	_, err = stmt.Exec([]driver.Value{newFilename, oldFilename})
-	if err != nil {
-		return err
-	}
-
-	if err := stmt.Close(); err != nil {
-		return err
-	}
-	stmt = nil
-
-	if _, err := ex.ExecContext(ctx, `COMMIT`, nil); err != nil {
+	if _, err := pgxConn.Exec(
+		ctx,
+		fmt.Sprintf(`UPDATE %s SET filename=$1 WHERE filename=$2`, qualifiedTableName+fileTableNameSuffix),
+		newFilename, oldFilename,
+	); err != nil {
 		return err
 	}
 
@@ -595,14 +571,11 @@ func uploadUserFile(
 	}
 	defer reader.Close()
 
-	if err := conn.EnsureConn(); err != nil {
+	if err := conn.EnsureConn(ctx); err != nil {
 		return "", err
 	}
 
-	ex := conn.GetDriverConn()
-	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
-		return "", err
-	}
+	pgxConn := conn.GetPGXConn()
 
 	connURL, err := url.Parse(conn.GetURL())
 	if err != nil {
@@ -634,42 +607,22 @@ func uploadUserFile(
 	if err != nil {
 		return "", err
 	}
-	stmt, err := conn.GetDriverConn().Prepare(sql.CopyInFileStmt(unescapedUserfileURL, sql.CrdbInternalName,
-		sql.UserFileUploadTable))
-	if err != nil {
-		return "", err
-	}
+	stmt := sql.CopyInFileStmt(unescapedUserfileURL, sql.CrdbInternalName, sql.UserFileUploadTable)
 
-	defer func() {
-		if stmt != nil {
-			_ = stmt.Close()
-			_, _ = ex.ExecContext(ctx, `ROLLBACK`, nil)
-		}
-	}()
-
-	send := make([]byte, chunkSize)
+	send := make([]byte, 0)
+	tmp := make([]byte, chunkSize)
 	for {
-		n, err := reader.Read(send)
+		n, err := reader.Read(tmp)
 		if n > 0 {
-			// TODO(adityamaru): Switch to StmtExecContext once the copyin driver
-			// supports it.
-			//lint:ignore SA1019 DriverConn doesn't support go 1.8 API
-			_, err = stmt.Exec([]driver.Value{string(send[:n])})
-			if err != nil {
-				return "", err
-			}
+			send = appendEscapedText(send, string(tmp[:n]))
 		} else if err == io.EOF {
 			break
 		} else if err != nil {
 			return "", err
 		}
 	}
-	if err := stmt.Close(); err != nil {
-		return "", err
-	}
-	stmt = nil
 
-	if _, err := ex.ExecContext(ctx, `COMMIT`, nil); err != nil {
+	if _, err := pgxConn.PgConn().CopyFrom(ctx, bytes.NewReader(send), stmt); err != nil {
 		return "", err
 	}
 

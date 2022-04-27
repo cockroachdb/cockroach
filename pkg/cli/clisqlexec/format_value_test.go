@@ -41,9 +41,10 @@ func Example_sql_format() {
 
 	// Output:
 	// sql -e create database t; create table t.times (bare timestamp, withtz timestamptz)
+	// CREATE DATABASE
 	// CREATE TABLE
 	// sql -e insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')
-	// INSERT 1
+	// INSERT 0 1
 	// sql -e select bare from t.times; select withtz from t.times
 	// bare
 	// 2016-01-25 10:10:10
@@ -62,7 +63,7 @@ func Example_sql_format() {
 	// float4
 	// 0.33333334
 	// float8
-	// 0.3333333333333333
+	// 0.333333333333333
 	// float8
 	// -Infinity
 	// sql -e select array['哈哈'::TEXT], array['哈哈'::NAME], array['哈哈'::VARCHAR]

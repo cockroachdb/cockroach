@@ -16,7 +16,6 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v4"
 )
 
 var inflightTracesQuery = `
@@ -207,7 +207,7 @@ type SQLConnInflightTraceZipper struct {
 	traceStrBuf         *bytes.Buffer
 	nodeTraceCollection *tracing.TraceCollection
 	z                   *memzipper.Zipper
-	sqlConn             driver.QueryerContext
+	sqlConn             *pgx.Conn
 }
 
 func (s *SQLConnInflightTraceZipper) getNodeTraceCollection() *tracing.TraceCollection {
@@ -234,7 +234,7 @@ func (s *SQLConnInflightTraceZipper) reset() {
 // into text, and jaegerJSON formats before creating a zip with per-node trace
 // files.
 func (s *SQLConnInflightTraceZipper) Zip(ctx context.Context, traceID int64) ([]byte, error) {
-	rows, err := s.sqlConn.QueryContext(ctx, fmt.Sprintf(inflightTracesQuery, traceID), nil /* args */)
+	rows, err := s.sqlConn.Query(ctx, fmt.Sprintf(inflightTracesQuery, traceID))
 	if err != nil {
 		return nil, err
 	}
@@ -243,12 +243,16 @@ func (s *SQLConnInflightTraceZipper) Zip(ctx context.Context, traceID int64) ([]
 	isFirstRow := true
 	for {
 		var err error
-		if err = rows.Next(vals); err == io.EOF {
+		if !rows.Next() {
 			flushAndReset(ctx, prevNodeID, s)
 			break
 		}
+		rawVals, err := rows.Values()
 		if err != nil {
 			return nil, err
+		}
+		for i := range rawVals {
+			vals[i] = rawVals[i]
 		}
 
 		row, err := s.populateInflightTraceRow(vals)
@@ -341,7 +345,7 @@ func (s *SQLConnInflightTraceZipper) populateInflightTraceRow(
 
 // MakeSQLConnInflightTraceZipper returns an instance of
 // SQLConnInflightTraceZipper.
-func MakeSQLConnInflightTraceZipper(sqlConn driver.QueryerContext) *SQLConnInflightTraceZipper {
+func MakeSQLConnInflightTraceZipper(sqlConn *pgx.Conn) *SQLConnInflightTraceZipper {
 	t := &SQLConnInflightTraceZipper{
 		traceStrBuf:         &bytes.Buffer{},
 		nodeTraceCollection: nil,

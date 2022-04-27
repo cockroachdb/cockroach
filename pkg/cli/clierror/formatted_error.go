@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgconn"
 )
 
 // OutputError prints out an error object on the given writer.
@@ -77,15 +77,19 @@ func (f *formattedError) Error() string {
 	// Extract the fields.
 	var message, hint, detail, location, constraintName string
 	var code pgcode.Code
-	if pqErr := (*pq.Error)(nil); errors.As(f.err, &pqErr) {
-		if pqErr.Severity != "" {
-			severity = pqErr.Severity
+	if pgErr := (*pgconn.PgError)(nil); errors.As(f.err, &pgErr) {
+		if pgErr.Severity != "" {
+			severity = pgErr.Severity
 		}
-		constraintName = pqErr.Constraint
-		message = pqErr.Message
-		code = pgcode.MakeCode(string(pqErr.Code))
-		hint, detail = pqErr.Hint, pqErr.Detail
-		location = formatLocation(pqErr.File, pqErr.Line, pqErr.Routine)
+		constraintName = pgErr.ConstraintName
+		message = pgErr.Message
+		code = pgcode.MakeCode(pgErr.Code)
+		hint, detail = pgErr.Hint, pgErr.Detail
+		line := ""
+		if pgErr.Line != 0 {
+			line = strconv.Itoa(int(pgErr.Line))
+		}
+		location = formatLocation(pgErr.File, line, pgErr.Routine)
 	} else {
 		message = f.err.Error()
 		code = pgerror.GetPGCode(f.err)

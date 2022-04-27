@@ -15,6 +15,8 @@ import (
 	"database/sql/driver"
 	"reflect"
 	"time"
+
+	"github.com/jackc/pgx/v4"
 )
 
 // Conn represents a connection to a SQL server.
@@ -24,7 +26,7 @@ type Conn interface {
 	Close() error
 
 	// EnsureConn (re-)establishes the connection to the server.
-	EnsureConn() error
+	EnsureConn(ctx context.Context) error
 
 	// Exec executes a statement.
 	Exec(ctx context.Context, query string, args ...interface{}) error
@@ -85,9 +87,9 @@ type Conn interface {
 	// The sql argument is the SQL query to use to retrieve the value.
 	GetServerValue(ctx context.Context, what, sql string) (driver.Value, string, bool)
 
-	// GetDriverConn exposes the underlying SQL driver connection object
+	// GetPGXConn exposes the underlying PGX driver connection object
 	// for use by the cli package.
-	GetDriverConn() DriverConn
+	GetPGXConn() *pgx.Conn
 }
 
 // Rows describes a result set.

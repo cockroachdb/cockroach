@@ -40,7 +40,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 	"github.com/spf13/cobra"
 )
 
@@ -190,7 +192,7 @@ func runDoctorExamine(
 
 // fromCluster collects system table data from a live cluster.
 func fromCluster(
-	sqlConn clisqlclient.Conn, timeout time.Duration,
+	conn clisqlclient.Conn, timeout time.Duration,
 ) (
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
@@ -198,8 +200,13 @@ func fromCluster(
 	retErr error,
 ) {
 	ctx := context.Background()
+	if err := conn.EnsureConn(ctx); err != nil {
+		return nil, nil, nil, err
+	}
+	sqlConn := conn.GetPGXConn()
+
 	if timeout != 0 {
-		if err := sqlConn.Exec(ctx,
+		if _, err := sqlConn.Exec(ctx,
 			`SET statement_timeout = $1`, timeout.String()); err != nil {
 			return nil, nil, nil, err
 		}
@@ -208,11 +215,12 @@ func fromCluster(
 SELECT id, descriptor, crdb_internal_mvcc_timestamp AS mod_time_logical
 FROM system.descriptor ORDER BY id`
 	checkColumnExistsStmt := "SELECT crdb_internal_mvcc_timestamp FROM system.descriptor LIMIT 1"
-	_, err := sqlConn.QueryRow(ctx, checkColumnExistsStmt)
+	var f float64
+	err := sqlConn.QueryRow(ctx, checkColumnExistsStmt).Scan(&f)
 	// On versions before 20.2, the system.descriptor won't have the builtin
 	// crdb_internal_mvcc_timestamp. If we can't find it, use NULL instead.
-	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-		if pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedColumn {
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+		if pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedColumn {
 			stmt = `
 SELECT id, descriptor, NULL AS mod_time_logical
 FROM system.descriptor ORDER BY id`
@@ -236,8 +244,12 @@ FROM system.descriptor ORDER BY id`
 		}
 		if vals[2] == nil {
 			row.ModTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		} else if mt, ok := vals[2].([]byte); ok {
-			decimal, _, err := apd.NewFromString(string(mt))
+		} else if mt, ok := vals[2].(pgtype.Numeric); ok {
+			buf, err := mt.EncodeText(sqlConn.ConnInfo(), nil)
+			if err != nil {
+				return err
+			}
+			decimal, _, err := apd.NewFromString(string(buf))
 			if err != nil {
 				return err
 			}
@@ -258,11 +270,12 @@ FROM system.descriptor ORDER BY id`
 	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace`
 
 	checkColumnExistsStmt = `SELECT "parentSchemaID" FROM system.namespace LIMIT 1`
-	_, err = sqlConn.QueryRow(ctx, checkColumnExistsStmt)
+	var i int
+	err = sqlConn.QueryRow(ctx, checkColumnExistsStmt).Scan(&i)
 	// On versions before 20.1, table system.namespace does not have this column.
 	// In that case the ParentSchemaID for tables is 29 and for databases is 0.
-	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-		if pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedColumn {
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+		if pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedColumn {
 			stmt = `
 SELECT "parentID", CASE WHEN "parentID" = 0 THEN 0 ELSE 29 END AS "parentSchemaID", name, id
 FROM system.namespace`
@@ -486,19 +499,20 @@ func tableMap(in io.Reader, fn func(string) error) error {
 
 // selectRowsMap applies `fn` to all rows returned from a select statement.
 func selectRowsMap(
-	conn clisqlclient.Conn, stmt string, vals []driver.Value, fn func([]driver.Value) error,
+	conn *pgx.Conn, stmt string, vals []driver.Value, fn func([]driver.Value) error,
 ) error {
 	rows, err := conn.Query(context.Background(), stmt)
 	if err != nil {
 		return errors.Wrapf(err, "query '%s'", stmt)
 	}
-	for {
+	for rows.Next() {
+		var rowVals []interface{}
 		var err error
-		if err = rows.Next(vals); err == io.EOF {
-			break
-		}
-		if err != nil {
+		if rowVals, err = rows.Values(); err != nil {
 			return err
+		}
+		for i := range vals {
+			vals[i] = rowVals[i]
 		}
 		if err := fn(vals); err != nil {
 			return err

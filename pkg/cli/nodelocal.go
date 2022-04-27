@@ -11,8 +11,8 @@
 package cli
 
 import (
+	"bytes"
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"io"
 	"net/url"
@@ -27,9 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	chunkSize = 4 * 1024
-)
+const chunkSize = 4 * 1024
 
 var nodeLocalUploadCmd = &cobra.Command{
 	Use:   "upload <source> <destination>",
@@ -74,17 +72,52 @@ func openSourceFile(source string) (io.ReadCloser, error) {
 	return f, nil
 }
 
+func appendEscapedText(buf []byte, text string) []byte {
+	escapeNeeded := false
+	startPos := 0
+	var c byte
+
+	// check if we need to escape
+	for i := 0; i < len(text); i++ {
+		c = text[i]
+		if c == '\\' || c == '\n' || c == '\r' || c == '\t' {
+			escapeNeeded = true
+			startPos = i
+			break
+		}
+	}
+	if !escapeNeeded {
+		return append(buf, text...)
+	}
+
+	// copy till first char to escape, iterate the rest
+	result := append(buf, text[:startPos]...)
+	for i := startPos; i < len(text); i++ {
+		c = text[i]
+		switch c {
+		case '\\':
+			result = append(result, '\\', '\\')
+		case '\n':
+			result = append(result, '\\', 'n')
+		case '\r':
+			result = append(result, '\\', 'r')
+		case '\t':
+			result = append(result, '\\', 't')
+		default:
+			result = append(result, c)
+		}
+	}
+	return result
+}
+
 func uploadFile(
 	ctx context.Context, conn clisqlclient.Conn, reader io.Reader, destination string,
 ) error {
-	if err := conn.EnsureConn(); err != nil {
+	if err := conn.EnsureConn(ctx); err != nil {
 		return err
 	}
 
-	ex := conn.GetDriverConn()
-	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
-		return err
-	}
+	pgxConn := conn.GetPGXConn()
 
 	// Construct the nodelocal URI as the destination for the CopyIn stmt.
 	nodelocalURL := url.URL{
@@ -92,42 +125,22 @@ func uploadFile(
 		Host:   "self",
 		Path:   destination,
 	}
-	stmt, err := conn.GetDriverConn().Prepare(sql.CopyInFileStmt(nodelocalURL.String(), sql.CrdbInternalName,
-		sql.NodelocalFileUploadTable))
-	if err != nil {
-		return err
-	}
+	stmt := sql.CopyInFileStmt(nodelocalURL.String(), sql.CrdbInternalName, sql.NodelocalFileUploadTable)
 
-	defer func() {
-		if stmt != nil {
-			_ = stmt.Close()
-			_, _ = ex.ExecContext(ctx, `ROLLBACK`, nil)
-		}
-	}()
-
-	send := make([]byte, chunkSize)
+	send := make([]byte, 0)
+	tmp := make([]byte, chunkSize)
 	for {
-		n, err := reader.Read(send)
+		n, err := reader.Read(tmp)
 		if n > 0 {
-			// TODO(adityamaru): Switch to StmtExecContext once the copyin driver
-			// supports it.
-			//lint:ignore SA1019 DriverConn doesn't support go 1.8 API
-			_, err = stmt.Exec([]driver.Value{string(send[:n])})
-			if err != nil {
-				return err
-			}
+			send = appendEscapedText(send, string(tmp[:n]))
 		} else if err == io.EOF {
 			break
 		} else if err != nil {
 			return err
 		}
 	}
-	if err := stmt.Close(); err != nil {
-		return err
-	}
-	stmt = nil
 
-	if _, err := ex.ExecContext(ctx, `COMMIT`, nil); err != nil {
+	if _, err := pgxConn.PgConn().CopyFrom(ctx, bytes.NewReader(send), stmt); err != nil {
 		return err
 	}
 
