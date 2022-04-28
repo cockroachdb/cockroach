@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -57,7 +58,9 @@ func (p *planner) DropRoleNode(
 			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot use special role specifier in DROP ROLE")
 		}
 	}
-	roleNames, err := roleSpecs.ToSQLUsernames(p.SessionData(), security.UsernameCreation)
+	roleNames, err := username.FromRoleSpecList(
+		p.SessionData(), security.UsernameCreation, roleSpecs,
+	)
 	if err != nil {
 		return nil, err
 	}

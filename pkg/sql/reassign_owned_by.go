@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,7 +44,9 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 		return nil, err
 	}
 
-	normalizedOldRoles, err := n.OldRoles.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	normalizedOldRoles, err := username.FromRoleSpecList(
+		p.SessionData(), security.UsernameValidation, n.OldRoles,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +62,9 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", oldRole)
 		}
 	}
-	newRole, err := n.NewRole.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+	newRole, err := username.FromRoleSpec(
+		p.SessionData(), security.UsernameValidation, n.NewRole,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +178,9 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	if err != nil {
 		return err
 	}
-	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+	owner, err := username.FromRoleSpec(
+		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+	)
 	if err != nil {
 		return err
 	}
@@ -197,7 +204,9 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 	if err != nil {
 		return err
 	}
-	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+	owner, err := username.FromRoleSpec(
+		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+	)
 	if err != nil {
 		return err
 	}
@@ -227,7 +236,9 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 		return err
 	}
 
-	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+	owner, err := username.FromRoleSpec(
+		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+	)
 	if err != nil {
 		return err
 	}
@@ -265,7 +276,9 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 		return err
 	}
 
-	owner, err := n.n.NewRole.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+	owner, err := username.FromRoleSpec(
+		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+	)
 	if err != nil {
 		return err
 	}

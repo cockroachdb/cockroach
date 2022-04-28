@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -88,7 +89,9 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
-	roleName, err := roleSpec.ToSQLUsername(p.SessionData(), security.UsernameCreation)
+	roleName, err := username.FromRoleSpec(
+		p.SessionData(), security.UsernameCreation, roleSpec,
+	)
 	if err != nil {
 		return nil, err
 	}

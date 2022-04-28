@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -47,7 +48,9 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	grantees, err := username.FromRoleSpecList(
+		p.SessionData(), security.UsernameValidation, n.Grantees,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +82,9 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 
-	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	grantees, err := username.FromRoleSpecList(
+		p.SessionData(), security.UsernameValidation, n.Grantees,
+	)
 	if err != nil {
 		return nil, err
 	}

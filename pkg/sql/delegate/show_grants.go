@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 )
 
 // delegateShowGrants implements SHOW GRANTS which returns grant details for the
@@ -232,7 +233,9 @@ FROM "".information_schema.type_privileges`
 
 	if n.Grantees != nil {
 		params = params[:0]
-		grantees, err := n.Grantees.ToSQLUsernames(d.evalCtx.SessionData(), security.UsernameValidation)
+		grantees, err := username.FromRoleSpecList(
+			d.evalCtx.SessionData(), security.UsernameValidation, n.Grantees,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -248,7 +251,9 @@ FROM "".information_schema.type_privileges`
 	// Terminate on invalid users.
 	for _, p := range n.Grantees {
 
-		user, err := p.ToSQLUsername(d.evalCtx.SessionData(), security.UsernameValidation)
+		user, err := username.FromRoleSpec(
+			d.evalCtx.SessionData(), security.UsernameValidation, p,
+		)
 		if err != nil {
 			return nil, err
 		}

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -57,11 +58,13 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 		return nil, err
 	}
 
-	inputRoles, err := n.Roles.ToSQLUsernames()
+	inputRoles, err := username.FromNameList(n.Roles)
 	if err != nil {
 		return nil, err
 	}
-	inputMembers, err := n.Members.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	inputMembers, err := username.FromRoleSpecList(
+		p.SessionData(), security.UsernameValidation, n.Members,
+	)
 	if err != nil {
 		return nil, err
 	}

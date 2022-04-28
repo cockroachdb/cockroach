@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -129,7 +130,9 @@ func (p *planner) createDatabase(
 
 	owner := p.SessionData().User()
 	if !database.Owner.Undefined() {
-		owner, err = database.Owner.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+		owner, err = username.FromRoleSpec(
+			p.SessionData(), security.UsernameValidation, database.Owner,
+		)
 		if err != nil {
 			return nil, true, err
 		}

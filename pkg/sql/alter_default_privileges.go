@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -96,7 +97,9 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 			"version %v must be finalized to use grant options",
 			clusterversion.ByKey(clusterversion.ValidateGrantOption))
 	}
-	targetRoles, err := n.n.Roles.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
+	targetRoles, err := username.FromRoleSpecList(
+		params.SessionData(), security.UsernameValidation, n.n.Roles,
+	)
 	if err != nil {
 		return err
 	}
@@ -120,7 +123,9 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		grantOption = n.n.Revoke.GrantOptionFor
 	}
 
-	granteeSQLUsernames, err := grantees.ToSQLUsernames(params.p.SessionData(), security.UsernameValidation)
+	granteeSQLUsernames, err := username.FromRoleSpecList(
+		params.p.SessionData(), security.UsernameValidation, grantees,
+	)
 	if err != nil {
 		return err
 	}
@@ -194,7 +199,9 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 			}
 		}
 
-		granteeSQLUsernames, err := grantees.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
+		granteeSQLUsernames, err := username.FromRoleSpecList(
+			params.SessionData(), security.UsernameValidation, grantees,
+		)
 		if err != nil {
 			return err
 		}
@@ -296,7 +303,9 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	}
 
 	var events []eventLogEntry
-	granteeSQLUsernames, err := grantees.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
+	granteeSQLUsernames, err := username.FromRoleSpecList(
+		params.SessionData(), security.UsernameValidation, grantees,
+	)
 	if err != nil {
 		return err
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -121,7 +122,9 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			NewSchemaName: newQualifiedSchemaName.String(),
 		})
 	case *tree.AlterSchemaOwner:
-		newOwner, err := t.Owner.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+		newOwner, err := username.FromRoleSpec(
+			params.p.SessionData(), security.UsernameValidation, t.Owner,
+		)
 		if err != nil {
 			return err
 		}

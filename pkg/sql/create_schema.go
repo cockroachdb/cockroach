@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -54,7 +55,9 @@ func CreateUserDefinedSchemaDescriptor(
 	db catalog.DatabaseDescriptor,
 	allocateID bool,
 ) (*schemadesc.Mutable, *catpb.PrivilegeDescriptor, error) {
-	authRole, err := n.AuthRole.ToSQLUsername(sessionData, security.UsernameValidation)
+	authRole, err := username.FromRoleSpec(
+		sessionData, security.UsernameValidation, n.AuthRole,
+	)
 	if err != nil {
 		return nil, nil, err
 	}

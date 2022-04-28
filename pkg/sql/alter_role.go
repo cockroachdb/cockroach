@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -103,7 +104,9 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 
-	roleName, err := roleSpec.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+	roleName, err := username.FromRoleSpec(
+		p.SessionData(), security.UsernameValidation, roleSpec,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +298,9 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 	var roleName security.SQLUsername
 	if !n.AllRoles {
 		var err error
-		roleName, err = n.RoleName.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+		roleName, err = username.FromRoleSpec(
+			p.SessionData(), security.UsernameValidation, n.RoleName,
+		)
 		if err != nil {
 			return nil, err
 		}
