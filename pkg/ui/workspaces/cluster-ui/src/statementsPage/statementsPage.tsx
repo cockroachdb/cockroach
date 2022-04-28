@@ -13,6 +13,7 @@ import { RouteComponentProps } from "react-router-dom";
 import { isNil, merge } from "lodash";
 import classNames from "classnames/bind";
 import { getValidErrorsList, Loading } from "src/loading";
+import { Delayed } from "src/delayed";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
   handleSortSettingFromQueryString,
@@ -623,10 +624,12 @@ export class StatementsPage extends React.Component<
     const longLoadingMessage = isNil(this.props.statements) &&
       timeWaitingResponse > 2 &&
       isNil(getValidErrorsList(this.props.statementsError)) && (
-        <InlineAlert
-          intent="info"
-          title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
-        />
+        <Delayed>
+          <InlineAlert
+            intent="info"
+            title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
+          />
+        </Delayed>
       );
 
     return (

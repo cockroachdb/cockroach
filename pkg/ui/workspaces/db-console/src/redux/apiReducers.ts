@@ -191,7 +191,7 @@ const jobsReducerObj = new KeyedCachedDataReducer(
   api.getJobs,
   "jobs",
   jobsRequestKey,
-  moment.duration(10, "s"),
+  moment.duration(30, "s"),
 );
 export const refreshJobs = jobsReducerObj.refresh;
 
