@@ -109,6 +109,7 @@ DEPENDENCIES = [
     "@npm//source-map-loader",
     "@npm//style-loader",
     "@npm//ts-jest",
+    "@npm//uplot",
     "@npm//url-loader",
     "@npm//webpack",
     "@npm//webpack-cli",
@@ -147,6 +148,7 @@ ts_project(
         "@npm//redux-saga",
         "@npm//redux-saga-test-plan",
         "@npm//reselect",
+        "@npm//uplot",
     ],
 )
 
