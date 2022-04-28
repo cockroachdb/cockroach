@@ -8,7 +8,7 @@ go_library(
         "span_store.go",
         "store.go",
         "system_store.go",
-        ":spanconfigstoreentry_interval_btree.go",  # keep
+        ":entry_interval_btree.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore",
     visibility = ["//visibility:public"],
@@ -33,7 +33,7 @@ go_test(
         "span_store_test.go",
         "store_test.go",
         "system_store_test.go",
-        ":spanconfigstoreentry_interval_btree_test.go",  # keep
+        ":entry_interval_btree_test.go",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":spanconfigstore"],
@@ -46,7 +46,6 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
-        "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
@@ -56,5 +55,5 @@ go_test(
 gen_interval_btree(
     name = "spanconfig_interval_btree",
     package = "spanconfigstore",
-    type = "*spanConfigStoreEntry",
+    type = "*entry",
 )

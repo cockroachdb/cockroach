@@ -260,7 +260,7 @@ func (f *fullReconciler) reconcile(
 	// KV, in order to delete them. After doing so, we'll issue those same
 	// deletions against this copy in order for it to reflect an up-to-date view
 	// of span configs.
-	storeWithLatestSpanConfigs = storeWithExistingSpanConfigs.Copy(ctx)
+	storeWithLatestSpanConfigs = storeWithExistingSpanConfigs.Clone()
 
 	// Delete all updated spans in a store populated with all current records.
 	// Because our translation above captures the entire SQL state, deleting all
