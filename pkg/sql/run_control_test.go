@@ -740,6 +740,7 @@ func getUserConn(t *testing.T, username string, server serverutils.TestServerInt
 // main statement with a timeout is blocked.
 func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 78494, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "times out under stress")
