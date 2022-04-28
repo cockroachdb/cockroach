@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -2889,7 +2889,9 @@ func (s *adminServer) enqueueRangeLocal(
 		queueName = "mvccGC"
 	}
 
-	traceSpans, processErr, err := store.ManuallyEnqueue(ctx, queueName, repl, req.SkipShouldQueue)
+	traceSpans, processErr, err := store.Enqueue(
+		ctx, queueName, repl, req.SkipShouldQueue, false, /* async */
+	)
 	if err != nil {
 		response.Details[0].Error = err.Error()
 		return response, nil

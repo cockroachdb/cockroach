@@ -83,7 +83,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	raft "go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3"
 	"golang.org/x/time/rate"
 )
 
@@ -3397,12 +3397,14 @@ func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Rec
 	return collectAndFinish(), nil
 }
 
-// ManuallyEnqueue runs the given replica through the requested queue,
-// returning all trace events collected along the way as well as the error
-// message returned from the queue's process method, if any.  Intended to help
-// power an admin debug endpoint.
-func (s *Store) ManuallyEnqueue(
-	ctx context.Context, queueName string, repl *Replica, skipShouldQueue bool,
+// Enqueue runs the given replica through the requested queue. If `async` is
+// specified, the replica is enqueued into the requested queue for asynchronous
+// processing and this method returns nothing. Otherwise, it returns all trace
+// events collected along the way as well as the error message returned from the
+// queue's process method, if any. Intended to help power the
+// server.decommissionMonitor and an admin debug endpoint.
+func (s *Store) Enqueue(
+	ctx context.Context, queueName string, repl *Replica, skipShouldQueue bool, async bool,
 ) (recording tracing.Recording, processError error, enqueueError error) {
 	ctx = repl.AnnotateCtx(ctx)
 
@@ -3413,12 +3415,14 @@ func (s *Store) ManuallyEnqueue(
 		return nil, nil, errors.Errorf("not enqueueing uninitialized replica %s", repl)
 	}
 
-	var queue queueImpl
+	var queue replicaQueue
+	var qImpl queueImpl
 	var needsLease bool
-	for _, replicaQueue := range s.scanner.queues {
-		if strings.EqualFold(replicaQueue.Name(), queueName) {
-			queue = replicaQueue.(queueImpl)
-			needsLease = replicaQueue.NeedsLease()
+	for _, q := range s.scanner.queues {
+		if strings.EqualFold(q.Name(), queueName) {
+			queue = q
+			qImpl = q.(queueImpl)
+			needsLease = q.NeedsLease()
 		}
 	}
 	if queue == nil {
@@ -3440,13 +3444,24 @@ func (s *Store) ManuallyEnqueue(
 		}
 	}
 
+	if async {
+		// NB: 1e6 is a placeholder for now. We want to use a high enough priority
+		// to ensure that these replicas are priority-ordered first.
+		if skipShouldQueue {
+			queue.AddAsync(ctx, repl, 1e6 /* prio */)
+		} else {
+			queue.MaybeAddAsync(ctx, repl, repl.Clock().NowAsClockTimestamp())
+		}
+		return nil, nil, nil
+	}
+
 	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(
 		ctx, s.cfg.AmbientCtx.Tracer, fmt.Sprintf("manual %s queue run", queueName))
 	defer collectAndFinish()
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
-		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
+		shouldQueue, priority := qImpl.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
 			return collectAndFinish(), nil, nil
@@ -3454,7 +3469,7 @@ func (s *Store) ManuallyEnqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := queue.process(ctx, repl, confReader)
+	processed, processErr := qImpl.process(ctx, repl, confReader)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return collectAndFinish(), processErr, nil
 }
