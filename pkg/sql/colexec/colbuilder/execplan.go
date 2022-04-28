@@ -374,17 +374,24 @@ func (r opResult) createDiskBackedSort(
 	if matchLen > 0 {
 		// The input is already partially ordered. Use a chunks sorter to avoid
 		// loading all the rows into memory.
+		var deselectorUnlimitedMemAcc *mon.BoundAccount
 		var sortChunksMemAccount *mon.BoundAccount
 		if useStreamingMemAccountForBuffering {
+			deselectorUnlimitedMemAcc = streamingMemAccount
 			sortChunksMemAccount = streamingMemAccount
 		} else {
+			opName := opNamePrefix + "sort-chunks"
+			deselectorUnlimitedMemAcc = r.createUnlimitedMemAccount(
+				ctx, flowCtx, opName, processorID,
+			)
 			sortChunksMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
-				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
+				ctx, flowCtx, spoolMemLimit, opName, processorID,
 			)
 		}
 		inMemorySorter, err = colexec.NewSortChunks(
-			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
-			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
+			colmem.NewAllocator(ctx, deselectorUnlimitedMemAcc, factory),
+			colmem.NewAllocator(ctx, sortChunksMemAccount, factory),
+			input, inputTypes, ordering.Columns, int(matchLen), maxOutputBatchMemSize,
 		)
 	} else if k := post.Limit + post.Offset; post.Limit != 0 &&
 		post.Limit < math.MaxUint64-post.Offset && colexec.ShouldUseTopK(k, inputTypes) {
