@@ -5569,13 +5569,13 @@ Bottom Left.`,
 				{"srid", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return makeGeometryFromBounds(args)
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return stEnvelopeFromArgs(args)
 			},
 			Info: infoBuilder{
-				info: "Returns a box2d from bounds.",
+				info: "Creates a rectangular Polygon from the minimum and maximum values for X and Y with the given SRID.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5585,13 +5585,13 @@ Bottom Left.`,
 				{"ymax", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return makeGeometryFromBounds(args)
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return stEnvelopeFromArgs(args)
 			},
 			Info: infoBuilder{
-				info: "Returns a box2d from bounds (the default srid value is 0).",
+				info: "Creates a rectangular Polygon from the minimum and maximum values for X and Y with SRID 0.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_flipcoordinates": makeBuiltin(
@@ -7539,8 +7539,8 @@ func applyGeoindexConfigStorageParams(
 	return indexDesc.GeoConfig, nil
 }
 
-// makeGeometryFromBounds builds a rectangle geometry from types.Float bounds as datums
-func makeGeometryFromBounds(args tree.Datums) (tree.Datum, error) {
+// stEnvelopeFromArgs builds a rectangle geometry from types.Float bounds as datums
+func stEnvelopeFromArgs(args tree.Datums) (tree.Datum, error) {
 	xmin := float64(tree.MustBeDFloat(args[0]))
 	ymin := float64(tree.MustBeDFloat(args[1]))
 	xmax := float64(tree.MustBeDFloat(args[2]))

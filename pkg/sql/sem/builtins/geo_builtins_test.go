@@ -17,7 +17,6 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -102,91 +101,6 @@ func TestGeoBuiltinsPointEmptyArgs(t *testing.T) {
 					}
 				})
 			}
-		})
-	}
-}
-
-func mustParseDFloat(t testing.TB, in string) tree.Datum {
-	d, err := tree.ParseDFloat(in)
-	require.NoError(t, err)
-
-	return d
-}
-
-func mustParseDGeometry(t testing.TB, in string, srid int) tree.Datum {
-	d, err := tree.ParseDGeometry(in)
-	require.NoError(t, err)
-
-	withSRID, err := d.CloneWithSRID(geopb.SRID(srid))
-	require.NoError(t, err)
-
-	return tree.NewDGeometry(withSRID)
-}
-
-type multiArgsBuiltinFixture struct {
-	Title       string
-	Builtin     tree.Overload
-	Args        tree.Datums
-	Expected    tree.Datum
-	ExpectError bool
-}
-
-func TestGeoBuiltinsSTMakeEnvelope(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// polygonGeometry, err := tree.ParseDGeometry("POLYGON((170 50,170 72,-130 72,-130 50,170 50))")
-	for _, toPin := range []multiArgsBuiltinFixture{
-		{
-			Title:   "st_makeenvelope happy path, srid",
-			Builtin: geoBuiltins["st_makeenvelope"].overloads[0],
-			Args: tree.Datums{
-				mustParseDFloat(t, "30.01"),
-				mustParseDFloat(t, "50.01"),
-				mustParseDFloat(t, "72.01"),
-				mustParseDFloat(t, "52.01"),
-				tree.NewDInt(tree.DInt(4326)),
-			},
-			Expected: mustParseDGeometry(t, "POLYGON((30.01 50.01,30.01 52.01,72.01 52.01,72.01 50.01,30.01 50.01))", 4326),
-		},
-		{
-			Title:   "st_makeenvelope happy path, unknown srid",
-			Builtin: geoBuiltins["st_makeenvelope"].overloads[1],
-			Args: tree.Datums{
-				mustParseDFloat(t, "30.01"),
-				mustParseDFloat(t, "50.01"),
-				mustParseDFloat(t, "72.01"),
-				mustParseDFloat(t, "52.01"),
-			},
-			Expected: mustParseDGeometry(t, "POLYGON((30.01 50.01,30.01 52.01,72.01 52.01,72.01 50.01,30.01 50.01))", 0),
-		},
-		{
-			Title:   "st_makeenvelope degenerate bounds, unknown srid",
-			Builtin: geoBuiltins["st_makeenvelope"].overloads[1],
-			Args: tree.Datums{
-				mustParseDFloat(t, "30"),
-				mustParseDFloat(t, "50"),
-				mustParseDFloat(t, "30"),
-				mustParseDFloat(t, "50"),
-			},
-			Expected: mustParseDGeometry(t, "POLYGON((30 50,30 50,30 50,30 50,30 50))", 0),
-		},
-	} {
-		testcase := toPin
-
-		t.Run(testcase.Title, func(t *testing.T) {
-			t.Parallel() // SAFE FOR TESTING
-
-			overload := testcase.Builtin
-			datums := testcase.Args
-			res, err := overload.Fn(&tree.EvalContext{}, datums)
-			if testcase.ExpectError {
-				require.Error(t, err)
-
-				return
-			}
-
-			require.NoError(t, err)
-			require.EqualValues(t, testcase.Expected, res)
 		})
 	}
 }

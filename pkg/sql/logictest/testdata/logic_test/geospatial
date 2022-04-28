@@ -5892,3 +5892,14 @@ FROM ( VALUES
 ----
 false  false  false
 false  false  false
+
+# ST_MakeEnvelope
+query MKENVSRID
+SELECT ST_MakeEnvelope(30.01,50.01,72.01,52.01,4326)
+---
+POLYGON((30.01 50.01,30.01 52.01,72.01 52.01,72.01 50.01,30.01 50.01))
+
+query MKENVNOSRID
+SELECT ST_MakeEnvelope(30.01,50.01,72.01,52.01)
+---
+POLYGON((30.01 50.01,30.01 52.01,72.01 52.01,72.01 50.01,30.01 50.01))
