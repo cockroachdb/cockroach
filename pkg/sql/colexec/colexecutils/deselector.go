@@ -26,8 +26,8 @@ import (
 type deselectorOp struct {
 	colexecop.OneInputHelper
 	colexecop.NonExplainable
-	allocator  *colmem.Allocator
-	inputTypes []*types.T
+	unlimitedAllocator *colmem.Allocator
+	inputTypes         []*types.T
 
 	output coldata.Batch
 }
@@ -36,39 +36,35 @@ var _ colexecop.Operator = &deselectorOp{}
 
 // NewDeselectorOp creates a new deselector operator on the given input
 // operator with the given column types.
+//
+// The provided allocator must be derived from an unlimited memory monitor since
+// the deselectorOp cannot spill to disk and a "memory budget exceeded" error
+// might be caught by the higher-level diskSpiller which would result in losing
+// some query results.
 func NewDeselectorOp(
-	allocator *colmem.Allocator, input colexecop.Operator, typs []*types.T,
+	unlimitedAllocator *colmem.Allocator, input colexecop.Operator, typs []*types.T,
 ) colexecop.Operator {
 	return &deselectorOp{
-		OneInputHelper: colexecop.MakeOneInputHelper(input),
-		allocator:      allocator,
-		inputTypes:     typs,
+		OneInputHelper:     colexecop.MakeOneInputHelper(input),
+		unlimitedAllocator: unlimitedAllocator,
+		inputTypes:         typs,
 	}
 }
 
 func (p *deselectorOp) Next() coldata.Batch {
-	// deselectorOp should *not* limit the capacities of the returned batches,
-	// so we don't use a memory limit here. It is up to the wrapped operator to
-	// limit the size of batches based on the memory footprint.
-	const maxBatchMemSize = math.MaxInt64
-	// TODO(yuzefovich): this allocation is only needed in order to appease the
-	// tests of the external sorter with forced disk spilling (if we don't do
-	// this, an OOM error occurs during ResetMaybeReallocate call below at
-	// which point we have already received a batch from the input and it'll
-	// get lost because deselectorOp doesn't support fall-over to the
-	// disk-backed infrastructure).
-	p.output, _ = p.allocator.ResetMaybeReallocate(
-		p.inputTypes, p.output, 1 /* minCapacity */, maxBatchMemSize,
-	)
 	batch := p.Input.Next()
 	if batch.Selection() == nil || batch.Length() == 0 {
 		return batch
 	}
-	p.output, _ = p.allocator.ResetMaybeReallocate(
+	// deselectorOp should *not* limit the capacities of the returned batches,
+	// so we don't use a memory limit here. It is up to the wrapped operator to
+	// limit the size of batches based on the memory footprint.
+	const maxBatchMemSize = math.MaxInt64
+	p.output, _ = p.unlimitedAllocator.ResetMaybeReallocate(
 		p.inputTypes, p.output, batch.Length(), maxBatchMemSize,
 	)
 	sel := batch.Selection()
-	p.allocator.PerformOperation(p.output.ColVecs(), func() {
+	p.unlimitedAllocator.PerformOperation(p.output.ColVecs(), func() {
 		for i := range p.inputTypes {
 			toCol := p.output.ColVec(i)
 			fromCol := batch.ColVec(i)
