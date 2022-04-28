@@ -3415,7 +3415,7 @@ func (s *Store) Enqueue(
 		// NB: 1e6 is a placeholder for now. We want to use a high enough priority
 		// to ensure that these replicas are priority-ordered first.
 		//
-		// FIXME: Do something more accurate?
+		// TODO(aayush): Do something more accurate for the enqueue priority.
 		queue.AddAsync(ctx, repl, 1e6 /* prio */)
 		return nil, nil, nil
 	}

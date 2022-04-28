@@ -148,6 +148,8 @@ type Server struct {
 	// layer.
 	kvMemoryMonitor *mon.BytesMonitor
 
+	decommissionMonitor *decommissionMonitor
+
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 	startTime time.Time
 }
@@ -792,6 +794,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	drain := newDrainServer(cfg.BaseConfig, stopper, grpcServer, sqlServer)
 	drain.setNode(node, nodeLiveness)
 
+	decomMonitor := newDecommissionMonitor(cfg.AmbientCtx, sAdmin, stopper, stores)
+
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
 		cfg:                    cfg,
@@ -834,6 +838,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		externalStorageBuilder: externalStorageBuilder,
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
+		decommissionMonitor:    decomMonitor,
 	}
 
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.

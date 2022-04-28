@@ -6711,6 +6711,7 @@ Support status: [reserved](#support-status)
 | queue | [string](#cockroach.server.serverpb.EnqueueRangeRequest-string) |  | The name of the replica queue to run the range through. Matched against each queue's name field. See the implementation of baseQueue for details. | [reserved](#support-status) |
 | range_id | [int32](#cockroach.server.serverpb.EnqueueRangeRequest-int32) |  | The ID of the range to run through the queue. | [reserved](#support-status) |
 | skip_should_queue | [bool](#cockroach.server.serverpb.EnqueueRangeRequest-bool) |  | If set, run the queue's process method without first checking whether the replica should be processed by calling shouldQueue. | [reserved](#support-status) |
+| async | [bool](#cockroach.server.serverpb.EnqueueRangeRequest-bool) |  | If set, the replica will be enqueued asynchronously and a successful response will be empty. | [reserved](#support-status) |
 
 
 

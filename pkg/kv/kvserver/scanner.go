@@ -35,6 +35,9 @@ type replicaQueue interface {
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
 	MaybeAddAsync(context.Context, replicaInQueue, hlc.ClockTimestamp)
+	// AddAsync adds the replica to the queue without checking if it meets
+	// inclusion criteria.
+	AddAsync(context.Context, replicaInQueue, float64)
 	// MaybeRemove removes the replica from the queue if it is present.
 	MaybeRemove(roachpb.RangeID)
 	// Name returns the name of the queue.

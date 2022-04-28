@@ -785,6 +785,9 @@ message EnqueueRangeRequest {
   // If set, run the queue's process method without first checking whether the
   // replica should be processed by calling shouldQueue.
   bool skip_should_queue = 4;
+  // If set, the replica will be enqueued asynchronously and a successful
+  // response will be empty.
+  bool async = 5;
 }
 
 message EnqueueRangeResponse {

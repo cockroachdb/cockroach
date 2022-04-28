@@ -121,6 +121,18 @@ func (s *Server) Decommission(
 			}); err != nil {
 				log.Ops.Errorf(ctx, "unable to record event: %+v: %+v", event, err)
 			}
+
+			if targetStatus.Decommissioning() {
+				// We're decommissioning this node, so spin up an async monitor task
+				// to tell other nodes to proactively enqueue this node's replicas for
+				// decommissioning.
+				//
+				// NB: decommissionMonitor.start() is idempotent.
+				err := s.decommissionMonitor.start()
+				if err != nil {
+					log.Warningf(ctx, "did not start decommission monitor: %v", err)
+				}
+			}
 		}
 
 		// Similarly to the log event above, we may not be able to clean up the

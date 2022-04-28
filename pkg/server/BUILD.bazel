@@ -20,6 +20,7 @@ go_library(
         "config.go",
         "config_unix.go",
         "config_windows.go",
+        "decommision_monitor.go",
         "decommission.go",
         "doc.go",
         "drain.go",
