@@ -6083,9 +6083,10 @@ CREATE TABLE crdb_internal.cluster_locks (
 var crdbInternalNodeExecutionOutliersTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.node_execution_outliers (
-	session_id     STRING NOT NULL,
-	transaction_id UUID NOT NULL,
-	statement_id   STRING NOT NULL
+	session_id               STRING NOT NULL,
+	transaction_id           UUID NOT NULL,
+	statement_id             STRING NOT NULL,
+	statement_fingerprint_id STRING NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
 		p.extendedEvalCtx.statsProvider.IterateOutliers(ctx, func(
@@ -6095,6 +6096,7 @@ CREATE TABLE crdb_internal.node_execution_outliers (
 				tree.NewDString(hex.EncodeToString(o.Session.ID)),
 				tree.NewDUuid(tree.DUuid{UUID: *o.Transaction.ID}),
 				tree.NewDString(hex.EncodeToString(o.Statement.ID)),
+				tree.NewDString(strconv.FormatUint(uint64(o.Statement.FingerprintID), 10)),
 			))
 		})
 		return err
