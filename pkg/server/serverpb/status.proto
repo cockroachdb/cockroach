@@ -944,6 +944,13 @@ message Session {
   // Information about the txn in progress on this session. Nil if the
   // session doesn't currently have a transaction.
   TxnInfo active_txn = 12;
+  // num_txns_executed is the number of transactions that were executed so
+  // far on this session.
+  int32 num_txns_executed = 16;
+  // List of transaction fingerprint IDs in this session.
+  repeated uint64 txnFingerprintIDs = 17 [(gogoproto.customname) = "TxnFingerprintIDs",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
+    (gogoproto.nullable) = false];
   // The SQL statement fingerprint of the last query executed on this session,
   // compatible with StatementStatisticsKey.
   string last_active_query_no_constants = 13;
@@ -958,6 +965,9 @@ message Session {
   // Timestamp of session's end.
   google.protobuf.Timestamp end = 15
       [ (gogoproto.nullable) = true, (gogoproto.stdtime) = true ];
+  // The session's total active time.
+  google.protobuf.Duration totalActiveTime = 18 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
 }
 
 // An error wrapper object for ListSessionsResponse.

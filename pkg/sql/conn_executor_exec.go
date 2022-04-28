@@ -2126,6 +2126,8 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 
 func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 	if ex.extraTxnState.shouldExecuteOnTxnRestart {
+		ex.totalActiveTimeStopWatch.Stop()
+		defer ex.totalActiveTimeStopWatch.Start()
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction, timeutil.Now())
 		ex.extraTxnState.transactionStatementFingerprintIDs = nil
 		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
@@ -2156,6 +2158,8 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
 	implicit := ex.implicitTxn()
+
+	ex.totalActiveTimeStopWatch.Start()
 
 	// Transaction received time is the time at which the statement that prompted
 	// the creation of this transaction was received.
@@ -2210,6 +2214,7 @@ func (ex *connExecutor) recordTransactionFinish(
 
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
+	ex.totalActiveTimeStopWatch.Stop()
 	if ex.executorType != executorTypeInternal {
 		ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	}
