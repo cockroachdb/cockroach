@@ -15,7 +15,10 @@ var gormBlocklists = blocklistsForVersion{
 	{"v21.1", "gormBlocklist21_1", gormBlocklist21_1, "gormIgnorelist21_1", gormIgnorelist21_1},
 	{"v21.2", "gormBlocklist21_2", gormBlocklist21_2, "gormIgnorelist21_2", gormIgnorelist21_2},
 	{"v22.1", "gormBlocklist22_1", gormBlocklist22_1, "gormIgnorelist22_1", gormIgnorelist22_1},
+	{"v22.2", "gormBlocklist22_2", gormBlocklist22_2, "gormIgnorelist22_2", gormIgnorelist22_2},
 }
+
+var gormBlocklist22_2 = gormBlocklist22_1
 
 var gormBlocklist22_1 = gormBlocklist21_2
 
@@ -24,6 +27,8 @@ var gormBlocklist21_2 = gormBlocklist21_1
 var gormBlocklist21_1 = gormBlocklist20_2
 
 var gormBlocklist20_2 = blocklist{}
+
+var gormIgnorelist22_2 = gormIgnorelist22_1
 
 var gormIgnorelist22_1 = gormIgnorelist21_2
 

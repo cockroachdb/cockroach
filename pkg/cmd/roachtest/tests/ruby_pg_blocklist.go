@@ -15,7 +15,10 @@ var rubyPGBlocklist = blocklistsForVersion{
 	{"v21.1", "rubyPGBlockList21_1", rubyPGBlockList21_1, "rubyPGIgnoreList21_1", rubyPGIgnoreList21_1},
 	{"v21.2", "rubyPGBlockList21_2", rubyPGBlockList21_2, "rubyPGIgnoreList21_2", rubyPGIgnoreList21_2},
 	{"v22.1", "rubyPGBlockList22_1", rubyPGBlockList22_1, "rubyPGIgnoreList21_2", rubyPGIgnoreList22_1},
+	{"v22.2", "rubyPGBlockList22_2", rubyPGBlockList22_2, "rubyPGIgnoreList21_2", rubyPGIgnoreList22_2},
 }
+
+var rubyPGBlockList22_2 = rubyPGBlockList22_1
 
 var rubyPGBlockList22_1 = blocklist{
 	"Basic type mapping PG::BasicTypeMapBasedOnResult with usage of result oids for bind params encoder selection can do JSON conversions":                                                                                      "unknown",
@@ -529,6 +532,8 @@ var rubyPGBlockList20_2 = blocklist{
 	"PG::Connection deprecated forms of methods should forward send_query to send_query_params":                                                                                                     "unknown",
 	"PG::Connection deprecated forms of methods should forward exec to exec_params":                                                                                                                 "unknown",
 }
+
+var rubyPGIgnoreList22_2 = rubyPGIgnoreList22_1
 
 var rubyPGIgnoreList22_1 = rubyPGIgnoreList21_2
 

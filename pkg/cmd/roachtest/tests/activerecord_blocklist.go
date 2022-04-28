@@ -15,6 +15,7 @@ var activeRecordBlocklists = blocklistsForVersion{
 	{"v21.1", "activeRecordBlockList21_1", activeRecordBlockList21_1, "activeRecordIgnoreList21_1", activeRecordIgnoreList21_1},
 	{"v21.2", "activeRecordBlockList21_2", activeRecordBlockList21_2, "activeRecordIgnoreList21_2", activeRecordIgnoreList21_2},
 	{"v22.1", "activeRecordBlockList22_1", activeRecordBlockList22_1, "activeRecordIgnoreList22_1", activeRecordIgnoreList22_1},
+	{"v22.2", "activeRecordBlockList22_2", activeRecordBlockList22_2, "activeRecordIgnoreList22_2", activeRecordIgnoreList22_2},
 }
 
 // These are lists of known activerecord test errors and failures.
@@ -28,6 +29,8 @@ var activeRecordBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var activeRecordBlockList22_2 = blocklist{}
+
 var activeRecordBlockList22_1 = blocklist{}
 
 var activeRecordBlockList21_2 = blocklist{}
@@ -35,6 +38,8 @@ var activeRecordBlockList21_2 = blocklist{}
 var activeRecordBlockList21_1 = blocklist{}
 
 var activeRecordBlockList20_2 = blocklist{}
+
+var activeRecordIgnoreList22_2 = activeRecordIgnoreList22_1
 
 var activeRecordIgnoreList22_1 = blocklist{
 	"CockroachDB::PostgresqlIntervalTest#test_interval_type":               "flaky",
