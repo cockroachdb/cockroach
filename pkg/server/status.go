@@ -226,10 +226,10 @@ func (b *baseStatusServer) getLocalSessions(
 			// Remove queries with constants if user doesn't have correct privileges.
 			// Note that users can have both VIEWACTIVITYREDACTED and VIEWACTIVITY,
 			// with the former taking precedence.
-			for _, query := range session.ActiveQueries {
-				query.Sql = ""
+			for idx := range session.ActiveQueries {
+				session.ActiveQueries[idx].Sql = session.ActiveQueries[idx].SqlNoConstants
 			}
-			session.LastActiveQuery = ""
+			session.LastActiveQuery = session.LastActiveQueryNoConstants
 		}
 
 		userSessions = append(userSessions, session)
