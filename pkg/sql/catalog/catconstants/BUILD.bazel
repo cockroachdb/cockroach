@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "catconstants",
@@ -9,8 +10,11 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/keys",
-        "//pkg/settings",
-    ],
+)
+
+disallowed_imports_test(
+    "catconstants",
+    # Don't allow this package to import anything in the repo; it's just
+    # constants.
+    disallowed_prefixes = ["pkg/"],
 )
