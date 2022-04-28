@@ -188,7 +188,7 @@ func TestSortChunks(t *testing.T) {
 
 	for _, tc := range sortChunksTestCases {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen)
+			return NewSortChunks(testAllocator, testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen)
 		})
 	}
 }
@@ -230,7 +230,7 @@ func TestSortChunksRandomized(t *testing.T) {
 				sort.Slice(expected, less(expected, ordCols))
 
 				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{sortedTups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen)
+					return NewSortChunks(testAllocator, testAllocator, input[0], typs[:nCols], ordCols, matchLen)
 				})
 			}
 		}
@@ -243,7 +243,9 @@ func BenchmarkSortChunks(b *testing.B) {
 	ctx := context.Background()
 
 	sorterConstructors := []func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.Ordering_Column, int) (colexecop.Operator, error){
-		NewSortChunks,
+		func(allocator *colmem.Allocator, input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, matchLen int) (colexecop.Operator, error) {
+			return NewSortChunks(allocator, allocator, input, inputTypes, orderingCols, matchLen)
+		},
 		func(allocator *colmem.Allocator, input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, _ int) (colexecop.Operator, error) {
 			return NewSorter(allocator, input, inputTypes, orderingCols)
 		},

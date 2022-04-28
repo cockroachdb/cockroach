@@ -208,7 +208,7 @@ func TestDistinct(t *testing.T) {
 				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
 					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						return newPartiallyOrderedDistinct(
-							testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs,
+							testAllocator, testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs,
 						)
 					})
 			}
@@ -386,7 +386,7 @@ func BenchmarkDistinct(b *testing.B) {
 			return NewUnorderedDistinct(allocator, input, distinctCols, typs), nil
 		},
 		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
-			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
+			return newPartiallyOrderedDistinct(allocator, allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
 		},
 		func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error) {
 			return colexecbase.NewOrderedDistinct(input, distinctCols, typs)
