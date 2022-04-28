@@ -13,17 +13,17 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -117,8 +117,8 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		// See https://github.com/cockroachdb/cockroach/issues/57741
 		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
-		owner, err := username.FromRoleSpec(
-			params.SessionData(), security.UsernameValidation, t.Owner,
+		owner, err := decodeusername.FromRoleSpec(
+			params.SessionData(), username.UsernameValidation, t.Owner,
 		)
 		if err != nil {
 			return err
@@ -398,7 +398,7 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 }
 
 func (p *planner) alterTypeOwner(
-	ctx context.Context, n *alterTypeNode, newOwner security.SQLUsername,
+	ctx context.Context, n *alterTypeNode, newOwner username.SQLUsername,
 ) error {
 	typeDesc := n.desc
 	oldOwner := typeDesc.GetPrivileges().Owner()
@@ -451,7 +451,7 @@ func (p *planner) setNewTypeOwner(
 	arrayTypeDesc *typedesc.Mutable,
 	typeName tree.TypeName,
 	arrayTypeName tree.TypeName,
-	newOwner security.SQLUsername,
+	newOwner username.SQLUsername,
 ) error {
 	privs := typeDesc.GetPrivileges()
 	privs.SetOwner(newOwner)

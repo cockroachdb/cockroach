@@ -15,10 +15,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/username"
 )
 
 // ShowRoleGrants returns role membership details for the specified roles and grantees.
@@ -36,8 +36,8 @@ SELECT role AS role_name,
 
 	if n.Roles != nil {
 		var roles []string
-		sqlUsernames, err := username.FromRoleSpecList(
-			d.evalCtx.SessionData(), security.UsernameValidation, n.Roles,
+		sqlUsernames, err := decodeusername.FromRoleSpecList(
+			d.evalCtx.SessionData(), username.UsernameValidation, n.Roles,
 		)
 		if err != nil {
 			return nil, err
@@ -58,8 +58,8 @@ SELECT role AS role_name,
 		}
 
 		var grantees []string
-		granteeSQLUsernames, err := username.FromRoleSpecList(
-			d.evalCtx.SessionData(), security.UsernameValidation, n.Grantees,
+		granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
+			d.evalCtx.SessionData(), username.UsernameValidation, n.Grantees,
 		)
 		if err != nil {
 			return nil, err

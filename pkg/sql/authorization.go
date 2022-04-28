@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -50,7 +50,7 @@ type MembershipCache struct {
 	tableVersion descpb.DescriptorVersion
 	boundAccount mon.BoundAccount
 	// userCache is a mapping from username to userRoleMembership.
-	userCache map[security.SQLUsername]userRoleMembership
+	userCache map[username.SQLUsername]userRoleMembership
 	// populateCacheGroup ensures that there is at most one request in-flight
 	// for each key.
 	populateCacheGroup singleflight.Group
@@ -66,13 +66,13 @@ func NewMembershipCache(account mon.BoundAccount, stopper *stop.Stopper) *Member
 }
 
 // userRoleMembership is a mapping of "rolename" -> "with admin option".
-type userRoleMembership map[security.SQLUsername]bool
+type userRoleMembership map[username.SQLUsername]bool
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
-		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user security.SQLUsername,
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user username.SQLUsername,
 	) error
 
 	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
@@ -88,7 +88,7 @@ type AuthorizationAccessor interface {
 	// (false, nil) means that the user has NO admin role
 	// (false, err) means that there was an error running the query on
 	// the `system.users` table
-	UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error)
+	UserHasAdminRole(ctx context.Context, user username.SQLUsername) (bool, error)
 
 	// HasAdminRole checks if the current session's user has admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
@@ -100,7 +100,7 @@ type AuthorizationAccessor interface {
 
 	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
 	// of and returns a map of role -> isAdmin.
-	MemberOfWithAdminOption(ctx context.Context, member security.SQLUsername) (map[security.SQLUsername]bool, error)
+	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
 
 	// HasRoleOption converts the roleoption to its SQL column name and checks if
 	// the user belongs to a role where the option has value true. Requires a
@@ -120,7 +120,7 @@ func (p *planner) CheckPrivilegeForUser(
 	ctx context.Context,
 	descriptor catalog.Descriptor,
 	privilege privilege.Kind,
-	user security.SQLUsername,
+	user username.SQLUsername,
 ) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
@@ -139,11 +139,11 @@ func (p *planner) CheckPrivilegeForUser(
 	privs := descriptor.GetPrivileges()
 
 	// Check if the 'public' pseudo-role has privileges.
-	if privs.CheckPrivilege(security.PublicRoleName(), privilege) {
+	if privs.CheckPrivilege(username.PublicRoleName(), privilege) {
 		return nil
 	}
 
-	hasPriv, err := p.checkRolePredicate(ctx, user, func(role security.SQLUsername) bool {
+	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) bool {
 		return IsOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
 	})
 	if err != nil {
@@ -176,7 +176,7 @@ func (p *planner) CheckGrantOptionsForUser(
 	ctx context.Context,
 	descriptor catalog.Descriptor,
 	privList privilege.List,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	isGrant bool,
 ) error {
 	// Always allow the command to go through if performed by a superuser or the
@@ -188,7 +188,7 @@ func (p *planner) CheckGrantOptionsForUser(
 	}
 
 	privs := descriptor.GetPrivileges()
-	hasPriv, err := p.checkRolePredicate(ctx, user, func(role security.SQLUsername) bool {
+	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) bool {
 		return IsOwner(descriptor, role) || privs.CheckGrantOptions(role, privList)
 	})
 	if err != nil {
@@ -214,25 +214,25 @@ func (p *planner) CheckGrantOptionsForUser(
 	)
 }
 
-func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {
+func getOwnerOfDesc(desc catalog.Descriptor) username.SQLUsername {
 	// Descriptors created prior to 20.2 do not have owners set.
 	owner := desc.GetPrivileges().Owner()
 	if owner.Undefined() {
 		// If the descriptor is ownerless and the descriptor is part of the system db,
 		// node is the owner.
 		if catalog.IsSystemDescriptor(desc) {
-			owner = security.NodeUserName()
+			owner = username.NodeUserName()
 		} else {
 			// This check is redundant in this case since admin already has privilege
 			// on all non-system objects.
-			owner = security.AdminRoleName()
+			owner = username.AdminRoleName()
 		}
 	}
 	return owner
 }
 
 // IsOwner returns if the role has ownership on the descriptor.
-func IsOwner(desc catalog.Descriptor, role security.SQLUsername) bool {
+func IsOwner(desc catalog.Descriptor, role username.SQLUsername) bool {
 	return role == getOwnerOfDesc(desc)
 }
 
@@ -243,7 +243,7 @@ func IsOwner(desc catalog.Descriptor, role security.SQLUsername) bool {
 func (p *planner) HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error) {
 	user := p.SessionData().User()
 
-	return p.checkRolePredicate(ctx, user, func(role security.SQLUsername) bool {
+	return p.checkRolePredicate(ctx, user, func(role username.SQLUsername) bool {
 		return IsOwner(descriptor, role)
 	})
 }
@@ -251,7 +251,7 @@ func (p *planner) HasOwnership(ctx context.Context, descriptor catalog.Descripto
 // checkRolePredicate checks if the predicate is true for the user or
 // any roles the user is a member of.
 func (p *planner) checkRolePredicate(
-	ctx context.Context, user security.SQLUsername, predicate func(role security.SQLUsername) bool,
+	ctx context.Context, user username.SQLUsername, predicate func(role username.SQLUsername) bool,
 ) (bool, error) {
 	if ok := predicate(user); ok {
 		return ok, nil
@@ -293,7 +293,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 	}
 
 	// Check if 'public' has privileges.
-	if privs.AnyPrivilege(security.PublicRoleName()) {
+	if privs.AnyPrivilege(username.PublicRoleName()) {
 		return nil
 	}
 
@@ -317,7 +317,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 
 // UserHasAdminRole implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
-func (p *planner) UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error) {
+func (p *planner) UserHasAdminRole(ctx context.Context, user username.SQLUsername) (bool, error) {
 	if user.Undefined() {
 		return false, errors.AssertionFailedf("empty user")
 	}
@@ -342,7 +342,7 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user security.SQLUsernam
 	}
 
 	// Check is 'user' is a member of role 'admin'.
-	if _, ok := memberOf[security.AdminRoleName()]; ok {
+	if _, ok := memberOf[username.AdminRoleName()]; ok {
 		return true, nil
 	}
 
@@ -374,8 +374,8 @@ func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 // MemberOfWithAdminOption is a wrapper around the MemberOfWithAdminOption
 // method.
 func (p *planner) MemberOfWithAdminOption(
-	ctx context.Context, member security.SQLUsername,
-) (map[security.SQLUsername]bool, error) {
+	ctx context.Context, member username.SQLUsername,
+) (map[username.SQLUsername]bool, error) {
 	return MemberOfWithAdminOption(
 		ctx,
 		p.execCfg,
@@ -396,8 +396,8 @@ func MemberOfWithAdminOption(
 	ie sqlutil.InternalExecutor,
 	descsCol *descs.Collection,
 	txn *kv.Txn,
-	member security.SQLUsername,
-) (map[security.SQLUsername]bool, error) {
+	member username.SQLUsername,
+) (map[username.SQLUsername]bool, error) {
 	if txn == nil || !txn.IsOpen() {
 		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
 	}
@@ -430,7 +430,7 @@ func MemberOfWithAdminOption(
 			// If the cache is based on an old table version, then update version and
 			// drop the map.
 			roleMembersCache.tableVersion = tableVersion
-			roleMembersCache.userCache = make(map[security.SQLUsername]userRoleMembership)
+			roleMembersCache.userCache = make(map[username.SQLUsername]userRoleMembership)
 			roleMembersCache.boundAccount.Empty(ctx)
 		} else if roleMembersCache.tableVersion > tableVersion {
 			// If the cache is based on a newer table version, then this transaction
@@ -465,13 +465,13 @@ func MemberOfWithAdminOption(
 			)
 		},
 	)
-	var memberships map[security.SQLUsername]bool
+	var memberships map[username.SQLUsername]bool
 	select {
 	case res := <-ch:
 		if res.Err != nil {
 			return nil, res.Err
 		}
-		memberships = res.Val.(map[security.SQLUsername]bool)
+		memberships = res.Val.(map[username.SQLUsername]bool)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -517,19 +517,19 @@ var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
 func resolveMemberOfWithAdminOption(
 	ctx context.Context,
-	member security.SQLUsername,
+	member username.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	singleQuery bool,
-) (map[security.SQLUsername]bool, error) {
-	ret := map[security.SQLUsername]bool{}
+) (map[username.SQLUsername]bool, error) {
+	ret := map[username.SQLUsername]bool{}
 	if singleQuery {
 		type membership struct {
-			role    security.SQLUsername
+			role    username.SQLUsername
 			isAdmin bool
 		}
-		memberToRoles := make(map[security.SQLUsername][]membership)
-		if err := forEachRoleMembership(ctx, ie, txn, func(role, member security.SQLUsername, isAdmin bool) error {
+		memberToRoles := make(map[username.SQLUsername][]membership)
+		if err := forEachRoleMembership(ctx, ie, txn, func(role, member username.SQLUsername, isAdmin bool) error {
 			memberToRoles[member] = append(memberToRoles[member], membership{role, isAdmin})
 			return nil
 		}); err != nil {
@@ -537,8 +537,8 @@ func resolveMemberOfWithAdminOption(
 		}
 
 		// Recurse through all roles associated with the member.
-		var recurse func(u security.SQLUsername)
-		recurse = func(u security.SQLUsername) {
+		var recurse func(u username.SQLUsername)
+		recurse = func(u username.SQLUsername) {
 			for _, membership := range memberToRoles[u] {
 				// If the parent role was seen before, we still might need to update
 				// the isAdmin flag for that role, but there's no need to recurse
@@ -555,8 +555,8 @@ func resolveMemberOfWithAdminOption(
 	}
 
 	// Keep track of members we looked up.
-	visited := map[security.SQLUsername]struct{}{}
-	toVisit := []security.SQLUsername{member}
+	visited := map[username.SQLUsername]struct{}{}
+	toVisit := []username.SQLUsername{member}
 	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
 
 	for len(toVisit) > 0 {
@@ -582,7 +582,7 @@ func resolveMemberOfWithAdminOption(
 			isAdmin := row[1].(*tree.DBool)
 
 			// system.role_members stores pre-normalized usernames.
-			role := security.MakeSQLUsernameFromPreNormalizedString(string(roleName))
+			role := username.MakeSQLUsernameFromPreNormalizedString(string(roleName))
 			ret[role] = bool(*isAdmin)
 
 			// We need to expand this role. Let the "pop" worry about already-visited elements.
@@ -621,7 +621,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 
 	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryRowEx(
 		ctx, "has-role-option", p.Txn(),
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(
 			`SELECT 1 from %s WHERE option = '%s' AND username = $1 LIMIT 1`,
 			sessioninit.RoleOptionsTableName, roleOption.String()), user.Normalized())
@@ -690,7 +690,7 @@ func (p *planner) canCreateOnSchema(
 	ctx context.Context,
 	schemaID descpb.ID,
 	dbID descpb.ID,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	checkPublicSchema shouldCheckPublicSchema,
 ) error {
 	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
@@ -750,7 +750,7 @@ func (p *planner) canResolveDescUnderSchema(
 // has privileges to alter the owner of the object. If the current user is not
 // a superuser, it also checks that they are a member of the new owner role.
 func (p *planner) checkCanAlterToNewOwner(
-	ctx context.Context, desc catalog.MutableDescriptor, newOwner security.SQLUsername,
+	ctx context.Context, desc catalog.MutableDescriptor, newOwner username.SQLUsername,
 ) error {
 	// Make sure the newOwner exists.
 	roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), newOwner)

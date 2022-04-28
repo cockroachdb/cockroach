@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1810,7 +1810,7 @@ func (t *logicTest) newCluster(
 
 		// Open a connection to a tenant to set any cluster settings specified
 		// by the test config.
-		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(security.RootUser))
+		pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(username.RootUser))
 		defer cleanup()
 		if params.ServerArgs.Insecure {
 			pgURL.RawQuery = "sslmode=disable"
@@ -1996,7 +1996,7 @@ func (t *logicTest) newCluster(
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(security.RootUser, 0 /* nodeIdxOverride */))
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(username.RootUser, 0 /* nodeIdxOverride */))
 }
 
 // waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal waits until all tenant
@@ -2008,7 +2008,7 @@ func (t *logicTest) waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
 	// Wait until all tenant servers are aware of the setting override.
 	testutils.SucceedsSoon(t.rootT, func() error {
 		for i := 0; i < len(t.tenantAddrs); i++ {
-			pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(security.RootUser))
+			pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(username.RootUser))
 			defer cleanup()
 			if insecure {
 				pgURL.RawQuery = "sslmode=disable"
@@ -2099,7 +2099,7 @@ CREATE DATABASE test; USE test;
 		t.Fatal(err)
 	}
 
-	if _, err := t.db.Exec(fmt.Sprintf("CREATE USER %s;", security.TestUser)); err != nil {
+	if _, err := t.db.Exec(fmt.Sprintf("CREATE USER %s;", username.TestUser)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2604,7 +2604,7 @@ func (t *logicTest) maybeBackupRestore(rng *rand.Rand, config testClusterConfig)
 		strconv.FormatInt(timeutil.Now().UnixNano(), 10))
 
 	// Perform the backup and restore as root.
-	t.setUser(security.RootUser, 0 /* nodeIdxOverride */)
+	t.setUser(username.RootUser, 0 /* nodeIdxOverride */)
 
 	if _, err := t.db.Exec(fmt.Sprintf("BACKUP TO '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "backing up cluster")
@@ -2615,7 +2615,7 @@ func (t *logicTest) maybeBackupRestore(rng *rand.Rand, config testClusterConfig)
 	t.resetCluster()
 
 	// Run the restore as root.
-	t.setUser(security.RootUser, 0 /* nodeIdxOverride */)
+	t.setUser(username.RootUser, 0 /* nodeIdxOverride */)
 	if _, err := t.db.Exec(fmt.Sprintf("RESTORE FROM '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "restoring cluster")
 	}

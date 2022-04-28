@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -144,7 +145,7 @@ func createNodeInitTempCertificates(
 		serviceCtx,
 		log.Ops.Infof,
 		lifespan,
-		security.NodeUser,
+		username.NodeUser,
 		hostnames,
 		caCertPEM,
 		caKeyPEM,

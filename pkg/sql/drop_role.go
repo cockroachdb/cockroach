@@ -16,16 +16,16 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -36,7 +36,7 @@ import (
 type DropRoleNode struct {
 	ifExists  bool
 	isRole    bool
-	roleNames []security.SQLUsername
+	roleNames []username.SQLUsername
 }
 
 // DropRole represents a DROP ROLE statement.
@@ -58,8 +58,8 @@ func (p *planner) DropRoleNode(
 			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot use special role specifier in DROP ROLE")
 		}
 	}
-	roleNames, err := username.FromRoleSpecList(
-		p.SessionData(), security.UsernameCreation, roleSpecs,
+	roleNames, err := decodeusername.FromRoleSpecList(
+		p.SessionData(), username.UsernameCreation, roleSpecs,
 	)
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	// Now check whether the user still has permission or ownership on any
 	// object in the database.
 
-	userNames := make(map[security.SQLUsername][]objectAndType)
+	userNames := make(map[username.SQLUsername][]objectAndType)
 	for i, name := range n.roleNames {
 		// userNames maps users to the objects they own
 		userNames[n.roleNames[i]] = make([]objectAndType, 0)
@@ -442,7 +442,7 @@ func (*DropRoleNode) Close(context.Context) {}
 // that the users in userNames have and append them to the objectAndType array.
 func accumulateDependentDefaultPrivileges(
 	defaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor,
-	userNames map[security.SQLUsername][]objectAndType,
+	userNames map[username.SQLUsername][]objectAndType,
 	dbName string,
 	schemaName string,
 ) error {
@@ -467,7 +467,7 @@ func addDependentPrivileges(
 	object tree.AlterDefaultPrivilegesTargetObject,
 	defaultPrivs catpb.PrivilegeDescriptor,
 	role catpb.DefaultPrivilegesRole,
-	userNames map[security.SQLUsername][]objectAndType,
+	userNames map[username.SQLUsername][]objectAndType,
 	dbName string,
 	schemaName string,
 ) {
@@ -490,7 +490,7 @@ func addDependentPrivileges(
 
 	createHint := func(
 		role catpb.DefaultPrivilegesRole,
-		grantee security.SQLUsername,
+		grantee username.SQLUsername,
 	) string {
 
 		roleString := "ALL ROLES"

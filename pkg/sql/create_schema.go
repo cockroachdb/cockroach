@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -32,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -55,8 +55,8 @@ func CreateUserDefinedSchemaDescriptor(
 	db catalog.DatabaseDescriptor,
 	allocateID bool,
 ) (*schemadesc.Mutable, *catpb.PrivilegeDescriptor, error) {
-	authRole, err := username.FromRoleSpec(
-		sessionData, security.UsernameValidation, n.AuthRole,
+	authRole, err := decodeusername.FromRoleSpec(
+		sessionData, username.UsernameValidation, n.AuthRole,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -135,7 +135,7 @@ func CreateSchemaDescriptorWithPrivileges(
 	codec keys.SQLCodec,
 	db catalog.DatabaseDescriptor,
 	schemaName string,
-	user, owner security.SQLUsername,
+	user, owner username.SQLUsername,
 	allocateID bool,
 ) (*schemadesc.Mutable, *catpb.PrivilegeDescriptor, error) {
 	// Create the ID.

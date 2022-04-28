@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -21,18 +21,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/errors"
 )
 
 // ReassignOwnedByNode represents a REASSIGN OWNED BY <role(s)> TO <role> statement.
 type reassignOwnedByNode struct {
 	n                  *tree.ReassignOwnedBy
-	normalizedOldRoles []security.SQLUsername
+	normalizedOldRoles []username.SQLUsername
 }
 
 func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) (planNode, error) {
@@ -44,8 +44,8 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 		return nil, err
 	}
 
-	normalizedOldRoles, err := username.FromRoleSpecList(
-		p.SessionData(), security.UsernameValidation, n.OldRoles,
+	normalizedOldRoles, err := decodeusername.FromRoleSpecList(
+		p.SessionData(), username.UsernameValidation, n.OldRoles,
 	)
 	if err != nil {
 		return nil, err
@@ -62,8 +62,8 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", oldRole)
 		}
 	}
-	newRole, err := username.FromRoleSpec(
-		p.SessionData(), security.UsernameValidation, n.NewRole,
+	newRole, err := decodeusername.FromRoleSpec(
+		p.SessionData(), username.UsernameValidation, n.NewRole,
 	)
 	if err != nil {
 		return nil, err
@@ -178,8 +178,8 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	if err != nil {
 		return err
 	}
-	owner, err := username.FromRoleSpec(
-		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+	owner, err := decodeusername.FromRoleSpec(
+		params.p.SessionData(), username.UsernameValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
@@ -204,8 +204,8 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 	if err != nil {
 		return err
 	}
-	owner, err := username.FromRoleSpec(
-		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+	owner, err := decodeusername.FromRoleSpec(
+		params.p.SessionData(), username.UsernameValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
@@ -236,8 +236,8 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 		return err
 	}
 
-	owner, err := username.FromRoleSpec(
-		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+	owner, err := decodeusername.FromRoleSpec(
+		params.p.SessionData(), username.UsernameValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
@@ -276,8 +276,8 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 		return err
 	}
 
-	owner, err := username.FromRoleSpec(
-		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+	owner, err := decodeusername.FromRoleSpec(
+		params.p.SessionData(), username.UsernameValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err

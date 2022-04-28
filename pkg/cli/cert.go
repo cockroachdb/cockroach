@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -164,7 +165,7 @@ Creation fails if the CA expiration time is before the desired certificate expir
 // TODO(marc): there is currently no way to specify which CA cert to use if more
 // than one if present.
 func runCreateClientCert(cmd *cobra.Command, args []string) error {
-	username, err := security.MakeSQLUsernameFromUserInput(args[0], security.UsernameCreation)
+	username, err := username.MakeSQLUsernameFromUserInput(args[0], username.UsernameCreation)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate client certificate and key")
 	}

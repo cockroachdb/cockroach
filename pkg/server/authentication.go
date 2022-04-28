@@ -23,8 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -146,7 +146,7 @@ func (s *authenticationServer) UserLogin(
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := security.MakeSQLUsernameFromUserInput(req.Username, security.UsernameValidation)
+	username, _ := username.MakeSQLUsernameFromUserInput(req.Username, username.UsernameValidation)
 
 	// Verify the provided username/password pair.
 	verified, expired, err := s.verifyPasswordDBConsole(ctx, username, req.Password)
@@ -211,7 +211,7 @@ func (s *authenticationServer) demoLogin(w http.ResponseWriter, req *http.Reques
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := security.MakeSQLUsernameFromUserInput(userInput, security.UsernameValidation)
+	username, _ := username.MakeSQLUsernameFromUserInput(userInput, username.UsernameValidation)
 	// Verify the provided username/password pair.
 	verified, expired, err := s.verifyPasswordDBConsole(ctx, username, password)
 	if err != nil {
@@ -256,7 +256,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
+	username, _ := username.MakeSQLUsernameFromUserInput(reqUsername, username.UsernameValidation)
 
 	exists, _, canLoginDBConsole, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
@@ -280,7 +280,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 //
 // The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) createSessionFor(
-	ctx context.Context, username security.SQLUsername,
+	ctx context.Context, username username.SQLUsername,
 ) (*http.Cookie, error) {
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := s.newAuthSession(ctx, username)
@@ -323,7 +323,7 @@ func (s *authenticationServer) UserLogout(
 		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionID,
 	); err != nil {
@@ -373,7 +373,7 @@ WHERE id = $1`
 		ctx,
 		"lookup-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		sessionQuery, cookie.ID)
 	if row == nil || err != nil {
 		return false, "", err
@@ -421,7 +421,7 @@ WHERE id = $1`
 // The caller is responsible for ensuring that the username is normalized.
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) verifyPasswordDBConsole(
-	ctx context.Context, username security.SQLUsername, passwordStr string,
+	ctx context.Context, username username.SQLUsername, passwordStr string,
 ) (valid bool, expired bool, err error) {
 	exists, _, canLoginDBConsole, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
@@ -480,7 +480,7 @@ func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
 //
 // The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) newAuthSession(
-	ctx context.Context, username security.SQLUsername,
+	ctx context.Context, username username.SQLUsername,
 ) (int64, []byte, error) {
 	secret, hashedSecret, err := CreateAuthSecret()
 	if err != nil {
@@ -500,7 +500,7 @@ RETURNING id
 		ctx,
 		"create-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		insertSessionStmt,
 		hashedSecret,
 		username.Normalized(),

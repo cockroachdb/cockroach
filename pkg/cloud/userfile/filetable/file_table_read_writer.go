@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -49,10 +49,10 @@ type FileToTableExecutorRows struct {
 // SQL query executor used by the FileToTableSystem
 type FileToTableSystemExecutor interface {
 	Query(ctx context.Context, opName, query string,
-		username security.SQLUsername,
+		username username.SQLUsername,
 		qargs ...interface{}) (*FileToTableExecutorRows, error)
 	Exec(ctx context.Context, opName, query string,
-		username security.SQLUsername,
+		username username.SQLUsername,
 		qargs ...interface{}) error
 }
 
@@ -75,7 +75,7 @@ func MakeInternalFileToTableExecutor(
 
 // Query implements the FileToTableSystemExecutor interface.
 func (i *InternalFileToTableExecutor) Query(
-	ctx context.Context, opName, query string, username security.SQLUsername, qargs ...interface{},
+	ctx context.Context, opName, query string, username username.SQLUsername, qargs ...interface{},
 ) (*FileToTableExecutorRows, error) {
 	result := FileToTableExecutorRows{}
 	var err error
@@ -89,7 +89,7 @@ func (i *InternalFileToTableExecutor) Query(
 
 // Exec implements the FileToTableSystemExecutor interface.
 func (i *InternalFileToTableExecutor) Exec(
-	ctx context.Context, opName, query string, username security.SQLUsername, qargs ...interface{},
+	ctx context.Context, opName, query string, username username.SQLUsername, qargs ...interface{},
 ) error {
 	_, err := i.ie.ExecEx(ctx, opName, nil,
 		sessiondata.InternalExecutorOverride{User: username}, query, qargs...)
@@ -112,7 +112,7 @@ func MakeSQLConnFileToTableExecutor(executor cloud.SQLConnI) *SQLConnFileToTable
 
 // Query implements the FileToTableSystemExecutor interface.
 func (i *SQLConnFileToTableExecutor) Query(
-	ctx context.Context, _, query string, _ security.SQLUsername, qargs ...interface{},
+	ctx context.Context, _, query string, _ username.SQLUsername, qargs ...interface{},
 ) (*FileToTableExecutorRows, error) {
 	result := FileToTableExecutorRows{}
 
@@ -136,7 +136,7 @@ func (i *SQLConnFileToTableExecutor) Query(
 
 // Exec implements the FileToTableSystemExecutor interface.
 func (i *SQLConnFileToTableExecutor) Exec(
-	ctx context.Context, _, query string, _ security.SQLUsername, qargs ...interface{},
+	ctx context.Context, _, query string, _ username.SQLUsername, qargs ...interface{},
 ) error {
 	argVals := make([]driver.NamedValue, len(qargs))
 	for i, qarg := range qargs {
@@ -162,7 +162,7 @@ func (i *SQLConnFileToTableExecutor) Exec(
 type FileToTableSystem struct {
 	qualifiedTableName string
 	executor           FileToTableSystemExecutor
-	username           security.SQLUsername
+	username           username.SQLUsername
 }
 
 // FileTable which contains records for every uploaded file.
@@ -239,7 +239,7 @@ func NewFileToTableSystem(
 	ctx context.Context,
 	qualifiedTableName string,
 	executor FileToTableSystemExecutor,
-	username security.SQLUsername,
+	username username.SQLUsername,
 ) (*FileToTableSystem, error) {
 	// Check the qualifiedTableName is parseable, so that we can return a useful
 	// error preemptively.
@@ -510,7 +510,7 @@ func newChunkWriter(
 	ctx context.Context,
 	chunkSize int,
 	filename string,
-	username security.SQLUsername,
+	username username.SQLUsername,
 	fileTableName, payloadTableName string,
 	ie sqlutil.InternalExecutor,
 	db *kv.DB,
@@ -645,7 +645,7 @@ func (r *reader) Read(p []byte) (int, error) {
 func newFileTableReader(
 	ctx context.Context,
 	filename string,
-	username security.SQLUsername,
+	username username.SQLUsername,
 	fileTableName, payloadTableName string,
 	ie FileToTableSystemExecutor,
 	offset int64,
@@ -812,7 +812,7 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 		`SELECT table_name FROM [SHOW TABLES FROM %s] WHERE table_name=$1 OR table_name=$2`,
 		databaseSchema)
 	numRows, err := ie.ExecEx(ctx, "tables-exist", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		tableExistenceQuery, fileTableName, payloadTableName)
 	if err != nil {
 		return false, err
@@ -865,7 +865,7 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
 		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username.SQLIdentifier())
 	_, err := ie.ExecEx(ctx, "grant-user-file-payload-table-access", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		grantQuery)
 	if err != nil {
 		return errors.Wrap(err, "failed to grant access privileges to file and payload tables")
@@ -883,18 +883,18 @@ func (f *FileToTableSystem) revokeOtherUserTablePrivileges(
 users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "username" = $1`
 	it, err := ie.QueryIteratorEx(
 		ctx, "get-users", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		getUsersQuery, f.username,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to get all the users of the cluster")
 	}
 
-	var users []security.SQLUsername
+	var users []username.SQLUsername
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
-		username := security.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(row[0])))
+		username := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(row[0])))
 		users = append(users, username)
 	}
 	if err != nil {
@@ -905,7 +905,7 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 		revokeQuery := fmt.Sprintf(`REVOKE ALL ON TABLE %s, %s FROM %s`,
 			f.GetFQFileTableName(), f.GetFQPayloadTableName(), user.SQLIdentifier())
 		_, err = ie.ExecEx(ctx, "revoke-user-privileges", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			revokeQuery)
 		if err != nil {
 			return errors.Wrap(err, "failed to revoke privileges")

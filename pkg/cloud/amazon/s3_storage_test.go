@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -35,7 +35,7 @@ import (
 )
 
 func makeS3Storage(
-	ctx context.Context, uri string, user security.SQLUsername,
+	ctx context.Context, uri string, user username.SQLUsername,
 ) (cloud.ExternalStorage, error) {
 	conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestPutS3(t *testing.T) {
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	ctx := context.Background()
-	user := security.RootUserName()
+	user := username.RootUserName()
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
 		_, err := cloud.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
 			"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
@@ -198,7 +198,7 @@ func TestPutS3Endpoint(t *testing.T) {
 	if bucket == "" {
 		skip.IgnoreLint(t, "AWS_S3_ENDPOINT_BUCKET env var must be set")
 	}
-	user := security.RootUserName()
+	user := username.RootUserName()
 
 	u := url.URL{
 		Scheme:   "s3",
@@ -275,7 +275,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	user := security.RootUserName()
+	user := username.RootUserName()
 
 	conf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
 	if err != nil {
@@ -318,7 +318,7 @@ func TestAntagonisticS3Read(t *testing.T) {
 	s3file := fmt.Sprintf(
 		"s3://%s/%s?%s=%s", bucket, "antagonistic-read",
 		cloud.AuthParam, cloud.AuthParamImplicit)
-	conf, err := cloud.ExternalStorageConfFromURI(s3file, security.RootUserName())
+	conf, err := cloud.ExternalStorageConfFromURI(s3file, username.RootUserName())
 	require.NoError(t, err)
 
 	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)

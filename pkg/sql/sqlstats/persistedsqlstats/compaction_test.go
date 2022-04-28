@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -129,7 +129,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 	firstServer := testCluster.Server(0 /* idx */)
 	firstPgURL, firstServerConnCleanup := sqlutils.PGUrl(
 		t, firstServer.ServingSQLAddr(), "CreateConnections", /* prefix */
-		url.User(security.RootUser))
+		url.User(username.RootUser))
 	defer firstServerConnCleanup()
 
 	pgFirstSQLConn, err := gosql.Open("postgres", firstPgURL.String())
@@ -153,7 +153,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 				"truncate-stmt-stats",
 				nil,
 				sessiondata.InternalExecutorOverride{
-					User: security.NodeUserName(),
+					User: username.NodeUserName(),
 				},
 				"TRUNCATE system.statement_statistics",
 			)
@@ -163,7 +163,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 				"truncate-txn-stats",
 				nil,
 				sessiondata.InternalExecutorOverride{
-					User: security.NodeUserName(),
+					User: username.NodeUserName(),
 				},
 				"TRUNCATE system.transaction_statistics",
 			)

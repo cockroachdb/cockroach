@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -280,9 +281,9 @@ func (u urlParser) setInternal(v string, warn bool) error {
 				return nil
 			}
 
-			userName := security.RootUserName()
+			userName := username.RootUserName()
 			if cliCtx.sqlConnUser != "" {
-				userName, _ = security.MakeSQLUsernameFromUserInput(cliCtx.sqlConnUser, security.UsernameValidation)
+				userName, _ = username.MakeSQLUsernameFromUserInput(cliCtx.sqlConnUser, username.UsernameValidation)
 			}
 			if err := tryCertsDir("sslrootcert", caCertPath, security.CACertFilename()); err != nil {
 				return err
@@ -352,12 +353,12 @@ func (cliCtx *cliContext) makeClientConnURL() (*pgurl.URL, error) {
 	}
 
 	// Check the structure of the username.
-	userName, err := security.MakeSQLUsernameFromUserInput(cliCtx.sqlConnUser, security.UsernameValidation)
+	userName, err := username.MakeSQLUsernameFromUserInput(cliCtx.sqlConnUser, username.UsernameValidation)
 	if err != nil {
 		return nil, err
 	}
 	if userName.Undefined() {
-		userName = security.RootUserName()
+		userName = username.RootUserName()
 	}
 
 	sCtx := rpc.MakeSecurityContext(cliCtx.Config, security.CommandTLSSettings{}, roachpb.SystemTenantID)

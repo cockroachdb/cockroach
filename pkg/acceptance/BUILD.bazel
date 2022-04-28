@@ -14,8 +14,8 @@ go_library(
         "//pkg/acceptance/cluster",
         "//pkg/base",
         "//pkg/build/bazel",
-        "//pkg/security",
         "//pkg/security/securitytest",  #keep
+        "//pkg/security/username",
         "//pkg/server",  # keep
         "//pkg/testutils",
         "//pkg/testutils/serverutils",  # keep
@@ -52,7 +52,7 @@ go_test(
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/build/bazel",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/testutils/skip",
         "//pkg/util/log",
     ],

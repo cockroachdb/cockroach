@@ -25,6 +25,7 @@ go_library(
         "//pkg/build/bazel",
         "//pkg/roachpb",
         "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util",
         "//pkg/util/envutil",

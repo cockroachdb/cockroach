@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -75,7 +75,7 @@ type backupInfoReader interface {
 		*mon.BoundAccount,
 		cloud.ExternalStorageFromURIFactory,
 		backupInfo,
-		security.SQLUsername,
+		username.SQLUsername,
 		chan<- tree.Datums,
 	) error
 	header() colinfo.ResultColumns
@@ -99,7 +99,7 @@ func (m manifestInfoReader) showBackup(
 	mem *mon.BoundAccount,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	info backupInfo,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	resultsCh chan<- tree.Datums,
 ) error {
 	var memReserved int64
@@ -153,7 +153,7 @@ func (m metadataSSTInfoReader) showBackup(
 	mem *mon.BoundAccount,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	info backupInfo,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	resultsCh chan<- tree.Datums,
 ) error {
 	filename := metadataSSTName

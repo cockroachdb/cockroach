@@ -13,7 +13,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,7 +31,7 @@ type plannerJobExecContext struct {
 
 // MakeJobExecContext makes a JobExecContext.
 func MakeJobExecContext(
-	opName string, user security.SQLUsername, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
+	opName string, user username.SQLUsername, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
 ) (JobExecContext, func()) {
 	plannerInterface, close := NewInternalPlanner(
 		opName,
@@ -58,7 +58,7 @@ func (e *plannerJobExecContext) SessionDataMutatorIterator() *sessionDataMutator
 func (e *plannerJobExecContext) ExecCfg() *ExecutorConfig        { return e.p.ExecCfg() }
 func (e *plannerJobExecContext) DistSQLPlanner() *DistSQLPlanner { return e.p.DistSQLPlanner() }
 func (e *plannerJobExecContext) LeaseMgr() *lease.Manager        { return e.p.LeaseMgr() }
-func (e *plannerJobExecContext) User() security.SQLUsername      { return e.p.User() }
+func (e *plannerJobExecContext) User() username.SQLUsername      { return e.p.User() }
 func (e *plannerJobExecContext) MigrationJobDeps() migration.JobDeps {
 	return e.p.MigrationJobDeps()
 }
@@ -84,7 +84,7 @@ type JobExecContext interface {
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
-	User() security.SQLUsername
+	User() username.SQLUsername
 	MigrationJobDeps() migration.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
 	Txn() *kv.Txn

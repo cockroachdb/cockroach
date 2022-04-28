@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -23,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -35,7 +36,7 @@ type CreateRoleNode struct {
 	ifNotExists bool
 	isRole      bool
 	roleOptions roleoption.List
-	roleName    security.SQLUsername
+	roleName    username.SQLUsername
 }
 
 // CreateRole represents a CREATE ROLE statement.
@@ -89,8 +90,8 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
-	roleName, err := username.FromRoleSpec(
-		p.SessionData(), security.UsernameCreation, roleSpec,
+	roleName, err := decodeusername.FromRoleSpec(
+		p.SessionData(), username.UsernameCreation, roleSpec,
 	)
 	if err != nil {
 		return nil, err
@@ -132,7 +133,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(`select "isRole" from %s where username = $1`, sessioninit.UsersTableName),
 		n.roleName,
 	)
@@ -194,7 +195,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			params.ctx,
 			opName,
 			params.p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			stmt,
 			qargs...,
 		)

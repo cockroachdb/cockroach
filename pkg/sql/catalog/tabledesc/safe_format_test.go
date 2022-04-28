@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -273,7 +273,7 @@ func TestSafeMessage(t *testing.T) {
 				tc.parentID,
 				tc.id,
 				tc.schema,
-				catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+				catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
 			)
 			require.NoError(t, err)
 			var td catalog.TableDescriptor

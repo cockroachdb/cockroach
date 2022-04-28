@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/catpb",
@@ -31,7 +31,7 @@ go_test(
     embed = [":systemschema"],
     deps = [
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",

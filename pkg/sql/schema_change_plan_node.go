@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -192,7 +192,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 
 func newSchemaChangerTxnRunDependencies(
 	sessionData *sessiondata.SessionData,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
 	descriptors *descs.Collection,

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1176,14 +1177,14 @@ var varGen = map[string]sessionVar{
 	`role`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			if evalCtx.SessionData().SessionUserProto == "" {
-				return security.NoneRole, nil
+				return username.NoneRole, nil
 			}
 			return evalCtx.SessionData().User().Normalized(), nil
 		},
 		// SetWithPlanner is defined in init(), as otherwise there is a circular
 		// initialization loop with the planner.
 		GlobalDefault: func(sv *settings.Values) string {
-			return security.NoneRole
+			return username.NoneRole
 		},
 	},
 
@@ -2102,7 +2103,7 @@ func init() {
 		{
 			name: `role`,
 			fn: func(ctx context.Context, p *planner, local bool, s string) error {
-				u, err := security.MakeSQLUsernameFromUserInput(s, security.UsernameValidation)
+				u, err := username.MakeSQLUsernameFromUserInput(s, username.UsernameValidation)
 				if err != nil {
 					return err
 				}

@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
@@ -135,7 +135,7 @@ func (c *Conf) Empty() bool {
 // are rules which generate identical mappings, only the first one will
 // be returned. That is, the returned list will be deduplicated,
 // preferring the first instance of any given username.
-func (c *Conf) Map(mapName, systemIdentity string) ([]security.SQLUsername, error) {
+func (c *Conf) Map(mapName, systemIdentity string) ([]username.SQLUsername, error) {
 	if c.data == nil {
 		return nil, nil
 	}
@@ -143,14 +143,14 @@ func (c *Conf) Map(mapName, systemIdentity string) ([]security.SQLUsername, erro
 	if elts == nil {
 		return nil, nil
 	}
-	var names []security.SQLUsername
+	var names []username.SQLUsername
 	seen := make(map[string]bool)
 	for _, elt := range elts {
 		if n := elt.substitute(systemIdentity); n != "" && !seen[n] {
 			// We're returning this as a for-validation username since a
 			// pattern-based mapping could still result in invalid characters
 			// being incorporated into the input.
-			u, err := security.MakeSQLUsernameFromUserInput(n, security.UsernameValidation)
+			u, err := username.MakeSQLUsernameFromUserInput(n, username.UsernameValidation)
 			if err != nil {
 				return nil, err
 			}

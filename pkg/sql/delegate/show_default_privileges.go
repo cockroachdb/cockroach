@@ -13,10 +13,10 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/username"
 )
 
 // delegateShowDefaultPrivileges implements SHOW DEFAULT PRIVILEGES
@@ -43,8 +43,8 @@ func (d *delegator) delegateShowDefaultPrivileges(
 	if n.ForAllRoles {
 		query += " AND for_all_roles=true"
 	} else if len(n.Roles) > 0 {
-		targetRoles, err := username.FromRoleSpecList(
-			d.evalCtx.SessionData(), security.UsernameValidation, n.Roles,
+		targetRoles, err := decodeusername.FromRoleSpecList(
+			d.evalCtx.SessionData(), username.UsernameValidation, n.Roles,
 		)
 		if err != nil {
 			return nil, err

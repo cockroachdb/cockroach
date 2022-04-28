@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -278,7 +278,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		p, cleanup := NewInternalPlanner(
 			desc,
 			txn,
-			security.RootUserName(),
+			username.RootUserName(),
 			&MemoryMetrics{},
 			sc.execCfg,
 			sessiondatapb.SessionData{},
@@ -567,7 +567,7 @@ func startGCJob(
 	ctx context.Context,
 	db *kv.DB,
 	jobRegistry *jobs.Registry,
-	username security.SQLUsername,
+	username username.SQLUsername,
 	schemaChangeDescription string,
 	details jobspb.SchemaChangeGCDetails,
 ) error {
@@ -2244,7 +2244,7 @@ func (sc *SchemaChanger) reverseMutation(
 // CreateGCJobRecord creates the job record for a GC job, setting some
 // properties which are common for all GC jobs.
 func CreateGCJobRecord(
-	originalDescription string, username security.SQLUsername, details jobspb.SchemaChangeGCDetails,
+	originalDescription string, username username.SQLUsername, details jobspb.SchemaChangeGCDetails,
 ) jobs.Record {
 	descriptorIDs := make([]descpb.ID, 0)
 	if len(details.Indexes) > 0 {
@@ -2483,14 +2483,14 @@ func NewFakeSessionData(sv *settings.Values) *sessiondata.SessionData {
 			// function, takes arguments which might be impure (so it can't always be
 			// pre-evaluated).
 			Database:      "",
-			UserProto:     security.NodeUserName().EncodeProto(),
+			UserProto:     username.NodeUserName().EncodeProto(),
 			VectorizeMode: sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv)),
 			Internal:      true,
 		},
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 			DistSQLMode: sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
 		},
-		SearchPath:    sessiondata.DefaultSearchPathForUser(security.NodeUserName()),
+		SearchPath:    sessiondata.DefaultSearchPathForUser(username.NodeUserName()),
 		SequenceState: sessiondata.NewSequenceState(),
 		Location:      time.UTC,
 	}

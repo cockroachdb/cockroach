@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package security_test
+package username_test
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -44,7 +44,7 @@ func TestUserName(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		username, err := security.MakeSQLUsernameFromUserInput(tc.username, security.UsernameCreation)
+		username, err := username.MakeSQLUsernameFromUserInput(tc.username, username.UsernameCreation)
 		if !testutils.IsError(err, tc.err) {
 			t.Errorf("%q: expected %q, got %v", tc.username, tc.err, err)
 			continue

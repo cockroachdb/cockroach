@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -250,7 +250,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		},
 	}
 
-	storage, err := cloud.ExternalStorageConfFromURI("nodelocal://0/foo", security.RootUserName())
+	storage, err := cloud.ExternalStorageConfFromURI("nodelocal://0/foo", username.RootUserName())
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

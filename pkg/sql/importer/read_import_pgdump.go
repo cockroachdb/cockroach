@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -307,7 +307,7 @@ func createPostgresSequences(
 	createSeq map[schemaAndTableName]*tree.CreateSequence,
 	fks fkHandler,
 	walltime int64,
-	owner security.SQLUsername,
+	owner username.SQLUsername,
 	schemaNameToDesc map[string]*schemadesc.Mutable,
 	execCfg *sql.ExecutorConfig,
 ) ([]*tabledesc.Mutable, error) {
@@ -487,7 +487,7 @@ func readPostgresCreateTable(
 	walltime int64,
 	fks fkHandler,
 	max int,
-	owner security.SQLUsername,
+	owner username.SQLUsername,
 	unsupportedStmtLogger *unsupportedStmtLogger,
 ) ([]*tabledesc.Mutable, []*schemadesc.Mutable, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
@@ -1036,7 +1036,7 @@ func (m *pgDumpReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user security.SQLUsername,
+	user username.SQLUsername,
 ) error {
 	// Setup logger to handle unsupported DML statements seen in the PGDUMP file.
 	m.unsupportedStmtLogger = makeUnsupportedStmtLogger(ctx, user,

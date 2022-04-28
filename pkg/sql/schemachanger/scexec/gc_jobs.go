@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -146,7 +146,7 @@ func (gj gcJobs) makeRecords(
 			addTableToJob(&s, &j, gj.tables[i])
 		}
 		gcJobRecords = append(gcJobRecords,
-			createGCJobRecord(mkJobID(), formatStatements(&s), security.NodeUserName(), j))
+			createGCJobRecord(mkJobID(), formatStatements(&s), username.NodeUserName(), j))
 	}
 	{
 		var j jobspb.SchemaChangeGCDetails
@@ -159,7 +159,7 @@ func (gj gcJobs) makeRecords(
 		}
 		if len(j.Tables) > 0 {
 			gcJobRecords = append(gcJobRecords,
-				createGCJobRecord(mkJobID(), formatStatements(&s), security.NodeUserName(), j))
+				createGCJobRecord(mkJobID(), formatStatements(&s), username.NodeUserName(), j))
 		}
 	}
 	indexes := gj.indexes
@@ -186,7 +186,7 @@ func (gj gcJobs) makeRecords(
 		}
 		if len(j.Indexes) > 0 {
 			gcJobRecords = append(gcJobRecords,
-				createGCJobRecord(mkJobID(), formatStatements(&s), security.NodeUserName(), j))
+				createGCJobRecord(mkJobID(), formatStatements(&s), username.NodeUserName(), j))
 		}
 	}
 	return dbZoneConfigsToRemove, gcJobRecords
@@ -217,7 +217,7 @@ func (gj gcJobs) sort() {
 func createGCJobRecord(
 	id jobspb.JobID,
 	description string,
-	username security.SQLUsername,
+	username username.SQLUsername,
 	details jobspb.SchemaChangeGCDetails,
 ) jobs.Record {
 	descriptorIDs := make([]descpb.ID, 0)

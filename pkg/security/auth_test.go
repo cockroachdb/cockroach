@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -172,33 +173,33 @@ func TestAuthenticationHook(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer func() { _ = security.SetCertPrincipalMap(nil) }()
 
-	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
-	blahUser := security.MakeSQLUsernameFromPreNormalizedString("blah")
+	fooUser := username.MakeSQLUsernameFromPreNormalizedString("foo")
+	barUser := username.MakeSQLUsernameFromPreNormalizedString("bar")
+	blahUser := username.MakeSQLUsernameFromPreNormalizedString("blah")
 
 	testCases := []struct {
 		insecure           bool
 		tlsSpec            string
-		username           security.SQLUsername
+		username           username.SQLUsername
 		principalMap       string
 		buildHookSuccess   bool
 		publicHookSuccess  bool
 		privateHookSuccess bool
 	}{
 		// Insecure mode, empty username.
-		{true, "", security.SQLUsername{}, "", true, false, false},
+		{true, "", username.SQLUsername{}, "", true, false, false},
 		// Insecure mode, non-empty username.
 		{true, "", fooUser, "", true, true, false},
 		// Secure mode, no TLS state.
-		{false, "", security.SQLUsername{}, "", false, false, false},
+		{false, "", username.SQLUsername{}, "", false, false, false},
 		// Secure mode, bad user.
-		{false, "foo", security.NodeUserName(), "", true, false, false},
+		{false, "foo", username.NodeUserName(), "", true, false, false},
 		// Secure mode, node user.
-		{false, security.NodeUser, security.NodeUserName(), "", true, true, true},
+		{false, username.NodeUser, username.NodeUserName(), "", true, true, true},
 		// Secure mode, node cert and unrelated user.
-		{false, security.NodeUser, fooUser, "", true, false, false},
+		{false, username.NodeUser, fooUser, "", true, false, false},
 		// Secure mode, root user.
-		{false, security.RootUser, security.NodeUserName(), "", true, false, false},
+		{false, username.RootUser, username.NodeUserName(), "", true, false, false},
 		// Secure mode, tenant cert, foo user.
 		{false, "(Tenants)foo", fooUser, "", true, false, false},
 		// Secure mode, multiple cert principals.

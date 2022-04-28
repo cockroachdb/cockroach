@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -126,7 +126,7 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	{
 		pgURL, cleanup := sqlutils.PGUrl(
-			t, s.ServingSQLAddr(), "TestSessionFinishRollsBackTxn", url.User(security.RootUser))
+			t, s.ServingSQLAddr(), "TestSessionFinishRollsBackTxn", url.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -151,7 +151,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Run(state, func(t *testing.T) {
 			// Create a low-level lib/pq connection so we can close it at will.
 			pgURL, cleanupDB := sqlutils.PGUrl(
-				t, s.ServingSQLAddr(), state, url.User(security.RootUser))
+				t, s.ServingSQLAddr(), state, url.User(username.RootUser))
 			defer cleanupDB()
 			c, err := pq.Open(pgURL.String())
 			if err != nil {
@@ -477,7 +477,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	// Prepare a session with a custom application name.
 	pgURL := url.URL{
 		Scheme:   "postgres",
-		User:     url.User(security.RootUser),
+		User:     url.User(username.RootUser),
 		Host:     s.ServingSQLAddr(),
 		RawQuery: "sslmode=disable&application_name=mytest",
 	}
@@ -877,7 +877,7 @@ func TestUnqualifiedIntSizeRace(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Connect to the cluster via the PGWire client.
-	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), security.RootUser)
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), username.RootUser)
 	require.NoError(t, err)
 
 	require.NoError(t, p.SendOneLine(`Query {"String": "SET default_int_size = 8"}`))
@@ -931,7 +931,7 @@ func TestTrimSuspendedPortals(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Connect to the cluster via the PGWire client.
-	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), security.RootUser)
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), username.RootUser)
 	require.NoError(t, err)
 
 	// Setup the portal.
@@ -1435,7 +1435,7 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 		_, err := s.InternalExecutor().(*sql.InternalExecutor).ExecEx(ctx,
 			"test-internal-active-stmt-wait",
 			nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			selectQuery)
 		require.NoError(t, err, "expected internal SELECT query to be successful, but encountered an error")
 		waitChannel <- struct{}{}

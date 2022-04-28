@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -58,9 +58,9 @@ func TestAzure(t *testing.T) {
 	}
 	testSettings := cluster.MakeTestingClusterSettings()
 	cloudtestutils.CheckExportStore(t, cfg.filePath("backup-test"),
-		false, security.RootUserName(), nil, nil, testSettings)
+		false, username.RootUserName(), nil, nil, testSettings)
 	cloudtestutils.CheckListFiles(
-		t, cfg.filePath("listing-test"), security.RootUserName(), nil, nil, testSettings,
+		t, cfg.filePath("listing-test"), username.RootUserName(), nil, nil, testSettings,
 	)
 }
 
@@ -75,7 +75,7 @@ func TestAntagonisticAzureRead(t *testing.T) {
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	conf, err := cloud.ExternalStorageConfFromURI(
-		cfg.filePath("antagonistic-read"), security.RootUserName())
+		cfg.filePath("antagonistic-read"), username.RootUserName())
 	require.NoError(t, err)
 
 	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)

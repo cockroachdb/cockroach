@@ -49,7 +49,7 @@ go_test(
         "//pkg/cli/clicfg",
         "//pkg/cli/clisqlclient",
         "//pkg/cli/clisqlexec",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql/scanner",
         "//pkg/testutils/serverutils",

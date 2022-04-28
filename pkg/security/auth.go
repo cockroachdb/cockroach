@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -36,7 +37,7 @@ var certPrincipalMap struct {
 // that may have been applied to the given connection.
 type UserAuthHook func(
 	ctx context.Context,
-	systemIdentity SQLUsername,
+	systemIdentity username.SQLUsername,
 	clientConnection bool,
 ) error
 
@@ -120,7 +121,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		}
 	}
 
-	return func(ctx context.Context, systemIdentity SQLUsername, clientConnection bool) error {
+	return func(ctx context.Context, systemIdentity username.SQLUsername, clientConnection bool) error {
 		// TODO(marc): we may eventually need stricter user syntax rules.
 		if systemIdentity.Undefined() {
 			return errors.New("user is missing")
@@ -162,7 +163,7 @@ func IsTenantCertificate(cert *x509.Certificate) bool {
 func UserAuthPasswordHook(
 	insecureMode bool, passwordStr string, hashedPassword password.PasswordHash,
 ) UserAuthHook {
-	return func(ctx context.Context, systemIdentity SQLUsername, clientConnection bool) error {
+	return func(ctx context.Context, systemIdentity username.SQLUsername, clientConnection bool) error {
 		if systemIdentity.Undefined() {
 			return errors.New("user is missing")
 		}
@@ -194,7 +195,7 @@ func UserAuthPasswordHook(
 // NewErrPasswordUserAuthFailed constructs an error that represents
 // failed password authentication for a user. It should be used when
 // the password is incorrect or the user does not exist.
-func NewErrPasswordUserAuthFailed(username SQLUsername) error {
+func NewErrPasswordUserAuthFailed(username username.SQLUsername) error {
 	return &PasswordUserAuthError{errors.Newf("password authentication failed for user %s", username)}
 }
 

@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -220,7 +220,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
 		node := p.ExecCfg().NodeInfo
 
 		nodeID, _ := node.NodeID.OptionalNodeID() // zero if not available
-		dbURL, err := node.PGURL(url.User(security.RootUser))
+		dbURL, err := node.PGURL(url.User(username.RootUser))
 		if err != nil {
 			return err
 		}
@@ -605,7 +605,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
             GROUP BY s."tableID"`, statsAsOfTimeClusterMode.String(&p.ExecCfg().Settings.SV))
 		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBufferedEx(
 			ctx, "crdb-internal-statistics-table", nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			query)
 		if err != nil {
 			// This query is likely to cause errors due to SHOW TABLES being run less
@@ -807,7 +807,7 @@ CREATE TABLE crdb_internal.jobs (
 
 		it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 			ctx, "crdb-internal-jobs-table", p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			queryWithBackoff, p.execCfg.JobRegistry.RetryInitialDelay(), p.execCfg.JobRegistry.RetryMaxDelay())
 		if err != nil {
 			return nil, nil, err
@@ -883,7 +883,7 @@ CREATE TABLE crdb_internal.jobs (
 				// We filter out masked rows before we allocate all the
 				// datums. Needless allocate when not necessary.
 				ownedByAdmin := false
-				var sqlUsername security.SQLUsername
+				var sqlUsername username.SQLUsername
 				if payload != nil {
 					sqlUsername = payload.UsernameProto.Decode()
 					ownedByAdmin, err = p.UserHasAdminRole(ctx, sqlUsername)
@@ -4660,7 +4660,7 @@ func collectMarshaledJobMetadataMap(
 	query := `SELECT id, status, payload, progress FROM system.jobs`
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx, "crdb-internal-jobs-table", p.Txn(),
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		query)
 	if err != nil {
 		return nil, err
@@ -5227,7 +5227,7 @@ CREATE TABLE crdb_internal.default_privileges (
 								role,                                  // role
 								forAllRoles,                           // for_all_roles
 								tree.NewDString(tree.Types.String()),  // object_type
-								tree.NewDString(security.PublicRoleName().Normalized()), // grantee
+								tree.NewDString(username.PublicRoleName().Normalized()), // grantee
 								tree.NewDString(privilege.USAGE.String()),               // privilege_type
 							); err != nil {
 								return err
@@ -5252,7 +5252,7 @@ CREATE TABLE crdb_internal.default_privileges (
 				}
 
 				addRowsForSchema := func(defaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor, schema tree.Datum) error {
-					if err := forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+					if err := forEachRole(ctx, p, func(username username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 						role := catpb.DefaultPrivilegesRole{
 							Role: username,
 						}

@@ -22,7 +22,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
@@ -502,7 +502,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 }
 
 func userIsSuper(
-	ctx context.Context, p *planner, username security.SQLUsername,
+	ctx context.Context, p *planner, username username.SQLUsername,
 ) (tree.DBool, error) {
 	isSuper, err := p.UserHasAdminRole(ctx, username)
 	return tree.DBool(isSuper), err
@@ -515,7 +515,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 	schema: vtable.PGCatalogAuthID,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, _ tree.Datum) error {
+		return forEachRole(ctx, p, func(username username.SQLUsername, isRole bool, options roleOptions, _ tree.Datum) error {
 			isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
 			// Currently, all users and roles inherit the privileges of roles they are
 			// members of. See https://github.com/cockroachdb/cockroach/issues/69583.
@@ -568,7 +568,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRoleMembership(ctx, p.ExecCfg().InternalExecutor, p.Txn(),
-			func(roleName, memberName security.SQLUsername, isAdmin bool) error {
+			func(roleName, memberName username.SQLUsername, isAdmin bool) error {
 				return addRow(
 					h.UserOid(roleName),                 // roleid
 					h.UserOid(memberName),               // member
@@ -2052,7 +2052,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 						//
 						// TODO(ajwerner): The public schema effectively carries the privileges
 						// of the database so consider using the database's owner for public.
-						ownerOID = h.UserOid(security.MakeSQLUsernameFromPreNormalizedString("admin"))
+						ownerOID = h.UserOid(username.MakeSQLUsernameFromPreNormalizedString("admin"))
 					}
 					return addRow(
 						h.NamespaceOid(db.GetID(), sc.GetName()), // oid
@@ -2438,7 +2438,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 		// include sensitive information such as password hashes.
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+			func(username username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 				isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
 				// Currently, all users and roles inherit the privileges of roles they are
 				// members of. See https://github.com/cockroachdb/cockroach/issues/69583.
@@ -2616,14 +2616,14 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 		// entry is a signal that the system itself depends on the referenced
 		// object, and so that object must never be deleted. The columns for the
 		// dependent object contain zeroes.
-		pinnedRoles := map[string]security.SQLUsername{
-			security.RootUser:  security.RootUserName(),
-			security.AdminRole: security.AdminRoleName(),
+		pinnedRoles := map[string]username.SQLUsername{
+			username.RootUser:  username.RootUserName(),
+			username.AdminRole: username.AdminRoleName(),
 		}
 
 		// Function commonly used to add table and database dependencies.
 		addSharedDependency := func(
-			dbID *tree.DOid, classID *tree.DOid, objID *tree.DOid, refClassID *tree.DOid, user, owner security.SQLUsername,
+			dbID *tree.DOid, classID *tree.DOid, objID *tree.DOid, refClassID *tree.DOid, user, owner username.SQLUsername,
 		) error {
 			// As stated above, where pinned roles is declared: pinned roles
 			// does not have dependent objects.
@@ -3107,7 +3107,7 @@ https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+			func(username username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 				if isRole {
 					return nil
 				}
@@ -3191,7 +3191,7 @@ https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html`,
 			ctx,
 			"select-db-role-settings",
 			p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			`SELECT database_id, role_name, settings FROM system.public.database_role_settings`,
 		)
 		if err != nil {
@@ -3203,7 +3203,7 @@ https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html`,
 			roleName := tree.MustBeDString(row[1])
 			roleID := oidZero
 			if roleName != "" {
-				roleID = h.UserOid(security.MakeSQLUsernameFromPreNormalizedString(string(roleName)))
+				roleID = h.UserOid(username.MakeSQLUsernameFromPreNormalizedString(string(roleName)))
 			}
 			settings := tree.MustBeDArray(row[2])
 			if err := addRow(
@@ -3224,7 +3224,7 @@ https://www.postgresql.org/docs/13/view-pg-shadow.html`,
 	schema: vtable.PgCatalogShadow,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+		return forEachRole(ctx, p, func(username username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 			noLogin, err := options.noLogin()
 			if err != nil {
 				return err
@@ -4440,7 +4440,7 @@ func (h oidHasher) RegProc(name string) tree.Datum {
 	return h.BuiltinOid(name, &overloads[0]).AsRegProc(name)
 }
 
-func (h oidHasher) UserOid(username security.SQLUsername) *tree.DOid {
+func (h oidHasher) UserOid(username username.SQLUsername) *tree.DOid {
 	h.writeTypeTag(userTypeTag)
 	h.writeStr(username.Normalized())
 	return h.getOid()

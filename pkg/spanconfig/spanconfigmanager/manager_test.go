@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -169,7 +169,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	)
 
 	payload, err := protoutil.Marshal(&jobspb.Payload{
-		UsernameProto: security.RootUserName().EncodeProto(),
+		UsernameProto: username.RootUserName().EncodeProto(),
 		Details:       jobspb.WrapPayloadDetails(jobspb.AutoSpanConfigReconciliationDetails{}),
 	})
 	require.NoError(t, err)

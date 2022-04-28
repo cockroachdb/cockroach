@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -176,7 +177,7 @@ func (b *baseStatusServer) getLocalSessions(
 		return nil, serverError(ctx, err)
 	}
 
-	reqUsername, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
+	reqUsername, err := username.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -281,12 +282,12 @@ func findSessionByQueryID(queryID string) sessionFinder {
 // checkCancelPrivilege returns nil if the user has the necessary cancel action
 // privileges for a session. This function returns a proper gRPC error status.
 func (b *baseStatusServer) checkCancelPrivilege(
-	ctx context.Context, username security.SQLUsername, findSession sessionFinder,
+	ctx context.Context, username username.SQLUsername, findSession sessionFinder,
 ) error {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
 	// reqUser is the user who made the cancellation request.
-	var reqUser security.SQLUsername
+	var reqUser username.SQLUsername
 	{
 		sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
 		if err != nil {
@@ -316,7 +317,7 @@ func (b *baseStatusServer) checkCancelPrivilege(
 			return serverError(ctx, err)
 		}
 
-		sessionUser := security.MakeSQLUsernameFromPreNormalizedString(session.Username)
+		sessionUser := username.MakeSQLUsernameFromPreNormalizedString(session.Username)
 		if sessionUser != reqUser {
 			// Must have CANCELQUERY privilege to cancel other users'
 			// sessions/queries.
@@ -2825,7 +2826,7 @@ func (s *statusServer) CancelSession(
 		return status.CancelSession(ctx, req)
 	}
 
-	reqUsername, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
+	reqUsername, err := username.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
@@ -2863,7 +2864,7 @@ func (s *statusServer) CancelQuery(
 		return status.CancelQuery(ctx, req)
 	}
 
-	reqUsername, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
+	reqUsername, err := username.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
@@ -3232,16 +3233,16 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 	return &serverpb.JSONResponse{Data: data}, nil
 }
 
-func userFromContext(ctx context.Context) (res security.SQLUsername, err error) {
+func userFromContext(ctx context.Context) (res username.SQLUsername, err error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return security.RootUserName(), nil
+		return username.RootUserName(), nil
 	}
 	usernames, ok := md[webSessionUserKeyStr]
 	if !ok {
 		// If the incoming context has metadata but no attached web session user,
 		// it's a gRPC / internal SQL connection which has root on the cluster.
-		return security.RootUserName(), nil
+		return username.RootUserName(), nil
 	}
 	if len(usernames) != 1 {
 		log.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)
@@ -3250,7 +3251,7 @@ func userFromContext(ctx context.Context) (res security.SQLUsername, err error) 
 	}
 	// At this point the user is already logged in, so we can assume
 	// the username has been normalized already.
-	username := security.MakeSQLUsernameFromPreNormalizedString(usernames[0])
+	username := username.MakeSQLUsernameFromPreNormalizedString(usernames[0])
 	return username, nil
 }
 

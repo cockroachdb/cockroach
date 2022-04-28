@@ -51,7 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -396,7 +396,7 @@ func TestChangefeedTenants(t *testing.T) {
 	})
 	t.Run("sinkless changefeed works", func(t *testing.T) {
 		sqlAddr := tenantServer.SQLAddr()
-		sink, cleanup := sqlutils.PGUrl(t, sqlAddr, t.Name(), url.User(security.RootUser))
+		sink, cleanup := sqlutils.PGUrl(t, sqlAddr, t.Name(), url.User(username.RootUser))
 		defer cleanup()
 
 		// kvServer is used here because we require a
@@ -2113,7 +2113,7 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		pgURL, cleanup := sqlutils.PGUrl(t, f.Server().ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		pgURL, cleanup := sqlutils.PGUrl(t, f.Server().ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 		defer cleanup()
 		pgBase, err := pq.NewConnector(pgURL.String())
 		if err != nil {
@@ -3979,7 +3979,7 @@ func TestChangefeedDescription(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-	sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	sink.Scheme = changefeedbase.SinkSchemeExperimentalSQL
 	sink.Path = `d`
@@ -3993,7 +3993,7 @@ func TestChangefeedDescription(t *testing.T) {
 	sqlDB.QueryRow(t,
 		`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
 	).Scan(&description)
-	redactedSink := strings.Replace(sink.String(), security.RootUser, `redacted`, 1)
+	redactedSink := strings.Replace(sink.String(), username.RootUser, `redacted`, 1)
 	expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + redactedSink +
 		`' WITH envelope = 'wrapped', updated`
 	require.Equal(t, expected, description)
@@ -4610,7 +4610,7 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 	// Create a factory which uses server 1 as the output of the Sink, but
 	// executes the CREATE CHANGEFEED statement on server 0.
 	sink, cleanup := sqlutils.PGUrl(
-		t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	f := makeTableFeedFactory(tc.Server(1), tc.ServerConn(0), sink)
 	foo := feed(t, f, "CREATE CHANGEFEED FOR foo")
@@ -6221,7 +6221,7 @@ func TestChangefeedCreateTelemetryLogs(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
 
 	t.Run(`core_sink_type`, func(t *testing.T) {
-		coreSink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		coreSink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 		defer cleanup()
 		coreFeedFactory := makeSinklessFeedFactory(s, coreSink)
 
@@ -6275,7 +6275,7 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
 
-		coreSink, coreSinkCleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		coreSink, coreSinkCleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 		coreFactory := makeSinklessFeedFactory(s, coreSink)
 		coreFeed := feed(t, coreFactory, `CREATE CHANGEFEED FOR foo`)
 		assertPayloads(t, coreFeed, []string{

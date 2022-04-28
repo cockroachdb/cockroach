@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -45,7 +45,7 @@ func CreateTestTableDescriptor(
 	evalCtx := eval.MakeTestingEvalContext(st)
 	switch n := stmt.AST.(type) {
 	case *tree.CreateTable:
-		db := dbdesc.NewInitial(parentID, "test", security.RootUserName())
+		db := dbdesc.NewInitial(parentID, "test", username.RootUserName())
 		desc, err := NewTableDesc(
 			ctx,
 			nil, /* txn */

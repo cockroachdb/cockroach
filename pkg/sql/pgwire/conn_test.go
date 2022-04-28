@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -316,7 +316,7 @@ func TestConnMessageTooBig(t *testing.T) {
 		t,
 		s.ServingSQLAddr(),
 		"TestBigClientMessage",
-		url.User(security.RootUser),
+		url.User(username.RootUser),
 	)
 	defer cleanup()
 
@@ -436,7 +436,7 @@ func execQuery(
 ) error {
 	it, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryIteratorEx(
 		ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName(), Database: "system"},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName(), Database: "system"},
 		query,
 	)
 	if err != nil {
@@ -463,7 +463,7 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 		return err
 	}
 	cfg, err := pgx.ParseConfig(
-		fmt.Sprintf("postgresql://%s@%s:%d/system?sslmode=disable", security.RootUser, host, port),
+		fmt.Sprintf("postgresql://%s@%s:%d/system?sslmode=disable", username.RootUser, host, port),
 	)
 	if err != nil {
 		return err
@@ -888,7 +888,7 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		pgURL, cleanupFunc := sqlutils.PGUrl(
-			t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
+			t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 		)
 		defer cleanupFunc()
 		db, err := gosql.Open("postgres", pgURL.String())
@@ -963,7 +963,7 @@ func TestConnCloseWhileProducingRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
+		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)
 	defer cleanupFunc()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
@@ -1174,7 +1174,7 @@ func TestConnResultsBufferSize(t *testing.T) {
 		require.Equal(t, `16384`, size)
 	}
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	q := pgURL.Query()
 
@@ -1554,7 +1554,7 @@ func TestSetSessionArguments(t *testing.T) {
 	require.NoError(t, err)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
+		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)
 	defer cleanupFunc()
 
@@ -1795,8 +1795,8 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	defer testServer.Stopper().Stop(ctx)
 
 	// Users.
-	admin := security.RootUser
-	nonAdmin := security.TestUser
+	admin := username.RootUser
+	nonAdmin := username.TestUser
 
 	// openConnWithUser opens a connection to the testServer for the given user
 	// and always returns an associated cleanup function, even in case of error,

@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -722,7 +722,7 @@ func (b *backupResumer) readManifestOnResume(
 	cfg *sql.ExecutorConfig,
 	defaultStore cloud.ExternalStorage,
 	details jobspb.BackupDetails,
-	user security.SQLUsername,
+	user username.SQLUsername,
 ) (*BackupManifest, int64, error) {
 	// We don't read the table descriptors from the backup descriptor, but
 	// they could be using either the new or the old foreign key
@@ -781,7 +781,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 			ctx,
 			"lookup-schedule-info",
 			txn,
-			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 			fmt.Sprintf(
 				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
 				env.SystemJobsTableName()),
@@ -834,7 +834,7 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 }
 
 func (b *backupResumer) deleteCheckpoint(
-	ctx context.Context, cfg *sql.ExecutorConfig, user security.SQLUsername,
+	ctx context.Context, cfg *sql.ExecutorConfig, user username.SQLUsername,
 ) {
 	// Attempt to delete BACKUP-CHECKPOINT(s) in /progress directory.
 	if err := func() error {

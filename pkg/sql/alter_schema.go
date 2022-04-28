@@ -15,18 +15,18 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -122,8 +122,8 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			NewSchemaName: newQualifiedSchemaName.String(),
 		})
 	case *tree.AlterSchemaOwner:
-		newOwner, err := username.FromRoleSpec(
-			params.p.SessionData(), security.UsernameValidation, t.Owner,
+		newOwner, err := decodeusername.FromRoleSpec(
+			params.p.SessionData(), username.UsernameValidation, t.Owner,
 		)
 		if err != nil {
 			return err
@@ -139,7 +139,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 func (p *planner) alterSchemaOwner(
 	ctx context.Context,
 	scDesc *schemadesc.Mutable,
-	newOwner security.SQLUsername,
+	newOwner username.SQLUsername,
 	jobDescription string,
 ) error {
 	oldOwner := scDesc.GetPrivileges().Owner()
@@ -175,7 +175,7 @@ func (p *planner) setNewSchemaOwner(
 	ctx context.Context,
 	dbDesc *dbdesc.Mutable,
 	scDesc *schemadesc.Mutable,
-	newOwner security.SQLUsername,
+	newOwner username.SQLUsername,
 ) error {
 	// Update the owner of the schema.
 	privs := scDesc.GetPrivileges()

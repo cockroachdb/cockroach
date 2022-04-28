@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -279,10 +279,10 @@ func cleanupSchemaObjects(
 		}
 	}
 
-	searchPath := sessiondata.DefaultSearchPathForUser(security.RootUserName()).WithTemporarySchemaName(schemaName)
+	searchPath := sessiondata.DefaultSearchPathForUser(username.RootUserName()).WithTemporarySchemaName(schemaName)
 	override := sessiondata.InternalExecutorOverride{
 		SearchPath:               &searchPath,
-		User:                     security.RootUserName(),
+		User:                     username.RootUserName(),
 		DatabaseIDToTempSchemaID: databaseIDToTempSchemaID,
 	}
 

@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -292,9 +293,9 @@ func CreateNodePair(
 
 	// Allow control of the principal to place in the cert via an env var. This
 	// is intended for testing purposes only.
-	nodeUser, _ := MakeSQLUsernameFromUserInput(
-		envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser),
-		UsernameValidation)
+	nodeUser, _ := username.MakeSQLUsernameFromUserInput(
+		envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", username.NodeUser),
+		username.UsernameValidation)
 
 	nodeCert, err := GenerateServerCert(caCert, caPrivateKey,
 		nodeKey.Public(), lifetime, nodeUser, hosts)
@@ -382,7 +383,7 @@ func CreateClientPair(
 	keySize int,
 	lifetime time.Duration,
 	overwrite bool,
-	user SQLUsername,
+	user username.SQLUsername,
 	wantPKCS8Key bool,
 ) error {
 	if len(caKeyPath) == 0 {

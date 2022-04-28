@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -417,7 +417,7 @@ func MakeBackupTableEntry(
 	fullyQualifiedTableName string,
 	backupManifests []BackupManifest,
 	endTime hlc.Timestamp,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	backupCodec keys.SQLCodec,
 ) (BackupTableEntry, error) {
 	var descName []string

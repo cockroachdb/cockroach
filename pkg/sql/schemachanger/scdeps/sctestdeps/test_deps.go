@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -848,8 +848,8 @@ func (s *TestState) Phase() scop.Phase {
 }
 
 // User implements the scrun.SchemaChangeJobCreationDependencies interface.
-func (s *TestState) User() security.SQLUsername {
-	return security.RootUserName()
+func (s *TestState) User() username.SQLUsername {
+	return username.RootUserName()
 }
 
 var _ scrun.JobRunDependencies = (*TestState)(nil)

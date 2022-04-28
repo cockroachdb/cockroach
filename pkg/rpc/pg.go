@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -23,7 +24,7 @@ import (
 
 // LoadSecurityOptions extends a url.Values with SSL settings suitable for
 // the given server config.
-func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.SQLUsername) error {
+func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username username.SQLUsername) error {
 	u.WithUsername(username.Normalized())
 	if ctx.config.Insecure {
 		u.WithInsecure()
@@ -124,7 +125,7 @@ func (ctx *SecurityContext) PGURL(user *url.Userinfo) (*pgurl.URL, error) {
 		WithNet(pgurl.NetTCP(host, port)).
 		WithDatabase(catalogkeys.DefaultDatabaseName)
 
-	username, _ := security.MakeSQLUsernameFromUserInput(user.Username(), security.UsernameValidation)
+	username, _ := username.MakeSQLUsernameFromUserInput(user.Username(), username.UsernameValidation)
 	if err := ctx.LoadSecurityOptions(u, username); err != nil {
 		return nil, err
 	}

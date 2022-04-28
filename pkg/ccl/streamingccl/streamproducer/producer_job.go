@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -37,7 +37,7 @@ func makeProducerJobRecord(
 	registry *jobs.Registry,
 	tenantID uint64,
 	timeout time.Duration,
-	username security.SQLUsername,
+	username username.SQLUsername,
 	ptsID uuid.UUID,
 ) jobs.Record {
 	return jobs.Record{

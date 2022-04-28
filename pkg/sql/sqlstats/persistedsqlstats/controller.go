@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -71,7 +71,7 @@ func (s *Controller) ResetClusterSQLStats(ctx context.Context) error {
 			"reset-sql-stats",
 			nil, /* txn */
 			sessiondata.InternalExecutorOverride{
-				User: security.NodeUserName(),
+				User: username.NodeUserName(),
 			},
 			"TRUNCATE "+tableName); err != nil {
 			return err

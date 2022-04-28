@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -74,7 +74,7 @@ func checkMetadata(
 		base.ExternalIODirConfig{},
 		tc.Servers[0].ClusterSettings(),
 		blobs.TestEmptyBlobClientFactory,
-		security.RootUserName(),
+		username.RootUserName(),
 		tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil)
 	if err != nil {
 		t.Fatal(err)

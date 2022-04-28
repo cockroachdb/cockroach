@@ -14,17 +14,17 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -97,8 +97,8 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 			"version %v must be finalized to use grant options",
 			clusterversion.ByKey(clusterversion.ValidateGrantOption))
 	}
-	targetRoles, err := username.FromRoleSpecList(
-		params.SessionData(), security.UsernameValidation, n.n.Roles,
+	targetRoles, err := decodeusername.FromRoleSpecList(
+		params.SessionData(), username.UsernameValidation, n.n.Roles,
 	)
 	if err != nil {
 		return err
@@ -123,8 +123,8 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		grantOption = n.n.Revoke.GrantOptionFor
 	}
 
-	granteeSQLUsernames, err := username.FromRoleSpecList(
-		params.p.SessionData(), security.UsernameValidation, grantees,
+	granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
+		params.p.SessionData(), username.UsernameValidation, grantees,
 	)
 	if err != nil {
 		return err
@@ -171,7 +171,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 
 func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 	params runParams,
-	targetRoles []security.SQLUsername,
+	targetRoles []username.SQLUsername,
 	objectType tree.AlterDefaultPrivilegesTargetObject,
 	grantees tree.RoleSpecList,
 	privileges privilege.List,
@@ -199,8 +199,8 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 			}
 		}
 
-		granteeSQLUsernames, err := username.FromRoleSpecList(
-			params.SessionData(), security.UsernameValidation, grantees,
+		granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
+			params.SessionData(), username.UsernameValidation, grantees,
 		)
 		if err != nil {
 			return err
@@ -276,7 +276,7 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 
 func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	params runParams,
-	targetRoles []security.SQLUsername,
+	targetRoles []username.SQLUsername,
 	objectType tree.AlterDefaultPrivilegesTargetObject,
 	grantees tree.RoleSpecList,
 	privileges privilege.List,
@@ -303,8 +303,8 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	}
 
 	var events []eventLogEntry
-	granteeSQLUsernames, err := username.FromRoleSpecList(
-		params.SessionData(), security.UsernameValidation, grantees,
+	granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
+		params.SessionData(), username.UsernameValidation, grantees,
 	)
 	if err != nil {
 		return err
