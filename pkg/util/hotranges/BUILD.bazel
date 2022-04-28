@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "hotranges",
+    srcs = ["hot_ranges.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/hotranges",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "hotranges_test",
+    size = "small",
+    srcs = [
+        "hot_ranges_test.go",
+    ],
+    embed = [":hotranges"],
+    deps = [
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
