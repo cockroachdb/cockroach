@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "tree",
@@ -275,5 +276,13 @@ genrule(
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
+    ],
+)
+
+disallowed_imports_test(
+    "tree",
+    disallowed_list = [
+        "//pkg/sql/sessiondata",
+        "//pkg/security",
     ],
 )
