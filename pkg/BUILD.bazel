@@ -223,6 +223,7 @@ ALL_TESTS = [
     "//pkg/spanconfig/spanconfigtestutils:spanconfigtestutils_test",
     "//pkg/spanconfig:spanconfig_test",
     "//pkg/sql/catalog/catalogkeys:catalogkeys_test",
+    "//pkg/sql/catalog/catconstants:catconstants_disallowed_imports_test",
     "//pkg/sql/catalog/catformat:catformat_test",
     "//pkg/sql/catalog/catpb:catpb_test",
     "//pkg/sql/catalog/catprivilege:catprivilege_test",
