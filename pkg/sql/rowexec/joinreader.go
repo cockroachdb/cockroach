@@ -903,7 +903,12 @@ func (jr *joinReader) readInput() (
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
 	} else {
-		sortSpans(spans, spanIDs)
+		if !jr.usesStreamer || jr.maintainOrdering {
+			// We don't want to sort the spans here if we're using the Streamer,
+			// and it will perform the sort on its own - currently, this is the
+			// case with OutOfOrder mode.
+			sortSpans(spans, spanIDs)
+		}
 	}
 
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
@@ -982,11 +987,17 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		}
 
 		if len(spans) != 0 {
-			// Sort the spans so that we can rely upon the fetcher to limit the number
-			// of results per batch. It's safe to reorder the spans here because we
-			// already restore the original order of the output during the output
-			// collection phase.
-			sortSpans(spans, spanIDs)
+			if !jr.usesStreamer || jr.maintainOrdering {
+				// Sort the spans so that we can rely upon the fetcher to limit
+				// the number of results per batch. It's safe to reorder the
+				// spans here because we already restore the original order of
+				// the output during the output collection phase.
+				//
+				// We don't want to sort the spans here if we're using the
+				// Streamer, and it will perform the sort on its own -
+				// currently, this is the case with OutOfOrder mode.
+				sortSpans(spans, spanIDs)
+			}
 
 			log.VEventf(jr.Ctx, 1, "scanning %d remote spans", len(spans))
 			bytesLimit := rowinfra.GetDefaultBatchBytesLimit(jr.EvalCtx.TestingKnobs.ForceProductionValues)
