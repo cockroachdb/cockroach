@@ -166,7 +166,12 @@ func TestVerifyPassword(t *testing.T) {
 					)
 				}
 
-				pwCompare, err := password.CompareHashAndCleartextPassword(ctx, hashedPassword, tc.password)
+				pwCompare, err := password.CompareHashAndCleartextPassword(
+					ctx,
+					hashedPassword,
+					tc.password,
+					security.GetExpensiveHashComputeSem(ctx),
+				)
 				if err != nil {
 					t.Error(err)
 					valid = false

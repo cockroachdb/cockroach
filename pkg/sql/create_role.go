@@ -294,7 +294,8 @@ func (p *planner) checkPasswordAndGetHash(
 	default:
 		return nil, errors.Newf("unsupported hash method: %v", method)
 	}
-	hashedPassword, err = password.HashPassword(ctx, cost, method, passwordStr)
+	hashedPassword, err = password.HashPassword(ctx, cost, method, passwordStr,
+		security.GetExpensiveHashComputeSem(ctx))
 	if err != nil {
 		return hashedPassword, err
 	}

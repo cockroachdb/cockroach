@@ -21,14 +21,9 @@ import (
 	"io"
 	"math"
 	"regexp"
-	"runtime"
 	"strconv"
-	"sync"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 	"github.com/xdg-go/pbkdf2"
 	"github.com/xdg-go/scram"
@@ -100,7 +95,7 @@ type PasswordHash interface {
 	Size() int
 	// compareWithCleartextPassword checks a cleartext password against
 	// the hash.
-	compareWithCleartextPassword(ctx context.Context, cleartext string) (ok bool, err error)
+	compareWithCleartextPassword(ctx context.Context, cleartext string, hashSem HashSemaphore) (ok bool, err error)
 }
 
 var _ PasswordHash = emptyPassword{}
@@ -123,7 +118,7 @@ func (e emptyPassword) Size() int { return 0 }
 
 // compareWithCleartextPassword is part of the PasswordHash interface.
 func (e emptyPassword) compareWithCleartextPassword(
-	ctx context.Context, cleartext string,
+	ctx context.Context, cleartext string, hashSem HashSemaphore,
 ) (ok bool, err error) {
 	return false, nil
 }
@@ -148,7 +143,7 @@ func (n invalidHash) Size() int { return len(n) }
 
 // compareWithCleartextPassword is part of the PasswordHash interface.
 func (n invalidHash) compareWithCleartextPassword(
-	ctx context.Context, cleartext string,
+	ctx context.Context, cleartext string, hashSem HashSemaphore,
 ) (ok bool, err error) {
 	return false, nil
 }
@@ -229,26 +224,32 @@ func AppendEmptySha256(password string) []byte {
 	return append([]byte(password), sha256NewSum...)
 }
 
+// HashSemaphore is the type of a semaphore that can be provided
+// to hashing functions to control the rate of password hashes.
+type HashSemaphore func(context.Context) (func(), error)
+
 // CompareHashAndCleartextPassword tests that the provided bytes are equivalent to the
 // hash of the supplied password. If the hash is valid but the password does not match,
 // no error is returned but the ok boolean is false.
 // If an error was detected while using the hash, an error is returned.
+// If sem is non null, it is acquired before computing a hash.
 func CompareHashAndCleartextPassword(
-	ctx context.Context, hashedPassword PasswordHash, password string,
+	ctx context.Context, hashedPassword PasswordHash, password string, hashSem HashSemaphore,
 ) (ok bool, err error) {
-	return hashedPassword.compareWithCleartextPassword(ctx, password)
+	return hashedPassword.compareWithCleartextPassword(ctx, password, hashSem)
 }
 
 // compareWithCleartextPassword is part of the PasswordHash interface.
 func (b bcryptHash) compareWithCleartextPassword(
-	ctx context.Context, cleartext string,
+	ctx context.Context, cleartext string, hashSem HashSemaphore,
 ) (ok bool, err error) {
-	sem := getExpensiveHashComputeSem(ctx)
-	alloc, err := sem.Acquire(ctx, 1)
-	if err != nil {
-		return false, err
+	if hashSem != nil {
+		alloc, err := hashSem(ctx)
+		if err != nil {
+			return false, err
+		}
+		defer alloc()
 	}
-	defer alloc.Release()
 
 	err = bcrypt.CompareHashAndPassword([]byte(b), AppendEmptySha256(cleartext))
 	if err != nil {
@@ -262,14 +263,15 @@ func (b bcryptHash) compareWithCleartextPassword(
 
 // compareWithCleartextPassword is part of the PasswordHash interface.
 func (s *scramHash) compareWithCleartextPassword(
-	ctx context.Context, cleartext string,
+	ctx context.Context, cleartext string, hashSem HashSemaphore,
 ) (ok bool, err error) {
-	sem := getExpensiveHashComputeSem(ctx)
-	alloc, err := sem.Acquire(ctx, 1)
-	if err != nil {
-		return false, err
+	if hashSem != nil {
+		alloc, err := hashSem(ctx)
+		if err != nil {
+			return false, err
+		}
+		defer alloc()
 	}
-	defer alloc.Release()
 
 	// Server-side verification of a plaintext password
 	// against a pre-computed stored SCRAM server key.
@@ -307,27 +309,30 @@ func computeHMAC(hg scram.HashGeneratorFcn, key, data []byte) []byte {
 // HashPassword takes a raw password and returns a hashed password, hashed
 // using the currently configured method.
 func HashPassword(
-	ctx context.Context, cost int, hashMethod HashMethod, password string,
+	ctx context.Context, cost int, hashMethod HashMethod, password string, hashSem HashSemaphore,
 ) ([]byte, error) {
 	switch hashMethod {
 	case HashBCrypt:
-		sem := getExpensiveHashComputeSem(ctx)
-		alloc, err := sem.Acquire(ctx, 1)
-		if err != nil {
-			return nil, err
+		if hashSem != nil {
+			alloc, err := hashSem(ctx)
+			if err != nil {
+				return nil, err
+			}
+			defer alloc()
 		}
-		defer alloc.Release()
 		return bcrypt.GenerateFromPassword(AppendEmptySha256(password), cost)
 
 	case HashSCRAMSHA256:
-		return hashPasswordUsingSCRAM(ctx, cost, password)
+		return hashPasswordUsingSCRAM(ctx, cost, password, hashSem)
 
 	default:
 		return nil, errors.Newf("unsupported hash method: %v", hashMethod)
 	}
 }
 
-func hashPasswordUsingSCRAM(ctx context.Context, cost int, cleartext string) ([]byte, error) {
+func hashPasswordUsingSCRAM(
+	ctx context.Context, cost int, cleartext string, hashSem HashSemaphore,
+) ([]byte, error) {
 	prepared, err := stringprep.SASLprep.Prepare(cleartext)
 	if err != nil {
 		// Special PostgreSQL case, quoth comment at the top of
@@ -356,12 +361,13 @@ func hashPasswordUsingSCRAM(ctx context.Context, cost int, cleartext string) ([]
 
 	// The computation of the SCRAM hash is expensive. Use the shared
 	// semaphore for it. We reuse the same pattern as the bcrypt case above.
-	sem := getExpensiveHashComputeSem(ctx)
-	alloc, err := sem.Acquire(ctx, 1)
-	if err != nil {
-		return nil, err
+	if hashSem != nil {
+		alloc, err := hashSem(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer alloc()
 	}
-	defer alloc.Release()
 	// Compute the credentials.
 	creds := client.GetStoredCredentials(scram.KeyFactors{Iters: cost, Salt: string(salt)})
 	// Encode them in our standard hash format.
@@ -560,49 +566,6 @@ func CheckPasswordHashValidity(
 	return false, false, 0, "", inputPassword, nil
 }
 
-// expensiveHashComputeSemOnce wraps a semaphore that limits the
-// number of concurrent calls to the bcrypt and sha256 hash
-// functions. This is needed to avoid the risk of a DoS attacks by
-// malicious users or broken client apps that would starve the server
-// of CPU resources just by computing hashes.
-//
-// We use a sync.Once to delay the creation of the semaphore to the
-// first time the password functions are used. This gives a chance to
-// the server process to update GOMAXPROCS before we compute the
-// maximum amount of concurrency for the semaphore.
-var expensiveHashComputeSemOnce struct {
-	sem  *quotapool.IntPool
-	once sync.Once
-}
-
-// envMaxHashComputeConcurrency allows a user to override the semaphore
-// configuration using an environment variable.
-// If the env var is set to a value >= 1, that value is used.
-// Otherwise, a default is computed from the configure GOMAXPROCS.
-var envMaxHashComputeConcurrency = envutil.EnvOrDefaultInt("COCKROACH_MAX_PW_HASH_COMPUTE_CONCURRENCY", 0)
-
-// getExpensiveHashComputeSem retrieves the hashing semaphore.
-func getExpensiveHashComputeSem(ctx context.Context) *quotapool.IntPool {
-	expensiveHashComputeSemOnce.once.Do(func() {
-		var n int
-		if envMaxHashComputeConcurrency >= 1 {
-			// The operator knows better. Use what they tell us to use.
-			n = envMaxHashComputeConcurrency
-		} else {
-			// We divide by 8 so that the max CPU usage of hash checks
-			// never exceeds ~10% of total CPU resources allocated to this
-			// process.
-			n = runtime.GOMAXPROCS(-1) / 8
-		}
-		if n < 1 {
-			n = 1
-		}
-		log.VInfof(ctx, 1, "configured maximum hashing concurrency: %d", n)
-		expensiveHashComputeSemOnce.sem = quotapool.NewIntPool("password_hashes", uint64(n))
-	})
-	return expensiveHashComputeSemOnce.sem
-}
-
 // BcryptCostToSCRAMIterCount maps the bcrypt cost in a pre-hashed
 // password using the crdb-bcrypt method to an “equivalent” cost
 // (iteration count) for the scram-sha-256 method. This is used to
@@ -704,6 +667,8 @@ func MaybeUpgradePasswordHash(
 	PasswordHashMethod HashMethod,
 	cleartext string,
 	hashed PasswordHash,
+	hashSem HashSemaphore,
+	logEvent func(context.Context, string, ...interface{}),
 ) (converted bool, prevHashBytes, newHashBytes []byte, newMethod string, err error) {
 	bh, isBcrypt := hashed.(bcryptHash)
 
@@ -756,10 +721,10 @@ func MaybeUpgradePasswordHash(
 		// structured event that reports that the conversion has completed
 		// (and the new credentials were stored) is sent by the SQL code
 		// that also owns the storing of the new credentials.
-		log.Infof(ctx, "hash conversion: computing a SCRAM hash with iteration count %d (from bcrypt cost %d)", scramIterCount, bcryptCost)
+		logEvent(ctx, "hash conversion: computing a SCRAM hash with iteration count %d (from bcrypt cost %d)", scramIterCount, bcryptCost)
 	}
 
-	rawHash, err := hashPasswordUsingSCRAM(ctx, int(scramIterCount), cleartext)
+	rawHash, err := hashPasswordUsingSCRAM(ctx, int(scramIterCount), cleartext, hashSem)
 	if err != nil {
 		// This call only fail with hard errors.
 		return false, nil, nil, "", err
@@ -771,8 +736,6 @@ func MaybeUpgradePasswordHash(
 	expectedMethod := HashSCRAMSHA256
 	newHash := LoadPasswordHash(ctx, rawHash)
 	if newHash.Method() != expectedMethod {
-		// The conversion failed? That is very strange.
-		log.Errorf(ctx, "unexpected hash contents during bcrypt->scram conversion: %T %+v -> %T %+v", hashed, hashed, newHash, newHash)
 		// In contrast to logs, we don't want the details of the hash in the error with %+v.
 		return false, nil, nil, "", errors.AssertionFailedf("programming error: re-hash failed to produce SCRAM hash, produced %T instead", newHash)
 	}
