@@ -637,6 +637,7 @@ var specs = []stmtSpec{
 			"'ON' a_expr":                    "'ON' column_name",
 			"opt_hash_sharded_bucket_count ": "",
 			"opt_nulls_order":                "",
+			"opt_partition_by_index":         "( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | )",
 		},
 		regreplace: map[string]string{
 			".* 'CREATE' .* 'INVERTED' 'INDEX' .*": "",
@@ -649,7 +650,8 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'CREATE' .* 'INVERTED' 'INDEX'")},
 		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_concurrently", "opt_with_storage_parameter_list", "storage_parameter_list"},
 		replace: map[string]string{
-			"opt_nulls_order": "",
+			"opt_nulls_order":        "",
+			"opt_partition_by_index": "( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | )",
 		},
 		nosplit: true,
 	},
@@ -831,10 +833,13 @@ var specs = []stmtSpec{
 		},
 	},
 	{
-		name:    "alter_table_partition_by",
-		stmt:    "alter_onetable_stmt",
-		inline:  []string{"alter_table_cmds", "alter_table_cmd", "partition_by_table"},
-		replace: map[string]string{"relation_expr": "table_name"},
+		name:   "alter_table_partition_by",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "partition_by_table"},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+			"partition_by ": "'PARTITION' 'BY' partition_by_inner ",
+		},
 		regreplace: map[string]string{
 			`'NOTHING' .*`:        `'NOTHING'`,
 			`_partitions '\)' .*`: `_partitions ')'`,
@@ -897,9 +902,12 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "column_name", "parent_table", "table_constraints"},
 	},
 	{
-		name:    "index_def",
-		inline:  []string{"opt_storing", "storing", "index_params", "opt_name", "opt_hash_sharded"},
-		replace: map[string]string{"opt_hash_sharded_bucket_count ": ""},
+		name:   "index_def",
+		inline: []string{"opt_storing", "storing", "index_params", "opt_name", "opt_hash_sharded"},
+		replace: map[string]string{
+			"opt_hash_sharded_bucket_count ": "",
+			"opt_partition_by_index":         "( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | )",
+		},
 	},
 	{
 		name:   "import_csv",
@@ -1384,6 +1392,7 @@ var specs = []stmtSpec{
 		inline: []string{"constraint_elem", "opt_storing", "storing", "opt_hash_sharded"},
 		replace: map[string]string{
 			"opt_hash_sharded_bucket_count ": "",
+			"opt_partition_by_index":         "( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | )",
 		},
 	},
 	{
