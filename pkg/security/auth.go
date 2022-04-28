@@ -179,7 +179,8 @@ func UserAuthPasswordHook(
 		if len(passwordStr) == 0 {
 			return NewErrPasswordUserAuthFailed(systemIdentity)
 		}
-		ok, err := password.CompareHashAndCleartextPassword(ctx, hashedPassword, passwordStr)
+		ok, err := password.CompareHashAndCleartextPassword(ctx,
+			hashedPassword, passwordStr, GetExpensiveHashComputeSem(ctx))
 		if err != nil {
 			return err
 		}

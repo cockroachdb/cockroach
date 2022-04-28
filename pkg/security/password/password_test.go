@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -57,7 +58,7 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 			// Check conversion succeeds.
 			autoUpgradePasswordHashesBool := security.AutoUpgradePasswordHashes.Get(&s.SV)
 			method := security.GetConfiguredPasswordHashMethod(ctx, &s.SV)
-			converted, prevHash, newHashBytes, hashMethod, err := password.MaybeUpgradePasswordHash(ctx, autoUpgradePasswordHashesBool, method, cleartext, bh)
+			converted, prevHash, newHashBytes, hashMethod, err := password.MaybeUpgradePasswordHash(ctx, autoUpgradePasswordHashesBool, method, cleartext, bh, nil, log.Infof)
 			require.NoError(t, err)
 			require.True(t, converted)
 			require.Equal(t, "SCRAM-SHA-256", string(newHashBytes)[:13])
@@ -73,7 +74,7 @@ func TestBCryptToSCRAMConversion(t *testing.T) {
 			autoUpgradePasswordHashesBool = security.AutoUpgradePasswordHashes.Get(&s.SV)
 			method = security.GetConfiguredPasswordHashMethod(ctx, &s.SV)
 
-			ec, _, _, _, err := password.MaybeUpgradePasswordHash(ctx, autoUpgradePasswordHashesBool, method, cleartext, newHash)
+			ec, _, _, _, err := password.MaybeUpgradePasswordHash(ctx, autoUpgradePasswordHashesBool, method, cleartext, newHash, nil, log.Infof)
 			require.NoError(t, err)
 			require.False(t, ec)
 		})
