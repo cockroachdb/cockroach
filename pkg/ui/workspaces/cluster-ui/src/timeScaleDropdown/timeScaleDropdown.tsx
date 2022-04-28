@@ -85,11 +85,13 @@ export const getTimeRangeTitle = (
       timeEnd: moment.utc(end).format(timeFormat),
       title: "Custom",
       timeLabel: getTimeLabel(currentWindow),
+      timeWindow: currentWindow,
     };
   } else {
     return {
       title: currentScale.key,
       timeLabel: getTimeLabel(currentWindow),
+      timeWindow: currentWindow,
     };
   }
 };

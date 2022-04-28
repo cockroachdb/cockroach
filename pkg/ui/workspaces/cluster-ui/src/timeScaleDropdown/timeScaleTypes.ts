@@ -70,8 +70,9 @@ export type TimeRangeTitle =
       timeEnd: string;
       title: "Custom";
       timeLabel: string;
+      timeWindow: TimeWindow;
     }
-  | { title: string; timeLabel: string };
+  | { title: string; timeLabel: string; timeWindow: TimeWindow };
 
 export enum ArrowDirection {
   LEFT,
