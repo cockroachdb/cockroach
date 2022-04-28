@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -72,7 +73,7 @@ func TestSessionCacheBasic(t *testing.T) {
 				require.NoError(t, err)
 
 				session := serverpb.Session{}
-				sessionID := ClusterWideID{id}
+				sessionID := clusterunique.ID{Uint128: id}
 				err = cache.add(ctx, sessionID, session)
 				require.NoError(t, err)
 
@@ -90,7 +91,7 @@ func TestSessionCacheBasic(t *testing.T) {
 				for i := 0; i < sessions; i++ {
 					cache.timeSrc = addSeconds(cache.timeSrc, seconds)
 					session := serverpb.Session{}
-					sessionID := ClusterWideID{id}
+					sessionID := clusterunique.ID{Uint128: id}
 					err := cache.add(ctx, sessionID, session)
 					require.NoError(t, err)
 					id = id.Add(1)

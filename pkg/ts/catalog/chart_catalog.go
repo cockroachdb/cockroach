@@ -1532,6 +1532,10 @@ var charts = []sectionDescription{
 		Organization: [][]string{{ReplicationLayer, "Raft", "Overview"}},
 		Charts: []chartDescription{
 			{
+				Title:   "Quota Pool Utilization (0-100)",
+				Metrics: []string{"raft.quota_pool.percent_used"},
+			},
+			{
 				Title:   "Commands Count",
 				Metrics: []string{"raft.commandsapplied"},
 			},

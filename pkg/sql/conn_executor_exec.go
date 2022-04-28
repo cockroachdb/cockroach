@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -2005,7 +2006,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 
 // addActiveQuery adds a running query to the list of running queries.
 func (ex *connExecutor) addActiveQuery(
-	ast tree.Statement, rawStmt string, queryID ClusterWideID, cancelFun context.CancelFunc,
+	ast tree.Statement, rawStmt string, queryID clusterunique.ID, cancelFun context.CancelFunc,
 ) {
 	_, hidden := ast.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
@@ -2022,7 +2023,7 @@ func (ex *connExecutor) addActiveQuery(
 	ex.mu.Unlock()
 }
 
-func (ex *connExecutor) removeActiveQuery(queryID ClusterWideID, ast tree.Statement) {
+func (ex *connExecutor) removeActiveQuery(queryID clusterunique.ID, ast tree.Statement) {
 	ex.mu.Lock()
 	_, ok := ex.mu.ActiveQueries[queryID]
 	if !ok {

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -86,7 +87,7 @@ func NewClosedSessionCache(
 
 // add adds a closed session to the ClosedSessionCache.
 func (c *ClosedSessionCache) add(
-	ctx context.Context, id ClusterWideID, session serverpb.Session,
+	ctx context.Context, id clusterunique.ID, session serverpb.Session,
 ) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -163,7 +164,7 @@ func (c *ClosedSessionCache) clear() {
 // sessionNode encapsulates the session information that will be inserted into
 // the cache.
 type sessionNode struct {
-	id        ClusterWideID
+	id        clusterunique.ID
 	data      serverpb.Session
 	timestamp time.Time
 }
@@ -178,7 +179,7 @@ func (n *sessionNode) getAgeString(now timeSource) string {
 
 func (n *sessionNode) size() int {
 	size := 0
-	size += int(unsafe.Sizeof(ClusterWideID{}))
+	size += int(unsafe.Sizeof(clusterunique.ID{}))
 	size += n.data.Size()
 	size += int(unsafe.Sizeof(time.Time{}))
 	return size

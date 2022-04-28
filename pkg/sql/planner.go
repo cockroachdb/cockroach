@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -54,7 +55,7 @@ type extendedEvalContext struct {
 	eval.Context
 
 	// SessionID for this connection.
-	SessionID ClusterWideID
+	SessionID clusterunique.ID
 
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
@@ -250,7 +251,7 @@ type planner struct {
 	contextDatabaseID descpb.ID
 }
 
-func (evalCtx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
+func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
 	evalCtx.SessionID = sessionID
 }
 
