@@ -2790,6 +2790,78 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 	),
+	"st_xmin": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				bbox := g.BoundingBoxRef()
+				if bbox == nil {
+					return tree.DNull, nil
+				}
+
+				return tree.NewDFloat(tree.DFloat(bbox.LoX)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the minimum X ordinate of a geometry.",
+			},
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"box2d", types.Box2D},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0])
+				if bbox == nil {
+					return tree.DNull, nil
+				}
+
+				return tree.NewDFloat(tree.DFloat(bbox.LoX)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the minimum X ordinate of a box2d.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
+	"st_xmax": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				bbox := g.BoundingBoxRef()
+				if bbox == nil {
+					return tree.DNull, nil
+				}
+
+				return tree.NewDFloat(tree.DFloat(bbox.HiX)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the maximum X ordinate of a geometry.",
+			},
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"box2d", types.Box2D},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0])
+				if bbox == nil {
+					return tree.DNull, nil
+				}
+
+				return tree.NewDFloat(tree.DFloat(bbox.HiX)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the maximum X ordinate of a box2d.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
 	"st_y": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -2814,6 +2886,78 @@ The requested number of points must be not larger than 65336.`,
 			},
 			volatility.Immutable,
 		),
+	),
+	"st_ymin": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				bbox := g.BoundingBoxRef()
+				if bbox == nil {
+					return tree.DNull, nil
+				}
+
+				return tree.NewDFloat(tree.DFloat(bbox.LoY)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the minimum Y ordinate of a geometry.",
+			},
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"box2d", types.Box2D},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0])
+				if bbox == nil {
+					return tree.DNull, nil
+				}
+
+				return tree.NewDFloat(tree.DFloat(bbox.LoY)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the minimum Y ordinate of a box2d.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
+	"st_ymax": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				bbox := g.BoundingBoxRef()
+				if bbox == nil {
+					return tree.DNull, nil
+				}
+
+				return tree.NewDFloat(tree.DFloat(bbox.HiY)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the maximum Y ordinate of a geometry.",
+			},
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"box2d", types.Box2D},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0])
+				if bbox == nil {
+					return tree.DNull, nil
+				}
+
+				return tree.NewDFloat(tree.DFloat(bbox.HiY)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the maximum Y ordinate of a box2d.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
 	),
 	"st_z": makeBuiltin(
 		defProps(),
@@ -5302,7 +5446,7 @@ The calculations are done on a sphere.`,
 			},
 			Info: infoBuilder{
 				info: `Snaps the vertices and segments of input geometry the target geometry's vertices.
-Tolerance is used to control where snapping is performed. The result geometry is the input geometry with the vertices snapped. 
+Tolerance is used to control where snapping is performed. The result geometry is the input geometry with the vertices snapped.
 If no snapping occurs then the input geometry is returned unchanged.`,
 			}.String(),
 			Volatility: volatility.Immutable,
@@ -6768,7 +6912,7 @@ May return a Point or LineString in the case of degenerate inputs.`,
 				return tree.NewDInt(tree.DInt(ret)), nil
 			},
 			Info: infoBuilder{
-				info: `Returns an interger value defining behavior of crossing of lines: 
+				info: `Returns an interger value defining behavior of crossing of lines:
 0: lines do not cross,
 -1: linestring_b crosses linestring_a from right to left,
 1: linestring_b crosses linestring_a from left to right,
