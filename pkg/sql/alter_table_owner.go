@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
@@ -63,7 +64,9 @@ func (p *planner) AlterTableOwner(ctx context.Context, n *tree.AlterTableOwner) 
 		return nil, err
 	}
 
-	owner, err := n.Owner.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+	owner, err := decodeusername.FromRoleSpec(
+		p.SessionData(), security.UsernameValidation, n.Owner,
+	)
 	if err != nil {
 		return nil, err
 	}
