@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -48,6 +49,8 @@ type ReplicaMetrics struct {
 	RaftLogTooLarge bool
 	BehindCount     int64
 
+	QuotaPoolPercentUsed int64 // [0,100]
+
 	// Latching and locking metrics.
 	LatchMetrics     concurrency.LatchMetrics
 	LockTableMetrics concurrency.LockTableMetrics
@@ -57,6 +60,7 @@ type ReplicaMetrics struct {
 func (r *Replica) Metrics(
 	ctx context.Context, now hlc.ClockTimestamp, livenessMap liveness.IsLiveMap, clusterNodes int,
 ) ReplicaMetrics {
+	var qpUsed, qpCap int64 // quota pool
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
 	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
@@ -65,6 +69,11 @@ func (r *Replica) Metrics(
 	conf := r.mu.conf
 	raftLogSize := r.mu.raftLogSize
 	raftLogSizeTrusted := r.mu.raftLogSizeTrusted
+	if q := r.mu.proposalQuota; q != nil {
+		qpAvail := int64(q.ApproximateQuota())
+		qpCap = int64(q.Capacity()) // NB: max capacity is MaxInt64, see NewIntPool
+		qpUsed = qpCap - qpAvail
+	}
 	r.mu.RUnlock()
 
 	r.store.unquiescedReplicas.Lock()
@@ -91,6 +100,7 @@ func (r *Replica) Metrics(
 		lockTableMetrics,
 		raftLogSize,
 		raftLogSizeTrusted,
+		qpUsed, qpCap,
 	)
 }
 
@@ -111,6 +121,7 @@ func calcReplicaMetrics(
 	lockTableMetrics concurrency.LockTableMetrics,
 	raftLogSize int64,
 	raftLogSizeTrusted bool,
+	qpUsed, qpCapacity int64, // quota pool used and capacity bytes
 ) ReplicaMetrics {
 	var m ReplicaMetrics
 
@@ -129,6 +140,8 @@ func calcReplicaMetrics(
 	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated = calcRangeCounter(
 		storeID, desc, leaseStatus, livenessMap, conf.GetNumVoters(), conf.NumReplicas, clusterNodes)
 
+	m.QuotaPoolPercentUsed = calcQuotaPoolPercentUsed(qpUsed, qpCapacity)
+
 	const raftLogTooLargeMultiple = 4
 	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple*raftCfg.RaftLogTruncationThreshold) &&
 		raftLogSizeTrusted
@@ -143,6 +156,17 @@ func calcReplicaMetrics(
 	m.LockTableMetrics = lockTableMetrics
 
 	return m
+}
+
+func calcQuotaPoolPercentUsed(qpUsed, qpCapacity int64) int64 {
+	if qpCapacity < 1 {
+		qpCapacity++ // defense in depth against divide by zero below
+	}
+	// NB: assumes qpUsed < qpCapacity. If this isn't the case, below returns more
+	// than 100, but that's better than rounding it (and thus hiding a problem).
+	// Also this might be expected if a quota pool overcommits (for example, due
+	// to a single proposal that clocks in above the total capacity).
+	return int64(math.Round(float64(100*qpUsed) / float64(qpCapacity))) // 0-100
 }
 
 // calcRangeCounter returns whether this replica is designated as the replica in
