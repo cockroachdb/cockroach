@@ -311,6 +311,10 @@ type JoinOrderBuilder struct {
 	// once does not exceed the session limit.
 	joinCount int
 
+	// equivs is an EquivSet used to keep track of equivalence relations when
+	// assembling filters.
+	equivs props.EquivSet
+
 	onReorderFunc OnReorderFunc
 
 	onAddJoinFunc OnAddJoinFunc
@@ -328,6 +332,7 @@ func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *eval.Context) {
 		plans:         make(map[vertexSet]memo.RelExpr),
 		onReorderFunc: jb.onReorderFunc,
 		onAddJoinFunc: jb.onAddJoinFunc,
+		equivs:        props.NewEquivSet(),
 	}
 }
 
@@ -501,9 +506,9 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 		return
 	}
 
-	var fds props.FuncDepSet
-	fds.AddEquivFrom(&jb.plans[s1].Relational().FuncDeps)
-	fds.AddEquivFrom(&jb.plans[s2].Relational().FuncDeps)
+	jb.equivs.Reset()
+	jb.equivs.AddFromFDs(&jb.plans[s1].Relational().FuncDeps)
+	jb.equivs.AddFromFDs(&jb.plans[s2].Relational().FuncDeps)
 
 	// Gather all inner edges that connect the left and right relation sets.
 	var innerJoinFilters memo.FiltersExpr
@@ -515,7 +520,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 		// Ensure that this edge forms a valid connection between the two sets. See
 		// the checkNonInnerJoin and checkInnerJoin comments for more information.
 		if e.checkInnerJoin(s1, s2) {
-			if areFiltersRedundant(&fds, e.filters) {
+			if areFiltersRedundant(&jb.equivs, e.filters) {
 				// Avoid adding redundant filters.
 				continue
 			}
@@ -524,7 +529,9 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 				// s2, any other edges that apply will also be part of that original join.
 				joinIsRedundant = e.joinIsRedundant(s1, s2)
 			}
-			getEquivFDs(&fds, e.filters)
+			for j := range e.filters {
+				jb.equivs.AddFromFDs(&e.filters[j].ScalarProps().FuncDeps)
+			}
 			innerJoinFilters = append(innerJoinFilters, e.filters...)
 			addInnerJoin = true
 		}
@@ -722,7 +729,7 @@ func (jb *JoinOrderBuilder) addJoin(
 
 // areFiltersRedundant returns true if the given FiltersExpr contains a single
 // equality filter that is already represented by the given FuncDepSet.
-func areFiltersRedundant(fds *props.FuncDepSet, filters memo.FiltersExpr) bool {
+func areFiltersRedundant(equivs *props.EquivSet, filters memo.FiltersExpr) bool {
 	if len(filters) != 1 {
 		return false
 	}
@@ -735,15 +742,7 @@ func areFiltersRedundant(fds *props.FuncDepSet, filters memo.FiltersExpr) bool {
 	if !ok1 || !ok2 {
 		return false
 	}
-	return fds.AreColsEquiv(var1.Col, var2.Col)
-}
-
-// getEquivFDs adds all equivalencies from the given filters to the given
-// FuncDepSet.
-func getEquivFDs(fds *props.FuncDepSet, filters memo.FiltersExpr) {
-	for i := range filters {
-		fds.AddEquivFrom(&filters[i].ScalarProps().FuncDeps)
-	}
+	return equivs.AreColsEquiv(var1.Col, var2.Col)
 }
 
 // addToGroup adds a join of the given type and with the given inputs to the
