@@ -10,19 +10,15 @@
 
 package tree
 
-import (
-	"strconv"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
+import "strconv"
 
 // TenantID represents a tenant ID that can be pretty-printed.
 type TenantID struct {
-	roachpb.TenantID
+	ID uint64
 
 	// Specified is set to true when the TENANT clause was specified in
 	// the backup target input syntax. We need this, instead of relying
-	// on roachpb.TenantID.IsSet(), because we need a special marker for
+	// on TenantID.IsSet(), because we need a special marker for
 	// the case when the value was anonymized. In other places, the
 	// value used for anonymized integer literals is 0, but we can't use
 	// 0 for TenantID as this is refused during parsing, nor can we use
@@ -36,6 +32,11 @@ type TenantID struct {
 
 var _ NodeFormatter = (*TenantID)(nil)
 
+// IsSet returns whether the TenantID is set.
+func (t *TenantID) IsSet() bool {
+	return t.ID != 0
+}
+
 // Format implements the NodeFormatter interface.
 func (t *TenantID) Format(ctx *FmtCtx) {
 	if ctx.flags.HasFlags(FmtHideConstants) || !t.IsSet() {
@@ -48,6 +49,6 @@ func (t *TenantID) Format(ctx *FmtCtx) {
 		// accepts expressions.
 		ctx.WriteByte('_')
 	} else {
-		ctx.WriteString(strconv.FormatUint(t.ToUint64(), 10))
+		ctx.WriteString(strconv.FormatUint(t.ID, 10))
 	}
 }

@@ -163,10 +163,10 @@ func ingestionPlanHook(
 		}
 
 		//TODO(casper): make target to be tenant-only.
-		oldTenantID := ingestionStmt.Targets.TenantID.TenantID
+		oldTenantID := roachpb.MakeTenantID(ingestionStmt.Targets.TenantID.ID)
 		newTenantID := oldTenantID
 		if ingestionStmt.AsTenant.Specified {
-			newTenantID = ingestionStmt.AsTenant.TenantID
+			newTenantID = roachpb.MakeTenantID(ingestionStmt.AsTenant.ID)
 		}
 		if oldTenantID == roachpb.SystemTenantID || newTenantID == roachpb.SystemTenantID {
 			return errors.Newf("either old tenant ID %d or the new tenant ID %d cannot be system tenant",
