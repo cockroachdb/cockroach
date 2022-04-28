@@ -837,7 +837,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		return nil
 	})
 	_, _, enqueueError := tc.GetFirstStoreFromServer(t, 0).
-		ManuallyEnqueue(ctx, "replicate", repl, true)
+		Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 
 	require.NoError(t, enqueueError)
 
@@ -1036,7 +1036,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
 			require.NotNil(t, repl)
 			_, _, enqueueError := tc.GetFirstStoreFromServer(t, i).
-				ManuallyEnqueue(ctx, "replicate", repl, true)
+				Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 			require.NoError(t, enqueueError)
 		}
 	}
