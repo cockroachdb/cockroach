@@ -21,7 +21,7 @@ import (
 
 // MakeTenantPrefix creates the key prefix associated with the specified tenant.
 func MakeTenantPrefix(tenID roachpb.TenantID) roachpb.Key {
-	if tenID == roachpb.SystemTenantID {
+	if false && tenID == roachpb.SystemTenantID {
 		return nil
 	}
 	return encoding.EncodeUvarintAscending(TenantPrefix, tenID.ToUint64())
@@ -81,6 +81,8 @@ func MakeSQLCodec(tenID roachpb.TenantID) SQLCodec {
 	}
 }
 
+var sysTenantPrefix = MakeTenantPrefix(roachpb.SystemTenantID)
+
 // SystemSQLCodec is a SQL key codec for the system tenant.
 var SystemSQLCodec = MakeSQLCodec(roachpb.SystemTenantID)
 
@@ -91,7 +93,8 @@ var TODOSQLCodec = MakeSQLCodec(roachpb.SystemTenantID)
 
 // ForSystemTenant returns whether the encoder is bound to the system tenant.
 func (e sqlEncoder) ForSystemTenant() bool {
-	return len(e.TenantPrefix()) == 0
+	// return len(e.TenantPrefix()) == 0
+	return e.TenantPrefix().Equal(sysTenantPrefix)
 }
 
 // TenantPrefix returns the key prefix used for the tenants's data.
