@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -104,6 +105,12 @@ type Factory struct {
 // onMaxConstructorStackDepthExceeded method is called. This can result in an
 // expression that is not fully optimized.
 const maxConstructorStackDepth = 10_000
+
+// Injecting this builtins dependency in the init function allows the memo
+// package to access builtin properties without importing the builtins package.
+func init() {
+	memo.GetBuiltinProperties = builtins.GetBuiltinProperties
+}
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
