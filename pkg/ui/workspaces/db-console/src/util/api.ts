@@ -176,6 +176,17 @@ export const STATUS_PREFIX = "_status";
 
 const ResponseError = protos.cockroach.server.serverpb.ResponseError;
 
+export class TimeoutError extends Error {
+  timeout: moment.Duration;
+  constructor(timeout: moment.Duration) {
+    const message = `Promise timed out after ${timeout.asMilliseconds()} ms`;
+    super(message);
+
+    this.name = this.constructor.name;
+    this.timeout = timeout;
+  }
+}
+
 // HELPER FUNCTIONS
 
 // Inspired by https://github.com/github/fetch/issues/175
@@ -188,10 +199,7 @@ export function withTimeout<T>(
   if (timeout) {
     return new Promise<T>((resolve, reject) => {
       setTimeout(
-        () =>
-          reject(
-            new Error(`Promise timed out after ${timeout.asMilliseconds()} ms`),
-          ),
+        () => reject(new TimeoutError(timeout)),
         timeout.asMilliseconds(),
       );
       promise.then(resolve, reject);
@@ -439,15 +447,27 @@ export function getHealth(
   );
 }
 
+export const jobsTimeoutErrorMessage =
+  "Unable to retrieve the Jobs table. To reduce the amount of data, try filtering the table.";
+
 export function getJobs(
   req: JobsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<JobsResponseMessage> {
-  return timeoutFetch(
-    serverpb.JobsResponse,
-    `${API_PREFIX}/jobs?status=${req.status}&type=${req.type}&limit=${req.limit}`,
-    null,
-    timeout,
+  const url = `${API_PREFIX}/jobs?status=${req.status}&type=${req.type}&limit=${req.limit}`;
+  return timeoutFetch(serverpb.JobsResponse, url, null, timeout).then(
+    (response: JobsResponseMessage) => response,
+    (err: Error) => {
+      if (err instanceof TimeoutError) {
+        console.error(
+          `Jobs page time out because attempt to retrieve jobs exceeded ${err.timeout.asMilliseconds()}ms.`,
+          `URL: ${url}. Request: ${JSON.stringify(req)}`,
+        );
+        throw new Error(jobsTimeoutErrorMessage);
+      } else {
+        throw err;
+      }
+    },
   );
 }
 

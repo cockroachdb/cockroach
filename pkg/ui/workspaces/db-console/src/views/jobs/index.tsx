@@ -20,7 +20,8 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
-import { Loading, util, SortSetting } from "@cockroachlabs/cluster-ui";
+import { Loading, Delayed, util, SortSetting } from "@cockroachlabs/cluster-ui";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 import {
   PageConfig,
   PageConfigItem,
@@ -234,6 +235,8 @@ export class JobsTable extends React.Component<JobsTableProps> {
   };
 
   render() {
+    const isLoading = !this.props.jobs || !this.props.jobs.data;
+    const error = this.props.jobs && this.props.jobs.lastError;
     return (
       <div className="jobs-page">
         <Helmet title="Jobs" />
@@ -268,9 +271,9 @@ export class JobsTable extends React.Component<JobsTableProps> {
         </div>
         <section className="section">
           <Loading
-            loading={!this.props.jobs || !this.props.jobs.data}
+            loading={isLoading}
             page={"jobs"}
-            error={this.props.jobs && this.props.jobs.lastError}
+            error={error}
             render={() => (
               <JobTable
                 isUsedFilter={
@@ -282,6 +285,14 @@ export class JobsTable extends React.Component<JobsTableProps> {
               />
             )}
           />
+          {isLoading && !error && (
+            <Delayed delay={moment.duration(2, "s")}>
+              <InlineAlert
+                intent="info"
+                title="If the Jobs table contains a large amount of data, this page might take a while to load. To reduce the amount of data, try filtering the table."
+              />
+            </Delayed>
+          )}
         </section>
       </div>
     );

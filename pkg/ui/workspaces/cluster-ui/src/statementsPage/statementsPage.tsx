@@ -13,6 +13,7 @@ import { RouteComponentProps } from "react-router-dom";
 import { isNil, merge } from "lodash";
 import classNames from "classnames/bind";
 import { getValidErrorsList, Loading } from "src/loading";
+import { Delayed } from "src/delayed";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
   handleSortSettingFromQueryString,
@@ -78,6 +79,7 @@ import { commonStyles } from "../common";
 import { flattenTreeAttributes, planNodeToString } from "../statementDetails";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { StatementViewType } from "./statementPageTypes";
+import moment from "moment";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -617,16 +619,14 @@ export class StatementsPage extends React.Component<
       : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
     const { filters, activeFilters } = this.state;
 
-    const timeNow = new Date();
-    const timeWaitingResponse =
-      (timeNow.getTime() - this.state.startRequest.getTime()) / 1000;
     const longLoadingMessage = isNil(this.props.statements) &&
-      timeWaitingResponse > 2 &&
       isNil(getValidErrorsList(this.props.statementsError)) && (
-        <InlineAlert
-          intent="info"
-          title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
-        />
+        <Delayed delay={moment.duration(2, "s")}>
+          <InlineAlert
+            intent="info"
+            title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
+          />
+        </Delayed>
       );
 
     return (

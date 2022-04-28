@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -11,10 +11,12 @@ import React from "react";
 import { storiesOf } from "@storybook/react";
 import { withRouterDecorator } from "src/util/decorators";
 
-import { JobTable } from "./jobTable";
-import { withData, empty } from "./jobTable.fixture";
+import { JobsTable } from "./index";
+import { withData, empty, loading, error } from "./jobsTable.fixture";
 
-storiesOf("JobTable", module)
+storiesOf("JobsTable", module)
   .addDecorator(withRouterDecorator)
-  .add("with data", () => <JobTable {...withData} />)
-  .add("empty", () => <JobTable {...empty} />);
+  .add("With data", () => <JobsTable {...withData} />)
+  .add("Empty", () => <JobsTable {...empty} />)
+  .add("Loading; with delayed message", () => <JobsTable {...loading} />)
+  .add("Timeout error", () => <JobsTable {...error} />);

@@ -21,7 +21,7 @@ import {
   CancelSessionRequestMessage,
 } from "src/api/terminateQueryApi";
 
-import Status = cockroach.server.serverpb.Session.Status;
+const Status = cockroach.server.serverpb.Session.Status;
 
 const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
