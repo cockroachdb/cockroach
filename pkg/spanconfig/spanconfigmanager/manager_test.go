@@ -23,11 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -271,16 +274,18 @@ func TestReconciliationJobIsIdle(t *testing.T) {
 	})
 }
 
-// TestReconciliationJobErrorFailsJob tests that injecting an error into the
+// TestReconciliationJobErrorAndRecovery tests that injecting an error into the
 // reconciliation job fails the entire job (if bypassing the internal retry); if
 // re-checked by the manager (and assuming we're no longer injecting an error),
-// the job runs successfully.
-func TestReconciliationJobErrorFailsJob(t *testing.T) {
+// the job runs successfully. We also verify that when the job as a whole is
+// bounced, we always run the full reconciliation process.
+func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	errMu := struct {
+	mu := struct {
 		syncutil.Mutex
-		err error
+		err         error
+		lastStartTS hlc.Timestamp
 	}{}
 
 	ctx := context.Background()
@@ -288,14 +293,19 @@ func TestReconciliationJobErrorFailsJob(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
+					ReconcilerInitialInterceptor: func(startTS hlc.Timestamp) {
+						mu.Lock()
+						defer mu.Unlock()
+						mu.lastStartTS = startTS
+					},
 					ManagerDisableJobCreation:                      true, // disable the automatic job creation
 					JobDisableInternalRetry:                        true,
 					SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
 					JobOnCheckpointInterceptor: func() error {
-						errMu.Lock()
-						defer errMu.Unlock()
+						mu.Lock()
+						defer mu.Unlock()
 
-						return errMu.err
+						return mu.err
 					},
 				},
 			},
@@ -304,17 +314,6 @@ func TestReconciliationJobErrorFailsJob(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	waitForJobStatus := func(jobID jobspb.JobID, status jobs.Status) {
-		testutils.SucceedsSoon(t, func() error {
-			var jobStatus string
-			tdb.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&jobStatus)
-
-			if jobs.Status(jobStatus) != status {
-				return errors.Newf("expected jobID %d to have status %, got %s", jobID, status, jobStatus)
-			}
-			return nil
-		})
-	}
 
 	var jobID jobspb.JobID
 	ts := tc.Server(0)
@@ -343,19 +342,153 @@ func TestReconciliationJobErrorFailsJob(t *testing.T) {
 		return nil
 	})
 
-	errMu.Lock()
-	errMu.err = errors.New("injected")
-	errMu.Unlock()
+	waitForJobCheckpoint(t, tdb)
 
-	waitForJobStatus(jobID, jobs.StatusFailed)
+	mu.Lock()
+	mu.err = errors.New("injected")
+	mu.Unlock()
 
-	errMu.Lock()
-	errMu.err = nil
-	errMu.Unlock()
+	waitForJobStatus(t, tdb, jobID, jobs.StatusFailed)
+
+	mu.Lock()
+	mu.err = nil
+	mu.Unlock()
 
 	started, err = manager.TestingCreateAndStartJobIfNoneExists(ctx)
 	require.NoError(t, err)
 	require.True(t, started)
 
-	waitForJobStatus(jobID, jobs.StatusRunning)
+	waitForJobStatus(t, tdb, jobID, jobs.StatusRunning)
+
+	mu.Lock()
+	require.True(t, mu.lastStartTS.IsEmpty(), "expected reconciler to start with empty checkpoint")
+	mu.Unlock()
+}
+
+// TestReconciliationUsesRightCheckpoint verifies that the reconciliation
+// internal retry uses the right checkpoint during internal retries.
+func TestReconciliationUsesRightCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	errCh := make(chan error)
+	mu := struct {
+		syncutil.Mutex
+		lastStartTS hlc.Timestamp
+	}{}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ReconcilerInitialInterceptor: func(startTS hlc.Timestamp) {
+						mu.Lock()
+						defer mu.Unlock()
+						mu.lastStartTS = startTS
+					},
+					ManagerDisableJobCreation:                      true, // disable the automatic job creation
+					SQLWatcherCheckpointNoopsEveryDurationOverride: 10 * time.Millisecond,
+					JobOnCheckpointInterceptor: func() error {
+						select {
+						case err := <-errCh:
+							return err
+						default:
+							return nil
+						}
+					},
+					JobOverrideRetryOptions: &retry.Options{ // for a faster test
+						InitialBackoff: 10 * time.Millisecond,
+						MaxBackoff:     10 * time.Millisecond,
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '10ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+
+	ts := tc.Server(0)
+	manager := spanconfigmanager.New(
+		ts.DB(),
+		ts.JobRegistry().(*jobs.Registry),
+		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.Stopper(),
+		ts.ClusterSettings(),
+		ts.SpanConfigReconciler().(spanconfig.Reconciler),
+		nil,
+	)
+
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	require.NoError(t, err)
+	require.True(t, started)
+
+	waitForJobCheckpoint(t, tdb)
+
+	mu.Lock()
+	require.True(t, mu.lastStartTS.IsEmpty())
+	mu.Unlock()
+
+	// Force an internal retry.
+	errCh <- errors.New("injected err")
+
+	testutils.SucceedsSoon(t, func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		if mu.lastStartTS.IsEmpty() {
+			return errors.New("expected reconciler to start with non-empty checkpoint")
+		}
+		return nil
+	})
+
+	// Force another internal retry, but one that's supposed to force a full
+	// reconciliation pass.
+	errCh <- spanconfig.NewMismatchedDescriptorTypesError(catalog.Database, catalog.Schema)
+
+	testutils.SucceedsSoon(t, func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		if !mu.lastStartTS.IsEmpty() {
+			return errors.New("expected reconciler to start with empty checkpoint")
+		}
+		return nil
+	})
+}
+
+func waitForJobStatus(
+	t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, status jobs.Status,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		var jobStatus string
+		tdb.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&jobStatus)
+
+		if jobs.Status(jobStatus) != status {
+			return errors.Newf("expected jobID %d to have status %, got %s", jobID, status, jobStatus)
+		}
+		return nil
+	})
+}
+
+func waitForJobCheckpoint(t *testing.T, tdb *sqlutils.SQLRunner) {
+	testutils.SucceedsSoon(t, func() error {
+		var progressBytes []byte
+		tdb.QueryRow(t, `
+SELECT progress FROM system.jobs
+  WHERE id = (SELECT job_id FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION')
+`).Scan(&progressBytes)
+
+		var progress jobspb.Progress
+		if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+			return err
+		}
+		sp, ok := progress.GetDetails().(*jobspb.Progress_AutoSpanConfigReconciliation)
+		require.Truef(t, ok, "unexpected job progress type")
+		if sp.AutoSpanConfigReconciliation.Checkpoint.IsEmpty() {
+			return errors.New("waiting for span config reconciliation...")
+		}
+
+		return nil
+	})
 }

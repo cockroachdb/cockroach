@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // TestingKnobs provide fine-grained control over the various span config
@@ -45,6 +46,10 @@ type TestingKnobs struct {
 	// JobDisableInternalRetry disables the span config reconciliation job's
 	// internal retry loop.
 	JobDisableInternalRetry bool
+
+	// JobOverrideRetryOptions, if set, controls the internal retry behavior for
+	// the reconciliation job.
+	JobOverrideRetryOptions *retry.Options
 
 	// JobPersistCheckpointInterceptor, if set, is invoked before the
 	// reconciliation job persists checkpoints.
@@ -99,7 +104,7 @@ type TestingKnobs struct {
 
 	// ReconcilerInitialInterceptor, if set, is invoked at the very outset of
 	// the reconciliation process.
-	ReconcilerInitialInterceptor func()
+	ReconcilerInitialInterceptor func(startTS hlc.Timestamp)
 
 	// ProtectedTSReaderOverrideFn returns a ProtectedTSReader which is used to
 	// override the ProtectedTSReader used when setting up a new store.
