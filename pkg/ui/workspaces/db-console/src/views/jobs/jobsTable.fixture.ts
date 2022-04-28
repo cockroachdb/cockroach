@@ -1,20 +1,12 @@
-// Copyright 2021 The Cockroach Authors.
-//
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
-
-import { JobTableProps } from "./jobTable";
+import { JobsTableProps } from "src/views/jobs/index";
 import moment from "moment";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { cockroach } from "src/js/protos";
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import Job = cockroach.server.serverpb.IJobResponse;
 import Long from "long";
+import { createMemoryHistory } from "history";
+import { jobsTimeoutErrorMessage } from "src/util/api";
 
 const defaultJobProperties = {
   username: "root",
@@ -270,13 +262,52 @@ export const allJobsFixture = [
   revertFailedJobFixture,
 ];
 
-const getJobTableProps = (jobs: Array<Job>): JobTableProps => ({
+const history = createMemoryHistory({ initialEntries: ["/statements"] });
+
+const staticJobProps: Pick<
+  JobsTableProps,
+  | "history"
+  | "location"
+  | "match"
+  | "sort"
+  | "status"
+  | "show"
+  | "type"
+  | "setSort"
+  | "setStatus"
+  | "setShow"
+  | "setType"
+  | "refreshJobs"
+> = {
+  history,
+  location: {
+    pathname: "/jobs",
+    search: "",
+    hash: "",
+    state: null,
+  },
+  match: {
+    path: "/jobs",
+    url: "/jobs",
+    isExact: true,
+    params: "{}",
+  },
   sort: {
     columnTitle: "creationTime",
     ascending: false,
   },
-  isUsedFilter: false,
-  setSort: (() => {}) as any,
+  status: "",
+  show: "50",
+  type: 0,
+  setSort: () => {},
+  setStatus: () => {},
+  setShow: () => {},
+  setType: () => {},
+  refreshJobs: () => null,
+};
+
+const getJobsTableProps = (jobs: Array<Job>): JobsTableProps => ({
+  ...staticJobProps,
   jobs: {
     inFlight: false,
     valid: false,
@@ -291,5 +322,27 @@ const getJobTableProps = (jobs: Array<Job>): JobTableProps => ({
   },
 });
 
-export const withData: JobTableProps = getJobTableProps(allJobsFixture);
-export const empty: JobTableProps = getJobTableProps([]);
+export const withData: JobsTableProps = getJobsTableProps(allJobsFixture);
+export const empty: JobsTableProps = getJobsTableProps([]);
+export const loading: JobsTableProps = {
+  ...staticJobProps,
+  jobs: {
+    inFlight: true,
+    valid: false,
+    requestedAt: moment(
+      "Mon Oct 18 2021 14:01:45 GMT-0400 (Eastern Daylight Time)",
+    ),
+  },
+};
+
+export const error: JobsTableProps = {
+  ...staticJobProps,
+  jobs: {
+    inFlight: false,
+    valid: false,
+    requestedAt: moment(
+      "Mon Oct 18 2021 14:01:45 GMT-0400 (Eastern Daylight Time)",
+    ),
+    lastError: new Error(jobsTimeoutErrorMessage),
+  },
+};
