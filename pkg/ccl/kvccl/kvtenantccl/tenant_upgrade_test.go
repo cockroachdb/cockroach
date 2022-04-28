@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -176,18 +178,13 @@ func TestTenantUpgrade(t *testing.T) {
 // equal the TestingBinaryMinSupportedVersion to avoid rot in tests using this
 // (as we retire old versions).
 func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
-	v1 := clusterversion.TestingBinaryVersion
 	v0 := clusterversion.TestingBinaryMinSupportedVersion
+	v1 := clusterversion.TestingBinaryVersion
 	v2 := clusterversion.TestingBinaryVersion
-	if v0.Minor > 0 {
-		v0.Minor--
+	if v1.Internal > 2 {
+		v1.Internal -= 2
 	} else {
-		v0.Major--
-	}
-	if v1.Minor > 0 {
-		v1.Minor--
-	} else {
-		v1.Major--
+		v2.Internal += 2
 	}
 	return v0, v1, v2
 }
@@ -242,6 +239,8 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			v0,
 			false, // initializeVersion
 		)
+		slinstance.DefaultTTL.Override(ctx, &settings.SV, 3*time.Second)
+		slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 500*time.Millisecond)
 		v2onMigrationStopper := stop.NewStopper()
 		// Initialize the version to the minimum it could be.
 		require.NoError(t, clusterversion.Initialize(ctx,
@@ -251,6 +250,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			TenantID: roachpb.MakeTenantID(id),
 			Existing: existing,
 			TestingKnobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				MigrationManager: &migration.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
 						return []clusterversion.ClusterVersion{{Version: v1}, {Version: v2}}
