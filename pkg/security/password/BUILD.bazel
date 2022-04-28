@@ -6,9 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/security/password",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/envutil",
-        "//pkg/util/log",
-        "//pkg/util/quotapool",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_xdg_go_pbkdf2//:pbkdf2",
         "@com_github_xdg_go_scram//:scram",
@@ -25,6 +22,7 @@ go_test(
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_crypto//bcrypt",
     ],

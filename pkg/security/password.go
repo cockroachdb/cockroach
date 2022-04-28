@@ -13,10 +13,15 @@ package security
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -166,3 +171,52 @@ var AutoUpgradePasswordHashes = settings.RegisterBoolSetting(
 	"whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256",
 	true,
 ).WithPublic()
+
+// expensiveHashComputeSemOnce wraps a semaphore that limits the
+// number of concurrent calls to the bcrypt and sha256 hash
+// functions. This is needed to avoid the risk of a DoS attacks by
+// malicious users or broken client apps that would starve the server
+// of CPU resources just by computing hashes.
+//
+// We use a sync.Once to delay the creation of the semaphore to the
+// first time the password functions are used. This gives a chance to
+// the server process to update GOMAXPROCS before we compute the
+// maximum amount of concurrency for the semaphore.
+var expensiveHashComputeSemOnce struct {
+	sem  *quotapool.IntPool
+	once sync.Once
+}
+
+// envMaxHashComputeConcurrency allows a user to override the semaphore
+// configuration using an environment variable.
+// If the env var is set to a value >= 1, that value is used.
+// Otherwise, a default is computed from the configure GOMAXPROCS.
+var envMaxHashComputeConcurrency = envutil.EnvOrDefaultInt("COCKROACH_MAX_PW_HASH_COMPUTE_CONCURRENCY", 0)
+
+// GetExpensiveHashComputeSem retrieves the hashing semaphore.
+func GetExpensiveHashComputeSem(ctx context.Context) password.HashSemaphore {
+	expensiveHashComputeSemOnce.once.Do(func() {
+		var n int
+		if envMaxHashComputeConcurrency >= 1 {
+			// The operator knows better. Use what they tell us to use.
+			n = envMaxHashComputeConcurrency
+		} else {
+			// We divide by 8 so that the max CPU usage of hash checks
+			// never exceeds ~10% of total CPU resources allocated to this
+			// process.
+			n = runtime.GOMAXPROCS(-1) / 8
+		}
+		if n < 1 {
+			n = 1
+		}
+		log.VInfof(ctx, 1, "configured maximum hashing concurrency: %d", n)
+		expensiveHashComputeSemOnce.sem = quotapool.NewIntPool("password_hashes", uint64(n))
+	})
+	return func(ctx context.Context) (func(), error) {
+		alloc, err := expensiveHashComputeSemOnce.sem.Acquire(ctx, 1)
+		if err != nil {
+			return nil, err
+		}
+		return alloc.Release, err
+	}
+}
