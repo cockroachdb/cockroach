@@ -385,6 +385,7 @@ ALL_TESTS = [
     "//pkg/sql/sem/eval/eval_test:eval_test_test",
     "//pkg/sql/sem/eval:eval_test",
     "//pkg/sql/sem/normalize:normalize_test",
+    "//pkg/sql/sem/tree:tree_disallowed_imports_test",
     "//pkg/sql/sem/tree:tree_test",
     "//pkg/sql/sessiondata:sessiondata_test",
     "//pkg/sql/sessioninit:sessioninit_test",
