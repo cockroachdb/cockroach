@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
@@ -30,12 +31,13 @@ func TestOutliers(t *testing.T) {
 	sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
 	txnID := uuid.FastMakeV4()
 	stmtID := clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+	stmtFptID := roachpb.StmtFingerprintID(100)
 
 	t.Run("detection", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		registry := outliers.New(st)
-		registry.ObserveStatement(sessionID, stmtID, 2)
+		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 2)
 		registry.ObserveTransaction(sessionID, txnID)
 
 		expected := []*outliers.Outlier{{
@@ -47,6 +49,7 @@ func TestOutliers(t *testing.T) {
 			},
 			Statement: &outliers.Outlier_Statement{
 				ID:               stmtID.GetBytes(),
+				FingerprintID:    stmtFptID,
 				LatencyInSeconds: 2,
 			},
 		}}
@@ -66,7 +69,7 @@ func TestOutliers(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 0)
 		registry := outliers.New(st)
-		registry.ObserveStatement(sessionID, stmtID, 2)
+		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 2)
 		registry.ObserveTransaction(sessionID, txnID)
 
 		var actual []*outliers.Outlier
@@ -83,7 +86,7 @@ func TestOutliers(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		registry := outliers.New(st)
-		registry.ObserveStatement(sessionID, stmtID, 0.5)
+		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 0.5)
 		registry.ObserveTransaction(sessionID, txnID)
 
 		var actual []*outliers.Outlier
@@ -100,12 +103,13 @@ func TestOutliers(t *testing.T) {
 		otherSessionID := clusterunique.IDFromBytes([]byte("cccccccccccccccccccccccccccccccc"))
 		otherTxnID := uuid.FastMakeV4()
 		otherStmtID := clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd"))
+		otherStmtFptID := roachpb.StmtFingerprintID(101)
 
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		registry := outliers.New(st)
-		registry.ObserveStatement(sessionID, stmtID, 2)
-		registry.ObserveStatement(otherSessionID, otherStmtID, 3)
+		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 2)
+		registry.ObserveStatement(otherSessionID, otherStmtID, otherStmtFptID, 3)
 		registry.ObserveTransaction(sessionID, txnID)
 		registry.ObserveTransaction(otherSessionID, otherTxnID)
 
@@ -118,6 +122,7 @@ func TestOutliers(t *testing.T) {
 			},
 			Statement: &outliers.Outlier_Statement{
 				ID:               stmtID.GetBytes(),
+				FingerprintID:    stmtFptID,
 				LatencyInSeconds: 2,
 			},
 		}, {
@@ -129,6 +134,7 @@ func TestOutliers(t *testing.T) {
 			},
 			Statement: &outliers.Outlier_Statement{
 				ID:               otherStmtID.GetBytes(),
+				FingerprintID:    otherStmtFptID,
 				LatencyInSeconds: 3,
 			},
 		}}

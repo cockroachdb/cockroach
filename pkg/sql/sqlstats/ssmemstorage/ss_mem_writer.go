@@ -159,7 +159,7 @@ func (s *Container) RecordStatement(
 		}
 	}
 
-	s.outliersRegistry.ObserveStatement(value.SessionID, value.StatementID, value.ServiceLatency)
+	s.outliersRegistry.ObserveStatement(value.SessionID, value.StatementID, stmtFingerprintID, value.ServiceLatency)
 
 	return stats.ID, nil
 }
