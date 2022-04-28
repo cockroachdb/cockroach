@@ -365,7 +365,7 @@ func newInternalPlanner(
 		p.semaCtx.IntervalStyleEnabled = sd.IntervalStyleEnabled
 		p.semaCtx.DateStyleEnabled = sd.DateStyleEnabled
 	}
-	p.semaCtx.SearchPath = sd.SearchPath
+	p.semaCtx.SearchPath = &sd.SearchPath
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()

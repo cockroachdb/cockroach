@@ -232,7 +232,7 @@ func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (boo
 		case *tree.FunctionDefinition:
 			name = t.Name
 		case *tree.UnresolvedName:
-			fn, err := t.ResolveFunction(params.SessionData().SearchPath)
+			fn, err := t.ResolveFunction(&params.SessionData().SearchPath)
 			if err != nil {
 				return false, err
 			}
