@@ -883,6 +883,8 @@ func (s *Server) newConnExecutor(
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
 		txnIDCacheWriter:          s.txnIDCache,
+		totalActiveTimeStopWatch:  timeutil.NewStopWatch(),
+		TxnFingerprintIDBuffer:    NewTxnFingerprintIDBuffer(s.cfg.Settings, s.cfg.RootMemoryMonitor),
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -1497,6 +1499,17 @@ type connExecutor struct {
 	// txnIDCacheWriter is used to write txnidcache.ResolvedTxnID to the
 	// Transaction ID Cache.
 	txnIDCacheWriter txnidcache.Writer
+
+	// totalTxnsExecuted tracks the total number of transactions executed during
+	// the lifetime of the session.
+	totalTxnsExecuted int
+
+	// TxnFingerprintIDBuffer is a circular buffer keeping track of the
+	// txnFingerprintIDs in this session.
+	TxnFingerprintIDBuffer *TxnFingerprintIDBuffer
+
+	// totalActiveTimeStopWatch tracks the total active time of the session.
+	totalActiveTimeStopWatch *timeutil.StopWatch
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1660,6 +1673,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 	ex.extraTxnState.sqlCursors.closeAll()
 
 	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
+
+	// Increment the totalTxnsExecuted count.
+	ex.totalTxnsExecuted += ex.extraTxnState.txnCounter
 
 	switch ev.eventType {
 	case txnCommit, txnRollback:
@@ -3115,6 +3131,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		remoteStr = sd.RemoteAddr.String()
 	}
 
+	txnFingerprintIDs := ex.TxnFingerprintIDBuffer.GetAllTxnFingerprintIDs()
+
 	return serverpb.Session{
 		Username:                   sd.SessionUser().Normalized(),
 		ClientAddress:              remoteStr,
@@ -3122,12 +3140,15 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		Start:                      ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
 		ActiveQueries:              activeQueries,
 		ActiveTxn:                  activeTxnInfo,
+		NumTxnsExecuted:            int32(ex.totalTxnsExecuted),
+		TxnFingerprintIDs:          txnFingerprintIDs,
 		LastActiveQuery:            lastActiveQuery,
 		ID:                         ex.sessionID.GetBytes(),
 		AllocBytes:                 ex.mon.AllocBytes(),
 		MaxAllocBytes:              ex.mon.MaximumBytes(),
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,
 		Status:                     status,
+		TotalActiveTime:            ex.totalActiveTimeStopWatch.Elapsed(),
 	}
 }
 
