@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -137,6 +138,67 @@ func (qs *raftReceiveQueues) Delete(rangeID roachpb.RangeID) {
 		// accounting (and also today it leaks memory when it happens).
 		q.Drain()
 	}
+}
+
+// HandleDelegatedSnapshot reads the incoming delegated snapshot message and
+// throttles sending snapshots before passing the request to the sender replica.
+func (s *Store) HandleDelegatedSnapshot(
+	ctx context.Context,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream DelegateSnapshotResponseStream,
+	span *tracing.Span,
+) error {
+	ctx = s.AnnotateCtx(ctx)
+	const name = "storage.Store: handle snapshot delegation"
+	return s.stopper.RunTaskWithErr(
+		ctx, name, func(ctx context.Context) error {
+			sender, err := s.GetReplica(req.RangeID)
+			if err != nil {
+				return err
+			}
+			// Pass the request to the sender replica.
+			err = sender.followerSendSnapshot(ctx, req.RecipientReplica, req, stream)
+
+			// Get the recording of the child RPC and serialize it in the response.
+			recording := span.FinishAndGetConfiguredRecording()
+			resp := &kvserverpb.DelegateSnapshotResponse{
+				SnapResponse: &kvserverpb.SnapshotResponse{
+					Status:  kvserverpb.SnapshotResponse_APPLIED,
+					Message: "Snapshot successfully applied by recipient",
+				},
+			}
+			if recording != nil {
+				resp.CollectedSpans = recording
+			}
+
+			if err != nil {
+				// Send a DelegationResponse_ERROR if the sender has rejected the
+				// request during handshake.
+				if errors.Is(err, errSenderRejectedDelegateSnapshotReq) {
+					return stream.Send(
+						&kvserverpb.DelegateSnapshotResponse{
+							DelegationResponse: &kvserverpb.DelegateSnapshotResponse_DelegationResponse{
+								Status:  kvserverpb.DelegateSnapshotResponse_DelegationResponse_ERROR,
+								Message: err.Error(),
+							},
+						},
+					)
+				}
+				// If an error occurred during snapshot sending, send an error response.
+				return stream.Send(
+					&kvserverpb.DelegateSnapshotResponse{
+						SnapResponse: &kvserverpb.SnapshotResponse{
+							Status:  kvserverpb.SnapshotResponse_ERROR,
+							Message: err.Error(),
+						},
+						CollectedSpans: resp.CollectedSpans,
+					},
+				)
+			}
+			// Send a final response that snapshot sending is completed.
+			return stream.Send(resp)
+		},
+	)
 }
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if

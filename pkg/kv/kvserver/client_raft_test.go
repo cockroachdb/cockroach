@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -3448,6 +3449,15 @@ func (d errorChannelTestHandler) HandleRaftResponse(
 
 func (errorChannelTestHandler) HandleSnapshot(
 	_ context.Context, _ *kvserverpb.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
+) error {
+	panic("unimplemented")
+}
+
+func (errorChannelTestHandler) HandleDelegatedSnapshot(
+	ctx context.Context,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream kvserver.DelegateSnapshotResponseStream,
+	span *tracing.Span,
 ) error {
 	panic("unimplemented")
 }
