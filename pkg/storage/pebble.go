@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -1862,7 +1863,7 @@ func (p *pebbleReadOnly) rawMVCCGet(key []byte) ([]byte, error) {
 	}
 	options := pebble.IterOptions{
 		LowerBound:                key,
-		UpperBound:                roachpb.BytesNext(key),
+		UpperBound:                encoding.BytesNext(key),
 		OnlyReadGuaranteedDurable: onlyReadGuaranteedDurable,
 	}
 	iter := p.parent.db.NewIter(&options)

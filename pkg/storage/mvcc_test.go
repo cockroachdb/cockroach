@@ -4198,7 +4198,7 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 	lu := roachpb.LockUpdate{
 		Span: roachpb.Span{
 			Key:    puts[0].key,
-			EndKey: roachpb.BytesNext(puts[len(puts)-1].key),
+			EndKey: encoding.BytesNext(puts[len(puts)-1].key),
 		},
 		Txn:            txnMeta,
 		Status:         status,
@@ -4307,7 +4307,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	lu := roachpb.LockUpdate{
 		Span: roachpb.Span{
 			Key:    puts[0].key,
-			EndKey: roachpb.BytesNext(puts[len(puts)-1].key),
+			EndKey: encoding.BytesNext(puts[len(puts)-1].key),
 		},
 		Txn:            txn.TxnMeta,
 		Status:         roachpb.PENDING,

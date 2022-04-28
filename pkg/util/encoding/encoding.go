@@ -3168,3 +3168,20 @@ func IsArrayKeyDone(buf []byte, dir Direction) bool {
 	}
 	return buf[0] == expected
 }
+
+// BytesNext returns the next possible byte slice, using the extra capacity
+// of the provided slice if possible, and if not, appending an \x00.
+func BytesNext(b []byte) []byte {
+	if cap(b) > len(b) {
+		bNext := b[:len(b)+1]
+		if bNext[len(bNext)-1] == 0 {
+			return bNext
+		}
+	}
+	// TODO(spencer): Do we need to enforce KeyMaxLength here?
+	// Switched to "make and copy" pattern in #4963 for performance.
+	bn := make([]byte, len(b)+1)
+	copy(bn, b)
+	bn[len(bn)-1] = 0
+	return bn
+}

@@ -394,7 +394,7 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 							}
 							// Skip to next key.
 							buf = append(buf[:0], k.Key...)
-							buf = roachpb.BytesNext(buf)
+							buf = encoding.BytesNext(buf)
 							iter.SeekGE(MVCCKey{Key: buf})
 						}
 					}
@@ -444,7 +444,7 @@ func BenchmarkScanOneAllIntentsResolved(b *testing.B) {
 							}
 							// Skip to next key.
 							buf = append(buf[:0], k.Key...)
-							buf = roachpb.BytesNext(buf)
+							buf = encoding.BytesNext(buf)
 							iter.Close()
 						}
 					}
