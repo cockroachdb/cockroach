@@ -13,6 +13,7 @@ package outliers
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -73,7 +74,10 @@ func New(st *cluster.Settings) *Registry {
 
 // ObserveStatement notifies the registry of a statement execution.
 func (r *Registry) ObserveStatement(
-	sessionID clusterunique.ID, statementID clusterunique.ID, latencyInSeconds float64,
+	sessionID clusterunique.ID,
+	statementID clusterunique.ID,
+	statementFingerprintID roachpb.StmtFingerprintID,
+	latencyInSeconds float64,
 ) {
 	if !r.enabled() {
 		return
@@ -82,6 +86,7 @@ func (r *Registry) ObserveStatement(
 	defer r.mu.Unlock()
 	r.mu.statements[sessionID] = append(r.mu.statements[sessionID], &Outlier_Statement{
 		ID:               statementID.GetBytes(),
+		FingerprintID:    statementFingerprintID,
 		LatencyInSeconds: latencyInSeconds,
 	})
 }

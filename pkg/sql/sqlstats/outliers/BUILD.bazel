@@ -12,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/clusterunique",
@@ -30,6 +31,7 @@ go_test(
     ],
     embed = [":outliers"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/clusterunique",
         "//pkg/util/uuid",
