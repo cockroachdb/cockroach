@@ -2793,103 +2793,73 @@ The requested number of points must be not larger than 65336.`,
 	"st_xmin": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				t, err := g.Geometry.AsGeomT()
-				if err != nil {
-					return nil, err
+			func(_ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				bbox := g.BoundingBoxRef()
+				if bbox == nil {
+					return tree.DNull, nil
 				}
-				switch t := t.(type) {
-				case geom.T:
-					if t.Empty() {
-						return tree.DNull, nil
-					}
-					if t.Stride() < 1 {
-						return tree.NewDFloat(0), nil
-					}
-					bounds := t.Bounds()
-					return tree.NewDFloat(tree.DFloat(bounds.Min(0))), nil
-				}
-				// Ideally we should return NULL here, but following PostGIS on this.
-				return nil, errors.Newf("argument to st_xmin() must be a valid geometry")
+
+				return tree.NewDFloat(tree.DFloat(bbox.LoX)), nil
 			},
 			types.Float,
 			infoBuilder{
-				info: "Returns the min(X) coordinate of a geometry.",
+				info: "min X coordinate of a geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"box2d", types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				bbox := tree.MustBeDBox2D(args[0]).CartesianBoundingBox
-				t := bbox.ToGeomT(0 /* SRID */)
-				if t.Empty() {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0])
+				if bbox == nil {
 					return tree.DNull, nil
 				}
-				if t.Stride() < 1 {
-					return tree.NewDFloat(0), nil
-				}
-				bounds := t.Bounds()
-				return tree.NewDFloat(tree.DFloat(bounds.Min(0))), nil
+
+				return tree.NewDFloat(tree.DFloat(bbox.LoX)), nil
 			},
 			Info: infoBuilder{
-				info: "Returns the min(X) coordinate of a box2d.",
+				info: "min X coordinate of a box2d.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_xmax": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				t, err := g.Geometry.AsGeomT()
-				if err != nil {
-					return nil, err
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				bbox := g.BoundingBoxRef()
+				if bbox == nil {
+					return tree.DNull, nil
 				}
-				switch t := t.(type) {
-				case geom.T:
-					if t.Empty() {
-						return tree.DNull, nil
-					}
-					if t.Stride() < 1 {
-						return tree.NewDFloat(0), nil
-					}
-					bounds := t.Bounds()
-					return tree.NewDFloat(tree.DFloat(bounds.Max(0))), nil
-				}
-				// Ideally we should return NULL here, but following PostGIS on this.
-				return nil, errors.Newf("argument to st_xmax() must be a valid geometry")
+
+				return tree.NewDFloat(tree.DFloat(bbox.HiX)), nil
 			},
 			types.Float,
 			infoBuilder{
-				info: "Returns the max(X) coordinate of a geometry.",
+				info: "max X coordinate of a geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"box2d", types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				bbox := tree.MustBeDBox2D(args[0]).CartesianBoundingBox
-				t := bbox.ToGeomT(0 /* SRID */)
-				if t.Empty() {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0])
+				if bbox == nil {
 					return tree.DNull, nil
 				}
-				if t.Stride() < 1 {
-					return tree.NewDFloat(0), nil
-				}
-				bounds := t.Bounds()
-				return tree.NewDFloat(tree.DFloat(bounds.Max(0))), nil
+
+				return tree.NewDFloat(tree.DFloat(bbox.HiX)), nil
 			},
 			Info: infoBuilder{
-				info: "Returns the max(X) coordinate of a box2d.",
+				info: "max X coordinate of a box2d.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_y": makeBuiltin(
@@ -2920,103 +2890,73 @@ The requested number of points must be not larger than 65336.`,
 	"st_ymin": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				t, err := g.Geometry.AsGeomT()
-				if err != nil {
-					return nil, err
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				bbox := g.BoundingBoxRef()
+				if bbox == nil {
+					return tree.DNull, nil
 				}
-				switch t := t.(type) {
-				case geom.T:
-					if t.Empty() {
-						return tree.DNull, nil
-					}
-					if t.Stride() < 2 {
-						return tree.NewDFloat(0.00), nil
-					}
-					bounds := t.Bounds()
-					return tree.NewDFloat(tree.DFloat(bounds.Min(1))), nil
-				}
-				// Ideally we should return NULL here, but following PostGIS on this.
-				return nil, errors.Newf("argument to st_ymin() must be a valid geometry")
+
+				return tree.NewDFloat(tree.DFloat(bbox.LoY)), nil
 			},
 			types.Float,
 			infoBuilder{
-				info: "Returns the min(Y) coordinate of a geometry.",
+				info: "min Y coordinate of a geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"box2d", types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				bbox := tree.MustBeDBox2D(args[0]).CartesianBoundingBox
-				t := bbox.ToGeomT(0 /* SRID */)
-				if t.Empty() {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0])
+				if bbox == nil {
 					return tree.DNull, nil
 				}
-				if t.Stride() < 2 {
-					return tree.NewDFloat(0.00), nil
-				}
-				bounds := t.Bounds()
-				return tree.NewDFloat(tree.DFloat(bounds.Min(1))), nil
+
+				return tree.NewDFloat(tree.DFloat(bbox.LoY)), nil
 			},
 			Info: infoBuilder{
-				info: "Returns the min(Y) coordinate of a box2d.",
+				info: "min Y coordinate of a box2d.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_ymax": makeBuiltin(
 		defProps(),
 		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				t, err := g.Geometry.AsGeomT()
-				if err != nil {
-					return nil, err
+			func(ctx *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				bbox := g.BoundingBoxRef()
+				if bbox == nil {
+					return tree.DNull, nil
 				}
-				switch t := t.(type) {
-				case geom.T:
-					if t.Empty() {
-						return tree.DNull, nil
-					}
-					if t.Stride() < 2 {
-						return tree.NewDFloat(0.00), nil
-					}
-					bounds := t.Bounds()
-					return tree.NewDFloat(tree.DFloat(bounds.Max(1))), nil
-				}
-				// Ideally we should return NULL here, but following PostGIS on this.
-				return nil, errors.Newf("argument to st_ymax() must be a valid geometry")
+
+				return tree.NewDFloat(tree.DFloat(bbox.HiY)), nil
 			},
 			types.Float,
 			infoBuilder{
-				info: "Returns the max(Y) coordinate of a geometry.",
+				info: "max Y coordinate of a geometry.",
 			},
-			tree.VolatilityImmutable,
+			volatility.Immutable,
 		),
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"box2d", types.Box2D},
 			},
 			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				bbox := tree.MustBeDBox2D(args[0]).CartesianBoundingBox
-				t := bbox.ToGeomT(0 /* SRID */)
-				if t.Empty() {
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0])
+				if bbox == nil {
 					return tree.DNull, nil
 				}
-				if t.Stride() < 2 {
-					return tree.NewDFloat(0.00), nil
-				}
-				bounds := t.Bounds()
-				return tree.NewDFloat(tree.DFloat(bounds.Max(1))), nil
+
+				return tree.NewDFloat(tree.DFloat(bbox.HiY)), nil
 			},
 			Info: infoBuilder{
-				info: "Returns the max(Y) coordinate of a box2d.",
+				info: "max Y coordinate of a box2d.",
 			}.String(),
-			Volatility: tree.VolatilityImmutable,
+			Volatility: volatility.Immutable,
 		},
 	),
 	"st_z": makeBuiltin(
@@ -3043,102 +2983,6 @@ The requested number of points must be not larger than 65336.`,
 			},
 			volatility.Immutable,
 		),
-	),
-	"st_zmin": makeBuiltin(
-		defProps(),
-		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				t, err := g.Geometry.AsGeomT()
-				if err != nil {
-					return nil, err
-				}
-				switch t := t.(type) {
-				case geom.T:
-					if t.Empty() {
-						return tree.DNull, nil
-					}
-					if t.Stride() < 3 {
-						return tree.NewDFloat(0.00), nil
-					}
-					bounds := t.Bounds()
-					return tree.NewDFloat(tree.DFloat(bounds.Min(2))), nil
-				}
-				// Ideally we should return NULL here, but following PostGIS on this.
-				return nil, errors.Newf("argument to st_zmin() must be a valid geometry")
-			},
-			types.Float,
-			infoBuilder{
-				info: "Returns the min(Z) coordinate of a geometry.",
-			},
-			tree.VolatilityImmutable,
-		),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"box2d", types.Box2D},
-			},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				bbox := tree.MustBeDBox2D(args[0]).CartesianBoundingBox
-				t := bbox.ToGeomT(0 /* SRID */)
-				if t.Empty() {
-					return tree.DNull, nil
-				}
-
-				return tree.NewDFloat(0.00), nil
-			},
-			Info: infoBuilder{
-				info: "Returns the min(Z) coordinate of a box2d.",
-			}.String(),
-			Volatility: tree.VolatilityImmutable,
-		},
-	),
-	"st_zmax": makeBuiltin(
-		defProps(),
-		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				t, err := g.Geometry.AsGeomT()
-				if err != nil {
-					return nil, err
-				}
-				switch t := t.(type) {
-				case geom.T:
-					if t.Empty() {
-						return tree.DNull, nil
-					}
-					if t.Stride() < 3 {
-						return tree.NewDFloat(0.00), nil
-					}
-					bounds := t.Bounds()
-					return tree.NewDFloat(tree.DFloat(bounds.Max(2))), nil
-				}
-				// Ideally we should return NULL here, but following PostGIS on this.
-				return nil, errors.Newf("argument to st_zmax() must be a valid geometry")
-			},
-			types.Float,
-			infoBuilder{
-				info: "Returns the max(Z) coordinate of a geometry.",
-			},
-			tree.VolatilityImmutable,
-		),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"box2d", types.Box2D},
-			},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				bbox := tree.MustBeDBox2D(args[0]).CartesianBoundingBox
-				t := bbox.ToGeomT(0 /* SRID */)
-				if t.Empty() {
-					return tree.DNull, nil
-				}
-
-				return tree.NewDFloat(0.00), nil
-			},
-			Info: infoBuilder{
-				info: "Returns the max(Z) coordinate of a box2d.",
-			}.String(),
-			Volatility: tree.VolatilityImmutable,
-		},
 	),
 	"st_m": makeBuiltin(
 		defProps(),

@@ -2570,35 +2570,27 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr>
 <tr><td><a name="st_x"></a><code>st_x(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the X coordinate of a geometry if it is a Point.</p>
 </span></td></tr>
-<tr><td><a name="st_xmax"></a><code>st_xmax(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the max(X) coordinate of a box2d.</p>
+<tr><td><a name="st_xmax"></a><code>st_xmax(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>max X coordinate of a box2d.</p>
 </span></td></tr>
-<tr><td><a name="st_xmax"></a><code>st_xmax(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the max(X) coordinate of a geometry.</p>
+<tr><td><a name="st_xmax"></a><code>st_xmax(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>max X coordinate of a geometry.</p>
 </span></td></tr>
-<tr><td><a name="st_xmin"></a><code>st_xmin(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the min(X) coordinate of a box2d.</p>
+<tr><td><a name="st_xmin"></a><code>st_xmin(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>min X coordinate of a box2d.</p>
 </span></td></tr>
-<tr><td><a name="st_xmin"></a><code>st_xmin(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the min(X) coordinate of a geometry.</p>
+<tr><td><a name="st_xmin"></a><code>st_xmin(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>min X coordinate of a geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_y"></a><code>st_y(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Y coordinate of a geometry if it is a Point.</p>
 </span></td></tr>
-<tr><td><a name="st_ymax"></a><code>st_ymax(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the max(Y) coordinate of a box2d.</p>
+<tr><td><a name="st_ymax"></a><code>st_ymax(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>max Y coordinate of a box2d.</p>
 </span></td></tr>
-<tr><td><a name="st_ymax"></a><code>st_ymax(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the max(Y) coordinate of a geometry.</p>
+<tr><td><a name="st_ymax"></a><code>st_ymax(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>max Y coordinate of a geometry.</p>
 </span></td></tr>
-<tr><td><a name="st_ymin"></a><code>st_ymin(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the min(Y) coordinate of a box2d.</p>
+<tr><td><a name="st_ymin"></a><code>st_ymin(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>min Y coordinate of a box2d.</p>
 </span></td></tr>
-<tr><td><a name="st_ymin"></a><code>st_ymin(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the min(Y) coordinate of a geometry.</p>
+<tr><td><a name="st_ymin"></a><code>st_ymin(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>min Y coordinate of a geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_z"></a><code>st_z(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Z coordinate of a geometry if it is a Point.</p>
 </span></td></tr>
-<tr><td><a name="st_zmax"></a><code>st_zmax(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the max(Z) coordinate of a box2d.</p>
-</span></td></tr>
-<tr><td><a name="st_zmax"></a><code>st_zmax(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the max(Z) coordinate of a geometry.</p>
-</span></td></tr>
 <tr><td><a name="st_zmflag"></a><code>st_zmflag(geometry: geometry) &rarr; int2</code></td><td><span class="funcdesc"><p>Returns a code based on the ZM coordinate dimension of a geometry (XY = 0, XYM = 1, XYZ = 2, XYZM = 3).</p>
-</span></td></tr>
-<tr><td><a name="st_zmin"></a><code>st_zmin(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the min(Z) coordinate of a box2d.</p>
-</span></td></tr>
-<tr><td><a name="st_zmin"></a><code>st_zmin(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the min(Z) coordinate of a geometry.</p>
 </span></td></tr></tbody>
 </table>
 

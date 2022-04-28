@@ -227,6 +227,26 @@ NULL
 BOX(5 5,5 5)
 BOX(4 5,9 10)
 
+subtest st_xmin on box2d
+
+query T
+SELECT
+  st_xmin(g::box2d),
+  st_ymin(g::box2d),
+  st_xmax(g::box2d),
+  st_ymax(g::box2d)
+FROM ( VALUES
+  ('box(-1 -1,-1 -1)'),
+  ('box(1 3,20 3)'),
+  ('box(5.5 -10, 5.5 60)'),
+  ('box(-1 -2, 4 6)')
+) tbl(g)
+----
+-1     -1  -1    -1
+ 1      3  20     3
+ 5.5  -10   5.5  60
+ -1    -2   4     6
+
 subtest st_box2dfromgeohash
 
 query T
