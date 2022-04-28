@@ -28,7 +28,7 @@ var _ tree.Visitor = &isConstVisitor{}
 
 func (v *isConstVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	if v.isConst {
-		if !tree.OperatorIsImmutable(expr, v.ctx.SessionData()) ||
+		if !tree.OperatorIsImmutable(expr, v.ctx.CastSessionOptions()) ||
 			IsVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 			v.isConst = false
 			return false, expr

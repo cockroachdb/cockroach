@@ -16,10 +16,15 @@ package cast
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
+
+// SessionOptions configures options for how cast volatility is defined.
+type SessionOptions struct {
+	IntervalStyleEnabled bool
+	DateStyleEnabled     bool
+}
 
 // Context represents the contexts in which a cast can be performed. There
 // are three types of cast contexts: explicit, assignment, and implicit. Not all
@@ -189,7 +194,7 @@ func ValidCast(src, tgt *types.T, ctx Context) bool {
 
 	// If src and tgt are not both array or tuple types, check castMap for a
 	// valid cast.
-	c, ok := LookupCast(src, tgt, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
+	c, ok := LookupCast(src, tgt, SessionOptions{})
 	if ok {
 		return c.MaxContext >= ctx
 	}
@@ -199,7 +204,7 @@ func ValidCast(src, tgt *types.T, ctx Context) bool {
 
 // LookupCast returns a cast that describes the cast from src to tgt if it
 // exists. If it does not exist, ok=false is returned.
-func LookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) (Cast, bool) {
+func LookupCast(src, tgt *types.T, so SessionOptions) (Cast, bool) {
 	srcFamily := src.Family()
 	tgtFamily := tgt.Family()
 	srcFamily.Name()
@@ -285,8 +290,8 @@ func LookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 
 	if tgts, ok := castMap[src.Oid()]; ok {
 		if c, ok := tgts[tgt.Oid()]; ok {
-			if intervalStyleEnabled && c.intervalStyleAffected ||
-				dateStyleEnabled && c.dateStyleAffected {
+			if so.IntervalStyleEnabled && c.intervalStyleAffected ||
+				so.DateStyleEnabled && c.dateStyleAffected {
 				c.Volatility = volatility.Stable
 			}
 			return c, true
@@ -307,14 +312,12 @@ func LookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 }
 
 // LookupCastVolatility returns the Volatility of a valid cast.
-func LookupCastVolatility(
-	from, to *types.T, sd *sessiondata.SessionData,
-) (_ volatility.V, ok bool) {
+func LookupCastVolatility(from, to *types.T, opts SessionOptions) (_ volatility.V, ok bool) {
 	fromFamily := from.Family()
 	toFamily := to.Family()
 	// Special case for casting between arrays.
 	if fromFamily == types.ArrayFamily && toFamily == types.ArrayFamily {
-		return LookupCastVolatility(from.ArrayContents(), to.ArrayContents(), sd)
+		return LookupCastVolatility(from.ArrayContents(), to.ArrayContents(), opts)
 	}
 	// Special case for casting between tuples.
 	if fromFamily == types.TupleFamily && toFamily == types.TupleFamily {
@@ -329,7 +332,7 @@ func LookupCastVolatility(
 		}
 		maxVolatility := volatility.LeakProof
 		for i := range fromTypes {
-			v, lookupOk := LookupCastVolatility(fromTypes[i], toTypes[i], sd)
+			v, lookupOk := LookupCastVolatility(fromTypes[i], toTypes[i], opts)
 			if !lookupOk {
 				return 0, false
 			}
@@ -340,14 +343,7 @@ func LookupCastVolatility(
 		return maxVolatility, true
 	}
 
-	intervalStyleEnabled := false
-	dateStyleEnabled := false
-	if sd != nil {
-		intervalStyleEnabled = sd.IntervalStyleEnabled
-		dateStyleEnabled = sd.DateStyleEnabled
-	}
-
-	cast, ok := LookupCast(from, to, intervalStyleEnabled, dateStyleEnabled)
+	cast, ok := LookupCast(from, to, opts)
 	if !ok {
 		return 0, false
 	}

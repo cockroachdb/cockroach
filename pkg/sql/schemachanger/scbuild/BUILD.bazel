@@ -35,6 +35,7 @@ go_library(
         "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
+        "//pkg/sql/sem/cast",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",

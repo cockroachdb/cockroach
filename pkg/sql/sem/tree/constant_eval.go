@@ -13,20 +13,19 @@ package tree
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // OperatorIsImmutable returns true if the given expression corresponds to a
 // constant operator. Note importantly that this will return true for all
 // expr types other than FuncExpr, CastExpr, UnaryExpr, BinaryExpr, and
 // ComparisonExpr. It does not do any recursive searching.
-func OperatorIsImmutable(expr Expr, sd *sessiondata.SessionData) bool {
+func OperatorIsImmutable(expr Expr, opts cast.SessionOptions) bool {
 	switch t := expr.(type) {
 	case *FuncExpr:
 		return t.fnProps.Class == NormalClass && t.fn.Volatility <= volatility.Immutable
 
 	case *CastExpr:
-		v, ok := cast.LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ, sd)
+		v, ok := cast.LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ, opts)
 		return ok && v <= volatility.Immutable
 
 	case *UnaryExpr:
