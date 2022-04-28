@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -2474,6 +2475,15 @@ func recordRangeEventsInLog(
 	return nil
 }
 
+// getSenderReplica returns a replica descriptor for a follower replica to act as
+// the sender for snapshots.
+// TODO(amy): select a follower based on locality matching.
+func (r *Replica) getSenderReplica(ctx context.Context) (roachpb.ReplicaDescriptor, error) {
+	log.Fatal(ctx, "follower snapshots not implemented")
+	return r.GetReplicaDescriptor()
+}
+
+// TODO(amy): update description when patch for follower snapshots are completed.
 // sendSnapshot sends a snapshot of the replica state to the specified replica.
 // Currently only invoked from replicateQueue and raftSnapshotQueue. Be careful
 // about adding additional calls as generating a snapshot is moderately
@@ -2597,6 +2607,102 @@ func (r *Replica) sendSnapshot(
 		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
 
+	sender, err := r.GetReplicaDescriptor()
+	if err != nil {
+		return err
+	}
+	// Check follower snapshots cluster setting.
+	if followerSnapshotsEnabled.Get(&r.ClusterSettings().SV) {
+		sender, err = r.getSenderReplica(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	log.VEventf(
+		ctx, 2, "delegating snapshot transmission for %v to %v", recipient, sender,
+	)
+	desc, err := r.GetReplicaDescriptor()
+	if err != nil {
+		return err
+	}
+	status := r.RaftStatus()
+	if status == nil {
+		// This code path is sometimes hit during scatter for replicas that
+		// haven't woken up yet.
+		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
+	}
+
+	// Create new delegate snapshot request with only required metadata.
+	delegateRequest := &kvserverpb.DelegateSnapshotRequest{
+		RangeID:            r.RangeID,
+		CoordinatorReplica: desc,
+		RecipientReplica:   recipient,
+		Priority:           priority,
+		Type:               snapType,
+		Term:               status.Term,
+		DelegatedSender:    sender,
+	}
+	err = contextutil.RunWithTimeout(
+		ctx, "delegate-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
+			return r.store.cfg.Transport.DelegateSnapshot(
+				ctx,
+				delegateRequest,
+			)
+		},
+	)
+
+	if err != nil {
+		return errors.Mark(err, errMarkSnapshotError)
+	}
+	return nil
+}
+
+// followerSnapshotsEnabled is used to enable or disable follower snapshots.
+var followerSnapshotsEnabled = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"kv.snapshot_delegation.enabled",
+		"set to true to allow snapshots from follower replicas",
+		false,
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
+
+// followerSendSnapshot receives a delegate snapshot request and generates the
+// snapshot from this replica. The entire process of generating and transmitting
+// the snapshot is handled, and errors are propagated back to the leaseholder.
+func (r *Replica) followerSendSnapshot(
+	ctx context.Context,
+	recipient roachpb.ReplicaDescriptor,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream DelegateSnapshotResponseStream,
+) (retErr error) {
+	ctx = r.AnnotateCtx(ctx)
+
+	// TODO(amy): when delegating to different senders, check raft applied state
+	// to determine if this follower replica is fit to send.
+	// Acknowledge that the request has been accepted.
+	if err := stream.Send(
+		&kvserverpb.DelegateSnapshotResponse{
+			SnapResponse: &kvserverpb.SnapshotResponse{
+				Status: kvserverpb.SnapshotResponse_ACCEPTED,
+			},
+		},
+	); err != nil {
+		return err
+	}
+
+	// Throttle snapshot sending.
+	rangeSize := r.GetMVCCStats().Total()
+	cleanup, err := r.store.reserveSendSnapshot(ctx, req, rangeSize)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	snapType := req.Type
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
 	if err != nil {
 		err = errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
@@ -2611,21 +2717,11 @@ func (r *Replica) sendSnapshot(
 	// the leaseholder and we haven't yet applied the configuration change that's
 	// adding the recipient to the range.
 	if _, ok := snap.State.Desc.GetReplicaDescriptor(recipient.StoreID); !ok {
-		return errors.Wrapf(errMarkSnapshotError,
+		return errors.Wrapf(
+			errMarkSnapshotError,
 			"attempting to send snapshot that does not contain the recipient as a replica; "+
-				"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc)
-	}
-
-	sender, err := r.GetReplicaDescriptor()
-	if err != nil {
-		return errors.Wrapf(err, "%s: change replicas failed", r)
-	}
-
-	status := r.RaftStatus()
-	if status == nil {
-		// This code path is sometimes hit during scatter for replicas that
-		// haven't woken up yet.
-		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
+				"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc,
+		)
 	}
 
 	// We avoid shipping over the past Raft log in the snapshot by changing
@@ -2643,25 +2739,26 @@ func (r *Replica) sendSnapshot(
 	// explicitly for snapshots going out to followers.
 	snap.State.DeprecatedUsingAppliedStateKey = true
 
-	req := kvserverpb.SnapshotRequest_Header{
+	// Create new snapshot request header using the delegate snapshot request.
+	header := kvserverpb.SnapshotRequest_Header{
 		State:                                snap.State,
 		DeprecatedUnreplicatedTruncatedState: true,
 		RaftMessageRequest: kvserverpb.RaftMessageRequest{
-			RangeID:     r.RangeID,
-			FromReplica: sender,
-			ToReplica:   recipient,
+			RangeID:     req.RangeID,
+			FromReplica: req.CoordinatorReplica,
+			ToReplica:   req.RecipientReplica,
 			Message: raftpb.Message{
 				Type:     raftpb.MsgSnap,
-				To:       uint64(recipient.ReplicaID),
-				From:     uint64(sender.ReplicaID),
-				Term:     status.Term,
+				From:     uint64(req.CoordinatorReplica.ReplicaID),
+				To:       uint64(req.RecipientReplica.ReplicaID),
+				Term:     req.Term,
 				Snapshot: snap.RaftSnap,
 			},
 		},
-		RangeSize: r.GetMVCCStats().Total(),
-		Priority:  priority,
+		RangeSize: rangeSize,
+		Priority:  req.Priority,
 		Strategy:  kvserverpb.SnapshotRequest_KV_BATCH,
-		Type:      snapType,
+		Type:      req.Type,
 	}
 	newBatchFn := func() storage.Batch {
 		return r.store.Engine().NewUnindexedBatch(true /* writeOnly */)
@@ -2669,18 +2766,20 @@ func (r *Replica) sendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
+
 	err = contextutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			return r.store.cfg.Transport.SendSnapshot(
 				ctx,
 				r.store.cfg.StorePool,
-				req,
+				header,
 				snap,
 				newBatchFn,
 				sent,
 				r.store.metrics.RangeSnapshotSentBytes,
 			)
-		})
+		},
+	)
 	if err != nil {
 		if errors.Is(err, errMalformedSnapshot) {
 			tag := fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short())

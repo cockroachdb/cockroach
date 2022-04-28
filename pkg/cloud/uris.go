@@ -28,6 +28,9 @@ const (
 	// AuthParamSpecified is the query parameter for the specified authentication
 	// mode in a URI.
 	AuthParamSpecified = roachpb.ExternalStorageAuthSpecified
+	// AuthParamAssume is the query parameter for AssumeRole authentication
+	// mode in a URI.
+	AuthParamAssume = roachpb.ExternalStorageAuthAssume
 )
 
 // GetPrefixBeforeWildcard gets the prefix of a path that does not contain glob-

@@ -17,6 +17,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -43,6 +44,7 @@ type kmsURIParams struct {
 	endpoint  string
 	region    string
 	auth      string
+	roleArn   string
 }
 
 func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
@@ -53,6 +55,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 		endpoint:  kmsURI.Query().Get(AWSEndpointParam),
 		region:    kmsURI.Query().Get(KMSRegionParam),
 		auth:      kmsURI.Query().Get(cloud.AuthParam),
+		roleArn:   kmsURI.Query().Get(AWSRoleArnParam),
 	}
 
 	// AWS secrets often contain + characters, which must be escaped when
@@ -132,6 +135,31 @@ func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
 		opts.SharedConfigState = session.SharedConfigEnable
+	case cloud.AuthParamAssume:
+		if kmsURIParams.roleArn == "" {
+			return nil, errors.Errorf(
+				"%s is set to '%s', but %s must be set",
+				cloud.AuthParam,
+				cloud.AuthParamAssume,
+				AWSRoleArnParam,
+			)
+		}
+		// User can specify the account that is assuming the role, or if left
+		// unspecified, it will be retrieved from the default credentials
+		// chain.
+		if (kmsURIParams.accessKey == "") != (kmsURIParams.secret == "") {
+			return nil, errors.Errorf(
+				"%s is set to '%s', but %s and %s must both be set for a specified user or neither for implicit",
+				cloud.AuthParam,
+				cloud.AuthParamAssume,
+				AWSAccessKeyParam,
+				AWSSecretParam,
+			)
+		} else if kmsURIParams.accessKey != "" {
+			// Account that is doing the AssumeRole is specified by the user,
+			// so pass in the access key and secret when creating the session.
+			opts.Config.MergeIn(awsConfig)
+		}
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
@@ -140,6 +168,11 @@ func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "new aws session")
 	}
+
+	if kmsURIParams.auth == cloud.AuthParamAssume {
+		sess.Config.Credentials = stscreds.NewCredentials(sess, kmsURIParams.roleArn)
+	}
+
 	if region == "" {
 		// TODO(adityamaru): Maybe use the KeyID to get the region, similar to how
 		// we infer the region from the bucket for s3_storage.

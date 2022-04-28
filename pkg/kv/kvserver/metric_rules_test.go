@@ -40,5 +40,6 @@ func TestMetricRules(t *testing.T) {
 	require.NotNil(t, ruleRegistry.GetRuleForTest(capacityAvailableRatioRuleName))
 	require.NotNil(t, ruleRegistry.GetRuleForTest(nodeCapacityAvailableRatioRuleName))
 	require.NotNil(t, ruleRegistry.GetRuleForTest(clusterCapacityAvailableRatioRuleName))
-	require.Equal(t, 12, ruleRegistry.GetRuleCountForTest())
+	require.NotNil(t, ruleRegistry.GetRuleForTest(nodeCapacityLowRuleName))
+	require.Equal(t, 13, ruleRegistry.GetRuleCountForTest())
 }
