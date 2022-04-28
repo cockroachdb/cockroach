@@ -65,7 +65,7 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 	}
 
 	if err := repeatRunE(ctx, c, node, "install dependencies", `
-		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential
+		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential python3.7-distutils
 	`); err != nil {
 		t.Fatal(err)
 	}
