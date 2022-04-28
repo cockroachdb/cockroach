@@ -285,6 +285,7 @@ ALL_TESTS = [
     "//pkg/sql/contention:contention_test",
     "//pkg/sql/contentionpb:contentionpb_test",
     "//pkg/sql/covering:covering_test",
+    "//pkg/sql/decodeusername:decodeusername_test",
     "//pkg/sql/delegate:delegate_test",
     "//pkg/sql/descmetadata:descmetadata_test",
     "//pkg/sql/distsql:distsql_test",

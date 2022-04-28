@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -47,7 +48,9 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	grantees, err := decodeusername.FromRoleSpecList(
+		p.SessionData(), security.UsernameValidation, n.Grantees,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +82,9 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 
-	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	grantees, err := decodeusername.FromRoleSpecList(
+		p.SessionData(), security.UsernameValidation, n.Grantees,
+	)
 	if err != nil {
 		return nil, err
 	}

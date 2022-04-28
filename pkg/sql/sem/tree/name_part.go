@@ -11,7 +11,6 @@
 package tree
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -104,20 +103,6 @@ func (l NameList) ToStrings() []string {
 		names[i] = string(n)
 	}
 	return names
-}
-
-// ToSQLUsernames converts a NameList containing SQL input of usernames,
-// normalizes the names and returns them as a list of SQLUsernames.
-func (l NameList) ToSQLUsernames() ([]security.SQLUsername, error) {
-	targetRoles := make([]security.SQLUsername, len(l))
-	for i, role := range l {
-		user, err := security.MakeSQLUsernameFromUserInput(string(role), security.UsernameValidation)
-		if err != nil {
-			return nil, err
-		}
-		targetRoles[i] = user
-	}
-	return targetRoles, nil
 }
 
 // A NameList is a list of identifiers.
