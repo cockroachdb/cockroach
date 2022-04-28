@@ -379,13 +379,19 @@ func (r opResult) createDiskBackedSort(
 	} else if matchLen > 0 {
 		// The input is already partially ordered. Use a chunks sorter to avoid
 		// loading all the rows into memory.
+		opName := opNamePrefix + "sort-chunks"
+		deselectorUnlimitedAllocator := colmem.NewAllocator(
+			ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
+				ctx, flowCtx, opName, processorID,
+			), factory,
+		)
 		var sortChunksMemAccount *mon.BoundAccount
 		sortChunksMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
-			ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
+			ctx, flowCtx, spoolMemLimit, opName, processorID,
 		)
 		inMemorySorter = colexec.NewSortChunks(
-			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
-			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
+			deselectorUnlimitedAllocator, colmem.NewAllocator(ctx, sortChunksMemAccount, factory),
+			input, inputTypes, ordering.Columns, int(matchLen), maxOutputBatchMemSize,
 		)
 	} else {
 		// No optimizations possible. Default to the standard sort operator.

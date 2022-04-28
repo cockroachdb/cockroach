@@ -340,3 +340,16 @@ export function calculateXAxisDomain(
 ): AxisDomain {
   return ComputeTimeAxisDomain([startMillis, endMillis] as Extent);
 }
+
+export function calculateXAxisDomainBarChart(
+  startMillis: number,
+  endMillis: number,
+  samplingIntervalMillis: number,
+): AxisDomain {
+  // For bar charts, we want to render past endMillis to fully render the
+  // last bar. We should extend the x axis to the next sampling interval.
+  return ComputeTimeAxisDomain([
+    startMillis,
+    endMillis + samplingIntervalMillis,
+  ] as Extent);
+}
