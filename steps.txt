@@ -1,0 +1,31 @@
+roachprod create -n 10 --clouds aws --local-ssd=false tobias-lsm
+
+deploy master with #80702 and #80648
+
+roachprod sql tobias-lsm:1 -- -e "
+set cluster setting kv.snapshot_recovery.max_rate = '500mb';
+set cluster setting kv.snapshot_rebalance.max_rate = '500mb';
+"
+
+roachprod run tobias-lsm:1 ./cockroach workload init kv
+
+# 10 hotspots
+roachprod ssh tobias-lsm -- sudo systemd-run -p LimitNOFILE=65535 --unit kv-seq -- ./cockroach workload run kv --read-percent 0 --concurrency 10 --min-block-bytes 10000 --max-block-bytes 10000 --sequential --tolerate-errors
+
+# Spray entire keyspace with writes too, so that "all" memtables on ranges overlap
+roachprod ssh tobias-lsm -- sudo systemd-run -p LimitNOFILE=65535 --unit kv-rand -- ./cockroach workload run kv --read-percent 0 --concurrency 10 --min-block-bytes 10000 --max-block-bytes 10000 --tolerate-errors
+
+# At this point, get L0Files shooting up past 600 and L0Sublevels heading straight to 20, within 10 minutes
+
+# admission control kicks in and keeps it stable
+
+# let it run for a few hours
+
+# Fri Apr 29 11:31:34 BST 2022: 
+roachprod ssh tobias-lsm:1 -- ./cockroach node decommission --insecure --wait=none 1 2 3 4
+
+roachprod ssh tobias-lsm:1 -- ./cockroach workload fixtures import bank --payload-bytes=1024 --ranges=20000 --rows=65104166 --seed=0 --db=mediumbank
+
+dashboard:
+
+http://3.19.237.245:26258/#/debug/chart?charts=%5B%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A1%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.quota_pool.percent_used-p99%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A1%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.dropped_bytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.queued_bytes%22%7D%2C%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A2%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.stepped_bytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A3%2C%22aggregator%22%3A3%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.storage.l0-num-files%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.replicas.leaseholders%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.storage.l0-sublevels%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A1%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.admission.granter.io_tokens_exhausted_duration.kv%22%7D%5D%2C%22axisUnits%22%3A2%7D%5D&start=1651221423&end=1651222023
