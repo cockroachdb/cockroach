@@ -19,6 +19,7 @@ export * from "./common";
 export * from "./databaseDetailsPage";
 export * from "./databaseTablePage";
 export * from "./databasesPage";
+export * from "./delayed";
 export * from "./downloadFile";
 export * from "./dropdown";
 export * from "./empty";
