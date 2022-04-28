@@ -48,7 +48,6 @@ go_library(
     deps = [
         "//pkg/server/telemetry",
         "//pkg/settings",
-        "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
@@ -72,6 +71,7 @@ go_library(
         "//pkg/sql/sem/asof",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/cast",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",
