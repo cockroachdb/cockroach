@@ -883,6 +883,8 @@ func (s *Server) newConnExecutor(
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
 		txnIDCacheWriter:          s.txnIDCache,
+		totalActiveTimeStopWatch:  timeutil.NewStopWatch(),
+		txnFingerprintIDBuffer:    NewTxnFingerprintIDBuffer(s.cfg.Settings, s.cfg.RootMemoryMonitor),
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -1497,6 +1499,13 @@ type connExecutor struct {
 	// txnIDCacheWriter is used to write txnidcache.ResolvedTxnID to the
 	// Transaction ID Cache.
 	txnIDCacheWriter txnidcache.Writer
+
+	// txnFingerprintIDBuffer is a circular buffer keeping track of the
+	// txnFingerprintIDs in this session.
+	txnFingerprintIDBuffer *TxnFingerprintIDBuffer
+
+	// totalActiveTimeStopWatch tracks the total active time of the session.
+	totalActiveTimeStopWatch *timeutil.StopWatch
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -3115,6 +3124,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		remoteStr = sd.RemoteAddr.String()
 	}
 
+	txnFingerprintIDs := ex.txnFingerprintIDBuffer.GetAllTxnFingerprintIDs()
+
 	return serverpb.Session{
 		Username:                   sd.SessionUser().Normalized(),
 		ClientAddress:              remoteStr,
@@ -3122,12 +3133,15 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		Start:                      ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
 		ActiveQueries:              activeQueries,
 		ActiveTxn:                  activeTxnInfo,
+		NumTxnsExecuted:            int32(ex.extraTxnState.txnCounter),
+		TxnFingerprintIDs:          txnFingerprintIDs,
 		LastActiveQuery:            lastActiveQuery,
 		ID:                         ex.sessionID.GetBytes(),
 		AllocBytes:                 ex.mon.AllocBytes(),
 		MaxAllocBytes:              ex.mon.MaximumBytes(),
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,
 		Status:                     status,
+		TotalActiveTime:            ex.totalActiveTimeStopWatch.Elapsed(),
 	}
 }
 

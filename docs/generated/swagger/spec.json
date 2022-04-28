@@ -768,6 +768,12 @@
       },
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
     },
+    "Duration": {
+      "description": "A Duration represents the elapsed time between two instants\nas an int64 nanosecond count. The representation limits the\nlargest representable duration to approximately 290 years.",
+      "type": "integer",
+      "format": "int64",
+      "x-go-package": "time"
+    },
     "EventsResponse": {
       "description": "EventsResponse contains a set of event log entries. This is always limited\nto the latest N entries (N is enforced in the associated endpoint).",
       "type": "object",
@@ -1220,6 +1226,12 @@
         "node_id": {
           "$ref": "#/definitions/NodeID"
         },
+        "num_txns_executed": {
+          "description": "Number of transactions that were executed so far on this session.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "NumTxnsExecuted"
+        },
         "start": {
           "description": "Timestamp of session's start.",
           "type": "string",
@@ -1228,6 +1240,17 @@
         },
         "status": {
           "$ref": "#/definitions/Session_Status"
+        },
+        "totalActiveTime": {
+          "$ref": "#/definitions/Duration"
+        },
+        "txnFingerprintIDs": {
+          "description": "List of transaction fingerprint IDs in this session.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TransactionFingerprintID"
+          },
+          "x-go-name": "TxnFingerprintIDs"
         },
         "username": {
           "description": "Username of the user for this session.",
@@ -1492,6 +1515,12 @@
         }
       },
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/util/hlc"
+    },
+    "TransactionFingerprintID": {
+      "description": "TransactionFingerprintID is the hashed string constructed using the\nindividual statement fingerprint IDs that comprise the transaction.",
+      "type": "integer",
+      "format": "uint64",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
     },
     "TxnInfo": {
       "type": "object",
