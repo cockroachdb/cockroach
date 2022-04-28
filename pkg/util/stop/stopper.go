@@ -590,6 +590,9 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 	defer time.AfterFunc(5*time.Second, func() {
 		log.Infof(ctx, "quiescing...")
 	}).Stop()
+	defer time.AfterFunc(2*time.Minute, func() {
+		log.DumpStacks(ctx, "slow quiesce")
+	}).Stop()
 	defer s.Recover(ctx)
 
 	func() {
