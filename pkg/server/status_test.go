@@ -3248,7 +3248,7 @@ func TestStatusAPIListSessions(t *testing.T) {
 	err = getStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
 	require.NoError(t, err)
 	session := getSessionWithTestAppName(&resp)
-	require.Empty(t, session.LastActiveQuery)
+	require.Equal(t, session.LastActiveQuery, session.LastActiveQueryNoConstants)
 	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
 
 	// Grant VIEWACTIVITY, VIEWACTIVITYREDACTED should take precedence.
@@ -3258,7 +3258,7 @@ func TestStatusAPIListSessions(t *testing.T) {
 	require.NoError(t, err)
 	session = getSessionWithTestAppName(&resp)
 	require.Equal(t, appName, session.ApplicationName)
-	require.Empty(t, session.LastActiveQuery)
+	require.Equal(t, session.LastActiveQuery, session.LastActiveQueryNoConstants)
 	require.Equal(t, "SELECT _, _", session.LastActiveQueryNoConstants)
 
 	// Remove VIEWACTIVITYREDCATED. User should now see full query.
