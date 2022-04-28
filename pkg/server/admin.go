@@ -2873,7 +2873,7 @@ func (s *adminServer) enqueueRangeLocal(
 		queueName = "mvccGC"
 	}
 
-	traceSpans, processErr, err := store.ManuallyEnqueue(ctx, queueName, repl, req.SkipShouldQueue)
+	traceSpans, processErr, err := store.Enqueue(ctx, queueName, repl, req.SkipShouldQueue, req.Async)
 	if err != nil {
 		response.Details[0].Error = err.Error()
 		return response, nil

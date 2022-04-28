@@ -60,7 +60,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	raft "go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -3088,7 +3088,9 @@ func TestManuallyEnqueueUninitializedReplica(t *testing.T) {
 		StoreID:   tc.store.StoreID(),
 		ReplicaID: 7,
 	})
-	_, _, err := tc.store.ManuallyEnqueue(ctx, "replicaGC", repl, true)
+	_, _, err := tc.store.Enqueue(
+		ctx, "replicaGC", repl, true /* skipShouldQueue */, false, /* async */
+	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not enqueueing uninitialized replica")
 }
