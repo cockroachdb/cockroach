@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -1569,6 +1570,94 @@ func TestEmptyTxnIsBeingCorrectlyCounted(t *testing.T) {
 	require.Less(t, openSQLTxnCountPostEmptyTxns-openSQLTxnCountPreEmptyTxns, numOfEmptyTxns,
 		"expected the sql.txns.open counter to be properly decremented "+
 			"after executing empty transactions, but it was not")
+}
+
+//TestSessionTotalActiveTime tests that a session's total active time is
+//correctly being recorded as transactions are executed.
+func TestSessionTotalActiveTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := mainDB.Exec(fmt.Sprintf("CREATE USER %s", username.TestUser))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pgURL, cleanupDB := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "TestSessionTotalActiveTime", url.User(username.TestUser))
+	defer cleanupDB()
+	rawSQL, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		err := rawSQL.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	getSessionWithTestUser := func() *serverpb.Session {
+		sessions := s.SQLServer().(*sql.Server).GetExecutorConfig().SessionRegistry.SerializeAll()
+		for _, s := range sessions {
+			if s.Username == username.TestUser {
+				return &s
+			}
+		}
+		t.Fatalf("expected session with username %s", username.TestUser)
+		return nil
+	}
+
+	sqlDB := sqlutils.MakeSQLRunner(rawSQL)
+	sqlDB.Exec(t, "SELECT 1")
+	session := getSessionWithTestUser()
+	activeTimeNanos := session.TotalActiveTime.Nanoseconds()
+
+	// We will execute different types of transactions.
+	// After each execution, verify the total active time has increased, but is no
+	// longer increasing after the transaction has completed.
+	testCases := []struct {
+		Query string
+		// SessionActiveAfterExecution signifies that the active time should still be active after this query.
+		SessionActiveAfterExecution bool
+	}{
+		{"SELECT 1", false},
+		// Test explicit transaction.
+		{"BEGIN", true},
+		{"SELECT 1", true},
+		{"SELECT  1, 2", true},
+		{"COMMIT", false},
+		{"BEGIN", true},
+		{"SELECT crdb_internal.force_retry('1s')", true},
+		{"COMMIT", false},
+	}
+
+	for _, tc := range testCases {
+		sqlDB.Exec(t, tc.Query)
+		if tc.Query == "crdb_internal.force_retry('1s'" {
+			continue
+		}
+		// Check that the total active time has increased.
+		session = getSessionWithTestUser()
+		require.Greater(t, session.TotalActiveTime.Nanoseconds(), activeTimeNanos)
+
+		activeTimeNanos = session.TotalActiveTime.Nanoseconds()
+		session = getSessionWithTestUser()
+
+		if tc.SessionActiveAfterExecution {
+			require.Greater(t, session.TotalActiveTime.Nanoseconds(), activeTimeNanos)
+		} else {
+			require.Equal(t, activeTimeNanos, session.TotalActiveTime.Nanoseconds())
+		}
+
+		activeTimeNanos = session.TotalActiveTime.Nanoseconds()
+	}
 }
 
 // dynamicRequestFilter exposes a filter method which is a
