@@ -7,29 +7,29 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
+/* global module */
+/* eslint-disable @typescript-eslint/no-var-requires */
 
 const { pathsToModuleNameMapper } = require("ts-jest/utils");
-const { compilerOptions } = require("./tsconfig");
+const { compilerOptions } = require("./tsconfig.json");
 
 module.exports = {
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
-  moduleNameMapper: Object.assign({},
+  moduleNameMapper: Object.assign(
+    {},
     pathsToModuleNameMapper(compilerOptions.paths),
     {
-      "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": "identity-obj-proxy",
+      "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$":
+        "identity-obj-proxy",
       "\\.(css|scss|less)$": "identity-obj-proxy",
       "\\.(gif|png|svg)$": "<rootDir>/.jest/fileMock.js",
     },
   ),
-  moduleDirectories: [
-    "node_modules",
-  ],
-  modulePaths: [
-    "<rootDir>/"
-  ],
+  moduleDirectories: ["node_modules"],
+  modulePaths: ["<rootDir>/"],
   roots: ["<rootDir>/src"],
   testEnvironment: "enzyme",
-  setupFilesAfterEnv: ["jest-enzyme"],
+  setupFilesAfterEnv: ["jest-enzyme", "./enzyme.setup.js"],
   testRegex: "(/__tests__/.*|(\\.|/)(test|spec))\\.tsx?$",
   transformIgnorePatterns: [
     "node_modules/(?!(@cockroachlabs/crdb-protobuf-client)/)",
@@ -38,5 +38,4 @@ module.exports = {
     "^.+\\.tsx?$": "ts-jest",
     "^.+\\.jsx?$": "babel-jest",
   },
-  setupFilesAfterEnv: ["./enzyme.setup.js"],
 };
