@@ -3118,6 +3118,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		if metrics.Leaseholder {
+			s.metrics.RaftQuotaPoolPercentUsed.RecordValue(metrics.QuotaPoolPercentUsed)
 			leaseHolderCount++
 			switch metrics.LeaseType {
 			case roachpb.LeaseNone:

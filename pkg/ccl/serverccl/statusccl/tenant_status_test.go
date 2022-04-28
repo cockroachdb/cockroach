@@ -27,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -894,7 +894,7 @@ func testTenantStatusCancelSessionErrorMessages(t *testing.T, helper *tenantTest
 
 		for _, testCase := range testCases {
 			t.Run(fmt.Sprintf("sessionID-%s", testCase.sessionID), func(t *testing.T) {
-				sessionID, err := sql.StringToClusterWideID(testCase.sessionID)
+				sessionID, err := clusterunique.IDFromString(testCase.sessionID)
 				require.NoError(t, err)
 				resp := serverpb.CancelSessionResponse{}
 				err = client.PostJSONChecked("/_status/cancel_session/0", &serverpb.CancelSessionRequest{

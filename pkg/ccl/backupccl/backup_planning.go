@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -980,9 +981,30 @@ func collectTelemetry(
 	}
 	if backupDetails.CollectionURI != "" {
 		countSource("backup.nested")
-		if initialDetails.Destination.Subdir == latestFileName {
-			countSource("backup.into-latest")
+		timeBaseSubdir := true
+		if _, err := time.Parse(DateBasedIntoFolderName,
+			initialDetails.Destination.Subdir); err != nil {
+			timeBaseSubdir = false
 		}
+		if backupDetails.StartTime.IsEmpty() {
+			if !timeBaseSubdir {
+				countSource("backup.deprecated-full-nontime-subdir")
+			} else if initialDetails.Destination.Exists {
+				countSource("backup.deprecated-full-time-subdir")
+			} else {
+				countSource("backup.full-no-subdir")
+			}
+		} else {
+			if initialDetails.Destination.Subdir == latestFileName {
+				countSource("backup.incremental-latest-subdir")
+			} else if !timeBaseSubdir {
+				countSource("backup.deprecated-incremental-nontime-subdir")
+			} else {
+				countSource("backup.incremental-explicit-subdir")
+			}
+		}
+	} else {
+		countSource("backup.deprecated-non-collection")
 	}
 	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
 		countSource("backup.targets.full_cluster")

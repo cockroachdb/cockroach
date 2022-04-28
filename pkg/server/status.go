@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -254,7 +255,7 @@ func findSessionBySessionID(sessionID []byte) sessionFinder {
 			}
 		}
 		if len(session.ID) == 0 {
-			return session, fmt.Errorf("session ID %s not found", sql.BytesToClusterWideID(sessionID))
+			return session, fmt.Errorf("session ID %s not found", clusterunique.IDFromBytes(sessionID))
 		}
 		return session, nil
 	}

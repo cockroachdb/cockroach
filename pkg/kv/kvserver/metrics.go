@@ -550,6 +550,16 @@ is located starts following the recovery.`,
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Quota pool metrics.
+	metaRaftQuotaPoolPercentUsed = metric.Metadata{
+		Name:        "raft.quota_pool.percent_used",
+		Help:        `Histogram of proposal quota pool utilization (0-100) per leaseholder per metrics interval`,
+		Measurement: "Percent",
+		// TODO(kv-obs): There is Unit_PERCENT but it seems to operate on float64
+		// (0 to 1.0) so it probably won't produce useful results here.
+		Unit: metric.Unit_COUNT,
+	}
+
 	// Raft processing metrics.
 	metaRaftTicks = metric.Metadata{
 		Name:        "raft.ticks",
@@ -1442,6 +1452,7 @@ type StoreMetrics struct {
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
+	RaftQuotaPoolPercentUsed  *metric.Histogram
 	RaftWorkingDurationNanos  *metric.Counter
 	RaftTickingDurationNanos  *metric.Counter
 	RaftCommandsApplied       *metric.Counter
@@ -1888,7 +1899,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 
 		// Raft processing metrics.
-		RaftTicks:                 metric.NewCounter(metaRaftTicks),
+		RaftTicks: metric.NewCounter(metaRaftTicks),
+		RaftQuotaPoolPercentUsed: metric.NewHistogram(
+			// NB: this results in 64 buckets (i.e. 64 timeseries in prometheus).
+			metaRaftQuotaPoolPercentUsed, histogramWindow, 100 /* maxVal */, 1, /* sigFigs */
+		),
 		RaftWorkingDurationNanos:  metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos:  metric.NewCounter(metaRaftTickingDurationNanos),
 		RaftCommandsApplied:       metric.NewCounter(metaRaftCommandsApplied),

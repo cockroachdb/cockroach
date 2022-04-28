@@ -12,6 +12,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -21,7 +22,7 @@ type Statement struct {
 
 	StmtNoConstants string
 	StmtSummary     string
-	QueryID         ClusterWideID
+	QueryID         clusterunique.ID
 
 	ExpectedTypes colinfo.ResultColumns
 
@@ -38,7 +39,7 @@ type Statement struct {
 	Prepared *PreparedStatement
 }
 
-func makeStatement(parserStmt parser.Statement, queryID ClusterWideID) Statement {
+func makeStatement(parserStmt parser.Statement, queryID clusterunique.ID) Statement {
 	return Statement{
 		Statement:       parserStmt,
 		StmtNoConstants: formatStatementHideConstants(parserStmt.AST),
@@ -47,7 +48,7 @@ func makeStatement(parserStmt parser.Statement, queryID ClusterWideID) Statement
 	}
 }
 
-func makeStatementFromPrepared(prepared *PreparedStatement, queryID ClusterWideID) Statement {
+func makeStatementFromPrepared(prepared *PreparedStatement, queryID clusterunique.ID) Statement {
 	return Statement{
 		Statement:       prepared.Statement,
 		Prepared:        prepared,
