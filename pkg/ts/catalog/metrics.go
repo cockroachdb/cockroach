@@ -86,6 +86,7 @@ var histogramMetricsNames = map[string]struct{}{
 	"raft.process.handleready.latency":          {},
 	"raft.process.commandcommit.latency":        {},
 	"raft.process.logcommit.latency":            {},
+	"raft.quota_pool.percent_used":              {},
 	"raft.scheduler.latency":                    {},
 	"txnwaitqueue.pusher.wait_time":             {},
 	"txnwaitqueue.query.wait_time":              {},
