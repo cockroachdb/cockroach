@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -47,7 +46,7 @@ type SemaContext struct {
 	// SearchPath indicates where to search for unqualified function
 	// names. The path elements must be normalized via Name.Normalize()
 	// already.
-	SearchPath sessiondata.SearchPath
+	SearchPath SearchPath
 
 	// TypeResolver manages resolving type names into *types.T's.
 	TypeResolver TypeReferenceResolver
@@ -1049,7 +1048,7 @@ func CheckIsWindowOrAgg(def *FunctionDefinition) error {
 func (expr *FuncExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	var searchPath sessiondata.SearchPath
+	searchPath := EmptySearchPath
 	if semaCtx != nil {
 		searchPath = semaCtx.SearchPath
 	}

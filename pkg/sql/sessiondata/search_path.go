@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
 // DefaultSearchPath is the search path used by virgin sessions.
@@ -289,4 +290,20 @@ func (iter *SearchPathIter) Next() (path string, ok bool) {
 		return iter.paths[iter.i-1], true
 	}
 	return "", false
+}
+
+// IterateSearchPath iterates the search path. If a non-nil error is
+// returned, iteration is stopped. If iterutils.StopIteration() is returned
+// from the iteration function,  a nil error is returned to the caller.
+func (s *SearchPath) IterateSearchPath(f func(schema string) error) error {
+	iter := s.Iter()
+	for schema, ok := iter.Next(); ok; schema, ok = iter.Next() {
+		if err := f(schema); err != nil {
+			if iterutil.Done(err) {
+				err = nil
+			}
+			return err
+		}
+	}
+	return nil
 }

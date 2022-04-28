@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -93,7 +92,7 @@ func helpWith(sqllex sqlLexer, helpText string) int {
 // "in error", with the error set to a contextual help message about
 // the current built-in function.
 func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
-	d, err := f.Resolve(sessiondata.SearchPath{})
+	d, err := f.Resolve(tree.EmptySearchPath)
 	if err != nil {
 		return 1
 	}

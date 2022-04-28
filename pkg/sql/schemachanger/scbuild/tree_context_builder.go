@@ -31,7 +31,7 @@ func (b buildCtx) SemaCtx() *tree.SemaContext {
 func newSemaCtx(d Dependencies) *tree.SemaContext {
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.Annotations = nil
-	semaCtx.SearchPath = d.SessionData().SearchPath
+	semaCtx.SearchPath = &d.SessionData().SearchPath
 	if d.ClusterSettings().Version.IsActive(context.Background(), clusterversion.IncrementalBackupSubdir) {
 		semaCtx.IntervalStyleEnabled = true
 		semaCtx.DateStyleEnabled = true

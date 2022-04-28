@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
 // This file contains the two major components to name resolution:
@@ -128,6 +128,26 @@ type QualifiedNameResolver interface {
 	CurrentDatabase() string
 }
 
+// SearchPath encapsulates the ordered list of schemas in the current database
+// to search during name resolution.
+type SearchPath interface {
+
+	// IterateSearchPath calls the passed function for every element of the
+	// SearchPath in order. If an error is returned, iteration stops. If the
+	// error is iterutil.StopIteration, no error will be returned from the
+	// method.
+	IterateSearchPath(func(schema string) error) error
+}
+
+// EmptySearchPath is a SearchPath with no members.
+var EmptySearchPath SearchPath = emptySearchPath{}
+
+type emptySearchPath struct{}
+
+func (emptySearchPath) IterateSearchPath(func(string) error) error {
+	return nil
+}
+
 // ResolveFunction transforms an UnresolvedName to a FunctionDefinition.
 //
 // Function resolution currently takes a "short path" using the
@@ -141,9 +161,7 @@ type QualifiedNameResolver interface {
 // TableName (or whatever an object name will be called by then)
 // and then undergo regular name resolution via ResolveExisting(). When
 // that happens, the following function can be removed.
-func (n *UnresolvedName) ResolveFunction(
-	searchPath sessiondata.SearchPath,
-) (*FunctionDefinition, error) {
+func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinition, error) {
 	if n.NumParts > 3 || len(n.Parts[0]) == 0 || n.Star {
 		// The Star part of the condition is really an assertion. The
 		// parser should not have let this star propagate to a point where
@@ -187,13 +205,15 @@ func (n *UnresolvedName) ResolveFunction(
 		if prefix == "" {
 			// The function wasn't qualified, so we must search for it via
 			// the search path first.
-			iter := searchPath.Iter()
-			for alt, ok := iter.Next(); ok; alt, ok = iter.Next() {
+			if err := searchPath.IterateSearchPath(func(alt string) error {
 				fullName = alt + "." + function
 				if def, ok = FunDefs[fullName]; ok {
 					found = true
-					break
+					return iterutil.StopIteration()
 				}
+				return nil
+			}); err != nil {
+				return nil, err
 			}
 		}
 		if !found {
