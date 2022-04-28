@@ -61,6 +61,9 @@ dump-store stores=(1,2)
     StartKey: /Min
     Replicas:
     - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 16}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 16
 - NodeID: 2
   StoreID: 2
   Descriptors:
@@ -72,6 +75,9 @@ dump-store stores=(1,2)
     - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
     - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
     - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 2
 
 # Second use case where we can't make a decision and fail keyspace coverage as
 # only a single learner is left, there is no way to recover.
