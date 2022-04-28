@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -165,7 +165,7 @@ func jobsMigrationFunc(
 	query := `SELECT id, payload FROM ` + tempTableName + ` WHERE status IN ` + statesToRevert
 	it, err := executor.QueryIteratorEx(
 		ctx, "restore-fetching-job-payloads", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		query)
 	if err != nil {
 		return errors.Wrap(err, "fetching job payloads")

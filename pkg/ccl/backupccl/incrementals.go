@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/errors"
 )
@@ -150,7 +150,7 @@ func JoinURLPath(args ...string) string {
 // backupsFromLocation is a small helper function to retrieve all prior
 // backups from the specified location.
 func backupsFromLocation(
-	ctx context.Context, user security.SQLUsername, execCfg *sql.ExecutorConfig, loc string,
+	ctx context.Context, user username.SQLUsername, execCfg *sql.ExecutorConfig, loc string,
 ) ([]string, error) {
 	mkStore := execCfg.DistSQLSrv.ExternalStorageFromURI
 	store, err := mkStore(ctx, loc, user)
@@ -164,7 +164,7 @@ func backupsFromLocation(
 
 func resolveIncrementalsBackupLocation(
 	ctx context.Context,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	execCfg *sql.ExecutorConfig,
 	explicitIncrementalCollections []string,
 	fullBackupCollections []string,

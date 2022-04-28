@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -293,7 +293,7 @@ func TestImportAvroLogicalTypes(t *testing.T) {
 		"",
 		nil,
 		sessiondata.InternalExecutorOverride{
-			User:     security.RootUserName(),
+			User:     username.RootUserName(),
 			Database: "log"},
 		fmt.Sprintf("SELECT * FROM %s", origTableName))
 	require.NoError(t, err, "failed to pull datums from table")

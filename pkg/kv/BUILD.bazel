@@ -67,6 +67,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql/sessiondatapb",
         "//pkg/storage/enginepb",

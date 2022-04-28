@@ -15,7 +15,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -85,7 +85,7 @@ func (so *DummySequenceOperators) IsTypeVisible(
 func (so *DummySequenceOperators) HasAnyPrivilege(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	privs []privilege.Privilege,
 ) (eval.HasAnyPrivilegeResult, error) {
 	return eval.HasNoPrivilege, errors.WithStack(errEvalPlanner)
@@ -212,15 +212,15 @@ func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 
 // UserHasAdminRole is part of the Planner interface.
 func (ep *DummyEvalPlanner) UserHasAdminRole(
-	ctx context.Context, user security.SQLUsername,
+	ctx context.Context, user username.SQLUsername,
 ) (bool, error) {
 	return false, errors.WithStack(errEvalPlanner)
 }
 
 // MemberOfWithAdminOption is part of the Planner interface.
 func (ep *DummyEvalPlanner) MemberOfWithAdminOption(
-	ctx context.Context, member security.SQLUsername,
-) (map[security.SQLUsername]bool, error) {
+	ctx context.Context, member username.SQLUsername,
+) (map[username.SQLUsername]bool, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
@@ -354,7 +354,7 @@ func (ep *DummyEvalPlanner) IsTypeVisible(
 func (ep *DummyEvalPlanner) HasAnyPrivilege(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	privs []privilege.Privilege,
 ) (eval.HasAnyPrivilegeResult, error) {
 	return eval.HasNoPrivilege, errors.WithStack(errEvalPlanner)

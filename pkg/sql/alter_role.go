@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -34,7 +34,7 @@ import (
 
 // alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
 type alterRoleNode struct {
-	roleName    security.SQLUsername
+	roleName    username.SQLUsername
 	ifExists    bool
 	isRole      bool
 	roleOptions roleoption.List
@@ -42,7 +42,7 @@ type alterRoleNode struct {
 
 // alterRoleSetNode represents an `ALTER ROLE ... SET` statement.
 type alterRoleSetNode struct {
-	roleName security.SQLUsername
+	roleName username.SQLUsername
 	ifExists bool
 	isRole   bool
 	allRoles bool
@@ -105,7 +105,7 @@ func (p *planner) AlterRoleNode(
 	}
 
 	roleName, err := decodeusername.FromRoleSpec(
-		p.SessionData(), security.UsernameValidation, roleSpec,
+		p.SessionData(), username.PurposeValidation, roleSpec,
 	)
 	if err != nil {
 		return nil, err
@@ -164,7 +164,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		n.roleName,
 	)
@@ -242,7 +242,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			params.ctx,
 			opName,
 			params.p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			stmt,
 			qargs...,
 		)
@@ -295,11 +295,11 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 		}
 	}
 
-	var roleName security.SQLUsername
+	var roleName username.SQLUsername
 	if !n.AllRoles {
 		var err error
 		roleName, err = decodeusername.FromRoleSpec(
-			p.SessionData(), security.UsernameValidation, n.RoleName,
+			p.SessionData(), username.PurposeValidation, n.RoleName,
 		)
 		if err != nil {
 			return nil, err
@@ -440,7 +440,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				params.ctx,
 				opName,
 				params.p.txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				deleteQuery,
 				n.dbDescID,
 				roleName,
@@ -450,7 +450,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				params.ctx,
 				opName,
 				params.p.txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				upsertQuery,
 				n.dbDescID,
 				roleName,
@@ -506,47 +506,47 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 // to make sure the role is safe to edit.
 func (n *alterRoleSetNode) getRoleName(
 	params runParams, opName string,
-) (needsUpdate bool, retRoleName security.SQLUsername, err error) {
+) (needsUpdate bool, retRoleName username.SQLUsername, err error) {
 	if n.allRoles {
-		return true, security.MakeSQLUsernameFromPreNormalizedString(""), nil
+		return true, username.MakeSQLUsernameFromPreNormalizedString(""), nil
 	}
 	if n.roleName.Undefined() {
-		return false, security.SQLUsername{}, pgerror.New(pgcode.InvalidParameterValue, "no username specified")
+		return false, username.SQLUsername{}, pgerror.New(pgcode.InvalidParameterValue, "no username specified")
 	}
 	if n.roleName.IsAdminRole() {
-		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit admin role")
+		return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit admin role")
 	}
 	if n.roleName.IsRootUser() {
-		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit root user")
+		return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit root user")
 	}
 	if n.roleName.IsPublicRole() {
-		return false, security.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit public role")
+		return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit public role")
 	}
 	// Check if role exists.
 	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		n.roleName,
 	)
 	if err != nil {
-		return false, security.SQLUsername{}, err
+		return false, username.SQLUsername{}, err
 	}
 	if row == nil {
 		if n.ifExists {
-			return false, security.SQLUsername{}, nil
+			return false, username.SQLUsername{}, nil
 		}
-		return false, security.SQLUsername{}, errors.Newf("role/user %s does not exist", n.roleName)
+		return false, username.SQLUsername{}, errors.Newf("role/user %s does not exist", n.roleName)
 	}
 	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
 	if err != nil {
-		return false, security.SQLUsername{}, err
+		return false, username.SQLUsername{}, err
 	}
 	if isAdmin {
 		if err := params.p.RequireAdminRole(params.ctx, "ALTER ROLE admin"); err != nil {
-			return false, security.SQLUsername{}, err
+			return false, username.SQLUsername{}, err
 		}
 	}
 	return true, n.roleName, nil
@@ -555,7 +555,7 @@ func (n *alterRoleSetNode) getRoleName(
 // makeNewSettings first loads the existing settings for the (role, db), then
 // returns a newSettings list with any occurrence of varName removed.
 func (n *alterRoleSetNode) makeNewSettings(
-	params runParams, opName string, roleName security.SQLUsername,
+	params runParams, opName string, roleName username.SQLUsername,
 ) (hasOldSettings bool, newSettings []string, err error) {
 	var selectQuery = fmt.Sprintf(
 		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,
@@ -565,7 +565,7 @@ func (n *alterRoleSetNode) makeNewSettings(
 		params.ctx,
 		opName,
 		params.p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		selectQuery,
 		n.dbDescID,
 		roleName,

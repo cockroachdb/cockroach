@@ -48,7 +48,7 @@ go_proto_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/roachpb",
-        "//pkg/security",  # keep
+        "//pkg/security/username",  # keep
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",  # keep

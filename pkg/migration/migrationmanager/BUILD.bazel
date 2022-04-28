@@ -14,7 +14,7 @@ go_library(
         "//pkg/migration",
         "//pkg/migration/migrationjob",
         "//pkg/migration/migrations",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/sql",

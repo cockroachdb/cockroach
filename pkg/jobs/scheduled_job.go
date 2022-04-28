@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -38,7 +38,7 @@ import (
 type scheduledJobRecord struct {
 	ScheduleID      int64                     `col:"schedule_id"`
 	ScheduleLabel   string                    `col:"schedule_name"`
-	Owner           security.SQLUsername      `col:"owner"`
+	Owner           username.SQLUsername      `col:"owner"`
 	NextRun         time.Time                 `col:"next_run"`
 	ScheduleState   jobspb.ScheduleState      `col:"schedule_state"`
 	ScheduleExpr    string                    `col:"schedule_expr"`
@@ -102,7 +102,7 @@ func LoadScheduledJob(
 	txn *kv.Txn,
 ) (*ScheduledJob, error) {
 	row, cols, err := ex.QueryRowExWithCols(ctx, "lookup-schedule", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = %d",
 			env.ScheduledJobsTableName(), id))
 
@@ -137,12 +137,12 @@ func (j *ScheduledJob) SetScheduleLabel(label string) {
 }
 
 // Owner returns schedule owner.
-func (j *ScheduledJob) Owner() security.SQLUsername {
+func (j *ScheduledJob) Owner() username.SQLUsername {
 	return j.rec.Owner
 }
 
 // SetOwner updates schedule owner.
-func (j *ScheduledJob) SetOwner(owner security.SQLUsername) {
+func (j *ScheduledJob) SetOwner(owner username.SQLUsername) {
 	j.rec.Owner = owner
 	j.markDirty("owner")
 }
@@ -338,7 +338,7 @@ func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []colinfo.Result
 					s, ok = native.(string)
 					if ok {
 						// Replace the value by one of the right type.
-						rv = reflect.ValueOf(security.MakeSQLUsernameFromPreNormalizedString(s))
+						rv = reflect.ValueOf(username.MakeSQLUsernameFromPreNormalizedString(s))
 					}
 				}
 				if !ok {
@@ -378,7 +378,7 @@ func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, 
 	}
 
 	row, retCols, err := ex.QueryRowExWithCols(ctx, "sched-create", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s) RETURNING schedule_id",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","), generatePlaceholders(len(qargs))),
 		qargs...,
@@ -415,7 +415,7 @@ func (j *ScheduledJob) Update(ctx context.Context, ex sqlutil.InternalExecutor, 
 	}
 
 	n, err := ex.ExecEx(ctx, "sched-update", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("UPDATE %s SET (%s) = (%s) WHERE schedule_id = %d",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","),
 			generatePlaceholders(len(qargs)), j.ScheduleID()),

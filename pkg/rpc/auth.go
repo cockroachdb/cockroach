@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -161,8 +162,8 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	// NodeUser. This is not a security concern, as RootUser has access to
 	// read and write all data, merely good hygiene. For example, there is
 	// no reason to permit the root user to send raw Raft RPCs.
-	if !security.Contains(certUsers, security.NodeUser) &&
-		!security.Contains(certUsers, security.RootUser) {
+	if !security.Contains(certUsers, username.NodeUser) &&
+		!security.Contains(certUsers, username.RootUser) {
 		return roachpb.TenantID{}, authErrorf("user %s is not allowed to perform this RPC", certUsers)
 	}
 

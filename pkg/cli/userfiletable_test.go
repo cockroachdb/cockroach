@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -358,7 +358,7 @@ func checkUserFileContent(
 	ctx context.Context,
 	t *testing.T,
 	execcCfg interface{},
-	user security.SQLUsername,
+	user username.SQLUsername,
 	userfileURI string,
 	expectedContent []byte,
 ) {
@@ -438,14 +438,14 @@ func TestUserFileUploadRecursive(t *testing.T) {
 						// specified.
 						if tc.name == "destination-not-full-URI" {
 							destinationFileURI = constructUserfileDestinationURI("",
-								filepath.Join(dstDir, relPath), security.RootUserName())
+								filepath.Join(dstDir, relPath), username.RootUserName())
 						}
 
 						fileContent, err := ioutil.ReadFile(path)
 						if err != nil {
 							return err
 						}
-						checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
+						checkUserFileContent(ctx, t, c.ExecutorConfig(), username.RootUserName(),
 							destinationFileURI, fileContent)
 						return nil
 					})
@@ -503,8 +503,8 @@ func TestUserFileUpload(t *testing.T) {
 					destination))
 				require.NoError(t, err)
 
-				checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
-					constructUserfileDestinationURI("", destination, security.RootUserName()),
+				checkUserFileContent(ctx, t, c.ExecutorConfig(), username.RootUserName(),
+					constructUserfileDestinationURI("", destination, username.RootUserName()),
 					tc.fileContent)
 			})
 
@@ -514,7 +514,7 @@ func TestUserFileUpload(t *testing.T) {
 					destination))
 				require.NoError(t, err)
 
-				checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
+				checkUserFileContent(ctx, t, c.ExecutorConfig(), username.RootUserName(),
 					destination, tc.fileContent)
 			})
 
@@ -526,7 +526,7 @@ func TestUserFileUpload(t *testing.T) {
 					destination))
 				require.NoError(t, err)
 
-				checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
+				checkUserFileContent(ctx, t, c.ExecutorConfig(), username.RootUserName(),
 					destination, tc.fileContent)
 			})
 
@@ -609,7 +609,7 @@ func TestUserfile(t *testing.T) {
 
 	defaultUserfileURLSchemeAndHost := url.URL{
 		Scheme: defaultUserfileScheme,
-		Host:   defaultQualifiedNamePrefix + security.RootUser,
+		Host:   defaultQualifiedNamePrefix + username.RootUser,
 	}
 
 	for tcNum, tc := range []struct {
@@ -785,7 +785,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 	require.NoError(t, err)
 
 	rootURL, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(),
-		url.User(security.RootUser))
+		url.User(username.RootUser))
 	defer cleanup()
 
 	conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, rootURL.String())
@@ -831,7 +831,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 				localFilePath, tc.name, userURL.String()))
 			require.NoError(t, err)
 
-			user, err := security.MakeSQLUsernameFromUserInput(tc.username, security.UsernameCreation)
+			user, err := username.MakeSQLUsernameFromUserInput(tc.username, username.PurposeCreation)
 			require.NoError(t, err)
 			uri := constructUserfileDestinationURI("", tc.name, user)
 			checkUserFileContent(ctx, t, c.ExecutorConfig(), user, uri, fileContent)

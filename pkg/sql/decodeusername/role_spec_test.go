@@ -13,7 +13,7 @@ package decodeusername
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -55,7 +55,7 @@ func TestRoleSpecValidation(t *testing.T) {
 	for _, tc := range testCases {
 		roleSpec := tree.RoleSpec{RoleSpecType: tree.RoleName, Name: tc.username}
 		normalized, err := FromRoleSpec(
-			&sessiondata.SessionData{}, security.UsernameCreation, roleSpec,
+			&sessiondata.SessionData{}, username.PurposeCreation, roleSpec,
 		)
 		if !testutils.IsError(err, tc.err) {
 			t.Errorf("%q: expected %q, got %v", tc.username, tc.err, err)

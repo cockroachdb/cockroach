@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,7 +33,7 @@ func TestPurgeSession(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	ts := s.(*TestServer)
-	username := security.TestUserName()
+	userName := username.TestUserName()
 
 	_, hashedSecret, err := CreateAuthSecret()
 	if err != nil {
@@ -92,10 +92,10 @@ VALUES($1, $2, $3, $4, $5)
 				ctx,
 				"add-session",
 				nil, /* txn */
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				insertSessionStmt,
 				hashedSecret,
-				username.Normalized(),
+				userName.Normalized(),
 				expiresAt,
 				revokedAt,
 				lastUsedAt,

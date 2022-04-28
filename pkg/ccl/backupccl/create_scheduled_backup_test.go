@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -151,7 +151,7 @@ func (h *testHelper) createBackupSchedule(
 		// Query system.scheduled_job table and load those schedules.
 		datums, cols, err := h.cfg.InternalExecutor.QueryRowExWithCols(
 			context.Background(), "sched-load", nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			"SELECT * FROM system.scheduled_jobs WHERE schedule_id = $1",
 			id,
 		)
@@ -811,7 +811,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 				// Verify backup.
 				execCfg := th.server.ExecutorConfig().(sql.ExecutorConfig)
 				ctx := context.Background()
-				store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, destination, security.RootUserName())
+				store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, destination, username.RootUserName())
 				require.NoError(t, err)
 				r, err := findLatestFile(ctx, store)
 				require.NoError(t, err)
@@ -893,7 +893,7 @@ func TestCreateBackupScheduleIfNotExists(t *testing.T) {
 
 	rows, err := th.cfg.InternalExecutor.QueryBufferedEx(
 		context.Background(), "check-sched", nil,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		selectQuery)
 
 	require.NoError(t, err)
@@ -906,7 +906,7 @@ func TestCreateBackupScheduleIfNotExists(t *testing.T) {
 
 	rows, err = th.cfg.InternalExecutor.QueryBufferedEx(
 		context.Background(), "check-sched2", nil,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		selectQuery)
 
 	require.NoError(t, err)

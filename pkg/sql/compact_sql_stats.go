@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -122,7 +122,7 @@ func (r *sqlStatsCompactionResumer) getScheduleID(
 	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, env scheduledjobs.JobSchedulerEnv,
 ) (scheduleID int64, _ error) {
 	row, err := ie.QueryRowEx(ctx, "lookup-sql-stats-schedule", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		fmt.Sprintf("SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2", env.SystemJobsTableName()),
 		r.job.ID(), jobs.CreatedByScheduledJobs,
 	)
@@ -188,7 +188,7 @@ func (e *scheduledSQLStatsCompactionExecutor) ExecuteJob(
 func (e *scheduledSQLStatsCompactionExecutor) createSQLStatsCompactionJob(
 	ctx context.Context, cfg *scheduledjobs.JobExecutionConfig, sj *jobs.ScheduledJob, txn *kv.Txn,
 ) error {
-	p, cleanup := cfg.PlanHookMaker("invoke-sql-stats-compact", txn, security.NodeUserName())
+	p, cleanup := cfg.PlanHookMaker("invoke-sql-stats-compact", txn, username.NodeUserName())
 	defer cleanup()
 
 	_, err :=

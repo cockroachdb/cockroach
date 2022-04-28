@@ -19,7 +19,7 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -72,7 +72,7 @@ func (ts *httpTestServer) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client,
 }
 
 func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
-	authUser security.SQLUsername, isAdmin bool,
+	authUser username.SQLUsername, isAdmin bool,
 ) (http.Client, *serverpb.SessionCookie, error) {
 	authIdx := 0
 	if isAdmin {
@@ -131,10 +131,10 @@ func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 	return authClient.httpClient, authClient.cookie, authClient.err
 }
 
-func (ts *httpTestServer) createAuthUser(userName security.SQLUsername, isAdmin bool) error {
+func (ts *httpTestServer) createAuthUser(userName username.SQLUsername, isAdmin bool) error {
 	if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 		"create-auth-user", nil,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("CREATE USER %s", userName.Normalized()),
 	); err != nil {
 		return err
@@ -144,7 +144,7 @@ func (ts *httpTestServer) createAuthUser(userName security.SQLUsername, isAdmin 
 		// to rely on CCL code.
 		if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 			"grant-admin", nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			"INSERT INTO system.role_members (role, member, \"isAdmin\") VALUES ('admin', $1, true)", userName.Normalized(),
 		); err != nil {
 			return err

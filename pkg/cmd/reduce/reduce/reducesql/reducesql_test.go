@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/jackc/pgx/v4"
@@ -56,7 +56,7 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 		options.Add("sslmode", "disable")
 		url := url.URL{
 			Scheme:   "postgres",
-			User:     url.User(security.RootUser),
+			User:     url.User(username.RootUser),
 			Host:     serv.ServingSQLAddr(),
 			RawQuery: options.Encode(),
 		}

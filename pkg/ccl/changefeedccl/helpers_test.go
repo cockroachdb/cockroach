@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -512,7 +512,7 @@ func sinklessTestWithOptions(testFn cdcTestFn, opts feedTestOptions) func(*testi
 		s, db, stopServer := startTestServer(t, opts)
 		defer stopServer()
 
-		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 		defer cleanup()
 		f := makeSinklessFeedFactory(s, sink)
 		testFn(t, db, f)
@@ -545,7 +545,7 @@ func enterpriseTestWithOptions(testFn cdcTestFn, options feedTestOptions) func(*
 		s, db, stopServer := startTestServer(t, options)
 		defer stopServer()
 
-		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 		defer cleanup()
 		f := makeTableFeedFactory(s, db, sink)
 
@@ -638,7 +638,7 @@ func serverArgsRegion(args base.TestServerArgs) string {
 // a lot of cdc test framework, use with caution. Driver-agnostic tools don't
 // have clean ways of inspecting incoming notices.
 func expectNotice(t *testing.T, s serverutils.TestServerInterface, sql string, expected string) {
-	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	base, err := pq.NewConnector(url.String())
 	if err != nil {

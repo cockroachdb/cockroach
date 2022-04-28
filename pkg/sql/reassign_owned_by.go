@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -32,7 +32,7 @@ import (
 // ReassignOwnedByNode represents a REASSIGN OWNED BY <role(s)> TO <role> statement.
 type reassignOwnedByNode struct {
 	n                  *tree.ReassignOwnedBy
-	normalizedOldRoles []security.SQLUsername
+	normalizedOldRoles []username.SQLUsername
 }
 
 func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) (planNode, error) {
@@ -45,7 +45,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	}
 
 	normalizedOldRoles, err := decodeusername.FromRoleSpecList(
-		p.SessionData(), security.UsernameValidation, n.OldRoles,
+		p.SessionData(), username.PurposeValidation, n.OldRoles,
 	)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 		}
 	}
 	newRole, err := decodeusername.FromRoleSpec(
-		p.SessionData(), security.UsernameValidation, n.NewRole,
+		p.SessionData(), username.PurposeValidation, n.NewRole,
 	)
 	if err != nil {
 		return nil, err
@@ -179,7 +179,7 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 		return err
 	}
 	owner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
@@ -205,7 +205,7 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 		return err
 	}
 	owner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
@@ -237,7 +237,7 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 	}
 
 	owner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
@@ -277,7 +277,7 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 	}
 
 	owner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), security.UsernameValidation, n.n.NewRole,
+		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err

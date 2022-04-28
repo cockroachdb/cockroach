@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -77,7 +77,7 @@ func TestMakeDatabaseDesc(t *testing.T) {
 		t.Fatal(err)
 	}
 	const id = 17
-	desc := NewInitial(id, string(stmt.AST.(*tree.CreateDatabase).Name), security.AdminRoleName())
+	desc := NewInitial(id, string(stmt.AST.(*tree.CreateDatabase).Name), username.AdminRoleName())
 	if desc.GetName() != "test" {
 		t.Fatalf("expected Name == test, got %s", desc.GetName())
 	}
@@ -101,7 +101,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 			descpb.DatabaseDescriptor{
 				Name:       "db",
 				ID:         0,
-				Privileges: catpb.NewBaseDatabasePrivilegeDescriptor(security.RootUserName()),
+				Privileges: catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName()),
 			},
 		},
 		{
@@ -110,7 +110,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 				Name:         "multi-region-db",
 				ID:           200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{},
-				Privileges:   catpb.NewBaseDatabasePrivilegeDescriptor(security.RootUserName()),
+				Privileges:   catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName()),
 			},
 		},
 	}
@@ -273,7 +273,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		privilege := catpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+		privilege := catpb.NewBasePrivilegeDescriptor(username.AdminRoleName())
 		var cb nstree.MutableCatalog
 		test.desc.Privileges = privilege
 		desc := NewBuilder(&test.desc).BuildImmutable()
@@ -317,7 +317,7 @@ func TestFixDroppedSchemaName(t *testing.T) {
 		Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
 			dbName: {ID: dbID, Dropped: true},
 		},
-		Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+		Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
 	}
 	b := NewBuilder(&dbDesc)
 	require.NoError(t, b.RunPostDeserializationChanges())
@@ -335,7 +335,7 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 		privileges             privilege.List
 		incompatiblePrivileges privilege.List
 		shouldChange           bool
-		users                  []security.SQLUsername
+		users                  []username.SQLUsername
 	}{
 		{ // 0
 			privilegeDesc:          catpb.PrivilegeDescriptor{},
@@ -343,8 +343,8 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			privileges:             privilege.List{privilege.SELECT},
 			incompatiblePrivileges: privilege.List{privilege.SELECT},
 			shouldChange:           true,
-			users: []security.SQLUsername{
-				security.MakeSQLUsernameFromPreNormalizedString("test"),
+			users: []username.SQLUsername{
+				username.MakeSQLUsernameFromPreNormalizedString("test"),
 			},
 		},
 		{ // 1
@@ -355,8 +355,8 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			},
 			incompatiblePrivileges: privilege.List{},
 			shouldChange:           false,
-			users: []security.SQLUsername{
-				security.MakeSQLUsernameFromPreNormalizedString("test"),
+			users: []username.SQLUsername{
+				username.MakeSQLUsernameFromPreNormalizedString("test"),
 			},
 		},
 		{ // 2
@@ -365,8 +365,8 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			privileges:             privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE},
 			incompatiblePrivileges: privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE},
 			shouldChange:           true,
-			users: []security.SQLUsername{
-				security.MakeSQLUsernameFromPreNormalizedString("test"),
+			users: []username.SQLUsername{
+				username.MakeSQLUsernameFromPreNormalizedString("test"),
 			},
 		},
 		{ // 3
@@ -375,9 +375,9 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			privileges:             privilege.List{privilege.SELECT},
 			incompatiblePrivileges: privilege.List{privilege.SELECT},
 			shouldChange:           true,
-			users: []security.SQLUsername{
-				security.MakeSQLUsernameFromPreNormalizedString("test"),
-				security.MakeSQLUsernameFromPreNormalizedString("foo"),
+			users: []username.SQLUsername{
+				username.MakeSQLUsernameFromPreNormalizedString("test"),
+				username.MakeSQLUsernameFromPreNormalizedString("foo"),
 			},
 		},
 		{ // 4
@@ -388,9 +388,9 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			},
 			incompatiblePrivileges: privilege.List{},
 			shouldChange:           false,
-			users: []security.SQLUsername{
-				security.MakeSQLUsernameFromPreNormalizedString("test"),
-				security.MakeSQLUsernameFromPreNormalizedString("foo"),
+			users: []username.SQLUsername{
+				username.MakeSQLUsernameFromPreNormalizedString("test"),
+				username.MakeSQLUsernameFromPreNormalizedString("foo"),
 			},
 		},
 	}

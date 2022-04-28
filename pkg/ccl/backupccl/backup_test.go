@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -569,7 +570,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 				base.ExternalIODirConfig{},
 				tc.Servers[0].ClusterSettings(),
 				blobs.TestEmptyBlobClientFactory,
-				security.RootUserName(),
+				username.RootUserName(),
 				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB(), nil)
 			require.NoError(t, err)
 			defer store.Close()
@@ -1116,7 +1117,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP TABLE bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
 	if err := jobutils.VerifySystemJob(t, sqlDB, 1, jobspb.TypeBackup, jobs.StatusSucceeded, jobs.Record{
-		Username: security.RootUserName(),
+		Username: username.RootUserName(),
 		Description: fmt.Sprintf(
 			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
 			sanitizedIncDir+"redacted", sanitizedFullDir+"redacted",
@@ -1132,7 +1133,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 
 	sqlDB.Exec(t, `RESTORE TABLE bank FROM $1, $2 WITH OPTIONS (into_db='restoredb')`, fullDir, incDir)
 	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
-		Username: security.RootUserName(),
+		Username: username.RootUserName(),
 		Description: fmt.Sprintf(
 			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
 			sanitizedFullDir+"redacted", sanitizedIncDir+"redacted",
@@ -1222,7 +1223,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 			// Verify the BACKUP job description is sanitized.
 			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeBackup, jobs.StatusSucceeded,
 				jobs.Record{
-					Username: security.RootUserName(),
+					Username: username.RootUserName(),
 					Description: fmt.Sprintf(
 						`BACKUP DATABASE data TO '%s' WITH %s`,
 						backupLoc1, sanitizedEncryptionOption1),
@@ -1241,7 +1242,7 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 
 			// Verify the RESTORE job description is sanitized.
 			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
-				Username: security.RootUserName(),
+				Username: username.RootUserName(),
 				Description: fmt.Sprintf(
 					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db = 'restoredb'`,
 					backupLoc1, sanitizedEncryptionOption2,
@@ -1528,7 +1529,7 @@ func createAndWaitForJob(
 	t.Helper()
 	now := timeutil.ToUnixMicros(timeutil.Now())
 	payload, err := protoutil.Marshal(&jobspb.Payload{
-		UsernameProto: security.RootUserName().EncodeProto(),
+		UsernameProto: username.RootUserName().EncodeProto(),
 		DescriptorIDs: descriptorIDs,
 		StartedMicros: now,
 		Details:       jobspb.WrapPayloadDetails(details),
@@ -5831,7 +5832,7 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 	ctx := context.Background()
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest,
-		security.RootUserName())
+		username.RootUserName())
 	require.NoError(t, err)
 	statsTable := StatsTable{
 		Statistics: []*stats.TableStatisticProto{{TableID: descpb.ID(tableID + 1), Name: "notbank"}},
@@ -7651,10 +7652,10 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		// if it's not the ideal error.
 
 		sqlDB.CheckQueryResults(t, `SELECT database_name, owner FROM [SHOW DATABASES]`, [][]string{
-			{"data", security.RootUser},
-			{"defaultdb", security.RootUser},
-			{"postgres", security.RootUser},
-			{"system", security.NodeUser},
+			{"data", username.RootUser},
+			{"defaultdb", username.RootUser},
+			{"postgres", username.RootUser},
+			{"system", username.NodeUser},
 		})
 
 		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `USE d`)
@@ -7760,7 +7761,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 			{"information_schema", "NULL"},
 			{"pg_catalog", "NULL"},
 			{"pg_extension", "NULL"},
-			{"public", security.AdminRole},
+			{"public", username.AdminRole},
 		})
 
 		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `SHOW TABLES FROM newdb.sc`)
@@ -8029,7 +8030,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		base.ExternalIODirConfig{},
 		st,
 		blobs.TestBlobServiceClient(dir),
-		security.RootUserName(), nil, nil, nil)
+		username.RootUserName(), nil, nil, nil)
 	require.NoError(t, err)
 
 	m := mon.NewMonitor("test-monitor", mon.MemoryResource, nil, nil, 0, 0, st)
@@ -9782,7 +9783,7 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 	// if there are as many as we'd expect if none got overwritten.
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()
-	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", security.RootUserName())
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
 	require.NoError(t, err)
 
 	// Find the latest file so we know where the directory is that we want
@@ -9921,7 +9922,7 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 			case "localFile":
 				uri = "nodelocal://0/a"
 			}
-			store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, uri, security.RootUserName())
+			store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, uri, username.RootUserName())
 			require.NoError(t, err)
 			for _, checkpoint := range checkpoints {
 				var desc []byte
@@ -9955,7 +9956,7 @@ func TestBackupNoOverwriteLatest(t *testing.T) {
 
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()
-	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", security.RootUserName())
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
 	require.NoError(t, err)
 	findNumLatestFiles := func() (int, string) {
 		var numLatestFiles int
@@ -10015,7 +10016,7 @@ func TestBackupLatestInBaseDirectory(t *testing.T) {
 	defer cleanupFn()
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()
-	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", security.RootUserName())
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
 	require.NoError(t, err)
 
 	query := fmt.Sprintf("BACKUP INTO %s", userfile)

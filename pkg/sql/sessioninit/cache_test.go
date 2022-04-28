@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -65,9 +65,9 @@ func TestCacheInvalidation(t *testing.T) {
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			s.DB(),
 			s.CollectionFactory().(*descs.CollectionFactory),
-			security.TestUserName(),
+			username.TestUserName(),
 			"defaultdb",
-			func(ctx context.Context, ie sqlutil.InternalExecutor, username security.SQLUsername, databaseID descpb.ID) ([]sessioninit.SettingsCacheEntry, error) {
+			func(ctx context.Context, ie sqlutil.InternalExecutor, userName username.SQLUsername, databaseID descpb.ID) ([]sessioninit.SettingsCacheEntry, error) {
 				didReadFromSystemTable = true
 				return nil, nil
 			})
@@ -81,8 +81,8 @@ func TestCacheInvalidation(t *testing.T) {
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			s.DB(),
 			s.CollectionFactory().(*descs.CollectionFactory),
-			security.TestUserName(),
-			func(ctx context.Context, ie sqlutil.InternalExecutor, username security.SQLUsername) (sessioninit.AuthInfo, error) {
+			username.TestUserName(),
+			func(ctx context.Context, ie sqlutil.InternalExecutor, userName username.SQLUsername) (sessioninit.AuthInfo, error) {
 				didReadFromSystemTable = true
 				return sessioninit.AuthInfo{}, nil
 			})
@@ -111,7 +111,7 @@ func TestCacheInvalidation(t *testing.T) {
 		require.Contains(t, settings, sessioninit.SettingsCacheEntry{
 			SettingsCacheKey: sessioninit.SettingsCacheKey{
 				DatabaseID: 0,
-				Username:   security.TestUserName(),
+				Username:   username.TestUserName(),
 			},
 			Settings: []string{"search_path=b"},
 		})
@@ -136,7 +136,7 @@ func TestCacheInvalidation(t *testing.T) {
 		require.Contains(t, settings, sessioninit.SettingsCacheEntry{
 			SettingsCacheKey: sessioninit.SettingsCacheKey{
 				DatabaseID: 0,
-				Username:   security.MakeSQLUsernameFromPreNormalizedString(""),
+				Username:   username.MakeSQLUsernameFromPreNormalizedString(""),
 			},
 			Settings: []string{"search_path=c"},
 		})
@@ -206,7 +206,7 @@ func TestCacheSingleFlight(t *testing.T) {
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	c := s.ExecutorConfig().(sql.ExecutorConfig).SessionInitCache
 
-	testuser := security.MakeSQLUsernameFromPreNormalizedString("test")
+	testuser := username.MakeSQLUsernameFromPreNormalizedString("test")
 
 	// Test concurrent table update with read.
 	// Outdated data is written back to the cache, verify that the cache is
@@ -224,7 +224,7 @@ func TestCacheSingleFlight(t *testing.T) {
 		_, err := c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
 			ctx context.Context,
 			ie sqlutil.InternalExecutor,
-			username security.SQLUsername,
+			userName username.SQLUsername,
 		) (sessioninit.AuthInfo, error) {
 			wgFirstGetAuthInfoCallInProgress.Done()
 			wgForConcurrentReadWrite.Wait()
@@ -248,7 +248,7 @@ func TestCacheSingleFlight(t *testing.T) {
 			_, err := c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
 				ctx context.Context,
 				ie sqlutil.InternalExecutor,
-				username security.SQLUsername,
+				userName username.SQLUsername,
 			) (sessioninit.AuthInfo, error) {
 				didReadFromSystemTable = true
 				return sessioninit.AuthInfo{}, nil
@@ -269,7 +269,7 @@ func TestCacheSingleFlight(t *testing.T) {
 	_, err = c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
 		ctx context.Context,
 		ie sqlutil.InternalExecutor,
-		username security.SQLUsername,
+		userName username.SQLUsername,
 	) (sessioninit.AuthInfo, error) {
 		didReadFromSystemTable = true
 		return sessioninit.AuthInfo{}, nil

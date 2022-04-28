@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -32,7 +32,7 @@ func defaultContainerConfig() container.Config {
 	return container.Config{
 		Image: acceptanceImage,
 		Env: []string{
-			fmt.Sprintf("PGUSER=%s", security.RootUser),
+			fmt.Sprintf("PGUSER=%s", username.RootUser),
 			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
 			"PGSSLCERT=/certs/client.root.crt",
 			"PGSSLKEY=/certs/client.root.key",

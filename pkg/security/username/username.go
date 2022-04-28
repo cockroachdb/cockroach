@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package security
+package username
 
 import (
 	"bytes"
@@ -128,36 +128,36 @@ func TestUserName() SQLUsername { return SQLUsername{TestUser} }
 // MakeSQLUsernameFromUserInput normalizes a username string as
 // entered in an ambiguous context into a SQL username (performs case
 // folding and unicode normalization form C - NFC).
-// If the purpose if UsernameCreation, the structure of the username
+// If the purpose if PurposeCreation, the structure of the username
 // is also checked. An error is returned if the validation fails.
-// If the purpose is UsernameValidation, no error is returned.
-func MakeSQLUsernameFromUserInput(u string, purpose UsernamePurpose) (res SQLUsername, err error) {
+// If the purpose is PurposeValidation, no error is returned.
+func MakeSQLUsernameFromUserInput(u string, purpose Purpose) (res SQLUsername, err error) {
 	// Perform case folding and NFC normalization.
 	res.u = lexbase.NormalizeName(u)
-	if purpose == UsernameCreation {
+	if purpose == PurposeCreation {
 		err = res.ValidateForCreation()
 	}
 	return res, err
 }
 
-// UsernamePurpose indicates the purpose of the resulting
+// Purpose indicates the purpose of the resulting
 // SQLUsername in MakeSQLUsernameFromUserInput.
-type UsernamePurpose bool
+type Purpose bool
 
 const (
-	// UsernameCreation indicates that the SQLUsername is being
+	// PurposeCreation indicates that the SQLUsername is being
 	// input for the purpose of creating a user account.
 	// This causes MakeSQLUsernameFromUserInput to also enforce
 	// structural restrictions on the username: which characters
 	// are allowed and a maximum length.
-	UsernameCreation UsernamePurpose = false
+	PurposeCreation Purpose = false
 
-	// UsernameValidation indicates that the SQLUsername is
+	// PurposeValidation indicates that the SQLUsername is
 	// being input for the purpose of looking up an existing
 	// user, or to compare with an existing username.
 	// This skips the structural restrictions imposed
-	// for the purpose UsernameCreation.
-	UsernameValidation UsernamePurpose = true
+	// for the purpose PurposeCreation.
+	PurposeValidation Purpose = true
 )
 
 const usernameHelp = "Usernames are case insensitive, must start with a letter, " +
@@ -184,17 +184,17 @@ func (s SQLUsername) ValidateForCreation() error {
 
 // ErrUsernameTooLong indicates that a username string was too
 // long. It is returned by ValidateForCreation() or
-// MakeSQLUserFromUserInput() with purpose UsernameCreation.
+// MakeSQLUserFromUserInput() with purpose PurposeCreation.
 var ErrUsernameTooLong = errors.WithHint(errors.New("username is too long"), usernameHelp)
 
 // ErrUsernameInvalid indicates that a username string contained
 // invalid characters. It is returned by ValidateForCreation() or
-// MakeSQLUserFromUserInput() with purpose UsernameCreation.
+// MakeSQLUserFromUserInput() with purpose PurposeCreation.
 var ErrUsernameInvalid = errors.WithHint(errors.New("username is invalid"), usernameHelp)
 
 // ErrUsernameEmpty indicates that an empty string was used as
 // username. It is returned by ValidateForCreation() or
-// MakeSQLUserFromUserInput() with purpose UsernameCreation.
+// MakeSQLUserFromUserInput() with purpose PurposeCreation.
 var ErrUsernameEmpty = errors.WithHint(errors.New("username is empty"), usernameHelp)
 
 // ErrUsernameNotNormalized indicates that a username

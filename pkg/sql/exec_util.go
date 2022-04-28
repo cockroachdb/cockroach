@@ -47,7 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -1338,7 +1338,7 @@ type UpdateVersionSystemSettingHook func(
 // VersionUpgradeHook is used to run migrations starting in v21.1.
 type VersionUpgradeHook func(
 	ctx context.Context,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	from, to clusterversion.ClusterVersion,
 	updateSystemVersionSetting UpdateVersionSystemSettingHook,
 ) error
@@ -1683,7 +1683,7 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 			dd := &tree.DDecimal{}
 			dd.Set(t)
 			d = dd
-		case security.SQLUsername:
+		case username.SQLUsername:
 			d = tree.NewDString(t.Normalized())
 		}
 		if d == nil {
@@ -1923,7 +1923,7 @@ type SessionDefaults map[string]string
 
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
-	User                        security.SQLUsername
+	User                        username.SQLUsername
 	IsSuperuser                 bool
 	SessionDefaults             SessionDefaults
 	CustomOptionSessionDefaults SessionDefaults
@@ -1974,7 +1974,7 @@ func (r *SessionRegistry) deregister(
 }
 
 type registrySession interface {
-	user() security.SQLUsername
+	user() username.SQLUsername
 	cancelQuery(queryID clusterunique.ID) bool
 	cancelCurrentQueries() bool
 	cancelSession()

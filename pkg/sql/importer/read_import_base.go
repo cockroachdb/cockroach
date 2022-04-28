@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -148,7 +148,7 @@ func readInputFiles(
 	format roachpb.IOFileFormat,
 	fileFunc readFileFunc,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user security.SQLUsername,
+	user username.SQLUsername,
 ) error {
 	done := ctx.Done()
 
@@ -375,7 +375,7 @@ func (f fileReader) ReadFraction() float32 {
 type inputConverter interface {
 	start(group ctxgroup.Group)
 	readFiles(ctx context.Context, dataFiles map[int32]string, resumePos map[int32]int64,
-		format roachpb.IOFileFormat, makeExternalStorage cloud.ExternalStorageFactory, user security.SQLUsername) error
+		format roachpb.IOFileFormat, makeExternalStorage cloud.ExternalStorageFactory, user username.SQLUsername) error
 }
 
 // formatHasNamedColumns returns true if the data in the input files can be

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -344,7 +344,7 @@ var strOrOidTypes = []*types.T{types.String, types.Oid}
 func makePGPrivilegeInquiryDef(
 	infoDetail string,
 	objSpecArgs argTypeOpts,
-	fn func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error),
+	fn func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error),
 ) builtinDefinition {
 	// Collect the different argument type variations.
 	//
@@ -390,7 +390,7 @@ func makePGPrivilegeInquiryDef(
 			Types:      argType,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				var user security.SQLUsername
+				var user username.SQLUsername
 				if withUser {
 					arg := eval.UnwrapDatum(ctx, args[0])
 					userS, err := getNameForArg(ctx, arg, "pg_roles", "rolname")
@@ -400,7 +400,7 @@ func makePGPrivilegeInquiryDef(
 					// Note: the username in pg_roles is already normalized, so
 					// we can safely turn it into a SQLUsername without
 					// re-normalization.
-					user = security.MakeSQLUsernameFromPreNormalizedString(userS)
+					user = username.MakeSQLUsernameFromPreNormalizedString(userS)
 					if user.Undefined() {
 						if _, ok := arg.(*tree.DOid); ok {
 							// Postgres returns falseifn no matching user is
@@ -1351,7 +1351,7 @@ SELECT description
 	"has_any_column_privilege": makePGPrivilegeInquiryDef(
 		"any column of table",
 		argTypeOpts{{"table", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			tableArg := eval.UnwrapDatum(ctx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(tableArg, false /* isSequence */)
 			if err != nil {
@@ -1378,7 +1378,7 @@ SELECT description
 	"has_column_privilege": makePGPrivilegeInquiryDef(
 		"column",
 		argTypeOpts{{"table", strOrOidTypes}, {"column", []*types.T{types.String, types.Int}}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			tableArg := eval.UnwrapDatum(ctx, args[0])
 			colArg := eval.UnwrapDatum(ctx, args[1])
 			specifier, err := columnHasPrivilegeSpecifier(tableArg, colArg)
@@ -1406,7 +1406,7 @@ SELECT description
 	"has_database_privilege": makePGPrivilegeInquiryDef(
 		"database",
 		argTypeOpts{{"database", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 
 			databaseArg := eval.UnwrapDatum(ctx, args[0])
 			specifier, err := databaseHasPrivilegeSpecifier(databaseArg)
@@ -1435,7 +1435,7 @@ SELECT description
 	"has_foreign_data_wrapper_privilege": makePGPrivilegeInquiryDef(
 		"foreign-data wrapper",
 		argTypeOpts{{"fdw", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			fdwArg := eval.UnwrapDatum(ctx, args[0])
 			fdw, err := getNameForArg(ctx, fdwArg, "pg_foreign_data_wrapper", "fdwname")
 			if err != nil {
@@ -1473,7 +1473,7 @@ SELECT description
 	"has_function_privilege": makePGPrivilegeInquiryDef(
 		"function",
 		argTypeOpts{{"function", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			oidArg := eval.UnwrapDatum(ctx, args[0])
 			// When specifying a function by a text string rather than by OID,
 			// the allowed input is the same as for the regprocedure data type.
@@ -1522,7 +1522,7 @@ SELECT description
 	"has_language_privilege": makePGPrivilegeInquiryDef(
 		"language",
 		argTypeOpts{{"language", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			langArg := eval.UnwrapDatum(ctx, args[0])
 			lang, err := getNameForArg(ctx, langArg, "pg_language", "lanname")
 			if err != nil {
@@ -1560,7 +1560,7 @@ SELECT description
 	"has_schema_privilege": makePGPrivilegeInquiryDef(
 		"schema",
 		argTypeOpts{{"schema", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			schemaArg := eval.UnwrapDatum(ctx, args[0])
 			databaseName := ctx.SessionData().Database
 			specifier, err := schemaHasPrivilegeSpecifier(ctx, schemaArg, databaseName)
@@ -1589,7 +1589,7 @@ SELECT description
 	"has_sequence_privilege": makePGPrivilegeInquiryDef(
 		"sequence",
 		argTypeOpts{{"sequence", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			seqArg := eval.UnwrapDatum(ctx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(seqArg, true /* isSequence */)
 			if err != nil {
@@ -1615,7 +1615,7 @@ SELECT description
 	"has_server_privilege": makePGPrivilegeInquiryDef(
 		"foreign server",
 		argTypeOpts{{"server", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			serverArg := eval.UnwrapDatum(ctx, args[0])
 			server, err := getNameForArg(ctx, serverArg, "pg_foreign_server", "srvname")
 			if err != nil {
@@ -1653,7 +1653,7 @@ SELECT description
 	"has_table_privilege": makePGPrivilegeInquiryDef(
 		"table",
 		argTypeOpts{{"table", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			tableArg := eval.UnwrapDatum(ctx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(tableArg, false /* isSequence */)
 			if err != nil {
@@ -1688,7 +1688,7 @@ SELECT description
 	"has_tablespace_privilege": makePGPrivilegeInquiryDef(
 		"tablespace",
 		argTypeOpts{{"tablespace", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			tablespaceArg := eval.UnwrapDatum(ctx, args[0])
 			tablespace, err := getNameForArg(ctx, tablespaceArg, "pg_tablespace", "spcname")
 			if err != nil {
@@ -1726,7 +1726,7 @@ SELECT description
 	"has_type_privilege": makePGPrivilegeInquiryDef(
 		"type",
 		argTypeOpts{{"type", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			oidArg := eval.UnwrapDatum(ctx, args[0])
 			// When specifying a type by a text string rather than by OID, the
 			// allowed input is the same as for the regtype data type.
@@ -1772,7 +1772,7 @@ SELECT description
 	"pg_has_role": makePGPrivilegeInquiryDef(
 		"role",
 		argTypeOpts{{"role", strOrOidTypes}},
-		func(ctx *eval.Context, args tree.Datums, user security.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 			roleArg := eval.UnwrapDatum(ctx, args[0])
 			roleS, err := getNameForArg(ctx, roleArg, "pg_roles", "rolname")
 			if err != nil {
@@ -1780,7 +1780,7 @@ SELECT description
 			}
 			// Note: the username in pg_roles is already normalized, so we can safely
 			// turn it into a SQLUsername without re-normalization.
-			role := security.MakeSQLUsernameFromPreNormalizedString(roleS)
+			role := username.MakeSQLUsernameFromPreNormalizedString(roleS)
 			if role.Undefined() {
 				switch roleArg.(type) {
 				case *tree.DString:
@@ -2376,7 +2376,7 @@ func pgTrueTypImpl(attrField, typField string, retType *types.T) builtinDefiniti
 // role, so this is currently equivalent to isMemberOfRole.
 // See https://github.com/cockroachdb/cockroach/issues/69583.
 func hasPrivsOfRole(
-	ctx *eval.Context, user, role security.SQLUsername,
+	ctx *eval.Context, user, role username.SQLUsername,
 ) (eval.HasAnyPrivilegeResult, error) {
 	return isMemberOfRole(ctx, user, role)
 }
@@ -2386,7 +2386,7 @@ func hasPrivsOfRole(
 //
 // This is defined to recurse through roles regardless of rolinherit.
 func isMemberOfRole(
-	ctx *eval.Context, user, role security.SQLUsername,
+	ctx *eval.Context, user, role username.SQLUsername,
 ) (eval.HasAnyPrivilegeResult, error) {
 	// Fast path for simple case.
 	if user == role {
@@ -2416,7 +2416,7 @@ func isMemberOfRole(
 // That is, is member the role itself (subject to restrictions below), a
 // member (directly or indirectly) WITH ADMIN OPTION, or a superuser?
 func isAdminOfRole(
-	ctx *eval.Context, user, role security.SQLUsername,
+	ctx *eval.Context, user, role username.SQLUsername,
 ) (eval.HasAnyPrivilegeResult, error) {
 	// Superusers are an admin of every role.
 	//

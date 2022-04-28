@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -116,7 +116,7 @@ func RegisterExternalStorageProvider(
 
 // ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
 func ExternalStorageConfFromURI(
-	path string, user security.SQLUsername,
+	path string, user username.SQLUsername,
 ) (roachpb.ExternalStorage, error) {
 	uri, err := url.Parse(path)
 	if err != nil {
@@ -137,7 +137,7 @@ func ExternalStorageFromURI(
 	externalConfig base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 	limiters Limiters,

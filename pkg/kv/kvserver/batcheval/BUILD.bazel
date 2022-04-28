@@ -72,7 +72,7 @@ go_library(
         "//pkg/kv/kvserver/txnwait",
         "//pkg/kv/kvserver/uncertainty",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage",

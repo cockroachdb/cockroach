@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -102,7 +102,7 @@ func (m *mysqldumpReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	user security.SQLUsername,
+	user username.SQLUsername,
 ) error {
 	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
 }
@@ -308,7 +308,7 @@ func readMysqlCreateTable(
 	match string,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
-	owner security.SQLUsername,
+	owner username.SQLUsername,
 	walltime int64,
 ) ([]*tabledesc.Mutable, error) {
 	match = lexbase.NormalizeName(match)
@@ -388,7 +388,7 @@ func mysqlTableToCockroach(
 	in *mysql.TableSpec,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
-	owner security.SQLUsername,
+	owner username.SQLUsername,
 	walltime int64,
 ) ([]*tabledesc.Mutable, []delayedFK, error) {
 	if in == nil {

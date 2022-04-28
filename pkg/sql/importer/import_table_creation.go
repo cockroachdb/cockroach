@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -64,7 +64,7 @@ func MakeTestingSimpleTableDescriptor(
 	fks fkHandler,
 	walltime int64,
 ) (*tabledesc.Mutable, error) {
-	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName())
+	db := dbdesc.NewInitial(parentID, "foo", username.RootUserName())
 	var sc catalog.SchemaDescriptor
 	if !st.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) && parentSchemaID == keys.PublicSchemaIDForBackup {
 		// If we're not on version PublicSchemasWithDescriptors, continue to
@@ -79,10 +79,10 @@ func MakeTestingSimpleTableDescriptor(
 			Version:  1,
 			ParentID: parentID,
 			Privileges: catpb.NewPrivilegeDescriptor(
-				security.PublicRoleName(),
+				username.PublicRoleName(),
 				privilege.SchemaPrivileges,
 				privilege.List{},
-				security.RootUserName(),
+				username.RootUserName(),
 			),
 		}).BuildCreatedMutableSchema()
 	}
@@ -188,7 +188,7 @@ func MakeSimpleTableDescriptor(
 		tableID,
 		nil, /* regionConfig */
 		hlc.Timestamp{WallTime: walltime},
-		catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 		affected,
 		semaCtx,
 		&evalCtx,
@@ -338,7 +338,7 @@ func (so *importSequenceOperators) IsTypeVisible(
 func (so *importSequenceOperators) HasAnyPrivilege(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	privs []privilege.Privilege,
 ) (eval.HasAnyPrivilegeResult, error) {
 	return eval.HasNoPrivilege, errors.WithStack(errSequenceOperators)

@@ -10,7 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catprivilege",
@@ -34,7 +34,7 @@ go_test(
     embed = [":dbdesc"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",

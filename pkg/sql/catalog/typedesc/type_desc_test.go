@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -385,10 +385,10 @@ func TestValidateTypeDesc(t *testing.T) {
 		},
 	}).BuildImmutable())
 
-	defaultPrivileges := catpb.NewBasePrivilegeDescriptor(security.RootUserName())
-	invalidPrivileges := catpb.NewBasePrivilegeDescriptor(security.RootUserName())
+	defaultPrivileges := catpb.NewBasePrivilegeDescriptor(username.RootUserName())
+	invalidPrivileges := catpb.NewBasePrivilegeDescriptor(username.RootUserName())
 	// Make the PrivilegeDescriptor invalid by granting SELECT to a type.
-	invalidPrivileges.Grant(security.TestUserName(), privilege.List{privilege.SELECT}, false)
+	invalidPrivileges.Grant(username.TestUserName(), privilege.List{privilege.SELECT}, false)
 	typeDescID := descpb.ID(bootstrap.TestingUserDescID(0))
 	testData := []struct {
 		err  string
@@ -833,7 +833,7 @@ func TestTableImplicitTypeDescCannotBeSerializedOrValidated(t *testing.T) {
 		ParentID:       1,
 		ParentSchemaID: 1,
 		Kind:           descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE,
-		Privileges:     catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		Privileges:     catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 	}
 
 	desc := typedesc.NewBuilder(td).BuildImmutable()

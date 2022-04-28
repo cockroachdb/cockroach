@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -75,7 +75,7 @@ func TestPreSeedSpanCountTable(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(security.RootUser))
+	pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(username.RootUser))
 	defer cleanupPGUrl()
 
 	tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
@@ -146,7 +146,7 @@ func TestSeedSpanCountTable(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(security.RootUser))
+	pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(username.RootUser))
 	defer cleanupPGUrl()
 
 	tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
@@ -223,7 +223,7 @@ func TestSeedSpanCountTableOverLimit(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(security.RootUser))
+	pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(username.RootUser))
 	defer cleanupPGUrl()
 
 	tenantSQLDB, err := gosql.Open("postgres", pgURL.String())

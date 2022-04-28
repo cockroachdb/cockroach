@@ -22,7 +22,7 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/geo/geoindex",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",

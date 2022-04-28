@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -2001,7 +2001,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 			status = jobs.StatusFailed
 		}
 		if err := jobutils.VerifySystemJob(t, &runner, migrationJobOffset+i, jobspb.TypeSchemaChange, status, jobs.Record{
-			Username:    security.RootUserName(),
+			Username:    username.RootUserName(),
 			Description: tc.sql,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),
@@ -2016,7 +2016,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 
 	// Roll back job.
 	if err := jobutils.VerifySystemJob(t, &runner, len(testCases), jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUserName(),
+		Username:    username.RootUserName(),
 		Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, testCases[jobRolledBack].sql),
 		DescriptorIDs: descpb.IDs{
 			tableDesc.GetID(),
@@ -3341,7 +3341,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 			Description:   "CLEANUP JOB for 'ALTER TABLE t.public.test ALTER PRIMARY KEY USING COLUMNS (k)'",
-			Username:      security.RootUserName(),
+			Username:      username.RootUserName(),
 			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
 		})
 	})
@@ -4295,7 +4295,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
 			Description:   "GC for TRUNCATE TABLE t.public.test",
-			Username:      security.RootUserName(),
+			Username:      username.RootUserName(),
 			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
 		})
 	})
@@ -4418,7 +4418,7 @@ func TestTruncateCompletion(t *testing.T) {
 	// most recent job instead.
 	schemaChangeJobOffset := 0
 	if err := jobutils.VerifySystemJob(t, sqlRun, schemaChangeJobOffset+2, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUserName(),
+		Username:    username.RootUserName(),
 		Description: "TRUNCATE TABLE t.public.test",
 		DescriptorIDs: descpb.IDs{
 			tableDesc.GetID(),
@@ -4833,7 +4833,7 @@ func TestCancelSchemaChange(t *testing.T) {
 				t.Fatalf("unexpected %v", err)
 			}
 			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusCanceled, jobs.Record{
-				Username:    security.RootUserName(),
+				Username:    username.RootUserName(),
 				Description: tc.sql,
 				DescriptorIDs: descpb.IDs{
 					tableDesc.GetID(),
@@ -4844,7 +4844,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			jobID := jobutils.GetJobID(t, sqlDB, idx)
 			idx++
 			jobRecord := jobs.Record{
-				Username:    security.RootUserName(),
+				Username:    username.RootUserName(),
 				Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, tc.sql),
 				DescriptorIDs: descpb.IDs{
 					tableDesc.GetID(),
@@ -4862,7 +4862,7 @@ func TestCancelSchemaChange(t *testing.T) {
 		} else {
 			sqlDB.Exec(t, tc.sql)
 			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUserName(),
+				Username:    username.RootUserName(),
 				Description: tc.sql,
 				DescriptorIDs: descpb.IDs{
 					tableDesc.GetID(),
@@ -5990,7 +5990,7 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
 		// TODO (lucy): Maybe this test API should use an offset starting
 		// from the most recent job instead.
 		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusValidation, jobs.Record{
-			Username:    security.RootUserName(),
+			Username:    username.RootUserName(),
 			Description: "ALTER TABLE t.public.test ADD COLUMN a INT8 AS (v - 1) STORED, ADD CHECK ((a < v) AND (a IS NOT NULL))",
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),

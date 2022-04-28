@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -118,7 +118,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
 		owner, err := decodeusername.FromRoleSpec(
-			params.SessionData(), security.UsernameValidation, t.Owner,
+			params.SessionData(), username.PurposeValidation, t.Owner,
 		)
 		if err != nil {
 			return err
@@ -398,7 +398,7 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 }
 
 func (p *planner) alterTypeOwner(
-	ctx context.Context, n *alterTypeNode, newOwner security.SQLUsername,
+	ctx context.Context, n *alterTypeNode, newOwner username.SQLUsername,
 ) error {
 	typeDesc := n.desc
 	oldOwner := typeDesc.GetPrivileges().Owner()
@@ -451,7 +451,7 @@ func (p *planner) setNewTypeOwner(
 	arrayTypeDesc *typedesc.Mutable,
 	typeName tree.TypeName,
 	arrayTypeName tree.TypeName,
-	newOwner security.SQLUsername,
+	newOwner username.SQLUsername,
 ) error {
 	privs := typeDesc.GetPrivileges()
 	privs.SetOwner(newOwner)

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -60,7 +60,7 @@ func CreateSQLStatsCompactionScheduleIfNotYetExist(
 	})
 
 	compactionSchedule.SetScheduleLabel(compactionScheduleName)
-	compactionSchedule.SetOwner(security.NodeUserName())
+	compactionSchedule.SetOwner(username.NodeUserName())
 
 	args, err := pbtypes.MarshalAny(&ScheduledSQLStatsCompactorExecutionArgs{})
 	if err != nil {
@@ -87,7 +87,7 @@ func CreateCompactionJob(
 ) (jobspb.JobID, error) {
 	record := jobs.Record{
 		Description: "automatic SQL Stats compaction",
-		Username:    security.NodeUserName(),
+		Username:    username.NodeUserName(),
 		Details:     jobspb.AutoSQLStatsCompactionDetails{},
 		Progress:    jobspb.AutoSQLStatsCompactionProgress{},
 		CreatedBy:   createdByInfo,
@@ -106,7 +106,7 @@ func checkExistingCompactionSchedule(
 	query := "SELECT count(*) FROM system.scheduled_jobs WHERE schedule_name = $1"
 
 	row, err := ie.QueryRowEx(ctx, "check-existing-sql-stats-schedule", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		query, compactionScheduleName,
 	)
 

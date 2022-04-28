@@ -13,7 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/util/admission",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",  # keep

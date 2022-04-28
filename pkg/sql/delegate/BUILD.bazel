@@ -41,7 +41,7 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/colinfo",

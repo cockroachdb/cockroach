@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -434,9 +434,9 @@ func TestImportInTenant(t *testing.T) {
 	const importStmt = "IMPORT INTO foo CSV DATA ($1)"
 
 	// Upload different files to same userfile name on each of host and tenants.
-	require.NoError(t, putUserfile(ctx, conn, security.RootUserName(), userfileURI, []byte("1,2\n3,4")))
-	require.NoError(t, putUserfile(ctx, conn10, security.RootUserName(), userfileURI, []byte("10,2")))
-	require.NoError(t, putUserfile(ctx, conn11, security.RootUserName(), userfileURI, []byte("11,22\n33,44\n55,66")))
+	require.NoError(t, putUserfile(ctx, conn, username.RootUserName(), userfileURI, []byte("1,2\n3,4")))
+	require.NoError(t, putUserfile(ctx, conn10, username.RootUserName(), userfileURI, []byte("10,2")))
+	require.NoError(t, putUserfile(ctx, conn11, username.RootUserName(), userfileURI, []byte("11,22\n33,44\n55,66")))
 
 	sqlDB.Exec(t, createStmt)
 	sqlDB.Exec(t, importStmt, userfileURI)
@@ -488,8 +488,8 @@ func TestImportInMultiServerTenant(t *testing.T) {
 	const importStmt = "IMPORT INTO foo CSV DATA ($1, $2)"
 
 	// Upload files.
-	require.NoError(t, putUserfile(ctx, conn1, security.RootUserName(), userfileURI, []byte("10,2")))
-	require.NoError(t, putUserfile(ctx, conn2, security.RootUserName(), userfile2URI, []byte("11,22\n33,44\n55,66")))
+	require.NoError(t, putUserfile(ctx, conn1, username.RootUserName(), userfileURI, []byte("10,2")))
+	require.NoError(t, putUserfile(ctx, conn2, username.RootUserName(), userfile2URI, []byte("11,22\n33,44\n55,66")))
 
 	t1.Exec(t, createStmt)
 	// TODO(harding): Verify that the import is distributed to both pods.
@@ -499,7 +499,7 @@ func TestImportInMultiServerTenant(t *testing.T) {
 }
 
 func putUserfile(
-	ctx context.Context, conn *gosql.DB, user security.SQLUsername, uri string, content []byte,
+	ctx context.Context, conn *gosql.DB, user username.SQLUsername, uri string, content []byte,
 ) error {
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {

@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -254,7 +254,7 @@ func writeNewEncryptionInfoToBackup(
 // base backups.
 func getEncryptionFromBase(
 	ctx context.Context,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	baseBackupURI string,
 	encryptionParams jobspb.BackupEncryptionOptions,

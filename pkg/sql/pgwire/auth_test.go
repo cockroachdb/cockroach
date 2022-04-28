@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
@@ -216,7 +216,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		}
 		httpHBAUrl := httpScheme + s.HTTPAddr() + "/debug/hba_conf"
 
-		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, security.TestUser)); err != nil {
+		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -422,7 +422,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 					// Prepare a connection string using the server's default.
 					// What is the user requested by the test?
-					user := security.RootUser
+					user := username.RootUser
 					if td.HasArg("user") {
 						td.ScanArgs(t, "user", &user)
 					}
@@ -438,7 +438,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
 						t, s.ServingSQLAddr(), t.Name(), url.User(user),
-						forceCerts || user == security.RootUser || user == security.TestUser /* withClientCerts */)
+						forceCerts || user == username.RootUser || user == username.TestUser /* withClientCerts */)
 					defer cleanupFn()
 
 					var host, port string
@@ -564,12 +564,12 @@ func TestClientAddrOverride(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(security.TestUser),
+		t, s.ServingSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
 	)
 	defer cleanupFunc()
 
 	// Ensure the test user exists.
-	if _, err := db.Exec(fmt.Sprintf(`CREATE USER %s`, security.TestUser)); err != nil {
+	if _, err := db.Exec(fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -599,7 +599,7 @@ func TestClientAddrOverride(t *testing.T) {
 				addr = addr[1 : len(addr)-1]
 				mask = "128"
 			}
-			hbaConf := "host all " + security.TestUser + " " + addr + "/" + mask + " reject\n" +
+			hbaConf := "host all " + username.TestUser + " " + addr + "/" + mask + " reject\n" +
 				"host all all all cert-password\n"
 			if _, err := db.Exec(
 				`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`,
