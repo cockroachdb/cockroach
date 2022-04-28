@@ -321,6 +321,7 @@ ALL_TESTS = [
     "//pkg/sql/opt/invertedexpr:invertedexpr_test",
     "//pkg/sql/opt/invertedidx:invertedidx_test",
     "//pkg/sql/opt/lookupjoin:lookupjoin_test",
+    "//pkg/sql/opt/memo:memo_disallowed_imports_test",
     "//pkg/sql/opt/memo:memo_test",
     "//pkg/sql/opt/norm:norm_test",
     "//pkg/sql/opt/opbench:opbench_test",
