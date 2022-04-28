@@ -25,10 +25,8 @@
     "baseUrl": ".",
     "paths": {
       "oss/*": ["*"],
-      "src/*": [
-        "ccl/src/*",
-        "src/*"
-      ]
+      "src/*": ["src/*"],
+      "ccl/src/*": ["src/*"]
     }
   },
   "exclude": [
