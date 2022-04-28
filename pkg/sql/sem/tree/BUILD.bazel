@@ -217,6 +217,7 @@ go_test(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/cast",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/normalize",

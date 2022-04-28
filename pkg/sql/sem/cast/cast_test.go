@@ -175,7 +175,7 @@ func TestCastsFromUnknown(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	for _, typ := range types.OidToType {
-		_, ok := LookupCast(types.Unknown, typ, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
+		_, ok := LookupCast(types.Unknown, typ, SessionOptions{})
 		if !ok {
 			t.Errorf("cast from Unknown to %s does not exist", typ.String())
 		}
@@ -227,7 +227,7 @@ func TestTupleCastVolatility(t *testing.T) {
 		from.InternalType.TupleContents = tc.from
 		to := *types.EmptyTuple
 		to.InternalType.TupleContents = tc.to
-		v, ok := LookupCastVolatility(&from, &to, nil /* sessionData */)
+		v, ok := LookupCastVolatility(&from, &to, SessionOptions{})
 		res := "error"
 		if ok {
 			res = v.String()

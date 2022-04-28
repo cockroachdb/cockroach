@@ -11,7 +11,6 @@ go_library(
     deps = [
         "//pkg/sql/oidext",
         "//pkg/sql/sem/volatility",
-        "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",

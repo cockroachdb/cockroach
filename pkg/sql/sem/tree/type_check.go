@@ -56,6 +56,7 @@ type SemaContext struct {
 	TableNameResolver QualifiedNameResolver
 
 	// IntervalStyleEnabled determines whether IntervalStyle is enabled.
+	CastSessionOptions cast.SessionOptions
 	// TODO(sql-exp): remove this field in 22.2, since it will always be true.
 	IntervalStyleEnabled bool
 	// DateStyleEnabled determines whether DateStyle is enabled.
@@ -430,11 +431,7 @@ func invalidCastError(castFrom, castTo *types.T) error {
 //
 // On success, any relevant telemetry counters are incremented.
 func resolveCast(
-	context string,
-	castFrom, castTo *types.T,
-	allowStable bool,
-	intervalStyleEnabled bool,
-	dateStyleEnabled bool,
+	context string, castFrom, castTo *types.T, allowStable bool, opts cast.SessionOptions,
 ) error {
 	toFamily := castTo.Family()
 	fromFamily := castFrom.Family()
@@ -445,8 +442,7 @@ func resolveCast(
 			castFrom.ArrayContents(),
 			castTo.ArrayContents(),
 			allowStable,
-			intervalStyleEnabled,
-			dateStyleEnabled,
+			opts,
 		)
 		if err != nil {
 			return err
@@ -483,8 +479,7 @@ func resolveCast(
 				from,
 				to,
 				allowStable,
-				intervalStyleEnabled,
-				dateStyleEnabled,
+				opts,
 			)
 			if err != nil {
 				return err
@@ -494,7 +489,7 @@ func resolveCast(
 		return nil
 
 	default:
-		cast, ok := cast.LookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
+		cast, ok := cast.LookupCast(castFrom, castTo, opts)
 		if !ok {
 			return invalidCastError(castFrom, castTo)
 		}
@@ -627,13 +622,16 @@ func (expr *CastExpr) TypeCheck(
 		allowStable = false
 		context = semaCtx.Properties.required.context
 	}
+	var castOpts cast.SessionOptions
+	if semaCtx != nil {
+		castOpts = semaCtx.CastSessionOptions
+	}
 	err = resolveCast(
 		context,
 		castFrom,
 		exprType,
 		allowStable,
-		semaCtx != nil && semaCtx.IntervalStyleEnabled,
-		semaCtx != nil && semaCtx.DateStyleEnabled,
+		castOpts,
 	)
 	if err != nil {
 		return nil, err

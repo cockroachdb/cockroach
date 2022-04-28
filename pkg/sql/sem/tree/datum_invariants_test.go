@@ -13,6 +13,7 @@ package tree
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -26,9 +27,8 @@ func TestAllTypesCastableToString(t *testing.T) {
 			"",
 			typ,
 			types.String,
-			true,  /* allowStable */
-			false, /* intervalStyleEnabled */
-			false, /* dateStyleEnabled */
+			true, /* allowStable */
+			cast.SessionOptions{},
 		); err != nil {
 			t.Errorf("%s is not castable to STRING, all types should be", typ)
 		}
@@ -43,9 +43,8 @@ func TestAllTypesCastableFromString(t *testing.T) {
 			"",
 			types.String,
 			typ,
-			true,  /* allowStable */
-			false, /* intervalStyleEnabled */
-			false, /* dateStyleEnabled */
+			true, /* allowStable */
+			cast.SessionOptions{},
 		); err != nil {
 			t.Errorf("%s is not castable from STRING, all types should be", typ)
 		}

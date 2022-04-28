@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -358,11 +359,15 @@ func newInternalPlanner(
 
 	p.semaCtx = tree.MakeSemaContext()
 	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
-		p.semaCtx.IntervalStyleEnabled = true
-		p.semaCtx.DateStyleEnabled = true
+		p.semaCtx.CastSessionOptions = cast.SessionOptions{
+			IntervalStyleEnabled: true,
+			DateStyleEnabled:     true,
+		}
 	} else {
-		p.semaCtx.IntervalStyleEnabled = sd.IntervalStyleEnabled
-		p.semaCtx.DateStyleEnabled = sd.DateStyleEnabled
+		p.semaCtx.CastSessionOptions = cast.SessionOptions{
+			IntervalStyleEnabled: sd.IntervalStyleEnabled,
+			DateStyleEnabled:     sd.DateStyleEnabled,
+		}
 	}
 	p.semaCtx.SearchPath = &sd.SearchPath
 	p.semaCtx.TypeResolver = p

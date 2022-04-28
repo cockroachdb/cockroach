@@ -45,8 +45,6 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
-        "//pkg/sql/sessiondata",
-        "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/errorutil/unimplemented",
