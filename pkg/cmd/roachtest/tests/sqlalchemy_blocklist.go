@@ -15,7 +15,10 @@ var sqlAlchemyBlocklists = blocklistsForVersion{
 	{"v21.1", "sqlAlchemyBlocklist21_1", sqlAlchemyBlocklist21_1, "sqlAlchemyIgnoreList21_1", sqlAlchemyIgnoreList21_1},
 	{"v21.2", "sqlAlchemyBlocklist21_2", sqlAlchemyBlocklist21_2, "sqlAlchemyIgnoreList21_2", sqlAlchemyIgnoreList21_2},
 	{"v22.1", "sqlAlchemyBlocklist22_1", sqlAlchemyBlocklist22_1, "sqlAlchemyIgnoreList22_1", sqlAlchemyIgnoreList22_1},
+	{"v22.2", "sqlAlchemyBlocklist22_2", sqlAlchemyBlocklist22_2, "sqlAlchemyIgnoreList22_2", sqlAlchemyIgnoreList22_2},
 }
+
+var sqlAlchemyBlocklist22_2 = blocklist{}
 
 var sqlAlchemyBlocklist22_1 = blocklist{}
 
@@ -24,6 +27,8 @@ var sqlAlchemyBlocklist21_2 = blocklist{}
 var sqlAlchemyBlocklist21_1 = blocklist{}
 
 var sqlAlchemyBlocklist20_2 = blocklist{}
+
+var sqlAlchemyIgnoreList22_2 = sqlAlchemyIgnoreList22_1
 
 var sqlAlchemyIgnoreList22_1 = sqlAlchemyIgnoreList21_2
 

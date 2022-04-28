@@ -15,11 +15,14 @@ var pgjdbcBlocklists = blocklistsForVersion{
 	{"v21.1", "pgjdbcBlockList21_1", pgjdbcBlockList21_1, "pgjdbcIgnoreList21_1", pgjdbcIgnoreList21_1},
 	{"v21.2", "pgjdbcBlockList21_2", pgjdbcBlockList21_2, "pgjdbcIgnoreList21_2", pgjdbcIgnoreList21_2},
 	{"v22.1", "pgjdbcBlockList22_1", pgjdbcBlockList22_1, "pgjdbcIgnoreList22_1", pgjdbcIgnoreList22_1},
+	{"v22.2", "pgjdbcBlockList22_2", pgjdbcBlockList22_2, "pgjdbcIgnoreList22_2", pgjdbcIgnoreList22_2},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var pgjdbcBlockList22_2 = pgjdbcBlockList22_1
+
 var pgjdbcBlockList22_1 = blocklist{
 	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=BOX, oidValue=603]":                                                                                        "unknown",
 	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=CIDR, oidValue=650]":                                                                                       "unknown",
@@ -3344,6 +3347,8 @@ var pgjdbcBlockList20_2 = blocklist{
 	"org.postgresql.test.xa.XADataSourceTest.testTwoPhaseCommit":                                                                                                               "22329",
 	"org.postgresql.test.xa.XADataSourceTest.testWrapperEquals":                                                                                                                "22329",
 }
+
+var pgjdbcIgnoreList22_2 = pgjdbcIgnoreList22_1
 
 var pgjdbcIgnoreList22_1 = pgjdbcIgnoreList21_2
 
