@@ -166,9 +166,12 @@ var djangoBlocklists = blocklistsForVersion{
 	{"v21.1", "djangoBlocklist21_1", djangoBlocklist21_1, "djangoIgnoreList21_1", djangoIgnoreList21_1},
 	{"v21.2", "djangoBlocklist21_2", djangoBlocklist21_2, "djangoIgnoreList21_2", djangoIgnoreList21_2},
 	{"v22.1", "djangoBlocklist22_1", djangoBlocklist22_1, "djangoIgnoreList22_1", djangoIgnoreList22_1},
+	{"v22.2", "djangoBlocklist22_2", djangoBlocklist22_2, "djangoIgnoreList22_2", djangoIgnoreList22_2},
 }
 
 // Maintain that this list is alphabetized.
+var djangoBlocklist22_2 = djangoBlocklist22_1
+
 var djangoBlocklist22_1 = djangoBlocklist21_2
 
 var djangoBlocklist21_2 = djangoBlocklist21_1
@@ -176,6 +179,8 @@ var djangoBlocklist21_2 = djangoBlocklist21_1
 var djangoBlocklist21_1 = djangoBlocklist20_2
 
 var djangoBlocklist20_2 = blocklist{}
+
+var djangoIgnoreList22_2 = djangoIgnoreList22_1
 
 var djangoIgnoreList22_1 = djangoIgnoreList21_2
 

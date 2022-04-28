@@ -15,22 +15,28 @@ var hibernateBlocklists = blocklistsForVersion{
 	{"v21.1", "hibernateBlockList21_1", hibernateBlockList21_1, "hibernateIgnoreList21_1", hibernateIgnoreList21_1},
 	{"v21.2", "hibernateBlockList21_2", hibernateBlockList21_2, "hibernateIgnoreList21_2", hibernateIgnoreList21_2},
 	{"v22.1", "hibernateBlockList22_1", hibernateBlockList22_1, "hibernateIgnoreList22_1", hibernateIgnoreList22_1},
+	{"v22.2", "hibernateBlockList22_2", hibernateBlockList22_2, "hibernateIgnoreList22_2", hibernateIgnoreList22_2},
 }
 
 var hibernateSpatialBlocklists = blocklistsForVersion{
 	{"v21.1", "hibernateSpatialBlockList21_1", hibernateSpatialBlockList21_1, "", nil},
 	{"v21.2", "hibernateSpatialBlockList21_2", hibernateSpatialBlockList21_2, "", nil},
 	{"v22.1", "hibernateSpatialBlockList22_1", hibernateSpatialBlockList22_1, "", nil},
+	{"v22.2", "hibernateSpatialBlockList22_2", hibernateSpatialBlockList22_2, "", nil},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var hibernateSpatialBlockList22_2 = blocklist{}
+
 var hibernateSpatialBlockList22_1 = blocklist{}
 
 var hibernateSpatialBlockList21_2 = blocklist{}
 
 var hibernateSpatialBlockList21_1 = blocklist{}
+
+var hibernateBlockList22_2 = hibernateBlockList22_1
 
 var hibernateBlockList22_1 = blocklist{
 	"org.hibernate.jpa.test.graphs.FetchGraphTest.testCollectionEntityGraph":                                                "unknown",
@@ -231,6 +237,8 @@ var hibernateBlockList20_2 = blocklist{
 	"org.hibernate.test.naturalid.inheritance.cache.InheritedNaturalIdNoCacheTest.testLoadExtendedByNormal":                                                                                      "unknown",
 	"org.hibernate.test.where.annotations.EagerManyToOneFetchModeSelectWhereTest.testAssociatedWhereClause":                                                                                      "unknown",
 }
+
+var hibernateIgnoreList22_2 = hibernateIgnoreList22_1
 
 var hibernateIgnoreList22_1 = hibernateIgnoreList21_2
 

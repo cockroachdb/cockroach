@@ -15,7 +15,10 @@ var liquibaseBlocklists = blocklistsForVersion{
 	{"v21.1", "liquibaseBlocklist21_1", liquibaseBlocklist21_1, "liquibaseIgnorelist21_1", liquibaseIgnorelist21_1},
 	{"v21.2", "liquibaseBlocklist21_2", liquibaseBlocklist21_2, "liquibaseIgnorelist21_2", liquibaseIgnorelist21_2},
 	{"v22.1", "liquibaseBlocklist22_1", liquibaseBlocklist22_1, "liquibaseIgnorelist21_2", liquibaseIgnorelist22_1},
+	{"v22.2", "liquibaseBlocklist22_2", liquibaseBlocklist22_2, "liquibaseIgnorelist21_2", liquibaseIgnorelist22_2},
 }
+
+var liquibaseBlocklist22_2 = liquibaseBlocklist22_1
 
 var liquibaseBlocklist22_1 = blocklist{
 	"liquibase.harness.change.ChangeObjectTests.apply addCheckConstraint against cockroachdb 20.2":  "unknown",
@@ -30,6 +33,8 @@ var liquibaseBlocklist21_2 = blocklist{
 var liquibaseBlocklist21_1 = liquibaseBlocklist20_2
 
 var liquibaseBlocklist20_2 = blocklist{}
+
+var liquibaseIgnorelist22_2 = liquibaseIgnorelist22_1
 
 var liquibaseIgnorelist22_1 = liquibaseIgnorelist21_2
 

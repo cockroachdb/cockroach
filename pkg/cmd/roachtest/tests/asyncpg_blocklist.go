@@ -13,6 +13,7 @@ package tests
 var asyncpgBlocklists = blocklistsForVersion{
 	{"v21.2", "asyncpgBlocklist21_2", asyncpgBlocklist21_2, "asyncpgIgnoreList21_2", asyncpgIgnoreList21_2},
 	{"v22.1", "asyncpgBlocklist22_1", asyncpgBlocklist22_1, "asyncpgIgnoreList22_1", asyncpgIgnoreList22_1},
+	{"v22.2", "asyncpgBlocklist22_2", asyncpgBlocklist22_2, "asyncpgIgnoreList22_2", asyncpgIgnoreList22_2},
 }
 
 // These are lists of known asyncpg test errors and failures.
@@ -23,6 +24,8 @@ var asyncpgBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var asyncpgBlocklist22_2 = asyncpgBlocklist22_1
+
 var asyncpgBlocklist22_1 = blocklist{
 	"test_cache_invalidation.TestCacheInvalidation.test_prepare_cache_invalidation_in_pool":               "unknown",
 	"test_cache_invalidation.TestCacheInvalidation.test_prepare_cache_invalidation_in_transaction":        "unknown",
@@ -201,5 +204,6 @@ var asyncpgBlocklist21_2 = blocklist{
 	"test_utils.TestUtils.test_mogrify_simple":                                                            "unknown",
 }
 
+var asyncpgIgnoreList22_2 = asyncpgIgnoreList22_1
 var asyncpgIgnoreList22_1 = asyncpgIgnoreList21_2
 var asyncpgIgnoreList21_2 = blocklist{}
