@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -66,7 +67,9 @@ func (p *planner) AlterDatabaseOwner(
 }
 
 func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
-	newOwner, err := n.n.Owner.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+	newOwner, err := decodeusername.FromRoleSpec(
+		params.p.SessionData(), security.UsernameValidation, n.n.Owner,
+	)
 	if err != nil {
 		return err
 	}

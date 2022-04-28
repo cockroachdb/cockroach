@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -61,11 +62,13 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 		return nil, err
 	}
 
-	inputRoles, err := n.Roles.ToSQLUsernames()
+	inputRoles, err := decodeusername.FromNameList(n.Roles)
 	if err != nil {
 		return nil, err
 	}
-	inputMembers, err := n.Members.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	inputMembers, err := decodeusername.FromRoleSpecList(
+		p.SessionData(), security.UsernameValidation, n.Members,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -121,7 +122,9 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			NewSchemaName: newQualifiedSchemaName.String(),
 		})
 	case *tree.AlterSchemaOwner:
-		newOwner, err := t.Owner.ToSQLUsername(params.p.SessionData(), security.UsernameValidation)
+		newOwner, err := decodeusername.FromRoleSpec(
+			params.p.SessionData(), security.UsernameValidation, t.Owner,
+		)
 		if err != nil {
 			return err
 		}

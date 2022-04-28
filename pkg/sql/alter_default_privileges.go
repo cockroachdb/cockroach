@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -96,7 +97,9 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 			"version %v must be finalized to use grant options",
 			clusterversion.ByKey(clusterversion.ValidateGrantOption))
 	}
-	targetRoles, err := n.n.Roles.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
+	targetRoles, err := decodeusername.FromRoleSpecList(
+		params.SessionData(), security.UsernameValidation, n.n.Roles,
+	)
 	if err != nil {
 		return err
 	}
@@ -120,7 +123,9 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		grantOption = n.n.Revoke.GrantOptionFor
 	}
 
-	granteeSQLUsernames, err := grantees.ToSQLUsernames(params.p.SessionData(), security.UsernameValidation)
+	granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
+		params.p.SessionData(), security.UsernameValidation, grantees,
+	)
 	if err != nil {
 		return err
 	}
@@ -194,7 +199,9 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 			}
 		}
 
-		granteeSQLUsernames, err := grantees.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
+		granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
+			params.SessionData(), security.UsernameValidation, grantees,
+		)
 		if err != nil {
 			return err
 		}
@@ -296,7 +303,9 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	}
 
 	var events []eventLogEntry
-	granteeSQLUsernames, err := grantees.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
+	granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
+		params.SessionData(), security.UsernameValidation, grantees,
+	)
 	if err != nil {
 		return err
 	}

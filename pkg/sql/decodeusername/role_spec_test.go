@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package decodeusername
 
 import (
 	"testing"
@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -52,8 +53,10 @@ func TestRoleSpecValidation(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		roleSpec := RoleSpec{RoleSpecType: RoleName, Name: tc.username}
-		normalized, err := roleSpec.ToSQLUsername(&sessiondata.SessionData{}, security.UsernameCreation)
+		roleSpec := tree.RoleSpec{RoleSpecType: tree.RoleName, Name: tc.username}
+		normalized, err := FromRoleSpec(
+			&sessiondata.SessionData{}, security.UsernameCreation, roleSpec,
+		)
 		if !testutils.IsError(err, tc.err) {
 			t.Errorf("%q: expected %q, got %v", tc.username, tc.err, err)
 			continue

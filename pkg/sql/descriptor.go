@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -129,7 +130,9 @@ func (p *planner) createDatabase(
 
 	owner := p.SessionData().User()
 	if !database.Owner.Undefined() {
-		owner, err = database.Owner.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+		owner, err = decodeusername.FromRoleSpec(
+			p.SessionData(), security.UsernameValidation, database.Owner,
+		)
 		if err != nil {
 			return nil, true, err
 		}
