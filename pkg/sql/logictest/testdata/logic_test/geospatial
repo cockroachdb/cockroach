@@ -3530,7 +3530,7 @@ FROM (VALUES
 0  NULL  NULL  NULL                                       NULL  NULL                                                       NULL
 
 # ST_XMin, ST_XMax, ST_YMin, ST_YMax on polygon and linestring geometries
-query IIITTTT
+query RRRR
 SELECT
   ST_Xmin(a.geom),
   ST_Xmax(a.geom),
@@ -3545,9 +3545,9 @@ FROM (VALUES
 ) a(geom)
 ----
 NULL  NULL  NULL  NULL
-0  1     0     1
-0  2     1     2
-0  1     0     1
+0     1     0     1
+0     2     0     2
+0     1     0     1
 NULL  NULL  NULL  NULL
 
 statement error argument must be LINESTRING geometries
