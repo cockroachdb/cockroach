@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -40,7 +40,7 @@ func TestPutGoogleCloud(t *testing.T) {
 		skip.IgnoreLint(t, "GS_BUCKET env var must be set")
 	}
 
-	user := security.RootUserName()
+	user := username.RootUserName()
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	testutils.RunTrueAndFalse(t, "specified", func(t *testing.T, specified bool) {
@@ -70,7 +70,7 @@ func TestPutGoogleCloud(t *testing.T) {
 				CredentialsParam,
 				url.QueryEscape(encoded),
 			),
-			security.RootUserName(), nil, nil, testSettings,
+			username.RootUserName(), nil, nil, testSettings,
 		)
 	})
 	t.Run("implicit", func(t *testing.T) {
@@ -88,7 +88,7 @@ func TestPutGoogleCloud(t *testing.T) {
 				cloud.AuthParam,
 				cloud.AuthParamImplicit,
 			),
-			security.RootUserName(), nil, nil, testSettings,
+			username.RootUserName(), nil, nil, testSettings,
 		)
 	})
 }
@@ -106,7 +106,7 @@ func TestAntagonisticGCSRead(t *testing.T) {
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/region.tbl?AUTH=implicit"
-	conf, err := cloud.ExternalStorageConfFromURI(gsFile, security.RootUserName())
+	conf, err := cloud.ExternalStorageConfFromURI(gsFile, username.RootUserName())
 	require.NoError(t, err)
 
 	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)
@@ -118,7 +118,7 @@ func TestAntagonisticGCSRead(t *testing.T) {
 func TestFileDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	requireImplicitGoogleCredentials(t)
-	user := security.RootUserName()
+	user := username.RootUserName()
 
 	testSettings := cluster.MakeTestingClusterSettings()
 
@@ -157,7 +157,7 @@ func TestCompressedGCS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	requireImplicitGoogleCredentials(t)
 
-	user := security.RootUserName()
+	user := username.RootUserName()
 	ctx := context.Background()
 
 	testSettings := cluster.MakeTestingClusterSettings()

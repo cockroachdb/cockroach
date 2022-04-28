@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -71,7 +72,7 @@ type transientCluster struct {
 	sqlFirstPort  int
 
 	adminPassword string
-	adminUser     security.SQLUsername
+	adminUser     username.SQLUsername
 
 	stickyEngineRegistry server.StickyInMemEnginesRegistry
 
@@ -466,10 +467,10 @@ func (c *transientCluster) Start(
 			return err
 		}
 		if c.demoCtx.Insecure {
-			c.adminUser = security.RootUserName()
+			c.adminUser = username.RootUserName()
 			c.adminPassword = "unused"
 		} else {
-			c.adminUser = security.MakeSQLUsernameFromPreNormalizedString(demoUsername)
+			c.adminUser = username.MakeSQLUsernameFromPreNormalizedString(demoUsername)
 			c.adminPassword = demoPassword
 		}
 
@@ -1072,7 +1073,7 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 		demoCtx.DefaultKeySize,
 		demoCtx.DefaultCertLifetime,
 		false, /* overwrite */
-		security.RootUserName(),
+		username.RootUserName(),
 		false, /* generatePKCS8Key */
 	); err != nil {
 		return err
@@ -1168,7 +1169,7 @@ func (c *transientCluster) GetConnURL() string {
 }
 
 func (c *transientCluster) GetSQLCredentials() (
-	adminUser security.SQLUsername,
+	adminUser username.SQLUsername,
 	adminPassword, certsDir string,
 ) {
 	return c.adminUser, c.adminPassword, c.demoDir

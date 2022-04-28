@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -54,7 +54,7 @@ func testJobsProtectedTimestamp(
 		return jobs.Record{
 			Description: "testing",
 			Statements:  []string{"SELECT 1"},
-			Username:    security.RootUserName(),
+			Username:    username.RootUserName(),
 			Details: jobspb.SchemaChangeGCDetails{
 				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
 					{
@@ -189,7 +189,7 @@ func testSchedulesProtectedTimestamp(
 	mkScheduledJobRec := func(scheduleLabel string) *jobs.ScheduledJob {
 		j := jobs.NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 		j.SetScheduleLabel(scheduleLabel)
-		j.SetOwner(security.TestUserName())
+		j.SetOwner(username.TestUserName())
 		any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{Statement: ""})
 		require.NoError(t, err)
 		j.SetExecutionDetails(jobs.InlineExecutorName, jobspb.ExecutionArguments{Args: any})

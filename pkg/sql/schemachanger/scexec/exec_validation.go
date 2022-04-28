@@ -13,7 +13,7 @@ package scexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -39,7 +39,7 @@ func executeValidateUniqueIndex(
 	}
 	// Execute the validation operation as a root user.
 	execOverride := sessiondata.InternalExecutorOverride{
-		User: security.RootUserName(),
+		User: username.RootUserName(),
 	}
 	if index.GetType() == descpb.IndexDescriptor_FORWARD {
 		err = deps.IndexValidator().ValidateForwardIndexes(ctx, table, []catalog.Index{index}, execOverride)

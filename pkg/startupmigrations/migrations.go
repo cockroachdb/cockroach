@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -383,7 +383,7 @@ type runner struct {
 func (r runner) execAsRoot(ctx context.Context, opName, stmt string, qargs ...interface{}) error {
 	_, err := r.sqlExecutor.ExecEx(ctx, opName, nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.RootUserName(),
+			User: username.RootUserName(),
 		},
 		stmt, qargs...)
 	return err
@@ -782,7 +782,7 @@ func addRootUser(ctx context.Context, r runner) error {
 	const upsertRootStmt = `
 	        UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)
 	        `
-	return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, security.RootUser)
+	return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, username.RootUser)
 }
 
 func addAdminRole(ctx context.Context, r runner) error {
@@ -790,7 +790,7 @@ func addAdminRole(ctx context.Context, r runner) error {
 	const upsertAdminStmt = `
           UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
           `
-	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, security.AdminRole)
+	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, username.AdminRole)
 }
 
 func addRootToAdminRole(ctx context.Context, r runner) error {
@@ -799,7 +799,7 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
           UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
           `
 	return r.execAsRootWithRetry(
-		ctx, "addRootToAdminRole", upsertAdminStmt, security.AdminRole, security.RootUser)
+		ctx, "addRootToAdminRole", upsertAdminStmt, username.AdminRole, username.RootUser)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {
@@ -812,9 +812,9 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 		row, err := r.sqlExecutor.QueryRowEx(
 			ctx, "disallowPublicUserOrRole", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
-				User: security.RootUserName(),
+				User: username.RootUserName(),
 			},
-			selectPublicStmt, security.PublicRole,
+			selectPublicStmt, username.PublicRole,
 		)
 		if err != nil {
 			continue
@@ -832,11 +832,11 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 		if isRole {
 			return fmt.Errorf(`found a role named %s which is now a reserved name. Please drop the role `+
 				`(DROP ROLE %s) using a previous version of CockroachDB and try again`,
-				security.PublicRole, security.PublicRole)
+				username.PublicRole, username.PublicRole)
 		}
 		return fmt.Errorf(`found a user named %s which is now a reserved name. Please drop the role `+
 			`(DROP USER %s) using a previous version of CockroachDB and try again`,
-			security.PublicRole, security.PublicRole)
+			username.PublicRole, username.PublicRole)
 	}
 	return nil
 }
@@ -905,7 +905,7 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 	// If so, we don't want to do anything.
 	row, err := r.sqlExecutor.QueryRowEx(ctx, "update-system-locations",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		`SELECT count(*) FROM system.locations`)
 	if err != nil {
 		return err

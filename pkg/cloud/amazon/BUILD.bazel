@@ -46,7 +46,7 @@ go_test(
         "//pkg/cloud",
         "//pkg/cloud/cloudtestutils",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/skip",

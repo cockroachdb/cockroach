@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -941,7 +941,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 			}
 			override := sessiondata.InternalExecutorOverride{
-				User:     security.RootUserName(),
+				User:     username.RootUserName(),
 				Database: dbDesc.GetName(),
 			}
 			rows, err := t.execCfg.InternalExecutor.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
@@ -1172,7 +1172,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
 		override := sessiondata.InternalExecutorOverride{
-			User:     security.RootUserName(),
+			User:     username.RootUserName(),
 			Database: dbDesc.GetName(),
 		}
 		rows, err := t.execCfg.InternalExecutor.QueryRowEx(

@@ -42,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -2221,7 +2221,7 @@ func TestImportCSVStmt(t *testing.T) {
 				intodbID, publicSchemaID).Scan(&tableID)
 
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
-				Username:      security.RootUserName(),
+				Username:      username.RootUserName(),
 				Description:   fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
 				DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
 			}); err != nil {
@@ -2414,7 +2414,7 @@ func TestImportCSVStmt(t *testing.T) {
 	t.Run("userfile-simple", func(t *testing.T) {
 		userfileURI := "userfile://defaultdb.public.root/test.csv"
 		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
-			ExternalStorageFromURI(ctx, userfileURI, security.RootUserName())
+			ExternalStorageFromURI(ctx, userfileURI, username.RootUserName())
 		require.NoError(t, err)
 
 		data := []byte("1,2")
@@ -2430,7 +2430,7 @@ func TestImportCSVStmt(t *testing.T) {
 	t.Run("userfile-relative-file-path", func(t *testing.T) {
 		userfileURI := "userfile:///import-test/employees.csv"
 		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
-			ExternalStorageFromURI(ctx, userfileURI, security.RootUserName())
+			ExternalStorageFromURI(ctx, userfileURI, username.RootUserName())
 		require.NoError(t, err)
 
 		data := []byte("1,2")
@@ -2555,7 +2555,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 		// Write to userfile storage now that testuser has CREATE privileges.
 		ie := tc.Server(0).InternalExecutor().(*sql.InternalExecutor)
 		fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, security.TestUserName(), ie, tc.Server(0).DB(), nil)
+			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.TestUserName(), ie, tc.Server(0).DB(), nil)
 		require.NoError(t, err)
 		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte(data))))
 	}
@@ -2713,7 +2713,7 @@ func TestURIRequiresAdminRole(t *testing.T) {
 		})
 
 		t.Run(tc.name+"-direct", func(t *testing.T) {
-			conf, err := cloud.ExternalStorageConfFromURI(tc.uri, security.RootUserName())
+			conf, err := cloud.ExternalStorageConfFromURI(tc.uri, username.RootUserName())
 			require.NoError(t, err)
 			require.Equal(t, conf.AccessIsWithExplicitAuth(), !tc.requiresAdmin)
 		})
@@ -3059,7 +3059,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 			jobPrefix := `IMPORT INTO defaultdb.public.t(a, b)`
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
-				Username:      security.RootUserName(),
+				Username:      username.RootUserName(),
 				Description:   fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
 				DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
 			}); err != nil {
@@ -3570,7 +3570,7 @@ func TestImportIntoCSV(t *testing.T) {
 	t.Run("import-into-userfile-simple", func(t *testing.T) {
 		userfileURI := "userfile://defaultdb.public.root/test.csv"
 		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
-			ExternalStorageFromURI(ctx, userfileURI, security.RootUserName())
+			ExternalStorageFromURI(ctx, userfileURI, username.RootUserName())
 		require.NoError(t, err)
 
 		data := []byte("1,2")
@@ -3637,7 +3637,7 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 	} else if uri.Scheme == "userfile" {
 		// Write the test data to userfile storage.
 		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
-			ExternalStorageFromURI(ctx, uploadBaseURI+testFileBase, security.RootUserName())
+			ExternalStorageFromURI(ctx, uploadBaseURI+testFileBase, username.RootUserName())
 		require.NoError(b, err)
 		content, err := ioctx.ReadAll(ctx, r)
 		require.NoError(b, err)
@@ -4989,7 +4989,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Start import job as root.
 			rootJobRecord := defaultRecord
-			rootJobRecord.Username = security.RootUserName()
+			rootJobRecord.Username = username.RootUserName()
 			rootJob := startLeasedJob(t, rootJobRecord)
 
 			// Test root can control root job.
@@ -4998,7 +4998,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 
 			// Start import job as non-admin user.
 			nonAdminJobRecord := defaultRecord
-			nonAdminJobRecord.Username = security.TestUserName()
+			nonAdminJobRecord.Username = username.TestUserName()
 			userJob := startLeasedJob(t, nonAdminJobRecord)
 
 			// Test testuser can control testuser job.
@@ -5741,7 +5741,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			base.ExternalIODirConfig{},
 			tc.Server(0).ClusterSettings(),
 			blobs.TestEmptyBlobClientFactory,
-			security.RootUserName(),
+			username.RootUserName(),
 			tc.Server(0).InternalExecutor().(*sql.InternalExecutor), tc.Server(0).DB(), nil)
 		require.NoError(t, err)
 		defer store.Close()

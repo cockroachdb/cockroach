@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,7 +38,7 @@ func init() {
 
 // NewRecord constructs a new jobs.Record for this migration.
 func NewRecord(
-	version clusterversion.ClusterVersion, user security.SQLUsername, name string,
+	version clusterversion.ClusterVersion, user username.SQLUsername, name string,
 ) jobs.Record {
 	return jobs.Record{
 		Description: name,

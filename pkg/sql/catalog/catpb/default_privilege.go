@@ -13,7 +13,7 @@ package catpb
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -25,7 +25,7 @@ import (
 //     role should be populated
 //     forAllRoles should be true.
 type DefaultPrivilegesRole struct {
-	Role        security.SQLUsername
+	Role        username.SQLUsername
 	ForAllRoles bool
 }
 

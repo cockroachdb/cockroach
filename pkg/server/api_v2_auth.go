@@ -15,7 +15,7 @@ import (
 	"encoding/base64"
 	"net/http"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -73,10 +73,10 @@ func (a *authenticationV2Server) bindEndpoint(endpoint string, handler http.Hand
 //
 // The caller is responsible to ensure the username has been normalized already.
 func (a *authenticationV2Server) createSessionFor(
-	ctx context.Context, username security.SQLUsername,
+	ctx context.Context, userName username.SQLUsername,
 ) (string, error) {
 	// Create a new database session, generating an ID and secret key.
-	id, secret, err := a.authServer.newAuthSession(ctx, username)
+	id, secret, err := a.authServer.newAuthSession(ctx, userName)
 	if err != nil {
 		return "", apiInternalError(ctx, err)
 	}
@@ -161,7 +161,7 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := security.MakeSQLUsernameFromUserInput(r.Form.Get("username"), security.UsernameValidation)
+	username, _ := username.MakeSQLUsernameFromUserInput(r.Form.Get("username"), username.PurposeValidation)
 
 	// Verify the provided username/password pair.
 	verified, expired, err := a.authServer.verifyPasswordDBConsole(a.ctx, username, r.Form.Get("password"))
@@ -239,7 +239,7 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		a.ctx,
 		"revoke-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionCookie.ID,
 	); err != nil {
@@ -354,7 +354,7 @@ type roleAuthorizationMux struct {
 }
 
 func (r *roleAuthorizationMux) getRoleForUser(
-	ctx context.Context, user security.SQLUsername,
+	ctx context.Context, user username.SQLUsername,
 ) (apiRole, error) {
 	if user.IsRootUser() {
 		// Shortcut.
@@ -384,7 +384,7 @@ func (r *roleAuthorizationMux) getRoleForUser(
 }
 
 func (r *roleAuthorizationMux) hasRoleOption(
-	ctx context.Context, user security.SQLUsername, roleOption roleoption.Option,
+	ctx context.Context, user username.SQLUsername, roleOption roleoption.Option,
 ) (bool, error) {
 	if user.IsRootUser() {
 		// Shortcut.
@@ -413,7 +413,7 @@ func (r *roleAuthorizationMux) hasRoleOption(
 func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// The username is set in authenticationV2Mux, and must correspond with a
 	// logged-in user.
-	username := security.MakeSQLUsernameFromPreNormalizedString(
+	username := username.MakeSQLUsernameFromPreNormalizedString(
 		req.Context().Value(webSessionUserKey{}).(string))
 	if role, err := r.getRoleForUser(req.Context(), username); err != nil || role < r.role {
 		if err != nil {

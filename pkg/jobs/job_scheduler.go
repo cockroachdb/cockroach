@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -88,7 +88,7 @@ func loadCandidateScheduleForExecution(
 	row, cols, err := ie.QueryRowExWithCols(
 		ctx, "find-scheduled-jobs-exec",
 		txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		lookupStmt)
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func lookupNumRunningJobs(
 	row, err := ie.QueryRowEx(
 		ctx, "lookup-num-running",
 		/*txn=*/ nil,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		lookupStmt)
 	if err != nil {
 		return 0, err
@@ -324,7 +324,7 @@ func (s *jobScheduler) executeSchedules(ctx context.Context, maxSchedules int64)
 	it, err := s.InternalExecutor.QueryIteratorEx(
 		ctx, "find-scheduled-jobs",
 		/*txn=*/ nil,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		findSchedulesStmt)
 
 	if err != nil {

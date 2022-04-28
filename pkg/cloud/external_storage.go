@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -99,7 +99,7 @@ type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStora
 
 // ExternalStorageFromURIFactory describes a factory function for ExternalStorage given a URI.
 type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
-	user security.SQLUsername) (ExternalStorage, error)
+	user username.SQLUsername) (ExternalStorage, error)
 
 // SQLConnI encapsulates the interfaces which will be implemented by the network
 // backed SQLConn which is used to interact with the userfile tables.
@@ -134,7 +134,7 @@ func RedactedParams(strs ...string) map[string]struct{} {
 // ExternalStorageURIContext contains arguments needed to parse external storage
 // URIs.
 type ExternalStorageURIContext struct {
-	CurrentUser security.SQLUsername
+	CurrentUser username.SQLUsername
 }
 
 // ExternalStorageURIParser functions parses a URL into a structured

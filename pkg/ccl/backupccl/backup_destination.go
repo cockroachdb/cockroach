@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -41,7 +41,7 @@ import (
 func fetchPreviousBackups(
 	ctx context.Context,
 	mem *mon.BoundAccount,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	prevBackupURIs []string,
 	encryptionParams jobspb.BackupEncryptionOptions,
@@ -77,7 +77,7 @@ func fetchPreviousBackups(
 // backup manifests in the backup chain.
 func resolveDest(
 	ctx context.Context,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	dest jobspb.BackupDetails_Destination,
 	endTime hlc.Timestamp,
 	incrementalFrom []string,
@@ -232,7 +232,7 @@ func resolveDest(
 func getBackupManifests(
 	ctx context.Context,
 	mem *mon.BoundAccount,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	backupURIs []string,
 	encryption *jobspb.BackupEncryptionOptions,
@@ -299,7 +299,7 @@ func readLatestFile(
 	ctx context.Context,
 	collectionURI string,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
-	user security.SQLUsername,
+	user username.SQLUsername,
 ) (string, error) {
 	collection, err := makeCloudStorage(ctx, collectionURI, user)
 	if err != nil {

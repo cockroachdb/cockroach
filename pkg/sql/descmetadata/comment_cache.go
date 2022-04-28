@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -137,7 +137,7 @@ func (mf *metadataCache) LoadCommentsForObjects(ctx context.Context, objIDs []de
 		ctx,
 		"mf-get-table-comments",
 		mf.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		buf.String(),
 	)
 
@@ -167,7 +167,7 @@ func (mf *metadataCache) warmCache() {
 		context.Background(),
 		"mf-warmup-cache",
 		mf.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(`SELECT type, object_id, sub_id, comment FROM system.comments ORDER BY object_id ASC LIMIT %d`, cacheWarmUpSize),
 	)
 

@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -288,7 +288,7 @@ func makeImportReaderSpecs(
 	format roachpb.IOFileFormat,
 	sqlInstanceIDs []base.SQLInstanceID,
 	walltime int64,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	procsPerNode int,
 ) []*execinfrapb.ReadImportDataSpec {
 	details := job.Details().(jobspb.ImportDetails)

@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -104,7 +104,7 @@ func TestDebugJobTrace(t *testing.T) {
 	id := registry.MakeJobID()
 	require.NoError(t, c.TestServer.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		err = registry.CreateStartableJobWithTxn(ctx, &job, id, txn, jobs.Record{
-			Username: security.RootUserName(),
+			Username: username.RootUserName(),
 			Details:  jobspb.BackupDetails{},
 			Progress: jobspb.BackupProgress{},
 		})
@@ -118,7 +118,7 @@ func TestDebugJobTrace(t *testing.T) {
 
 	args := []string{strconv.Itoa(int(id))}
 	pgURL, cleanup := sqlutils.PGUrl(t, c.TestServer.ServingSQLAddr(),
-		"TestDebugJobTrace", url.User(security.RootUser))
+		"TestDebugJobTrace", url.User(username.RootUser))
 	defer cleanup()
 
 	_, err := c.RunWithCaptureArgs([]string{`debug`, `job-trace`, args[0], fmt.Sprintf(`--url=%s`, pgURL.String()), `--format=csv`})

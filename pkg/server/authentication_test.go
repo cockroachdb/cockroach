@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -102,15 +103,15 @@ func TestSSLEnforcement(t *testing.T) {
 	}
 
 	// HTTPS with client certs for security.RootUser.
-	rootCertsContext := newRPCContext(testutils.NewTestBaseContext(security.RootUserName()))
+	rootCertsContext := newRPCContext(testutils.NewTestBaseContext(username.RootUserName()))
 	// HTTPS with client certs for security.NodeUser.
 	nodeCertsContext := newRPCContext(testutils.NewNodeTestBaseContext())
 	// HTTPS with client certs for TestUser.
-	testCertsContext := newRPCContext(testutils.NewTestBaseContext(security.TestUserName()))
+	testCertsContext := newRPCContext(testutils.NewTestBaseContext(username.TestUserName()))
 	// HTTPS without client certs. The user does not matter.
 	noCertsContext := insecureCtx{}
 	// Plain http.
-	plainHTTPCfg := testutils.NewTestBaseContext(security.TestUserName())
+	plainHTTPCfg := testutils.NewTestBaseContext(username.TestUserName())
 	plainHTTPCfg.Insecure = true
 	insecureContext := newRPCContext(plainHTTPCfg)
 
@@ -233,7 +234,7 @@ func TestVerifyPasswordDBConsole(t *testing.T) {
 		{"timelord", "12345", "", "VALID UNTIL $1",
 			[]interface{}{timeutil.Now().Add(59 * time.Minute).In(shanghaiLoc)}},
 	} {
-		username := security.MakeSQLUsernameFromPreNormalizedString(user.username)
+		username := username.MakeSQLUsernameFromPreNormalizedString(user.username)
 		cmd := fmt.Sprintf(
 			"CREATE USER %s WITH PASSWORD '%s' %s %s",
 			username.SQLIdentifier(), user.password, user.loginFlag, user.validUntilClause)
@@ -274,7 +275,7 @@ func TestVerifyPasswordDBConsole(t *testing.T) {
 		{"user with VALID UNTIL NULL should succeed", "cthon98", "12345", true},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
-			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
+			username := username.MakeSQLUsernameFromPreNormalizedString(tc.username)
 			valid, expired, err := ts.authentication.verifyPasswordDBConsole(context.Background(), username, tc.password)
 			if err != nil {
 				t.Errorf(
@@ -304,7 +305,7 @@ func TestCreateSession(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
-	username := security.TestUserName()
+	username := username.TestUserName()
 
 	// Create an authentication, noting the time before and after creation. This
 	// lets us ensure that the timestamps created are accurate.
@@ -396,7 +397,7 @@ func TestVerifySession(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
-	sessionUsername := security.TestUserName()
+	sessionUsername := username.TestUserName()
 	id, origSecret, err := ts.authentication.newAuthSession(context.Background(), sessionUsername)
 	if err != nil {
 		t.Fatal(err)
@@ -816,7 +817,7 @@ func TestGRPCAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tlsConfig, err := certManager.GetClientTLSConfig(security.TestUserName())
+	tlsConfig, err := certManager.GetClientTLSConfig(username.TestUserName())
 	if err != nil {
 		t.Fatal(err)
 	}

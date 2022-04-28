@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -106,12 +106,12 @@ func createPublicSchemaDescriptor(
 	b := txn.NewBatch()
 
 	publicSchemaDesc, _, err := sql.CreateSchemaDescriptorWithPrivileges(
-		ctx, d.DB, d.Codec, desc, tree.PublicSchema, security.AdminRoleName(), security.AdminRoleName(), true, /* allocateID */
+		ctx, d.DB, d.Codec, desc, tree.PublicSchema, username.AdminRoleName(), username.AdminRoleName(), true, /* allocateID */
 	)
 	// The public role has hardcoded privileges; see comment in
 	// descpb.NewPublicSchemaPrivilegeDescriptor.
 	publicSchemaDesc.Privileges.Grant(
-		security.PublicRoleName(),
+		username.PublicRoleName(),
 		privilege.List{privilege.CREATE, privilege.USAGE},
 		false, /* withGrantOption */
 	)

@@ -12,7 +12,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -61,7 +61,7 @@ func (p *FakeJobExecContext) LeaseMgr() *lease.Manager {
 }
 
 // User implements the JobExecContext interface.
-func (p *FakeJobExecContext) User() security.SQLUsername {
+func (p *FakeJobExecContext) User() username.SQLUsername {
 	panic("unimplemented")
 }
 

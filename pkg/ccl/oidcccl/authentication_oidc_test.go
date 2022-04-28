@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -68,7 +69,7 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 			})
 	}
 
-	plainHTTPCfg := testutils.NewTestBaseContext(security.TestUserName())
+	plainHTTPCfg := testutils.NewTestBaseContext(username.TestUserName())
 	testCertsContext := newRPCContext(plainHTTPCfg)
 
 	client, err := testCertsContext.GetHTTPClient()
@@ -184,7 +185,7 @@ func TestOIDCEnabled(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = "https://cockroachlabs.com/oidc/v1/callback"`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
 
-	plainHTTPCfg := testutils.NewTestBaseContext(security.TestUserName())
+	plainHTTPCfg := testutils.NewTestBaseContext(username.TestUserName())
 	testCertsContext := newRPCContext(plainHTTPCfg)
 
 	client, err := testCertsContext.GetHTTPClient()

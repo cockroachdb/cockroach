@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -38,7 +38,7 @@ func TestDockerCLI(t *testing.T) {
 
 	containerConfig := defaultContainerConfig()
 	containerConfig.Cmd = []string{"stat", cluster.CockroachBinaryInContainer}
-	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", security.RootUser)}
+	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", username.RootUser)}
 	ctx := context.Background()
 	if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
 		skip.IgnoreLintf(t, `TODO(dt): No binary in one-shot container, see #6086: %s`, err)
@@ -111,7 +111,7 @@ func TestDockerUnixSocket(t *testing.T) {
 		skip.IgnoreLintf(t, `TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
-	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", security.RootUser)}
+	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", username.RootUser)}
 	containerConfig.Cmd = append(cmdBase,
 		"/mnt/data/psql/test-psql-unix.sh "+cluster.CockroachBinaryInContainer)
 	if err := testDockerOneShot(ctx, t, "unix_socket_test", containerConfig); err != nil {
@@ -135,7 +135,7 @@ func TestSQLWithoutTLS(t *testing.T) {
 		skip.IgnoreLintf(t, `TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
-	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", security.RootUser)}
+	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", username.RootUser)}
 	containerConfig.Cmd = append(cmdBase,
 		"/mnt/data/psql/test-psql-notls.sh "+cluster.CockroachBinaryInContainer)
 	if err := testDockerOneShot(ctx, t, "notls_secure_test", containerConfig); err != nil {

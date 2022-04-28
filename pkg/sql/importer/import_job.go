@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -850,7 +850,7 @@ func parseAndCreateBundleTableDescs(
 	files []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
-	owner security.SQLUsername,
+	owner username.SQLUsername,
 	jobID jobspb.JobID,
 ) ([]*tabledesc.Mutable, []*schemadesc.Mutable, error) {
 
@@ -1368,7 +1368,7 @@ func writeNonDropDatabaseChange(
 }
 
 func createNonDropDatabaseChangeJob(
-	user security.SQLUsername,
+	user username.SQLUsername,
 	databaseID descpb.ID,
 	jobDesc string,
 	p sql.JobExecContext,

@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -430,7 +430,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(keys.MaxSystemConfigDescID+1))
 	valAt := func(i int) *descpb.Descriptor {
 		return dbdesc.NewInitial(
-			descpb.ID(i), "foo", security.AdminRoleName(),
+			descpb.ID(i), "foo", username.AdminRoleName(),
 		).DescriptorProto()
 	}
 

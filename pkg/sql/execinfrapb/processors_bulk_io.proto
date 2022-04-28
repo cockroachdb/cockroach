@@ -157,7 +157,7 @@ message ReadImportDataSpec {
 
   // User who initiated the import. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user_proto = 15 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  optional string user_proto = 15 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
 
   repeated sqlbase.TypeDescriptor types = 16;
 
@@ -236,7 +236,7 @@ message BackupDataSpec {
 
   // User who initiated the backup. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
 
   // NEXTID: 12.
 }
@@ -317,7 +317,7 @@ message ExportSpec {
 
   // User who initiated the export. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
 
   // col_names specifies the logical column names for the exported parquet file.
   repeated string col_names = 7 ;

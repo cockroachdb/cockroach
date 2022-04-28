@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -113,7 +113,7 @@ func (j *jobMonitor) getSchedule(
 		"load-sql-stats-scheduled-job",
 		txn,
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		},
 		"SELECT schedule_id FROM system.scheduled_jobs WHERE schedule_name = $1",
 		compactionScheduleName,

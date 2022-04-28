@@ -44,7 +44,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/catid",
@@ -60,7 +60,7 @@ go_test(
     deps = [
         ":catpb",
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/catid",

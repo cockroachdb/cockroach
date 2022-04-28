@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -47,7 +47,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 
 	// writeManifest writes an empty backup manifest file to the given URI.
 	writeManifest := func(t *testing.T, uri string) {
-		storage, err := externalStorageFromURI(ctx, uri, security.RootUserName())
+		storage, err := externalStorageFromURI(ctx, uri, username.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
 		require.NoError(t, cloud.WriteFile(ctx, storage, backupManifestName, emptyReader))
@@ -56,7 +56,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 	// writeLatest writes latestBackupSuffix to the LATEST file in the given
 	// collection.
 	writeLatest := func(t *testing.T, collectionURI, latestBackupSuffix string) {
-		storage, err := externalStorageFromURI(ctx, collectionURI, security.RootUserName())
+		storage, err := externalStorageFromURI(ctx, collectionURI, username.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
 		require.NoError(t, writeNewLatestFile(ctx, storage.Settings(), storage, latestBackupSuffix))
@@ -122,7 +122,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					require.NoError(t, err)
 
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
-						ctx, security.RootUserName(),
+						ctx, username.RootUserName(),
 						jobspb.BackupDetails_Destination{To: to},
 						endTime,
 						incrementalFrom,
@@ -189,7 +189,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					endTime := hlc.Timestamp{WallTime: backupTime.UnixNano()}
 
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
-						ctx, security.RootUserName(),
+						ctx, username.RootUserName(),
 						jobspb.BackupDetails_Destination{To: to},
 						endTime,
 						nil, /* incrementalFrom */
@@ -349,7 +349,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 						fullBackupExists = true
 					}
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
-						ctx, security.RootUserName(),
+						ctx, username.RootUserName(),
 						jobspb.BackupDetails_Destination{To: collectionTo, Subdir: subdir,
 							IncrementalStorage: incrementalTo, Exists: fullBackupExists},
 						endTime,

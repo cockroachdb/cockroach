@@ -25,7 +25,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -980,7 +980,7 @@ func parseClientProvidedSessionParameters(
 			// case-insensitive. Therefore we need to normalize the username
 			// here, so that further lookups for authentication have the correct
 			// identifier.
-			args.User, _ = security.MakeSQLUsernameFromUserInput(value, security.UsernameValidation)
+			args.User, _ = username.MakeSQLUsernameFromUserInput(value, username.PurposeValidation)
 			// IsSuperuser will get updated later when we load the user's session
 			// initialization information.
 			args.IsSuperuser = args.User.IsRootUser()

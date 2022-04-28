@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -52,7 +52,7 @@ func TestPutHttp(t *testing.T) {
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	const badHeadResponse = "bad-head-response"
-	user := security.RootUserName()
+	user := username.RootUserName()
 	ctx := context.Background()
 
 	makeServer := func() (*url.URL, func() int, func()) {
@@ -366,7 +366,7 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		http.DefaultTransport.(*http.Transport).Proxy = nil
 	}()
 
-	conf, err := cloud.ExternalStorageConfFromURI("http://my-server", security.RootUserName())
+	conf, err := cloud.ExternalStorageConfFromURI("http://my-server", username.RootUserName())
 	require.NoError(t, err)
 	s, err := cloud.MakeExternalStorage(
 		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,

@@ -39,7 +39,7 @@ go_test(
     deps = [
         ":schemadesc",
         "//pkg/clusterversion",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/dbdesc",

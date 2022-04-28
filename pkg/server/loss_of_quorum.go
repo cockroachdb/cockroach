@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -63,7 +63,7 @@ func publishPendingLossOfQuorumRecoveryEvents(
 				func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 					sqlExec := func(ctx context.Context, stmt string, args ...interface{}) (int, error) {
 						return s.GetStoreConfig().SQLExecutor.ExecEx(ctx, "", nil,
-							sessiondata.InternalExecutorOverride{User: security.RootUserName()}, stmt, args...)
+							sessiondata.InternalExecutorOverride{User: username.RootUserName()}, stmt, args...)
 					}
 					if recoveryEventsSupported {
 						if err := loqrecovery.UpdateRangeLogWithRecovery(ctx, sqlExec, record); err != nil {

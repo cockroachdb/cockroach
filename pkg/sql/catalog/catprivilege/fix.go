@@ -11,7 +11,7 @@
 package catprivilege
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -89,7 +89,7 @@ func MaybeFixPrivileges(
 
 	changed := false
 
-	fixSuperUser := func(user security.SQLUsername) {
+	fixSuperUser := func(user username.SQLUsername) {
 		privs := p.FindOrCreateUser(user)
 		oldPrivilegeBits := privs.Privileges
 		if oldPrivilegeBits != allowedPrivilegesBits {
@@ -103,8 +103,8 @@ func MaybeFixPrivileges(
 	}
 
 	// Check "root" user and "admin" role.
-	fixSuperUser(security.RootUserName())
-	fixSuperUser(security.AdminRoleName())
+	fixSuperUser(username.RootUserName())
+	fixSuperUser(username.AdminRoleName())
 
 	if objectType == privilege.Table || objectType == privilege.Database {
 		changed = MaybeFixUsagePrivForTablesAndDBs(&p) || changed
@@ -126,9 +126,9 @@ func MaybeFixPrivileges(
 
 	if p.Owner().Undefined() {
 		if systemPrivs != nil {
-			p.SetOwner(security.NodeUserName())
+			p.SetOwner(username.NodeUserName())
 		} else {
-			p.SetOwner(security.RootUserName())
+			p.SetOwner(username.RootUserName())
 		}
 		changed = true
 	}
@@ -148,7 +148,7 @@ func MaybeUpdateGrantOptions(p *catpb.PrivilegeDescriptor) bool {
 	// created by a new binary, so all the other grant options are already
 	// correct. Note that admin always has SELECT on *every* table including
 	// system tables.
-	if p.CheckGrantOptions(security.AdminRoleName(), privilege.List{privilege.SELECT}) {
+	if p.CheckGrantOptions(username.AdminRoleName(), privilege.List{privilege.SELECT}) {
 		return false
 	}
 

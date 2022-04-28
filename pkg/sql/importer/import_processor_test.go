@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -132,7 +132,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 				group.Go(func() error {
 					defer close(kvCh)
 					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format,
-						externalStorageFactory, security.RootUserName())
+						externalStorageFactory, username.RootUserName())
 				})
 
 				lastBatch := 0

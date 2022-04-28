@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -328,7 +328,7 @@ DO NOTHING
 		"insert-txn-stats",
 		txn, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		},
 		insertStmt,
 		aggregatedTs,                         // aggregated_ts
@@ -369,7 +369,7 @@ WHERE fingerprint_id = $2
 		"update-stmt-stats",
 		txn, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		},
 		updateStmt,
 		statistics,                           // statistics
@@ -423,7 +423,7 @@ WHERE fingerprint_id = $2
 		"update-stmt-stats",
 		txn, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		},
 		updateStmt,
 		statistics,                           // statistics
@@ -492,7 +492,7 @@ DO NOTHING
 		"insert-stmt-stats",
 		txn, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		},
 		insertStmt,
 		aggregatedTs,                         // aggregated_ts
@@ -537,7 +537,7 @@ FOR UPDATE
 		"fetch-txn-stats",
 		txn, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		},
 		readStmt,                             // stmt
 		serializedFingerprintID,              // fingerprint_id
@@ -594,7 +594,7 @@ FOR UPDATE
 		"fetch-stmt-stats",
 		txn, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		},
 		readStmt,                             // stmt
 		serializedFingerprintID,              // fingerprint_id

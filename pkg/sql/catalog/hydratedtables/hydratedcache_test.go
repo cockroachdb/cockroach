@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -289,7 +289,7 @@ const (
 // constructing descriptors for testing less terrible without running a whole
 // server.
 var (
-	dbDesc     = dbdesc.NewInitial(dbID, "db", security.RootUserName())
+	dbDesc     = dbdesc.NewInitial(dbID, "db", username.RootUserName())
 	schemaDesc = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		Name:     "schema",
 		ID:       scID,

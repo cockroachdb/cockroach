@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -26,8 +26,8 @@ import (
 // RevokeRoleNode removes entries from the system.role_members table.
 // This is called from REVOKE <ROLE>
 type RevokeRoleNode struct {
-	roles       []security.SQLUsername
-	members     []security.SQLUsername
+	roles       []username.SQLUsername
+	members     []username.SQLUsername
 	adminOption bool
 
 	run revokeRoleRun
@@ -63,7 +63,7 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 		return nil, err
 	}
 	inputMembers, err := decodeusername.FromRoleSpecList(
-		p.SessionData(), security.UsernameValidation, n.Members,
+		p.SessionData(), username.PurposeValidation, n.Members,
 	)
 	if err != nil {
 		return nil, err
@@ -132,13 +132,13 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 				// We use CodeObjectInUseError which is what happens if you tried to delete the current user in pg.
 				return pgerror.Newf(pgcode.ObjectInUse,
 					"role/user %s cannot be removed from role %s or lose the ADMIN OPTION",
-					security.RootUser, security.AdminRole)
+					username.RootUser, username.AdminRole)
 			}
 			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				memberStmt,
 				r.Normalized(), m.Normalized(),
 			)

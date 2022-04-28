@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -51,7 +51,7 @@ func newDatabaseRegionChangeFinalizer(
 	p, cleanup := NewInternalPlanner(
 		"repartition-regional-by-row-tables",
 		txn,
-		security.RootUserName(),
+		username.RootUserName(),
 		&MemoryMetrics{},
 		execCfg,
 		sessiondatapb.SessionData{},

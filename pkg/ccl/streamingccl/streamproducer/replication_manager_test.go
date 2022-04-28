@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -45,7 +45,7 @@ func TestReplicationManagerRequiresAdminRole(t *testing.T) {
 	}
 
 	getManagerForUser := func(u string) (streaming.ReplicationStreamManager, error) {
-		sqlUser, err := security.MakeSQLUsernameFromUserInput(u, security.UsernameValidation)
+		sqlUser, err := username.MakeSQLUsernameFromUserInput(u, username.PurposeValidation)
 		require.NoError(t, err)
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		txn := kvDB.NewTxn(ctx, "test")

@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -190,7 +190,7 @@ func restoreWithRetry(
 type storeByLocalityKV map[string]roachpb.ExternalStorage
 
 func makeBackupLocalityMap(
-	backupLocalityInfos []jobspb.RestoreDetails_BackupLocalityInfo, user security.SQLUsername,
+	backupLocalityInfos []jobspb.RestoreDetails_BackupLocalityInfo, user username.SQLUsername,
 ) (map[int]storeByLocalityKV, error) {
 
 	backupLocalityMap := make(map[int]storeByLocalityKV)
@@ -722,7 +722,7 @@ func createImportingDescriptors(
 	tempSystemDBID := tempSystemDatabaseID(details)
 	if tempSystemDBID != descpb.InvalidID {
 		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
-			security.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
+			username.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
 		databases = append(databases, tempSystemDB)
 	}
 
@@ -1733,7 +1733,7 @@ func (r *restoreResumer) publishDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *sql.ExecutorConfig,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	descsCol *descs.Collection,
 	details jobspb.RestoreDetails,
 	devalidateIndexes map[descpb.ID][]descpb.IndexID,

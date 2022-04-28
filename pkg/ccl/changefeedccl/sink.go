@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,7 +66,7 @@ func getSink(
 	serverCfg *execinfra.ServerConfig,
 	feedCfg jobspb.ChangefeedDetails,
 	timestampOracle timestampLowerBoundOracle,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	jobID jobspb.JobID,
 	m *sliMetrics,
 ) (Sink, error) {

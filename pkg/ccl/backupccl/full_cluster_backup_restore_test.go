@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -235,11 +235,11 @@ CREATE TABLE data2.foo (a int);
 		sqlDBRestore.CheckQueryResults(t,
 			`SELECT database_name, owner FROM [SHOW DATABASES]`,
 			[][]string{
-				{"data", security.RootUser},
-				{"data2", security.RootUser},
-				{"defaultdb", security.RootUser},
-				{"postgres", security.RootUser},
-				{"system", security.NodeUser},
+				{"data", username.RootUser},
+				{"data2", username.RootUser},
+				{"defaultdb", username.RootUser},
+				{"postgres", username.RootUser},
+				{"system", username.NodeUser},
 			})
 	})
 

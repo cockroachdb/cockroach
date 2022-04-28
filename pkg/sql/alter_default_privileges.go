@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -98,7 +98,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 			clusterversion.ByKey(clusterversion.ValidateGrantOption))
 	}
 	targetRoles, err := decodeusername.FromRoleSpecList(
-		params.SessionData(), security.UsernameValidation, n.n.Roles,
+		params.SessionData(), username.PurposeValidation, n.n.Roles,
 	)
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	}
 
 	granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
-		params.p.SessionData(), security.UsernameValidation, grantees,
+		params.p.SessionData(), username.PurposeValidation, grantees,
 	)
 	if err != nil {
 		return err
@@ -171,7 +171,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 
 func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 	params runParams,
-	targetRoles []security.SQLUsername,
+	targetRoles []username.SQLUsername,
 	objectType tree.AlterDefaultPrivilegesTargetObject,
 	grantees tree.RoleSpecList,
 	privileges privilege.List,
@@ -200,7 +200,7 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 		}
 
 		granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
-			params.SessionData(), security.UsernameValidation, grantees,
+			params.SessionData(), username.PurposeValidation, grantees,
 		)
 		if err != nil {
 			return err
@@ -276,7 +276,7 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 
 func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	params runParams,
-	targetRoles []security.SQLUsername,
+	targetRoles []username.SQLUsername,
 	objectType tree.AlterDefaultPrivilegesTargetObject,
 	grantees tree.RoleSpecList,
 	privileges privilege.List,
@@ -304,7 +304,7 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 
 	var events []eventLogEntry
 	granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
-		params.SessionData(), security.UsernameValidation, grantees,
+		params.SessionData(), username.PurposeValidation, grantees,
 	)
 	if err != nil {
 		return err

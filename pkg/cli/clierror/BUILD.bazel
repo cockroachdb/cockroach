@@ -36,7 +36,7 @@ go_test(
         "//pkg/cli",
         "//pkg/cli/clisqlclient",
         "//pkg/cli/exit",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

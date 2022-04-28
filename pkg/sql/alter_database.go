@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -68,7 +68,7 @@ func (p *planner) AlterDatabaseOwner(
 
 func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 	newOwner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), security.UsernameValidation, n.n.Owner,
+		params.p.SessionData(), username.PurposeValidation, n.n.Owner,
 	)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 // setNewDatabaseOwner handles setting a new database owner.
 // Called in ALTER DATABASE and REASSIGN OWNED BY.
 func (p *planner) setNewDatabaseOwner(
-	ctx context.Context, desc catalog.MutableDescriptor, newOwner security.SQLUsername,
+	ctx context.Context, desc catalog.MutableDescriptor, newOwner username.SQLUsername,
 ) error {
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)

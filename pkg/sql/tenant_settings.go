@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -135,7 +135,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		reportedValue = "DEFAULT"
 		if _, err := params.p.execCfg.InternalExecutor.ExecEx(
 			params.ctx, "reset-tenant-setting", params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			"DELETE FROM system.tenant_settings WHERE tenant_id = $1 AND name = $2", tenantID, n.name,
 		); err != nil {
 			return err
@@ -152,7 +152,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		}
 		if _, err := params.p.execCfg.InternalExecutor.ExecEx(
 			params.ctx, "update-tenant-setting", params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			`UPSERT INTO system.tenant_settings (tenant_id, name, value, last_updated, value_type) VALUES ($1, $2, $3, now(), $4)`,
 			tenantID, n.name, encoded, n.setting.Typ(),
 		); err != nil {
@@ -199,7 +199,7 @@ func resolveTenantID(p *planner, expr tree.TypedExpr) (uint64, tree.Datum, error
 func assertTenantExists(ctx context.Context, p *planner, tenantID tree.Datum) error {
 	exists, err := p.ExecCfg().InternalExecutor.QueryRowEx(
 		ctx, "get-tenant", p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		`SELECT EXISTS(SELECT id FROM system.tenants WHERE id = $1)`, tenantID)
 	if err != nil {
 		return err
@@ -297,7 +297,7 @@ FROM
 
 			datums, err := p.ExecCfg().InternalExecutor.QueryRowEx(
 				ctx, "get-tenant-setting-value", p.txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				lookupEncodedTenantSetting,
 				name)
 			if err != nil {

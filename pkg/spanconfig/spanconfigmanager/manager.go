@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -180,7 +180,7 @@ func (m *Manager) createAndStartJobIfNoneExists(ctx context.Context) (bool, erro
 	record := jobs.Record{
 		JobID:         m.jr.MakeJobID(),
 		Description:   "reconciling span configurations",
-		Username:      security.NodeUserName(),
+		Username:      username.NodeUserName(),
 		Details:       jobspb.AutoSpanConfigReconciliationDetails{},
 		Progress:      jobspb.AutoSpanConfigReconciliationProgress{},
 		NonCancelable: true,

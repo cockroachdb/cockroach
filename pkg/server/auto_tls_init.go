@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
@@ -318,7 +319,7 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 		cl.CAKeyPath(),
 		defaultCertLifetime,
 		defaultCALifetime,
-		security.NodeUser,
+		username.NodeUser,
 		serviceNameInterNode,
 		rpcAddrs,
 		true, /* serviceCertIsAlsoValidAsClient */
@@ -336,7 +337,7 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 		cl.ClientCAKeyPath(),
 		defaultCertLifetime,
 		defaultCALifetime,
-		security.NodeUser,
+		username.NodeUser,
 		serviceNameUserAuth,
 		nil,
 		true, /* serviceCertIsAlsoValidAsClient */
@@ -354,7 +355,7 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 		cl.SQLServiceCAKeyPath(),
 		defaultCertLifetime,
 		defaultCALifetime,
-		security.NodeUser,
+		username.NodeUser,
 		serviceNameSQL,
 		// TODO(aaron-crl): Add RPC variable to config or SplitSQLAddr.
 		sqlAddrs,
@@ -373,7 +374,7 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 		cl.RPCServiceCAKeyPath(),
 		defaultCertLifetime,
 		defaultCALifetime,
-		security.NodeUser,
+		username.NodeUser,
 		serviceNameRPC,
 		// TODO(aaron-crl): Add RPC variable to config.
 		rpcAddrs,
@@ -597,7 +598,7 @@ func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
 			cl.NodeCertPath(),
 			cl.NodeKeyPath(),
 			defaultCertLifetime,
-			security.NodeUser,
+			username.NodeUser,
 			serviceNameInterNode,
 			rpcAddrs,
 			true, /* serviceCertIsAlsoValidAsClient */
@@ -614,7 +615,7 @@ func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
 			cl.ClientNodeCertPath(),
 			cl.ClientNodeKeyPath(),
 			defaultCertLifetime,
-			security.NodeUser,
+			username.NodeUser,
 			serviceNameUserAuth,
 			nil,
 			true, /* serviceCertIsAlsoValidAsClient */
@@ -631,7 +632,7 @@ func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
 			cl.SQLServiceCertPath(),
 			cl.SQLServiceKeyPath(),
 			defaultCertLifetime,
-			security.NodeUser,
+			username.NodeUser,
 			serviceNameSQL,
 			sqlAddrs,
 			false, /* serviceCertIsAlsoValidAsClient */
@@ -648,7 +649,7 @@ func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
 			cl.RPCServiceCertPath(),
 			cl.RPCServiceKeyPath(),
 			defaultCertLifetime,
-			security.NodeUser,
+			username.NodeUser,
 			serviceNameRPC,
 			rpcAddrs,
 			false, /* serviceCertIsAlsoValidAsClient */

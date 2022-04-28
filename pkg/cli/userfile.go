@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -326,7 +326,7 @@ func openUserFile(source string) (io.ReadCloser, error) {
 // This schema gives us the two properties we desire from this table name prefix:
 // - Uniqueness amongst users with different usernames.
 // - Support for all current and future valid usernames.
-func getDefaultQualifiedTableName(user security.SQLUsername) string {
+func getDefaultQualifiedTableName(user username.SQLUsername) string {
 	normalizedUsername := user.Normalized()
 	if lexbase.IsBareIdentifier(normalizedUsername) {
 		return defaultQualifiedNamePrefix + normalizedUsername
@@ -335,7 +335,7 @@ func getDefaultQualifiedTableName(user security.SQLUsername) string {
 }
 
 // Construct the userfile ExternalStorage URI from CLI args.
-func constructUserfileDestinationURI(source, destination string, user security.SQLUsername) string {
+func constructUserfileDestinationURI(source, destination string, user username.SQLUsername) string {
 	// User has not specified a destination URI/path. We use the default URI
 	// scheme and host, and the basename from the source arg as the path.
 	if destination == "" {
@@ -375,7 +375,7 @@ func constructUserfileDestinationURI(source, destination string, user security.S
 	return userFileURL.String()
 }
 
-func constructUserfileListURI(glob string, user security.SQLUsername) string {
+func constructUserfileListURI(glob string, user username.SQLUsername) string {
 	// If the destination is a well-formed userfile URI of the form
 	// userfile://db.schema.tablename_prefix/glob/pattern, then we
 	// use that as the final URI.
@@ -408,7 +408,7 @@ func getUserfileConf(
 		return roachpb.ExternalStorage_FileTable{}, err
 	}
 
-	reqUsername, _ := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameValidation)
+	reqUsername, _ := username.MakeSQLUsernameFromUserInput(connURL.User.Username(), username.PurposeValidation)
 
 	userfileListURI := constructUserfileListURI(glob, reqUsername)
 	unescapedUserfileListURI, err := url.PathUnescape(userfileListURI)
@@ -491,7 +491,7 @@ func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([
 		return nil, err
 	}
 
-	reqUsername, _ := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameValidation)
+	reqUsername, _ := username.MakeSQLUsernameFromUserInput(connURL.User.Username(), username.PurposeValidation)
 
 	userfileListURI := constructUserfileListURI(glob, reqUsername)
 	unescapedUserfileListURI, err := url.PathUnescape(userfileListURI)
@@ -614,7 +614,7 @@ func uploadUserFile(
 	// is the same one on the remote machine, and it may contain special
 	// characters.
 	// See also: https://github.com/cockroachdb/cockroach/issues/55389
-	username, err := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameCreation)
+	username, err := username.MakeSQLUsernameFromUserInput(connURL.User.Username(), username.PurposeCreation)
 	if err != nil {
 		return "", err
 	}

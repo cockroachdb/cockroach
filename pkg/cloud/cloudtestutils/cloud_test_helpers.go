@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -106,7 +106,7 @@ func storeFromURI(
 	t *testing.T,
 	uri string,
 	clientFactory blobs.BlobClientFactory,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,
@@ -129,7 +129,7 @@ func CheckExportStore(
 	t *testing.T,
 	storeURI string,
 	skipSingleFile bool,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,
@@ -344,7 +344,7 @@ func CheckExportStore(
 func CheckListFiles(
 	t *testing.T,
 	storeURI string,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,
@@ -359,7 +359,7 @@ func CheckListFilesCanonical(
 	t *testing.T,
 	storeURI string,
 	canonical string,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,

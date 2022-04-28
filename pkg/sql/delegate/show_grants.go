@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -234,7 +234,7 @@ FROM "".information_schema.type_privileges`
 	if n.Grantees != nil {
 		params = params[:0]
 		grantees, err := decodeusername.FromRoleSpecList(
-			d.evalCtx.SessionData(), security.UsernameValidation, n.Grantees,
+			d.evalCtx.SessionData(), username.PurposeValidation, n.Grantees,
 		)
 		if err != nil {
 			return nil, err
@@ -252,7 +252,7 @@ FROM "".information_schema.type_privileges`
 	for _, p := range n.Grantees {
 
 		user, err := decodeusername.FromRoleSpec(
-			d.evalCtx.SessionData(), security.UsernameValidation, p,
+			d.evalCtx.SessionData(), username.PurposeValidation, p,
 		)
 		if err != nil {
 			return nil, err

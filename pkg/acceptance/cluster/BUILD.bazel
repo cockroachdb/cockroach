@@ -18,6 +18,7 @@ go_library(
         "//pkg/base",
         "//pkg/config/zonepb",
         "//pkg/security",
+        "//pkg/security/username",
         "//pkg/util/contextutil",
         "//pkg/util/log",
         "//pkg/util/log/logflags",

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -180,7 +180,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 
 	record := Record{
 		Description: "fake job",
-		Username:    security.TestUserName(),
+		Username:    username.TestUserName(),
 		Details:     jobspb.ImportDetails{},
 		Progress:    jobspb.ImportProgress{},
 	}
@@ -252,7 +252,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				jobControl,
 			)
 			require.NoError(t, err)
@@ -293,7 +293,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 
 	record := Record{
 		Description: "fake job",
-		Username:    security.TestUserName(),
+		Username:    username.TestUserName(),
 		Details:     jobspb.ImportDetails{},
 		Progress:    jobspb.ImportProgress{},
 	}
@@ -333,7 +333,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				jobControl,
 			)
 			require.NoError(t, err)
@@ -367,7 +367,7 @@ func TestJobControlByType(t *testing.T) {
 			context.Background(),
 			"test-invalid-type",
 			nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			invalidTypeQuery,
 		)
 		require.Error(t, err)
@@ -426,7 +426,7 @@ func TestJobControlByType(t *testing.T) {
 						for i := 0; i < numJobsPerStatus; i++ {
 							record := Record{
 								Description: "fake job",
-								Username:    security.TestUserName(),
+								Username:    username.TestUserName(),
 								Details:     jobInfo.jobDetails,
 								Progress:    jobInfo.jobProgress,
 							}
@@ -447,7 +447,7 @@ func TestJobControlByType(t *testing.T) {
 					context.Background(),
 					"test-num-effected",
 					nil,
-					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+					sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 					commandQuery,
 				)
 				require.NoError(t, err)

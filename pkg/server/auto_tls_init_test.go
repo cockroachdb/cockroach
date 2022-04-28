@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -59,7 +60,7 @@ func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBund
 	}
 
 	err = bundleFromDisk.InterNode.loadOrCreateServiceCertificates(
-		ctx, cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, username.NodeUser, "", []string{},
 		true, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
@@ -67,14 +68,14 @@ func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBund
 	}
 
 	err = bundleFromDisk.UserAuth.loadOrCreateServiceCertificates(
-		ctx, cl.ClientNodeCertPath(), cl.ClientNodeKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.ClientNodeCertPath(), cl.ClientNodeKeyPath(), "", "", 0, 0, username.NodeUser, "", []string{},
 		true, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
 		return bundleFromDisk, err
 	}
 	err = bundleFromDisk.SQLService.loadOrCreateServiceCertificates(
-		ctx, cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, username.NodeUser, "", []string{},
 		false, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
@@ -82,7 +83,7 @@ func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBund
 	}
 
 	err = bundleFromDisk.RPCService.loadOrCreateServiceCertificates(
-		ctx, cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, username.NodeUser, "", []string{},
 		false, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {

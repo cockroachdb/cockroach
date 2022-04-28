@@ -24,7 +24,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
@@ -212,7 +212,7 @@ func (h Entry) ConnMatches(clientConn ConnType, ip net.IP) (bool, error) {
 // The provided username must be normalized already.
 // The function assumes the entry was normalized to contain only
 // one user and its username normalized. See ParseAndNormalize().
-func (h Entry) UserMatches(userName security.SQLUsername) bool {
+func (h Entry) UserMatches(userName username.SQLUsername) bool {
 	if h.User == nil {
 		return true
 	}

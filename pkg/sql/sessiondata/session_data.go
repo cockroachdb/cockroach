@@ -14,7 +14,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -149,7 +149,7 @@ func (s *SessionData) GetDateStyle() pgdate.DateStyle {
 // The SessionUser is the username that originally logged into the session.
 // If a user applies SET ROLE, the SessionUser remains the same whilst the
 // User() changes.
-func (s *SessionData) SessionUser() security.SQLUsername {
+func (s *SessionData) SessionUser() username.SQLUsername {
 	if s.SessionUserProto == "" {
 		return s.User()
 	}

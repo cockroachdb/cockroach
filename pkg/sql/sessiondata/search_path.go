@@ -14,7 +14,7 @@ import (
 	"bytes"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -43,8 +43,8 @@ var EmptySearchPath = SearchPath{}
 
 // DefaultSearchPathForUser returns the default search path with the user
 // specific schema name set so that it can be expanded during resolution.
-func DefaultSearchPathForUser(username security.SQLUsername) SearchPath {
-	return DefaultSearchPath.WithUserSchemaName(username.Normalized())
+func DefaultSearchPathForUser(userName username.SQLUsername) SearchPath {
+	return DefaultSearchPath.WithUserSchemaName(userName.Normalized())
 }
 
 // MakeSearchPath returns a new immutable SearchPath struct. The paths slice

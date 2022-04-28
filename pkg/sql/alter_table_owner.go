@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -24,7 +24,7 @@ import (
 )
 
 type alterTableOwnerNode struct {
-	owner  security.SQLUsername
+	owner  username.SQLUsername
 	desc   *tabledesc.Mutable
 	n      *tree.AlterTableOwner
 	prefix catalog.ResolvedObjectPrefix
@@ -65,7 +65,7 @@ func (p *planner) AlterTableOwner(ctx context.Context, n *tree.AlterTableOwner) 
 	}
 
 	owner, err := decodeusername.FromRoleSpec(
-		p.SessionData(), security.UsernameValidation, n.Owner,
+		p.SessionData(), username.PurposeValidation, n.Owner,
 	)
 	if err != nil {
 		return nil, err
@@ -126,7 +126,7 @@ func (p *planner) setNewTableOwner(
 	ctx context.Context,
 	desc *tabledesc.Mutable,
 	tbNameWithSchema tree.TableName,
-	newOwner security.SQLUsername,
+	newOwner username.SQLUsername,
 ) error {
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)

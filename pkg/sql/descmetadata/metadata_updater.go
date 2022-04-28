@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -43,7 +43,7 @@ func (mu metadataUpdater) UpsertDescriptorComment(
 	_, err := mu.ie.ExecEx(context.Background(),
 		fmt.Sprintf("upsert-%s-comment", commentType),
 		mu.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 		commentType,
 		id,
@@ -60,7 +60,7 @@ func (mu metadataUpdater) DeleteDescriptorComment(
 	_, err := mu.ie.ExecEx(context.Background(),
 		fmt.Sprintf("delete-%s-comment", commentType),
 		mu.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"DELETE FROM system.comments WHERE object_id = $1 AND sub_id = $2 AND "+
 			"type = $3;",
 		id,
@@ -91,7 +91,7 @@ DELETE FROM system.comments
 	_, err := mu.ie.ExecEx(context.Background(),
 		"delete-all-comments-for-tables",
 		mu.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		buf.String(),
 	)
 	return err
@@ -116,7 +116,7 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 	rowsDeleted, err := mu.ie.ExecEx(ctx,
 		"delete-db-role-setting",
 		mu.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(
 			`DELETE FROM %s WHERE database_id = $1`,
 			sessioninit.DatabaseRoleSettingsTableName,
@@ -161,7 +161,7 @@ func (mu metadataUpdater) SwapDescriptorSubComment(
 	_, err := mu.ie.ExecEx(context.Background(),
 		fmt.Sprintf("upsert-%s-comment", commentType),
 		mu.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"UPDATE system.comments  SET sub_id= $1 WHERE "+
 			"object_id = $2 AND sub_id = $3 AND type = $4",
 		newSubID,
@@ -178,7 +178,7 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) 
 		ctx,
 		"delete-schedule",
 		mu.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"DELETE FROM system.scheduled_jobs WHERE schedule_id = $1",
 		scheduleID,
 	)

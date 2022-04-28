@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -117,7 +117,7 @@ func newTestHelperForTables(
 func (h *testHelper) newScheduledJob(t *testing.T, scheduleLabel, sql string) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	j.SetScheduleLabel(scheduleLabel)
-	j.SetOwner(security.TestUserName())
+	j.SetOwner(username.TestUserName())
 	any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{Statement: sql})
 	require.NoError(t, err)
 	j.SetExecutionDetails(InlineExecutorName, jobspb.ExecutionArguments{Args: any})
@@ -131,7 +131,7 @@ func (h *testHelper) newScheduledJobForExecutor(
 ) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	j.SetScheduleLabel(scheduleLabel)
-	j.SetOwner(security.TestUserName())
+	j.SetOwner(username.TestUserName())
 	j.SetExecutionDetails(executorName, jobspb.ExecutionArguments{Args: executorArgs})
 	return j
 }
@@ -141,7 +141,7 @@ func (h *testHelper) loadSchedule(t *testing.T, id int64) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	row, cols, err := h.cfg.InternalExecutor.QueryRowExWithCols(
 		context.Background(), "sched-load", nil,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(
 			"SELECT * FROM %s WHERE schedule_id = %d",
 			h.env.ScheduledJobsTableName(), id),
@@ -175,7 +175,7 @@ func addFakeJob(
 ) jobspb.JobID {
 	payload := []byte("fake payload")
 	datums, err := h.cfg.InternalExecutor.QueryRowEx(context.Background(), "fake-job", txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(`
 INSERT INTO %s (created_by_type, created_by_id, status, payload)
 VALUES ($1, $2, $3, $4)

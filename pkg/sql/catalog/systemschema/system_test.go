@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -34,7 +34,7 @@ func TestShouldSplitAtDesc(t *testing.T) {
 		tabledesc.NewBuilder(&tbl1).BuildImmutable():          true,
 		tabledesc.NewBuilder(&tbl2).BuildImmutable():          false,
 		tabledesc.NewBuilder(&tbl3).BuildImmutable():          true,
-		dbdesc.NewInitial(42, "db", security.AdminRoleName()): false,
+		dbdesc.NewInitial(42, "db", username.AdminRoleName()): false,
 		typedesc.NewBuilder(&typ).BuildCreatedMutable():       false,
 		schemadesc.NewBuilder(&schema).BuildImmutable():       false,
 	} {

@@ -79,6 +79,7 @@ go_test(
         "//pkg/rpc/nodedialer",
         "//pkg/security",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",

@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -49,7 +49,7 @@ func WithBuilderDependenciesFromTestServer(
 	ip, cleanup := sql.NewInternalPlanner(
 		"test",
 		kv.NewTxn(context.Background(), s.DB(), s.NodeID()),
-		security.RootUserName(),
+		username.RootUserName(),
 		&sql.MemoryMetrics{},
 		&execCfg,
 		// Setting the database on the session data to "defaultdb" in the obvious

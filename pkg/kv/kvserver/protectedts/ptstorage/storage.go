@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -76,7 +76,7 @@ func (p *storage) UpdateTimestamp(
 	ctx context.Context, txn *kv.Txn, id uuid.UUID, timestamp hlc.Timestamp,
 ) error {
 	row, err := p.ex.QueryRowEx(ctx, "protectedts-update", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		updateTimestampQuery, id.GetBytesMut(), timestamp.AsOfSystemTime())
 	if err != nil {
 		return errors.Wrapf(err, "failed to update record %v", id)
@@ -96,7 +96,7 @@ func (p *storage) deprecatedProtect(
 		return errors.Wrap(err, "failed to marshal spans")
 	}
 	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-deprecated-protect", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		protectQueryWithoutTarget,
 		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
 		r.ID, r.Timestamp.AsOfSystemTime(),
@@ -176,7 +176,7 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 		return errors.Wrap(err, "failed to marshal spans")
 	}
 	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-protect", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
 		r.ID, r.Timestamp.AsOfSystemTime(),
@@ -215,7 +215,7 @@ func (p *storage) deprecatedGetRecord(
 	ctx context.Context, txn *kv.Txn, id uuid.UUID,
 ) (*ptpb.Record, error) {
 	row, err := p.ex.QueryRowEx(ctx, "protectedts-deprecated-GetRecord", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		getRecordWithoutTargetQuery, id.GetBytesMut())
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read record %v", id)
@@ -245,7 +245,7 @@ func (p *storage) GetRecord(ctx context.Context, txn *kv.Txn, id uuid.UUID) (*pt
 	}
 
 	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetRecord", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		getRecordQuery, id.GetBytesMut())
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read record %v", id)
@@ -265,7 +265,7 @@ func (p *storage) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) e
 		return errNoTxn
 	}
 	numRows, err := p.ex.ExecEx(ctx, "protectedts-MarkVerified", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		markVerifiedQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to mark record %v as verified", id)
@@ -281,7 +281,7 @@ func (p *storage) Release(ctx context.Context, txn *kv.Txn, id uuid.UUID) error 
 		return errNoTxn
 	}
 	numRows, err := p.ex.ExecEx(ctx, "protectedts-Release", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		releaseQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to release record %v", id)
@@ -297,7 +297,7 @@ func (p *storage) GetMetadata(ctx context.Context, txn *kv.Txn) (ptpb.Metadata, 
 		return ptpb.Metadata{}, errNoTxn
 	}
 	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetMetadata", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		getMetadataQuery)
 	if err != nil {
 		return ptpb.Metadata{}, errors.Wrap(err, "failed to read metadata")
@@ -333,7 +333,7 @@ func (p *storage) GetState(ctx context.Context, txn *kv.Txn) (ptpb.State, error)
 
 func (p *storage) deprecatedGetRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, error) {
 	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-deprecated-GetRecords", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		getRecordsWithoutTargetQuery)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read records")
@@ -360,7 +360,7 @@ func (p *storage) getRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, e
 	}
 
 	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-GetRecords", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, getRecordsQuery)
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, getRecordsQuery)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read records")
 	}

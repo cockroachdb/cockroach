@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -67,7 +67,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 	datums, cols, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
 		params.ctx,
 		"load-schedule",
-		params.p.Txn(), sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		params.p.Txn(), sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(
 			"SELECT schedule_id, next_run, schedule_expr, executor_type, execution_args FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),
@@ -106,7 +106,7 @@ func DeleteSchedule(
 		ctx,
 		"delete-schedule",
 		txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(
 			"DELETE FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),

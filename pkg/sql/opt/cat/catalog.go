@@ -15,7 +15,7 @@ package cat
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -160,5 +160,5 @@ type Catalog interface {
 	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
 
 	// RoleExists returns true if the role exists.
-	RoleExists(ctx context.Context, role security.SQLUsername) (bool, error)
+	RoleExists(ctx context.Context, role username.SQLUsername) (bool, error)
 }

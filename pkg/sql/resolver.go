@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
@@ -304,7 +304,7 @@ func (p *planner) IsTypeVisible(
 func (p *planner) HasAnyPrivilege(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	privs []privilege.Privilege,
 ) (eval.HasAnyPrivilegeResult, error) {
 	desc, err := p.ResolveDescriptorForPrivilegeSpecifier(

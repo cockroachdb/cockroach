@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -116,7 +116,7 @@ func (c *StatsCompactor) getRowCountForShard(
 	row, err := c.ie.QueryRowEx(ctx,
 		"scan-row-count",
 		nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		stmt,
 		shardIdx,
 	)
@@ -208,7 +208,7 @@ func (c *StatsCompactor) executeDeleteStmt(
 	it, err := c.ie.QueryIteratorEx(ctx,
 		"delete-old-sql-stats",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		delStmt,
 		qargs...,
 	)

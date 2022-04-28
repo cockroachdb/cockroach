@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -91,7 +91,7 @@ GRANT admin TO foo`); err != nil {
 			s.ServingSQLAddr(), t.Name(), url.UserPassword("bar", "testabc"), false /* withClientCerts */)
 		defer barCleanupFn()
 		rootURL, rootCleanupFn := sqlutils.PGUrl(t,
-			s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+			s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 		defer rootCleanupFn()
 
 		// Override the timeout built into pgx so we are only subject to

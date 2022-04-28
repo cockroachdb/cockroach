@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -123,7 +123,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 		})
 	case *tree.AlterSchemaOwner:
 		newOwner, err := decodeusername.FromRoleSpec(
-			params.p.SessionData(), security.UsernameValidation, t.Owner,
+			params.p.SessionData(), username.PurposeValidation, t.Owner,
 		)
 		if err != nil {
 			return err
@@ -139,7 +139,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 func (p *planner) alterSchemaOwner(
 	ctx context.Context,
 	scDesc *schemadesc.Mutable,
-	newOwner security.SQLUsername,
+	newOwner username.SQLUsername,
 	jobDescription string,
 ) error {
 	oldOwner := scDesc.GetPrivileges().Owner()
@@ -175,7 +175,7 @@ func (p *planner) setNewSchemaOwner(
 	ctx context.Context,
 	dbDesc *dbdesc.Mutable,
 	scDesc *schemadesc.Mutable,
-	newOwner security.SQLUsername,
+	newOwner username.SQLUsername,
 ) error {
 	// Update the owner of the schema.
 	privs := scDesc.GetPrivileges()
