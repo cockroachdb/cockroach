@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "cardinality.go",
         "col_stats_map.go",
+        "equiv_set.go",
         "func_dep.go",
         "histogram.go",
         "logical.go",
@@ -43,6 +44,7 @@ go_test(
     srcs = [
         "cardinality_test.go",
         "col_stats_map_test.go",
+        "equiv_set_test.go",
         "func_dep_rand_test.go",
         "func_dep_test.go",
         "histogram_test.go",
