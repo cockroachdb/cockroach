@@ -140,7 +140,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         placement="bottom"
         content={
-          "A session is active if it has an open transaction (including implicit transactions, which are individual SQL statements), and idle if it has no open transaction."
+          "A session is active if it has an open explicit or implicit transaction (individual SQL statement) with a statement that is actively running or waiting to acquire a lock. A session is idle if it has no open transactions."
         }
       >
         {getLabel("status")}
