@@ -10,7 +10,6 @@
 
 import React from "react";
 import { ReactWrapper } from "enzyme";
-import { assert } from "chai";
 import { times } from "lodash";
 import Long from "long";
 
@@ -233,8 +232,7 @@ describe("Nodes Overview page", () => {
           sortSetting={sortSetting.selector(store.getState())}
         />
       ));
-      assert.equal(
-        wrapper.find("h3.text.text--heading-3").text(),
+      expect(wrapper.find("h3.text.text--heading-3").text()).toEqual(
         `Nodes (${nodesCount})`,
       );
     });
@@ -264,16 +262,15 @@ describe("Nodes Overview page", () => {
       const columnCells = wrapper.find(
         ".table-section__content table thead th",
       );
-      assert.equal(columnCells.length, expectedColumns.length);
+      expect(columnCells.length).toEqual(expectedColumns.length);
 
       expectedColumns.forEach((columnName, idx) =>
-        assert.equal(
+        expect(
           columnCells
             .at(idx)
             .text()
             .toLowerCase(),
-          columnName,
-        ),
+        ).toEqual(columnName),
       );
     });
 
@@ -303,15 +300,14 @@ describe("Nodes Overview page", () => {
       const columnCells = wrapper.find(
         ".table-section__content table thead th",
       );
-      assert.equal(columnCells.length, expectedColumns.length);
+      expect(columnCells.length).toEqual(expectedColumns.length);
       expectedColumns.forEach((columnName, idx) =>
-        assert.equal(
+        expect(
           columnCells
             .at(idx)
             .text()
             .toLowerCase(),
-          columnName,
-        ),
+        ).toEqual(columnName),
       );
     });
 
@@ -427,13 +423,13 @@ describe("Nodes Overview page", () => {
           nodeSummary,
         );
 
-        assert.lengthOf(records, expectedDecommissionedNodeIds.length);
+        expect(records.length).toBe(expectedDecommissionedNodeIds.length);
         records.forEach(record => {
-          assert.isTrue(
+          expect(
             expectedDecommissionedNodeIds.some(
               nodeId => nodeId === record.nodeId,
             ),
-          );
+          ).toBe(true);
         });
       });
 
@@ -442,7 +438,7 @@ describe("Nodes Overview page", () => {
           nodeSummary,
         );
         recordsGroupedByRegion.forEach(record => {
-          assert.equal(record.nodeName, record.nodeId.toString());
+          expect(record.nodeName).toEqual(record.nodeId.toString());
         });
       });
     });
@@ -455,15 +451,14 @@ describe("Nodes Overview page", () => {
           nodeSummary,
         );
 
-        assert.lengthOf(recordsGroupedByRegion, 1);
-        assert.lengthOf(
-          recordsGroupedByRegion[0].children,
+        expect(recordsGroupedByRegion.length).toBe(1);
+        expect(recordsGroupedByRegion[0].children.length).toBe(
           expectedLiveNodeIds.length,
         );
         recordsGroupedByRegion[0].children.forEach(record => {
-          assert.isTrue(
+          expect(
             expectedLiveNodeIds.some(nodeId => nodeId === record.nodeId),
-          );
+          ).toBe(true);
         });
       });
 
@@ -474,7 +469,7 @@ describe("Nodes Overview page", () => {
         );
         recordsGroupedByRegion[0].children.forEach(record => {
           const expectedName = `127.0.0.${record.nodeId}:50945`;
-          assert.equal(record.nodeName, expectedName);
+          expect(record.nodeName).toEqual(expectedName);
         });
       });
     });
@@ -482,19 +477,16 @@ describe("Nodes Overview page", () => {
 
   describe("getLivenessStatusName", () => {
     it("return node liveness names without prefix", () => {
-      assert.equal(
-        getLivenessStatusName(LivenessStatus.NODE_STATUS_LIVE),
+      expect(getLivenessStatusName(LivenessStatus.NODE_STATUS_LIVE)).toEqual(
         "LIVE",
       );
-      assert.equal(
+      expect(
         getLivenessStatusName(LivenessStatus.NODE_STATUS_DECOMMISSIONED),
-        "DECOMMISSIONED",
-      );
-      assert.equal(
-        getLivenessStatusName(LivenessStatus.NODE_STATUS_DEAD),
+      ).toEqual("DECOMMISSIONED");
+      expect(getLivenessStatusName(LivenessStatus.NODE_STATUS_DEAD)).toEqual(
         "DEAD",
       );
-      assert.equal(getLivenessStatusName(3), "LIVE");
+      expect(getLivenessStatusName(3)).toEqual("LIVE");
     });
   });
 });

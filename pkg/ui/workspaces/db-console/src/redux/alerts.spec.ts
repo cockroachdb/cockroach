@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { Store } from "redux";
 import moment from "moment";
 import sinon from "sinon";
@@ -87,7 +86,7 @@ describe("alerts", function() {
           ]),
         );
         const versions = versionsSelector(state());
-        assert.deepEqual(versions, ["0.1", "0.2"]);
+        expect(versions).toEqual(["0.1", "0.2"]);
       });
 
       it("ignores decommissioning/decommissioned nodes", function() {
@@ -142,14 +141,14 @@ describe("alerts", function() {
         );
 
         const versions = versionsSelector(state());
-        assert.deepEqual(versions, ["0.1"]);
+        expect(versions).toEqual(["0.1"]);
       });
     });
 
     describe("version mismatch warning", function() {
       it("requires versions to be loaded before displaying", function() {
         const alert = staggeredVersionWarningSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
       });
 
       it("does not display when versions match", function() {
@@ -168,7 +167,7 @@ describe("alerts", function() {
           ]),
         );
         const alert = staggeredVersionWarningSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
       });
 
       it("displays when mismatch detected and not dismissed", function() {
@@ -191,9 +190,9 @@ describe("alerts", function() {
           ]),
         );
         const alert = staggeredVersionWarningSelector(state());
-        assert.isObject(alert);
-        assert.equal(alert.level, AlertLevel.WARNING);
-        assert.equal(alert.title, "Staggered Version");
+        expect(typeof alert).toBe("object");
+        expect(alert.level).toEqual(AlertLevel.WARNING);
+        expect(alert.title).toEqual("Staggered Version");
       });
 
       it("does not display if dismissed locally", function() {
@@ -213,7 +212,7 @@ describe("alerts", function() {
         );
         dispatch(staggeredVersionDismissedSetting.set(true));
         const alert = staggeredVersionWarningSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
       });
 
       it("dismisses by setting local dismissal", function() {
@@ -233,7 +232,7 @@ describe("alerts", function() {
         );
         const alert = staggeredVersionWarningSelector(state());
         alert.dismiss(dispatch, state);
-        assert.isTrue(staggeredVersionDismissedSetting.selector(state()));
+        expect(staggeredVersionDismissedSetting.selector(state())).toBe(true);
       });
     });
 
@@ -241,7 +240,7 @@ describe("alerts", function() {
       it("displays nothing when versions have not yet been loaded", function() {
         dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
         const alert = newVersionNotificationSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
       });
 
       it("displays nothing when persistent dismissal has not been checked", function() {
@@ -256,7 +255,7 @@ describe("alerts", function() {
           }),
         );
         const alert = newVersionNotificationSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
       });
 
       it("displays nothing when no new version is available", function() {
@@ -267,7 +266,7 @@ describe("alerts", function() {
           }),
         );
         const alert = newVersionNotificationSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
       });
 
       it("displays when new version available and not dismissed", function() {
@@ -283,9 +282,9 @@ describe("alerts", function() {
           }),
         );
         const alert = newVersionNotificationSelector(state());
-        assert.isObject(alert);
-        assert.equal(alert.level, AlertLevel.NOTIFICATION);
-        assert.equal(alert.title, "New Version Available");
+        expect(typeof alert).toBe("object");
+        expect(alert.level).toEqual(AlertLevel.NOTIFICATION);
+        expect(alert.title).toEqual("New Version Available");
       });
 
       it("respects local dismissal setting", function() {
@@ -302,14 +301,14 @@ describe("alerts", function() {
         );
         dispatch(newVersionDismissedLocalSetting.set(moment()));
         let alert = newVersionNotificationSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
 
         // Local dismissal only lasts one day.
         dispatch(
           newVersionDismissedLocalSetting.set(moment().subtract(2, "days")),
         );
         alert = newVersionNotificationSelector(state());
-        assert.isDefined(alert);
+        expect(alert).toBeDefined();
       });
 
       it("respects persistent dismissal setting", function() {
@@ -325,7 +324,7 @@ describe("alerts", function() {
           }),
         );
         let alert = newVersionNotificationSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
 
         // Dismissal only lasts one day.
         dispatch(
@@ -337,7 +336,7 @@ describe("alerts", function() {
           ),
         );
         alert = newVersionNotificationSelector(state());
-        assert.isDefined(alert);
+        expect(alert).toBeDefined();
       });
 
       it("dismisses by setting local and persistent dismissal", function(done) {
@@ -369,17 +368,17 @@ describe("alerts", function() {
         const beforeDismiss = moment();
 
         alert.dismiss(dispatch, state).then(() => {
-          assert.isTrue(
+          expect(
             newVersionDismissedLocalSetting
               .selector(state())
               .isSameOrAfter(beforeDismiss),
-          );
-          assert.isNotNull(state().uiData[VERSION_DISMISSED_KEY]);
-          assert.isNotNull(state().uiData[VERSION_DISMISSED_KEY].data);
+          ).toBe(true);
+          expect(state().uiData[VERSION_DISMISSED_KEY]).not.toBeNull();
+          expect(state().uiData[VERSION_DISMISSED_KEY].data).not.toBeNull();
           const dismissedMoment = moment(
             state().uiData[VERSION_DISMISSED_KEY].data as number,
           );
-          assert.isTrue(dismissedMoment.isSameOrAfter(beforeDismiss));
+          expect(dismissedMoment.isSameOrAfter(beforeDismiss)).toBe(true);
           done();
         });
       });
@@ -388,7 +387,7 @@ describe("alerts", function() {
     describe("disconnected alert", function() {
       it("requires health to be available before displaying", function() {
         const alert = disconnectedAlertSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
       });
 
       it("does not display when cluster is healthy", function() {
@@ -398,16 +397,15 @@ describe("alerts", function() {
           ),
         );
         const alert = disconnectedAlertSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
       });
 
       it("displays when cluster health endpoint returns an error", function() {
         dispatch(healthReducerObj.errorData(new Error("error")));
         const alert = disconnectedAlertSelector(state());
-        assert.isObject(alert);
-        assert.equal(alert.level, AlertLevel.CRITICAL);
-        assert.equal(
-          alert.title,
+        expect(typeof alert).toBe("object");
+        expect(alert.level).toEqual(AlertLevel.CRITICAL);
+        expect(alert.title).toEqual(
           "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.",
         );
       });
@@ -416,7 +414,7 @@ describe("alerts", function() {
         dispatch(healthReducerObj.errorData(new Error("error")));
         dispatch(disconnectedDismissedLocalSetting.set(moment()));
         const alert = disconnectedAlertSelector(state());
-        assert.isUndefined(alert);
+        expect(alert).not.toBeDefined();
       });
 
       it("dismisses by setting local dismissal", function(done) {
@@ -425,11 +423,11 @@ describe("alerts", function() {
         const beforeDismiss = moment();
 
         alert.dismiss(dispatch, state).then(() => {
-          assert.isTrue(
+          expect(
             disconnectedDismissedLocalSetting
               .selector(state())
               .isSameOrAfter(beforeDismiss),
-          );
+          ).toBe(true);
           done();
         });
       });
@@ -440,20 +438,20 @@ describe("alerts", function() {
         const settingState = emailSubscriptionAlertLocalSetting.selector(
           state(),
         );
-        assert.isFalse(settingState);
+        expect(settingState).toBe(false);
       });
 
       it("dismissed by alert#dismiss", async () => {
         // set alert to open state
         dispatch(emailSubscriptionAlertLocalSetting.set(true));
         let openState = emailSubscriptionAlertLocalSetting.selector(state());
-        assert.isTrue(openState);
+        expect(openState).toBe(true);
 
         // dismiss alert
         const alert = emailSubscriptionAlertSelector(state());
         await alert.dismiss(dispatch, state);
         openState = emailSubscriptionAlertLocalSetting.selector(state());
-        assert.isFalse(openState);
+        expect(openState).toBe(false);
       });
     });
   });
@@ -474,11 +472,11 @@ describe("alerts", function() {
 
     it("dispatches requests for expected data on empty store", function() {
       sync();
-      assert.isTrue(isInFlight(state(), VERSION_DISMISSED_KEY));
-      assert.isTrue(state().cachedData.cluster.inFlight);
-      assert.isTrue(state().cachedData.nodes.inFlight);
-      assert.isFalse(state().cachedData.version.inFlight);
-      assert.isTrue(state().cachedData.health.inFlight);
+      expect(isInFlight(state(), VERSION_DISMISSED_KEY)).toBe(true);
+      expect(state().cachedData.cluster.inFlight).toBe(true);
+      expect(state().cachedData.nodes.inFlight).toBe(true);
+      expect(state().cachedData.version.inFlight).toBe(false);
+      expect(state().cachedData.health.inFlight).toBe(true);
     });
 
     it("dispatches request for version data when cluster ID and nodes are available", function() {
@@ -500,7 +498,7 @@ describe("alerts", function() {
       );
 
       sync();
-      assert.isTrue(state().cachedData.version.inFlight);
+      expect(state().cachedData.version.inFlight).toBe(true);
     });
 
     it("does not request version data when version is staggered", function() {
@@ -527,7 +525,7 @@ describe("alerts", function() {
       );
 
       sync();
-      assert.isFalse(state().cachedData.version.inFlight);
+      expect(state().cachedData.version.inFlight).toBe(false);
     });
 
     it("refreshes health function whenever the last health response is no longer valid.", function() {
@@ -538,7 +536,7 @@ describe("alerts", function() {
       );
       dispatch(healthReducerObj.invalidateData());
       sync();
-      assert.isTrue(state().cachedData.health.inFlight);
+      expect(state().cachedData.health.inFlight).toBe(true);
     });
 
     it("does not do anything when all data is available.", function() {
@@ -573,7 +571,7 @@ describe("alerts", function() {
 
       const expectedState = state();
       sync();
-      assert.deepEqual(state(), expectedState);
+      expect(state()).toEqual(expectedState);
     });
   });
 });

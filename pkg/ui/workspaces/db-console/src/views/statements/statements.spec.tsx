@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import Long from "long";
 import moment from "moment";
 import { RouteComponentProps } from "react-router-dom";
@@ -42,7 +41,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.isNull(result);
+    expect(result).toBeNull();
   });
 
   it("returns the statements currently loaded", () => {
@@ -53,7 +52,7 @@ describe("selectStatements", () => {
     const props = makeEmptyRouteProps();
 
     const result = selectStatements(state, props);
-    assert.equal(result.length, 3);
+    expect(result.length).toEqual(3);
 
     const expectedFingerprints = [stmtA, stmtB, stmtC].map(
       stmt => stmt.key.key_data.query,
@@ -61,7 +60,7 @@ describe("selectStatements", () => {
     expectedFingerprints.sort();
     const actualFingerprints = result.map((stmt: any) => stmt.label);
     actualFingerprints.sort();
-    assert.deepEqual(actualFingerprints, expectedFingerprints);
+    expect(actualFingerprints).toEqual(expectedFingerprints);
   });
 
   it("returns the statements without Internal for default ALL filter", () => {
@@ -74,7 +73,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 2);
+    expect(result.length).toEqual(2);
   });
 
   it("coalesces statements from different apps", () => {
@@ -89,9 +88,9 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 1);
-    assert.equal(result[0].label, stmtA.key.key_data.query);
-    assert.equal(result[0].stats.count.toNumber(), sumCount);
+    expect(result.length).toEqual(1);
+    expect(result[0].label).toEqual(stmtA.key.key_data.query);
+    expect(result[0].stats.count.toNumber()).toEqual(sumCount);
   });
 
   it("coalesces statements with differing node ids", () => {
@@ -104,7 +103,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 1);
+    expect(result.length).toEqual(1);
   });
 
   it("coalesces statements with differing distSQL and failed values", () => {
@@ -118,7 +117,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 1);
+    expect(result.length).toEqual(1);
   });
 
   it("filters out statements when app param is set", () => {
@@ -131,7 +130,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 1);
+    expect(result.length).toEqual(1);
   });
 
   it('filters out statements with app set when app param is "(unset)"', () => {
@@ -144,7 +143,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 1);
+    expect(result.length).toEqual(1);
   });
 
   it('filters out statements with app set when app param is "$ internal"', () => {
@@ -155,7 +154,7 @@ describe("selectStatements", () => {
     ]);
     const props = makeRoutePropsWithApp("$ internal");
     const result = selectStatements(state, props);
-    assert.equal(result.length, 1);
+    expect(result.length).toEqual(1);
   });
 });
 
@@ -165,7 +164,7 @@ describe("selectApps", () => {
 
     const result = selectApps(state);
 
-    assert.deepEqual(result, []);
+    expect(result).toEqual([]);
   });
 
   it("returns all the apps that appear in the statements", () => {
@@ -178,7 +177,7 @@ describe("selectApps", () => {
 
     const result = selectApps(state);
 
-    assert.deepEqual(result, ["(unset)", "foobar", "cockroach sql"]);
+    expect(result).toEqual(["(unset)", "foobar", "cockroach sql"]);
   });
 });
 
@@ -188,7 +187,7 @@ describe("selectTotalFingerprints", () => {
 
     const result = selectTotalFingerprints(state);
 
-    assert.equal(result, 0);
+    expect(result).toEqual(0);
   });
 
   it("returns the number of statement fingerprints", () => {
@@ -200,7 +199,7 @@ describe("selectTotalFingerprints", () => {
 
     const result = selectTotalFingerprints(state);
 
-    assert.equal(result, 3);
+    expect(result).toEqual(3);
   });
 
   it("coalesces statements from different apps", () => {
@@ -212,7 +211,7 @@ describe("selectTotalFingerprints", () => {
 
     const result = selectTotalFingerprints(state);
 
-    assert.equal(result, 1);
+    expect(result).toEqual(1);
   });
 
   it("coalesces statements with differing node ids", () => {
@@ -224,7 +223,7 @@ describe("selectTotalFingerprints", () => {
 
     const result = selectTotalFingerprints(state);
 
-    assert.equal(result, 1);
+    expect(result).toEqual(1);
   });
 
   it("coalesces statements with differing distSQL and failed keys", () => {
@@ -237,7 +236,7 @@ describe("selectTotalFingerprints", () => {
 
     const result = selectTotalFingerprints(state);
 
-    assert.equal(result, 1);
+    expect(result).toEqual(1);
   });
 });
 
@@ -247,7 +246,7 @@ describe("selectLastReset", () => {
 
     const result = selectLastReset(state);
 
-    assert.equal(result, "unknown");
+    expect(result).toEqual("unknown");
   });
 
   it("returns the formatted timestamp if valid", () => {
@@ -256,7 +255,7 @@ describe("selectLastReset", () => {
 
     const result = selectLastReset(state);
 
-    assert.equal(moment.utc(result).unix(), timestamp);
+    expect(moment.utc(result).unix()).toEqual(timestamp);
   });
 });
 
@@ -267,7 +266,7 @@ describe("selectStatement", () => {
 
     const result = selectStatement(state, props);
 
-    assert.isNull(result);
+    expect(result).toBeNull();
   });
 
   it("returns the statement currently loaded", () => {
@@ -280,13 +279,13 @@ describe("selectStatement", () => {
     const props = makeRoutePropsWithStatement(stmtAFingerprintID);
     const result = selectStatement(state, props);
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+    expect(result.statement).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(stmtA.stats.count.toNumber());
+    expect(result.app).toEqual([stmtA.key.key_data.app]);
+    expect(result.distSQL).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.vec).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.failed).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.node_id).toEqual([stmtA.key.node_id]);
   });
 
   it("coalesces statements from different apps", () => {
@@ -301,17 +300,17 @@ describe("selectStatement", () => {
     const props = makeRoutePropsWithStatement(stmtAFingerprintID);
     const result = selectStatement(state, props);
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), sumCount);
-    assert.deepEqual(result.app, [
+    expect(result.statement).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(sumCount);
+    expect(result.app).toEqual([
       stmtA.key.key_data.app,
       stmtB.key.key_data.app,
       stmtC.key.key_data.app,
     ]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+    expect(result.distSQL).toEqual({ numerator: 0, denominator: 3 });
+    expect(result.vec).toEqual({ numerator: 0, denominator: 3 });
+    expect(result.failed).toEqual({ numerator: 0, denominator: 3 });
+    expect(result.node_id).toEqual([stmtA.key.node_id]);
   });
 
   it("coalesces statements with differing node ids", () => {
@@ -327,13 +326,13 @@ describe("selectStatement", () => {
     const props = makeRoutePropsWithStatement(stmtAFingerprintID);
     const result = selectStatement(state, props);
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), sumCount);
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 3 });
-    assert.deepEqual(result.node_id, [1, 2, 3]);
+    expect(result.statement).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(sumCount);
+    expect(result.app).toEqual([stmtA.key.key_data.app]);
+    expect(result.distSQL).toEqual({ numerator: 0, denominator: 3 });
+    expect(result.vec).toEqual({ numerator: 0, denominator: 3 });
+    expect(result.failed).toEqual({ numerator: 0, denominator: 3 });
+    expect(result.node_id).toEqual([1, 2, 3]);
   });
 
   it("coalesces statements with differing distSQL, vec and failed values", () => {
@@ -368,13 +367,13 @@ describe("selectStatement", () => {
     const props = makeRoutePropsWithStatement(stmtAFingerprintID);
     const result = selectStatement(state, props);
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), sumCount);
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, { numerator: 4, denominator: 8 });
-    assert.deepEqual(result.vec, { numerator: 4, denominator: 8 });
-    assert.deepEqual(result.failed, { numerator: 4, denominator: 8 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+    expect(result.statement).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(sumCount);
+    expect(result.app).toEqual([stmtA.key.key_data.app]);
+    expect(result.distSQL).toEqual({ numerator: 4, denominator: 8 });
+    expect(result.vec).toEqual({ numerator: 4, denominator: 8 });
+    expect(result.failed).toEqual({ numerator: 4, denominator: 8 });
+    expect(result.node_id).toEqual([stmtA.key.node_id]);
   });
 
   it("filters out statements when app param is set", () => {
@@ -389,13 +388,13 @@ describe("selectStatement", () => {
 
     const result = selectStatement(state, props);
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+    expect(result.statement).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(stmtA.stats.count.toNumber());
+    expect(result.app).toEqual([stmtA.key.key_data.app]);
+    expect(result.distSQL).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.vec).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.failed).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.node_id).toEqual([stmtA.key.node_id]);
   });
 
   it('filters out statements with app set when app param is "(unset)"', () => {
@@ -413,13 +412,13 @@ describe("selectStatement", () => {
 
     const result = selectStatement(state, props);
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
-    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+    expect(result.statement).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(stmtA.stats.count.toNumber());
+    expect(result.app).toEqual([stmtA.key.key_data.app]);
+    expect(result.distSQL).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.vec).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.failed).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.node_id).toEqual([stmtA.key.node_id]);
   });
 
   it('filters out statements with app set when app param is "$ internal"', () => {
@@ -437,14 +436,14 @@ describe("selectStatement", () => {
 
     const result = selectStatement(state, props);
 
-    assert.equal(result.statement, stmtA.key.key_data.query);
-    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
+    expect(result.statement).toEqual(stmtA.key.key_data.query);
+    expect(result.stats.count.toNumber()).toEqual(stmtA.stats.count.toNumber());
     // Statements with internal app prefix should have "$ internal" as app name
-    assert.deepEqual(result.app, ["$ internal"]);
-    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.vec, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
-    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+    expect(result.app).toEqual(["$ internal"]);
+    expect(result.distSQL).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.vec).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.failed).toEqual({ numerator: 0, denominator: 1 });
+    expect(result.node_id).toEqual([stmtA.key.node_id]);
   });
 });
 

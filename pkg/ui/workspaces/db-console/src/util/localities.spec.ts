@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
-
 import * as protos from "src/js/protos";
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import {
@@ -30,13 +28,13 @@ describe("parseLocalityRoute", function() {
     it("returns an empty array when passed undefined", function() {
       const tiers = parseLocalityRoute(undefined);
 
-      assert.deepEqual(tiers, []);
+      expect(tiers).toEqual([]);
     });
 
     it("returns an empty array when passed an empty string", function() {
       const tiers = parseLocalityRoute("");
 
-      assert.deepEqual(tiers, []);
+      expect(tiers).toEqual([]);
     });
   });
 
@@ -47,7 +45,7 @@ describe("parseLocalityRoute", function() {
 
       const tiers = parseLocalityRoute(key + "=" + value);
 
-      assert.deepEqual(tiers, [{ key, value }]);
+      expect(tiers).toEqual([{ key, value }]);
     });
   });
 
@@ -65,7 +63,7 @@ describe("parseLocalityRoute", function() {
 
       const tiers = parseLocalityRoute(route);
 
-      assert.deepEqual(tiers, expectedTiers);
+      expect(tiers).toEqual(expectedTiers);
     });
   });
 });
@@ -75,7 +73,7 @@ describe("generateLocalityRoute", function() {
     it("returns an empty string", function() {
       const route = generateLocalityRoute([]);
 
-      assert.equal(route, "/");
+      expect(route).toEqual("/");
     });
   });
 
@@ -86,7 +84,7 @@ describe("generateLocalityRoute", function() {
 
       const route = generateLocalityRoute([{ key, value }]);
 
-      assert.equal(route, "/" + key + "=" + value);
+      expect(route).toEqual("/" + key + "=" + value);
     });
   });
 
@@ -103,7 +101,7 @@ describe("generateLocalityRoute", function() {
 
       const route = generateLocalityRoute(tiers);
 
-      assert.equal(route, expectedRoute);
+      expect(route).toEqual(expectedRoute);
     });
   });
 });
@@ -125,7 +123,7 @@ describe("getNodeLocalityTiers", function() {
 
     const locality = getNodeLocalityTiers(node);
 
-    assert.deepEqual(locality, tiers);
+    expect(locality).toEqual(tiers);
   });
 });
 
@@ -140,7 +138,7 @@ describe("getChildLocalities", function() {
 
       const children = getChildLocalities(locality);
 
-      assert.deepEqual(children, []);
+      expect(children).toEqual([]);
     });
   });
 
@@ -171,7 +169,7 @@ describe("getChildLocalities", function() {
 
       const children = getChildLocalities(locality);
 
-      assert.lengthOf(children, 2);
+      expect(children.length).toBe(2);
       assert.deepInclude(children, usEast);
       assert.deepInclude(children, usWest);
     });
@@ -222,7 +220,7 @@ describe("getLocality", function() {
 
       const tree = getLocality(localityTree, tiers);
 
-      assert.deepEqual(tree, localityTree);
+      expect(tree).toEqual(localityTree);
     });
   });
 
@@ -232,7 +230,7 @@ describe("getLocality", function() {
 
       const tree = getLocality(localityTree, tiers);
 
-      assert.deepEqual(tree, localityTree.localities.region["us-east"]);
+      expect(tree).toEqual(localityTree.localities.region["us-east"]);
     });
 
     it("returns null if the tier key does not exist", function() {
@@ -240,7 +238,7 @@ describe("getLocality", function() {
 
       const tree = getLocality(localityTree, tiers);
 
-      assert.equal(tree, null);
+      expect(tree).toEqual(null);
     });
 
     it("returns null if the tier value does not exist", function() {
@@ -248,7 +246,7 @@ describe("getLocality", function() {
 
       const tree = getLocality(localityTree, tiers);
 
-      assert.equal(tree, null);
+      expect(tree).toEqual(null);
     });
   });
 
@@ -261,8 +259,7 @@ describe("getLocality", function() {
 
       const tree = getLocality(localityTree, tiers);
 
-      assert.deepEqual(
-        tree,
+      expect(tree).toEqual(
         localityTree.localities.region["us-east"].localities.zone["us-east-1"],
       );
     });
@@ -275,7 +272,7 @@ describe("getLocality", function() {
 
       const tree = getLocality(localityTree, tiers);
 
-      assert.equal(tree, null);
+      expect(tree).toEqual(null);
     });
 
     it("returns null if the first tier value does not exist", function() {
@@ -286,7 +283,7 @@ describe("getLocality", function() {
 
       const tree = getLocality(localityTree, tiers);
 
-      assert.equal(tree, null);
+      expect(tree).toEqual(null);
     });
 
     it("returns null if the second tier key does not exist", function() {
@@ -297,7 +294,7 @@ describe("getLocality", function() {
 
       const tree = getLocality(localityTree, tiers);
 
-      assert.equal(tree, null);
+      expect(tree).toEqual(null);
     });
 
     it("returns null if the second tier value does not exist", function() {
@@ -308,7 +305,7 @@ describe("getLocality", function() {
 
       const tree = getLocality(localityTree, tiers);
 
-      assert.equal(tree, null);
+      expect(tree).toEqual(null);
     });
   });
 });
@@ -367,7 +364,7 @@ describe("getLeaves", function() {
 
     const leaves = getLeaves(localityTree);
 
-    assert.deepEqual(leaves, [node1, node2]);
+    expect(leaves).toEqual([node1, node2]);
   });
 });
 
@@ -376,7 +373,7 @@ describe("getLocalityLabel", function() {
     it('returns the string "Cluster"', function() {
       const label = getLocalityLabel([]);
 
-      assert.equal(label, "Cluster");
+      expect(label).toEqual("Cluster");
     });
   });
 
@@ -387,7 +384,7 @@ describe("getLocalityLabel", function() {
 
       const label = getLocalityLabel([{ key, value }]);
 
-      assert.equal(label, key + "=" + value);
+      expect(label).toEqual(key + "=" + value);
     });
   });
 
@@ -401,7 +398,7 @@ describe("getLocalityLabel", function() {
         { key, value },
       ]);
 
-      assert.equal(label, key + "=" + value);
+      expect(label).toEqual(key + "=" + value);
     });
   });
 });
@@ -418,7 +415,7 @@ describe("allNodesHaveLocality", function() {
       },
     ];
 
-    assert.isFalse(allNodesHaveLocality(nodes));
+    expect(allNodesHaveLocality(nodes)).toBe(false);
   });
 
   it("returns true if all nodes have localities", function() {
@@ -437,6 +434,6 @@ describe("allNodesHaveLocality", function() {
       },
     ];
 
-    assert.isTrue(allNodesHaveLocality(nodes));
+    expect(allNodesHaveLocality(nodes)).toBe(true);
   });
 });

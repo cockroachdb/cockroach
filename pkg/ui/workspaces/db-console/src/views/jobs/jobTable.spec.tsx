@@ -10,7 +10,6 @@
 
 import React from "react";
 import { shallow } from "enzyme";
-import { assert } from "chai";
 import { JobTable, JobTableProps } from "src/views/jobs/jobTable";
 
 import "src/enzymeInit";
@@ -42,10 +41,10 @@ describe("<JobTable>", () => {
         isUsedFilter={jobTableProps.isUsedFilter}
       />,
     );
-    assert.equal(jobTable.state().pagination.current, 2);
+    expect(jobTable.state().pagination.current).toEqual(2);
     jobTable.setProps({
       jobs: { data: { jobs: [{}, {}], toJSON }, inFlight: false, valid: true },
     });
-    assert.equal(jobTable.state().pagination.current, 1);
+    expect(jobTable.state().pagination.current).toEqual(1);
   });
 });

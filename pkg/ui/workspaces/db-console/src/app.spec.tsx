@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { assert } from "chai";
 import { Action, Store } from "redux";
 import { createMemoryHistory } from "history";
 import { mount, ReactWrapper } from "enzyme";
@@ -75,26 +74,26 @@ describe("Routing to", () => {
   describe("'/' path", () => {
     it("routes to <ClusterOverview> component", () => {
       navigateToPath("/");
-      assert.lengthOf(appWrapper.find(ClusterOverview), 1);
+      expect(appWrapper.find(ClusterOverview).length).toBe(1);
     });
 
     it("redirected to '/overview'", () => {
       navigateToPath("/");
       const location = history.location;
-      assert.equal(location.pathname, "/overview/list");
+      expect(location.pathname).toEqual("/overview/list");
     });
   });
 
   describe("'/overview' path", () => {
     it("routes to <ClusterOverview> component", () => {
       navigateToPath("/overview");
-      assert.lengthOf(appWrapper.find(ClusterOverview), 1);
+      expect(appWrapper.find(ClusterOverview).length).toBe(1);
     });
 
     it("redirected to '/overview'", () => {
       navigateToPath("/overview");
       const location = history.location;
-      assert.equal(location.pathname, "/overview/list");
+      expect(location.pathname).toEqual("/overview/list");
     });
   });
 
@@ -102,9 +101,9 @@ describe("Routing to", () => {
     it("routes to <NodeList> component", () => {
       navigateToPath("/overview");
       const clusterOverview = appWrapper.find(ClusterOverview);
-      assert.lengthOf(clusterOverview, 1);
+      expect(clusterOverview.length).toBe(1);
       const nodeList = clusterOverview.find(NodeList);
-      assert.lengthOf(nodeList, 1);
+      expect(nodeList.length).toBe(1);
     });
   });
 
@@ -113,8 +112,8 @@ describe("Routing to", () => {
       navigateToPath("/overview/map");
       const clusterOverview = appWrapper.find(ClusterOverview);
       const clusterViz = appWrapper.find(ClusterVisualization);
-      assert.lengthOf(clusterOverview, 1);
-      assert.lengthOf(clusterViz, 1);
+      expect(clusterOverview.length).toBe(1);
+      expect(clusterViz.length).toBe(1);
     });
   });
 
@@ -124,67 +123,67 @@ describe("Routing to", () => {
   describe("'/metrics' path", () => {
     it("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(appWrapper.find(NodeGraphs).length).toBe(1);
     });
 
     it("redirected to '/metrics/overview/cluster'", () => {
       navigateToPath("/metrics");
       const location = history.location;
-      assert.equal(location.pathname, "/metrics/overview/cluster");
+      expect(location.pathname).toEqual("/metrics/overview/cluster");
     });
   });
 
   describe("'/metrics/overview/cluster' path", () => {
     it("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/overview/cluster");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(appWrapper.find(NodeGraphs).length).toBe(1);
     });
   });
 
   describe("'/metrics/overview/node' path", () => {
     it("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/overview/node");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(appWrapper.find(NodeGraphs).length).toBe(1);
     });
   });
 
   describe("'/metrics/:dashboardNameAttr' path", () => {
     it("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(appWrapper.find(NodeGraphs).length).toBe(1);
     });
 
     it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
       navigateToPath("/metrics/some-dashboard");
       const location = history.location;
-      assert.equal(location.pathname, "/metrics/some-dashboard/cluster");
+      expect(location.pathname).toEqual("/metrics/some-dashboard/cluster");
     });
   });
 
   describe("'/metrics/:dashboardNameAttr/cluster' path", () => {
     it("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard/cluster");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(appWrapper.find(NodeGraphs).length).toBe(1);
     });
   });
 
   describe("'/metrics/:dashboardNameAttr/node' path", () => {
     it("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard/node");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(appWrapper.find(NodeGraphs).length).toBe(1);
     });
 
     it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
       navigateToPath("/metrics/some-dashboard/node");
       const location = history.location;
-      assert.equal(location.pathname, "/metrics/some-dashboard/cluster");
+      expect(location.pathname).toEqual("/metrics/some-dashboard/cluster");
     });
   });
 
   describe("'/metrics/:dashboardNameAttr/node/:nodeIDAttr' path", () => {
     it("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard/node/123");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(appWrapper.find(NodeGraphs).length).toBe(1);
     });
   });
 
@@ -194,27 +193,27 @@ describe("Routing to", () => {
   describe("'/node' path", () => {
     it("routes to <NodeList> component", () => {
       navigateToPath("/node");
-      assert.lengthOf(appWrapper.find(NodeList), 1);
+      expect(appWrapper.find(NodeList).length).toBe(1);
     });
 
     it("redirected to '/overview/list'", () => {
       navigateToPath("/node");
       const location = history.location;
-      assert.equal(location.pathname, "/overview/list");
+      expect(location.pathname).toEqual("/overview/list");
     });
   });
 
   describe("'/node/:nodeIDAttr' path", () => {
     it("routes to <NodeOverview> component", () => {
       navigateToPath("/node/1");
-      assert.lengthOf(appWrapper.find(NodeOverview), 1);
+      expect(appWrapper.find(NodeOverview).length).toBe(1);
     });
   });
 
   describe("'/node/:nodeIDAttr/logs' path", () => {
     it("routes to <Logs> component", () => {
       navigateToPath("/node/1/logs");
-      assert.lengthOf(appWrapper.find(Logs), 1);
+      expect(appWrapper.find(Logs).length).toBe(1);
     });
   });
 
@@ -224,14 +223,14 @@ describe("Routing to", () => {
   describe("'/events' path", () => {
     it("routes to <EventPageUnconnected> component", () => {
       navigateToPath("/events");
-      assert.lengthOf(appWrapper.find(EventPageUnconnected), 1);
+      expect(appWrapper.find(EventPageUnconnected).length).toBe(1);
     });
   });
 
   describe("'/jobs' path", () => {
     it("routes to <JobsTable> component", () => {
       navigateToPath("/jobs");
-      assert.lengthOf(appWrapper.find(JobsTable), 1);
+      expect(appWrapper.find(JobsTable).length).toBe(1);
     });
   });
 
@@ -241,7 +240,7 @@ describe("Routing to", () => {
   describe("'/databases' path", () => {
     it("routes to <DatabasesPage> component", () => {
       navigateToPath("/databases");
-      assert.lengthOf(appWrapper.find(DatabasesPage), 1);
+      expect(appWrapper.find(DatabasesPage).length).toBe(1);
     });
   });
 
@@ -249,7 +248,7 @@ describe("Routing to", () => {
     it("redirected to '/databases'", () => {
       navigateToPath("/databases/tables");
       const location = history.location;
-      assert.equal(location.pathname, "/databases");
+      expect(location.pathname).toEqual("/databases");
     });
   });
 
@@ -257,7 +256,7 @@ describe("Routing to", () => {
     it("redirected to '/databases'", () => {
       navigateToPath("/databases/grants");
       const location = history.location;
-      assert.equal(location.pathname, "/databases");
+      expect(location.pathname).toEqual("/databases");
     });
   });
 
@@ -265,8 +264,7 @@ describe("Routing to", () => {
     it("redirected to '/database/:${databaseNameAttr}/table/:${tableNameAttr}'", () => {
       navigateToPath("/databases/database/some-db-name/table/some-table-name");
       const location = history.location;
-      assert.equal(
-        location.pathname,
+      expect(location.pathname).toEqual(
         "/database/some-db-name/table/some-table-name",
       );
     });
@@ -276,14 +274,14 @@ describe("Routing to", () => {
     it("redirected to '/databases'", () => {
       navigateToPath("/database");
       const location = history.location;
-      assert.equal(location.pathname, "/databases");
+      expect(location.pathname).toEqual("/databases");
     });
   });
 
   describe("'/database/:${databaseNameAttr}' path", () => {
     it("routes to <DatabaseDetailsPage> component", () => {
       navigateToPath("/database/some-db-name");
-      assert.lengthOf(appWrapper.find(DatabaseDetailsPage), 1);
+      expect(appWrapper.find(DatabaseDetailsPage).length).toBe(1);
     });
   });
 
@@ -291,14 +289,14 @@ describe("Routing to", () => {
     it("redirected to '/databases/:${databaseNameAttr}'", () => {
       navigateToPath("/database/some-db-name/table");
       const location = history.location;
-      assert.equal(location.pathname, "/database/some-db-name");
+      expect(location.pathname).toEqual("/database/some-db-name");
     });
   });
 
   describe("'/database/:${databaseNameAttr}/table/:${tableNameAttr}' path", () => {
     it("routes to <DatabaseTablePage> component", () => {
       navigateToPath("/database/some-db-name/table/some-table-name");
-      assert.lengthOf(appWrapper.find(DatabaseTablePage), 1);
+      expect(appWrapper.find(DatabaseTablePage).length).toBe(1);
     });
   });
 
@@ -308,7 +306,7 @@ describe("Routing to", () => {
   describe("'/data-distribution' path", () => {
     it("routes to <DataDistributionPage> component", () => {
       navigateToPath("/data-distribution");
-      assert.lengthOf(appWrapper.find(DataDistributionPage), 1);
+      expect(appWrapper.find(DataDistributionPage).length).toBe(1);
     });
   });
 
@@ -318,28 +316,28 @@ describe("Routing to", () => {
   describe("'/statements' path", () => {
     it("routes to <StatementsPage> component", () => {
       navigateToPath("/statements");
-      assert.lengthOf(appWrapper.find(StatementsPage), 1);
+      expect(appWrapper.find(StatementsPage).length).toBe(1);
     });
   });
 
   describe("'/statements/:${appAttr}' path", () => {
     it("routes to <StatementsPage> component", () => {
       navigateToPath("/statements/%24+internal");
-      assert.lengthOf(appWrapper.find(StatementsPage), 1);
+      expect(appWrapper.find(StatementsPage).length).toBe(1);
     });
   });
 
   describe("'/statements/:${appAttr}/:${statementAttr}' path", () => {
     it("routes to <StatementDetails> component", () => {
       navigateToPath("/statements/%24+internal/true");
-      assert.lengthOf(appWrapper.find(StatementDetails), 1);
+      expect(appWrapper.find(StatementDetails).length).toBe(1);
     });
   });
 
   describe("'/statements/:${implicitTxnAttr}/:${statementAttr}' path", () => {
     it("routes to <StatementDetails> component", () => {
       navigateToPath("/statements/implicit-txn-attr/statement-attr");
-      assert.lengthOf(appWrapper.find(StatementDetails), 1);
+      expect(appWrapper.find(StatementDetails).length).toBe(1);
     });
   });
 
@@ -347,8 +345,7 @@ describe("Routing to", () => {
     it("redirected to '/sql-activity?tab=Statements'", () => {
       navigateToPath("/statement");
       const location = history.location;
-      assert.equal(
-        location.pathname + location.search,
+      expect(location.pathname + location.search).toEqual(
         "/sql-activity?tab=Statements",
       );
     });
@@ -357,7 +354,7 @@ describe("Routing to", () => {
   describe("'/statement/:${implicitTxnAttr}/:${statementAttr}' path", () => {
     it("routes to <StatementDetails> component", () => {
       navigateToPath("/statement/implicit-attr/statement-attr/");
-      assert.lengthOf(appWrapper.find(StatementDetails), 1);
+      expect(appWrapper.find(StatementDetails).length).toBe(1);
     });
   });
 
@@ -367,14 +364,14 @@ describe("Routing to", () => {
   describe("'/sql-activity?tab=Transactions' path", () => {
     it("routes to <TransactionsPage> component", () => {
       navigateToPath("/sql-activity?tab=Transactions");
-      assert.lengthOf(appWrapper.find(TransactionsPage), 1);
+      expect(appWrapper.find(TransactionsPage).length).toBe(1);
     });
   });
 
   describe("'/transaction/:aggregated_ts/:txn_fingerprint_id' path", () => {
     it("routes to <TransactionDetails> component", () => {
       navigateToPath("/transaction/1637877600/4948941983164833719");
-      assert.lengthOf(appWrapper.find(TransactionDetails), 1);
+      expect(appWrapper.find(TransactionDetails).length).toBe(1);
     });
   });
 
@@ -384,7 +381,7 @@ describe("Routing to", () => {
   describe("'/debug' path", () => {
     it("routes to <Debug> component", () => {
       navigateToPath("/debug");
-      assert.lengthOf(appWrapper.find(Debug), 1);
+      expect(appWrapper.find(Debug).length).toBe(1);
     });
   });
 
@@ -393,7 +390,7 @@ describe("Routing to", () => {
   xdescribe("'/debug/redux' path", () => {
     it("routes to <ReduxDebug> component", () => {
       navigateToPath("/debug/redux");
-      assert.lengthOf(appWrapper.find(ReduxDebug), 1);
+      expect(appWrapper.find(ReduxDebug).length).toBe(1);
     });
   });
 
@@ -401,14 +398,14 @@ describe("Routing to", () => {
     it("routes to <CustomChart> component", () => {
       navigateToPath("/debug/chart");
       // assert.lengthOf(appWrapper.find(Debug), 1);
-      assert.lengthOf(appWrapper.find(CustomChart), 1);
+      expect(appWrapper.find(CustomChart).length).toBe(1);
     });
   });
 
   describe("'/debug/enqueue_range' path", () => {
     it("routes to <EnqueueRange> component", () => {
       navigateToPath("/debug/enqueue_range");
-      assert.lengthOf(appWrapper.find(EnqueueRange), 1);
+      expect(appWrapper.find(EnqueueRange).length).toBe(1);
     });
   });
 
@@ -418,111 +415,111 @@ describe("Routing to", () => {
   describe("'/raft' path", () => {
     it("routes to <Raft> component", () => {
       navigateToPath("/raft");
-      assert.lengthOf(appWrapper.find(Raft), 1);
+      expect(appWrapper.find(Raft).length).toBe(1);
     });
 
     it("redirected to '/raft/ranges'", () => {
       navigateToPath("/raft");
       const location = history.location;
-      assert.equal(location.pathname, "/raft/ranges");
+      expect(location.pathname).toEqual("/raft/ranges");
     });
   });
 
   describe("'/raft/ranges' path", () => {
     it("routes to <RangesMain> component", () => {
       navigateToPath("/raft/ranges");
-      assert.lengthOf(appWrapper.find(RangesMain), 1);
+      expect(appWrapper.find(RangesMain).length).toBe(1);
     });
   });
 
   describe("'/raft/messages/all' path", () => {
     it("routes to <RaftMessages> component", () => {
       navigateToPath("/raft/messages/all");
-      assert.lengthOf(appWrapper.find(RaftMessages), 1);
+      expect(appWrapper.find(RaftMessages).length).toBe(1);
     });
   });
 
   describe("'/raft/messages/node/:${nodeIDAttr}' path", () => {
     it("routes to <RaftMessages> component", () => {
       navigateToPath("/raft/messages/node/node-id-attr");
-      assert.lengthOf(appWrapper.find(RaftMessages), 1);
+      expect(appWrapper.find(RaftMessages).length).toBe(1);
     });
   });
 
   describe("'/reports/problemranges' path", () => {
     it("routes to <ProblemRanges> component", () => {
       navigateToPath("/reports/problemranges");
-      assert.lengthOf(appWrapper.find(ProblemRanges), 1);
+      expect(appWrapper.find(ProblemRanges).length).toBe(1);
     });
   });
 
   describe("'/reports/problemranges/:nodeIDAttr' path", () => {
     it("routes to <ProblemRanges> component", () => {
       navigateToPath("/reports/problemranges/1");
-      assert.lengthOf(appWrapper.find(ProblemRanges), 1);
+      expect(appWrapper.find(ProblemRanges).length).toBe(1);
     });
   });
 
   describe("'/reports/localities' path", () => {
     it("routes to <Localities> component", () => {
       navigateToPath("/reports/localities");
-      assert.lengthOf(appWrapper.find(Localities), 1);
+      expect(appWrapper.find(Localities).length).toBe(1);
     });
   });
 
   describe("'/reports/nodes' path", () => {
     it("routes to <Nodes> component", () => {
       navigateToPath("/reports/nodes");
-      assert.lengthOf(appWrapper.find(Nodes), 1);
+      expect(appWrapper.find(Nodes).length).toBe(1);
     });
   });
 
   describe("'/reports/nodes/history' path", () => {
     it("routes to <DecommissionedNodeHistory> component", () => {
       navigateToPath("/reports/nodes/history");
-      assert.lengthOf(appWrapper.find(DecommissionedNodeHistory), 1);
+      expect(appWrapper.find(DecommissionedNodeHistory).length).toBe(1);
     });
   });
 
   describe("'/reports/network' path", () => {
     it("routes to <Network> component", () => {
       navigateToPath("/reports/network");
-      assert.lengthOf(appWrapper.find(Network), 1);
+      expect(appWrapper.find(Network).length).toBe(1);
     });
   });
 
   describe("'/reports/network/:nodeIDAttr' path", () => {
     it("routes to <Network> component", () => {
       navigateToPath("/reports/network/1");
-      assert.lengthOf(appWrapper.find(Network), 1);
+      expect(appWrapper.find(Network).length).toBe(1);
     });
   });
 
   describe("'/reports/settings' path", () => {
     it("routes to <Settings> component", () => {
       navigateToPath("/reports/settings");
-      assert.lengthOf(appWrapper.find(Settings), 1);
+      expect(appWrapper.find(Settings).length).toBe(1);
     });
   });
 
   describe("'/reports/certificates/:nodeIDAttr' path", () => {
     it("routes to <Certificates> component", () => {
       navigateToPath("/reports/certificates/1");
-      assert.lengthOf(appWrapper.find(Certificates), 1);
+      expect(appWrapper.find(Certificates).length).toBe(1);
     });
   });
 
   describe("'/reports/range/:nodeIDAttr' path", () => {
     it("routes to <Range> component", () => {
       navigateToPath("/reports/range/1");
-      assert.lengthOf(appWrapper.find(Range), 1);
+      expect(appWrapper.find(Range).length).toBe(1);
     });
   });
 
   describe("'/reports/stores/:nodeIDAttr' path", () => {
     it("routes to <Stores> component", () => {
       navigateToPath("/reports/stores/1");
-      assert.lengthOf(appWrapper.find(Stores), 1);
+      expect(appWrapper.find(Stores).length).toBe(1);
     });
   });
 
@@ -533,7 +530,7 @@ describe("Routing to", () => {
     it("redirected to '/metrics/overview/cluster'", () => {
       navigateToPath("/cluster");
       const location = history.location;
-      assert.equal(location.pathname, "/metrics/overview/cluster");
+      expect(location.pathname).toEqual("/metrics/overview/cluster");
     });
   });
 
@@ -542,7 +539,9 @@ describe("Routing to", () => {
       const dashboardNameAttr = "some-dashboard-name";
       navigateToPath(`/cluster/all/${dashboardNameAttr}`);
       const location = history.location;
-      assert.equal(location.pathname, `/metrics/${dashboardNameAttr}/cluster`);
+      expect(location.pathname).toEqual(
+        `/metrics/${dashboardNameAttr}/cluster`,
+      );
     });
   });
 
@@ -552,8 +551,7 @@ describe("Routing to", () => {
       const nodeIDAttr = 1;
       navigateToPath(`/cluster/node/${nodeIDAttr}/${dashboardNameAttr}`);
       const location = history.location;
-      assert.equal(
-        location.pathname,
+      expect(location.pathname).toEqual(
         `/metrics/${dashboardNameAttr}/node/${nodeIDAttr}`,
       );
     });
@@ -563,7 +561,7 @@ describe("Routing to", () => {
     it("redirected to '/overview/list'", () => {
       navigateToPath("/cluster/nodes");
       const location = history.location;
-      assert.equal(location.pathname, "/overview/list");
+      expect(location.pathname).toEqual("/overview/list");
     });
   });
 
@@ -572,7 +570,7 @@ describe("Routing to", () => {
       const nodeIDAttr = 1;
       navigateToPath(`/cluster/nodes/${nodeIDAttr}`);
       const location = history.location;
-      assert.equal(location.pathname, `/node/${nodeIDAttr}`);
+      expect(location.pathname).toEqual(`/node/${nodeIDAttr}`);
     });
   });
 
@@ -581,7 +579,7 @@ describe("Routing to", () => {
       const nodeIDAttr = 1;
       navigateToPath(`/cluster/nodes/${nodeIDAttr}/logs`);
       const location = history.location;
-      assert.equal(location.pathname, `/node/${nodeIDAttr}/logs`);
+      expect(location.pathname).toEqual(`/node/${nodeIDAttr}/logs`);
     });
   });
 
@@ -589,7 +587,7 @@ describe("Routing to", () => {
     it("redirected to '/events'", () => {
       navigateToPath("/cluster/events");
       const location = history.location;
-      assert.equal(location.pathname, "/events");
+      expect(location.pathname).toEqual("/events");
     });
   });
 
@@ -597,14 +595,14 @@ describe("Routing to", () => {
     it("redirected to '/overview/list'", () => {
       navigateToPath("/cluster/nodes");
       const location = history.location;
-      assert.equal(location.pathname, "/overview/list");
+      expect(location.pathname).toEqual("/overview/list");
     });
   });
 
   describe("'/unknown-url' path", () => {
     it("routes to <errorMessage> component", () => {
       navigateToPath("/some-random-ulr");
-      assert.lengthOf(appWrapper.find(NotFound), 1);
+      expect(appWrapper.find(NotFound).length).toBe(1);
     });
   });
 
@@ -612,8 +610,7 @@ describe("Routing to", () => {
     it("redirected to '/sql-activity?tab=Statements'", () => {
       navigateToPath("/statements");
       const location = history.location;
-      assert.equal(
-        location.pathname + location.search,
+      expect(location.pathname + location.search).toEqual(
         "/sql-activity?tab=Statements",
       );
     });
@@ -623,8 +620,7 @@ describe("Routing to", () => {
     it("redirected to '/sql-activity?tab=Sessions'", () => {
       navigateToPath("/sessions");
       const location = history.location;
-      assert.equal(
-        location.pathname + location.search,
+      expect(location.pathname + location.search).toEqual(
         "/sql-activity?tab=Sessions",
       );
     });
@@ -634,8 +630,7 @@ describe("Routing to", () => {
     it("redirected to '/sql-activity?tab=Transactions'", () => {
       navigateToPath("/transactions");
       const location = history.location;
-      assert.equal(
-        location.pathname + location.search,
+      expect(location.pathname + location.search).toEqual(
         "/sql-activity?tab=Transactions",
       );
     });

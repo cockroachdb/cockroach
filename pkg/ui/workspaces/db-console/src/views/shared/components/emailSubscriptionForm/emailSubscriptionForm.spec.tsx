@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
 import sinon, { SinonSpy } from "sinon";
 import classNames from "classnames/bind";
@@ -58,22 +57,22 @@ describe("EmailSubscriptionForm", () => {
         .find(`button.${cx("crl-button")}`)
         .first();
       buttonComponent.simulate("click");
-      assert.isTrue(onSubmitHandler.notCalled);
+      expect(onSubmitHandler.notCalled).toBe(true);
     });
 
     it("submit button is disabled", () => {
       const buttonComponent = wrapper
         .find(`button.${cx("crl-button")}.${cx("crl-button--disabled")}`)
         .first();
-      assert.isTrue(buttonComponent.exists());
+      expect(buttonComponent.exists()).toBe(true);
     });
 
     it("validation message is shown", () => {
       const validationMessageWrapper = wrapper
         .find(".crl-input__text--error-message")
         .first();
-      assert.isTrue(validationMessageWrapper.exists());
-      assert.equal(validationMessageWrapper.text(), "Invalid email address.");
+      expect(validationMessageWrapper.exists()).toBe(true);
+      expect(validationMessageWrapper.text()).toEqual("Invalid email address.");
     });
   });
 });

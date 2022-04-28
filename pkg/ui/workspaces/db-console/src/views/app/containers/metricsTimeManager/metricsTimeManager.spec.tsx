@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { assert } from "chai";
 import { shallow } from "enzyme";
 import * as sinon from "sinon";
 import moment from "moment";
@@ -40,8 +39,8 @@ describe("<MetricsTimeManager>", function() {
 
   it("resets time window immediately it is empty", function() {
     getManager();
-    assert.isTrue(spy.calledOnce);
-    assert.deepEqual(spy.firstCall[0], {
+    expect(spy.calledOnce).toBe(true);
+    expect(spy.firstCall[0]).toEqual({
       start: now().subtract(state.scale.windowSize),
       end: now(),
     });
@@ -56,8 +55,8 @@ describe("<MetricsTimeManager>", function() {
     };
 
     getManager();
-    assert.isTrue(spy.calledOnce);
-    assert.deepEqual(spy.firstCall[0], {
+    expect(spy.calledOnce).toBe(true);
+    expect(spy.firstCall[0]).toEqual({
       start: now().subtract(state.scale.windowSize),
       end: now(),
     });
@@ -72,8 +71,8 @@ describe("<MetricsTimeManager>", function() {
     state.metricsTime.shouldUpdateMetricsWindowFromScale = true;
 
     getManager();
-    assert.isTrue(spy.calledOnce);
-    assert.deepEqual(spy.firstCall[0], {
+    expect(spy.calledOnce).toBe(true);
+    expect(spy.firstCall[0]).toEqual({
       start: now().subtract(state.scale.windowSize),
       end: now(),
     });
@@ -87,13 +86,13 @@ describe("<MetricsTimeManager>", function() {
     };
 
     getManager();
-    assert.isTrue(spy.notCalled);
+    expect(spy.notCalled).toBe(true);
 
     // Wait 11 milliseconds, then verify that window was updated.
     return new Promise<void>((resolve, _reject) => {
       setTimeout(() => {
-        assert.isTrue(spy.calledOnce);
-        assert.deepEqual(spy.firstCall[0], {
+        expect(spy.calledOnce).toBe(true);
+        expect(spy.firstCall[0]).toEqual({
           start: now().subtract(state.scale.windowSize),
           end: now(),
         });
@@ -112,7 +111,7 @@ describe("<MetricsTimeManager>", function() {
     };
 
     const manager = getManager();
-    assert.isTrue(spy.notCalled);
+    expect(spy.notCalled).toBe(true);
 
     // Set new props on currentWindow. The previous timeout should be abandoned.
     state.metricsTime.currentWindow = {
@@ -123,13 +122,13 @@ describe("<MetricsTimeManager>", function() {
     manager.setProps({
       timeWindow: state,
     });
-    assert.isTrue(spy.notCalled);
+    expect(spy.notCalled).toBe(true);
 
     // Wait 11 milliseconds, then verify that window was updated a single time.
     return new Promise<void>((resolve, _reject) => {
       setTimeout(() => {
-        assert.isTrue(spy.calledOnce);
-        assert.deepEqual(spy.firstCall[0], {
+        expect(spy.calledOnce).toBe(true);
+        expect(spy.firstCall[0]).toEqual({
           start: now().subtract(state.scale.windowSize),
           end: now(),
         });

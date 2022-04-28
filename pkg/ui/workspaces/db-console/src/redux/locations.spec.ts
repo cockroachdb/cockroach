@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
-
 import * as protos from "src/js/protos";
 import { ILocation, selectLocations, selectLocationTree } from "./locations";
 
@@ -70,7 +68,7 @@ describe("selectLocations", function() {
       },
     };
 
-    assert.deepEqual(selectLocations(state), []);
+    expect(selectLocations(state)).toEqual([]);
   });
 
   // Data must still be returned while the state is invalid to avoid
@@ -87,8 +85,7 @@ describe("selectLocations", function() {
     const state = makeStateWithLocations(locationData);
     state.cachedData.locations.valid = false;
 
-    assert.deepEqual(
-      selectLocations(state).map(climbOutOfTheMorass),
+    expect(selectLocations(state).map(climbOutOfTheMorass)).toEqual(
       locationData,
     );
   });
@@ -96,7 +93,7 @@ describe("selectLocations", function() {
   it("returns an empty array if location data is null", function() {
     const state = makeStateWithLocations(null);
 
-    assert.deepEqual(selectLocations(state).map(climbOutOfTheMorass), []);
+    expect(selectLocations(state).map(climbOutOfTheMorass)).toEqual([]);
   });
 
   it("returns location data if valid", function() {
@@ -112,7 +109,7 @@ describe("selectLocations", function() {
 
     const result = selectLocations(state).map(climbOutOfTheMorass);
 
-    assert.deepEqual(result, locationData);
+    expect(result).toEqual(locationData);
   });
 });
 
@@ -120,7 +117,7 @@ describe("selectLocationTree", function() {
   it("returns an empty object if locations are empty", function() {
     const state = makeStateWithLocations([]);
 
-    assert.deepEqual(selectLocationTree(state), {});
+    expect(selectLocationTree(state)).toEqual({});
   });
 
   it("makes a key for each locality tier in locations", function() {
@@ -175,8 +172,8 @@ describe("selectLocationTree", function() {
 
     const tree = selectLocationTree(state);
 
-    assert.deepEqual(climbOutOfTheMorass(tree.country.US), us);
-    assert.deepEqual(climbOutOfTheMorass(tree.city.NYC), nyc);
-    assert.deepEqual(climbOutOfTheMorass(tree.city.SF), sf);
+    expect(climbOutOfTheMorass(tree.country.US)).toEqual(us);
+    expect(climbOutOfTheMorass(tree.city.NYC)).toEqual(nyc);
+    expect(climbOutOfTheMorass(tree.city.SF)).toEqual(sf);
   });
 });

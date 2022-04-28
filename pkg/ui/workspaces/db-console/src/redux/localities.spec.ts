@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
-
 import { selectLocalityTree, LocalityTier } from "./localities";
 
 function makeStateWithLocalities(localities: LocalityTier[][]) {
@@ -43,7 +41,7 @@ describe("selectLocalityTree", function() {
     assert.isEmpty(tree.tiers);
     assert.isEmpty(tree.localities);
 
-    assert.lengthOf(tree.nodes, 1);
+    expect(tree.nodes.length).toBe(1);
   });
 
   it("organizes nodes by locality", function() {
@@ -65,15 +63,15 @@ describe("selectLocalityTree", function() {
     const usEast1 = regions["us-east-1"];
 
     assert.isEmpty(usEast1.localities);
-    assert.deepEqual(usEast1.tiers, [{ key: "region", value: "us-east-1" }]);
+    expect(usEast1.tiers).toEqual([{ key: "region", value: "us-east-1" }]);
 
-    assert.lengthOf(usEast1.nodes, 1);
+    expect(usEast1.nodes.length).toBe(1);
 
     const usEast2 = regions["us-east-2"];
 
     assert.isEmpty(usEast2.localities);
-    assert.deepEqual(usEast2.tiers, [{ key: "region", value: "us-east-2" }]);
+    expect(usEast2.tiers).toEqual([{ key: "region", value: "us-east-2" }]);
 
-    assert.lengthOf(usEast2.nodes, 1);
+    expect(usEast2.nodes.length).toBe(1);
   });
 });
