@@ -79,10 +79,26 @@ func (i *interner) remove(ctx context.Context, id internerID) {
 
 	marshalled, err := protoutil.Marshal(&conf)
 	if err != nil {
-		log.Infof(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	delete(i.idToConfig, id)
 	delete(i.idToRefCount, id)
 	delete(i.configToID, string(marshalled))
+}
+
+func (i *interner) copy() *interner {
+	copiedInterner := newInterner()
+	copiedInterner.internIDAlloc = i.internIDAlloc
+
+	for k, v := range i.configToID {
+		copiedInterner.configToID[k] = v
+	}
+	for k, v := range i.idToConfig {
+		copiedInterner.idToConfig[k] = v
+	}
+	for k, v := range i.idToRefCount {
+		copiedInterner.idToRefCount[k] = v
+	}
+	return copiedInterner
 }

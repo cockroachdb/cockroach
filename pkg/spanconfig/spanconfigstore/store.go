@@ -37,7 +37,7 @@ var EnabledSetting = settings.RegisterBoolSetting(
 
 // Store is an in-memory data structure to store, retrieve, and incrementally
 // update the span configuration state. Internally, it makes use of an interval
-// tree based spanConfigStore to store non-overlapping span configurations that
+// btree based spanConfigStore to store non-overlapping span configurations that
 // target keyspans. It's safe for concurrent use.
 type Store struct {
 	mu struct {
@@ -88,7 +88,11 @@ func (s *Store) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) ro
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.mu.spanConfigStore.computeSplitKey(ctx, start, end)
+	splitKey, err := s.mu.spanConfigStore.computeSplitKey(start, end)
+	if err != nil {
+		log.FatalfDepth(ctx, 3, "unable to compute split key: %v", err)
+	}
+	return splitKey
 }
 
 // GetSpanConfigForKey is part of the spanconfig.StoreReader interface.
@@ -139,14 +143,14 @@ func (s *Store) ForEachOverlappingSpanConfig(
 	})
 }
 
-// Copy returns a copy of the Store.
-func (s *Store) Copy(ctx context.Context) *Store {
+// Clone returns a copy of the Store.
+func (s *Store) Clone() *Store {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	clone := New(s.fallback, s.settings, s.knobs)
-	clone.mu.spanConfigStore = s.mu.spanConfigStore.copy(ctx)
-	clone.mu.systemSpanConfigStore = s.mu.systemSpanConfigStore.copy()
+	clone.mu.spanConfigStore = s.mu.spanConfigStore.clone()
+	clone.mu.systemSpanConfigStore = s.mu.systemSpanConfigStore.clone()
 	return clone
 }
 

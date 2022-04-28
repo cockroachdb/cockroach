@@ -120,8 +120,8 @@ func (s *systemSpanConfigStore) combine(
 	return config, nil
 }
 
-// copy returns a copy of the system span config store.
-func (s *systemSpanConfigStore) copy() *systemSpanConfigStore {
+// clone returns a copy of the system span config store.
+func (s *systemSpanConfigStore) clone() *systemSpanConfigStore {
 	clone := newSystemSpanConfigStore()
 	for k := range s.store {
 		clone.store[k] = s.store[k]
