@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -212,7 +212,7 @@ func makeTable(useColFamilies bool) (catalog.TableDescriptor, error) {
 	var testTableDesc = descpb.TableDescriptor{
 		Name:       "abcd",
 		ID:         descpb.ID(tableID),
-		Privileges: catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		Privileges: catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 		Version:    1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "a", ID: 1, Type: types.Int},

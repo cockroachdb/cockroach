@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -55,7 +55,7 @@ func authGSS(
 
 	// Update the incoming connection with the GSS username. We'll expect
 	// to see this value come back to the mapper function below.
-	if u, err := security.MakeSQLUsernameFromUserInput(gssUser, security.UsernameValidation); err != nil {
+	if u, err := username.MakeSQLUsernameFromUserInput(gssUser, username.PurposeValidation); err != nil {
 		return nil, err
 	} else {
 		behaviors.SetReplacementIdentity(u)
@@ -82,7 +82,7 @@ func authGSS(
 	}
 
 	behaviors.SetAuthenticator(func(
-		_ context.Context, _ security.SQLUsername, _ bool, _ pgwire.PasswordRetrievalFn,
+		_ context.Context, _ username.SQLUsername, _ bool, _ pgwire.PasswordRetrievalFn,
 	) error {
 		// Enforce krb_realm option, if any.
 		if realms := entry.GetOptions("krb_realm"); len(realms) > 0 {
@@ -140,28 +140,28 @@ func checkEntry(_ *settings.Values, entry hba.Entry) error {
 }
 
 // stripRealm removes the realm data, if any, from the provided username.
-func stripRealm(u security.SQLUsername) (security.SQLUsername, error) {
+func stripRealm(u username.SQLUsername) (username.SQLUsername, error) {
 	norm := u.Normalized()
 	if idx := strings.Index(norm, "@"); idx != -1 {
 		norm = norm[:idx]
 	}
-	return security.MakeSQLUsernameFromUserInput(norm, security.UsernameValidation)
+	return username.MakeSQLUsernameFromUserInput(norm, username.PurposeValidation)
 }
 
 // stripRealmMapper is a pgwire.RoleMapper that just strips the trailing
 // realm information, if any, from the gssapi username.
 func stripRealmMapper(
-	_ context.Context, systemIdentity security.SQLUsername,
-) ([]security.SQLUsername, error) {
+	_ context.Context, systemIdentity username.SQLUsername,
+) ([]username.SQLUsername, error) {
 	ret, err := stripRealm(systemIdentity)
-	return []security.SQLUsername{ret}, err
+	return []username.SQLUsername{ret}, err
 }
 
 // stripAndDelegateMapper wraps a delegate pgwire.RoleMapper such that
 // the incoming identity has its realm information stripped before the
 // next mapping is applied.
 func stripAndDelegateMapper(delegate pgwire.RoleMapper) pgwire.RoleMapper {
-	return func(ctx context.Context, systemIdentity security.SQLUsername) ([]security.SQLUsername, error) {
+	return func(ctx context.Context, systemIdentity username.SQLUsername) ([]username.SQLUsername, error) {
 		next, err := stripRealm(systemIdentity)
 		if err != nil {
 			return nil, err

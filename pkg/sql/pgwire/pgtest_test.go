@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -44,7 +44,7 @@ func TestPGTest(t *testing.T) {
 				s.Stopper().Stop(ctx)
 			}
 			addr = s.ServingSQLAddr()
-			user = security.RootUser
+			user = username.RootUser
 			// None of the tests read that much data, so we hardcode the max message
 			// size to something small. This lets us test the handling of large
 			// query inputs. See the large_input test.

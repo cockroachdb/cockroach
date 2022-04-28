@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
@@ -73,7 +73,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 		tenantState.TestTenantInterface, err = testServer.StartTenant(ctx, tenantArgs)
 		require.NoError(h.t, err)
 
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(h.t, tenantState.SQLAddr(), "Tenant", url.User(security.RootUser))
+		pgURL, cleanupPGUrl := sqlutils.PGUrl(h.t, tenantState.SQLAddr(), "Tenant", url.User(username.RootUser))
 		tenantSQLDB, err := gosql.Open("postgres", pgURL.String())
 		require.NoError(h.t, err)
 

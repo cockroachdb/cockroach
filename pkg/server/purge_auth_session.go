@@ -15,7 +15,7 @@ import (
 	math_rand "math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -124,7 +124,7 @@ RETURNING 1
 		ctx,
 		"delete-old-expired-sessions",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		deleteOldExpiredSessionsStmt,
 		purgeTime,
 		limit,
@@ -136,7 +136,7 @@ RETURNING 1
 		ctx,
 		"delete-old-revoked-sessions",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		deleteOldRevokedSessionsStmt,
 		purgeTime,
 		limit,
@@ -148,7 +148,7 @@ RETURNING 1
 		ctx,
 		"delete-sessions-timeout",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		deleteSessionsAutoLogoutStmt,
 		autoLogoutTime,
 		limit,

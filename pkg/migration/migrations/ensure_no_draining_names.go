@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -58,7 +58,7 @@ func ensureNoDrainingNames(
 			ctx,
 			"ensure-no-draining-names",
 			nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			query,
 		)
 		if err != nil {

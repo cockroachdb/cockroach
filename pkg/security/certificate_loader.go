@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -480,9 +481,9 @@ func validateDualPurposeNodeCert(ci *CertInfo) error {
 	// The first certificate is used in client auth.
 	cert := ci.ParsedCertificates[0]
 	principals := getCertificatePrincipals(cert)
-	if !Contains(principals, NodeUser) {
+	if !Contains(principals, username.NodeUser) {
 		return errors.Errorf("client/server node certificate has principals %q, expected %q",
-			principals, NodeUser)
+			principals, username.NodeUser)
 	}
 
 	return nil

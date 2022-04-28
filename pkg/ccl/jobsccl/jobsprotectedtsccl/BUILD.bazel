@@ -1,45 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
-    name = "jobsccl_test",
-    srcs = [
-        "jobs_protected_ts_test.go",
-        "main_test.go",
-    ],
-    deps = [
-        "//pkg/base",
-        "//pkg/ccl/kvccl/kvtenantccl",
-        "//pkg/ccl/storageccl",
-        "//pkg/ccl/utilccl",
-        "//pkg/jobs",
-        "//pkg/jobs/jobspb",
-        "//pkg/jobs/jobsprotectedts",
-        "//pkg/keys",
-        "//pkg/kv",
-        "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb",
-        "//pkg/roachpb",
-        "//pkg/scheduledjobs",
-        "//pkg/security",
-        "//pkg/security/securitytest",
-        "//pkg/server",
-        "//pkg/sql",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/testutils",
-        "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
-        "//pkg/testutils/testcluster",
-        "//pkg/util/hlc",
-        "//pkg/util/leaktest",
-        "//pkg/util/randutil",
-        "//pkg/util/uuid",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//types",
-        "@com_github_stretchr_testify//require",
-    ],
-)
-
-go_test(
     name = "jobsprotectedtsccl_test",
     srcs = [
         "jobs_protected_ts_test.go",
@@ -61,6 +22,7 @@ go_test(
         "//pkg/scheduledjobs",
         "//pkg/security",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",

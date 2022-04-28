@@ -15,7 +15,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -73,7 +73,7 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (clisqlclient.Conn,
 	}
 
 	// If there is no user in the URL already, fill in the default user.
-	sqlCtx.User = security.RootUser
+	sqlCtx.User = username.RootUser
 
 	// If there is no application name already, use the provided one.
 	sqlCtx.ApplicationName = catconstants.ReportableAppNamePrefix + appName

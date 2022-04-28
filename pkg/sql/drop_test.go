@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -204,7 +204,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	// TODO (lucy): Maybe this test API should use an offset starting
 	// from the most recent job instead.
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUserName(),
+		Username:    username.RootUserName(),
 		Description: "DROP DATABASE t CASCADE",
 		DescriptorIDs: descpb.IDs{
 			tbDesc.GetID(), dbDesc.GetID(), dbDesc.GetSchemaID(tree.PublicSchema),
@@ -323,7 +323,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset,
 		jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
-			Username:    security.RootUserName(),
+			Username:    username.RootUserName(),
 			Description: "DROP DATABASE t CASCADE",
 			DescriptorIDs: descpb.IDs{
 				tbDesc.GetID(), tb2Desc.GetID(), dbDesc.GetID(), dbDesc.GetSchemaID(tree.PublicSchema),
@@ -357,7 +357,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
-			Username:    security.NodeUserName(),
+			Username:    username.NodeUserName(),
 			Description: "GC for DROP DATABASE t CASCADE",
 			DescriptorIDs: descpb.IDs{
 				tbDesc.GetID(), tb2Desc.GetID(), dbDesc.GetID(),
@@ -385,7 +385,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
-			Username:    security.NodeUserName(),
+			Username:    username.NodeUserName(),
 			Description: "GC for DROP DATABASE t CASCADE",
 			DescriptorIDs: descpb.IDs{
 				tbDesc.GetID(), tb2Desc.GetID(), dbDesc.GetID(),
@@ -455,7 +455,7 @@ func TestDropIndex(t *testing.T) {
 	const migrationJobOffset = 0
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    security.RootUserName(),
+		Username:    username.RootUserName(),
 		Description: `DROP INDEX t.public.kv@foo`,
 		DescriptorIDs: descpb.IDs{
 			tableDesc.GetID(),
@@ -485,7 +485,7 @@ func TestDropIndex(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-			Username:    security.RootUserName(),
+			Username:    username.RootUserName(),
 			Description: `DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),
@@ -495,7 +495,7 @@ func TestDropIndex(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
-			Username:    security.RootUserName(),
+			Username:    username.RootUserName(),
 			Description: `GC for temporary index used during index backfill`,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),
@@ -505,7 +505,7 @@ func TestDropIndex(t *testing.T) {
 		}
 
 		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
-			Username:    security.RootUserName(),
+			Username:    username.RootUserName(),
 			Description: `GC for DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),
@@ -651,7 +651,7 @@ func TestDropTable(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0,
 		jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
-			Username:    security.RootUserName(),
+			Username:    username.RootUserName(),
 			Description: `DROP TABLE t.public.kv`,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),
@@ -737,7 +737,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 		if err := jobutils.VerifySystemJob(t, sqlRun, i,
 			jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUserName(),
+				Username:    username.RootUserName(),
 				Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
 				DescriptorIDs: descpb.IDs{
 					descs[i].GetID(),
@@ -768,7 +768,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		// Ensure that the job is marked as succeeded.
 		if err := jobutils.VerifySystemJob(t, sqlRun, i,
 			jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUserName(),
+				Username:    username.RootUserName(),
 				Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
 				DescriptorIDs: descpb.IDs{
 					descs[i].GetID(),
@@ -782,7 +782,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			return jobutils.VerifySystemJob(t, sqlRun, 2*i+1,
 				jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
-					Username:    security.NodeUserName(),
+					Username:    username.NodeUserName(),
 					Description: fmt.Sprintf(`GC for DROP TABLE t.public.%s`, descs[i].GetName()),
 					DescriptorIDs: descpb.IDs{
 						descs[i].GetID(),

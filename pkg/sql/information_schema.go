@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -242,7 +242,7 @@ func populateRoleHierarchy(
 	}
 	return forEachRoleMembership(
 		ctx, p.ExecCfg().InternalExecutor, p.Txn(),
-		func(role, member security.SQLUsername, isAdmin bool) error {
+		func(role, member username.SQLUsername, isAdmin bool) error {
 			// The ADMIN OPTION is inherited through the role hierarchy, and grantee
 			// is supposed to be the role that has the ADMIN OPTION. The current user
 			// inherits all the ADMIN OPTIONs of its ancestors.
@@ -973,9 +973,9 @@ var builtinTypePrivileges = []struct {
 	grantee *tree.DString
 	kind    *tree.DString
 }{
-	{tree.NewDString(security.RootUser), tree.NewDString(privilege.ALL.String())},
-	{tree.NewDString(security.AdminRole), tree.NewDString(privilege.ALL.String())},
-	{tree.NewDString(security.PublicRole), tree.NewDString(privilege.USAGE.String())},
+	{tree.NewDString(username.RootUser), tree.NewDString(privilege.ALL.String())},
+	{tree.NewDString(username.AdminRole), tree.NewDString(privilege.ALL.String())},
+	{tree.NewDString(username.PublicRole), tree.NewDString(privilege.USAGE.String())},
 }
 
 // Custom; PostgreSQL has data_type_privileges, which only shows one row per type,
@@ -1322,7 +1322,7 @@ var informationSchemaUserPrivileges = virtualSchemaTable{
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(dbDesc catalog.DatabaseDescriptor) error {
 				dbNameStr := tree.NewDString(dbDesc.GetName())
-				for _, u := range []string{security.RootUser, security.AdminRole} {
+				for _, u := range []string{username.RootUser, username.AdminRole} {
 					grantee := tree.NewDString(u)
 					for _, p := range privilege.GetValidPrivilegesForObject(privilege.Table).SortedNames() {
 						if err := addRow(
@@ -2601,7 +2601,7 @@ GROUP BY
 func forEachRole(
 	ctx context.Context,
 	p *planner,
-	fn func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error,
+	fn func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error,
 ) error {
 	query := forEachRoleQuery(ctx, p)
 
@@ -2631,8 +2631,8 @@ func forEachRole(
 		options := roleOptions{roleOptionsJSON}
 
 		// system tables already contain normalized usernames.
-		username := security.MakeSQLUsernameFromPreNormalizedString(string(usernameS))
-		if err := fn(username, bool(*isRole), options, defaultSettings); err != nil {
+		userName := username.MakeSQLUsernameFromPreNormalizedString(string(usernameS))
+		if err := fn(userName, bool(*isRole), options, defaultSettings); err != nil {
 			return err
 		}
 	}
@@ -2644,7 +2644,7 @@ func forEachRoleMembership(
 	ctx context.Context,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
-	fn func(role, member security.SQLUsername, isAdmin bool) error,
+	fn func(role, member username.SQLUsername, isAdmin bool) error,
 ) (retErr error) {
 	const query = `SELECT "role", "member", "isAdmin" FROM system.role_members`
 	it, err := ie.QueryIterator(ctx, "read-members", txn, query)
@@ -2664,8 +2664,8 @@ func forEachRoleMembership(
 
 		// The names in the system tables are already normalized.
 		if err := fn(
-			security.MakeSQLUsernameFromPreNormalizedString(string(roleName)),
-			security.MakeSQLUsernameFromPreNormalizedString(string(memberName)),
+			username.MakeSQLUsernameFromPreNormalizedString(string(roleName)),
+			username.MakeSQLUsernameFromPreNormalizedString(string(memberName)),
 			bool(*isAdmin)); err != nil {
 			return err
 		}

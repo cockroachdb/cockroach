@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 )
 
 // GetFloatPrec computes a precision suitable for a call to
@@ -82,6 +82,6 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 }
 
 // User retrieves the current user.
-func (s *SessionData) User() security.SQLUsername {
+func (s *SessionData) User() username.SQLUsername {
 	return s.UserProto.Decode()
 }

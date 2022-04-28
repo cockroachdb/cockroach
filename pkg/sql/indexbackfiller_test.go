@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -507,7 +507,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 			j, err = jr.CreateAdoptableJobWithTxn(ctx, jobs.Record{
 				Description:   "testing",
 				Statements:    []string{"testing"},
-				Username:      security.RootUserName(),
+				Username:      username.RootUserName(),
 				DescriptorIDs: []descpb.ID{tableID},
 				Details: jobspb.SchemaChangeDetails{
 					DescID:          tableID,

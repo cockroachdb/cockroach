@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -85,7 +85,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	pgBaseURL := url.URL{
 		Scheme:   "postgres",
 		Host:     net.JoinHostPort(host, port),
-		User:     url.User(security.RootUser),
+		User:     url.User(username.RootUser),
 		RawQuery: "sslmode=disable",
 	}
 
@@ -156,7 +156,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	pgBaseURL := url.URL{
 		Scheme:   "postgres",
 		Host:     net.JoinHostPort(host, port),
-		User:     url.User(security.RootUser),
+		User:     url.User(username.RootUser),
 		RawQuery: "sslmode=disable",
 	}
 
@@ -253,7 +253,7 @@ func TestPGUnwrapError(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -281,7 +281,7 @@ func TestPGPrepareFail(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -333,7 +333,7 @@ func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -544,22 +544,22 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("isRole", "BOOL", false, false, "", "{primary}", false),
 		}},
 		{"SELECT database_name, owner FROM [SHOW DATABASES]", []preparedQueryTest{
-			baseTest.Results("d", security.RootUser).
-				Results("defaultdb", security.RootUser).
-				Results("postgres", security.RootUser).
-				Results("system", security.NodeUser),
+			baseTest.Results("d", username.RootUser).
+				Results("defaultdb", username.RootUser).
+				Results("postgres", username.RootUser).
+				Results("system", username.NodeUser),
 		}},
 		{"SHOW GRANTS ON system.users", []preparedQueryTest{
-			baseTest.Results("system", "public", "users", security.AdminRole, "DELETE", true).
-				Results("system", "public", "users", security.AdminRole, "GRANT", true).
-				Results("system", "public", "users", security.AdminRole, "INSERT", true).
-				Results("system", "public", "users", security.AdminRole, "SELECT", true).
-				Results("system", "public", "users", security.AdminRole, "UPDATE", true).
-				Results("system", "public", "users", security.RootUser, "DELETE", true).
-				Results("system", "public", "users", security.RootUser, "GRANT", true).
-				Results("system", "public", "users", security.RootUser, "INSERT", true).
-				Results("system", "public", "users", security.RootUser, "SELECT", true).
-				Results("system", "public", "users", security.RootUser, "UPDATE", true),
+			baseTest.Results("system", "public", "users", username.AdminRole, "DELETE", true).
+				Results("system", "public", "users", username.AdminRole, "GRANT", true).
+				Results("system", "public", "users", username.AdminRole, "INSERT", true).
+				Results("system", "public", "users", username.AdminRole, "SELECT", true).
+				Results("system", "public", "users", username.AdminRole, "UPDATE", true).
+				Results("system", "public", "users", username.RootUser, "DELETE", true).
+				Results("system", "public", "users", username.RootUser, "GRANT", true).
+				Results("system", "public", "users", username.RootUser, "INSERT", true).
+				Results("system", "public", "users", username.RootUser, "SELECT", true).
+				Results("system", "public", "users", username.RootUser, "UPDATE", true),
 		}},
 		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false).
@@ -851,7 +851,7 @@ func TestPGPreparedQuery(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1342,7 +1342,7 @@ func TestPGPrepareNameQual(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1394,7 +1394,7 @@ func TestPGPrepareInvalidate(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1461,7 +1461,7 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1505,7 +1505,7 @@ func TestPGCommandTags(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1629,7 +1629,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 
 	// Setup pgwire client.
 	pgURL, cleanupFn := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	const minbytes = 20
@@ -1732,7 +1732,7 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 	}
 	pgURL := url.URL{
 		Scheme:   "postgres",
-		User:     url.User(security.RootUser),
+		User:     url.User(username.RootUser),
 		Host:     net.JoinHostPort("", port),
 		RawQuery: options.Encode(),
 	}
@@ -1747,7 +1747,7 @@ func TestPGWireResultChange(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1819,7 +1819,7 @@ func TestSessionParameters(t *testing.T) {
 	port, _ := strconv.Atoi(ports)
 
 	connCfg, err := pgx.ParseConfig(
-		fmt.Sprintf("postgresql://%s@%s:%d/defaultdb?sslmode=disable", security.RootUser, host, port),
+		fmt.Sprintf("postgresql://%s@%s:%d/defaultdb?sslmode=disable", username.RootUser, host, port),
 	)
 	require.NoError(t, err)
 	connCfg.TLSConfig = nil
@@ -2014,7 +2014,7 @@ func TestFailPrepareFailsTxn(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())

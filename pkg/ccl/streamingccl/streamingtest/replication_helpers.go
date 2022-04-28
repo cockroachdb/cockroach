@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -206,7 +206,7 @@ SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
 	_, tenantConn := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
 
 	// Sink to read data from.
-	sink, cleanupSink := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	sink, cleanupSink := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 
 	h := &ReplicationHelper{
 		SysServer: s,

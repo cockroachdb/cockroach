@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -398,8 +398,8 @@ func TestExportShow(t *testing.T) {
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/show' FROM SELECT database_name, owner FROM [SHOW DATABASES] ORDER BY database_name`)
 	content := readFileByGlob(t, filepath.Join(dir, "show", exportFilePattern))
 
-	if expected, got := "defaultdb,"+security.RootUser+"\npostgres,"+security.RootUser+"\nsystem,"+
-		security.NodeUser+"\n", string(content); expected != got {
+	if expected, got := "defaultdb,"+username.RootUser+"\npostgres,"+username.RootUser+"\nsystem,"+
+		username.NodeUser+"\n", string(content); expected != got {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}
 }

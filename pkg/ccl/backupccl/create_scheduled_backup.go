@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -537,7 +537,7 @@ func checkForExistingBackupsInCollection(
 
 func makeBackupSchedule(
 	env scheduledjobs.JobSchedulerEnv,
-	owner security.SQLUsername,
+	owner username.SQLUsername,
 	label string,
 	recurrence *scheduleRecurrence,
 	details jobspb.ScheduleDetails,
@@ -629,7 +629,7 @@ func checkScheduleAlreadyExists(
 ) (bool, error) {
 
 	row, err := p.ExecCfg().InternalExecutor.QueryRowEx(ctx, "check-sched",
-		p.Txn(), sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		p.Txn(), sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("SELECT count(schedule_name) FROM %s WHERE schedule_name = '%s'",
 			scheduledjobs.ProdJobSchedulerEnv.ScheduledJobsTableName(), scheduleLabel))
 

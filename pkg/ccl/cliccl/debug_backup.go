@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -280,7 +280,7 @@ func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClie
 }
 
 func externalStorageFromURIFactory(
-	ctx context.Context, uri string, user security.SQLUsername,
+	ctx context.Context, uri string, user username.SQLUsername,
 ) (cloud.ExternalStorage, error) {
 	defaultSettings := &cluster.Settings{}
 	defaultSettings.SV.Init(ctx, nil /* opaque */)
@@ -297,7 +297,7 @@ func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManif
 	// upgraded from the old FK representation, or even older formats). If more
 	// fields are added to the output, the table descriptors may need to be
 	// upgraded.
-	backupManifest, _, err := backupccl.ReadBackupManifestFromURI(ctx, nil /* mem */, path, security.RootUserName(),
+	backupManifest, _, err := backupccl.ReadBackupManifestFromURI(ctx, nil /* mem */, path, username.RootUserName(),
 		externalStorageFromURIFactory, nil)
 	if err != nil {
 		return backupccl.BackupManifest{}, err
@@ -331,7 +331,7 @@ func runListBackupsCmd(cmd *cobra.Command, args []string) error {
 		path = nodelocal.MakeLocalStorageURI(path)
 	}
 	ctx := context.Background()
-	store, err := externalStorageFromURIFactory(ctx, path, security.RootUserName())
+	store, err := externalStorageFromURIFactory(ctx, path, username.RootUserName())
 	if err != nil {
 		return errors.Wrapf(err, "connect to external storage")
 	}
@@ -394,7 +394,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 	// Search for incrementals in the old default location, i.e. the given path.
 	oldIncURI := *uri
 	oldIncURI.Path = backupccl.JoinURLPath(oldIncURI.Path, subdir)
-	baseStore, err := externalStorageFromURIFactory(ctx, oldIncURI.String(), security.RootUserName())
+	baseStore, err := externalStorageFromURIFactory(ctx, oldIncURI.String(), username.RootUserName())
 	if err != nil {
 		return errors.Wrapf(err, "connect to external storage")
 	}
@@ -411,7 +411,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 	// Search for incrementals in the new default location, i.e. the "/incrementals" subdir.
 	newIncURI := *uri
 	newIncURI.Path = backupccl.JoinURLPath(newIncURI.Path, backupccl.DefaultIncrementalsSubdir, subdir)
-	incStore, err := externalStorageFromURIFactory(ctx, newIncURI.String(), security.RootUserName())
+	incStore, err := externalStorageFromURIFactory(ctx, newIncURI.String(), username.RootUserName())
 	if err != nil {
 		return errors.Wrapf(err, "connect to external storage")
 	}
@@ -430,7 +430,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 	rows := make([][]string, 0)
 	for i, path := range priorPaths {
 		uri.Path = path
-		stores[i], err = externalStorageFromURIFactory(ctx, uri.String(), security.RootUserName())
+		stores[i], err = externalStorageFromURIFactory(ctx, uri.String(), username.RootUserName())
 		if err != nil {
 			return errors.Wrapf(err, "connect to external storage")
 		}
@@ -486,7 +486,7 @@ func runExportDataCmd(cmd *cobra.Command, args []string) error {
 		fullyQualifiedTableName,
 		manifests,
 		endTime,
-		security.RootUserName(),
+		username.RootUserName(),
 		codec,
 	)
 	if err != nil {
@@ -559,7 +559,7 @@ func showData(
 
 	if debugBackupArgs.destination != "" {
 		dir, file := filepath.Split(debugBackupArgs.destination)
-		store, err := externalStorageFromURIFactory(ctx, dir, security.RootUserName())
+		store, err := externalStorageFromURIFactory(ctx, dir, username.RootUserName())
 		if err != nil {
 			return errors.Wrapf(err, "unable to open store to write files: %s", debugBackupArgs.destination)
 		}

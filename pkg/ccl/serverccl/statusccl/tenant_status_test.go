@@ -24,7 +24,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -173,7 +173,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	}
 
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, nonTenant.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
+		t, nonTenant.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer cleanupGoDB()
 	sqlDB, err = gosql.Open("postgres", pgURL.String())
 	require.NoError(t, err)

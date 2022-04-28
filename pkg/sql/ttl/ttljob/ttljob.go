@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -555,7 +555,7 @@ func fetchStatistics(
 				c.opName,
 				nil,
 				sessiondata.InternalExecutorOverride{
-					User:             security.RootUserName(),
+					User:             username.RootUserName(),
 					QualityOfService: &qosLevel,
 				},
 				fmt.Sprintf(c.query, details.TableID, aost.String()),

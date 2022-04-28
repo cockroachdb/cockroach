@@ -17,7 +17,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/gcp"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/errors"
 )
@@ -37,7 +37,7 @@ func GetStorage(ctx context.Context, cfg FixtureConfig) (cloud.ExternalStorage, 
 
 	s, err := cloud.ExternalStorageFromURI(ctx, cfg.ObjectPathToURI(),
 		base.ExternalIODirConfig{}, clustersettings.MakeClusterSettings(),
-		nil, security.SQLUsername{}, nil, nil, nil)
+		nil, username.SQLUsername{}, nil, nil, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, storageError)
 	}

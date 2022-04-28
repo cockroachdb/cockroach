@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationjob"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -98,7 +98,7 @@ var _ migration.JobDeps = (*Manager)(nil)
 // from the current version to the target one.
 func (m *Manager) Migrate(
 	ctx context.Context,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	from, to clusterversion.ClusterVersion,
 	updateSystemVersionSetting sql.UpdateVersionSystemSettingHook,
 ) error {
@@ -287,7 +287,7 @@ func forEveryNodeUntilClusterStable(
 }
 
 func (m *Manager) runMigration(
-	ctx context.Context, user security.SQLUsername, version clusterversion.ClusterVersion,
+	ctx context.Context, user username.SQLUsername, version clusterversion.ClusterVersion,
 ) error {
 	mig, exists := m.GetMigration(version)
 	if !exists {
@@ -306,7 +306,7 @@ func (m *Manager) runMigration(
 
 func (m *Manager) getOrCreateMigrationJob(
 	ctx context.Context,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	version clusterversion.ClusterVersion,
 	name string,
 ) (alreadyCompleted bool, jobID jobspb.JobID, _ error) {

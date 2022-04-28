@@ -11,7 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessiondata",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
