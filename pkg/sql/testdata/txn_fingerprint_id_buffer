@@ -1,0 +1,95 @@
+# Initialize TxnFingerprintIDBuffer
+init capacity=10
+----
+buffer_size: 0
+
+# Add four TxnFingerprintIDs: 5, 6, 7, 8
+enqueue id=05
+----
+buffer_size: 1
+
+enqueue id=06
+----
+buffer_size: 2
+
+enqueue id=07
+----
+buffer_size: 3
+
+enqueue id=08
+----
+buffer_size: 4
+
+dequeue
+----
+txnFingerprintID: 5
+
+dequeue
+----
+txnFingerprintID: 6
+
+# There should be 2 valid TxnFingerprintIDs
+show
+----
+0 -> 0
+1 -> 0
+2 -> 7
+3 -> 8
+4 -> 0
+5 -> 0
+6 -> 0
+7 -> 0
+8 -> 0
+9 -> 0
+
+enqueue id=09
+----
+buffer_size: 3
+
+getAllTxnFingerprintIDs
+----
+[7 8 9]
+
+# Increase the TxnFingerprintIDBufferCapacity cluster setting
+override capacity=12
+----
+TxnFingerprintIDBufferCapacity: 12
+
+# Enqueue another txnFingerprintID so the override takes effect
+enqueue id=10
+----
+buffer_size: 4
+
+# The buffer should look like this now:
+show
+----
+0 -> 7
+1 -> 8
+2 -> 9
+3 -> 10
+4 -> 0
+5 -> 0
+6 -> 0
+7 -> 0
+8 -> 0
+9 -> 0
+10 -> 0
+11 -> 0
+
+# Decrease the TxnFingerprintIDBufferCapacity cluster setting to one below the
+# size of the buffer
+override capacity=3
+----
+TxnFingerprintIDBufferCapacity: 3
+
+# Enqueue another id to overwrite the 0th txnFingerprintID
+enqueue id=11
+----
+buffer_size: 3
+
+# The buffer should look like this now:
+show
+----
+0 -> 11
+1 -> 8
+2 -> 9

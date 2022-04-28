@@ -223,6 +223,7 @@ go_library(
         "topk.go",
         "truncate.go",
         "txn_state.go",
+        "txn_fingerprint_id_buffer.go",
         "type_change.go",
         "unary.go",
         "union.go",
