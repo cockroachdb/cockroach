@@ -10,10 +10,7 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/types"
 
 // GetRenderColName computes a name for a result column.
 // A name specified with AS takes priority, otherwise a name
@@ -24,7 +21,7 @@ import (
 // The algorithm is borrowed from FigureColName() in PostgreSQL 10, to be
 // found in src/backend/parser/parse_target.c. We reuse this algorithm
 // to provide names more compatible with PostgreSQL.
-func GetRenderColName(searchPath sessiondata.SearchPath, target SelectExpr) (string, error) {
+func GetRenderColName(searchPath SearchPath, target SelectExpr) (string, error) {
 	if target.As != "" {
 		return string(target.As), nil
 	}
@@ -47,7 +44,7 @@ func GetRenderColName(searchPath sessiondata.SearchPath, target SelectExpr) (str
 //
 // The algorithm is borrowed from FigureColnameInternal in PostgreSQL 10,
 // to be found in src/backend/parser/parse_target.c.
-func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string, error) {
+func ComputeColNameInternal(sp SearchPath, target Expr) (int, string, error) {
 	// The order of the type cases below mirrors that of PostgreSQL's
 	// own code, so that code reviews can more easily compare the two
 	// implementations.
@@ -170,9 +167,7 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 // computeColNameInternalSubquery handles the cases of subqueries that
 // cannot be handled by the function above due to the Go typing
 // differences.
-func computeColNameInternalSubquery(
-	sp sessiondata.SearchPath, s SelectStatement,
-) (int, string, error) {
+func computeColNameInternalSubquery(sp SearchPath, s SelectStatement) (int, string, error) {
 	switch e := s.(type) {
 	case *ParenSelect:
 		return computeColNameInternalSubquery(sp, e.Select.Select)

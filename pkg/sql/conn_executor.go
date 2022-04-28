@@ -2794,7 +2794,7 @@ func (ex *connExecutor) resetPlanner(
 		p.semaCtx.IntervalStyleEnabled = ex.sessionData().IntervalStyleEnabled
 		p.semaCtx.DateStyleEnabled = ex.sessionData().DateStyleEnabled
 	}
-	p.semaCtx.SearchPath = ex.sessionData().SearchPath
+	p.semaCtx.SearchPath = &ex.sessionData().SearchPath
 	p.semaCtx.Annotations = nil
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.TableNameResolver = p
