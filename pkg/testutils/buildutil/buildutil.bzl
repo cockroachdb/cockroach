@@ -78,7 +78,23 @@ _deps_rule = rule(
   },
 )
 
+def _validate_disallowed_prefixes(prefixes):
+  validated = []
+  repo_prefix = "github.com/cockroachdb/cockroach/"
+  short_prefix = "pkg/"
+  for prefix in prefixes:
+    if prefix.startswith(repo_prefix):
+      validated.append(prefix)
+    elif prefix.startswith(short_prefix):
+      validated.append(repo_prefix + prefix)
+    else:
+      fail("invalid prefix {}: should start with {} or {}".format(
+        prefix, repo_prefix, short_prefix,
+      ))
+  return validated
+
 def disallowed_imports_test(src, disallowed_list = [], disallowed_prefixes = []):
+  disallowed_prefixes = _validate_disallowed_prefixes(disallowed_prefixes)
   script = src.strip(":") + "_disallowed_imports_script"
   _deps_rule(
     name = script,
