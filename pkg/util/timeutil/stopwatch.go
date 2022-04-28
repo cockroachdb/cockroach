@@ -81,6 +81,15 @@ func (w *StopWatch) Elapsed() time.Duration {
 	return w.mu.elapsed
 }
 
+// StartedAt returns a bool indicating if the stopwatch has started, and the
+// time at which the stopwatch was started. If the stopwatch is stopped,
+// the time returned is the last time the stopwatch was started.
+func (w *StopWatch) StartedAt() (started bool, startedAt time.Time) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.mu.started, w.mu.startedAt
+}
+
 // TestTimeSource is a source of time that remembers when it was created (in
 // terms of the real time) and returns the time based on its creation time and
 // the number of "advances" it has had. It is used for testing only.

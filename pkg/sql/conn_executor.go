@@ -886,6 +886,8 @@ func (s *Server) newConnExecutor(
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
 		txnIDCacheWriter:          s.txnIDCache,
+		totalActiveTimeStopWatch:  timeutil.NewStopWatch(),
+		txnFingerprintIDCache:     NewTxnFingerprintIDCache(s.cfg.Settings, sessionRootMon),
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -1500,6 +1502,14 @@ type connExecutor struct {
 	// txnIDCacheWriter is used to write txnidcache.ResolvedTxnID to the
 	// Transaction ID Cache.
 	txnIDCacheWriter txnidcache.Writer
+
+	// txnFingerprintIDCache is used to track the most recent
+	// txnFingerprintIDs executed in this session.
+	txnFingerprintIDCache *TxnFingerprintIDCache
+
+	// totalActiveTimeStopWatch tracks the total active time of the session.
+	// This is defined as the time spent executing transactions and statements.
+	totalActiveTimeStopWatch *timeutil.StopWatch
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -2890,6 +2900,10 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// Start of the transaction, so no statements were executed earlier.
 		// Bump the txn counter for logging.
 		ex.extraTxnState.txnCounter++
+
+		// Session is considred active when executing a transaction.
+		ex.totalActiveTimeStopWatch.Start()
+
 		if !ex.server.cfg.Codec.ForSystemTenant() {
 			// Update the leased descriptor collection with the current sqlliveness.Session.
 			// This is required in the multi-tenant environment to update the transaction
@@ -3133,6 +3147,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		remoteStr = sd.RemoteAddr.String()
 	}
 
+	txnFingerprintIDs := ex.txnFingerprintIDCache.GetAllTxnFingerprintIDs()
+	sessionActiveTime := ex.totalActiveTimeStopWatch.Elapsed()
+	if started, startedAt := ex.totalActiveTimeStopWatch.StartedAt(); started {
+		sessionActiveTime = time.Duration(sessionActiveTime.Nanoseconds() + timeutil.Since(startedAt).Nanoseconds())
+	}
+
 	return serverpb.Session{
 		Username:                   sd.SessionUser().Normalized(),
 		ClientAddress:              remoteStr,
@@ -3140,12 +3160,15 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		Start:                      ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
 		ActiveQueries:              activeQueries,
 		ActiveTxn:                  activeTxnInfo,
+		NumTxnsExecuted:            int32(ex.extraTxnState.txnCounter),
+		TxnFingerprintIDs:          txnFingerprintIDs,
 		LastActiveQuery:            lastActiveQuery,
 		ID:                         ex.sessionID.GetBytes(),
 		AllocBytes:                 ex.mon.AllocBytes(),
 		MaxAllocBytes:              ex.mon.MaximumBytes(),
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,
 		Status:                     status,
+		TotalActiveTime:            sessionActiveTime,
 	}
 }
 
