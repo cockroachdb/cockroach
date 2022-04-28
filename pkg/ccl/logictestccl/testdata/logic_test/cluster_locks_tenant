@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: 3node-tenant
 
 # Create a table, write a row, lock it, then switch users.
 statement ok
@@ -9,21 +9,6 @@ GRANT ALL ON t TO testuser
 
 statement ok
 INSERT INTO t VALUES ('a', 'val1'), ('b', 'val2'), ('c', 'val3'), ('l', 'val4'), ('m', 'val5'), ('p', 'val6'), ('s', 'val7'), ('t', 'val8'), ('z', 'val9')
-
-query TTT colnames
-ALTER TABLE t SPLIT AT VALUES ('d'), ('r')
-----
-key                   pretty  split_enforced_until
-[242 137 18 100 0 1]  /"d"    2262-04-11 23:47:16.854776 +0000 +0000
-[242 137 18 114 0 1]  /"r"    2262-04-11 23:47:16.854776 +0000 +0000
-
-query TTTI colnames,rowsort
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
-----
-start_key  end_key  replicas  lease_holder
-NULL       /"d"     {1}       1
-/"d"       /"r"     {1}       1
-/"r"       NULL     {1}       1
 
 # Also create an additional user with VIEWACTIVITYREDACTED, with only permissions on t
 statement ok
@@ -65,15 +50,6 @@ SELECT txns.id FROM crdb_internal.cluster_transactions txns WHERE txns.session_i
 let $txn2
 SELECT txns.id FROM crdb_internal.cluster_transactions txns WHERE txns.session_id = '$testuser_session'
 
-let $r1
-SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key='/"d"'
-
-let $r2
-SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key='/"r"'
-
-let $r3
-SELECT range_id FROM [SHOW RANGES FROM TABLE t] WHERE end_key IS NULL
-
 user testuser
 
 query TT async,rowsort readReq
@@ -97,50 +73,38 @@ SELECT user_name, query, phase FROM crdb_internal.cluster_queries WHERE txn_id='
 user_name   query             phase
 testuser    SELECT * FROM t   executing
 
-# looking at each range and transaction separately, validate the expected results in the lock table
+# looking at each transaction separately, validate the expected results in the lock table
 query TTTTTTBB colnames,retry
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn1'
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn1'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           /Table/106/1/"b"/0  Exclusive       Replicated    true    true
 test          public      t           /Table/106/1/"c"/0  Exclusive       Replicated    true    false
+test          public      t           /Table/106/1/"l"/0  Exclusive       Replicated    true    false
+test          public      t           /Table/106/1/"m"/0  Exclusive       Replicated    true    false
+test          public      t           /Table/106/1/"p"/0  Exclusive       Replicated    true    false
+test          public      t           /Table/106/1/"s"/0  Exclusive       Replicated    true    false
+test          public      t           /Table/106/1/"t"/0  Exclusive       Replicated    true    false
 
 query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn2'
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn2'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           /Table/106/1/"b"/0  None            Replicated    false   true
-
-# since SQL incorporates limits which disables parallel batches, the select from txn2 will not reach subsequent ranges.
-
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r2 AND txn_id='$txn1'
-----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r2 AND txn_id='$txn2'
-----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r3 AND txn_id='$txn1'
-----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r3 AND txn_id='$txn2'
-----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 
 # check that we can't see keys, potentially revealing PII, with VIEWACTIVITYREDACTED
 user testuser2
 
 query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn1'
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn1'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           ·                   Exclusive       Replicated    true    true
+test          public      t           ·                   Exclusive       Replicated    true    false
+test          public      t           ·                   Exclusive       Replicated    true    false
+test          public      t           ·                   Exclusive       Replicated    true    false
+test          public      t           ·                   Exclusive       Replicated    true    false
+test          public      t           ·                   Exclusive       Replicated    true    false
 test          public      t           ·                   Exclusive       Replicated    true    false
 
 user root
@@ -148,7 +112,7 @@ user root
 query I
 SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 't'
 ----
-3
+8
 
 statement ok
 COMMIT
@@ -211,46 +175,26 @@ SELECT user_name, query, phase FROM crdb_internal.cluster_queries WHERE txn_id='
 user_name   query                                         phase
 testuser    DELETE FROM t WHERE (k >= 'b') AND (k < 'x')  executing
 
-# looking at each range and transaction separately, validate the expected results in the lock table
+# looking at each transaction separately, validate the expected results in the lock table
 query TTTTTTBB colnames,retry
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn3'
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn3'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           /Table/106/1/"a"/0  Exclusive       Unreplicated  true    false
 test          public      t           /Table/106/1/"b"/0  Exclusive       Unreplicated  true    true
 test          public      t           /Table/106/1/"c"/0  Exclusive       Unreplicated  true    false
-
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn4'
-----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-test          public      t           /Table/106/1/"b"/0  Exclusive       Unreplicated  false   true
-
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r2 AND txn_id='$txn3'
-----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           /Table/106/1/"l"/0  Exclusive       Unreplicated  true    false
 test          public      t           /Table/106/1/"m"/0  Exclusive       Unreplicated  true    false
 test          public      t           /Table/106/1/"p"/0  Exclusive       Unreplicated  true    false
-
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r2 AND txn_id='$txn4'
-----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-
-query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r3 AND txn_id='$txn3'
-----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           /Table/106/1/"s"/0  Exclusive       Unreplicated  true    false
 test          public      t           /Table/106/1/"t"/0  Exclusive       Unreplicated  true    false
 test          public      t           /Table/106/1/"z"/0  Exclusive       Unreplicated  true    false
 
 query TTTTTTBB colnames
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r3 AND txn_id='$txn4'
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn4'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
+test          public      t           /Table/106/1/"b"/0  Exclusive       Unreplicated  false   true
 
 query I
 SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 't'

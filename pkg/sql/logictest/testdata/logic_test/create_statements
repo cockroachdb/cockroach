@@ -250,6 +250,39 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
    jaeger_json STRING NULL,
    INDEX cluster_inflight_traces_trace_id_idx (trace_id ASC) STORING (node_id, root_op_name, trace_str, jaeger_json)
 )  {}  {}
+CREATE TABLE crdb_internal.cluster_locks (
+   range_id INT8 NOT NULL,
+   table_id INT8 NOT NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   table_name STRING NULL,
+   index_name STRING NULL,
+   lock_key BYTES NOT NULL,
+   lock_key_pretty STRING NOT NULL,
+   txn_id UUID NULL,
+   ts TIMESTAMP NULL,
+   lock_strength STRING NULL,
+   durability STRING NULL,
+   granted BOOL NULL,
+   contended BOOL NULL,
+   duration INTERVAL NULL
+)  CREATE TABLE crdb_internal.cluster_locks (
+   range_id INT8 NOT NULL,
+   table_id INT8 NOT NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   table_name STRING NULL,
+   index_name STRING NULL,
+   lock_key BYTES NOT NULL,
+   lock_key_pretty STRING NOT NULL,
+   txn_id UUID NULL,
+   ts TIMESTAMP NULL,
+   lock_strength STRING NULL,
+   durability STRING NULL,
+   granted BOOL NULL,
+   contended BOOL NULL,
+   duration INTERVAL NULL
+)  {}  {}
 CREATE TABLE crdb_internal.cluster_queries (
    query_id STRING NULL,
    txn_id UUID NULL,
