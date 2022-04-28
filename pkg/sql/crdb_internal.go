@@ -1910,6 +1910,7 @@ CREATE TABLE crdb_internal.%s (
   application_name   STRING,         -- the name of the application as per SET application_name
   active_queries     STRING,         -- the currently running queries as SQL
   last_active_query  STRING,         -- the query that finished last on this session as SQL
+  num_txns_executed  INT,            -- the number of transactions that were executed so far on this session
   session_start      TIMESTAMP,      -- the time when the session was opened
   oldest_query_start TIMESTAMP,      -- the time when the oldest query in the session was started
   kv_txn             STRING,         -- the ID of the current KV transaction
@@ -2011,6 +2012,7 @@ func populateSessionsTable(
 			tree.NewDString(session.ApplicationName),
 			tree.NewDString(activeQueries.String()),
 			tree.NewDString(session.LastActiveQuery),
+			tree.NewDInt(tree.DInt(session.NumTxnsExecuted)),
 			startTSDatum,
 			oldestStartDatum,
 			kvTxnIDDatum,
@@ -2036,6 +2038,7 @@ func populateSessionsTable(
 				tree.DNull,                             // application name
 				tree.NewDString("-- "+rpcErr.Message),  // active queries
 				tree.DNull,                             // last active query
+				tree.DNull,                             // num txns executed
 				tree.DNull,                             // session start
 				tree.DNull,                             // oldest_query_start
 				tree.DNull,                             // kv_txn

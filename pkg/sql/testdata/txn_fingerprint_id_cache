@@ -1,0 +1,77 @@
+# Initialize TxnFingerprintIDCache
+init capacity=10
+----
+size: 0
+
+# Add four TxnFingerprintIDs: 5, 6, 7, 8
+enqueue id=05
+----
+size: 1
+
+enqueue id=06
+----
+size: 2
+
+enqueue id=07
+----
+size: 3
+
+enqueue id=08
+----
+size: 4
+
+# There should be 4 valid TxnFingerprintIDs
+show
+----
+[8 7 6 5]
+
+enqueue id=09
+----
+size: 5
+
+enqueue id=10
+----
+size: 6
+
+show
+----
+[10 9 8 7 6 5]
+
+# Decrease the TxnFingerprintIDCacheCapacity cluster setting to below current size.
+override capacity=3
+----
+TxnFingerprintIDCacheCapacity: 3
+
+# Enqueue another id to
+enqueue id=11
+----
+size: 3
+
+# The cache should have the most recent 3 insertions.
+show
+----
+[11 10 9]
+
+# Check that retrieving IDs also properly truncates the cache when the capacity has
+# been changed.
+# Increase capacity back up to 5, insert some values, then decrease capacity to 2 and
+# retrieve all ids.
+override capacity=5
+----
+TxnFingerprintIDCacheCapacity: 5
+
+enqueue id=12
+----
+size: 4
+
+enqueue id=13
+----
+size: 5
+
+override capacity=2
+----
+TxnFingerprintIDCacheCapacity: 2
+
+show
+----
+[13 12]
