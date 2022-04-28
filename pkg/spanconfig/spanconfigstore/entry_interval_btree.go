@@ -22,7 +22,7 @@ import (
 )
 
 // nilT is a nil instance of the Template type.
-var nilT *spanConfigStoreEntry
+var nilT *entry
 
 const (
 	degree   = 16
@@ -43,7 +43,7 @@ const (
 //  c ==  0  if (a.Key(), a.EndKey(), a.ID()) == (b.Key(), b.EndKey(), b.ID())
 //  c ==  1  if (a.Key(), a.EndKey(), a.ID()) >  (b.Key(), b.EndKey(), b.ID())
 //
-func cmp(a, b *spanConfigStoreEntry) int {
+func cmp(a, b *entry) int {
 	c := bytes.Compare(a.Key(), b.Key())
 	if c != 0 {
 		return c
@@ -81,7 +81,7 @@ func (b keyBound) compare(o keyBound) int {
 	return -1
 }
 
-func (b keyBound) contains(a *spanConfigStoreEntry) bool {
+func (b keyBound) contains(a *entry) bool {
 	c := bytes.Compare(a.Key(), b.key)
 	if c == 0 {
 		return b.inc
@@ -89,7 +89,7 @@ func (b keyBound) contains(a *spanConfigStoreEntry) bool {
 	return c < 0
 }
 
-func upperBound(c *spanConfigStoreEntry) keyBound {
+func upperBound(c *entry) keyBound {
 	if len(c.EndKey()) != 0 {
 		return keyBound{key: c.EndKey()}
 	}
@@ -101,7 +101,7 @@ type leafNode struct {
 	count int16
 	leaf  bool
 	max   keyBound
-	items [maxItems]*spanConfigStoreEntry
+	items [maxItems]*entry
 }
 
 type node struct {
@@ -221,7 +221,7 @@ func (n *node) clone() *node {
 	return c
 }
 
-func (n *node) insertAt(index int, item *spanConfigStoreEntry, nd *node) {
+func (n *node) insertAt(index int, item *entry, nd *node) {
 	if index < int(n.count) {
 		copy(n.items[index+1:n.count+1], n.items[index:n.count])
 		if !n.leaf {
@@ -235,7 +235,7 @@ func (n *node) insertAt(index int, item *spanConfigStoreEntry, nd *node) {
 	n.count++
 }
 
-func (n *node) pushBack(item *spanConfigStoreEntry, nd *node) {
+func (n *node) pushBack(item *entry, nd *node) {
 	n.items[n.count] = item
 	if !n.leaf {
 		n.children[n.count+1] = nd
@@ -243,7 +243,7 @@ func (n *node) pushBack(item *spanConfigStoreEntry, nd *node) {
 	n.count++
 }
 
-func (n *node) pushFront(item *spanConfigStoreEntry, nd *node) {
+func (n *node) pushFront(item *entry, nd *node) {
 	if !n.leaf {
 		copy(n.children[1:n.count+2], n.children[:n.count+1])
 		n.children[0] = nd
@@ -255,7 +255,7 @@ func (n *node) pushFront(item *spanConfigStoreEntry, nd *node) {
 
 // removeAt removes a value at a given index, pulling all subsequent values
 // back.
-func (n *node) removeAt(index int) (*spanConfigStoreEntry, *node) {
+func (n *node) removeAt(index int) (*entry, *node) {
 	var child *node
 	if !n.leaf {
 		child = n.children[index+1]
@@ -270,7 +270,7 @@ func (n *node) removeAt(index int) (*spanConfigStoreEntry, *node) {
 }
 
 // popBack removes and returns the last element in the list.
-func (n *node) popBack() (*spanConfigStoreEntry, *node) {
+func (n *node) popBack() (*entry, *node) {
 	n.count--
 	out := n.items[n.count]
 	n.items[n.count] = nilT
@@ -283,7 +283,7 @@ func (n *node) popBack() (*spanConfigStoreEntry, *node) {
 }
 
 // popFront removes and returns the first element in the list.
-func (n *node) popFront() (*spanConfigStoreEntry, *node) {
+func (n *node) popFront() (*entry, *node) {
 	n.count--
 	var child *node
 	if !n.leaf {
@@ -300,7 +300,7 @@ func (n *node) popFront() (*spanConfigStoreEntry, *node) {
 // find returns the index where the given item should be inserted into this
 // list. 'found' is true if the item already exists in the list at the given
 // index.
-func (n *node) find(item *spanConfigStoreEntry) (index int, found bool) {
+func (n *node) find(item *entry) (index int, found bool) {
 	// Logic copied from sort.Search. Inlining this gave
 	// an 11% speedup on BenchmarkBTreeDeleteInsert.
 	i, j := 0, int(n.count)
@@ -340,7 +340,7 @@ func (n *node) find(item *spanConfigStoreEntry) (index int, found bool) {
 // |         x |     | z         |
 // +-----------+     +-----------+
 //
-func (n *node) split(i int) (*spanConfigStoreEntry, *node) {
+func (n *node) split(i int) (*entry, *node) {
 	out := n.items[i]
 	var next *node
 	if n.leaf {
@@ -375,7 +375,7 @@ func (n *node) split(i int) (*spanConfigStoreEntry, *node) {
 // nodes in the subtree exceed maxItems items. Returns true if an existing item
 // was replaced and false if an item was inserted. Also returns whether the
 // node's upper bound changes.
-func (n *node) insert(item *spanConfigStoreEntry) (replaced, newBound bool) {
+func (n *node) insert(item *entry) (replaced, newBound bool) {
 	i, found := n.find(item)
 	if found {
 		n.items[i] = item
@@ -408,7 +408,7 @@ func (n *node) insert(item *spanConfigStoreEntry) (replaced, newBound bool) {
 
 // removeMax removes and returns the maximum item from the subtree rooted at
 // this node.
-func (n *node) removeMax() *spanConfigStoreEntry {
+func (n *node) removeMax() *entry {
 	if n.leaf {
 		n.count--
 		out := n.items[n.count]
@@ -432,7 +432,7 @@ func (n *node) removeMax() *spanConfigStoreEntry {
 // remove removes an item from the subtree rooted at this node. Returns the item
 // that was removed or nil if no matching item was found. Also returns whether
 // the node's upper bound changes.
-func (n *node) remove(item *spanConfigStoreEntry) (out *spanConfigStoreEntry, newBound bool) {
+func (n *node) remove(item *entry) (out *entry, newBound bool) {
 	i, found := n.find(item)
 	if n.leaf {
 		if found {
@@ -609,7 +609,7 @@ func (n *node) findUpperBound() keyBound {
 // adjustUpperBoundOnInsertion adjusts the upper key bound for this node given
 // an item and an optional child node that was inserted. Returns true is the
 // upper bound was changed and false if not.
-func (n *node) adjustUpperBoundOnInsertion(item *spanConfigStoreEntry, child *node) bool {
+func (n *node) adjustUpperBoundOnInsertion(item *entry, child *node) bool {
 	up := upperBound(item)
 	if child != nil {
 		if up.compare(child.max) < 0 {
@@ -626,7 +626,7 @@ func (n *node) adjustUpperBoundOnInsertion(item *spanConfigStoreEntry, child *no
 // adjustUpperBoundOnRemoval adjusts the upper key bound for this node given an
 // item and an optional child node that was removed. Returns true is the upper
 // bound was changed and false if not.
-func (n *node) adjustUpperBoundOnRemoval(item *spanConfigStoreEntry, child *node) bool {
+func (n *node) adjustUpperBoundOnRemoval(item *entry, child *node) bool {
 	up := upperBound(item)
 	if child != nil {
 		if up.compare(child.max) < 0 {
@@ -693,7 +693,7 @@ func (t *btree) Clone() btree {
 }
 
 // Delete removes an item equal to the passed in item from the tree.
-func (t *btree) Delete(item *spanConfigStoreEntry) {
+func (t *btree) Delete(item *entry) {
 	if t.root == nil || t.root.count == 0 {
 		return
 	}
@@ -713,7 +713,7 @@ func (t *btree) Delete(item *spanConfigStoreEntry) {
 
 // Set adds the given item to the tree. If an item in the tree already equals
 // the given one, it is replaced with the new item.
-func (t *btree) Set(item *spanConfigStoreEntry) {
+func (t *btree) Set(item *entry) {
 	if t.root == nil {
 		t.root = newLeafNode()
 	} else if t.root.count >= maxItems {
@@ -875,7 +875,7 @@ func (i *iterator) ascend() {
 
 // SeekGE seeks to the first item greater-than or equal to the provided
 // item.
-func (i *iterator) SeekGE(item *spanConfigStoreEntry) {
+func (i *iterator) SeekGE(item *entry) {
 	i.reset()
 	if i.n == nil {
 		return
@@ -897,7 +897,7 @@ func (i *iterator) SeekGE(item *spanConfigStoreEntry) {
 }
 
 // SeekLT seeks to the first item less-than the provided item.
-func (i *iterator) SeekLT(item *spanConfigStoreEntry) {
+func (i *iterator) SeekLT(item *entry) {
 	i.reset()
 	if i.n == nil {
 		return
@@ -995,7 +995,7 @@ func (i *iterator) Valid() bool {
 
 // Cur returns the item at the iterator's current position. It is illegal
 // to call Cur if the iterator is not valid.
-func (i *iterator) Cur() *spanConfigStoreEntry {
+func (i *iterator) Cur() *entry {
 	return i.n.items[i.pos]
 }
 
@@ -1056,7 +1056,7 @@ type overlapScan struct {
 
 // FirstOverlap seeks to the first item in the btree that overlaps with the
 // provided search item.
-func (i *iterator) FirstOverlap(item *spanConfigStoreEntry) {
+func (i *iterator) FirstOverlap(item *entry) {
 	i.reset()
 	if i.n == nil {
 		return
@@ -1070,7 +1070,7 @@ func (i *iterator) FirstOverlap(item *spanConfigStoreEntry) {
 
 // NextOverlap positions the iterator to the item immediately following
 // its current position that overlaps with the search item.
-func (i *iterator) NextOverlap(item *spanConfigStoreEntry) {
+func (i *iterator) NextOverlap(item *entry) {
 	if i.n == nil {
 		return
 	}
@@ -1078,7 +1078,7 @@ func (i *iterator) NextOverlap(item *spanConfigStoreEntry) {
 	i.findNextOverlap(item)
 }
 
-func (i *iterator) constrainMinSearchBounds(item *spanConfigStoreEntry) {
+func (i *iterator) constrainMinSearchBounds(item *entry) {
 	k := item.Key()
 	j := sort.Search(int(i.n.count), func(j int) bool {
 		return bytes.Compare(k, i.n.items[j].Key()) <= 0
@@ -1087,7 +1087,7 @@ func (i *iterator) constrainMinSearchBounds(item *spanConfigStoreEntry) {
 	i.o.constrMinPos = int16(j)
 }
 
-func (i *iterator) constrainMaxSearchBounds(item *spanConfigStoreEntry) {
+func (i *iterator) constrainMaxSearchBounds(item *entry) {
 	up := upperBound(item)
 	j := sort.Search(int(i.n.count), func(j int) bool {
 		return !up.contains(i.n.items[j])
@@ -1096,7 +1096,7 @@ func (i *iterator) constrainMaxSearchBounds(item *spanConfigStoreEntry) {
 	i.o.constrMaxPos = int16(j)
 }
 
-func (i *iterator) findNextOverlap(item *spanConfigStoreEntry) {
+func (i *iterator) findNextOverlap(item *entry) {
 	for {
 		if i.pos > i.n.count {
 			// Iterate up tree.

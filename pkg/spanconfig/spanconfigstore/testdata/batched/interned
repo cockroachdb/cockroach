@@ -1,0 +1,81 @@
+# Tests to make sure config interning works as expected. We should be observe
+# the right ref counts for each unique config.
+
+apply
+set [a,b):A
+set [b,c):B
+set [c,d):C
+set [d,e):D
+set [e,f):D
+set [f,g):D
+set [g,h):D
+----
+added [a,b):A
+added [b,c):B
+added [c,d):C
+added [d,e):D
+added [e,f):D
+added [f,g):D
+added [g,h):D
+
+interned
+----
+A (refs = 1)
+B (refs = 1)
+C (refs = 1)
+D (refs = 4)
+
+apply
+delete [e,f)
+delete [b,c)
+----
+deleted [b,c)
+deleted [e,f)
+
+interned
+----
+A (refs = 1)
+C (refs = 1)
+D (refs = 3)
+
+apply
+set [a,b):A
+set [b,c):B
+----
+added [b,c):B
+
+overlapping span=[a,z)
+----
+[a,b):A
+[b,c):B
+[c,d):C
+[d,e):D
+[f,g):D
+[g,h):D
+
+interned
+----
+A (refs = 1)
+B (refs = 1)
+C (refs = 1)
+D (refs = 3)
+
+apply
+set [a,d):A
+----
+deleted [a,b)
+deleted [b,c)
+deleted [c,d)
+added [a,d):A
+
+overlapping span=[a,z)
+----
+[a,d):A
+[d,e):D
+[f,g):D
+[g,h):D
+
+interned
+----
+A (refs = 1)
+D (refs = 3)

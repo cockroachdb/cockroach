@@ -18,71 +18,66 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-type internerID uint64
+type spanConfigKey string
 
 // interner interns span config protos. It's a ref-counted data structure that
 // maintains a single copy of every unique config that that's been added to
-// it. Configs that are maintained are identified/retrivable using an
-// internerID. Configs can also be removed, and if there are no more references
-// to it, we no longer hold onto it in memory.
+// it. Configs can also be removed, and if there are no more references to it,
+// we no longer hold onto it in memory.
 type interner struct {
-	internIDAlloc internerID
-
-	configToID   map[string]internerID
-	idToConfig   map[internerID]roachpb.SpanConfig
-	idToRefCount map[internerID]uint64
+	configToCanonical map[spanConfigKey]*roachpb.SpanConfig
+	refCounts         map[*roachpb.SpanConfig]uint64
 }
 
 func newInterner() *interner {
 	return &interner{
-		configToID:   make(map[string]internerID),
-		idToConfig:   make(map[internerID]roachpb.SpanConfig),
-		idToRefCount: make(map[internerID]uint64),
+		configToCanonical: make(map[spanConfigKey]*roachpb.SpanConfig),
+		refCounts:         make(map[*roachpb.SpanConfig]uint64),
 	}
 }
 
-func (i *interner) add(ctx context.Context, conf roachpb.SpanConfig) internerID {
+func (i *interner) add(ctx context.Context, conf roachpb.SpanConfig) *roachpb.SpanConfig {
 	marshalled, err := protoutil.Marshal(&conf)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 
-	if id, found := i.configToID[string(marshalled)]; found {
-		i.idToRefCount[id]++
-		return id
+	if canonical, found := i.configToCanonical[spanConfigKey(marshalled)]; found {
+		i.refCounts[canonical]++
+		return canonical
 	}
 
-	i.internIDAlloc++
-
-	id := i.internIDAlloc
-	i.configToID[string(marshalled)] = id
-	i.idToConfig[i.internIDAlloc] = conf
-	i.idToRefCount[id] = 1
-	return id
+	i.configToCanonical[spanConfigKey(marshalled)] = &conf
+	i.refCounts[&conf] = 1
+	return &conf
 }
 
-func (i *interner) get(id internerID) (roachpb.SpanConfig, bool) {
-	conf, found := i.idToConfig[id]
-	return conf, found
-}
-
-func (i *interner) remove(ctx context.Context, id internerID) {
-	conf, found := i.idToConfig[id]
-	if !found {
+func (i *interner) remove(ctx context.Context, conf *roachpb.SpanConfig) {
+	if _, found := i.refCounts[conf]; !found {
 		return // nothing to do
 	}
 
-	i.idToRefCount[id]--
-	if i.idToRefCount[id] != 0 {
+	i.refCounts[conf]--
+	if i.refCounts[conf] != 0 {
 		return // nothing to do
 	}
 
-	marshalled, err := protoutil.Marshal(&conf)
+	marshalled, err := protoutil.Marshal(conf)
 	if err != nil {
-		log.Infof(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
-	delete(i.idToConfig, id)
-	delete(i.idToRefCount, id)
-	delete(i.configToID, string(marshalled))
+	delete(i.refCounts, conf)
+	delete(i.configToCanonical, spanConfigKey(marshalled))
+}
+
+func (i *interner) copy() *interner {
+	copiedInterner := newInterner()
+	for k, v := range i.configToCanonical {
+		copiedInterner.configToCanonical[k] = v
+	}
+	for k, v := range i.refCounts {
+		copiedInterner.refCounts[k] = v
+	}
+	return copiedInterner
 }

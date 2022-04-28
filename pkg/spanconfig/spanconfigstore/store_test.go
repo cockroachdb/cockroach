@@ -36,22 +36,21 @@ func (s *Store) TestingApplyInternal(
 
 // TestingSplitKeys returns the computed list of range split points between
 // [start, end).
-func (s *Store) TestingSplitKeys(ctx context.Context, start, end roachpb.RKey) []roachpb.RKey {
+func (s *Store) TestingSplitKeys(tb testing.TB, start, end roachpb.RKey) []roachpb.RKey {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.mu.spanConfigStore.TestingSplitKeys(ctx, start, end)
+	return s.mu.spanConfigStore.TestingSplitKeys(tb, start, end)
 }
 
 // TestingSplitKeys returns the computed list of range split points between
 // [start, end).
-func (s *spanConfigStore) TestingSplitKeys(
-	ctx context.Context, start, end roachpb.RKey,
-) []roachpb.RKey {
+func (s *spanConfigStore) TestingSplitKeys(tb testing.TB, start, end roachpb.RKey) []roachpb.RKey {
 	var splitKeys []roachpb.RKey
 	computeStart := start
 	for {
-		splitKey := s.computeSplitKey(ctx, computeStart, end)
+		splitKey, err := s.computeSplitKey(computeStart, end)
+		require.NoError(tb, err)
 		if splitKey == nil {
 			break
 		}
@@ -100,6 +99,10 @@ func (s *spanConfigStore) TestingSplitKeys(
 // 		[d,f):B
 // 		[f,h):A
 //
+// 		interned
+// 		----
+// 		A (refs = 2)
+// 		B (refs = 1)
 //
 // Text of the form [a,b), {entire-keyspace}, {source=1,target=20}, and [a,b):C
 // correspond to targets {spans, system targets} and span config records; see
@@ -170,7 +173,7 @@ func TestDataDriven(t *testing.T) {
 				span := spanconfigtestutils.ParseSpan(t, spanStr)
 
 				start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
-				splitKeys := store.TestingSplitKeys(ctx, start, end)
+				splitKeys := store.TestingSplitKeys(t, start, end)
 				var b strings.Builder
 				for _, splitKey := range splitKeys {
 					b.WriteString(fmt.Sprintf("key=%s\n", string(splitKey)))
@@ -193,6 +196,14 @@ func TestDataDriven(t *testing.T) {
 					},
 				)
 				return strings.Join(results, "\n")
+
+			case "interned":
+				var b strings.Builder
+				for _, i := range store.testingInterned() {
+					b.WriteString(fmt.Sprintf("%s (refs = %d)\n",
+						spanconfigtestutils.PrintSpanConfig(i.SpanConfig), i.RefCount))
+				}
+				return b.String()
 
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
@@ -248,7 +259,7 @@ func TestStoreClone(t *testing.T) {
 
 	original := New(roachpb.TestingDefaultSpanConfig(), cluster.MakeClusterSettings(), nil)
 	original.Apply(ctx, false, updates...)
-	clone := original.Copy(ctx)
+	clone := original.Clone()
 
 	var originalRecords, clonedRecords []spanconfig.Record
 	_ = original.Iterate(func(rec spanconfig.Record) error {
@@ -272,6 +283,9 @@ func TestStoreClone(t *testing.T) {
 	}
 }
 
+// BenchmarkStoreComputeSplitKey measures how long it takes to compute the split
+// key while varying the total number of span config entries we have to sift
+// through for each computation.
 func BenchmarkStoreComputeSplitKey(b *testing.B) {
 	ctx := context.Background()
 	for _, numEntries := range []int{10_000, 100_000, 1_000_000} {
@@ -310,4 +324,30 @@ func BenchmarkStoreComputeSplitKey(b *testing.B) {
 			}
 		})
 	}
+}
+
+type interned struct {
+	roachpb.SpanConfig
+	RefCount uint64
+}
+
+func (s *Store) testingInterned() []interned {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.mu.spanConfigStore.testingInterned()
+}
+
+func (s *spanConfigStore) testingInterned() []interned {
+	var is []interned
+	for canonical, refs := range s.interner.refCounts {
+		is = append(is, interned{
+			SpanConfig: *canonical,
+			RefCount:   refs,
+		})
+	}
+	sort.Slice(is, func(i, j int) bool {
+		return spanconfigtestutils.PrintSpanConfig(is[i].SpanConfig) < spanconfigtestutils.PrintSpanConfig(is[j].SpanConfig)
+	})
+	return is
 }

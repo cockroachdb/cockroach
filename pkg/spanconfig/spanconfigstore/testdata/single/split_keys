@@ -59,6 +59,14 @@ overlapping span=[a,z)
 [f,g):E
 [g,h):D
 
+interned
+----
+A (refs = 1)
+B (refs = 1)
+C (refs = 1)
+D (refs = 2)
+E (refs = 2)
+
 split-keys span=[a,z)
 ----
 key=b
