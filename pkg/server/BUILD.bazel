@@ -127,6 +127,7 @@ go_library(
         "//pkg/server/goroutinedumper",
         "//pkg/server/heapprofiler",
         "//pkg/server/serverpb",
+        "//pkg/server/serverrules",
         "//pkg/server/settingswatcher",
         "//pkg/server/status",
         "//pkg/server/status/statuspb",

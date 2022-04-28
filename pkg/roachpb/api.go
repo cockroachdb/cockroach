@@ -1429,6 +1429,10 @@ const (
 	// ExternalStorageAuthSpecified is used by ExternalStorage instances to
 	// indicate access is via explicitly provided credentials.
 	ExternalStorageAuthSpecified = "specified"
+
+	// ExternalStorageAuthAssume is used by ExternalStorage instances to
+	// indicate access is via assuming a target IAM Role or Service Account.
+	ExternalStorageAuthAssume = "assume"
 )
 
 // AccessIsWithExplicitAuth returns true if the external storage config carries
