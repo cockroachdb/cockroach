@@ -285,4 +285,7 @@ disallowed_imports_test(
         "//pkg/sql/sessiondata",
         "//pkg/security",
     ],
+    disallowed_prefixes = [
+        "pkg/sql/catalog",
+    ],
 )
