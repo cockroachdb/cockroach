@@ -45,7 +45,7 @@ const (
 // statement execution to determine which statements are outliers and
 // exposes the set of currently retained outliers.
 type Registry struct {
-	st *cluster.Settings
+	detector detector
 
 	// Note that this single mutex places unnecessary constraints on outlier
 	// detection and reporting. We will develop a higher-throughput system
@@ -65,7 +65,7 @@ func New(st *cluster.Settings) *Registry {
 			return size > maxCacheSize
 		},
 	}
-	r := &Registry{st: st}
+	r := &Registry{detector: latencyThresholdDetector{st: st}}
 	r.mu.statements = make(map[clusterunique.ID][]*Outlier_Statement)
 	r.mu.outliers = cache.NewUnorderedCache(config)
 	return r
@@ -98,7 +98,7 @@ func (r *Registry) ObserveTransaction(sessionID clusterunique.ID, txnID uuid.UUI
 
 	hasOutlier := false
 	for _, s := range statements {
-		if s.LatencyInSeconds > LatencyThreshold.Get(&r.st.SV).Seconds() {
+		if r.detector.isOutlier(s) {
 			hasOutlier = true
 		}
 	}
@@ -115,7 +115,7 @@ func (r *Registry) ObserveTransaction(sessionID clusterunique.ID, txnID uuid.UUI
 }
 
 func (r *Registry) enabled() bool {
-	return LatencyThreshold.Get(&r.st.SV) > 0
+	return r.detector.enabled()
 }
 
 // Reader offers read-only access to the currently retained set of outliers.
