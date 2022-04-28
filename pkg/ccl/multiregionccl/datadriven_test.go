@@ -316,8 +316,9 @@ SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'
 						return errors.New(`could not find replica`)
 					}
 					for _, queueName := range []string{"split", "replicate", "raftsnapshot"} {
-						_, processErr, err := store.ManuallyEnqueue(ctx, queueName, repl,
-							true /* skipShouldQueue */)
+						_, processErr, err := store.Enqueue(
+							ctx, queueName, repl, true /* skipShouldQueue */, false, /* async */
+						)
 						if processErr != nil {
 							return processErr
 						}

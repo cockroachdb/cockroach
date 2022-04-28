@@ -1204,11 +1204,8 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 		// because we know that it is the leaseholder (since it is the only voting
 		// replica).
 		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-		recording, processErr, err := store.ManuallyEnqueue(
-			ctx,
-			"replicate",
-			repl,
-			false, /* skipShouldQueue */
+		recording, processErr, err := store.Enqueue(
+			ctx, "replicate", repl, false /* skipShouldQueue */, false, /* async */
 		)
 		if err != nil {
 			log.Errorf(ctx, "err: %s", err.Error())

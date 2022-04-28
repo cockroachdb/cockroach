@@ -159,6 +159,17 @@ func (tq *testQueue) MaybeAddAsync(
 	}
 }
 
+// NB: AddAsync on a testQueue is actually synchronous.
+func (tq *testQueue) AddAsync(ctx context.Context, replI replicaInQueue, prio float64) {
+	repl := replI.(*Replica)
+
+	tq.Lock()
+	defer tq.Unlock()
+	if index := tq.indexOf(repl.RangeID); index == -1 {
+		tq.ranges = append(tq.ranges, repl)
+	}
+}
+
 func (tq *testQueue) MaybeRemove(rangeID roachpb.RangeID) {
 	tq.Lock()
 	defer tq.Unlock()
