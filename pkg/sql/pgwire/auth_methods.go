@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -352,7 +351,7 @@ func scramAuthenticator(
 				// We need to manually report the unimplemented error because it is not
 				// passed through to the client as-is (authn errors are hidden behind
 				// a generic "authn failed" error).
-				sqltelemetry.RecordError(ctx, err, &execCfg.Settings.SV)
+				sql.RecordError(ctx, err, &execCfg.Settings.SV)
 				return err
 			}
 			inputLen, err := rb.GetUint32()

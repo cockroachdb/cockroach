@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -204,7 +203,7 @@ func (ie *InternalExecutor) initConnEx(
 	wg.Add(1)
 	go func() {
 		if err := ex.run(ctx, ie.mon, mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
-			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
+			RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 			errCallback(err)
 		}
 		w.finish()

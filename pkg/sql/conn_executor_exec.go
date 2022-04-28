@@ -1753,7 +1753,7 @@ func (ex *connExecutor) runShowSyntax(
 			commErr = res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
 		},
 		func(ctx context.Context, err error) {
-			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
+			RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 		},
 	)
 	return commErr

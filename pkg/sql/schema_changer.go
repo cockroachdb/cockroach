@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -744,7 +743,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 			log.Warningf(ctx, "waiting to update leases: %+v", err)
 			// As we are dismissing the error, go through the recording motions.
 			// This ensures that any important error gets reported to Sentry, etc.
-			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
+			RecordError(ctx, err, &sc.settings.SV)
 		}
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
@@ -835,7 +834,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 			log.Infof(ctx, "failed to update job status: %+v", err)
 		}
 		// Go through the recording motions. See comment above.
-		sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
+		RecordError(ctx, err, &sc.settings.SV)
 		if jobs.IsPauseSelfError(err) {
 			// For testing only
 			return err
@@ -855,7 +854,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 			log.Warningf(ctx, "unexpected error while waiting for leases to update: %+v", err)
 			// As we are dismissing the error, go through the recording motions.
 			// This ensures that any important error gets reported to Sentry, etc.
-			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
+			RecordError(ctx, err, &sc.settings.SV)
 		}
 	}()
 
@@ -901,7 +900,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 		// From now on, the returned error will be a secondary error of the returned
 		// error, so we'll record the original error now.
 		secondary := errors.Wrap(err, "original error when rolling back mutations")
-		sqltelemetry.RecordError(ctx, secondary, &sc.settings.SV)
+		RecordError(ctx, secondary, &sc.settings.SV)
 		return errors.WithSecondaryError(rollbackErr, secondary)
 	}
 
@@ -918,7 +917,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 			log.Warningf(ctx, "waiting to update leases: %+v", err)
 			// As we are dismissing the error, go through the recording motions.
 			// This ensures that any important error gets reported to Sentry, etc.
-			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
+			RecordError(ctx, err, &sc.settings.SV)
 		}
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
@@ -936,7 +935,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 			log.Warningf(ctx, "unexpected error while waiting for leases to update: %+v", err)
 			// As we are dismissing the error, go through the recording motions.
 			// This ensures that any important error gets reported to Sentry, etc.
-			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
+			RecordError(ctx, err, &sc.settings.SV)
 		}
 	}()
 

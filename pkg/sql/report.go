@@ -8,10 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqltelemetry
+package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -38,7 +39,7 @@ func RecordError(ctx context.Context, err error, sv *settings.Values) {
 		// qualified with a code).
 		//
 		// TODO(knz): figure out if this telemetry is still useful.
-		telemetry.Inc(UncategorizedErrorCounter)
+		telemetry.Inc(sqltelemetry.UncategorizedErrorCounter)
 
 	case code == pgcode.Internal || errors.HasAssertionFailure(err):
 		// This is an assertion failure / crash.

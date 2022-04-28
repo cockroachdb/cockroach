@@ -17,7 +17,6 @@ go_library(
         "pgwire.go",
         "planning.go",
         "reassign_owned_by.go",
-        "report.go",
         "scalar.go",
         "scheduled_backups.go",
         "schema.go",
@@ -31,11 +30,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/server/telemetry",
-        "//pkg/settings",
         "//pkg/sql/pgwire/pgcode",
-        "//pkg/sql/pgwire/pgerror",
-        "//pkg/util/log",
-        "//pkg/util/log/logcrash",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )

@@ -161,6 +161,7 @@ go_library(
         "render.go",
         "repair.go",
         "reparent_database.go",
+        "report.go",
         "resolve_oid.go",
         "resolver.go",
         "revert.go",

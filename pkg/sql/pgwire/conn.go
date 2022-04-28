@@ -1461,7 +1461,7 @@ func writeErr(
 	ctx context.Context, sv *settings.Values, err error, msgBuilder *writeBuffer, w io.Writer,
 ) error {
 	// Record telemetry for the error.
-	sqltelemetry.RecordError(ctx, err, sv)
+	sql.RecordError(ctx, err, sv)
 	msgBuilder.initMsg(pgwirebase.ServerMsgErrorResponse)
 	return writeErrFields(ctx, sv, err, msgBuilder, w)
 }
