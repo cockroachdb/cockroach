@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"golang.org/x/tools/container/intsets"
@@ -772,7 +771,7 @@ func (c *coster) computeSelectCost(sel *memo.SelectExpr, required *physical.Requ
 		inputRowCount = math.Min(inputRowCount, required.LimitHint/selectivity)
 	}
 
-	filterSetup, filterPerRow := c.computeFiltersCost(sel.Filters, util.FastIntMap{})
+	filterSetup, filterPerRow := c.computeFiltersCost(sel.Filters, nil /* shouldSkipEq */)
 	cost := memo.Cost(inputRowCount) * filterPerRow
 	cost += filterSetup
 	return cost
@@ -830,22 +829,13 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	// Compute filter cost. Fetch the equality columns so they can be
 	// ignored later.
 	on := join.Child(2).(*memo.FiltersExpr)
-	leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(
-		join.Child(0).(memo.RelExpr).Relational().OutputCols,
-		join.Child(1).(memo.RelExpr).Relational().OutputCols,
-		*on,
-	)
-	// Generate a quick way to lookup if two columns are join equality
-	// columns. We add in both directions because we don't know which way
-	// the equality filters will be defined.
-	eqMap := util.FastIntMap{}
-	for i := range leftEq {
-		left := int(leftEq[i])
-		right := int(rightEq[i])
-		eqMap.Set(left, right)
-		eqMap.Set(right, left)
+	leftCols := join.Child(0).(memo.RelExpr).Relational().OutputCols
+	rightCols := join.Child(1).(memo.RelExpr).Relational().OutputCols
+	shouldSkipEq := func(eq *memo.EqExpr) bool {
+		isJoinEquality, _, _ := memo.ExtractJoinEquality(leftCols, rightCols, eq)
+		return isJoinEquality
 	}
-	filterSetup, filterPerRow := c.computeFiltersCost(*on, eqMap)
+	filterSetup, filterPerRow := c.computeFiltersCost(*on, shouldSkipEq)
 	cost += filterSetup
 
 	// Add the CPU cost of emitting the rows.
@@ -882,7 +872,7 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 	// smaller right side is preferred to the symmetric join.
 	cost := memo.Cost(0.9*leftRowCount+1.1*rightRowCount) * cpuCostFactor
 
-	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
+	filterSetup, filterPerRow := c.computeFiltersCost(join.On, nil /* shouldSkipEq */)
 	cost += filterSetup
 
 	// Add the CPU cost of emitting the rows.
@@ -996,7 +986,7 @@ func (c *coster) computeIndexLookupJoinCost(
 	perLookupCost += lookupExprCost(join)
 	cost := memo.Cost(lookupCount) * perLookupCost
 
-	filterSetup, filterPerRow := c.computeFiltersCost(on, util.FastIntMap{})
+	filterSetup, filterPerRow := c.computeFiltersCost(on, nil /* shouldSkipEq */)
 	cost += filterSetup
 
 	// Each lookup might retrieve many rows; add the IO cost of retrieving the
@@ -1075,7 +1065,7 @@ func (c *coster) computeInvertedJoinCost(
 	perLookupCost *= 5
 	cost := memo.Cost(lookupCount) * perLookupCost
 
-	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
+	filterSetup, filterPerRow := c.computeFiltersCost(join.On, nil /* shouldSkipEq */)
 	cost += filterSetup
 
 	// Each lookup might retrieve many rows; add the IO cost of retrieving the
@@ -1108,8 +1098,11 @@ func (c *coster) computeExprCost(expr opt.Expr) memo.Cost {
 // computeFiltersCost returns the setup and per-row cost of executing
 // a filter. Callers of this function should add setupCost and multiply
 // perRowCost by the number of rows expected to be filtered.
+//
+// shouldSkipEq is a function that is used to skip equality filters on some
+// joins in the case when they do not cost anything.
 func (c *coster) computeFiltersCost(
-	filters memo.FiltersExpr, eqMap util.FastIntMap,
+	filters memo.FiltersExpr, shouldSkipEq func(*memo.EqExpr) bool,
 ) (setupCost, perRowCost memo.Cost) {
 	// Add a base perRowCost so that callers do not need to have their own
 	// base per-row cost.
@@ -1118,16 +1111,8 @@ func (c *coster) computeFiltersCost(
 		f := &filters[i]
 		if f.Condition.Op() == opt.EqOp {
 			eq := f.Condition.(*memo.EqExpr)
-			leftVar, lOk := eq.Left.(*memo.VariableExpr)
-			rightVar, rOk := eq.Right.(*memo.VariableExpr)
-			if lOk && rOk {
-				val, ok := eqMap.Get(int(leftVar.Col))
-				if ok && val == int(rightVar.Col) {
-					// Equality filters on some joins are still in
-					// filters, while others have already removed
-					// them. They do not cost anything.
-					continue
-				}
+			if shouldSkipEq != nil && shouldSkipEq(eq) {
+				continue
 			}
 		}
 		perRowCost += c.computeExprCost(f.Condition)
@@ -1156,7 +1141,7 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	scanCost := c.rowScanCost(join, join.LeftTable, join.LeftIndex, leftCols, join.Relational().Stats)
 	scanCost += c.rowScanCost(join, join.RightTable, join.RightIndex, rightCols, join.Relational().Stats)
 
-	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
+	filterSetup, filterPerRow := c.computeFiltersCost(join.On, nil /* shouldSkipEq */)
 
 	// Double the cost of emitting rows as well as the cost of seeking rows,
 	// given two indexes will be accessed.
