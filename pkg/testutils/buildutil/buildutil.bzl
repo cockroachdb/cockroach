@@ -31,13 +31,14 @@ _deps_aspect = aspect(
   provides = [_DepsInfo],
 )
 
-def _find_deps_with_disallowed_prefixes(dep_pkgs, prefixes):
+def _find_deps_with_disallowed_prefixes(current_pkg, dep_pkgs, prefixes):
   return [dp for dp_list in [
-      [(d, p) for p in prefixes if d.startswith(p)] for d in dep_pkgs
+      [(d, p) for p in prefixes if d.startswith(p) and d != current_pkg] for d in dep_pkgs
     ] for dp in dp_list]
 
 def _deps_rule_impl(ctx):
   failed_prefixes = _find_deps_with_disallowed_prefixes(
+    current_pkg = ctx.attr.src[GoLibrary].importpath,
     dep_pkgs = ctx.attr.src[_DepsInfo].dep_pkgs,
     prefixes = ctx.attr.disallowed_prefixes,
   )
