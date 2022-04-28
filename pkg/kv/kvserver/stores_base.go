@@ -65,7 +65,7 @@ func (s *baseStore) Enqueue(
 		return nil, err
 	}
 
-	trace, processErr, enqueueErr := store.ManuallyEnqueue(ctx, queue, repl, skipShouldQueue)
+	trace, processErr, enqueueErr := store.Enqueue(ctx, queue, repl, skipShouldQueue, false /* async */)
 	if processErr != nil {
 		return nil, processErr
 	}
