@@ -478,6 +478,26 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		opts.StorageClusterID = &c
 	}
 
+	// In any case, inform logs when the node or cluster ID changes.
+	prevOnSetc := opts.StorageClusterID.OnSet
+	opts.StorageClusterID.OnSet = func(id uuid.UUID) {
+		if prevOnSetc != nil {
+			prevOnSetc(id)
+		}
+		if log.V(2) {
+			log.Infof(ctx, "ClusterID set to %s", id)
+		}
+	}
+	prevOnSetn := opts.NodeID.OnSet
+	opts.NodeID.OnSet = func(id roachpb.NodeID) {
+		if prevOnSetn != nil {
+			prevOnSetn(id)
+		}
+		if log.V(2) {
+			log.Infof(ctx, "NodeID set to %s", id)
+		}
+	}
+
 	if opts.LogicalClusterID == nil {
 		if opts.TenantID.IsSystem() {
 			// We currently expose the storage cluster ID as logical
