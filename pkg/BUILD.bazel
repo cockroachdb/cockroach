@@ -441,6 +441,7 @@ ALL_TESTS = [
     "//pkg/util/goschedstats:goschedstats_test",
     "//pkg/util/grpcutil:grpcutil_test",
     "//pkg/util/hlc:hlc_test",
+    "//pkg/util/hotranges:hotranges_test",
     "//pkg/util/httputil:httputil_test",
     "//pkg/util/humanizeutil:humanizeutil_test",
     "//pkg/util/interval/generic:generic_test",
