@@ -93,10 +93,14 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		return
 	}
 
-	var colToEq util.FastIntMap
-	for i := range leftEq {
-		colToEq.Set(int(leftEq[i]), i)
-		colToEq.Set(int(rightEq[i]), i)
+	getEqCols := func(col opt.ColumnID) (left, right opt.ColumnID) {
+		// Assume that col is in either leftEq or rightEq.
+		for eqIdx := 0; eqIdx < len(leftEq); eqIdx++ {
+			if leftEq[eqIdx] == col || rightEq[eqIdx] == col {
+				return leftEq[eqIdx], rightEq[eqIdx]
+			}
+		}
+		panic(errors.AssertionFailedf("failed to find eqIdx for merge join"))
 	}
 
 	var remainingFilters memo.FiltersExpr
@@ -115,8 +119,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		merge.RightOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
 
 		addCol := func(col opt.ColumnID, descending bool) {
-			eqIdx, _ := colToEq.Get(int(col))
-			l, r := leftEq[eqIdx], rightEq[eqIdx]
+			l, r := getEqCols(col)
 			merge.LeftEq = append(merge.LeftEq, opt.MakeOrderingColumn(l, descending))
 			merge.RightEq = append(merge.RightEq, opt.MakeOrderingColumn(r, descending))
 			merge.LeftOrdering.AppendCol(l, descending)
