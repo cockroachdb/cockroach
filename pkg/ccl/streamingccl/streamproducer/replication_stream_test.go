@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
+	"net/http"
+	"net/http/httptest"
 )
 
 // pgConnReplicationFeedSource yields replicationMessages from the replication stream.
@@ -238,6 +241,27 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	})
 }
 
+func encodeSpec(t *testing.T, h *streamingtest.ReplicationHelper, startFrom hlc.Timestamp, tables ...string) []byte {
+	var spans []roachpb.Span
+	for _, table := range tables {
+		desc := desctestutils.TestingGetPublicTableDescriptor(
+			h.SysServer.DB(), h.Tenant.Codec, "d", table)
+		spans = append(spans, desc.PrimaryIndexSpan(h.Tenant.Codec))
+	}
+
+	spec := &streampb.StreamPartitionSpec{
+		StartFrom: startFrom,
+		Spans:     spans,
+		Config: streampb.StreamPartitionSpec_ExecutionConfig{
+			MinCheckpointFrequency: 10 * time.Millisecond,
+		},
+	}
+
+	opaqueSpec, err := protoutil.Marshal(spec)
+	require.NoError(t, err)
+	return opaqueSpec
+}
+
 func TestStreamPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -251,29 +275,6 @@ INSERT INTO d.t1 (i) VALUES (42);
 USE d;
 `)
 
-	makePartitionSpec := func(startFrom hlc.Timestamp, tables ...string) *streampb.StreamPartitionSpec {
-		var spans []roachpb.Span
-		for _, table := range tables {
-			desc := desctestutils.TestingGetPublicTableDescriptor(
-				h.SysServer.DB(), h.Tenant.Codec, "d", table)
-			spans = append(spans, desc.PrimaryIndexSpan(h.Tenant.Codec))
-		}
-
-		return &streampb.StreamPartitionSpec{
-			StartFrom: startFrom,
-			Spans:     spans,
-			Config: streampb.StreamPartitionSpec_ExecutionConfig{
-				MinCheckpointFrequency: 10 * time.Millisecond,
-			},
-		}
-	}
-
-	encodeSpec := func(startFrom hlc.Timestamp, tables ...string) []byte {
-		opaqueSpec, err := protoutil.Marshal(makePartitionSpec(startFrom, tables...))
-		require.NoError(t, err)
-		return opaqueSpec
-	}
-
 	ctx := context.Background()
 	rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
 	streamID := rows[0][0]
@@ -283,7 +284,7 @@ USE d;
 
 	t.Run("stream-table", func(t *testing.T) {
 		_, feed := startReplication(t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(hlc.Timestamp{}, "t1"))
+			streamPartitionQuery, streamID, encodeSpec(t, h, hlc.Timestamp{}, "t1"))
 		defer feed.Close(ctx)
 
 		expected := streamingtest.EncodeKV(t, h.Tenant.Codec, t1Descr, 42)
@@ -312,7 +313,7 @@ USE d;
 		h.Tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'мир' WHERE i = 42`)
 
 		_, feed := startReplication(t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(beforeUpdateTS, "t1"))
+			streamPartitionQuery, streamID, encodeSpec(t, h, beforeUpdateTS, "t1"))
 		defer feed.Close(ctx)
 
 		// We should observe 2 versions of this key: one with ("привет", "world"), and a later
@@ -348,7 +349,7 @@ CREATE TABLE t2(
 		addRows(0, 10)
 
 		source, feed := startReplication(t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(hlc.Timestamp{}, "t1"))
+			streamPartitionQuery, streamID, encodeSpec(t, h, hlc.Timestamp{}, "t1"))
 		defer feed.Close(ctx)
 
 		// Few more rows after feed started.
@@ -365,5 +366,92 @@ CREATE TABLE t2(
 				break
 			}
 		}
+	})
+}
+
+func TestStreamAddSSTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{}, serverutils.TestTenantID())
+	defer cleanup()
+
+	h.Tenant.SQL.Exec(t, `
+CREATE DATABASE d;
+CREATE TABLE d.t1(i int primary key, a string, b string);
+INSERT INTO d.t1 (i) VALUES (42);
+USE d;
+`)
+
+	ctx := context.Background()
+	rows := h.SysDB.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
+	streamID := rows[0][0]
+
+	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
+
+	dataSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			if _, err := w.Write([]byte("42,42\n")); err != nil {
+				t.Logf("failed to write: %s", err.Error())
+			}
+		}
+	}))
+	defer dataSrv.Close()
+
+	testAddSSTable := func(t *testing.T, initialScan bool, addSSTableBeforeRangefeed bool, table string) {
+		var startTime time.Time
+		h.Tenant.SQL.Exec(t, fmt.Sprintf("CREATE TABLE %s (id INT PRIMARY KEY, n INT)", table))
+		h.Tenant.SQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&startTime)
+		startHlcTime := hlc.Timestamp{WallTime: startTime.UnixNano()}
+		if initialScan {
+			startHlcTime = hlc.Timestamp{}
+		}
+		if addSSTableBeforeRangefeed {
+			h.Tenant.SQL.Exec(t, fmt.Sprintf("IMPORT INTO %s CSV DATA ($1)", table), dataSrv.URL)
+		}
+		source, feed := startReplication(t, h, makePartitionStreamDecoder,
+			streamPartitionQuery, streamID, encodeSpec(t, h, startHlcTime, table))
+		defer feed.Close(ctx)
+		if !addSSTableBeforeRangefeed {
+			h.Tenant.SQL.Exec(t, fmt.Sprintf("IMPORT INTO %s CSV DATA ($1)", table), dataSrv.URL)
+		}
+
+		codec := source.codec.(*partitionStreamDecoder)
+		for {
+			require.True(t, source.rows.Next())
+			source.codec.decode()
+			if codec.e.Batch != nil {
+				if len(codec.e.Batch.Ssts) > 0 {
+					require.Equal(t, 1, len(codec.e.Batch.Ssts))
+					require.Regexp(t, "/Tenant/10/Table/.*42.*", codec.e.Batch.Ssts[0].Span.String())
+				} else if len(codec.e.Batch.KeyValues) > 0 {
+					for _, keyVal := range codec.e.Batch.KeyValues {
+						fmt.Println("received", keyVal.Key.String(), keyVal.Value.String())
+					}
+					require.LessOrEqual(t, 1, len(codec.e.Batch.KeyValues))
+					require.Regexp(t, "/Tenant/10/Table/.*42.*", codec.e.Batch.KeyValues[0].Key.String())
+				}
+				break
+			}
+		}
+	}
+
+	t.Run("initial-scan-import-before-rangefeed", func(t *testing.T) {
+		testAddSSTable(t, true, /* initialScan*/
+			true /* addSSTableBeforeRangefeed */, "x1" /* table */)
+	})
+
+	t.Run("no-initial-scan-import-before-rangefeed", func(t *testing.T) {
+		testAddSSTable(t, false, /* initialScan*/
+			true /* addSSTableBeforeRangefeed */, "x2" /* table */)
+	})
+
+	t.Run("initial-scan-import-after-rangefeed", func(t *testing.T) {
+		testAddSSTable(t, true, /* initialScan*/
+			false /* addSSTableBeforeRangefeed */, "x3" /* table */)
+	})
+
+	t.Run("no-initial-scan-import-after-rangefeed", func(t *testing.T) {
+		testAddSSTable(t, false, /* initialScan*/
+			false /* addSSTableBeforeRangefeed */, "x4" /* table */)
 	})
 }

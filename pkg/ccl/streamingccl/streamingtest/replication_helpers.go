@@ -200,6 +200,7 @@ SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
+SET CLUSTER SETTING kv.bulk_io_write.small_write_size = '1';
 `, `;`)...)
 
 	// Start tenant server
