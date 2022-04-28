@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"runtime"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -589,6 +590,11 @@ func (s *Stopper) IsStopped() <-chan struct{} {
 func (s *Stopper) Quiesce(ctx context.Context) {
 	defer time.AfterFunc(5*time.Second, func() {
 		log.Infof(ctx, "quiescing...")
+	}).Stop()
+	defer time.AfterFunc(2*time.Minute, func() {
+		b := make([]byte, 10*(1<<20)) // 10mb
+		b = b[:runtime.Stack(b, true /* all */)]
+		log.Infof(ctx, "slow quiesce; stacks:\n\n%s", b)
 	}).Stop()
 	defer s.Recover(ctx)
 
