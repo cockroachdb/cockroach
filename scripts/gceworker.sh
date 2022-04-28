@@ -119,9 +119,13 @@ case "${cmd}" in
     mosh)
     mosh "${FQNAME}"
     ;;
-    scp)
-    # Example: $0 scp gceworker-youruser:go/src/github.com/cockroachdb/cockroach/cockroach-data/logs gcelogs --recurse
-    retry gcloud compute scp "$@"
+    gcloud)
+    gcloud "$@"
+    ;;
+    get)
+    from="${NAME}:go/src/github.com/cockroachdb/cockroach/${1}"
+    shift
+    gcloud compute scp --recurse "${from}" "$@"
     ;;
     ip)
     gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
