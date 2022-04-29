@@ -6839,7 +6839,8 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 
 				var foundRepl bool
 				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
-					err := store.Enqueue(ctx.Context, queue, rangeID, skipShouldQueue)
+					var err error
+					_, err = store.Enqueue(ctx.Context, queue, rangeID, skipShouldQueue)
 					if err == nil {
 						foundRepl = true
 						return nil
@@ -6856,12 +6857,69 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 				if !foundRepl {
 					return nil, errors.Errorf("replica with range id %s not found on this node", rangeID)
 				}
+
 				return tree.DBoolTrue, nil
 			},
 			Info: `Enqueue the replica with the given range ID into the named queue, on the
-specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
+store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'split',
 'replicate', 'replicaGC', 'raftlog', 'raftsnapshot', 'consistencyChecker', and
 'timeSeriesMaintenance'.`,
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"range_id", types.Int},
+				{"queue_name", types.String},
+				{"skip_should_queue", types.Bool},
+				{"should_return_trace", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
+				queue := string(tree.MustBeDString(args[1]))
+				skipShouldQueue := bool(tree.MustBeDBool(args[2]))
+				shouldReturnTrace := bool(tree.MustBeDBool(args[3]))
+
+				var foundRepl bool
+				var rec tracing.Recording
+				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					var err error
+					rec, err = store.Enqueue(ctx.Context, queue, rangeID, skipShouldQueue)
+					if err == nil {
+						foundRepl = true
+						return nil
+					}
+
+					if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
+						return nil
+					}
+					return err
+				}); err != nil {
+					return nil, err
+				}
+
+				if !foundRepl {
+					return nil, errors.Errorf("replica with range id %s not found on this node", rangeID)
+				}
+
+				if shouldReturnTrace {
+					return tree.NewDString(rec.String()), nil
+				}
+
+				return tree.NewDString("replica enqueued"), nil
+			},
+			Info: `Enqueue the replica with the given range ID into the named queue, on the
+store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'split',
+'replicate', 'replicaGC', 'raftlog', 'raftsnapshot', 'consistencyChecker', and
+'timeSeriesMaintenance'. Specify if the trace corresponding to the enqueue operation should be rendered.`,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
@@ -6890,7 +6948,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
 					if storeID == store.StoreID() {
 						foundStore = true
-						return store.Enqueue(ctx.Context, queue, rangeID, skipShouldQueue)
+						_, err := store.Enqueue(ctx.Context, queue, rangeID, skipShouldQueue)
+						return err
 					}
 					return nil
 				}); err != nil {

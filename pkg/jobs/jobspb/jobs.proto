@@ -199,8 +199,8 @@ message BackupDetails {
   int64 schedule_id = 12 [(gogoproto.customname) = "ScheduleID"];
 
   // SchedulePTSChainingRecord is used by scheduled backups to chain protected
-  // timestamp records. For more details about the chaining scheme refer to
-  // ScheduledBackupExecutionArgs.ChainProtectedTimestampRecords.
+  // timestamp records. For more details about the chaining scheme refer to the
+  // comment at the top of `schedule_pts_chaining.go`.
   SchedulePTSChainingRecord schedule_pts_chaining_record = 10 [(gogoproto.customname) = "SchedulePTSChainingRecord"];
 
   bool revision_history = 13;

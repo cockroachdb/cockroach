@@ -1171,6 +1171,8 @@ func planSchedulePTSChaining(
 	if err != nil {
 		return err
 	}
+
+	// If chaining of protected timestamp records is disabled, noop.
 	if !args.ChainProtectedTimestampRecords {
 		return nil
 	}
@@ -1178,6 +1180,7 @@ func planSchedulePTSChaining(
 	if args.BackupType == ScheduledBackupExecutionArgs_FULL {
 		// Check if there is a dependent incremental schedule associated with the
 		// full schedule running the current backup.
+		//
 		// If present, the full backup on successful completion, will release the
 		// pts record found on the incremental schedule, and replace it with a new
 		// pts record protecting after the EndTime of the full backup.
@@ -1188,18 +1191,11 @@ func planSchedulePTSChaining(
 		_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(
 			ctx, env, txn, execCfg.InternalExecutor, args.DependentScheduleID)
 		if err != nil {
-			// If we are unable to resolve the dependent incremental schedule (it
-			// could have been dropped) we do not need to perform any chaining.
-			//
-			// TODO(adityamaru): Update this comment when DROP SCHEDULE is taught
-			// to clear the dependent ID. Once that is done, we should not encounter
-			// this error.
-			if jobs.HasScheduledJobNotFoundError(err) {
-				log.Warningf(ctx, "could not find dependent schedule with id %d",
-					args.DependentScheduleID)
-				return nil
-			}
-			return err
+			// We should always be able to resolve the dependent schedule ID. If the
+			// incremental schedule was dropped then it would have unlinked itself
+			// from the full schedule. Thus, we treat all errors as a problem.
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"dependent schedule %d could not be resolved", args.DependentScheduleID)
 		}
 		backupDetails.SchedulePTSChainingRecord = &jobspb.SchedulePTSChainingRecord{
 			ProtectedTimestampRecord: incArgs.ProtectedTimestampRecord,
@@ -1210,7 +1206,7 @@ func planSchedulePTSChaining(
 		// that the job should update on successful completion, to protect data
 		// after the current backups' EndTime.
 		// We save this information on the job instead of reading it from the
-		// schedule on completion, so as to prevent an "overhang" incremental from
+		// schedule on completion, to prevent an "overhang" incremental from
 		// incorrectly pulling forward a pts record that was written by a new full
 		// backup that completed while the incremental was still executing.
 		//

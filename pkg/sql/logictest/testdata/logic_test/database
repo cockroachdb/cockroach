@@ -258,8 +258,14 @@ SET sql_safe_updates=false;
 statement ok
 DROP DATABASE db1;
 
-statement error pq: database "db1" does not exist
+statement error pgcode 3D000 pq: database "db1" does not exist
 SELECT * FROM crdb_internal.session_variables;
+
+statement error pgcode 3D000 pq: database "db1" does not exist
+SELECT * FROM pg_catalog.pg_attribute;
+
+statement error pgcode 3D000 pq: database "db1" does not exist
+SELECT * FROM unknown_table;
 
 subtest missing-schema-error-69713
 
