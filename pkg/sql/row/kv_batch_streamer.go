@@ -102,8 +102,7 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 			f.releaseLastResult(ctx)
 			return true, kvBatchFetcherResponse{}, nil
 		}
-		pos := result.EnqueueKeysSatisfied[f.lastResultState.numEmitted]
-		origSpan := f.spans[pos]
+		origSpan := f.spans[result.Position]
 		f.lastResultState.numEmitted++
 		f.getResponseScratch[0] = roachpb.KeyValue{Key: origSpan.Key, Value: *get.Value}
 		ret.kvs = f.getResponseScratch[:]

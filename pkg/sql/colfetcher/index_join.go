@@ -218,12 +218,15 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				continue
 			}
 
-			if !s.maintainOrdering {
+			if !s.usesStreamer && !s.maintainOrdering {
 				// Sort the spans when !maintainOrdering. This allows lower layers to
 				// optimize iteration over the data. Note that the looked up rows are
 				// output unchanged, in the retrieval order, so it is not safe to do
 				// this when maintainOrdering is true (the ordering to be maintained
 				// may be different than the ordering in the index).
+				//
+				// We don't want to sort the spans here if we're using the
+				// Streamer since it will perform the sort on its own.
 				sort.Sort(spans)
 			}
 
