@@ -18,7 +18,6 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/sql/sem/tree",
-        "//pkg/testutils/serverutils",
         "//pkg/util/fsm",
         "//pkg/util/hlc",
         "//pkg/util/log",

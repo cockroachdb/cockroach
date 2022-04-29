@@ -10,7 +10,6 @@ package changefeedccl
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"sort"
@@ -69,8 +68,8 @@ func TestShowChangefeedJobsBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
@@ -121,10 +120,7 @@ func TestShowChangefeedJobsBasic(t *testing.T) {
 		require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
 	}
 
-	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`cloudstorage`, cloudStorageTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
+	cdcTest(t, testFn)
 }
 
 func TestShowChangefeedJobs(t *testing.T) {
@@ -354,8 +350,8 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 
@@ -443,5 +439,6 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 		require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	// Force kafka to validate topics
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
