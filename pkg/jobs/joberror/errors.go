@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,9 +46,9 @@ func isBreakerOpenError(err error) bool {
 }
 
 // IsPermanentBulkJobError returns true if the error results in a permanent
-// failure of a bulk job (IMPORT, BACKUP, RESTORE). This function is a allowlist
-// instead of a blocklist: only known safe errors are confirmed to not be
-// permanent errors. Anything unknown is assumed to be permanent.
+// failure of a bulk job (IMPORT, BACKUP, RESTORE). This function is an
+// allowlist instead of a blocklist: only known safe errors are confirmed to not
+// be permanent errors. Anything unknown is assumed to be permanent.
 func IsPermanentBulkJobError(err error) bool {
 	if err == nil {
 		return false
@@ -57,5 +58,7 @@ func IsPermanentBulkJobError(err error) bool {
 		!grpcutil.IsClosedConnection(err) &&
 		!flowinfra.IsNoInboundStreamConnectionError(err) &&
 		!kvcoord.IsSendError(err) &&
-		!isBreakerOpenError(err)
+		!isBreakerOpenError(err) &&
+		!sysutil.IsErrConnectionReset(err) &&
+		!sysutil.IsErrConnectionRefused(err)
 }
