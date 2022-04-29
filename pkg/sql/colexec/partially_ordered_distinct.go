@@ -26,6 +26,7 @@ import (
 // distinct columns when we have partial ordering on some of the distinct
 // columns.
 func newPartiallyOrderedDistinct(
+	unlimitedAllocator *colmem.Allocator,
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	distinctCols []uint32,
@@ -39,7 +40,7 @@ func newPartiallyOrderedDistinct(
 			"partially ordered distinct wrongfully planned: numDistinctCols=%d "+
 				"numOrderedCols=%d", len(distinctCols), len(orderedCols))
 	}
-	chunker, err := newChunker(allocator, input, typs, orderedCols, nullsAreDistinct)
+	chunker, err := newChunker(unlimitedAllocator, allocator, input, typs, orderedCols, nullsAreDistinct)
 	if err != nil {
 		return nil, err
 	}

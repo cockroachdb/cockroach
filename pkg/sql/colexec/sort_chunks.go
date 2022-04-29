@@ -29,6 +29,7 @@ import (
 // the columns in the input operator. The input tuples must be sorted on first
 // matchLen columns.
 func NewSortChunks(
+	unlimitedAllocator *colmem.Allocator,
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
@@ -46,7 +47,7 @@ func NewSortChunks(
 	for i := range alreadySortedCols {
 		alreadySortedCols[i] = orderingCols[i].ColIdx
 	}
-	chunker, err := newChunker(allocator, input, inputTypes, alreadySortedCols, false /* nullsAreDistinct */)
+	chunker, err := newChunker(unlimitedAllocator, allocator, input, inputTypes, alreadySortedCols, false /* nullsAreDistinct */)
 	if err != nil {
 		return nil, err
 	}
@@ -262,6 +263,7 @@ type chunker struct {
 var _ spooler = &chunker{}
 
 func newChunker(
+	unlimitedAllocator *colmem.Allocator,
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
@@ -276,7 +278,7 @@ func newChunker(
 			return nil, err
 		}
 	}
-	deselector := colexecutils.NewDeselectorOp(allocator, input, inputTypes)
+	deselector := colexecutils.NewDeselectorOp(unlimitedAllocator, input, inputTypes)
 	return &chunker{
 		OneInputNode:      colexecop.NewOneInputNode(deselector),
 		allocator:         allocator,
