@@ -725,6 +725,7 @@ func (hj *hashJoiner) resetOutput(nResults int) {
 	const maxOutputBatchMemSize = math.MaxInt64
 	hj.output, _ = hj.outputUnlimitedAllocator.ResetMaybeReallocate(
 		hj.outputTypes, hj.output, nResults, maxOutputBatchMemSize,
+		true, /* desiredCapacitySufficient */
 	)
 }
 

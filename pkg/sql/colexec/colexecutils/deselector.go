@@ -62,6 +62,7 @@ func (p *deselectorOp) Next() coldata.Batch {
 	const maxBatchMemSize = math.MaxInt64
 	p.output, _ = p.unlimitedAllocator.ResetMaybeReallocate(
 		p.inputTypes, p.output, batch.Length(), maxBatchMemSize,
+		true, /* desiredCapacitySufficient */
 	)
 	sel := batch.Selection()
 	p.unlimitedAllocator.PerformOperation(p.output.ColVecs(), func() {

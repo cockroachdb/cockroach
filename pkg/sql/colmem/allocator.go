@@ -156,7 +156,10 @@ func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Bat
 //
 // The method will grow the allocated capacity of the batch exponentially
 // (possibly incurring a reallocation), until the batch reaches
-// coldata.BatchSize() in capacity or maxBatchMemSize in the memory footprint.
+// coldata.BatchSize() in capacity or maxBatchMemSize in the memory footprint if
+// desiredCapacitySufficient is false. When that parameter is true and the
+// capacity of old batch is at least minDesiredCapacity, then the old batch is
+// reused.
 //
 // NOTE: if the reallocation occurs, then the memory under the old batch is
 // released, so it is expected that the caller will lose the references to the
@@ -164,7 +167,11 @@ func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Bat
 // Note: the method assumes that minDesiredCapacity is at least 0 and will clamp
 // minDesiredCapacity to be between 1 and coldata.BatchSize() inclusive.
 func (a *Allocator) ResetMaybeReallocate(
-	typs []*types.T, oldBatch coldata.Batch, minDesiredCapacity int, maxBatchMemSize int64,
+	typs []*types.T,
+	oldBatch coldata.Batch,
+	minDesiredCapacity int,
+	maxBatchMemSize int64,
+	desiredCapacitySufficient bool,
 ) (newBatch coldata.Batch, reallocated bool) {
 	if minDesiredCapacity < 0 {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid minDesiredCapacity %d", minDesiredCapacity))
@@ -179,6 +186,11 @@ func (a *Allocator) ResetMaybeReallocate(
 	} else {
 		// If old batch is already of the largest capacity, we will reuse it.
 		useOldBatch := oldBatch.Capacity() == coldata.BatchSize()
+		// If the old batch already satisfies the desired capacity which is
+		// sufficient, we will reuse it too.
+		if desiredCapacitySufficient && oldBatch.Capacity() >= minDesiredCapacity {
+			useOldBatch = true
+		}
 		// Avoid calculating the memory footprint if possible.
 		var oldBatchMemSize int64
 		if !useOldBatch {
@@ -568,10 +580,14 @@ func (h *SetAccountingHelper) getBytesLikeTotalSize() int64 {
 // Allocator.ResetMaybeReallocate (and thus has the same contract) with an
 // additional logic for memory tracking purposes.
 func (h *SetAccountingHelper) ResetMaybeReallocate(
-	typs []*types.T, oldBatch coldata.Batch, minCapacity int, maxBatchMemSize int64,
+	typs []*types.T,
+	oldBatch coldata.Batch,
+	minCapacity int,
+	maxBatchMemSize int64,
+	desiredCapacitySufficient bool,
 ) (newBatch coldata.Batch, reallocated bool) {
 	newBatch, reallocated = h.Allocator.ResetMaybeReallocate(
-		typs, oldBatch, minCapacity, maxBatchMemSize,
+		typs, oldBatch, minCapacity, maxBatchMemSize, desiredCapacitySufficient,
 	)
 	if reallocated && !h.allFixedLength {
 		// Allocator.ResetMaybeReallocate has released the precise memory
