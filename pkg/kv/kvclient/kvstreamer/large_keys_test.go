@@ -13,6 +13,7 @@ package kvstreamer_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -50,6 +51,10 @@ func TestLargeKeys(t *testing.T) {
 		{
 			name:  "lookup join, no ordering",
 			query: "SELECT * FROM bar INNER LOOKUP JOIN foo ON lookup_blob = pk_blob",
+		},
+		{
+			name:  "lookup join, with ordering",
+			query: "SELECT max(length(blob)) FROM bar INNER LOOKUP JOIN foo ON lookup_blob = pk_blob GROUP BY pk_blob",
 		},
 	}
 
@@ -125,7 +130,7 @@ func TestLargeKeys(t *testing.T) {
 						INDEX (attribute)%s
 					);`, familiesSuffix))
 				require.NoError(t, err)
-				_, err = db.Exec("CREATE TABLE bar (lookup_blob STRING)")
+				_, err = db.Exec("CREATE TABLE bar (lookup_blob STRING PRIMARY KEY)")
 				require.NoError(t, err)
 
 				// Insert some number of rows.
@@ -167,10 +172,17 @@ func TestLargeKeys(t *testing.T) {
 					_, err = db.Exec("SELECT count(*) FROM foo")
 					require.NoError(t, err)
 
-					for _, vectorizeMode := range []string{"on", "off"} {
-						_, err = db.Exec("SET vectorize = " + vectorizeMode)
-						require.NoError(t, err)
-						for _, tc := range testCases {
+					for _, tc := range testCases {
+						vectorizeModes := []string{"on", "off"}
+						if strings.Contains(tc.name, "lookup") {
+							// Lookup joins currently only have a single
+							// implementation, so there is no point in changing
+							// the vectorize mode.
+							vectorizeModes = []string{"on"}
+						}
+						for _, vectorizeMode := range vectorizeModes {
+							_, err = db.Exec("SET vectorize = " + vectorizeMode)
+							require.NoError(t, err)
 							t.Run(fmt.Sprintf(
 								"%s/size=%s/scans=%t/onlyLarge=%t/numRows=%d/newRangeProb=%.2f/vec=%s",
 								tc.name, humanize.Bytes(uint64(pkBlobSize)), useScans,

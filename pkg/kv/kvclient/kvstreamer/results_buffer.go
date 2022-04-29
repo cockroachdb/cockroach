@@ -207,13 +207,16 @@ func (b *resultsBufferBase) error() error {
 	return b.err
 }
 
-func resultsToString(results []Result) string {
+func resultsToString(results []Result, printSubRequestIdx bool) string {
 	result := "results for positions "
 	for i, r := range results {
 		if i > 0 {
 			result += ", "
 		}
 		result += fmt.Sprintf("%d", r.Position)
+		if printSubRequestIdx {
+			result += fmt.Sprintf(" (%d)", r.subRequestIdx)
+		}
 	}
 	return result
 }
@@ -312,23 +315,41 @@ type inOrderResultsBuffer struct {
 	// headOfLinePosition is the Position value of the next Result to be
 	// returned.
 	headOfLinePosition int
+	// headOfLineSubRequestIdx is the sub-request ordinal of the next Result to
+	// be returned. This value only matters when the original Scan request spans
+	// multiple ranges - in such a scenario, multiple Results are created. For
+	// Get requests and for single-range Scan requests this will always stay at
+	// zero.
+	headOfLineSubRequestIdx int
 	// buffered contains all buffered Results, regardless of whether they are
 	// stored in-memory or on disk.
 	buffered []inOrderBufferedResult
 
 	diskBuffer ResultDiskBuffer
+
+	// addCounter tracks the number of times add() has been called. See
+	// inOrderBufferedResult.addEpoch for why this is needed.
+	addCounter int
+
+	// singleRowLookup is the value of Hints.SingleRowLookup. Only used for
+	// debug messages.
+	// TODO(yuzefovich): remove this when debug messages are removed.
+	singleRowLookup bool
 }
 
 var _ resultsBuffer = &inOrderResultsBuffer{}
 var _ heap.Interface = &inOrderResultsBuffer{}
 
-func newInOrderResultsBuffer(budget *budget, diskBuffer ResultDiskBuffer) resultsBuffer {
+func newInOrderResultsBuffer(
+	budget *budget, diskBuffer ResultDiskBuffer, singleRowLookup bool,
+) resultsBuffer {
 	if diskBuffer == nil {
 		panic(errors.AssertionFailedf("diskBuffer is nil"))
 	}
 	return &inOrderResultsBuffer{
 		resultsBufferBase: newResultsBufferBase(budget),
 		diskBuffer:        diskBuffer,
+		singleRowLookup:   singleRowLookup,
 	}
 }
 
@@ -337,7 +358,12 @@ func (b *inOrderResultsBuffer) Len() int {
 }
 
 func (b *inOrderResultsBuffer) Less(i, j int) bool {
-	return b.buffered[i].Position < b.buffered[j].Position
+	posI, posJ := b.buffered[i].Position, b.buffered[j].Position
+	subI, subJ := b.buffered[i].subRequestIdx, b.buffered[j].subRequestIdx
+	epochI, epochJ := b.buffered[i].addEpoch, b.buffered[j].addEpoch
+	return posI < posJ || // results for different requests
+		(posI == posJ && subI < subJ) || // results for the same Scan request, but for different ranges
+		(posI == posJ && subI == subJ && epochI < epochJ) // results for the same Scan request, for the same range
 }
 
 func (b *inOrderResultsBuffer) Swap(i, j int) {
@@ -362,6 +388,8 @@ func (b *inOrderResultsBuffer) init(ctx context.Context, numExpectedResponses in
 		return err
 	}
 	b.headOfLinePosition = 0
+	b.headOfLineSubRequestIdx = 0
+	b.addCounter = 0
 	if err := b.diskBuffer.Reset(ctx); err != nil {
 		b.setErrorLocked(err)
 		return err
@@ -378,12 +406,16 @@ func (b *inOrderResultsBuffer) add(results []Result) {
 	foundHeadOfLine := false
 	for _, r := range results {
 		if debug {
-			fmt.Printf("adding a result for position %d of size %d\n", r.Position, r.memoryTok.toRelease)
+			subRequestIdx := ""
+			if !b.singleRowLookup {
+				subRequestIdx = fmt.Sprintf(" (%d)", r.subRequestIdx)
+			}
+			fmt.Printf("adding a result for position %d%s of size %d\n", r.Position, subRequestIdx, r.memoryTok.toRelease)
 		}
 		// All the Results have already been registered with the budget, so
 		// we're keeping them in-memory.
-		heap.Push(b, inOrderBufferedResult{Result: r, onDisk: false})
-		if r.Position == b.headOfLinePosition {
+		heap.Push(b, inOrderBufferedResult{Result: r, onDisk: false, addEpoch: b.addCounter})
+		if r.Position == b.headOfLinePosition && r.subRequestIdx == b.headOfLineSubRequestIdx {
 			foundHeadOfLine = true
 		}
 	}
@@ -393,12 +425,9 @@ func (b *inOrderResultsBuffer) add(results []Result) {
 		}
 		b.signal()
 	}
+	b.addCounter++
 }
 
-// TODO(yuzefovich): this doesn't work for Scan responses spanning multiple
-// Results, fix it once lookup joins are supported. In particular, it can
-// reorder responses for a single ScanRequest since all of them have the same
-// Position value.
 func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) {
 	// Whenever a result is picked up from disk, we need to make the memory
 	// reservation for it, so we acquire the budget's mutex.
@@ -410,7 +439,7 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 	if debug {
 		fmt.Printf("attempting to get results, current headOfLinePosition = %d\n", b.headOfLinePosition)
 	}
-	for len(b.buffered) > 0 && b.buffered[0].Position == b.headOfLinePosition {
+	for len(b.buffered) > 0 && b.buffered[0].Position == b.headOfLinePosition && b.buffered[0].subRequestIdx == b.headOfLineSubRequestIdx {
 		result, toConsume, err := b.buffered[0].get(ctx, b)
 		if err != nil {
 			b.setErrorLocked(err)
@@ -441,10 +470,16 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 		}
 		res = append(res, result)
 		heap.Remove(b, 0)
+		if result.subRequestDone {
+			// Only advance the sub-request index if we're done with all parts
+			// of the sub-request.
+			b.headOfLineSubRequestIdx++
+		}
 		if result.GetResp != nil || result.ScanResp.Complete {
 			// If the current Result is complete, then we need to advance the
 			// head-of-the-line position.
 			b.headOfLinePosition++
+			b.headOfLineSubRequestIdx = 0
 		}
 	}
 	// Now all the Results in res are no longer "buffered" and become
@@ -452,7 +487,8 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 	b.numUnreleasedResults += len(res)
 	if debug {
 		if len(res) > 0 {
-			fmt.Printf("returning %s to the client, headOfLinePosition is now %d\n", resultsToString(res), b.headOfLinePosition)
+			printSubRequestIdx := !b.singleRowLookup
+			fmt.Printf("returning %s to the client, headOfLinePosition is now %d\n", resultsToString(res, printSubRequestIdx), b.headOfLinePosition)
 		}
 	}
 	// All requests are complete IFF we have received the complete responses for
@@ -472,7 +508,14 @@ func (b *inOrderResultsBuffer) stringLocked() string {
 		if b.buffered[i].onDisk {
 			onDiskInfo = " (on disk)"
 		}
-		result += fmt.Sprintf("[%d]%s: size %d", b.buffered[i].Position, onDiskInfo, b.buffered[i].memoryTok.toRelease)
+		var subRequestIdx string
+		if !b.singleRowLookup {
+			subRequestIdx = fmt.Sprintf(" (%d)", b.buffered[i].subRequestIdx)
+		}
+		result += fmt.Sprintf(
+			"[%d%s]%s: size %d", b.buffered[i].Position, subRequestIdx,
+			onDiskInfo, b.buffered[i].memoryTok.toRelease,
+		)
 	}
 	return result
 }
@@ -516,8 +559,8 @@ func (b *inOrderResultsBuffer) spill(
 		if r := &b.buffered[idx]; !r.onDisk && r.Position > spillingPriority {
 			if debug {
 				fmt.Printf(
-					"spilling a result for position %d which will free up %d bytes\n",
-					r.Position, r.memoryTok.toRelease,
+					"spilling a result for position %d (%d) which will free up %d bytes\n",
+					r.Position, r.subRequestIdx, r.memoryTok.toRelease,
 				)
 			}
 			diskResultID, err := b.diskBuffer.Serialize(ctx, &b.buffered[idx].Result)
@@ -553,8 +596,24 @@ func (b *inOrderResultsBuffer) close(ctx context.Context) {
 // of where it is stored (in-memory or on disk).
 type inOrderBufferedResult struct {
 	// If onDisk is true, then only Result.ScanResp.Complete, Result.memoryTok,
-	// and Result.Position are set.
+	// Result.Position, Result.subRequestIdx, and Result.subRequestDone are set.
 	Result
+	// addEpoch indicates the value of addCounter variable when this result was
+	// added to the buffer. This "epoch" allows us to order correctly two
+	// partial Results that came for the same original Scan request from the
+	// same range when one of the Results was the "ResumeSpan" Result to
+	// another.
+	//
+	// Consider the following example: we have the original Scan request as
+	// Scan(a, c) which goes to a single range [a, c) containing keys 'a' and
+	// 'b'. Imagine that the Scan response can only contain a single key, so we
+	// first get a partial ScanResponse('a') with ResumeSpan(b, c), and then we
+	// get a partial ScanResponse('b') with an empty ResumeSpan. The first
+	// response will be added to the buffer when addCounter is 0, so its "epoch"
+	// is 0 whereas the second response is added during "epoch" 1 - thus, we
+	// can correctly return 'a' before 'b' although the priority and
+	// subRequestIdx of two Results are the same.
+	addEpoch int
 	// If onDisk is true, then the serialized Result is stored on disk in the
 	// ResultDiskBuffer, identified by diskResultID.
 	onDisk       bool
@@ -566,7 +625,13 @@ type inOrderBufferedResult struct {
 func (r *inOrderBufferedResult) spill(diskResultID int) {
 	isScanComplete := r.ScanResp.Complete
 	*r = inOrderBufferedResult{
-		Result:       Result{memoryTok: r.memoryTok, Position: r.Position},
+		Result: Result{
+			memoryTok:      r.memoryTok,
+			Position:       r.Position,
+			subRequestIdx:  r.subRequestIdx,
+			subRequestDone: r.subRequestDone,
+		},
+		addEpoch:     r.addEpoch,
 		onDisk:       true,
 		diskResultID: diskResultID,
 	}
