@@ -716,7 +716,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			}
 
 			// Try to constrain prefixCol to constant, non-ranging values.
-			foundVals, allIdx, ok := c.findJoinFilterConstants(allFilters, prefixCol)
+			foundVals, allIdx, ok := lookupjoin.FindJoinFilterConstants(allFilters, prefixCol, c.e.evalCtx)
 			if !ok {
 				// Cannot constrain prefix column and therefore cannot generate
 				// an inverted join.
@@ -937,43 +937,6 @@ func (c *CustomFuncs) mapInvertedJoin(
 	invertedJoin.ConstFilters = *constFilters
 	on := c.e.f.RemapCols(&invertedJoin.On, srcColsToDstCols).(*memo.FiltersExpr)
 	invertedJoin.On = *on
-}
-
-// findJoinFilterConstants tries to find a filter that is exactly equivalent to
-// constraining the given column to a constant value or a set of constant
-// values. If successful, the constant values and the index of the constraining
-// FiltersItem are returned. If multiple filters match, the one that minimizes
-// the number of returned values is chosen. Note that the returned constant
-// values do not contain NULL.
-func (c *CustomFuncs) findJoinFilterConstants(
-	filters memo.FiltersExpr, col opt.ColumnID,
-) (values tree.Datums, filterIdx int, ok bool) {
-	var bestValues tree.Datums
-	var bestFilterIdx int
-	for filterIdx := range filters {
-		props := filters[filterIdx].ScalarProps()
-		if props.TightConstraints {
-			constCol, constVals, ok := props.Constraints.HasSingleColumnConstValues(c.e.evalCtx)
-			if !ok || constCol != col {
-				continue
-			}
-			hasNull := false
-			for i := range constVals {
-				if constVals[i] == tree.DNull {
-					hasNull = true
-					break
-				}
-			}
-			if !hasNull && (bestValues == nil || len(bestValues) > len(constVals)) {
-				bestValues = constVals
-				bestFilterIdx = filterIdx
-			}
-		}
-	}
-	if bestValues == nil {
-		return nil, -1, false
-	}
-	return bestValues, bestFilterIdx, true
 }
 
 // constructJoinWithConstants constructs a cross join that joins every row in
