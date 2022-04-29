@@ -3385,6 +3385,10 @@ func (s *Store) Enqueue(
 ) (recording tracing.Recording, processError error, enqueueError error) {
 	ctx = repl.AnnotateCtx(ctx)
 
+	if fn := s.TestingKnobs().EnqueueReplicaInterceptor; fn != nil {
+		fn(queueName, repl)
+	}
+
 	// Do not enqueue uninitialized replicas. The baseQueue ignores these during
 	// normal queue scheduling, but we error here to signal to the user that the
 	// operation was unsuccessful.
