@@ -1523,3 +1523,15 @@ SELECT (
 		`,
 	)
 }
+
+// databaseHasTablesWithPartitioning detects if any of the tables have partitioning
+// on them already.
+func (og *operationGenerator) databaseHasTablesWithPartitioning(
+	ctx context.Context, tx pgx.Tx, database string,
+) (bool, error) {
+	return og.scanBool(ctx,
+		tx,
+		fmt.Sprintf(`SELECT count(*)> 0 FROM %s.crdb_internal.partitions`,
+			database),
+	)
+}

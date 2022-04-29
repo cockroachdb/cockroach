@@ -704,6 +704,16 @@ func (og *operationGenerator) primaryRegion(ctx context.Context, tx pgx.Tx) (str
 		return fmt.Sprintf(`ALTER DATABASE %s PRIMARY REGION "invalid-region"`, database), nil
 	}
 
+	// Conversion to multi-region is only allowed if the data is not already
+	// partitioned.
+	hasPartitioning, err := og.databaseHasTablesWithPartitioning(ctx, tx, database)
+	if err != nil {
+		return "", err
+	}
+	if hasPartitioning {
+		og.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+	}
+
 	// No regions in database, set a random region to be the PRIMARY REGION.
 	if len(regionResult.regionNamesInDatabase) == 0 {
 		idx := og.params.rng.Intn(len(regionResult.regionNamesInCluster))
