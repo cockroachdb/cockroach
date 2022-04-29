@@ -63,4 +63,17 @@ func init() {
 			}
 		}
 	}
+
+	tree.OnTypeCheckIfErr = func() {
+		telemetry.Inc(sqltelemetry.IfErrCounter)
+	}
+	tree.OnTypeCheckArrayConstructor = func() {
+		telemetry.Inc(sqltelemetry.ArrayConstructorCounter)
+	}
+	tree.OnTypeCheckArraySubscript = func() {
+		telemetry.Inc(sqltelemetry.ArraySubscriptCounter)
+	}
+	tree.OnTypeCheckArrayFlatten = func() {
+		telemetry.Inc(sqltelemetry.ArrayFlattenCounter)
+	}
 }

@@ -31,6 +31,15 @@ import (
 	"golang.org/x/text/language"
 )
 
+// OnTypeCheck* functions are hooks which get called if not nil and the
+// type checking of the relevant function is made.
+var (
+	OnTypeCheckArraySubscript   func()
+	OnTypeCheckIfErr            func()
+	OnTypeCheckArrayConstructor func()
+	OnTypeCheckArrayFlatten     func()
+)
+
 // SemaContext defines the context in which to perform semantic analysis on an
 // expression syntax tree.
 type SemaContext struct {
@@ -667,7 +676,9 @@ func (expr *IndirectionExpr) TypeCheck(
 	expr.Expr = subExpr
 	expr.typ = typ.ArrayContents()
 
-	telemetry.Inc(sqltelemetry.ArraySubscriptCounter)
+	if OnTypeCheckArraySubscript != nil {
+		OnTypeCheckArraySubscript()
+	}
 	return expr, nil
 }
 
@@ -1248,7 +1259,9 @@ func (expr *IfErrExpr) TypeCheck(
 	expr.ErrCode = typedErrCode
 	expr.typ = retType
 
-	telemetry.Inc(sqltelemetry.IfErrCounter)
+	if OnTypeCheckIfErr != nil {
+		OnTypeCheckIfErr()
+	}
 	return expr, nil
 }
 
@@ -1604,7 +1617,9 @@ func (expr *Array) TypeCheck(
 		expr.Exprs[i] = typedSubExprs[i]
 	}
 
-	telemetry.Inc(sqltelemetry.ArrayConstructorCounter)
+	if OnTypeCheckArrayConstructor != nil {
+		OnTypeCheckArrayConstructor()
+	}
 	return expr, nil
 }
 
@@ -1624,7 +1639,9 @@ func (expr *ArrayFlatten) TypeCheck(
 	expr.Subquery = subqueryTyped
 	expr.typ = types.MakeArray(subqueryTyped.ResolvedType())
 
-	telemetry.Inc(sqltelemetry.ArrayFlattenCounter)
+	if OnTypeCheckArrayFlatten != nil {
+		OnTypeCheckArrayFlatten()
+	}
 	return expr, nil
 }
 
