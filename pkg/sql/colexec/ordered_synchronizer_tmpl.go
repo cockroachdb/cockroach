@@ -220,6 +220,7 @@ func (o *OrderedSynchronizer) resetOutput() {
 	var reallocated bool
 	o.output, reallocated = o.accountingHelper.ResetMaybeReallocate(
 		o.typs, o.output, 1 /* minDesiredCapacity */, o.memoryLimit,
+		false, /* desiredCapacitySufficient */
 	)
 	if reallocated {
 		o.outVecs.SetBatch(o.output)
