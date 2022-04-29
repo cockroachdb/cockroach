@@ -652,6 +652,11 @@ func (t *TestTenant) DrainClients(ctx context.Context) error {
 	return t.drain.drainClients(ctx, nil /* reporter */)
 }
 
+// MustGetSQLCounter implements TestTenantInterface.
+func (t *TestTenant) MustGetSQLCounter(name string) int64 {
+	return mustGetSQLCounterForRegistry(t.metricsRegistry, name)
+}
+
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
@@ -892,38 +897,9 @@ func (v *v2AuthDecorator) RoundTrip(r *http.Request) (*http.Response, error) {
 	return v.RoundTripper.RoundTrip(r)
 }
 
-// MustGetSQLCounter implements TestServerInterface.
+// MustGetSQLCounter implements TestTenantInterface.
 func (ts *TestServer) MustGetSQLCounter(name string) int64 {
-	var c int64
-	var found bool
-
-	type (
-		int64Valuer  interface{ Value() int64 }
-		int64Counter interface{ Count() int64 }
-	)
-
-	ts.registry.Each(func(n string, v interface{}) {
-		if name == n {
-			switch t := v.(type) {
-			case *metric.Counter:
-				c = t.Count()
-				found = true
-			case *metric.Gauge:
-				c = t.Value()
-				found = true
-			case int64Valuer:
-				c = t.Value()
-				found = true
-			case int64Counter:
-				c = t.Count()
-				found = true
-			}
-		}
-	})
-	if !found {
-		panic(fmt.Sprintf("couldn't find metric %s", name))
-	}
-	return c
+	return mustGetSQLCounterForRegistry(ts.registry, name)
 }
 
 // MustGetSQLNetworkCounter implements TestServerInterface.
@@ -1421,4 +1397,37 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 	ts.httpTestServer.t.sqlServer = ts.Server.sqlServer
 
 	return ts, nil
+}
+
+func mustGetSQLCounterForRegistry(registry *metric.Registry, name string) int64 {
+	var c int64
+	var found bool
+
+	type (
+		int64Valuer  interface{ Value() int64 }
+		int64Counter interface{ Count() int64 }
+	)
+
+	registry.Each(func(n string, v interface{}) {
+		if name == n {
+			switch t := v.(type) {
+			case *metric.Counter:
+				c = t.Count()
+				found = true
+			case *metric.Gauge:
+				c = t.Value()
+				found = true
+			case int64Valuer:
+				c = t.Value()
+				found = true
+			case int64Counter:
+				c = t.Count()
+				found = true
+			}
+		}
+	})
+	if !found {
+		panic(fmt.Sprintf("couldn't find metric %s", name))
+	}
+	return c
 }
