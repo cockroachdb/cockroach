@@ -423,6 +423,29 @@ func (f *Factory) ConstructConstVal(d tree.Datum, t *types.T) opt.ScalarExpr {
 	return f.ConstructConst(d, t)
 }
 
+// ConstructConstFilter builds a filter that constrains the given column to one
+// of the given set of constant values. This is performed by either constructing
+// an equality expression or an IN expression.
+func (f *Factory) ConstructConstFilter(col opt.ColumnID, values tree.Datums) memo.FiltersItem {
+	if len(values) == 1 {
+		return f.ConstructFiltersItem(f.ConstructEq(
+			f.ConstructVariable(col),
+			f.ConstructConstVal(values[0], values[0].ResolvedType()),
+		))
+	}
+	elems := make(memo.ScalarListExpr, len(values))
+	elemTypes := make([]*types.T, len(values))
+	for i := range values {
+		typ := values[i].ResolvedType()
+		elems[i] = f.ConstructConstVal(values[i], typ)
+		elemTypes[i] = typ
+	}
+	return f.ConstructFiltersItem(f.ConstructIn(
+		f.ConstructVariable(col),
+		f.ConstructTuple(elems, types.MakeTuple(elemTypes)),
+	))
+}
+
 // ----------------------------------------------------------------------
 //
 // Convenience functions.

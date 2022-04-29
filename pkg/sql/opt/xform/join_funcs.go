@@ -606,29 +606,6 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	})
 }
 
-// makeConstFilter builds a filter that constrains the given column to the given
-// set of constant values. This is performed by either constructing an equality
-// expression or an IN expression.
-func (c *CustomFuncs) makeConstFilter(col opt.ColumnID, values tree.Datums) memo.FiltersItem {
-	if len(values) == 1 {
-		return c.e.f.ConstructFiltersItem(c.e.f.ConstructEq(
-			c.e.f.ConstructVariable(col),
-			c.e.f.ConstructConstVal(values[0], values[0].ResolvedType()),
-		))
-	}
-	elems := make(memo.ScalarListExpr, len(values))
-	elemTypes := make([]*types.T, len(values))
-	for i := range values {
-		typ := values[i].ResolvedType()
-		elems[i] = c.e.f.ConstructConstVal(values[i], typ)
-		elemTypes[i] = typ
-	}
-	return c.e.f.ConstructFiltersItem(c.e.f.ConstructIn(
-		c.e.f.ConstructVariable(col),
-		c.e.f.ConstructTuple(elems, types.MakeTuple(elemTypes)),
-	))
-}
-
 // constructContinuationColumnForPairedJoin constructs a continuation column
 // ID for the paired-joiners used for left outer/semi/anti joins when the
 // first join generates false positives (due to an inverted index or
@@ -1244,11 +1221,11 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	// partitions or only remote partitions.
 	localExpr = make(memo.FiltersExpr, len(private.LookupExpr))
 	copy(localExpr, private.LookupExpr)
-	localExpr[filterIdx] = c.makeConstFilter(col, localValues)
+	localExpr[filterIdx] = c.e.f.ConstructConstFilter(col, localValues)
 
 	remoteExpr = make(memo.FiltersExpr, len(private.LookupExpr))
 	copy(remoteExpr, private.LookupExpr)
-	remoteExpr[filterIdx] = c.makeConstFilter(col, remoteValues)
+	remoteExpr[filterIdx] = c.e.f.ConstructConstFilter(col, remoteValues)
 
 	return localExpr, remoteExpr, true
 }
