@@ -287,7 +287,10 @@ func (p *sortOp) Next() coldata.Batch {
 				p.state = sortDone
 				continue
 			}
-			p.output, _ = p.allocator.ResetMaybeReallocate(p.inputTypes, p.output, toEmit, p.maxOutputBatchMemSize)
+			p.output, _ = p.allocator.ResetMaybeReallocate(
+				p.inputTypes, p.output, toEmit, p.maxOutputBatchMemSize,
+				true, /* desiredCapacitySufficient */
+			)
 			if toEmit > p.output.Capacity() {
 				toEmit = p.output.Capacity()
 			}
