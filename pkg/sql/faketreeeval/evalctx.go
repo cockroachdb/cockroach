@@ -15,7 +15,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -394,7 +393,6 @@ func (ep *DummyEvalPlanner) ResolveType(
 func (ep *DummyEvalPlanner) QueryRowEx(
 	ctx context.Context,
 	opName string,
-	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
@@ -406,7 +404,6 @@ func (ep *DummyEvalPlanner) QueryRowEx(
 func (ep *DummyEvalPlanner) QueryIteratorEx(
 	ctx context.Context,
 	opName string,
-	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},

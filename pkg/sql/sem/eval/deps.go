@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -267,7 +266,6 @@ type Planner interface {
 	QueryRowEx(
 		ctx context.Context,
 		opName string,
-		txn *kv.Txn,
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
 		qargs ...interface{}) (tree.Datums, error)
@@ -281,7 +279,6 @@ type Planner interface {
 	QueryIteratorEx(
 		ctx context.Context,
 		opName string,
-		txn *kv.Txn,
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
 		qargs ...interface{},
