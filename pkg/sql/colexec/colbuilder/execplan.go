@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecdisk"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecprojconst"
@@ -413,7 +414,7 @@ func (r opResult) createDiskBackedSort(
 	// sorter regardless of which sorter variant we have instantiated (i.e.
 	// we don't take advantage of the limits and of partial ordering). We
 	// could improve this.
-	return colexec.NewOneInputDiskSpiller(
+	return colexecdisk.NewOneInputDiskSpiller(
 		input, inMemorySorter.(colexecop.BufferingInMemoryOperator),
 		sorterMemMonitorName,
 		func(input colexecop.Operator) colexecop.Operator {
@@ -434,7 +435,7 @@ func (r opResult) createDiskBackedSort(
 					ctx, flowCtx, opName+"-output", processorID,
 				), factory)
 			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
-			es := colexec.NewExternalSorter(
+			es := colexecdisk.NewExternalSorter(
 				sortUnlimitedAllocator,
 				mergeUnlimitedAllocator,
 				outputUnlimitedAllocator,
@@ -465,7 +466,7 @@ func (r opResult) makeDiskBackedSorterConstructor(
 	args *colexecargs.NewColOperatorArgs,
 	opNamePrefix redact.RedactableString,
 	factory coldata.ColumnFactory,
-) colexec.DiskBackedSorterConstructor {
+) colexecdisk.DiskBackedSorterConstructor {
 	return func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) colexecop.Operator {
 		if maxNumberPartitions < colexecop.ExternalSorterMinPartitions {
 			colexecerror.InternalError(errors.AssertionFailedf(
@@ -930,7 +931,7 @@ func NewColOperator(
 					// case, the wrapped aggregate functions might hit a memory
 					// error even when used by the external hash aggregator).
 					evalCtx.SingleDatumAggMemAccount = ehaMemAccount
-					result.Root = colexec.NewOneInputDiskSpiller(
+					result.Root = colexecdisk.NewOneInputDiskSpiller(
 						inputs[0].Root, inMemoryHashAggregator.(colexecop.BufferingInMemoryOperator),
 						hashAggregatorMemMonitorName,
 						func(input colexecop.Operator) colexecop.Operator {
@@ -942,7 +943,7 @@ func NewColOperator(
 							newAggArgs.Allocator = colmem.NewAllocator(ctx, ehaMemAccount, factory)
 							newAggArgs.MemAccount = ehaMemAccount
 							newAggArgs.Input = input
-							return colexec.NewExternalHashAggregator(
+							return colexecdisk.NewExternalHashAggregator(
 								flowCtx,
 								args,
 								&newAggArgs,
@@ -998,14 +999,14 @@ func NewColOperator(
 				)
 				edOpName := redact.RedactableString("external-distinct")
 				diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
-				result.Root = colexec.NewOneInputDiskSpiller(
+				result.Root = colexecdisk.NewOneInputDiskSpiller(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
 					distinctMemMonitorName,
 					func(input colexecop.Operator) colexecop.Operator {
 						unlimitedAllocator := colmem.NewAllocator(
 							ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, edOpName, spec.ProcessorID), factory,
 						)
-						return colexec.NewExternalDistinct(
+						return colexecdisk.NewExternalDistinct(
 							unlimitedAllocator,
 							flowCtx,
 							args,
@@ -1089,14 +1090,14 @@ func NewColOperator(
 				} else {
 					opName := redact.RedactableString("external-hash-joiner")
 					diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
-					result.Root = colexec.NewTwoInputDiskSpiller(
+					result.Root = colexecdisk.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
 						hashJoinerMemMonitorName,
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 							unlimitedAllocator := colmem.NewAllocator(
 								ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 							)
-							ehj := colexec.NewExternalHashJoiner(
+							ehj := colexecdisk.NewExternalHashJoiner(
 								unlimitedAllocator,
 								flowCtx,
 								args,

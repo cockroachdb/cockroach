@@ -395,7 +395,7 @@ func TestCrossJoiner(t *testing.T) {
 						Inputs:              colexectestutils.MakeInputs(sources),
 						StreamingMemAccount: testMemAcc,
 						DiskQueueCfg:        queueCfg,
-						FDSemaphore:         colexecop.NewTestingSemaphore(externalHJMinPartitions),
+						FDSemaphore:         colexecop.NewTestingSemaphore(colexecop.ExternalHJMinPartitions),
 						MonitorRegistry:     &monitorRegistry,
 					}
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)

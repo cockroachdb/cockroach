@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecdisk
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -20,27 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/marusama/semaphore"
-)
-
-const (
-	// We need at least two buckets per side to make progress. However, the
-	// minimum number of partitions necessary are the partitions in use during a
-	// fallback to sort and merge join. We'll be using the minimum necessary per
-	// input + 2 (1 for each spilling queue that the merge joiner uses). For
-	// clarity this is what happens:
-	// - The 2 partitions that need to be sorted + merged will use an FD each: 2
-	//   FDs. Meanwhile, each sorter will use up to ExternalSorterMinPartitions to
-	//   sort and partition this input. At this stage 2 + 2 *
-	//   ExternalSorterMinPartitions FDs are used.
-	// - Once the inputs (the hash joiner partitions) are finished, both FDs will
-	//   be released. The merge joiner will now be in use, which uses two
-	//   spillingQueues with 1 FD each for a total of 2. Since each sorter will
-	//   use ExternalSorterMinPartitions, the FDs used at this stage are 2 +
-	//   (2 * ExternalSorterMinPartitions) as well. Note that as soon as the
-	//   sorter emits its first batch, it must be the case that the input to it
-	//   has returned a zero batch, and thus the FD has been closed.
-	sortMergeNonSortMinFDsOpen = 2
-	externalHJMinPartitions    = sortMergeNonSortMinFDsOpen + (colexecop.ExternalSorterMinPartitions * 2)
 )
 
 // externalHashJoiner is an operator that performs Grace hash join algorithm
@@ -120,7 +99,7 @@ func NewExternalHashJoiner(
 		// We need to allocate 2 FDs for reading the partitions (reused by the merge
 		// joiner) that we need to join using sort + merge join strategy, and all
 		// others are divided between the two inputs.
-		externalSorterMaxNumberPartitions := (maxNumberActivePartitions - sortMergeNonSortMinFDsOpen) / 2
+		externalSorterMaxNumberPartitions := (maxNumberActivePartitions - colexecop.SortMergeNonSortMinFDsOpen) / 2
 		leftOrdering := makeOrdering(spec.Left.EqCols)
 		leftPartitionSorter := createDiskBackedSorter(
 			partitionedInputs[0], spec.Left.SourceTypes, leftOrdering, externalSorterMaxNumberPartitions,
@@ -146,6 +125,6 @@ func NewExternalHashJoiner(
 		inMemMainOpConstructor,
 		diskBackedFallbackOpConstructor,
 		diskAcc,
-		externalHJMinPartitions,
+		colexecop.ExternalHJMinPartitions,
 	)
 }

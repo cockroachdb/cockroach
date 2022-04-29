@@ -126,6 +126,11 @@ func TestExternalHashAggregator(t *testing.T) {
 			}
 			var semsToCheck []semaphore.Semaphore
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+				// ehaNumRequiredFDs is the minimum number of file descriptors
+				// that are needed for the machinery of the external aggregator
+				// (plus 1 is needed for the in-memory hash aggregator in order
+				// to track tuples in a spilling queue).
+				ehaNumRequiredFDs := 1 + colexecop.ExternalSorterMinPartitions
 				sem := colexecop.NewTestingSemaphore(ehaNumRequiredFDs)
 				semsToCheck = append(semsToCheck, sem)
 				op, closers, err := createExternalHashAggregator(

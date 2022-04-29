@@ -455,7 +455,7 @@ EXPLAIN (VEC) DELETE FROM t70438 WHERE k=3 OR v=6
 │
 └ Node 1
   └ *sql.planNodeToRowSource
-    └ *colexec.unorderedDistinct
+    └ *colexec.UnorderedDistinct
       └ *colexec.SerialUnorderedSynchronizer
         ├ *colfetcher.ColBatchScan
         └ *colfetcher.ColBatchScan
