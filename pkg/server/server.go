@@ -568,6 +568,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				keys.SpanConfigurationsTableID,
 				1<<20, /* 1 MB */
 				fallbackConf,
+				cfg.Settings,
 				spanConfigKnobs,
 			)
 		}

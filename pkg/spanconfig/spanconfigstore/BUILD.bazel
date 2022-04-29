@@ -1,11 +1,14 @@
+load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "spanconfigstore",
     srcs = [
-        "spanconfigstore.go",
+        "interner.go",
+        "span_store.go",
         "store.go",
-        "systemspanconfigstore.go",
+        "system_store.go",
+        ":entry_interval_btree.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore",
     visibility = ["//visibility:public"],
@@ -13,11 +16,13 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/spanconfig",
-        "//pkg/util/interval",
         "//pkg/util/iterutil",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",  # keep
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -25,15 +30,17 @@ go_library(
 go_test(
     name = "spanconfigstore_test",
     srcs = [
-        "spanconfigstore_test.go",
+        "span_store_test.go",
         "store_test.go",
-        "systemspanconfigstore_test.go",
+        "system_store_test.go",
+        ":entry_interval_btree_test.go",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":spanconfigstore"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils",
@@ -43,4 +50,10 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+gen_interval_btree(
+    name = "spanconfig_interval_btree",
+    package = "spanconfigstore",
+    type = "*entry",
 )

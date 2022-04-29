@@ -19,6 +19,8 @@ go_library(
         "//pkg/cli/clisqlexec",
         "//pkg/cli/democluster/api",
         "//pkg/docs",
+        "//pkg/security/password",
+        "//pkg/security/pprompt",
         "//pkg/server/pgurl",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",

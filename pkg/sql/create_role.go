@@ -285,14 +285,9 @@ func (p *planner) checkPasswordAndGetHash(
 	}
 
 	method := security.GetConfiguredPasswordHashMethod(ctx, &st.SV)
-	var cost int
-	switch method {
-	case password.HashBCrypt:
-		cost = int(security.BcryptCost.Get(&st.SV))
-	case password.HashSCRAMSHA256:
-		cost = int(security.SCRAMCost.Get(&st.SV))
-	default:
-		return nil, errors.Newf("unsupported hash method: %v", method)
+	cost, err := security.GetConfiguredPasswordCost(ctx, &st.SV, method)
+	if err != nil {
+		return hashedPassword, errors.HandleAsAssertionFailure(err)
 	}
 	hashedPassword, err = password.HashPassword(ctx, cost, method, passwordStr,
 		security.GetExpensiveHashComputeSem(ctx))

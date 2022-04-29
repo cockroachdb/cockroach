@@ -23,6 +23,11 @@ overlapping span=[b,h)
 [d,f):B
 [f,h):A
 
+interned
+----
+A (refs = 2)
+B (refs = 1)
+
 
 # Check that writing a span that partially overlaps with multiple existing
 # entries deletes all of them, and re-adds the right non-overlapping fragments
@@ -43,6 +48,12 @@ overlapping span=[b,h)
 [e,f):B
 [f,h):A
 
+interned
+----
+A (refs = 2)
+B (refs = 1)
+C (refs = 1)
+
 # Check that when a span being written to entirely envelopes an existing entry,
 # that entry is deleted in its entirety.
 apply
@@ -60,6 +71,11 @@ overlapping span=[b,h)
 [c,d):C
 [g,h):A
 
+interned
+----
+A (refs = 2)
+C (refs = 1)
+
 # Validate that the right split points (span start keys) are surfaced.
 needs-split span=[b,h)
 ----
@@ -70,16 +86,21 @@ compute-split span=[b,h)
 key=c
 
 apply
-set [b,g):A
+set [b,g):B
 ----
 deleted [b,c)
 deleted [c,d)
-added [b,g):A
+added [b,g):B
 
 overlapping span=[b,h)
 ----
-[b,g):A
+[b,g):B
 [g,h):A
+
+interned
+----
+A (refs = 1)
+B (refs = 1)
 
 needs-split span=[b,h)
 ----

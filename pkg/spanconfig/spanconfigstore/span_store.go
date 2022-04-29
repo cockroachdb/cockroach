@@ -16,55 +16,86 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
+// tenantCoalesceAdjacentSetting is a hidden cluster setting that controls
+// whether we coalesce adjacent ranges in the tenant keyspace if they have the
+// same span config.
+var tenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"spanconfig.tenant_coalesce_adjacent.enabled",
+	`collapse adjacent ranges with the same span configs`,
+	true,
+)
+
+// hostCoalesceAdjacentSetting is a hidden cluster setting that controls
+// whether we coalesce adjacent ranges in the host tenant keyspace if they have
+// the same span config.
+var hostCoalesceAdjacentSetting = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"spanconfig.host_coalesce_adjacent.enabled",
+	`collapse adjacent ranges with the same span configs`,
+	false,
+)
+
 // spanConfigStore is an in-memory data structure to store and retrieve
-// SpanConfigs associated with a single span. Internally it makes use of an
-// interval tree to store non-overlapping span configurations. It isn't safe for
+// SpanConfigs associated with a single span. Internally it makes use of a
+// b-tree to store non-overlapping span configurations. It isn't safe for
 // concurrent use.
 type spanConfigStore struct {
-	tree    interval.Tree
-	idAlloc int64
+	btree       *btree
+	treeIDAlloc uint64    // used to maintain unique IDs for entries in btree
+	interner    *interner // interns configs for fast comparison
+
+	settings *cluster.Settings
+	knobs    *spanconfig.TestingKnobs
 }
 
 // newSpanConfigStore constructs and returns a new spanConfigStore.
-func newSpanConfigStore() *spanConfigStore {
-	s := &spanConfigStore{}
-	s.tree = interval.NewTree(interval.ExclusiveOverlapper)
+func newSpanConfigStore(
+	settings *cluster.Settings, knobs *spanconfig.TestingKnobs,
+) *spanConfigStore {
+	if knobs == nil {
+		knobs = &spanconfig.TestingKnobs{}
+	}
+	s := &spanConfigStore{
+		settings: settings,
+		knobs:    knobs,
+		btree:    &btree{},
+		interner: newInterner(),
+	}
 	return s
 }
 
 // copy returns a copy of the spanConfigStore.
-func (s *spanConfigStore) copy(ctx context.Context) *spanConfigStore {
-	clone := newSpanConfigStore()
-	_ = s.forEachOverlapping(keys.EverythingSpan, func(entry spanConfigEntry) error {
-		record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(entry.span), entry.config)
-		if err != nil {
-			log.Fatalf(ctx, "%v", err)
-		}
-		_, _, err = clone.apply(false /* dryrun */, spanconfig.Update(record))
-		if err != nil {
-			log.Fatalf(ctx, "%v", err)
-		}
-		return nil
-	})
-	return clone
+func (s *spanConfigStore) clone() *spanConfigStore {
+	clonedTree := s.btree.Clone()
+	return &spanConfigStore{
+		settings: s.settings,
+		knobs:    s.knobs,
+		btree:    &clonedTree,
+		interner: s.interner.copy(),
+	}
 }
 
 // forEachOverlapping iterates through the set of entries that overlap with the
 // given span, in sorted order. It does not return an error if the callback
 // doesn't.
-func (s *spanConfigStore) forEachOverlapping(sp roachpb.Span, f func(spanConfigEntry) error) error {
+func (s *spanConfigStore) forEachOverlapping(
+	sp roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
 	// Iterate over all overlapping ranges and invoke the callback with the
 	// corresponding span config entries.
-	for _, overlapping := range s.tree.Get(sp.AsRange()) {
-		entry := overlapping.(*spanConfigStoreEntry).spanConfigEntry
-		if err := f(entry); err != nil {
+	iter, query := s.btree.MakeIter(), makeQueryEntry(sp)
+	for iter.FirstOverlap(query); iter.Valid(); iter.NextOverlap(query) {
+		interned := iter.Cur().spanConfigPairInterned
+		if err := f(interned.span, interned.conf()); err != nil {
 			if iterutil.Done(err) {
 				err = nil
 			}
@@ -76,7 +107,7 @@ func (s *spanConfigStore) forEachOverlapping(sp roachpb.Span, f func(spanConfigE
 
 // computeSplitKey returns the first key we should split on because of the
 // presence a span config given a start and end key pair.
-func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) roachpb.RKey {
+func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) (roachpb.RKey, error) {
 	sp := roachpb.Span{Key: start.AsRawKey(), EndKey: end.AsRawKey()}
 
 	// We don't want to split within the system config span while we're still
@@ -85,56 +116,144 @@ func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) roachpb.RKey 
 	// TODO(irfansharif): Once we've fully phased out the system config span, we
 	// can get rid of this special handling.
 	if keys.SystemConfigSpan.Contains(sp) {
-		return nil
+		return nil, nil
 	}
 	if keys.SystemConfigSpan.ContainsKey(sp.Key) {
-		return roachpb.RKey(keys.SystemConfigSpan.EndKey)
+		return roachpb.RKey(keys.SystemConfigSpan.EndKey), nil
 	}
 
-	idx := 0
-	var splitKey roachpb.RKey = nil
-	s.tree.DoMatching(func(i interval.Interface) (done bool) {
-		if idx > 0 {
-			splitKey = roachpb.RKey(i.(*spanConfigStoreEntry).span.Key)
-			return true // we found our split key, we're done
+	// Generally split keys are going to be the start keys of span config entries.
+	// When computing a split key over ['b', 'z'), 'b' is not a valid split key;
+	// in the iteration below we'll find all entries overlapping with the given
+	// span but skipping over any start keys <= the given start key. In our
+	// example this could be ['a', 'x') or ['b', 'y').
+	var match spanConfigPairInterned
+	{
+		iter, query := s.btree.MakeIter(), makeQueryEntry(sp)
+		for iter.FirstOverlap(query); iter.Valid(); iter.NextOverlap(query) {
+			interned := iter.Cur().spanConfigPairInterned
+			if interned.span.Key.Compare(sp.Key) <= 0 {
+				continue // more
+			}
+
+			match = interned
+			break // we found our split key, we're done
 		}
+		if match.isEmpty() {
+			return nil, nil // no overlapping entries == no split key
+		}
+	}
 
-		idx++
-		return false // more
-	}, sp.AsRange())
+	if s.knobs.StoreDisableCoalesceAdjacent {
+		return roachpb.RKey(match.span.Key), nil
+	}
 
-	return splitKey
+	rem, matchTenID, err := keys.DecodeTenantPrefix(match.span.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	if !s.knobs.StoreIgnoreCoalesceAdjacentExceptions {
+		if matchTenID.IsSystem() {
+			// NB: This MaxReservedDescID fellow isn't really that meaningful anymore,
+			// it's just the maximum ID system tables could have had before dynamic
+			// system table IDs were thing. This check here is out of an abundance of
+			// caution, for these older system tables there's little benefit to
+			// coalescing them even though we can: it lowers the range count slightly
+			// but at the risk of subsystems stepping on one another by sharing these
+			// ranges. That said, we take no such precautions in the tenant keyspace,
+			// so perhaps it's overblown. Perhaps we want general config attributes
+			// that opt a specific table/index out of being coalesced with adjacent
+			// ranges.
+			systemTableUpperBound := keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)
+			if roachpb.Key(rem).Compare(systemTableUpperBound) < 0 ||
+				!hostCoalesceAdjacentSetting.Get(&s.settings.SV) {
+				return roachpb.RKey(match.span.Key), nil
+			}
+		} else {
+			if !tenantCoalesceAdjacentSetting.Get(&s.settings.SV) {
+				return roachpb.RKey(match.span.Key), nil
+			}
+		}
+	}
+
+	// We're looking to coalesce adjacent spans with the same configs as long
+	// they don't straddle across tenant boundaries. We'll first peek backwards to
+	// find the entry with the same start key as our query span (exactly what we
+	// skipped over above). If this entry has a different config or belongs to a
+	// different tenant prefix from our original match, our original match key is
+	// the split point we're interested in. If such an entry does not exist, then
+	// too our original match key is the right split point.
+	var firstMatch spanConfigPairInterned
+	preSplitKeySp := roachpb.Span{Key: sp.Key, EndKey: match.span.Key}
+	{
+		iter, query := s.btree.MakeIter(), makeQueryEntry(preSplitKeySp)
+		if iter.FirstOverlap(query); iter.Valid() {
+			firstMatch = iter.Cur().spanConfigPairInterned
+		}
+		if firstMatch.isEmpty() {
+			return roachpb.RKey(match.span.Key), nil
+		}
+		_, firstMatchTenID, err := keys.DecodeTenantPrefix(firstMatch.span.Key)
+		if err != nil {
+			return nil, err
+		}
+		if firstMatch.canonical != match.canonical || firstMatchTenID.ToUint64() != matchTenID.ToUint64() {
+			return roachpb.RKey(match.span.Key), nil
+		}
+	}
+
+	// At least the first two entries with the given span have the same configs
+	// and part of the same tenant range. Keep seeking ahead until we find a
+	// different config or a different tenant.
+	var lastMatch spanConfigPairInterned
+	postSplitKeySp := roachpb.Span{Key: match.span.EndKey, EndKey: sp.EndKey}
+	{
+		iter, query := s.btree.MakeIter(), makeQueryEntry(postSplitKeySp)
+		for iter.FirstOverlap(query); iter.Valid(); iter.NextOverlap(query) {
+			nextEntry := iter.Cur().spanConfigPairInterned
+			_, entryTenID, err := keys.DecodeTenantPrefix(nextEntry.span.Key)
+			if err != nil {
+				return nil, err
+			}
+			if nextEntry.canonical != match.canonical || entryTenID.ToUint64() != matchTenID.ToUint64() {
+				lastMatch = nextEntry
+				break // we're done
+			}
+		}
+		if !lastMatch.isEmpty() {
+			return roachpb.RKey(lastMatch.span.Key), nil
+		}
+	}
+
+	// All entries within the given span have the same config and part of the same
+	// tenant. There are no split points here.
+	return nil, nil
 }
 
 // getSpanConfigForKey returns the span config corresponding to the supplied
 // key.
 func (s *spanConfigStore) getSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, bool, error) {
+) (conf roachpb.SpanConfig, found bool) {
 	sp := roachpb.Span{Key: key.AsRawKey(), EndKey: key.Next().AsRawKey()}
-
-	var conf roachpb.SpanConfig
-	found := false
-	s.tree.DoMatching(func(i interval.Interface) (done bool) {
-		conf = i.(*spanConfigStoreEntry).config
-		found = true
-		return true
-	}, sp.AsRange())
-
-	if !found {
-		if log.ExpensiveLogEnabled(ctx, 1) {
-			log.Warningf(ctx, "span config not found for %s", key.String())
-		}
+	iter, query := s.btree.MakeIter(), makeQueryEntry(sp)
+	for iter.FirstOverlap(query); iter.Valid(); {
+		conf, found = iter.Cur().conf(), true
+		break
 	}
-	return conf, found, nil
+	if !found && log.ExpensiveLogEnabled(ctx, 1) {
+		log.Warningf(ctx, "span config not found for %s", key.String())
+	}
+	return conf, found
 }
 
 // apply takes an incremental set of updates and returns the spans/span<->config
 // entries deleted/added as a result of applying them. It also updates its state
 // by applying them if dryrun is false.
 func (s *spanConfigStore) apply(
-	dryrun bool, updates ...spanconfig.Update,
-) (deleted []roachpb.Span, added []spanConfigStoreEntry, err error) {
+	ctx context.Context, dryrun bool, updates ...spanconfig.Update,
+) (deleted []roachpb.Span, added []entry, err error) {
 	if err := validateApplyArgs(updates...); err != nil {
 		return nil, nil, err
 	}
@@ -146,26 +265,26 @@ func (s *spanConfigStore) apply(
 	})
 	updates = sorted // re-use the same variable
 
-	entriesToDelete, entriesToAdd := s.accumulateOpsFor(updates)
+	entriesToDelete, entriesToAdd, err := s.accumulateOpsFor(ctx, dryrun, updates)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	deleted = make([]roachpb.Span, len(entriesToDelete))
 	for i := range entriesToDelete {
 		entry := &entriesToDelete[i]
 		if !dryrun {
-			if err := s.tree.Delete(entry, false); err != nil {
-				return nil, nil, err
-			}
+			s.btree.Delete(entry)
+			s.interner.remove(ctx, entry.canonical)
 		}
 		deleted[i] = entry.span
 	}
 
-	added = make([]spanConfigStoreEntry, len(entriesToAdd))
+	added = make([]entry, len(entriesToAdd))
 	for i := range entriesToAdd {
 		entry := &entriesToAdd[i]
 		if !dryrun {
-			if err := s.tree.Insert(entry, false); err != nil {
-				return nil, nil, err
-			}
+			s.btree.Set(entry)
 		}
 		added[i] = *entry
 	}
@@ -247,7 +366,7 @@ func (s *spanConfigStore) apply(
 //           add {span=carried-over.span, conf=carried-over.conf} if non-empty
 //
 //       for entry in store.overlapping(update.span):
-//          if entry.overlap(processed):
+//          if entry.overlap(carried-over):
 //               continue # already processed
 //
 //           union, intersection = union(update.span, entry), intersection(update.span, entry)
@@ -268,36 +387,37 @@ func (s *spanConfigStore) apply(
 //   add {span=carry-over.span, conf=carry-over.conf} if non-empty
 //
 func (s *spanConfigStore) accumulateOpsFor(
-	updates []spanconfig.Update,
-) (toDelete, toAdd []spanConfigStoreEntry) {
-	var carryOver spanConfigEntry
+	ctx context.Context, dryrun bool, updates []spanconfig.Update,
+) (toDelete, toAdd []entry, _ error) {
+	var carryOver spanConfigPair
 	for _, update := range updates {
-		var carriedOver spanConfigEntry
-		carriedOver, carryOver = carryOver, spanConfigEntry{}
+		var carriedOver spanConfigPair
+		carriedOver, carryOver = carryOver, spanConfigPair{}
 		if update.GetTarget().GetSpan().Overlaps(carriedOver.span) {
 			gapBetweenUpdates := roachpb.Span{
 				Key:    carriedOver.span.Key,
 				EndKey: update.GetTarget().GetSpan().Key}
 			if gapBetweenUpdates.Valid() {
-				toAdd = append(toAdd, s.makeEntry(gapBetweenUpdates, carriedOver.config))
+				toAdd = append(toAdd, s.makeEntry(ctx, dryrun, gapBetweenUpdates, carriedOver.config))
 			}
 
 			carryOverSpanAfterUpdate := roachpb.Span{
 				Key:    update.GetTarget().GetSpan().EndKey,
 				EndKey: carriedOver.span.EndKey}
 			if carryOverSpanAfterUpdate.Valid() {
-				carryOver = spanConfigEntry{
+				carryOver = spanConfigPair{
 					span:   carryOverSpanAfterUpdate,
 					config: carriedOver.config,
 				}
 			}
 		} else if !carriedOver.isEmpty() {
-			toAdd = append(toAdd, s.makeEntry(carriedOver.span, carriedOver.config))
+			toAdd = append(toAdd, s.makeEntry(ctx, dryrun, carriedOver.span, carriedOver.config))
 		}
 
 		skipAddingSelf := false
-		for _, overlapping := range s.tree.Get(update.GetTarget().GetSpan().AsRange()) {
-			existing := overlapping.(*spanConfigStoreEntry)
+		iter, query := s.btree.MakeIter(), makeQueryEntry(update.GetTarget().GetSpan())
+		for iter.FirstOverlap(query); iter.Valid(); iter.NextOverlap(query) {
+			existing := iter.Cur()
 			if existing.span.Overlaps(carriedOver.span) {
 				continue // we've already processed this entry above.
 			}
@@ -310,8 +430,9 @@ func (s *spanConfigStore) accumulateOpsFor(
 				post = roachpb.Span{Key: inter.EndKey, EndKey: union.EndKey}
 			)
 
+			existingConf := existing.conf()
 			if update.Addition() {
-				if existing.span.Equal(update.GetTarget().GetSpan()) && existing.config.Equal(update.GetConfig()) {
+				if existing.span.Equal(update.GetTarget().GetSpan()) && existingConf.Equal(update.GetConfig()) {
 					skipAddingSelf = true
 					break // no-op; peep-hole optimization
 				}
@@ -333,7 +454,7 @@ func (s *spanConfigStore) accumulateOpsFor(
 
 				// Re-add the non-intersecting span, if any.
 				if pre.Valid() {
-					toAdd = append(toAdd, s.makeEntry(pre, existing.config))
+					toAdd = append(toAdd, s.makeEntry(ctx, dryrun, pre, existingConf))
 				}
 			}
 
@@ -345,16 +466,16 @@ func (s *spanConfigStore) accumulateOpsFor(
 				// up:        [---------)
 
 				// Carry over the non-intersecting span.
-				carryOver = spanConfigEntry{
+				carryOver = spanConfigPair{
 					span:   post,
-					config: existing.config,
+					config: existingConf,
 				}
 			}
 		}
 
 		if update.Addition() && !skipAddingSelf {
 			// Add the update itself.
-			toAdd = append(toAdd, s.makeEntry(update.GetTarget().GetSpan(), update.GetConfig()))
+			toAdd = append(toAdd, s.makeEntry(ctx, dryrun, update.GetTarget().GetSpan(), update.GetConfig()))
 
 			// TODO(irfansharif): If we're adding an entry, we could inspect the
 			// entries before and after and check whether either of them have
@@ -372,17 +493,9 @@ func (s *spanConfigStore) accumulateOpsFor(
 	}
 
 	if !carryOver.isEmpty() {
-		toAdd = append(toAdd, s.makeEntry(carryOver.span, carryOver.config))
+		toAdd = append(toAdd, s.makeEntry(ctx, dryrun, carryOver.span, carryOver.config))
 	}
-	return toDelete, toAdd
-}
-
-func (s *spanConfigStore) makeEntry(sp roachpb.Span, conf roachpb.SpanConfig) spanConfigStoreEntry {
-	s.idAlloc++
-	return spanConfigStoreEntry{
-		spanConfigEntry: spanConfigEntry{span: sp, config: conf},
-		id:              s.idAlloc,
-	}
+	return toDelete, toAdd, nil
 }
 
 // validateApplyArgs validates the supplied updates can be applied to the
@@ -422,31 +535,72 @@ func validateApplyArgs(updates ...spanconfig.Update) error {
 	return nil
 }
 
-// spanConfigEntry captures a span <->config pair.
-type spanConfigEntry struct {
+// spanConfigPair represents a span <->config pair.
+type spanConfigPair struct {
 	span   roachpb.Span
 	config roachpb.SpanConfig
 }
 
-func (s *spanConfigEntry) isEmpty() bool {
+func (s *spanConfigPair) isEmpty() bool {
 	return s.span.Equal(roachpb.Span{}) && s.config.IsEmpty()
 }
 
-// spanConfigStoreEntry is the type used to store and sort values in the
-// span config store.
-type spanConfigStoreEntry struct {
-	spanConfigEntry
-	id int64
+// spanConfigPairInterned represents a span <->config pair, but unlike
+// spanConfigPair, doesn't embed the span config itself. It instead holds onto
+// an interner ID which can be used to retrieve the corresponding config.
+type spanConfigPairInterned struct {
+	span      roachpb.Span
+	canonical *roachpb.SpanConfig
 }
 
-var _ interval.Interface = &spanConfigStoreEntry{}
-
-// Range implements interval.Interface.
-func (s *spanConfigStoreEntry) Range() interval.Range {
-	return s.span.AsRange()
+func (s *spanConfigPairInterned) isEmpty() bool {
+	return s.span.Equal(roachpb.Span{}) && s.canonical == nil
 }
 
-// ID implements interval.Interface.
-func (s *spanConfigStoreEntry) ID() uintptr {
-	return uintptr(s.id)
+func (s *spanConfigPairInterned) conf() roachpb.SpanConfig {
+	return *s.canonical
 }
+
+//go:generate ../../util/interval/generic/gen.sh *entry spanconfigstore
+
+type entry struct {
+	spanConfigPairInterned
+	id uint64
+}
+
+func (s *spanConfigStore) makeEntry(
+	ctx context.Context, dryrun bool, sp roachpb.Span, conf roachpb.SpanConfig,
+) entry {
+	if !dryrun {
+		s.treeIDAlloc++
+	}
+	var canonical *roachpb.SpanConfig
+	if !dryrun || s.knobs.StoreInternConfigsInDryRuns {
+		canonical = s.interner.add(ctx, conf)
+	}
+	return entry{
+		spanConfigPairInterned: spanConfigPairInterned{
+			span:      sp,
+			canonical: canonical,
+		},
+		id: s.treeIDAlloc,
+	}
+}
+
+func makeQueryEntry(s roachpb.Span) *entry {
+	var e entry
+	e.SetKey(s.Key)
+	e.SetEndKey(s.EndKey)
+	return &e
+}
+
+// Methods required by util/interval/generic type contract.
+
+func (s *entry) ID() uint64         { return s.id }
+func (s *entry) Key() []byte        { return s.span.Key }
+func (s *entry) EndKey() []byte     { return s.span.EndKey }
+func (s *entry) String() string     { return s.span.String() }
+func (s *entry) New() *entry        { return new(entry) }
+func (s *entry) SetID(id uint64)    { s.id = id }
+func (s *entry) SetKey(k []byte)    { s.span.Key = k }
+func (s *entry) SetEndKey(k []byte) { s.span.EndKey = k }
