@@ -125,6 +125,11 @@ type Hints struct {
 	// UniqueRequests tells the Streamer that the requests will be unique. As
 	// such, there's no point in de-duping them or caching results.
 	UniqueRequests bool
+	// SingleRowLookup tells the Streamer that each enqueued request will result
+	// in a single row lookup (in other words, the request contains a "key"). If
+	// true, then the Streamer knows that no request will be split across
+	// multiple ranges, so some internal state can be optimized away.
+	SingleRowLookup bool
 }
 
 // Release needs to be called by the recipient of the Result exactly once when
@@ -238,8 +243,9 @@ type Streamer struct {
 
 		// numRangesLeftPerScanRequest tracks how many ranges a particular
 		// originally enqueued ScanRequest touches, but scanning of those ranges
-		// isn't complete. It is allocated lazily when the first ScanRequest is
-		// encountered in Enqueue.
+		// isn't complete. It is allocated lazily if Hints.SingleRowLookup is
+		// false when the first ScanRequest is encountered in Enqueue.
+		// TODO(yuzefovich): perform memory accounting for this.
 		numRangesLeftPerScanRequest []int
 
 		// numRequestsInFlight tracks the number of single-range batches that
@@ -460,26 +466,30 @@ func (s *Streamer) Enqueue(
 		if err != nil {
 			return err
 		}
-		for _, pos := range positions {
-			if _, isScan := reqs[pos].GetInner().(*roachpb.ScanRequest); isScan {
-				if firstScanRequest {
-					// We have some ScanRequests, so we have to set up
-					// numRangesLeftPerScanRequest.
-					streamerLocked = true
-					s.mu.Lock()
-					if cap(s.mu.numRangesLeftPerScanRequest) < len(reqs) {
-						s.mu.numRangesLeftPerScanRequest = make([]int, len(reqs))
-					} else {
-						// We can reuse numRangesLeftPerScanRequest allocated on
-						// the previous call to Enqueue after we zero it out.
-						s.mu.numRangesLeftPerScanRequest = s.mu.numRangesLeftPerScanRequest[:len(reqs)]
-						for n := 0; n < len(s.mu.numRangesLeftPerScanRequest); {
-							n += copy(s.mu.numRangesLeftPerScanRequest[n:], zeroIntSlice)
+		if !s.hints.SingleRowLookup {
+			for _, pos := range positions {
+				if _, isScan := reqs[pos].GetInner().(*roachpb.ScanRequest); isScan {
+					if firstScanRequest {
+						// We have some ScanRequests, and each might touch
+						// multiple ranges, so we have to set up
+						// numRangesLeftPerScanRequest.
+						streamerLocked = true
+						s.mu.Lock()
+						if cap(s.mu.numRangesLeftPerScanRequest) < len(reqs) {
+							s.mu.numRangesLeftPerScanRequest = make([]int, len(reqs))
+						} else {
+							// We can reuse numRangesLeftPerScanRequest
+							// allocated on the previous call to Enqueue after
+							// we zero it out.
+							s.mu.numRangesLeftPerScanRequest = s.mu.numRangesLeftPerScanRequest[:len(reqs)]
+							for n := 0; n < len(s.mu.numRangesLeftPerScanRequest); {
+								n += copy(s.mu.numRangesLeftPerScanRequest[n:], zeroIntSlice)
+							}
 						}
 					}
+					s.mu.numRangesLeftPerScanRequest[pos]++
+					firstScanRequest = false
 				}
-				s.mu.numRangesLeftPerScanRequest[pos]++
-				firstScanRequest = false
 			}
 		}
 
@@ -1320,7 +1330,11 @@ func (w *workerCoordinator) processSingleRangeResults(
 				result.memoryTok.toRelease = scanResponseSize(scan)
 				memoryTokensBytes += result.memoryTok.toRelease
 				result.ScanResp.ScanResponse = scan
-				// Complete field will be set below.
+				if w.s.hints.SingleRowLookup {
+					// When SingleRowLookup is false, Complete field will be set
+					// in finalizeSingleRangeResults().
+					result.ScanResp.Complete = true
+				}
 				results = append(results, result)
 				hasNonEmptyScanResponse = true
 			}
@@ -1343,6 +1357,16 @@ func (w *workerCoordinator) processSingleRangeResults(
 					resumeReq.priority = position
 				}
 				resumeReqIdx++
+
+				if w.s.hints.SingleRowLookup {
+					// Unset the ResumeSpan on the result in order to not
+					// confuse the user of the Streamer. Non-nil resume span was
+					// already included into resumeReq above.
+					//
+					// When SingleRowLookup is false, this will be done in
+					// finalizeSingleRangeResults().
+					scan.ResumeSpan = nil
+				}
 			}
 		}
 	}
@@ -1393,8 +1417,9 @@ func (w *workerCoordinator) processSingleRangeResults(
 
 // finalizeSingleRangeResults "finalizes" the results of evaluation of a
 // singleRangeBatch. By "finalization" we mean setting Complete field of
-// ScanResp to correct value for all scan responses, updating the estimate of an
-// average response size, and telling the Streamer about these results.
+// ScanResp to correct value for all scan responses (when Hints.SingleRowLookup
+// is false), updating the estimate of an average response size, and telling the
+// Streamer about these results.
 //
 // This method assumes that results has length greater than zero.
 func (w *workerCoordinator) finalizeSingleRangeResults(
@@ -1416,7 +1441,11 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	// We need to do this check as well as adding the results to be returned to
 	// the client as an atomic operation so that Complete is set to true only on
 	// the last partial scan response.
-	if hasNonEmptyScanResponse {
+	//
+	// However, if we got a hint that each lookup produces a single row, then we
+	// know that no original ScanRequest can span multiple ranges, so Complete
+	// field has already been set correctly.
+	if hasNonEmptyScanResponse && !w.s.hints.SingleRowLookup {
 		for i := range results {
 			if results[i].ScanResp.ScanResponse != nil {
 				if results[i].ScanResp.ResumeSpan == nil {
