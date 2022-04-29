@@ -10,6 +10,7 @@ go_library(
         "//pkg/sql/flowinfra",
         "//pkg/util/circuit",
         "//pkg/util/grpcutil",
+        "//pkg/util/sysutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
