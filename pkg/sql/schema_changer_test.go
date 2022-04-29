@@ -6604,6 +6604,7 @@ SELECT job_id FROM crdb_internal.jobs
 // multiple queued schema changes works as expected.
 func TestCancelMultipleQueued(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 80782, "flaky test")
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
