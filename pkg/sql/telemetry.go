@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -75,5 +76,26 @@ func init() {
 	}
 	tree.OnTypeCheckArrayFlatten = func() {
 		telemetry.Inc(sqltelemetry.ArrayFlattenCounter)
+	}
+	tree.OnCastTypeCheck = make(map[tree.CastCounterType]func())
+	for fromID := range types.Family_name {
+		for toID := range types.Family_name {
+			from := types.Family(fromID)
+			to := types.Family(toID)
+			var c telemetry.Counter
+			switch {
+			case from == types.ArrayFamily && to == types.ArrayFamily:
+				c = sqltelemetry.ArrayCastCounter
+			case from == types.TupleFamily && to == types.TupleFamily:
+				c = sqltelemetry.TupleCastCounter
+			case from == types.EnumFamily && to == types.EnumFamily:
+				c = sqltelemetry.EnumCastCounter
+			default:
+				c = sqltelemetry.CastOpCounter(from.Name(), to.Name())
+			}
+			tree.OnCastTypeCheck[tree.CastCounterType{From: from, To: to}] = func() {
+				telemetry.Inc(c)
+			}
+		}
 	}
 }

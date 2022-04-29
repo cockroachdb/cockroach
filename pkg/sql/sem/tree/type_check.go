@@ -15,13 +15,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -451,7 +449,7 @@ func resolveCast(
 		if err != nil {
 			return err
 		}
-		telemetry.Inc(getCastCounter(fromFamily, toFamily))
+		onCastTypeCheckHook(fromFamily, toFamily)
 		return nil
 
 	case toFamily == types.EnumFamily && fromFamily == types.EnumFamily:
@@ -460,7 +458,7 @@ func resolveCast(
 		if !castFrom.Equivalent(castTo) {
 			return invalidCastError(castFrom, castTo)
 		}
-		telemetry.Inc(getCastCounter(fromFamily, toFamily))
+		onCastTypeCheckHook(fromFamily, toFamily)
 		return nil
 
 	case toFamily == types.TupleFamily && fromFamily == types.TupleFamily:
@@ -489,7 +487,7 @@ func resolveCast(
 				return err
 			}
 		}
-		telemetry.Inc(getCastCounter(fromFamily, toFamily))
+		onCastTypeCheckHook(fromFamily, toFamily)
 		return nil
 
 	default:
@@ -505,48 +503,28 @@ func resolveCast(
 			}
 			return err
 		}
-		telemetry.Inc(getCastCounter(fromFamily, toFamily))
+		onCastTypeCheckHook(fromFamily, toFamily)
 		return nil
 	}
 }
 
-// castCounterType represents a cast from one family to another.
-type castCounterType struct {
-	from, to types.Family
+// CastCounterType represents a cast from one family to another.
+type CastCounterType struct {
+	From, To types.Family
 }
 
-// castCounterMap is a map of cast counter types to their corresponding
-// telemetry counters.
-var castCounters map[castCounterType]telemetry.Counter
+// OnCastTypeCheck is a map of CastCounterTypes to their hook.
+var OnCastTypeCheck map[CastCounterType]func()
 
-// Initialize castCounters.
-func init() {
-	castCounters = make(map[castCounterType]telemetry.Counter)
-	for fromID := range types.Family_name {
-		for toID := range types.Family_name {
-			from := types.Family(fromID)
-			to := types.Family(toID)
-			var c telemetry.Counter
-			switch {
-			case from == types.ArrayFamily && to == types.ArrayFamily:
-				c = sqltelemetry.ArrayCastCounter
-			case from == types.TupleFamily && to == types.TupleFamily:
-				c = sqltelemetry.TupleCastCounter
-			case from == types.EnumFamily && to == types.EnumFamily:
-				c = sqltelemetry.EnumCastCounter
-			default:
-				c = sqltelemetry.CastOpCounter(from.Name(), to.Name())
-			}
-			castCounters[castCounterType{from, to}] = c
-		}
+// onCastTypeCheckHook performs the registered hook for the given cast on type check.
+func onCastTypeCheckHook(from, to types.Family) {
+	// The given map has not been populated, so do not expect any telemetry.
+	if OnCastTypeCheck == nil {
+		return
 	}
-}
-
-// getCastCounter returns the telemetry counter for the cast from one family to
-// another family.
-func getCastCounter(from, to types.Family) telemetry.Counter {
-	if c, ok := castCounters[castCounterType{from, to}]; ok {
-		return c
+	if f, ok := OnCastTypeCheck[CastCounterType{From: from, To: to}]; ok {
+		f()
+		return
 	}
 	panic(errors.AssertionFailedf(
 		"no cast counter found for cast from %s to %s", from.Name(), to.Name(),
