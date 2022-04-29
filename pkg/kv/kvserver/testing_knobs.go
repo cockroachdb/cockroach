@@ -390,6 +390,8 @@ type StoreTestingKnobs struct {
 	// IgnoreStrictGCEnforcement is used by tests to op out of strict GC
 	// enforcement.
 	IgnoreStrictGCEnforcement bool
+	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
+	EnqueueReplicaInterceptor func(queueName string, replica *Replica)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
