@@ -147,7 +147,8 @@ func (b *kvStreamerResultDiskBuffer) Close(ctx context.Context) {
 // kvstreamer.Result that is spilled to disk.
 //
 // It contains all the information except for 'ScanResp.Complete', 'memoryTok',
-// and 'Position' fields which are kept in-memory (because they are allocated in
+// 'Position', 'subRequestIdx', and 'subRequestDone' fields which are kept
+// in-memory (because they are allocated in
 // kvstreamer.inOrderBufferedResult.Result anyway).
 var inOrderResultsBufferSpillTypeSchema = []*types.T{
 	types.Bool, // isGet
