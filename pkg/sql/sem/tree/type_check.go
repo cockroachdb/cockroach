@@ -353,9 +353,8 @@ func (expr *BinaryExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
 	}
 
-	// Register operator usage in telemetry.
-	if binOp.counter != nil {
-		telemetry.Inc(binOp.counter)
+	if binOp.OnTypeCheck != nil {
+		binOp.OnTypeCheck()
 	}
 
 	expr.Left, expr.Right = leftTyped, rightTyped
@@ -883,9 +882,8 @@ func (expr *ComparisonExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
 	}
 
-	// Register operator usage in telemetry.
-	if cmpOp.counter != nil {
-		telemetry.Inc(cmpOp.counter)
+	if cmpOp.OnTypeCheck != nil {
+		cmpOp.OnTypeCheck()
 	}
 
 	expr.Left, expr.Right = leftTyped, rightTyped
@@ -1496,9 +1494,8 @@ func (expr *UnaryExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
 	}
 
-	// Register operator usage in telemetry.
-	if unaryOp.counter != nil {
-		telemetry.Inc(unaryOp.counter)
+	if unaryOp.OnTypeCheck != nil {
+		unaryOp.OnTypeCheck()
 	}
 
 	expr.Expr = exprTyped

@@ -1129,7 +1129,8 @@ const (
 
 var _ = NumUnaryOperatorSymbols
 
-var unaryOpName = [...]string{
+// UnaryOpName is the mapping of unary operators to names.
+var UnaryOpName = [...]string{
 	UnaryMinus:      "-",
 	UnaryPlus:       "+",
 	UnaryComplement: "~",
@@ -1138,10 +1139,10 @@ var unaryOpName = [...]string{
 }
 
 func (i UnaryOperatorSymbol) String() string {
-	if i > UnaryOperatorSymbol(len(unaryOpName)-1) {
+	if i > UnaryOperatorSymbol(len(UnaryOpName)-1) {
 		return fmt.Sprintf("UnaryOp(%d)", i)
 	}
-	return unaryOpName[i]
+	return UnaryOpName[i]
 }
 
 // UnaryExpr represents a unary value expression.
