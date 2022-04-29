@@ -958,6 +958,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Start a context for the asynchronous network workers.
+	workersCtx := s.AnnotateCtx(context.Background())
+
 	// connManager tracks incoming connections accepted via listeners
 	// and automatically closes them when the stopper indicates a
 	// shutdown.
@@ -966,10 +969,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// - SQL client connections with a TLS handshake over TCP.
 	// (gRPC connections are handled separately via s.grpc and perform
 	// their TLS handshake on their own)
-	connManager := netutil.MakeServer(s.stopper, uiTLSConfig, http.HandlerFunc(s.http.baseHandler))
-
-	// Start a context for the asynchronous network workers.
-	workersCtx := s.AnnotateCtx(context.Background())
+	connManager := netutil.MakeServer(workersCtx, s.stopper, uiTLSConfig, http.HandlerFunc(s.http.baseHandler))
 
 	// Start the admin UI server. This opens the HTTP listen socket,
 	// optionally sets up TLS, and dispatches the server worker for the
