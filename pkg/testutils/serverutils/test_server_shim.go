@@ -199,6 +199,9 @@ type TestServerInterface interface {
 	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
 	// the server.
 	SpanConfigKVSubscriber() interface{}
+
+	// DecommissionMonitor returns the DecommissionMonitor for the server.
+	DecommissionMonitor() interface{}
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

@@ -116,6 +116,7 @@ func (t *testServerShim) MetricsRecorder() *status.MetricsRecorder { panic(unsup
 func (t *testServerShim) CollectionFactory() interface{}           { panic(unsupportedShimMethod) }
 func (t *testServerShim) SystemTableIDResolver() interface{}       { panic(unsupportedShimMethod) }
 func (t *testServerShim) SpanConfigKVSubscriber() interface{}      { panic(unsupportedShimMethod) }
+func (t *testServerShim) DecommissionMonitor() interface{}         { panic(unsupportedShimMethod) }
 func (t *testServerShim) SystemConfigProvider() config.SystemConfigProvider {
 	panic(unsupportedShimMethod)
 }

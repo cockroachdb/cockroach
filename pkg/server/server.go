@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -86,7 +87,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"google.golang.org/grpc/codes"
 )
 
@@ -398,6 +399,19 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
+	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
+	decommissionMonitor := &decommissionMonitor{
+		localNodeIDContainer: nodeIDContainer,
+		localStores:          stores,
+		stopper:              stopper,
+		// NOTE(aayush): We could make this semaphore size configurable if we wanted
+		// to.
+		nudgerSem: quotapool.NewIntPool("decommission-monitor-sem", 10),
+	}
+	decommissionMonitor.mu.Lock()
+	decommissionMonitor.mu.nudgersByNodeID = make(map[roachpb.NodeID]*nodeDecommissionNudger)
+	decommissionMonitor.mu.Unlock()
+
 	nodeLiveness := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,
 		Clock:                   clock,
@@ -416,7 +430,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			); err != nil {
 				log.Fatalf(ctx, "unable to add tombstone for n%d: %s", liveness.NodeID, err)
 			}
+			decommissionMonitor.onNodeDecommissioned(liveness.NodeID)
 		},
+		OnNodeDecommissioning: decommissionMonitor.makeOnNodeDecommissioningCallback(),
 	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
@@ -440,7 +456,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
-	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
 
 	// The InternalExecutor will be further initialized later, as we create more
@@ -663,10 +678,20 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	node := NewNode(
-		storeCfg, recorder, registry, stopper,
-		txnMetrics, stores, nil /* execCfg */, cfg.ClusterIDContainer,
-		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
-		tenantUsage, tenantSettingsWatcher, spanConfig.kvAccessor,
+		storeCfg,
+		recorder,
+		registry,
+		stopper,
+		txnMetrics,
+		stores,
+		nil,
+		cfg.ClusterIDContainer,
+		gcoords.Regular.GetWorkQueue(admission.KVWork),
+		gcoords.Stores,
+		tenantUsage,
+		tenantSettingsWatcher,
+		spanConfig.kvAccessor,
+		decommissionMonitor,
 	)
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)

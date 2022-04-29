@@ -2369,6 +2369,10 @@ func (fq *fakeRangeQueue) MaybeAddAsync(context.Context, replicaInQueue, hlc.Clo
 	// Do nothing
 }
 
+func (fq *fakeRangeQueue) AddAsync(context.Context, replicaInQueue, float64) {
+	// Do nothing
+}
+
 func (fq *fakeRangeQueue) MaybeRemove(rangeID roachpb.RangeID) {
 	fq.maybeRemovedRngs <- rangeID
 }

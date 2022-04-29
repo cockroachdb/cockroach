@@ -193,10 +193,11 @@ type NodeLiveness struct {
 	// heartbeatPaused contains an atomically-swapped number representing a bool
 	// (1 or 0). heartbeatToken is a channel containing a token which is taken
 	// when heartbeating or when pausing the heartbeat. Used for testing.
-	heartbeatPaused      uint32
-	heartbeatToken       chan struct{}
-	metrics              Metrics
-	onNodeDecommissioned func(livenesspb.Liveness) // noop if nil
+	heartbeatPaused       uint32
+	heartbeatToken        chan struct{}
+	metrics               Metrics
+	onNodeDecommissioned  func(livenesspb.Liveness)  // noop if nil
+	onNodeDecommissioning OnNodeDecommissionCallback // noop if nil
 
 	mu struct {
 		syncutil.RWMutex
@@ -274,23 +275,27 @@ type NodeLivenessOptions struct {
 	// idempotent as it may be invoked multiple times and defaults to a
 	// noop.
 	OnNodeDecommissioned func(livenesspb.Liveness)
+	// OnNodeDecommissioning is invoked when a node is detected to be
+	// decommissioning.
+	OnNodeDecommissioning OnNodeDecommissionCallback
 }
 
 // NewNodeLiveness returns a new instance of NodeLiveness configured
 // with the specified gossip instance.
 func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 	nl := &NodeLiveness{
-		ambientCtx:           opts.AmbientCtx,
-		clock:                opts.Clock,
-		db:                   opts.DB,
-		gossip:               opts.Gossip,
-		livenessThreshold:    opts.LivenessThreshold,
-		renewalDuration:      opts.RenewalDuration,
-		selfSem:              make(chan struct{}, 1),
-		st:                   opts.Settings,
-		otherSem:             make(chan struct{}, 1),
-		heartbeatToken:       make(chan struct{}, 1),
-		onNodeDecommissioned: opts.OnNodeDecommissioned,
+		ambientCtx:            opts.AmbientCtx,
+		clock:                 opts.Clock,
+		db:                    opts.DB,
+		gossip:                opts.Gossip,
+		livenessThreshold:     opts.LivenessThreshold,
+		renewalDuration:       opts.RenewalDuration,
+		selfSem:               make(chan struct{}, 1),
+		st:                    opts.Settings,
+		otherSem:              make(chan struct{}, 1),
+		heartbeatToken:        make(chan struct{}, 1),
+		onNodeDecommissioned:  opts.OnNodeDecommissioned,
+		onNodeDecommissioning: opts.OnNodeDecommissioning,
 	}
 	nl.metrics = Metrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
@@ -689,6 +694,10 @@ func (nl *NodeLiveness) IsAvailableNotDraining(nodeID roachpb.NodeID) bool {
 		!liveness.Membership.Decommissioned() &&
 		!liveness.Draining
 }
+
+// OnNodeDecommissionCallback is a callback that is invoked when a node is
+// detected to be decommissioning.
+type OnNodeDecommissionCallback func(nodeID roachpb.NodeID)
 
 // NodeLivenessStartOptions are the arguments to `NodeLiveness.Start`.
 type NodeLivenessStartOptions struct {
@@ -1396,6 +1405,9 @@ func (nl *NodeLiveness) maybeUpdate(ctx context.Context, newLivenessRec Record) 
 	}
 	if newLivenessRec.Membership.Decommissioned() && nl.onNodeDecommissioned != nil {
 		nl.onNodeDecommissioned(newLivenessRec.Liveness)
+	}
+	if newLivenessRec.Membership.Decommissioning() && nl.onNodeDecommissioning != nil {
+		nl.onNodeDecommissioning(newLivenessRec.NodeID)
 	}
 }
 

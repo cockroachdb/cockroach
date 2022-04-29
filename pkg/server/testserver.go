@@ -1365,6 +1365,11 @@ func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
 	return ts.node.storeCfg.SpanConfigSubscriber
 }
 
+// DecommissionMonitor is part of the TestServerInterface.
+func (ts *TestServer) DecommissionMonitor() interface{} {
+	return ts.node.decommissionMonitor
+}
+
 // SystemConfigProvider is part of the TestServerInterface.
 func (ts *TestServer) SystemConfigProvider() config.SystemConfigProvider {
 	return ts.node.storeCfg.SystemConfigProvider
