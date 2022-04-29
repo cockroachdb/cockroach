@@ -165,7 +165,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	}
 
 	for i, cmd := range n.n.Cmds {
-		telemetry.Inc(cmd.TelemetryCounter())
+		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", cmd.TelemetryName()))
 
 		if !n.tableDesc.HasPrimaryKey() && !isAlterCmdValidWithoutPrimaryKey(cmd) {
 			return errors.Newf("table %q does not have a primary key, cannot perform%s", n.tableDesc.Name, tree.AsString(cmd))
