@@ -5,7 +5,6 @@ load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "execinfra",
     srcs = [
-        "aggregatorbase.go",
         "base.go",
         "flow_context.go",
         "metadata_test_receiver.go",
@@ -48,7 +47,6 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/rowinfra",
-        "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
