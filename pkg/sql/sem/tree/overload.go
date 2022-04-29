@@ -17,7 +17,6 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -134,9 +133,8 @@ type Overload struct {
 	// statement which will be executed as a common table expression in the query.
 	SQLFn SQLFnOverload
 
-	// counter, if non-nil, should be incremented upon successful
-	// type check of expressions using this overload.
-	counter telemetry.Counter
+	// OnTypeCheck is incremented every time this overload is type checked.
+	OnTypeCheck func()
 
 	// SpecializedVecBuiltin is used to let the vectorized engine
 	// know when an Overload has a specialized vectorized operator.
