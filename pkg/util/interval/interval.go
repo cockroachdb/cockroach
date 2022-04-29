@@ -234,7 +234,8 @@ type TreeIterator interface {
 var useBTreeImpl = envutil.EnvOrDefaultBool("COCKROACH_INTERVAL_BTREE", false)
 
 // NewTree creates a new interval tree with the given overlapper function. It
-// uses the augmented Left-Leaning Red Black tree implementation.
+// uses the augmented Left-Leaning Red Black tree implementation unless the
+// envvar COCKROACH_INTERVAL_BTREE is set.
 func NewTree(overlapper Overlapper) Tree {
 	if useBTreeImpl {
 		return newBTree(overlapper)

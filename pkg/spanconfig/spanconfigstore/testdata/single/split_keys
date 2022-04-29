@@ -1,0 +1,76 @@
+apply
+set [a,b):A
+set [b,c):B
+set [c,d):C
+set [d,e):D
+set [e,f):D
+set [f,g):D
+set [g,h):D
+----
+added [a,b):A
+added [b,c):B
+added [c,d):C
+added [d,e):D
+added [e,f):D
+added [f,g):D
+added [g,h):D
+
+split-keys span=[a,z)
+----
+key=b
+key=c
+key=d
+
+apply
+delete [e,f)
+----
+deleted [e,f)
+
+overlapping span=[a,z)
+----
+[a,b):A
+[b,c):B
+[c,d):C
+[d,e):D
+[f,g):D
+[g,h):D
+
+split-keys span=[a,z)
+----
+key=b
+key=c
+key=d
+
+apply
+set [e,f):E
+set [f,g):E
+----
+deleted [f,g)
+added [e,f):E
+added [f,g):E
+
+overlapping span=[a,z)
+----
+[a,b):A
+[b,c):B
+[c,d):C
+[d,e):D
+[e,f):E
+[f,g):E
+[g,h):D
+
+interned
+----
+A (refs = 1)
+B (refs = 1)
+C (refs = 1)
+D (refs = 2)
+E (refs = 2)
+
+split-keys span=[a,z)
+----
+key=b
+key=c
+key=d
+key=e
+key=g

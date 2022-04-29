@@ -7,6 +7,8 @@ MISC_SRCS = [
   "//pkg/kv/kvserver/spanlatch:latch_interval_btree_test.go",
   "//pkg/roachpb:batch_generated.go",
   "//pkg/roachprod/vm/aws:terraform/main.tf",
+  "//pkg/spanconfig/spanconfigstore:entry_interval_btree.go",
+  "//pkg/spanconfig/spanconfigstore:entry_interval_btree_test.go",
   "//pkg/sql/lexbase:keywords.go",
   "//pkg/sql/lexbase:reserved_keywords.go",
   "//pkg/sql/lexbase:tokens.go",
