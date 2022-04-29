@@ -81,6 +81,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 		CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
 			th.cfg = config
 		},
+		IntervalOverrides: jobs.NewTestingKnobsWithShortIntervals().IntervalOverrides,
 	}
 
 	args := base.TestServerArgs{
@@ -94,6 +95,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	th.sqlDB = sqlutils.MakeSQLRunner(db)
 	th.server = s
 	th.sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1MiB'`)
+	th.sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up test
 
 	return th, func() {
 		dirCleanupFn()
@@ -372,16 +374,18 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "BACKUP .*",
-					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached",
-					period:     time.Hour,
-					paused:     true,
+					nameRe:                        "BACKUP .*",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
 				},
 				{
-					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
-					period:     24 * time.Hour,
-					runsNow:    true,
+					nameRe:                        "BACKUP .+",
+					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH detached",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
 				},
 			},
 		},
@@ -391,16 +395,18 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "my-backup",
-					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached",
-					period:     time.Hour,
-					paused:     true,
+					nameRe:                        "my-backup",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
 				},
 				{
-					nameRe:     "my-backup",
-					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
-					period:     24 * time.Hour,
-					runsNow:    true,
+					nameRe:                        "my-backup",
+					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH detached",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
 				},
 			},
 		},
@@ -422,16 +428,18 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "BACKUP .*",
-					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached, incremental_location = 'nodelocal://1/incremental'",
-					period:     time.Hour,
-					paused:     true,
+					nameRe:                        "BACKUP .*",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached, incremental_location = 'nodelocal://1/incremental'",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
 				},
 				{
-					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
-					period:     24 * time.Hour,
-					runsNow:    true,
+					nameRe:                        "BACKUP .+",
+					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH detached",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
 				},
 			},
 		},
@@ -469,16 +477,18 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		WITH revision_history RECURRING '@hourly'`,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "BACKUP .*",
-					backupStmt: "BACKUP DATABASE system INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
-					period:     time.Hour,
-					paused:     true,
+					nameRe:                        "BACKUP .*",
+					backupStmt:                    "BACKUP DATABASE system INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
 				},
 				{
-					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP DATABASE system INTO 'nodelocal://0/backup' WITH revision_history, detached",
-					period:     24 * time.Hour,
-					runsNow:    true,
+					nameRe:                        "BACKUP .+",
+					backupStmt:                    "BACKUP DATABASE system INTO 'nodelocal://0/backup' WITH revision_history, detached",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
 				},
 			},
 		},
@@ -490,16 +500,18 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		WITH revision_history RECURRING '@hourly'`,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "BACKUP .*",
-					backupStmt: "BACKUP TABLE system.public.* INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
-					period:     time.Hour,
-					paused:     true,
+					nameRe:                        "BACKUP .*",
+					backupStmt:                    "BACKUP TABLE system.public.* INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
 				},
 				{
-					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP TABLE system.public.* INTO 'nodelocal://0/backup' WITH revision_history, detached",
-					period:     24 * time.Hour,
-					runsNow:    true,
+					nameRe:                        "BACKUP .+",
+					backupStmt:                    "BACKUP TABLE system.public.* INTO 'nodelocal://0/backup' WITH revision_history, detached",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
 				},
 			},
 		},

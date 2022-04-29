@@ -31,18 +31,56 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
-// maybeUpdateSchedulePTSRecord is responsible for chaining of protected ts
-// records across scheduled backups. For a detailed outline of the scheme refer
-// to the comment above
-// ScheduledBackupExecutionArgs.ChainProtectedTimestampRecords.
+// A backup is responsible for reading KVs in a target key span and writing them
+// to an external storage sink. It is the backup's responsibility to ensure that
+// the KVs it has to read as of a certain timestamp have not been
+// garbage collected when it goes to read them. To achieve this, the backup,
+// prior to execution writes a protected timestamp (pts) record on its target
+// schema object, and releases this record upon successful completion.
 //
-// maybeUpdateSchedulePTSRecord writes/updates a pts record
-// on the schedule to protect all data after the current backups EndTime. This
-// EndTime could be out of the GC window by the time the job has reached here.
-// In some situations, we rely on the pts record written by the backup during
-// planning (also protecting data after EndTime) to ensure that we can protect
-// and verify the new record. Thus, we must ensure that this method is called
-// before we release the jobs' pts record below.
+// 1) In the case of a full backup, the pts record will protect data from GC,
+// starting at the time the as of which we want to back data up.
+//
+// 2) In the case of an incremental backup, the pts record will protect data
+// from GC, starting at the time at which the previous backup in the chain
+// backed data up. This allows the incremental to read all revisions between the
+// previous backup and itself.
+//
+// Previously, (2) meant that the gap between two backups in a chain had to be
+// less than the GC TTL of the target schema object. If this was not the case,
+// then the data the pts record needs to protect may have already been garbage
+// collected, causing the incremental backup to fail.
+//
+// To decouple scheduled backups from GC TTL we make the backup schedules (full
+// and incremental) responsible for managing pts records as described below.
+// This is in addition to the job managed pts records explained above.
+//
+// 1. On successful completion of the first full backup, the full backup schedule
+//    will write a pts record to protect all target data as of the time the full
+//    backup backed up data. This will be done before the job managed pts record
+//    is released, thereby guaranteeing that the data will still be live.
+//    The full schedule will then store a reference of this record on the dependent
+//    incremental schedule.
+//
+// 2. On successful completion of every incremental backup adding to the backup
+//    chain, the incremental schedule will pull up the PTS record stored on it to
+//    protect the target data as of the time the incremental backup covered.
+//
+// 3. On successful completion of subsequent full backups we will do two things:
+//
+//  a) Release the pts record stored on the incremental schedule corresponding to the
+//     now old chain of backups.
+//
+//  b) Repeat 1)
+//
+// You should see that this chaining schema, along with the job managed pts
+// records means that we are never trying to protect data at a timestamp that
+// might have fallen out of the GC window, without a previously written pts
+// record protecting it from GC.
+
+// maybeUpdateSchedulePTSRecord is responsible for managing the schedule owned
+// protected timestamp record based on the stage we are in in the scheme
+// described above.
 func maybeUpdateSchedulePTSRecord(
 	ctx context.Context,
 	exec *sql.ExecutorConfig,
@@ -78,7 +116,7 @@ func maybeUpdateSchedulePTSRecord(
 		}
 
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
-		_, args, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
+		sj, args, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
 			exec.InternalExecutor, scheduleID)
 		if err != nil {
 			return errors.Wrap(err, "load scheduled job")
@@ -89,10 +127,21 @@ func maybeUpdateSchedulePTSRecord(
 			return nil
 		}
 
-		// If SchedulePTSChainingRecord was not set during backup planning, we do
-		// not need to perform any chaining.
+		// Update the full schedule to disable chaining since there is no associated
+		// inc schedule. It could have been dropped before we got here.
+		if args.BackupType == ScheduledBackupExecutionArgs_FULL && args.DependentScheduleID == 0 {
+			args.ChainProtectedTimestampRecords = false
+			any, err := pbtypes.MarshalAny(args)
+			if err != nil {
+				return err
+			}
+			sj.SetExecutionDetails(sj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
+			return sj.Update(ctx, exec.InternalExecutor, txn)
+		}
+
 		if backupDetails.SchedulePTSChainingRecord == nil {
-			return nil
+			return errors.AssertionFailedf(
+				"scheduled backup is chaining protected timestamp records but no chaining action was specified")
 		}
 
 		switch args.BackupType {
@@ -119,28 +168,24 @@ func maybeUpdateSchedulePTSRecord(
 	})
 }
 
-// manageFullBackupPTSChaining is invoked on successful completion of a
-// scheduled full backup. It is responsible for:
-// - Releasing the pts record that was stored on the incremental schedule when
-//   the full backup was planned.
-// - Writing a new pts record protecting all data after the full backups' EndTime
-//   and store this on the incremental schedule.
+// manageFullBackupPTSChaining implements is responsible for managing the
+// schedule owned protected timestamp record on completion of a full backup.
 func manageFullBackupPTSChaining(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
 	backupDetails jobspb.BackupDetails,
 	exec *sql.ExecutorConfig,
-	args *ScheduledBackupExecutionArgs,
+	fullScheduleArgs *ScheduledBackupExecutionArgs,
 ) error {
 	// Let's resolve the dependent incremental schedule as the first step. If the
 	// schedule has been dropped then we can avoid doing unnecessary work.
 	incSj, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
-		exec.InternalExecutor, args.DependentScheduleID)
+		exec.InternalExecutor, fullScheduleArgs.DependentScheduleID)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
 			log.Warningf(ctx, "could not find dependent schedule with id %d",
-				args.DependentScheduleID)
+				fullScheduleArgs.DependentScheduleID)
 			return nil
 		}
 		return err
@@ -150,7 +195,7 @@ func manageFullBackupPTSChaining(
 	// scheduled backup.
 	targetToProtect, deprecatedSpansToProtect, err := getTargetProtectedByBackup(ctx, backupDetails, txn, exec)
 	if err != nil {
-		return errors.Wrap(err, "getting spans to protect")
+		return errors.Wrap(err, "getting target to protect")
 	}
 
 	// Records written by the backup schedule should be ignored when making GC
@@ -161,9 +206,10 @@ func manageFullBackupPTSChaining(
 		targetToProtect.IgnoreIfExcludedFromBackup = true
 	}
 
-	// Protect the target after the EndTime of the current backup. We do not need
-	// to verify this new record as we have a record written by the backup during
-	// planning, already protecting this target after EndTime.
+	// Protect the target after the EndTime of the current backup. Data in the
+	// target will not have been GC'ed because we have a protected timestamp
+	// record written during backup planning, already protecting this target after
+	// EndTime.
 	//
 	// Since this record will be stored on the incremental schedule, we use the
 	// inc schedule ID as the records' Meta. This ensures that even if the full
@@ -172,11 +218,23 @@ func manageFullBackupPTSChaining(
 	ptsRecord, err := protectTimestampRecordForSchedule(ctx, targetToProtect, deprecatedSpansToProtect,
 		backupDetails.EndTime, incSj.ScheduleID(), exec, txn)
 	if err != nil {
-		return errors.Wrap(err, "protect and verify pts record for schedule")
+		return errors.Wrap(err, "protect pts record for schedule")
 	}
 
-	// Attempt to release the pts record that was written on the incremental
-	// schedule when the full backup was being planned.
+	// When the full backup was being planned, if there was a protected timestamp
+	// record on the incremental schedule then we should try and release it. This
+	// should be the case for every scheduled full backup after the first
+	//
+	// This is because, with the completion of this scheduled full backup we will
+	// be starting a new backup chain, and therefore the record associated with
+	// the old chain should be released.
+	//
+	// NB: Since this logic runs after we have written the scheduled full backup
+	// manifest to external storage, we are guaranteed that no new incremental
+	// backups will build on top of the old chain, and rely on the record we are
+	// about to release. Already running incremental backup jobs would have
+	// written their own pts record during planning, and should complete
+	// successfully.
 	if err := releaseProtectedTimestamp(ctx, txn, exec.ProtectedTimestampProvider,
 		backupDetails.SchedulePTSChainingRecord.ProtectedTimestampRecord); err != nil {
 		return errors.Wrap(err, "release pts record for schedule")
@@ -192,9 +250,9 @@ func manageFullBackupPTSChaining(
 	return incSj.Update(ctx, exec.InternalExecutor, txn)
 }
 
-// manageIncrementalBackupPTSChaining is invoked on successful completion of an
-// incremental backup. It is responsible for updating the pts record on the
-// incremental schedule to protect after the EndTime of the current backup.
+// manageFullBackupPTSChaining implements is responsible for managing the
+// schedule owned protected timestamp record on completion of an incremental
+// backup.
 func manageIncrementalBackupPTSChaining(
 	ctx context.Context,
 	ptsRecordID *uuid.UUID,
@@ -204,17 +262,18 @@ func manageIncrementalBackupPTSChaining(
 	scheduleID int64,
 ) error {
 	if ptsRecordID == nil {
-		return errors.Newf("unexpected nil pts record id on incremental schedule %d", scheduleID)
+		return errors.AssertionFailedf("unexpected nil pts record id on incremental schedule %d", scheduleID)
 	}
 	err := exec.ProtectedTimestampProvider.UpdateTimestamp(ctx, txn, *ptsRecordID,
 		tsToProtect)
-	// If we cannot find the pts record to update it is possible that a
-	// concurrent full backup has released the record, and written a new record
-	// on the incremental schedule. This should only happen in the case of an
-	// "overhang" incremental backup.
+	// If we cannot find the pts record to update it is possible that a concurrent
+	// full backup has released the record, and written a new record on the
+	// incremental schedule. This should only happen if this is an "overhang"
+	// incremental backup i.e. an incremental that has completed after a
+	// concurrent full backup has started a new chain.
+	//
 	// In such a scenario it is okay to do nothing since the next incremental on
-	// the new full backup will rely on the pts record written by the full
-	// backup.
+	// the new full backup will rely on the pts record written by the full backup.
 	if err != nil && errors.Is(err, protectedts.ErrNotExists) {
 		log.Warningf(ctx, "failed to update timestamp record %d since it does not exist", ptsRecordID)
 		return nil //nolint:returnerrcheck

@@ -5702,6 +5702,42 @@ Bottom Left.`,
 			Volatility: volatility.Immutable,
 		},
 	),
+	"st_makeenvelope": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"xmin", types.Float},
+				{"ymin", types.Float},
+				{"xmax", types.Float},
+				{"ymax", types.Float},
+				{"srid", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return stEnvelopeFromArgs(args)
+			},
+			Info: infoBuilder{
+				info: "Creates a rectangular Polygon from the minimum and maximum values for X and Y with the given SRID.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"xmin", types.Float},
+				{"ymin", types.Float},
+				{"xmax", types.Float},
+				{"ymax", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return stEnvelopeFromArgs(args)
+			},
+			Info: infoBuilder{
+				info: "Creates a rectangular Polygon from the minimum and maximum values for X and Y with SRID 0.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
 	"st_flipcoordinates": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -7645,4 +7681,29 @@ func applyGeoindexConfigStorageParams(
 		return geoindex.Config{}, err
 	}
 	return indexDesc.GeoConfig, nil
+}
+
+// stEnvelopeFromArgs builds a rectangle geometry from types.Float bounds as datums
+func stEnvelopeFromArgs(args tree.Datums) (tree.Datum, error) {
+	xmin := float64(tree.MustBeDFloat(args[0]))
+	ymin := float64(tree.MustBeDFloat(args[1]))
+	xmax := float64(tree.MustBeDFloat(args[2]))
+	ymax := float64(tree.MustBeDFloat(args[3]))
+
+	var srid int
+	if len(args) > 4 {
+		srid = int(tree.MustBeDInt(args[4]))
+	}
+
+	extent, err := geo.MakeGeometryFromGeomT(
+		geom.NewBounds(geom.XY).
+			Set(xmin, ymin, xmax, ymax).
+			Polygon().
+			SetSRID(srid),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDGeometry(extent), nil
 }
