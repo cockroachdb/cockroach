@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecdisk
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -26,11 +26,6 @@ const (
 	// This limit comes from the fallback strategy where we are using an
 	// external sort.
 	ehaNumRequiredActivePartitions = colexecop.ExternalSorterMinPartitions
-	// ehaNumRequiredFDs is the minimum number of file descriptors that are
-	// needed for the machinery of the external aggregator (plus 1 is needed for
-	// the in-memory hash aggregator in order to track tuples in a spilling
-	// queue).
-	ehaNumRequiredFDs = ehaNumRequiredActivePartitions + 1
 )
 
 // NewExternalHashAggregator returns a new disk-backed hash aggregator. It uses
@@ -50,7 +45,7 @@ func NewExternalHashAggregator(
 		newAggArgs.Input = partitionedInputs[0]
 		// We don't need to track the input tuples when we have already spilled.
 		// TODO(yuzefovich): it might be worth increasing the number of buckets.
-		return NewHashAggregator(&newAggArgs, nil /* newSpillingQueueArgs */, outputUnlimitedAllocator, maxOutputBatchMemSize)
+		return colexec.NewHashAggregator(&newAggArgs, nil /* newSpillingQueueArgs */, outputUnlimitedAllocator, maxOutputBatchMemSize)
 	}
 	spec := newAggArgs.Spec
 	diskBackedFallbackOpConstructor := func(
@@ -63,7 +58,7 @@ func NewExternalHashAggregator(
 			partitionedInputs[0], newAggArgs.InputTypes,
 			makeOrdering(spec.GroupCols), maxNumberActivePartitions,
 		)
-		return NewOrderedAggregator(&newAggArgs)
+		return colexec.NewOrderedAggregator(&newAggArgs)
 	}
 	eha := newHashBasedPartitioner(
 		newAggArgs.Allocator,
@@ -96,17 +91,3 @@ func NewExternalHashAggregator(
 	maxNumberActivePartitions := calculateMaxNumberActivePartitions(flowCtx, args, ehaNumRequiredActivePartitions)
 	return createDiskBackedSorter(eha, newAggArgs.OutputTypes, outputOrdering.Columns, maxNumberActivePartitions)
 }
-
-// HashAggregationDiskSpillingEnabledSettingName is the cluster setting name for
-// HashAggregationDiskSpillingEnabled.
-const HashAggregationDiskSpillingEnabledSettingName = "sql.distsql.temp_storage.hash_agg.enabled"
-
-// HashAggregationDiskSpillingEnabled is a cluster setting that allows to
-// disable hash aggregator disk spilling.
-var HashAggregationDiskSpillingEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	HashAggregationDiskSpillingEnabledSettingName,
-	"set to false to disable hash aggregator disk spilling "+
-		"(this will improve performance, but the query might hit the memory limit)",
-	true,
-)

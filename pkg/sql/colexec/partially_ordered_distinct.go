@@ -67,7 +67,7 @@ func newPartiallyOrderedDistinct(
 }
 
 // partiallyOrderedDistinct implements DISTINCT operation using a combination
-// of chunkerOperator and unorderedDistinct. It's only job is to check whether
+// of chunkerOperator and UnorderedDistinct. It's only job is to check whether
 // the input has been fully processed and, if not, to move to the next chunk
 // (where "chunk" is all tuples that are equal on the ordered columns).
 type partiallyOrderedDistinct struct {

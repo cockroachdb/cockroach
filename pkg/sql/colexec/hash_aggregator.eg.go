@@ -24,6 +24,8 @@ import (
 // zeroes and be of at least batchLength length.
 const _ = "template_populateEqChains"
 
+var zeroIntColumn = make([]int, coldata.MaxBatchSize)
+
 // populateEqChains populates op.scratch.eqChains with indices of tuples from b
 // that belong to the same groups. It returns the number of equality chains as
 // well as a selection vector that contains "heads" of each of the chains. The

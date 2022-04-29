@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecdisk
 
 import (
 	"context"
@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
-
-var zeroIntColumn = make([]int, coldata.MaxBatchSize)
 
 func newPartitionerToOperator(
 	allocator *colmem.Allocator, types []*types.T, partitioner colcontainer.PartitionedQueue,
