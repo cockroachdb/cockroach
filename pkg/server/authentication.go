@@ -445,7 +445,7 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 		return false, true, nil
 	}
 
-	ok, err := password.CompareHashAndCleartextPassword(ctx, hashedPassword, passwordStr)
+	ok, err := password.CompareHashAndCleartextPassword(ctx, hashedPassword, passwordStr, security.GetExpensiveHashComputeSem(ctx))
 	if ok && err == nil {
 		// Password authentication succeeded using cleartext.  If the
 		// stored hash was encoded using crdb-bcrypt, we might want to
