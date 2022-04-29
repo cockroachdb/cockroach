@@ -71,6 +71,7 @@ go_test(
         "//pkg/sql/colflow",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execagg",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/flowinfra",
         "//pkg/sql/randgen",

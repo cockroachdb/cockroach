@@ -15,6 +15,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -133,7 +134,7 @@ func (ag *aggregatorBase) init(
 				)
 			}
 		}
-		constructor, arguments, outputType, err := execinfra.GetAggregateConstructor(
+		constructor, arguments, outputType, err := execagg.GetAggregateConstructor(
 			flowCtx.EvalCtx, semaCtx, &aggInfo, ag.inputTypes,
 		)
 		if err != nil {

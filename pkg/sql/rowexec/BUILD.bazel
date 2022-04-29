@@ -58,6 +58,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execagg",
         "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfra/execreleasable",
         "//pkg/sql/execinfrapb",

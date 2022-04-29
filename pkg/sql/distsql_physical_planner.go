@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -1936,7 +1937,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 					for j, c := range e.ColIdx {
 						argTypes[j] = inputTypes[c]
 					}
-					_, outputType, err := execinfra.GetAggregateInfo(localFunc, argTypes...)
+					_, outputType, err := execagg.GetAggregateInfo(localFunc, argTypes...)
 					if err != nil {
 						return err
 					}
@@ -1988,7 +1989,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 							// the current aggregation e.
 							argTypes[i] = intermediateTypes[argIdxs[i]]
 						}
-						_, outputType, err := execinfra.GetAggregateInfo(finalInfo.Fn, argTypes...)
+						_, outputType, err := execagg.GetAggregateInfo(finalInfo.Fn, argTypes...)
 						if err != nil {
 							return err
 						}
@@ -2143,7 +2144,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		}
 		copy(argTypes[len(agg.ColIdx):], info.argumentsColumnTypes[i])
 		var err error
-		_, returnTyp, err := execinfra.GetAggregateInfo(agg.Func, argTypes...)
+		_, returnTyp, err := execagg.GetAggregateInfo(agg.Func, argTypes...)
 		if err != nil {
 			return err
 		}
