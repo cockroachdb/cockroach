@@ -3385,6 +3385,10 @@ func (s *Store) Enqueue(
 ) (recording tracing.Recording, processError error, enqueueError error) {
 	ctx = repl.AnnotateCtx(ctx)
 
+	if fn := s.TestingKnobs().EnqueueReplicaInterceptor; fn != nil {
+		fn(queueName, repl)
+	}
+
 	// Do not enqueue uninitialized replicas. The baseQueue ignores these during
 	// normal queue scheduling, but we error here to signal to the user that the
 	// operation was unsuccessful.
@@ -3426,11 +3430,13 @@ func (s *Store) Enqueue(
 	}
 
 	if async {
-		// NB: 1e6 is a placeholder for now. We want to use a high enough priority
-		// to ensure that these replicas are priority-ordered first.
-		//
-		// FIXME: Do something more accurate?
-		queue.AddAsync(ctx, repl, 1e6 /* prio */)
+		if skipShouldQueue {
+			// NB: 1e6 is a placeholder for now. We want to use a high enough priority
+			// to ensure that these replicas are priority-ordered first.
+			queue.AddAsync(ctx, repl, 1e6 /* prio */)
+		} else {
+			queue.MaybeAddAsync(ctx, repl, repl.store.Clock().NowAsClockTimestamp())
+		}
 		return nil, nil, nil
 	}
 

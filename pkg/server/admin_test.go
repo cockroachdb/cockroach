@@ -2374,6 +2374,134 @@ func TestDecommissionSelf(t *testing.T) {
 	}
 }
 
+// TestDecommissionMonitorBasic tests that we spin up exactly one
+// `nodeDecommissionNudger` goroutine per decomissioning node and that once a
+// decommissioning node is marked `DECOMMISSIONED`, we wind down its nudger.
+func TestDecommissionMonitorBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t) // too slow with 5-node clusters
+
+	// Set up test cluster.
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 5, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Decommission several nodes, including the node we're submitting the
+	// decommission request to.
+	adminSrv := tc.Server(4)
+	conn, err := adminSrv.RPCContext().GRPCDialNode(
+		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
+	require.NoError(t, err)
+	adminClient := serverpb.NewAdminClient(conn)
+	decomNodeIDs := []roachpb.NodeID{
+		tc.Server(2).NodeID(),
+		tc.Server(3).NodeID(),
+		tc.Server(4).NodeID(),
+	}
+
+	// The DECOMMISSIONING call should return a full status response.
+	resp, err := adminClient.Decommission(ctx, &serverpb.DecommissionRequest{
+		NodeIDs:          decomNodeIDs,
+		TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Status, len(decomNodeIDs))
+	for i, nodeID := range decomNodeIDs {
+		status := resp.Status[i]
+		require.Equal(t, nodeID, status.NodeID)
+		// Liveness entries may not have been updated yet.
+		require.Contains(t, []livenesspb.MembershipStatus{
+			livenesspb.MembershipStatus_ACTIVE,
+			livenesspb.MembershipStatus_DECOMMISSIONING,
+		}, status.Membership, "unexpected membership status %v for node %v", status, nodeID)
+	}
+
+	// We should have 3 active nudgers running on node 1.
+	monitor := tc.Server(1).DecommissionMonitor().(*decommissionMonitor)
+	require.ElementsMatch(t, []roachpb.NodeID{3, 4, 5}, monitor.getActiveDecommissionNudgers())
+
+	// Decommission node 5 again and ensure that we still only see one active
+	// nudger for it.
+	resp, err = adminClient.Decommission(ctx, &serverpb.DecommissionRequest{
+		NodeIDs:          []roachpb.NodeID{tc.Server(4).NodeID()},
+		TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Status, 1)
+	require.Equal(t, resp.Status[0].NodeID, tc.Server(4).NodeID())
+	require.ElementsMatch(t, []roachpb.NodeID{3, 4, 5}, monitor.getActiveDecommissionNudgers())
+
+	// Finally, mark all the `DECOMMISSIONING` nodes as `DECOMMISSIONED` and
+	// ensure that the nudgers are stopped.
+	resp, err = adminClient.Decommission(ctx, &serverpb.DecommissionRequest{
+		NodeIDs:          decomNodeIDs,
+		TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
+	})
+	require.NoError(t, err)
+	require.Empty(t, resp.Status)
+
+	require.Eventually(t, func() bool {
+		return len(monitor.getActiveDecommissionNudgers()) == 0
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// TestDecommissionMonitorEnqueueReplicas tests that a decommissioning node's
+// replicas proactively enqueued into their replicateQueues by the other nodes
+// in the system.
+func TestDecommissionMonitorEnqueueReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	enqueueCh := make(chan roachpb.RangeID, 1)
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		// Disable the replicateQueue so that the only way a decommissioning node
+		// can finish decommissioning is through the `decommissionMonitor`.
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Insecure: true, // allows admin client without setting up certs
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EnqueueReplicaInterceptor: func(
+						queueName string, repl *kvserver.Replica,
+					) {
+						require.Equal(t, queueName, "replicate")
+						enqueueCh <- repl.GetRangeID()
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Add a scratch range's replica to a node we will decommission later.
+	scratchKey := tc.ScratchRange(t)
+	const decommissioningSrvIdx = 2
+	decommissioningSrv := tc.Server(decommissioningSrvIdx)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
+
+	conn, err := decommissioningSrv.RPCContext().GRPCDialNode(
+		decommissioningSrv.RPCAddr(), decommissioningSrv.NodeID(), rpc.DefaultClass,
+	).Connect(ctx)
+	require.NoError(t, err)
+	adminClient := serverpb.NewAdminClient(conn)
+	decomNodeIDs := []roachpb.NodeID{tc.Server(decommissioningSrvIdx).NodeID()}
+	_, err = adminClient.Decommission(
+		ctx,
+		&serverpb.DecommissionRequest{
+			NodeIDs:          decomNodeIDs,
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+		},
+	)
+	require.NoError(t, err)
+
+	// Ensure that the scratch range's replica was proactively enqueued.
+	require.Equal(t, tc.LookupRangeOrFatal(t, scratchKey).RangeID, <-enqueueCh)
+}
+
 func TestAdminDecommissionedOperations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

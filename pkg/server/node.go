@@ -234,6 +234,8 @@ type Node struct {
 	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
 	suppressNodeStatus syncutil.AtomicBool
 
+	decommissionMonitor *decommissionMonitor
+
 	testingErrorEvent func(context.Context, *roachpb.BatchRequest, error)
 }
 
@@ -359,6 +361,7 @@ func NewNode(
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
+	decommissionMonitor *decommissionMonitor,
 ) *Node {
 	var sqlExec *sql.InternalExecutor
 	if execCfg != nil {
@@ -378,6 +381,7 @@ func NewNode(
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
+		decommissionMonitor:   decommissionMonitor,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
 	n.storeCfg.KVAdmissionController = n.admissionController

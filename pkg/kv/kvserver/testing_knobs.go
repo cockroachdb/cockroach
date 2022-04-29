@@ -351,6 +351,9 @@ type StoreTestingKnobs struct {
 	// PurgeOutdatedReplicasInterceptor intercepts attempts to purge outdated
 	// replicas in the store.
 	PurgeOutdatedReplicasInterceptor func()
+	// EnqueueReplicaInterceptor intercepts calls to store.Enqueue() made to
+	// enqueue a particular replica into a particular queue.
+	EnqueueReplicaInterceptor func(queueName string, repl *Replica)
 	// SpanConfigUpdateInterceptor is called after the store hears about a span
 	// config update.
 	SpanConfigUpdateInterceptor func(spanconfig.Update)
