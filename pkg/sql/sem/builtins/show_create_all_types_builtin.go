@@ -35,7 +35,6 @@ func getTypeIDs(
 	it, err := evalPlanner.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_types",
-		txn,
 		sessiondata.NoSessionDataOverride,
 		query,
 		dbName,
@@ -76,7 +75,6 @@ func getTypeCreateStatement(
 	row, err := evalPlanner.QueryRowEx(
 		ctx,
 		"crdb_internal.show_create_all_types",
-		txn,
 		sessiondata.NoSessionDataOverride,
 		query,
 		id,
