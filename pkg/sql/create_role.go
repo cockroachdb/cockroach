@@ -263,7 +263,7 @@ func (p *planner) checkPasswordAndGetHash(
 	}
 
 	st := p.ExecCfg().Settings
-	if security.AutoDetectPasswordHashes.Get(&st.SV) {
+	if autoDetect, requireHash := security.AutoDetectPasswordHashes.Get(&st.SV), security.RequirePasswordHashes.Get(&st.SV); autoDetect || requireHash {
 		var isPreHashed, schemeSupported bool
 		var schemeName string
 		var issueNum int
@@ -276,6 +276,8 @@ func (p *planner) checkPasswordAndGetHash(
 				return hashedPassword, unimplemented.NewWithIssueDetailf(issueNum, schemeName, "the password hash scheme %q is not supported", schemeName)
 			}
 			return hashedPassword, nil
+		} else /* !isPreHashed */ if requireHash {
+			return hashedPassword, errors.New("password must be pre-hashed by client")
 		}
 	}
 

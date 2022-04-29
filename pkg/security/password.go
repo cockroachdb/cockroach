@@ -147,6 +147,15 @@ var AutoDetectPasswordHashes = settings.RegisterBoolSetting(
 	true,
 )
 
+// RequirePasswordHashes is the cluster setting that configures whether
+// new password credentials submitted via SQL must be pre-hashed.
+var RequirePasswordHashes = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"server.user_login.require_pre_hashed_passwords.enabled",
+	"whether the server requires the client to pre-hash passwords",
+	false,
+)
+
 // MinPasswordLength is the cluster setting that configures the
 // minimum SQL password length.
 var MinPasswordLength = settings.RegisterIntSetting(

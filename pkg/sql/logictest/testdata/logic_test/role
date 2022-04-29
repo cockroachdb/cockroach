@@ -1550,3 +1550,37 @@ RESET CLUSTER SETTING server.user_login.password_encryption;
 
 statement ok
 RESET CLUSTER SETTING server.user_login.password_hashes.default_cost.scram_sha_256
+
+
+subtest require_hash
+
+statement ok
+SET CLUSTER SETTING server.user_login.require_pre_hashed_passwords.enabled = true
+
+# Password hash recognized
+statement ok
+CREATE USER hash9 WITH PASSWORD '$bcrypt_pw'
+
+# Password hash recognized (albeit with method not supported)
+statement error the password hash scheme "md5" is not supported
+CREATE USER hash10 WITH PASSWORD 'md5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+# Password hash recognized
+statement ok
+CREATE USER hasha WITH PASSWORD '$scram_pw'
+
+# Error: password not pre-hashed.
+statement error password must be pre-hashed by client
+CREATE USER hashb WITH PASSWORD 'abc'
+
+query TTB
+SELECT username, substr("hashedPassword", 1, 7), 'CRDB-BCRYPT'||"hashedPassword" = '$bcrypt_pw' FROM system.users WHERE username LIKE 'hash%' ORDER BY 1 DESC LIMIT 3
+----
+hasha  SCRAM-S  false
+hash9  $2a$10$  true
+hash8  SCRAM-S  false
+
+# Reset cluster setting after test completion.
+statement ok
+RESET CLUSTER SETTING server.user_login.require_pre_hashed_passwords.enabled;
+
