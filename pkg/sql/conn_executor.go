@@ -2776,6 +2776,9 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
+	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
+	p.schemaResolver.descCollection = p.Descriptors()
+	p.schemaResolver.authAccessor = p
 }
 
 func (ex *connExecutor) resetPlanner(
@@ -2810,7 +2813,11 @@ func (ex *connExecutor) resetPlanner(
 
 	p.autoCommit = false
 	p.isPreparing = false
-	p.avoidLeasedDescriptors = false
+
+	p.schemaResolver.txn = txn
+	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
+	p.skipDescriptorCache = false
+	p.typeResolutionDbID = descpb.InvalidID
 }
 
 // txnStateTransitionsApplyWrapper is a wrapper on top of Machine built with the

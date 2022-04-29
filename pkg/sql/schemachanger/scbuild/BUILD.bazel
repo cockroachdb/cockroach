@@ -15,6 +15,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",
+        "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",

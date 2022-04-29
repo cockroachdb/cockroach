@@ -132,6 +132,16 @@ func (s *TestState) HasOwnership(ctx context.Context, descriptor catalog.Descrip
 	return true, nil
 }
 
+// CheckPrivilegeForUser implements the scbuild.AuthorizationAccessor interface.
+func (s *TestState) CheckPrivilegeForUser(
+	ctx context.Context,
+	descriptor catalog.Descriptor,
+	privilege privilege.Kind,
+	user security.SQLUsername,
+) error {
+	return nil
+}
+
 // IndexPartitioningCCLCallback implements the scbuild.Dependencies interface.
 func (s *TestState) IndexPartitioningCCLCallback() scbuild.CreatePartitioningCCLCallback {
 	if ccl := scdeps.CreatePartitioningCCL; ccl != nil {
