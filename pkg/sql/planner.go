@@ -163,6 +163,8 @@ func (evalCtx *extendedEvalContext) QueueJob(
 // planners are usually created by using the newPlanner method on a Session.
 // If one needs to be created outside of a Session, use makeInternalPlanner().
 type planner struct {
+	schemaResolver
+
 	txn *kv.Txn
 
 	// isInternalPlanner is set to true when this planner is not bound to
@@ -190,15 +192,6 @@ type planner struct {
 	sqlCursors sqlCursors
 
 	createdSequences createdSequences
-
-	// avoidLeasedDescriptors, when true, instructs all code that
-	// accesses table/view descriptors to force reading the descriptors
-	// within the transaction. This is necessary to read descriptors
-	// from the store for:
-	// 1. Descriptors that are part of a schema change but are not
-	// modified by the schema change. (reading a table in CREATE VIEW)
-	// 2. Disable the use of the table cache in tests.
-	avoidLeasedDescriptors bool
 
 	// autoCommit indicates whether the plan is allowed (but not required) to
 	// commit the transaction along with other KV operations. Committing the txn
@@ -243,12 +236,6 @@ type planner struct {
 	noticeSender noticeSender
 
 	queryCacheSession querycache.Session
-
-	// contextDatabaseID is the ID of a database. It is set during some name
-	// resolution processes to disallow cross database references. In particular,
-	// the type resolution steps will disallow resolution of types that have a
-	// parentID != contextDatabaseID when it is set.
-	contextDatabaseID descpb.ID
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
@@ -416,6 +403,11 @@ func newInternalPlanner(
 	p.optPlanningCtx.init(p)
 	p.createdSequences = emptyCreatedSequences{}
 
+	p.schemaResolver.descCollection = p.Descriptors()
+	p.schemaResolver.sessionDataStack = sds
+	p.schemaResolver.txn = p.txn
+	p.schemaResolver.authAccessor = p
+
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create
 		// the context as explained at the top of the method.
@@ -493,11 +485,6 @@ func internalExtendedEvalCtx(
 	return ret
 }
 
-// LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.
-func (p *planner) Accessor() catalog.Accessor {
-	return p.Descriptors()
-}
-
 // SemaCtx provides access to the planner's SemaCtx.
 func (p *planner) SemaCtx() *tree.SemaContext {
 	return &p.semaCtx
@@ -510,16 +497,6 @@ func (p *planner) ExtendedEvalContext() *extendedEvalContext {
 
 func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {
 	return p.extendedEvalCtx.copy()
-}
-
-// CurrentDatabase is part of the resolver.SchemaResolver interface.
-func (p *planner) CurrentDatabase() string {
-	return p.SessionData().Database
-}
-
-// CurrentSearchPath is part of the resolver.SchemaResolver interface.
-func (p *planner) CurrentSearchPath() sessiondata.SearchPath {
-	return p.SessionData().SearchPath
 }
 
 // EvalContext() provides convenient access to the planner's EvalContext().
