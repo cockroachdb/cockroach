@@ -193,6 +193,7 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 			const maxBatchMemSize = math.MaxInt64
 			q.diskQueueDeselectionScratch, _ = q.unlimitedAllocator.ResetMaybeReallocate(
 				q.typs, q.diskQueueDeselectionScratch, n, maxBatchMemSize,
+				true, /* desiredCapacitySufficient */
 			)
 			q.unlimitedAllocator.PerformOperation(q.diskQueueDeselectionScratch.ColVecs(), func() {
 				for i := range q.typs {
@@ -295,6 +296,7 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 		// attention to the memory registered with the unlimited allocator, and
 		// we will stop adding tuples into this batch and spill when needed.
 		math.MaxInt64, /* maxBatchMemSize */
+		true,          /* desiredCapacitySufficient */
 	)
 	q.unlimitedAllocator.PerformOperation(newBatch.ColVecs(), func() {
 		for i := range q.typs {

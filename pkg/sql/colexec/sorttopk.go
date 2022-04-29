@@ -200,7 +200,10 @@ func (t *topKSorter) emit() coldata.Batch {
 		// We're done.
 		return coldata.ZeroBatch
 	}
-	t.output, _ = t.allocator.ResetMaybeReallocate(t.inputTypes, t.output, toEmit, t.maxOutputBatchMemSize)
+	t.output, _ = t.allocator.ResetMaybeReallocate(
+		t.inputTypes, t.output, toEmit, t.maxOutputBatchMemSize,
+		true, /* desiredCapacitySufficient */
+	)
 	if toEmit > t.output.Capacity() {
 		toEmit = t.output.Capacity()
 	}
