@@ -29,7 +29,8 @@ import (
 )
 
 // TestInOrderResultsBuffer verifies that the inOrderResultsBuffer returns the
-// results in the correct order (with increasing 'Position' values).
+// results in the correct order (with increasing 'Position' values, or with
+// increasing 'subRequestIdx' values when 'Position' values are equal).
 // Additionally, it randomly asks the buffer to spill to disk.
 func TestInOrderResultsBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -59,7 +60,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 
 	budget := newBudget(nil /* acc */, math.MaxInt /* limitBytes */)
 	diskBuffer := TestResultDiskBufferConstructor(tempEngine, diskMonitor)
-	b := newInOrderResultsBuffer(budget, diskBuffer)
+	b := newInOrderResultsBuffer(budget, diskBuffer, false /* singleRowLookup */)
 	defer b.close(ctx)
 
 	for run := 0; run < 10; run++ {
@@ -68,33 +69,42 @@ func TestInOrderResultsBuffer(t *testing.T) {
 
 		// Generate a set of results.
 		var results []Result
-		var addOrder []int
 		for i := 0; i < numExpectedResponses; i++ {
 			// Randomly choose between Get and Scan responses.
 			if rng.Float64() < 0.5 {
 				get := makeResultWithGetResp(rng, rng.Float64() < 0.1 /* empty */)
+				get.memoryTok.toRelease = rng.Int63n(100)
 				get.Position = i
 				results = append(results, get)
 			} else {
-				scan := makeResultWithScanResp(rng)
-				// TODO(yuzefovich): once lookup joins are supported, make Scan
-				// responses spanning multiple ranges for a single original Scan
-				// request.
-				scan.ScanResp.Complete = true
-				scan.Position = i
-				results = append(results, scan)
+				// Randomize the number of ranges the original Scan request
+				// touches.
+				numRanges := 1
+				if rng.Float64() < 0.5 {
+					numRanges = rng.Intn(10) + 1
+				}
+				for j := 0; j < numRanges; j++ {
+					scan := makeResultWithScanResp(rng)
+					scan.ScanResp.Complete = j+1 == numRanges
+					scan.memoryTok.toRelease = rng.Int63n(100)
+					scan.Position = i
+					scan.subRequestIdx = j
+					scan.subRequestDone = true
+					results = append(results, scan)
+				}
 			}
-			results[len(results)-1].memoryTok.toRelease = rng.Int63n(100)
-			addOrder = append(addOrder, i)
 		}
 
 		// Randomize the order in which the results are added into the buffer.
+		addOrder := make([]int, len(results))
+		for i := range addOrder {
+			addOrder[i] = i
+		}
 		rng.Shuffle(len(addOrder), func(i, j int) {
 			addOrder[i], addOrder[j] = addOrder[j], addOrder[i]
 		})
 
 		var received []Result
-		var addOrderIdx int
 		for {
 			r, allComplete, err := b.get(ctx)
 			require.NoError(t, err)
@@ -103,11 +113,11 @@ func TestInOrderResultsBuffer(t *testing.T) {
 				break
 			}
 
-			numToAdd := rng.Intn(len(results)-addOrderIdx) + 1
+			numToAdd := rng.Intn(len(addOrder)) + 1
 			toAdd := make([]Result, numToAdd)
 			for i := range toAdd {
-				toAdd[i] = results[addOrder[addOrderIdx]]
-				addOrderIdx++
+				toAdd[i] = results[addOrder[0]]
+				addOrder = addOrder[1:]
 			}
 			b.add(toAdd)
 
