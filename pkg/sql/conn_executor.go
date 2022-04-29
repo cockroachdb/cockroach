@@ -3450,6 +3450,25 @@ func statementFromCtx(ctx context.Context) tree.Statement {
 	return stmt.(tree.Statement)
 }
 
+// contextGistKey is an empty type for the handle associated with the
+// gist value (see context.Value).
+type contextPlanGistKey struct{}
+
+func withPlanGist(ctx context.Context, gist string) context.Context {
+	if gist == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, contextPlanGistKey{}, gist)
+}
+
+func planGistFromCtx(ctx context.Context) string {
+	val := ctx.Value(contextPlanGistKey{})
+	if val != nil {
+		return val.(string)
+	}
+	return ""
+}
+
 func init() {
 	// Register a function to include the anonymized statement in crash reports.
 	logcrash.RegisterTagFn("statement", func(ctx context.Context) string {
@@ -3459,5 +3478,8 @@ func init() {
 		}
 		// Anonymize the statement for reporting.
 		return anonymizeStmtAndConstants(stmt, nil /* VirtualTabler */)
+	})
+	logcrash.RegisterTagFn("gist", func(ctx context.Context) string {
+		return planGistFromCtx(ctx)
 	})
 }
