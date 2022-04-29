@@ -33,8 +33,8 @@ func TestInOrderRequestsProvider(t *testing.T) {
 	requests := make([]singleRangeBatch, rng.Intn(maxNumRequests)+1)
 	priorities := make([]int, len(requests))
 	for i := range requests {
-		requests[i].priority = rng.Intn(maxNumRequests)
-		priorities[i] = requests[i].priority
+		requests[i].positions = []int{rng.Intn(maxNumRequests)}
+		priorities[i] = requests[i].priority()
 	}
 	sort.Ints(priorities)
 
@@ -47,17 +47,17 @@ func TestInOrderRequestsProvider(t *testing.T) {
 		first := p.firstLocked()
 		p.removeFirstLocked()
 		p.Unlock()
-		require.Equal(t, priorities[0], first.priority)
+		require.Equal(t, priorities[0], first.priority())
 		priorities = priorities[1:]
 		// With 50% probability simulate that a resume request with random
 		// priority is added.
 		if rng.Float64() < 0.5 {
-			// Note that in reality the priority of the resume request cannot
+			// Note that in reality the position of the resume request cannot
 			// have lower value than of the original request, but it's ok for
 			// the test.
-			first.priority = rng.Intn(maxNumRequests)
+			first.positions[0] = rng.Intn(maxNumRequests)
 			p.add(first)
-			priorities = append(priorities, first.priority)
+			priorities = append(priorities, first.priority())
 			sort.Ints(priorities)
 		}
 	}

@@ -117,6 +117,20 @@ type Result struct {
 	// TODO(yuzefovich): this might need to be []int when non-unique requests
 	// are supported.
 	Position int
+	// subRequestIdx allows us to order two Results that come for the same
+	// original Scan request but from different ranges. It is non-zero only in
+	// InOrder mode when Hints.SingleRowLookup is false, in all other cases it
+	// will remain zero. See singleRangeBatch.subRequestIdx for more details.
+	subRequestIdx int
+	// subRequestDone is true if the current Result is the last one for the
+	// corresponding sub-request. For all Get requests and for Scan requests
+	// contained within a single range, it is always true since those can only
+	// have a single sub-request.
+	//
+	// Note that for correctness, it is only necessary that this value is set
+	// properly if this Result is a Scan response and Hints.SingleRowLookup is
+	// false.
+	subRequestDone bool
 }
 
 // Hints provides different hints to the Streamer for optimization purposes.
@@ -240,12 +254,18 @@ type Streamer struct {
 
 		avgResponseEstimator avgResponseEstimator
 
-		// numRangesLeftPerScanRequest tracks how many ranges a particular
-		// originally enqueued ScanRequest touches, but scanning of those ranges
-		// isn't complete. It is allocated lazily if Hints.SingleRowLookup is
-		// false when the first ScanRequest is encountered in Enqueue.
+		// In OutOfOrder mode, numRangesPerScanRequest tracks how many
+		// ranges a particular originally enqueued ScanRequest touches, but
+		// scanning of those ranges isn't complete.
+		//
+		// In InOrder mode, it tracks how many ranges a particular originally
+		// enqueued ScanRequest touch. In other words, it contains how many
+		// "sub-requests" the original Scan request was broken down into.
+		//
+		// It is allocated lazily if Hints.SingleRowLookup is false when the
+		// first ScanRequest is encountered in Enqueue.
 		// TODO(yuzefovich): perform memory accounting for this.
-		numRangesLeftPerScanRequest []int
+		numRangesPerScanRequest []int
 
 		// numRequestsInFlight tracks the number of single-range batches that
 		// are currently being served asynchronously (i.e. those that have
@@ -347,7 +367,7 @@ func (s *Streamer) Init(
 		s.results = newOutOfOrderResultsBuffer(s.budget)
 	} else {
 		s.requestsToServe = newInOrderRequestsProvider()
-		s.results = newInOrderResultsBuffer(s.budget, diskBuffer)
+		s.results = newInOrderResultsBuffer(s.budget, diskBuffer, hints.SingleRowLookup)
 	}
 	if !hints.UniqueRequests {
 		panic(errors.AssertionFailedf("only unique requests are currently supported"))
@@ -465,28 +485,35 @@ func (s *Streamer) Enqueue(
 		if err != nil {
 			return err
 		}
+		var subRequestIdx []int
 		if !s.hints.SingleRowLookup {
-			for _, pos := range positions {
+			for i, pos := range positions {
 				if _, isScan := reqs[pos].GetInner().(*roachpb.ScanRequest); isScan {
 					if firstScanRequest {
 						// We have some ScanRequests, and each might touch
 						// multiple ranges, so we have to set up
-						// numRangesLeftPerScanRequest.
+						// numRangesPerScanRequest.
 						streamerLocked = true
 						s.mu.Lock()
-						if cap(s.mu.numRangesLeftPerScanRequest) < len(reqs) {
-							s.mu.numRangesLeftPerScanRequest = make([]int, len(reqs))
+						if cap(s.mu.numRangesPerScanRequest) < len(reqs) {
+							s.mu.numRangesPerScanRequest = make([]int, len(reqs))
 						} else {
-							// We can reuse numRangesLeftPerScanRequest
-							// allocated on the previous call to Enqueue after
-							// we zero it out.
-							s.mu.numRangesLeftPerScanRequest = s.mu.numRangesLeftPerScanRequest[:len(reqs)]
-							for n := 0; n < len(s.mu.numRangesLeftPerScanRequest); {
-								n += copy(s.mu.numRangesLeftPerScanRequest[n:], zeroIntSlice)
+							// We can reuse numRangesPerScanRequest allocated on
+							// the previous call to Enqueue after we zero it
+							// out.
+							s.mu.numRangesPerScanRequest = s.mu.numRangesPerScanRequest[:len(reqs)]
+							for n := 0; n < len(s.mu.numRangesPerScanRequest); {
+								n += copy(s.mu.numRangesPerScanRequest[n:], zeroIntSlice)
 							}
 						}
 					}
-					s.mu.numRangesLeftPerScanRequest[pos]++
+					if s.mode == InOrder {
+						if subRequestIdx == nil {
+							subRequestIdx = make([]int, len(singleRangeReqs))
+						}
+						subRequestIdx[i] = s.mu.numRangesPerScanRequest[pos]
+					}
+					s.mu.numRangesPerScanRequest[pos]++
 					firstScanRequest = false
 				}
 			}
@@ -499,8 +526,8 @@ func (s *Streamer) Enqueue(
 		r := singleRangeBatch{
 			reqs:              singleRangeReqs,
 			positions:         positions,
+			subRequestIdx:     subRequestIdx,
 			reqsReservedBytes: requestsMemUsage(singleRangeReqs),
-			priority:          positions[0],
 		}
 		totalReqsMemUsage += r.reqsReservedBytes
 
@@ -570,7 +597,8 @@ func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 		if len(results) > 0 || allComplete || err != nil {
 			if debug {
 				if len(results) > 0 {
-					fmt.Printf("returning %s to the client\n", resultsToString(results))
+					printSubRequestIdx := s.mode == InOrder && !s.hints.SingleRowLookup
+					fmt.Printf("returning %s to the client\n", resultsToString(results, printSubRequestIdx))
 				} else {
 					suffix := "all requests have been responded to"
 					if !allComplete {
@@ -684,7 +712,7 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			// The first request has the highest urgency among all current
 			// requests to serve, so we use its priority to spill everything
 			// with less urgency when necessary to free up the budget.
-			spillingPriority = w.s.requestsToServe.firstLocked().priority
+			spillingPriority = w.s.requestsToServe.firstLocked().priority()
 		}
 		w.s.requestsToServe.Unlock()
 
@@ -1228,12 +1256,11 @@ func (w *workerCoordinator) processSingleRangeResults(
 	// We have to allocate the new slice for requests, but we can reuse the
 	// positions slice.
 	resumeReq.reqs = make([]roachpb.RequestUnion, numIncompleteRequests)
-	// numIncompleteRequests will never exceed the number of requests in req.
-	resumeReq.positions = req.positions[:numIncompleteRequests]
+	resumeReq.positions = req.positions[:0]
+	resumeReq.subRequestIdx = req.subRequestIdx[:0]
 	// We've already reconciled the budget with the actual reservation for the
 	// requests with the ResumeSpans.
 	resumeReq.reqsReservedBytes = resumeReqsMemUsage
-	resumeReq.priority = math.MaxInt
 	gets := make([]struct {
 		req   roachpb.GetRequest
 		union roachpb.RequestUnion_Get
@@ -1256,6 +1283,10 @@ func (w *workerCoordinator) processSingleRangeResults(
 		if w.s.enqueueKeys != nil {
 			enqueueKey = w.s.enqueueKeys[position]
 		}
+		var subRequestIdx int
+		if req.subRequestIdx != nil {
+			subRequestIdx = req.subRequestIdx[i]
+		}
 		reply := resp.GetInner()
 		switch origRequest := req.reqs[i].GetInner().(type) {
 		case *roachpb.GetRequest:
@@ -1270,12 +1301,12 @@ func (w *workerCoordinator) processSingleRangeResults(
 				newGet.req.KeyLocking = origRequest.KeyLocking
 				newGet.union.Get = &newGet.req
 				resumeReq.reqs[resumeReqIdx].Value = &newGet.union
-				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				resumeReq.positions = append(resumeReq.positions, position)
+				if req.subRequestIdx != nil {
+					resumeReq.subRequestIdx = append(resumeReq.subRequestIdx, subRequestIdx)
+				}
 				if resumeReq.minTargetBytes == 0 {
 					resumeReq.minTargetBytes = get.ResumeNextBytes
-				}
-				if position < resumeReq.priority {
-					resumeReq.priority = position
 				}
 				resumeReqIdx++
 			} else {
@@ -1291,6 +1322,8 @@ func (w *workerCoordinator) processSingleRangeResults(
 					// unique.
 					EnqueueKeysSatisfied: []int{enqueueKey},
 					Position:             position,
+					subRequestIdx:        subRequestIdx,
+					subRequestDone:       true,
 				}
 				result.memoryTok.streamer = w.s
 				result.memoryTok.toRelease = getResponseSize(get)
@@ -1324,6 +1357,8 @@ func (w *workerCoordinator) processSingleRangeResults(
 					// are unique.
 					EnqueueKeysSatisfied: []int{enqueueKey},
 					Position:             position,
+					subRequestIdx:        subRequestIdx,
+					subRequestDone:       scan.ResumeSpan == nil,
 				}
 				result.memoryTok.streamer = w.s
 				result.memoryTok.toRelease = scanResponseSize(scan)
@@ -1348,12 +1383,12 @@ func (w *workerCoordinator) processSingleRangeResults(
 				newScan.req.KeyLocking = origRequest.KeyLocking
 				newScan.union.Scan = &newScan.req
 				resumeReq.reqs[resumeReqIdx].Value = &newScan.union
-				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				resumeReq.positions = append(resumeReq.positions, position)
+				if req.subRequestIdx != nil {
+					resumeReq.subRequestIdx = append(resumeReq.subRequestIdx, subRequestIdx)
+				}
 				if resumeReq.minTargetBytes == 0 {
 					resumeReq.minTargetBytes = scan.ResumeNextBytes
-				}
-				if position < resumeReq.priority {
-					resumeReq.priority = position
 				}
 				resumeReqIdx++
 
@@ -1449,10 +1484,21 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 			if results[i].ScanResp.ScanResponse != nil {
 				if results[i].ScanResp.ResumeSpan == nil {
 					// The scan within the range is complete.
-					w.s.mu.numRangesLeftPerScanRequest[results[i].Position]--
-					if w.s.mu.numRangesLeftPerScanRequest[results[i].Position] == 0 {
-						// The scan across all ranges is now complete too.
-						results[i].ScanResp.Complete = true
+					if w.s.mode == OutOfOrder {
+						w.s.mu.numRangesPerScanRequest[results[i].Position]--
+						if w.s.mu.numRangesPerScanRequest[results[i].Position] == 0 {
+							// The scan across all ranges is now complete too.
+							results[i].ScanResp.Complete = true
+						}
+					} else {
+						// In InOrder mode, the scan is marked as complete when
+						// the last sub-request is satisfied. Note that it is ok
+						// if the previous sub-requests haven't been satisfied
+						// yet - the inOrderResultsBuffer will not emit this
+						// Result until the previous sub-requests are responded
+						// to.
+						numSubRequests := w.s.mu.numRangesPerScanRequest[results[i].Position]
+						results[i].ScanResp.Complete = results[i].subRequestIdx+1 == numSubRequests
 					}
 				} else {
 					// Unset the ResumeSpan on the result in order to not
@@ -1471,7 +1517,8 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	// partial one. Think more about this.
 	w.s.mu.avgResponseEstimator.update(actualMemoryReservation, int64(len(results)))
 	if debug {
-		fmt.Printf("created %s with total size %d\n", resultsToString(results), actualMemoryReservation)
+		printSubRequestIdx := w.s.mode == InOrder && !w.s.hints.SingleRowLookup
+		fmt.Printf("created %s with total size %d\n", resultsToString(results, printSubRequestIdx), actualMemoryReservation)
 	}
 	w.s.results.add(results)
 }
