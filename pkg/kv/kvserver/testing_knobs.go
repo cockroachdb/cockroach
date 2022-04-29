@@ -403,6 +403,9 @@ type StoreTestingKnobs struct {
 	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
 	// send snapshot semaphore.
 	AfterSendSnapshotThrottle func()
+
+	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
+	EnqueueReplicaInterceptor func(queueName string, replica *Replica)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
