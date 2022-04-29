@@ -3409,6 +3409,10 @@ func (s *Store) Enqueue(
 ) (recording tracingpb.Recording, processError error, enqueueError error) {
 	ctx = repl.AnnotateCtx(ctx)
 
+	if fn := s.TestingKnobs().EnqueueReplicaInterceptor; fn != nil {
+		fn(queueName, repl)
+	}
+
 	// Do not enqueue uninitialized replicas. The baseQueue ignores these during
 	// normal queue scheduling, but we error here to signal to the user that the
 	// operation was unsuccessful.
@@ -3446,10 +3450,17 @@ func (s *Store) Enqueue(
 	}
 
 	if async {
-		// NB: 1e6 is a placeholder for now. We want to use a high enough priority
-		// to ensure that these replicas are priority-ordered first.
+		// NB: 1e5 is a placeholder for now. We want to use a high enough priority
+		// to ensure that these replicas are priority-ordered first (just below the
+		// replacement of dead replicas).
+		//
+		// TODO(aayush): Once we address
+		// https://github.com/cockroachdb/cockroach/issues/79266, we can consider
+		// removing the `AddAsync` path here and just use the `MaybeAddAsync` path,
+		// which will allow us to stop specifiying the priority ad-hoc.
+		const asyncEnqueuePriority = 1e5
 		if skipShouldQueue {
-			queue.AddAsync(ctx, repl, 1e6 /* prio */)
+			queue.AddAsync(ctx, repl, asyncEnqueuePriority)
 		} else {
 			queue.MaybeAddAsync(ctx, repl, repl.Clock().NowAsClockTimestamp())
 		}
