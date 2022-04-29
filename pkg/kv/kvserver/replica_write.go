@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -36,6 +37,18 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
+)
+
+// migrateApplicationTimeout is the duration to wait for a Migrate command
+// to be applied to all replicas.
+//
+// TODO(erikgrinaker): this, and the timeout handling, should be moved into a
+// migration helper that manages checkpointing and retries as well.
+var migrateApplicationTimeout = settings.RegisterDurationSetting(
+	"kv.migration.migrate_application.timeout",
+	"timeout for a Migrate request to be applied across all replicas of a range",
+	1*time.Minute,
+	settings.PositiveDuration,
 )
 
 // executeWriteBatch is the entry point for client requests which may mutate the
@@ -272,12 +285,15 @@ func (r *Replica) executeWriteBatch(
 				//
 				// [1]: See PurgeOutdatedReplicas from the Migration service.
 				// [2]: pkg/migration
-				desc := r.Desc()
-				// NB: waitForApplication already has a timeout.
-				applicationErr := waitForApplication(
-					ctx, r.store.cfg.NodeDialer, desc.RangeID, desc.Replicas().Descriptors(),
-					// We wait for an index >= that of the migration command.
-					r.GetLeaseAppliedIndex())
+				applicationErr := contextutil.RunWithTimeout(ctx, "wait for Migrate application",
+					migrateApplicationTimeout.Get(&r.ClusterSettings().SV),
+					func(ctx context.Context) error {
+						desc := r.Desc()
+						return waitForApplication(
+							ctx, r.store.cfg.NodeDialer, desc.RangeID, desc.Replicas().Descriptors(),
+							// We wait for an index >= that of the migration command.
+							r.GetLeaseAppliedIndex())
+					})
 				propResult.Err = roachpb.NewError(applicationErr)
 			}
 			return propResult.Reply, nil, propResult.Err
