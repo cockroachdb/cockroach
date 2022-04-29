@@ -25,6 +25,7 @@ configure_make(
         ],
         "@io_bazel_rules_go//go/platform:linux_amd64": ["--host=x86_64-unknown-linux-gnu"],
         "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
+        "@io_bazel_rules_go//go/platform:linux_s390x": ["--host=s390x-unknown-linux-gnu"],
         # NB: Normally host detection is handled by configure, but the version
         # of jemalloc we have vendored is pretty ancient and can't handle some
         # of the newer M1 Macs. This arm of the select() can probably be deleted

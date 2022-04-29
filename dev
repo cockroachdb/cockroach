@@ -22,4 +22,5 @@ if [[ ! -f "$BINARY_PATH" ]]; then
     chmod a+w $BINARY_PATH
 fi
 
+cd $THIS_DIR
 exec $BINARY_PATH "$@"

@@ -12,7 +12,6 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -98,11 +97,16 @@ func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType *types.T) bool {
 	return o.NullableArgs
 }
 
+// GetBuiltinProperties is set to builtins.GetBuiltinProperties in an init
+// function in the norm package. This allows the memo package to resolve builtin
+// functions without importing the builtins package.
+var GetBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload)
+
 // AggregateOverloadExists returns whether or not the given operator has a
 // unary overload which takes the given type as input.
 func AggregateOverloadExists(agg opt.Operator, typ *types.T) bool {
 	name := opt.AggregateOpReverseMap[agg]
-	_, overloads := builtins.GetBuiltinProperties(name)
+	_, overloads := GetBuiltinProperties(name)
 	for _, o := range overloads {
 		if o.Types.MatchAt(typ, 0) {
 			return true
@@ -117,7 +121,7 @@ func AggregateOverloadExists(agg opt.Operator, typ *types.T) bool {
 func FindFunction(
 	e opt.ScalarExpr, name string,
 ) (props *tree.FunctionProperties, overload *tree.Overload, ok bool) {
-	props, overloads := builtins.GetBuiltinProperties(name)
+	props, overloads := GetBuiltinProperties(name)
 	for o := range overloads {
 		overload = &overloads[o]
 		if overload.Types.Length() != e.ChildCount() {

@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "memo",
@@ -35,7 +36,6 @@ go_library(
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",
-        "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/cast",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
@@ -116,4 +116,9 @@ genrule(
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
     visibility = ["//visibility:public"],
+)
+
+disallowed_imports_test(
+    "memo",
+    ["//pkg/sql/sem/builtins"],
 )
