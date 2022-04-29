@@ -399,17 +399,23 @@ func (r opResult) createDiskBackedSort(
 		// The input is already partially ordered. Use a chunks sorter to avoid
 		// loading all the rows into memory.
 		sorterMemMonitorName = fmt.Sprintf("%ssort-chunks-%d", memMonitorNamePrefix, processorID)
+		var deselectorUnlimitedMemAcc *mon.BoundAccount
 		var sortChunksMemAccount *mon.BoundAccount
 		if useStreamingMemAccountForBuffering {
+			deselectorUnlimitedMemAcc = streamingMemAccount
 			sortChunksMemAccount = streamingMemAccount
 		} else {
+			deselectorUnlimitedMemAcc = r.createBufferingUnlimitedMemAccount(
+				ctx, flowCtx, sorterMemMonitorName+"-unlimited",
+			)
 			sortChunksMemAccount = r.createMemAccountForSpillStrategy(
 				ctx, flowCtx, sorterMemMonitorName,
 			)
 		}
 		inMemorySorter, err = colexec.NewSortChunks(
-			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
-			ordering.Columns, int(matchLen),
+			colmem.NewAllocator(ctx, deselectorUnlimitedMemAcc, factory),
+			colmem.NewAllocator(ctx, sortChunksMemAccount, factory),
+			input, inputTypes, ordering.Columns, int(matchLen),
 		)
 	} else if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
 		// There is a limit specified, so we know exactly how many rows the
