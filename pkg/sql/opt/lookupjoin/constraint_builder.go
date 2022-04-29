@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Constraint is used to constrain a lookup join. There are two types of
@@ -399,7 +398,7 @@ func (b *ConstraintBuilder) findFiltersForIndexLookup(
 		if foundConstFilter {
 			constFilter := filters[allIdx]
 			if !isCanonicalFilter(constFilter) {
-				constFilter = b.makeConstFilter(idxCol, values)
+				constFilter = b.f.ConstructConstFilter(idxCol, values)
 			}
 			constFilters = append(constFilters, constFilter)
 		}
@@ -418,29 +417,6 @@ func (b *ConstraintBuilder) findFiltersForIndexLookup(
 	}
 
 	return eqFilters, constFilters, rightSideCols
-}
-
-// makeConstFilter builds a filter that constrains the given column to the given
-// set of constant values. This is performed by either constructing an equality
-// expression or an IN expression.
-func (b *ConstraintBuilder) makeConstFilter(col opt.ColumnID, values tree.Datums) memo.FiltersItem {
-	if len(values) == 1 {
-		return b.f.ConstructFiltersItem(b.f.ConstructEq(
-			b.f.ConstructVariable(col),
-			b.f.ConstructConstVal(values[0], values[0].ResolvedType()),
-		))
-	}
-	elems := make(memo.ScalarListExpr, len(values))
-	elemTypes := make([]*types.T, len(values))
-	for i := range values {
-		typ := values[i].ResolvedType()
-		elems[i] = b.f.ConstructConstVal(values[i], typ)
-		elemTypes[i] = typ
-	}
-	return b.f.ConstructFiltersItem(b.f.ConstructIn(
-		b.f.ConstructVariable(col),
-		b.f.ConstructTuple(elems, types.MakeTuple(elemTypes)),
-	))
 }
 
 // findJoinFilterRange tries to find an inequality range for this column.
