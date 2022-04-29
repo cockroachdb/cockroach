@@ -388,6 +388,10 @@ func (ds *DistSender) singleRangeFeed(
 	eventCh chan<- *roachpb.RangeFeedEvent,
 	onRangeEvent onRangeEventCb,
 ) (hlc.Timestamp, error) {
+	// Ensure context is cancelled on all errors, to prevent gRPC stream leaks.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	args := roachpb.RangeFeedRequest{
 		Span: span,
 		Header: roachpb.Header{
