@@ -13,9 +13,7 @@ package tree
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 // AlterTable represents an ALTER TABLE statement.
@@ -145,8 +143,7 @@ func (node *AlterTableAddColumn) Format(ctx *FmtCtx) {
 // CockroachDB and Postgres, but not necessarily other SQL databases:
 //
 //     ALTER TABLE t ADD COLUMN a INT CHECK (a < b)
-//
-func (node *AlterTable) HoistAddColumnConstraints() {
+func (node *AlterTable) HoistAddColumnConstraints(onHoistedFKConstraint func()) {
 	var normalizedCmds AlterTableCmds
 
 	for _, cmd := range node.Cmds {
@@ -185,7 +182,7 @@ func (node *AlterTable) HoistAddColumnConstraints() {
 				}
 				normalizedCmds = append(normalizedCmds, constraint)
 				d.References.Table = nil
-				telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
+				onHoistedFKConstraint()
 			}
 		}
 	}
