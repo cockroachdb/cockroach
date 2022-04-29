@@ -725,27 +725,6 @@ func (p *planner) canCreateOnSchema(
 	}
 }
 
-func (p *planner) canResolveDescUnderSchema(
-	ctx context.Context, scDesc catalog.SchemaDescriptor, desc catalog.Descriptor,
-) error {
-	// We can't always resolve temporary schemas by ID (for example in the temporary
-	// object cleaner which accesses temporary schemas not in the current session).
-	// To avoid an internal error, we just don't check usage on temporary tables.
-	if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsTemporary() {
-		return nil
-	}
-
-	switch kind := scDesc.SchemaKind(); kind {
-	case catalog.SchemaPublic, catalog.SchemaTemporary, catalog.SchemaVirtual:
-		// Anyone can resolve under temporary, public or virtual schemas.
-		return nil
-	case catalog.SchemaUserDefined:
-		return p.CheckPrivilegeForUser(ctx, scDesc, privilege.USAGE, p.User())
-	default:
-		panic(errors.AssertionFailedf("unknown schema kind %d", kind))
-	}
-}
-
 // checkCanAlterToNewOwner checks that the new owner exists and the current user
 // has privileges to alter the owner of the object. If the current user is not
 // a superuser, it also checks that they are a member of the new owner role.

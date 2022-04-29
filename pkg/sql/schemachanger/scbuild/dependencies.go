@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -133,6 +134,11 @@ type AuthorizationAccessor interface {
 	// HasOwnership returns true iff the role, or any role the role is a member
 	// of, has ownership privilege of the desc.
 	HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error)
+
+	// CheckPrivilegeForUser verifies that the user has `privilege` on `descriptor`.
+	CheckPrivilegeForUser(
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user security.SQLUsername,
+	) error
 }
 
 // AstFormatter provides interfaces for formatting AST nodes.

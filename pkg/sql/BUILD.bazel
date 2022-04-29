@@ -175,6 +175,7 @@ go_library(
         "schema_changer.go",
         "schema_changer_metrics.go",
         "schema_changer_state.go",
+        "schema_resolver.go",
         "scrub.go",
         "scrub_constraint.go",
         "scrub_fk.go",
