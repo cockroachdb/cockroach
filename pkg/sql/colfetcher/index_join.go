@@ -162,7 +162,10 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 		}
 		s.streamerInfo.Streamer.Init(
 			mode,
-			kvstreamer.Hints{UniqueRequests: true},
+			kvstreamer.Hints{
+				UniqueRequests:  true,
+				SingleRowLookup: true,
+			},
 			int(s.cf.table.spec.MaxKeysPerRow),
 			s.streamerInfo.diskBuffer,
 		)
