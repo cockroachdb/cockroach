@@ -256,6 +256,7 @@ go_test(
         "queue_test.go",
         "raft_log_queue_test.go",
         "raft_log_truncator_test.go",
+        "raft_snapshot_queue_test.go",
         "raft_test.go",
         "raft_transport_test.go",
         "raft_transport_unit_test.go",
