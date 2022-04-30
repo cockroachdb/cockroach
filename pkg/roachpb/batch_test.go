@@ -61,6 +61,7 @@ func TestBatchIsCompleteTransaction(t *testing.T) {
 		{[]Request{withSeq(get, 0), withSeq(put, 1), withSeq(put, 2), withSeq(get, 2), withSeq(etC, 3)}, true},
 		{[]Request{withSeq(put, 1), withSeq(get, 1), withSeq(put, 2), withSeq(etC, 4)}, false},
 		{[]Request{withSeq(get, 0), withSeq(put, 1), withSeq(put, 2), withSeq(put, 3), withSeq(get, 3), withSeq(etC, 4)}, true},
+		{[]Request{withSeq(put, 1), withSeq(etC, -1)}, false},
 	}
 	for i, test := range testCases {
 		ba := BatchRequest{}

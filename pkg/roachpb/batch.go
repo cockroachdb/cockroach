@@ -351,7 +351,7 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 		// The transaction performed no writes.
 		return true
 	}
-	if int(maxSeq) > len(ba.Requests) {
+	if maxSeq < 0 || int(maxSeq) > len(ba.Requests) {
 		// Fast-path.
 		return false
 	}
