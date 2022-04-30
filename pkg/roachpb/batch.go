@@ -358,6 +358,7 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 	// Check whether any sequence numbers were skipped between 1 and the
 	// EndTxn's sequence number. A Batch is only a complete transaction
 	// if it contains every write that the transaction performed.
+	// Sequence numbers are assigned to requests in txnSeqNumAllocator.
 	nextSeq := enginepb.TxnSeq(1)
 	for _, args := range ba.Requests {
 		req := args.GetInner()
@@ -375,7 +376,7 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 			}
 		}
 	}
-	panic("unreachable")
+	panic(fmt.Errorf("unreachable. Batch requests: %s", ba.Requests))
 }
 
 // hasFlag returns true iff one of the requests within the batch contains the
