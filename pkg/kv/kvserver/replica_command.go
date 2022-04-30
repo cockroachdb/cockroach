@@ -3229,11 +3229,16 @@ func (r *Replica) adminScatter(
 		// Learner replicas aren't allowed to become the leaseholder or raft leader,
 		// so only consider the `VoterDescriptors` replicas.
 		voterReplicas := desc.Replicas().VoterDescriptors()
-		newLeaseholderIdx := rand.Intn(len(voterReplicas))
-		targetStoreID := voterReplicas[newLeaseholderIdx].StoreID
-		if targetStoreID != r.store.StoreID() {
-			if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
-				log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
+		potentialLeaseTargets, _ := r.store.cfg.StorePool.liveAndDeadReplicas(
+			voterReplicas, false, /* includeSuspectAndDrainingNodes */
+		)
+		if len(potentialLeaseTargets) > 0 {
+			newLeaseholderIdx := rand.Intn(len(potentialLeaseTargets))
+			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID
+			if targetStoreID != r.store.StoreID() {
+				if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
+					log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
+				}
 			}
 		}
 	}
