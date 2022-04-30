@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
@@ -28,7 +30,9 @@ const (
 	// queued replicas.
 	raftSnapshotQueueTimerDuration = 0 // zero duration to process Raft snapshots greedily
 
-	raftSnapshotPriority float64 = 0
+	raftSnapshotToLeaseholderPriority float64 = 3
+	raftSnapshotToVoterPriority       float64 = 2
+	raftSnapshotToLearnerPriority     float64 = 1
 )
 
 // raftSnapshotQueue manages a queue of replicas which may need to catch a
@@ -60,22 +64,56 @@ func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 	return rq
 }
 
-func (rq *raftSnapshotQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
-) (shouldQueue bool, priority float64) {
-	// If a follower needs a snapshot, enqueue at the highest priority.
-	if status := repl.RaftStatus(); status != nil {
+type snapshoter interface {
+	raftWithProgress(withProgressVisitor)
+	getLeaseRLocked() (cur, next roachpb.Lease)
+}
+
+// raftSnapshotQueuePriority returns the priority for the replica to send a
+// snapshot. If followers do need snapshots, the priority is a function of the
+// types of followers that need snapshots. Returns -1 if the replica is not the
+// leader or if no snapshots are needed.
+func raftSnapshotQueuePriority(repl snapshoter) float64 {
+	priority := -1.0
+	repl.raftWithProgress(func(id uint64, _ raft.ProgressType, pr tracker.Progress) {
 		// raft.Status.Progress is only populated on the Raft group leader.
-		for _, p := range status.Progress {
-			if p.State == tracker.StateSnapshot {
-				if log.V(2) {
-					log.Infof(ctx, "raft snapshot needed, enqueuing")
-				}
-				return true, raftSnapshotPriority
+		if pr.State == tracker.StateSnapshot {
+			var curPriority float64
+			// NB: repl.mu.RLock()'d by raftWithProgress.
+			lease, _ := repl.getLeaseRLocked()
+			if roachpb.ReplicaID(id) == lease.Replica.ReplicaID {
+				// If a leaseholder needs a snapshot, give it priority over all other
+				// snapshots. The leaseholder may be so far behind on its log that it
+				// does not even realize that it holds the lease. In such cases, the
+				// range is unavailable for reads and writes until the leaseholder
+				// receives its snapshot, so send one ASAP. We don't bother to check the
+				// lease validity.
+				curPriority = raftSnapshotToLeaseholderPriority
+			} else if !pr.IsLearner {
+				// If a voter needs a snapshot, give it priority over learners because a
+				// voter in need of a snapshot can not vote for new proposals, so it may
+				// be needed to achieve quorum on the range for write availability.
+				curPriority = raftSnapshotToVoterPriority
+			} else {
+				curPriority = raftSnapshotToLearnerPriority
 			}
+			priority = math.Max(priority, curPriority)
 		}
+	})
+	return priority
+}
+
+func (rq *raftSnapshotQueue) shouldQueue(
+	ctx context.Context, _ hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
+) (shouldQueue bool, priority float64) {
+	priority = raftSnapshotQueuePriority(repl)
+	if priority < 0 {
+		return false, 0
 	}
-	return false, 0
+	if log.V(2) {
+		log.Infof(ctx, "raft snapshot needed, enqueuing with priority %f", priority)
+	}
+	return true, priority
 }
 
 func (rq *raftSnapshotQueue) process(

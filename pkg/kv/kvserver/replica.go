@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 const (
@@ -1224,6 +1225,24 @@ func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
 		return rg.BasicStatus()
 	}
 	return raft.BasicStatus{}
+}
+
+type withProgressVisitor func(id uint64, typ raft.ProgressType, pr tracker.Progress)
+
+// raftWithProgress is a helper to efficiently introspect the Progress for each
+// member of the replica's Raft group. The visitor is never called if the Raft
+// group has not been initialized yet. The visitor is called while holding
+// Replica.mu in read mode.
+func (r *Replica) raftWithProgress(f withProgressVisitor) {
+	r.mu.RLock()
+	r.raftWithProgressRLocked(f)
+	r.mu.RUnlock()
+}
+
+func (r *Replica) raftWithProgressRLocked(f withProgressVisitor) {
+	if rg := r.mu.internalRaftGroup; rg != nil {
+		r.mu.internalRaftGroup.WithProgress(f)
+	}
 }
 
 // State returns a copy of the internal state of the Replica, along with some
