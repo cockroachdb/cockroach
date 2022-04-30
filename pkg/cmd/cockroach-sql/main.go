@@ -65,6 +65,13 @@ func main() {
 	f.BoolVar(&cfg.ConnCtx.DebugMode, cliflags.CliDebugMode.Name, cfg.ConnCtx.DebugMode, cliflags.CliDebugMode.Description)
 	f.BoolVar(&cfg.ConnCtx.Echo, cliflags.EchoSQL.Name, cfg.ConnCtx.Echo, cliflags.EchoSQL.Description)
 
+	// We want to simplify tutorials, docs etc by allowing
+	// 'cockroach-sql' to be symlinked to 'cockroach' and
+	// ensure that the resulting symlink still works when invoked
+	// as 'cockroach sql' (with a 'sql' sub-command).
+	subCmd := *sqlCmd
+	sqlCmd.AddCommand(&subCmd)
+
 	errCode := exit.Success()
 	if err := sqlCmd.Execute(); err != nil {
 		clierror.OutputError(os.Stderr, err, true /*showSeverity*/, false /*verbose*/)
