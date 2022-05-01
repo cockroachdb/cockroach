@@ -371,7 +371,12 @@ func (p *pebbleBatch) SingleClearEngineKey(key EngineKey) error {
 
 // ClearRawRange implements the Batch interface.
 func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
-	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], MVCCKey{Key: start})
+	endBuf := EncodeMVCCKey(MVCCKey{Key: end})
+	if err := p.batch.DeleteRange(p.buf, endBuf, nil); err != nil {
+		return err
+	}
+	return p.ExperimentalClearAllMVCCRangeKeys(start, end)
 }
 
 // ClearMVCCRange implements the Batch interface.
@@ -383,10 +388,6 @@ func (p *pebbleBatch) ClearMVCCRange(start, end roachpb.Key) error {
 
 // ClearMVCCVersions implements the Batch interface.
 func (p *pebbleBatch) ClearMVCCVersions(start, end MVCCKey) error {
-	return p.clearRange(start, end)
-}
-
-func (p *pebbleBatch) clearRange(start, end MVCCKey) error {
 	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], start)
 	buf2 := EncodeMVCCKey(end)
 	return p.batch.DeleteRange(p.buf, buf2, nil)
@@ -413,7 +414,7 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 			return err
 		}
 	}
-	return nil
+	return p.ExperimentalClearAllMVCCRangeKeys(start, end)
 }
 
 // ExperimentalClearMVCCRangeKey implements the Engine interface.
