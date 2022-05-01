@@ -531,36 +531,41 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearEngineKey(key EngineKey) error
 
-	// ClearRawRange removes a set of entries, from start (inclusive) to end
-	// (exclusive). It can be applied to a range consisting of MVCCKeys or the
-	// more general EngineKeys -- it simply uses the roachpb.Key parameters as
-	// the Key field of an EngineKey. Similar to the other Clear* methods,
-	// this method actually removes entries from the storage engine.
+	// ClearRawRange removes a set of entries from start (inclusive) to end
+	// (exclusive) using a Pebble range tombstone. It can be applied to a range
+	// consisting of MVCCKeys or the more general EngineKeys -- it simply uses the
+	// roachpb.Key parameters as the Key field of an EngineKey.
 	//
-	// It is safe to modify the contents of the arguments after it returns.
+	// Similar to the other Clear* methods, this method actually removes entries
+	// from the storage engine. It is safe to modify the contents of the arguments
+	// after it returns.
 	ClearRawRange(start, end roachpb.Key) error
-	// ClearMVCCRangeAndIntents removes MVCC keys and intents from start (inclusive)
-	// to end (exclusive). This is a higher-level method that handles both
-	// interleaved and separated intents. Similar to the other Clear* methods,
-	// this method actually removes entries from the storage engine.
+	// ClearMVCCRange removes MVCC keys from start (inclusive) to end (exclusive)
+	// using a Pebble range tombstone. It will remove everything in the span,
+	// including intents.
 	//
-	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCCRangeAndIntents(start, end roachpb.Key) error
-	// ClearMVCCRange removes MVCC keys from start (inclusive) to end
-	// (exclusive). It should not be expected to clear intents, though may clear
-	// interleaved intents that it encounters. It is meant for efficiently
+	// Similar to the other Clear* methods, this method actually removes entries
+	// from the storage engine. It is safe to modify the contents of the arguments
+	// after it returns.
+	ClearMVCCRange(start, end roachpb.Key) error
+	// ClearMVCCVersions removes MVCC versions from start (inclusive) to end
+	// (exclusive) using a Pebble range tombstone. It is meant for efficiently
 	// clearing a subset of versions of a key, since the parameters are MVCCKeys
-	// and not roachpb.Keys. Similar to the other Clear* methods, this method
-	// actually removes entries from the storage engine.
+	// and not roachpb.Keys, but it can also be used across multiple keys. It will
+	// ignore intents, leaving them in place.
 	//
-	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCCRange(start, end MVCCKey) error
-
-	// ClearIterRange removes all keys in the given span using an iterator to
-	// iterate over point keys and remove them from the storage engine using
-	// per-key storage tombstones (not MVCC tombstones). Any separated
-	// intents/locks will also be cleared.
-	ClearIterRange(start, end roachpb.Key) error
+	// Similar to the other Clear* methods, this method actually removes entries
+	// from the storage engine. It is safe to modify the contents of the arguments
+	// after it returns.
+	ClearMVCCVersions(start, end MVCCKey) error
+	// ClearMVCCIteratorRange removes all keys in the given span using an MVCC
+	// iterator, by clearing individual keys (including intents) with Pebble point
+	// tombstones.
+	//
+	// Similar to the other Clear* methods, this method actually removes entries
+	// from the storage engine. It is safe to modify the contents of the arguments
+	// after it returns.
+	ClearMVCCIteratorRange(start, end roachpb.Key) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged

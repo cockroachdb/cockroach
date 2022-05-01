@@ -72,43 +72,43 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 
 	t.Run("writes before range", func(t *testing.T) {
 		if err := batch.ClearUnversioned(outsideKey.Key); !isWriteSpanErr(err) {
-			t.Errorf("Clear: unexpected error %v", err)
+			t.Errorf("ClearUnversioned: unexpected error %v", err)
 		}
 		if err := batch.ClearRawRange(outsideKey.Key, outsideKey2.Key); !isWriteSpanErr(err) {
-			t.Errorf("ClearRange: unexpected error %v", err)
+			t.Errorf("ClearRawRange: unexpected error %v", err)
 		}
 		{
-			err := batch.ClearIterRange(outsideKey.Key, outsideKey2.Key)
+			err := batch.ClearMVCCIteratorRange(outsideKey.Key, outsideKey2.Key)
 			if !isWriteSpanErr(err) {
-				t.Errorf("ClearIterRange: unexpected error %v", err)
+				t.Errorf("ClearMVCCIteratorRange: unexpected error %v", err)
 			}
 		}
 		if err := batch.Merge(outsideKey, nil); !isWriteSpanErr(err) {
 			t.Errorf("Merge: unexpected error %v", err)
 		}
 		if err := batch.PutUnversioned(outsideKey.Key, nil); !isWriteSpanErr(err) {
-			t.Errorf("Put: unexpected error %v", err)
+			t.Errorf("PutUnversioned: unexpected error %v", err)
 		}
 	})
 
 	t.Run("writes after range", func(t *testing.T) {
 		if err := batch.ClearUnversioned(outsideKey3.Key); !isWriteSpanErr(err) {
-			t.Errorf("Clear: unexpected error %v", err)
+			t.Errorf("ClearUnversioned: unexpected error %v", err)
 		}
 		if err := batch.ClearRawRange(insideKey2.Key, outsideKey4.Key); !isWriteSpanErr(err) {
-			t.Errorf("ClearRange: unexpected error %v", err)
+			t.Errorf("ClearRawRange: unexpected error %v", err)
 		}
 		{
-			err := batch.ClearIterRange(outsideKey2.Key, outsideKey4.Key)
+			err := batch.ClearMVCCIteratorRange(outsideKey2.Key, outsideKey4.Key)
 			if !isWriteSpanErr(err) {
-				t.Errorf("ClearIterRange: unexpected error %v", err)
+				t.Errorf("ClearMVCCIteratorRange: unexpected error %v", err)
 			}
 		}
 		if err := batch.Merge(outsideKey3, nil); !isWriteSpanErr(err) {
 			t.Errorf("Merge: unexpected error %v", err)
 		}
 		if err := batch.PutUnversioned(outsideKey3.Key, nil); !isWriteSpanErr(err) {
-			t.Errorf("Put: unexpected error %v", err)
+			t.Errorf("PutUnversioned: unexpected error %v", err)
 		}
 	})
 
@@ -318,19 +318,19 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 
 	for _, batch := range []storage.Batch{batchBefore, batchNonMVCC} {
 		if err := batch.ClearUnversioned(wkey.Key); !isWriteSpanErr(err) {
-			t.Errorf("Clear: unexpected error %v", err)
+			t.Errorf("ClearUnversioned: unexpected error %v", err)
 		}
 		{
-			err := batch.ClearIterRange(wkey.Key, wkey.Key)
+			err := batch.ClearMVCCIteratorRange(wkey.Key, wkey.Key)
 			if !isWriteSpanErr(err) {
-				t.Errorf("ClearIterRange: unexpected error %v", err)
+				t.Errorf("ClearMVCCIteratorRange: unexpected error %v", err)
 			}
 		}
 		if err := batch.Merge(wkey, nil); !isWriteSpanErr(err) {
 			t.Errorf("Merge: unexpected error %v", err)
 		}
 		if err := batch.PutUnversioned(wkey.Key, nil); !isWriteSpanErr(err) {
-			t.Errorf("Put: unexpected error %v", err)
+			t.Errorf("PutUnversioned: unexpected error %v", err)
 		}
 	}
 

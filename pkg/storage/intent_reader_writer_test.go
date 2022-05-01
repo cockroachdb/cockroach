@@ -246,7 +246,7 @@ func TestIntentDemuxWriter(t *testing.T) {
 				pw.reset()
 				start := scanRoachKey(t, d, "start")
 				end := scanRoachKey(t, d, "end")
-				if scratch, err = w.ClearMVCCRangeAndIntents(start, end, scratch); err != nil {
+				if scratch, err = w.ClearMVCCRange(start, end, scratch); err != nil {
 					return err.Error()
 				}
 				printEngContents(&pw.b, eng)
