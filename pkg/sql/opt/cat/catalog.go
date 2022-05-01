@@ -126,6 +126,14 @@ type Catalog interface {
 		ctx context.Context, name *tree.UnresolvedObjectName,
 	) (*types.T, error)
 
+	// ResolveIndex is used to resolve index with a TableIndexName where name of
+	// table, schema, database could be missing. Index is returned together with
+	// name of the table/materialized view contains the index. Error is returned
+	// if the index is not found.
+	ResolveIndex(
+		ctx context.Context, flags Flags, name *tree.TableIndexName,
+	) (Index, DataSourceName, error)
+
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.
 	CheckPrivilege(ctx context.Context, o Object, priv privilege.Kind) error
