@@ -329,18 +329,18 @@ func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkClearMVCCRange_Pebble(b *testing.B) {
+func BenchmarkClearMVCCVersions_Pebble(b *testing.B) {
 	skip.UnderShort(b)
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		return batch.ClearMVCCRange(start, end)
+		return batch.ClearMVCCVersions(start, end)
 	})
 }
 
-func BenchmarkClearIterRange_Pebble(b *testing.B) {
+func BenchmarkClearMVCCIteratorRange_Pebble(b *testing.B) {
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		return batch.ClearIterRange(start.Key, end.Key)
+		return batch.ClearMVCCIteratorRange(start.Key, end.Key)
 	})
 }
 

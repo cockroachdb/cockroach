@@ -1227,15 +1227,14 @@ func (p *Pebble) ClearRawRange(start, end roachpb.Key) error {
 	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
 }
 
-// ClearMVCCRangeAndIntents implements the Engine interface.
-func (p *Pebble) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
-	_, err := p.wrappedIntentWriter.ClearMVCCRangeAndIntents(start, end, nil)
+// ClearMVCCRange implements the Engine interface.
+func (p *Pebble) ClearMVCCRange(start, end roachpb.Key) error {
+	_, err := p.wrappedIntentWriter.ClearMVCCRange(start, end, nil)
 	return err
-
 }
 
-// ClearMVCCRange implements the Engine interface.
-func (p *Pebble) ClearMVCCRange(start, end MVCCKey) error {
+// ClearMVCCVersions implements the Engine interface.
+func (p *Pebble) ClearMVCCVersions(start, end MVCCKey) error {
 	return p.clearRange(start, end)
 }
 
@@ -1245,13 +1244,13 @@ func (p *Pebble) clearRange(start, end MVCCKey) error {
 	return p.db.DeleteRange(bufStart, bufEnd, pebble.Sync)
 }
 
-// ClearIterRange implements the Engine interface.
-func (p *Pebble) ClearIterRange(start, end roachpb.Key) error {
+// ClearMVCCIteratorRange implements the Engine interface.
+func (p *Pebble) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 	// Write all the tombstones in one batch.
 	batch := p.NewUnindexedBatch(false /* writeOnly */)
 	defer batch.Close()
 
-	if err := batch.ClearIterRange(start, end); err != nil {
+	if err := batch.ClearMVCCIteratorRange(start, end); err != nil {
 		return err
 	}
 	return batch.Commit(true)
@@ -2105,15 +2104,15 @@ func (p *pebbleReadOnly) ClearRawRange(start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+func (p *pebbleReadOnly) ClearMVCCRange(start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearMVCCRange(start, end MVCCKey) error {
+func (p *pebbleReadOnly) ClearMVCCVersions(start, end MVCCKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearIterRange(start, end roachpb.Key) error {
+func (p *pebbleReadOnly) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
