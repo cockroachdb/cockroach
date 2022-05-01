@@ -612,32 +612,29 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearRawRange(start, end roachpb.Key) error
-	// ClearMVCCRangeAndIntents removes MVCC keys and intents from start (inclusive)
-	// to end (exclusive). This is a higher-level method that handles both
-	// interleaved and separated intents. Similar to the other Clear* methods,
-	// this method actually removes entries from the storage engine.
-	//
-	// It is safe to modify the contents of the arguments after it returns.
-	//
-	// TODO(erikgrinaker): This should clear range keys too.
-	ClearMVCCRangeAndIntents(start, end roachpb.Key) error
-	// ClearMVCCRange removes MVCC keys from start (inclusive) to end
-	// (exclusive). It should not be expected to clear intents, though may clear
-	// interleaved intents that it encounters. It is meant for efficiently
-	// clearing a subset of versions of a key, since the parameters are MVCCKeys
-	// and not roachpb.Keys. Similar to the other Clear* methods, this method
+	// ClearMVCCRange removes MVCC keys from start (inclusive) to end (exclusive),
+	// including intents. Similar to the other Clear* methods, this method
 	// actually removes entries from the storage engine.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCCRange(start, end MVCCKey) error
-
-	// ClearIterRange removes all keys in the given span using an iterator to
-	// iterate over point keys and remove them from the storage engine using
-	// per-key storage tombstones (not MVCC tombstones). Any separated
-	// intents/locks will also be cleared.
 	//
 	// TODO(erikgrinaker): This should clear range keys too.
-	ClearIterRange(start, end roachpb.Key) error
+	ClearMVCCRange(start, end roachpb.Key) error
+	// ClearMVCCVersions removes MVCC point key versions from start (inclusive) to
+	// end (exclusive). It does not affect intents nor range keys. It is meant for
+	// efficiently clearing a subset of versions of a key, since the parameters
+	// are MVCCKeys and not roachpb.Keys. Similar to the other Clear* methods,
+	// this method actually removes entries from the storage engine.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearMVCCVersions(start, end MVCCKey) error
+	// ClearMVCCIteratorRange removes all keys in the given span using an MVCC
+	// iterator and clearing individual point keys (including intents). Similar to
+	// the other Clear* methods, this method actually removes entries from the
+	// storage engine.
+	//
+	// TODO(erikgrinaker): This should clear range keys too.
+	ClearMVCCIteratorRange(start, end roachpb.Key) error
 
 	// ExperimentalClearMVCCRangeKey deletes an MVCC range key from start
 	// (inclusive) to end (exclusive) at the given timestamp. For any range key

@@ -689,7 +689,7 @@ func cmdCheckIntent(e *evalCtx) error {
 
 func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
-	return e.engine.ClearMVCCRangeAndIntents(key, endKey)
+	return e.engine.ClearMVCCRange(key, endKey)
 }
 
 func cmdCPut(e *evalCtx) error {
