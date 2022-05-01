@@ -78,7 +78,7 @@ func (sc *AbortSpan) max() roachpb.Key {
 func (sc *AbortSpan) ClearData(e storage.Engine) error {
 	b := e.NewUnindexedBatch(false /* writeOnly */)
 	defer b.Close()
-	if err := b.ClearIterRange(sc.min(), sc.max()); err != nil {
+	if err := b.ClearMVCCIteratorRange(sc.min(), sc.max()); err != nil {
 		return err
 	}
 	return b.Commit(false /* sync */)

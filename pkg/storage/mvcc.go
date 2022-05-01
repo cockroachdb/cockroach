@@ -2064,7 +2064,7 @@ func MVCCClearTimeRange(
 
 	flushClearedKeys := func(nonMatch MVCCKey) error {
 		if len(clearRangeStart.Key) != 0 {
-			if err := rw.ClearMVCCRange(clearRangeStart, nonMatch); err != nil {
+			if err := rw.ClearMVCCVersions(clearRangeStart, nonMatch); err != nil {
 				return err
 			}
 			batchByteSize += int64(clearRangeStart.EncodedSize() + nonMatch.EncodedSize())
@@ -2079,7 +2079,7 @@ func MVCCClearTimeRange(
 			// clearrange, the byte size of the keys we did get is now too large to
 			// encode them all within the byte size limit, so use clearrange anyway.
 			if batchByteSize+encodedBufSize >= maxBatchByteSize {
-				if err := rw.ClearMVCCRange(buf[0], nonMatch); err != nil {
+				if err := rw.ClearMVCCVersions(buf[0], nonMatch); err != nil {
 					return err
 				}
 				batchByteSize += int64(buf[0].EncodedSize() + nonMatch.EncodedSize())
