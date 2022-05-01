@@ -116,7 +116,7 @@ func (rk RKey) Equal(other []byte) bool {
 // The method may only take a shallow copy of the RKey, so both the
 // receiver and the return value should be treated as immutable after.
 func (rk RKey) Next() RKey {
-	return RKey(BytesNext(rk))
+	return RKey(encoding.BytesNext(rk))
 }
 
 // PrefixEnd determines the end key given key as a prefix, that is the
@@ -140,23 +140,6 @@ func (rk RKey) StringWithDirs(valDirs []encoding.Direction, maxLen int) string {
 // messages which refer to Cockroach keys.
 type Key []byte
 
-// BytesNext returns the next possible byte slice, using the extra capacity
-// of the provided slice if possible, and if not, appending an \x00.
-func BytesNext(b []byte) []byte {
-	if cap(b) > len(b) {
-		bNext := b[:len(b)+1]
-		if bNext[len(bNext)-1] == 0 {
-			return bNext
-		}
-	}
-	// TODO(spencer): Do we need to enforce KeyMaxLength here?
-	// Switched to "make and copy" pattern in #4963 for performance.
-	bn := make([]byte, len(b)+1)
-	copy(bn, b)
-	bn[len(bn)-1] = 0
-	return bn
-}
-
 // Clone returns a copy of the key.
 func (k Key) Clone() Key {
 	if k == nil {
@@ -171,7 +154,7 @@ func (k Key) Clone() Key {
 // take a shallow copy of the Key, so both the receiver and the return
 // value should be treated as immutable after.
 func (k Key) Next() Key {
-	return Key(BytesNext(k))
+	return Key(encoding.BytesNext(k))
 }
 
 // IsPrev is a more efficient version of k.Next().Equal(m).
