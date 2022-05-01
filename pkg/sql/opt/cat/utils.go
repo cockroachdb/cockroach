@@ -16,9 +16,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -54,76 +51,7 @@ func ExpandDataSourceGlob(
 func ResolveTableIndex(
 	ctx context.Context, catalog Catalog, flags Flags, name *tree.TableIndexName,
 ) (Index, DataSourceName, error) {
-	if name.Table.ObjectName != "" {
-		ds, tn, err := catalog.ResolveDataSource(ctx, flags, &name.Table)
-		if err != nil {
-			return nil, DataSourceName{}, err
-		}
-		table, ok := ds.(Table)
-		if !ok {
-			return nil, DataSourceName{}, pgerror.Newf(
-				pgcode.WrongObjectType, "%q is not a table", name.Table.ObjectName,
-			)
-		}
-		if name.Index == "" {
-			// Return primary index.
-			return table.Index(0), tn, nil
-		}
-		for i := 0; i < table.IndexCount(); i++ {
-			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
-				return idx, tn, nil
-			}
-		}
-		// Fallback to referencing @primary as the PRIMARY KEY.
-		// Note that indexes with "primary" as their name takes precedence above.
-		if name.Index == tabledesc.LegacyPrimaryKeyIndexName {
-			return table.Index(0), tn, nil
-		}
-		return nil, DataSourceName{}, pgerror.Newf(
-			pgcode.UndefinedObject, "index %q does not exist", name.Index,
-		)
-	}
-
-	// We have to search for a table that has an index with the given name.
-	schema, _, err := catalog.ResolveSchema(ctx, flags, &name.Table.ObjectNamePrefix)
-	if err != nil {
-		return nil, DataSourceName{}, err
-	}
-	dsNames, _, err := schema.GetDataSourceNames(ctx)
-	if err != nil {
-		return nil, DataSourceName{}, err
-	}
-	var found Index
-	var foundTabName DataSourceName
-	for i := range dsNames {
-		ds, tn, err := catalog.ResolveDataSource(ctx, flags, &dsNames[i])
-		if err != nil {
-			return nil, DataSourceName{}, err
-		}
-		table, ok := ds.(Table)
-		if !ok {
-			// Not a table, ignore.
-			continue
-		}
-		for i := 0; i < table.IndexCount(); i++ {
-			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
-				if found != nil {
-					return nil, DataSourceName{}, pgerror.Newf(pgcode.AmbiguousParameter,
-						"index name %q is ambiguous (found in %s and %s)",
-						name.Index, tn.String(), foundTabName.String())
-				}
-				found = idx
-				foundTabName = tn
-				break
-			}
-		}
-	}
-	if found == nil {
-		return nil, DataSourceName{}, pgerror.Newf(
-			pgcode.UndefinedObject, "index %q does not exist", name.Index,
-		)
-	}
-	return found, foundTabName, nil
+	return catalog.ResolveIndex(ctx, flags, name)
 }
 
 // FormatTable nicely formats a catalog table using a treeprinter for debugging
