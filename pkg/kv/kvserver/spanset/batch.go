@@ -588,25 +588,25 @@ func (s spanSetWriter) ClearRawRange(start, end roachpb.Key) error {
 	return s.w.ClearRawRange(start, end)
 }
 
-func (s spanSetWriter) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+func (s spanSetWriter) ClearMVCCRange(start, end roachpb.Key) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
-		return err
-	}
-	return s.w.ClearMVCCRangeAndIntents(start, end)
-}
-
-func (s spanSetWriter) ClearMVCCRange(start, end storage.MVCCKey) error {
-	if err := s.checkAllowedRange(start.Key, end.Key); err != nil {
 		return err
 	}
 	return s.w.ClearMVCCRange(start, end)
 }
 
-func (s spanSetWriter) ClearIterRange(start, end roachpb.Key) error {
+func (s spanSetWriter) ClearMVCCVersions(start, end storage.MVCCKey) error {
+	if err := s.checkAllowedRange(start.Key, end.Key); err != nil {
+		return err
+	}
+	return s.w.ClearMVCCVersions(start, end)
+}
+
+func (s spanSetWriter) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearIterRange(start, end)
+	return s.w.ClearMVCCIteratorRange(start, end)
 }
 
 func (s spanSetWriter) ExperimentalPutMVCCRangeKey(

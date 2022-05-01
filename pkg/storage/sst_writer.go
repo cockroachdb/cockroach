@@ -132,13 +132,13 @@ func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key) error {
 	return fw.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
 }
 
-// ClearMVCCRangeAndIntents implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
-	panic("ClearMVCCRangeAndIntents is unsupported")
+// ClearMVCCRange implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCRange(start, end roachpb.Key) error {
+	panic("not implemented")
 }
 
-// ClearMVCCRange implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCRange(start, end MVCCKey) error {
+// ClearMVCCVersions implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCVersions(start, end MVCCKey) error {
 	return fw.clearRange(start, end)
 }
 
@@ -314,9 +314,9 @@ func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
 	panic("unimplemented")
 }
 
-// ClearIterRange implements the Writer interface.
-func (fw *SSTWriter) ClearIterRange(start, end roachpb.Key) error {
-	panic("ClearIterRange is unsupported")
+// ClearMVCCIteratorRange implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCIteratorRange(start, end roachpb.Key) error {
+	panic("not implemented")
 }
 
 // Merge implements the Writer interface.

@@ -374,15 +374,15 @@ func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
 	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
 }
 
-// ClearMVCCRangeAndIntents implements the Batch interface.
-func (p *pebbleBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+// ClearMVCCRange implements the Batch interface.
+func (p *pebbleBatch) ClearMVCCRange(start, end roachpb.Key) error {
 	var err error
-	p.scratch, err = p.wrappedIntentWriter.ClearMVCCRangeAndIntents(start, end, p.scratch)
+	p.scratch, err = p.wrappedIntentWriter.ClearMVCCRange(start, end, p.scratch)
 	return err
 }
 
-// ClearMVCCRange implements the Batch interface.
-func (p *pebbleBatch) ClearMVCCRange(start, end MVCCKey) error {
+// ClearMVCCVersions implements the Batch interface.
+func (p *pebbleBatch) ClearMVCCVersions(start, end MVCCKey) error {
 	return p.clearRange(start, end)
 }
 
@@ -393,7 +393,7 @@ func (p *pebbleBatch) clearRange(start, end MVCCKey) error {
 }
 
 // ClearIterRange implements the Batch interface.
-func (p *pebbleBatch) ClearIterRange(start, end roachpb.Key) error {
+func (p *pebbleBatch) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 	iter := p.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: start,
 		UpperBound: end,
