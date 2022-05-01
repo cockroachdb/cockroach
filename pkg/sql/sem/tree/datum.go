@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
@@ -1260,7 +1260,7 @@ func (d *DString) Prev(ctx CompareContext) (Datum, bool) {
 
 // Next implements the Datum interface.
 func (d *DString) Next(ctx CompareContext) (Datum, bool) {
-	return NewDString(string(roachpb.Key(*d).Next())), true
+	return NewDString(string(encoding.BytesNext([]byte(*d)))), true
 }
 
 // IsMax implements the Datum interface.
@@ -1512,7 +1512,7 @@ func (d *DBytes) Prev(ctx CompareContext) (Datum, bool) {
 
 // Next implements the Datum interface.
 func (d *DBytes) Next(ctx CompareContext) (Datum, bool) {
-	return NewDBytes(DBytes(roachpb.Key(*d).Next())), true
+	return NewDBytes(DBytes(encoding.BytesNext([]byte(*d)))), true
 }
 
 // IsMax implements the Datum interface.
