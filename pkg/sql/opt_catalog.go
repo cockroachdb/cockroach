@@ -222,6 +222,49 @@ func (oc *optCatalog) ResolveDataSource(
 	return ds, oc.tn, nil
 }
 
+func (oc *optCatalog) ResolveIndex(
+	ctx context.Context, flags cat.Flags, name *tree.TableIndexName,
+) (cat.Index, cat.DataSourceName, error) {
+	var prefix catalog.ResolvedObjectPrefix
+	var tbl catalog.TableDescriptor
+	var idx catalog.Index
+	var err error
+	oc.planner.runWithOptions(resolveFlags{skipCache: flags.AvoidDescriptorCaches}, func() {
+		_, prefix, tbl, idx, err = resolver.ResolveIndex(
+			ctx,
+			oc.planner,
+			name,
+			oc.planner.Txn(),
+			oc.planner.EvalContext().Codec,
+			true, /* required */
+			true, /* requireActiveIndex */
+		)
+	})
+	if err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+	if err := oc.planner.canResolveDescUnderSchema(ctx, prefix.Schema, tbl); err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+
+	namePrefix := prefix.NamePrefix()
+	oc.tn = tree.MakeTableNameWithSchema(namePrefix.CatalogName, namePrefix.SchemaName, tree.Name(tbl.GetName()))
+
+	ds, err := oc.dataSourceForDesc(ctx, flags, tbl, &oc.tn)
+	if err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+
+	table, ok := ds.(cat.Table)
+	if !ok {
+		return nil, cat.DataSourceName{}, pgerror.Newf(
+			pgcode.InvalidParameterValue, "%q is not a table or materialized view", ds.Name(),
+		)
+	}
+
+	return table.Index(idx.Ordinal()), oc.tn, nil
+}
+
 // ResolveDataSourceByID is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveDataSourceByID(
 	ctx context.Context, flags cat.Flags, dataSourceID cat.StableID,

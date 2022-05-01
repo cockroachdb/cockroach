@@ -176,6 +176,56 @@ func (tc *Catalog) ResolveDataSourceByID(
 		"relation [%d] does not exist", id)
 }
 
+// ResolveIndex is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveIndex(
+	ctx context.Context, flags cat.Flags, name *tree.TableIndexName,
+) (cat.Index, cat.DataSourceName, error) {
+	if name.Table.Object() != "" {
+		ds, dsName, err := tc.ResolveDataSource(ctx, flags, &name.Table)
+		if err != nil {
+			return nil, cat.DataSourceName{}, err
+		}
+		table := ds.(cat.Table)
+		if name.Index == "" {
+			// Return primary index.
+			return table.Index(0), dsName, nil
+		}
+		for i := 0; i < table.IndexCount(); i++ {
+			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
+				return idx, dsName, nil
+			}
+		}
+
+		return nil, cat.DataSourceName{}, pgerror.Newf(
+			pgcode.UndefinedObject, "index %q does not exist", name.Index,
+		)
+	}
+
+	schema, _, err := tc.ResolveSchema(ctx, flags, &name.Table.ObjectNamePrefix)
+	if err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+	dsNames, _, err := schema.GetDataSourceNames(ctx)
+	if err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+	for i := range dsNames {
+		ds, tn, err := tc.ResolveDataSource(ctx, flags, &dsNames[i])
+		if err != nil {
+			return nil, cat.DataSourceName{}, err
+		}
+		table := ds.(cat.Table)
+		for i := 0; i < table.IndexCount(); i++ {
+			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
+				return idx, tn, nil
+			}
+		}
+	}
+	return nil, cat.DataSourceName{}, pgerror.Newf(
+		pgcode.UndefinedObject, "index %q does not exist", name.Index,
+	)
+}
+
 // CheckPrivilege is part of the cat.Catalog interface.
 func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
 	return tc.CheckAnyPrivilege(ctx, o)

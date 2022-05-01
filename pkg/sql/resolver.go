@@ -598,72 +598,6 @@ func (p *planner) getQualifiedTypeName(
 	return &typeName, nil
 }
 
-// findTableContainingIndex returns the descriptor of a table
-// containing the index of the given name.
-// This is used by expandMutableIndexName().
-//
-// An error is returned if the index name is ambiguous (i.e. exists in
-// multiple tables). If no table is found and requireTable is true, an
-// error will be returned, otherwise the TableName and descriptor
-// returned will be nil.
-func findTableContainingIndex(
-	ctx context.Context,
-	txn *kv.Txn,
-	sc resolver.SchemaResolver,
-	codec keys.SQLCodec,
-	dbName, scName string,
-	idxName tree.UnrestrictedName,
-	lookupFlags tree.CommonLookupFlags,
-) (result *tree.TableName, desc *tabledesc.Mutable, err error) {
-	sa := sc.Accessor()
-	dbDesc, err := sa.GetDatabaseDesc(ctx, txn, dbName, lookupFlags)
-	if dbDesc == nil || err != nil {
-		return nil, nil, err
-	}
-
-	tns, _, err := sa.GetObjectNamesAndIDs(
-		ctx, txn, dbDesc, scName, tree.DatabaseListFlags{
-			CommonLookupFlags: lookupFlags,
-			ExplicitPrefix:    true,
-		},
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	result = nil
-	for i := range tns {
-		tn := &tns[i]
-		_, tableDesc, err := resolver.ResolveMutableExistingTableObject(
-			ctx, sc, tn, false /*required*/, tree.ResolveAnyTableKind,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-		if tableDesc == nil || !(tableDesc.IsTable() || tableDesc.MaterializedView()) {
-			continue
-		}
-
-		idx, err := tableDesc.FindIndexWithName(string(idxName))
-		if err != nil || idx.Dropped() {
-			// err is nil if the index does not exist on the table.
-			continue
-		}
-		if result != nil {
-			return nil, nil, pgerror.Newf(pgcode.AmbiguousParameter,
-				"index name %q is ambiguous (found in %s and %s)",
-				idxName, tn.String(), result.String())
-		}
-		result = tn
-		desc = tableDesc
-	}
-	if result == nil && lookupFlags.Required {
-		return nil, nil, pgerror.Newf(pgcode.UndefinedObject,
-			"index %q does not exist", idxName)
-	}
-	return result, desc, nil
-}
-
 // expandMutableIndexName ensures that the index name is qualified with a table
 // name, and searches the table name if not yet specified.
 //
@@ -692,7 +626,7 @@ func expandIndexName(
 	requireTable bool,
 ) (tn *tree.TableName, desc *tabledesc.Mutable, err error) {
 	tn = &index.Table
-	if tn.Table() != "" {
+	if tn.Object() != "" {
 		// The index and its table prefix must exist already. Resolve the table.
 		_, desc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, tn, requireTable, tree.ResolveRequireTableOrViewDesc)
 		if err != nil {
@@ -705,43 +639,25 @@ func expandIndexName(
 		return tn, desc, nil
 	}
 
-	// On the first call to expandMutableIndexName(), index.Table.Table() is empty.
-	// Once the table name is resolved for the index below, index.Table
-	// references the table name.
-
-	// Look up the table prefix.
-	found, _, err := resolver.ResolveObjectNamePrefix(
-		ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath(), &tn.ObjectNamePrefix,
-	)
+	found, resolvedPrefix, tbl, _, err := resolver.ResolveIndex(ctx, sc, index, txn, codec, requireTable, false /*requireActiveIndex*/)
 	if err != nil {
 		return nil, nil, err
 	}
+	// if err is nil, that means either:
+	// (1) require==false, index is either found or not found
+	// (2) require==true, index is found
 	if !found {
-		if requireTable {
-			err = pgerror.Newf(pgcode.UndefinedObject,
-				"schema or database was not found while searching index: %q",
-				tree.ErrString(&index.Index))
-			err = errors.WithHint(err, "check the current database and search_path are valid")
-			return nil, nil, err
-		}
 		return nil, nil, nil
 	}
-
-	lookupFlags := sc.CommonLookupFlags(requireTable)
-	var foundTn *tree.TableName
-	foundTn, desc, err = findTableContainingIndex(
-		ctx, txn, sc, codec, tn.Catalog(), tn.Schema(), index.Index, lookupFlags,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if foundTn != nil {
-		// Memoize the table name that was found. tn is a reference to the table name
-		// stored in index.Table.
-		*tn = *foundTn
-	}
-	return tn, desc, nil
+	tableName := tree.MakeTableNameFromPrefix(resolvedPrefix.NamePrefix(), tree.Name(tbl.GetName()))
+	// Expand the tableName explicitly.
+	tableName.ExplicitSchema = true
+	tableName.ExplicitCatalog = true
+	// Memoize the table name that was found. tn is a reference to the table name
+	// stored in index.Table.
+	*tn = tableName
+	tblMutable := tbl.NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
+	return &tableName, tblMutable, nil
 }
 
 // getTableAndIndex returns the table and index descriptors for a
@@ -749,46 +665,55 @@ func expandIndexName(
 //
 // It can return indexes that are being rolled out.
 func (p *planner) getTableAndIndex(
-	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
-) (*tabledesc.Mutable, catalog.Index, error) {
-	var catalog optCatalog
-	catalog.init(p)
-	catalog.reset()
+	ctx context.Context,
+	tableWithIndex *tree.TableIndexName,
+	privilege privilege.Kind,
+	skipCache bool,
+) (prefix catalog.ResolvedObjectPrefix, mut *tabledesc.Mutable, idx catalog.Index, err error) {
+	p.runWithOptions(resolveFlags{skipCache: skipCache}, func() {
+		prefix, mut, idx, err = p.getTableAndIndexImpl(ctx, tableWithIndex, privilege)
+	})
+	return prefix, mut, idx, err
+}
 
-	idx, qualifiedName, err := cat.ResolveTableIndex(
-		ctx, &catalog, cat.Flags{AvoidDescriptorCaches: true}, tableWithIndex,
+func (p *planner) getTableAndIndexImpl(
+	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
+) (catalog.ResolvedObjectPrefix, *tabledesc.Mutable, catalog.Index, error) {
+	_, resolvedPrefix, tbl, idx, err := resolver.ResolveIndex(
+		ctx, p, tableWithIndex, p.Txn(), p.EvalContext().Codec, true /* required */, true, /* requireActiveIndex */
 	)
 	if err != nil {
-		return nil, nil, err
+		return catalog.ResolvedObjectPrefix{}, nil, nil, err
 	}
-	if err := catalog.CheckPrivilege(ctx, idx.Table(), privilege); err != nil {
-		return nil, nil, err
+	if err := p.canResolveDescUnderSchema(ctx, resolvedPrefix.Schema, tbl); err != nil {
+		return catalog.ResolvedObjectPrefix{}, nil, nil, err
 	}
-	optIdx := idx.(*optIndex)
+	if err := p.CheckPrivilege(ctx, tbl, privilege); err != nil {
+		return catalog.ResolvedObjectPrefix{}, nil, nil, err
+	}
 
 	// Set the object name for logging if it's missing.
 	if tableWithIndex.Table.ObjectName == "" {
 		tableWithIndex.Table = tree.MakeTableNameFromPrefix(
-			qualifiedName.ObjectNamePrefix, qualifiedName.ObjectName,
+			resolvedPrefix.NamePrefix(), tree.Name(tbl.GetName()),
 		)
 	}
 
 	// Use the descriptor collection to get a proper handle to the mutable
 	// descriptor for the relevant table and use that mutable object to
 	// get a handle to the corresponding index.
-	tableID := optIdx.tab.desc.GetID()
-	mut, err := p.Descriptors().GetMutableTableVersionByID(ctx, tableID, p.Txn())
+	mut, err := p.Descriptors().GetMutableTableVersionByID(ctx, tbl.GetID(), p.Txn())
 	if err != nil {
-		return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
-			"failed to re-resolve table %d for index %s", tableID, tableWithIndex)
+		return catalog.ResolvedObjectPrefix{}, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
+			"failed to re-resolve table %d for index %s", tbl.GetID(), tableWithIndex)
 	}
-	retIdx, err := mut.FindIndexWithID(optIdx.idx.GetID())
+	retIdx, err := mut.FindIndexWithID(idx.GetID())
 	if err != nil {
-		return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
+		return catalog.ResolvedObjectPrefix{}, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"retrieving index %s (%d) from table which was known to already exist for table %d",
-			tableWithIndex, optIdx.idx.GetID(), tableID)
+			tableWithIndex, idx.GetID(), tbl.GetID())
 	}
-	return mut, retIdx, nil
+	return resolvedPrefix, mut, retIdx, nil
 }
 
 // expandTableGlob expands pattern into a list of objects represented
