@@ -524,39 +524,7 @@ func ResolveObjectNamePrefix(
 	tp *tree.ObjectNamePrefix,
 ) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
 	if tp.ExplicitSchema {
-		// pg_temp can be used as an alias for the current sessions temporary schema.
-		// We must perform this resolution before looking up the object. This
-		// resolution only succeeds if the session already has a temporary schema.
-		scName, err := searchPath.MaybeResolveTemporarySchema(tp.Schema())
-		if err != nil {
-			return false, catalog.ResolvedObjectPrefix{}, err
-		}
-		if tp.ExplicitCatalog {
-			// Catalog name is explicit; nothing to do.
-			tp.SchemaName = tree.Name(scName)
-			return r.LookupSchema(ctx, tp.Catalog(), scName)
-		}
-		// Try with the current database. This may be empty, because
-		// virtual schemas exist even when the db name is empty
-		// (CockroachDB extension).
-		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
-			if err == nil {
-				tp.CatalogName = tree.Name(curDb)
-				tp.SchemaName = tree.Name(scName)
-			}
-			return found, scMeta, err
-		}
-		// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
-		if found, scMeta, err = r.LookupSchema(ctx, tp.Schema(), tree.PublicSchema); found || err != nil {
-			if err == nil {
-				tp.CatalogName = tp.SchemaName
-				tp.SchemaName = tree.PublicSchemaName
-				tp.ExplicitCatalog = true
-			}
-			return found, scMeta, err
-		}
-		// No luck.
-		return false, catalog.ResolvedObjectPrefix{}, nil
+		return resolvePrefixWithExplicitSchema(ctx, r, curDb, searchPath, tp)
 	}
 	// This is a naked table name. Use the current schema = the first
 	// valid item in the search path.
@@ -571,4 +539,296 @@ func ResolveObjectNamePrefix(
 		}
 	}
 	return found, scMeta, err
+}
+
+// ResolveIndex tries to find an index with a TableIndexName.
+// (1) If table name is provided, table is resolved first, and it looks for a
+// non-dropped index from the table. Primary index is returned if index name is
+// empty or LegacyPrimaryKeyIndexName,
+// (2) If table name is not provided:
+// a: If schema name is provided, schema name is first resolved, and then all
+// tables are looped to search for the index.
+// b: If schema name is not provided, all tables within all schemas	on the
+// search path are looped for the index.
+//
+// Error is returned when any of the these happened:
+// (1) "require=true" but index does not exist.
+// (2) index name is ambiguous, namely more than one table in a same schema
+// contain indexes with same name.
+// (3) table name is present from input, but the resolved object is not a table
+// or materialized view.
+// (4) table name is not present, the given schema or schemas on search path can
+// not be found.
+func ResolveIndex(
+	ctx context.Context,
+	schemaResolver SchemaResolver,
+	tableIndexName *tree.TableIndexName,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	required bool,
+	requireActiveIndex bool,
+) (
+	found bool,
+	prefix catalog.ResolvedObjectPrefix,
+	tblDesc catalog.TableDescriptor,
+	idxDesc catalog.Index,
+	err error,
+) {
+	if tableIndexName.Table.ObjectName != "" {
+		lflags := tree.ObjectLookupFlags{
+			CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
+			DesiredObjectKind:    tree.TableObject,
+			DesiredTableDescKind: tree.ResolveRequireTableOrViewDesc,
+		}
+
+		resolvedPrefix, candidateTbl, err := ResolveExistingTableObject(ctx, schemaResolver, &tableIndexName.Table, lflags)
+		if err != nil {
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil, err
+		}
+		if candidateTbl == nil {
+			if required {
+				err = pgerror.Newf(
+					pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index,
+				)
+			}
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil, err
+		}
+		if candidateTbl.IsView() && !candidateTbl.MaterializedView() {
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil, pgerror.Newf(
+				pgcode.WrongObjectType, "%q is not a table or materialized view", tableIndexName.Table.ObjectName,
+			)
+		}
+
+		if tableIndexName.Index == "" {
+			// Return primary index.
+			return true, resolvedPrefix, candidateTbl, candidateTbl.GetPrimaryIndex(), nil
+		}
+
+		idx, err := candidateTbl.FindNonDropIndexWithName(string(tableIndexName.Index))
+		// err == nil indicates that the index is found.
+		if err == nil && (!requireActiveIndex || idx.Public()) {
+			return true, resolvedPrefix, candidateTbl, idx, nil
+		}
+
+		// Fallback to referencing @primary as the PRIMARY KEY.
+		// Note that indexes with "primary" as their name takes precedence above.
+		if tableIndexName.Index == tabledesc.LegacyPrimaryKeyIndexName {
+			return true, resolvedPrefix, candidateTbl, candidateTbl.GetPrimaryIndex(), nil
+		}
+
+		if required {
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil, pgerror.Newf(
+				pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index,
+			)
+		}
+		return false, catalog.ResolvedObjectPrefix{}, nil, nil, nil
+	}
+
+	if tableIndexName.Table.ExplicitSchema {
+		resolvedPrefix, err := resolveSchemaByName(ctx, schemaResolver, &tableIndexName.Table.ObjectNamePrefix, schemaResolver.CurrentSearchPath())
+		if err != nil {
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil, err
+		}
+
+		tblFound, tbl, idx, err := findTableContainingIndex(
+			ctx, tree.Name(tableIndexName.Index), resolvedPrefix, txn, codec, schemaResolver, requireActiveIndex,
+		)
+		if err != nil {
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil, err
+		}
+		if tblFound {
+			return true, resolvedPrefix, tbl, idx, nil
+		}
+		if required {
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil, pgerror.Newf(
+				pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index,
+			)
+		}
+		return false, catalog.ResolvedObjectPrefix{}, nil, nil, nil
+	}
+
+	var schemaFound bool
+	catalogName := schemaResolver.CurrentDatabase()
+	if tableIndexName.Table.ExplicitCatalog {
+		catalogName = tableIndexName.Table.Catalog()
+	}
+	// We need to iterate through all the schemas in the search path.
+	iter := schemaResolver.CurrentSearchPath().IterWithoutImplicitPGSchemas()
+	for path, ok := iter.Next(); ok; path, ok = iter.Next() {
+		curPrefix := tree.ObjectNamePrefix{
+			CatalogName:     tree.Name(catalogName),
+			ExplicitCatalog: true,
+			SchemaName:      tree.Name(path),
+			ExplicitSchema:  true,
+		}
+
+		found, candidateResolvedPrefix, curErr := resolvePrefixWithExplicitSchema(
+			ctx, schemaResolver, schemaResolver.CurrentDatabase(), schemaResolver.CurrentSearchPath(), &curPrefix,
+		)
+		if curErr != nil {
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil, curErr
+		}
+		if !found {
+			continue
+		}
+		schemaFound = true
+
+		candidateFound, tbl, idx, curErr := findTableContainingIndex(
+			ctx, tree.Name(tableIndexName.Index), candidateResolvedPrefix, txn, codec, schemaResolver, requireActiveIndex,
+		)
+		if curErr != nil {
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil, curErr
+		}
+
+		if candidateFound {
+			return true, candidateResolvedPrefix, tbl, idx, nil
+		}
+	}
+
+	if !schemaFound {
+		return false, catalog.ResolvedObjectPrefix{}, nil, nil, pgerror.Newf(
+			pgcode.UndefinedObject, "schema or database was not found while searching index: %q", tableIndexName.Index,
+		)
+	}
+
+	if required {
+		return false, catalog.ResolvedObjectPrefix{}, nil, nil, pgerror.Newf(
+			pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index,
+		)
+	}
+	return false, catalog.ResolvedObjectPrefix{}, nil, nil, nil
+}
+
+// resolvePrefixWithExplicitSchema resolves a name prefix with explicit schema.
+// Error won't be return if schema is not found. Instead, found=false is return.
+// (1) If db(catalog) name is given, it looks up schema within the db.
+// (2) If db(catalog) name is not given, it first looks at current db to look up
+// the schema. If a schema cannot be found given the name, but there is a
+// database with the same name, public schema under this db is returned.
+func resolvePrefixWithExplicitSchema(
+	ctx context.Context,
+	r ObjectNameTargetResolver,
+	curDb string,
+	searchPath sessiondata.SearchPath,
+	tp *tree.ObjectNamePrefix,
+) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
+	// pg_temp can be used as an alias for the current sessions temporary schema.
+	// We must perform this resolution before looking up the object. This
+	// resolution only succeeds if the session already has a temporary schema.
+	scName, err := searchPath.MaybeResolveTemporarySchema(tp.Schema())
+	if err != nil {
+		return false, catalog.ResolvedObjectPrefix{}, err
+	}
+	if tp.ExplicitCatalog {
+		// Catalog name is explicit; nothing to do.
+		tp.SchemaName = tree.Name(scName)
+		return r.LookupSchema(ctx, tp.Catalog(), scName)
+	}
+	// Try with the current database. This may be empty, because
+	// virtual schemas exist even when the db name is empty
+	// (CockroachDB extension).
+	if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
+		if err == nil {
+			tp.CatalogName = tree.Name(curDb)
+			tp.SchemaName = tree.Name(scName)
+		}
+		return found, scMeta, err
+	}
+	// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
+	if found, scMeta, err = r.LookupSchema(ctx, tp.Schema(), tree.PublicSchema); found || err != nil {
+		if err == nil {
+			tp.CatalogName = tp.SchemaName
+			tp.SchemaName = tree.PublicSchemaName
+			tp.ExplicitCatalog = true
+		}
+		return found, scMeta, err
+	}
+	// No luck.
+	return false, catalog.ResolvedObjectPrefix{}, nil
+}
+
+// resolveSchemaByName is similar to resolvePrefixWithExplicitSchema, but
+// returns error if schema is not found.
+func resolveSchemaByName(
+	ctx context.Context,
+	schemaResolver SchemaResolver,
+	prefix *tree.ObjectNamePrefix,
+	searchPath sessiondata.SearchPath,
+) (catalog.ResolvedObjectPrefix, error) {
+	if !prefix.ExplicitSchema {
+		return catalog.ResolvedObjectPrefix{}, pgerror.New(
+			pgcode.InvalidName, "no schema specified",
+		)
+	}
+
+	found, resolvedPrefix, err := resolvePrefixWithExplicitSchema(
+		ctx, schemaResolver, schemaResolver.CurrentDatabase(), searchPath, prefix,
+	)
+	if err != nil {
+		return catalog.ResolvedObjectPrefix{}, err
+	}
+	if !found {
+		return catalog.ResolvedObjectPrefix{}, pgerror.Newf(
+			pgcode.InvalidSchemaName, "target database or schema does not exist",
+		)
+	}
+
+	return resolvedPrefix, nil
+}
+
+// findTableContainingIndex tries to find and index in a schema by iterating
+// through all tables.
+// Error is returned if Index name is ambiguous between tables. No error is
+// returned if no table is found.
+func findTableContainingIndex(
+	ctx context.Context,
+	indexName tree.Name,
+	resolvedPrefix catalog.ResolvedObjectPrefix,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	schemaResolver SchemaResolver,
+	requireActiveIndex bool,
+) (found bool, tblDesc catalog.TableDescriptor, idxDesc catalog.Index, err error) {
+	dsNames, _, err := GetObjectNamesAndIDs(
+		ctx, txn, schemaResolver, codec, resolvedPrefix.Database, resolvedPrefix.Schema.GetName(), true,
+	)
+
+	if err != nil {
+		return false, nil, nil, err
+	}
+
+	lflags := tree.ObjectLookupFlags{
+		DesiredObjectKind:    tree.TableObject,
+		DesiredTableDescKind: tree.ResolveAnyTableKind,
+	}
+	for _, dsName := range dsNames {
+		_, candidateTbl, err := ResolveExistingTableObject(ctx, schemaResolver, &dsName, lflags)
+		if err != nil {
+			return false, nil, nil, err
+		}
+		if candidateTbl == nil || !(candidateTbl.IsTable() || candidateTbl.MaterializedView()) {
+			continue
+		}
+
+		candidateIdx, err := candidateTbl.FindNonDropIndexWithName(string(indexName))
+		if err == nil {
+			if requireActiveIndex && !candidateIdx.Public() {
+				continue
+			}
+			if found {
+				prefix := resolvedPrefix.NamePrefix()
+				return false, nil, nil, pgerror.Newf(
+					pgcode.AmbiguousParameter, "index name %q is ambiguous (found in %s and %s)",
+					indexName,
+					tree.MakeTableNameFromPrefix(prefix, tree.Name(candidateTbl.GetName())),
+					tree.MakeTableNameFromPrefix(prefix, tree.Name(tblDesc.GetName())),
+				)
+			}
+			found = true
+			tblDesc = candidateTbl
+			idxDesc = candidateIdx
+		}
+	}
+
+	return found, tblDesc, idxDesc, nil
 }
