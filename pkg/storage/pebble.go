@@ -1244,7 +1244,11 @@ func (p *Pebble) SingleClearEngineKey(key EngineKey) error {
 
 // ClearRawRange implements the Engine interface.
 func (p *Pebble) ClearRawRange(start, end roachpb.Key) error {
-	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+	startKey, endKey := EncodeMVCCKey(MVCCKey{Key: start}), EncodeMVCCKey(MVCCKey{Key: end})
+	if err := p.db.DeleteRange(startKey, endKey, pebble.Sync); err != nil {
+		return err
+	}
+	return p.ExperimentalClearAllMVCCRangeKeys(start, end)
 }
 
 // ClearMVCCRange implements the Engine interface.
@@ -1255,13 +1259,7 @@ func (p *Pebble) ClearMVCCRange(start, end roachpb.Key) error {
 
 // ClearMVCCVersions implements the Engine interface.
 func (p *Pebble) ClearMVCCVersions(start, end MVCCKey) error {
-	return p.clearRange(start, end)
-}
-
-func (p *Pebble) clearRange(start, end MVCCKey) error {
-	bufStart := EncodeMVCCKey(start)
-	bufEnd := EncodeMVCCKey(end)
-	return p.db.DeleteRange(bufStart, bufEnd, pebble.Sync)
+	return p.db.DeleteRange(EncodeMVCCKey(start), EncodeMVCCKey(end), pebble.Sync)
 }
 
 // ClearMVCCIteratorRange implements the Engine interface.
@@ -1301,8 +1299,19 @@ func (p *Pebble) ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
-	return p.db.Experimental().RangeKeyDelete(
-		EncodeMVCCKeyPrefix(start), EncodeMVCCKeyPrefix(end), pebble.Sync)
+	// Look for any range keys in the span before dropping a range tombstone, and
+	// use the smallest possible span that covers them, to avoid dropping range
+	// tombstones across unnecessary spans. We don't worry about races here,
+	// because this is a non-MVCC operation where the caller must guarantee
+	// appropriate isolation.
+	clearFrom, clearTo, err := pebbleFindRangeKeySpan(p.db,
+		EncodeMVCCKeyPrefix(start), EncodeMVCCKeyPrefix(end))
+	if err != nil {
+		return err
+	} else if clearFrom == nil || clearTo == nil {
+		return nil
+	}
+	return p.db.Experimental().RangeKeyDelete(clearFrom, clearTo, pebble.Sync)
 }
 
 // ExperimentalPutMVCCRangeKey implements the Engine interface.
@@ -2573,4 +2582,41 @@ func pebbleExportToSst(
 	}
 
 	return rows.BulkOpSummary, MVCCKey{Key: resumeKey, Timestamp: resumeTS}, nil
+}
+
+// pebbleFindRangeKeySpan returns the minimum span within the given bounds that
+// covers all contained range keys. If there are no range keys within the
+// bounds, this returns nil keys.
+func pebbleFindRangeKeySpan(r pebble.Reader, lower, upper []byte) ([]byte, []byte, error) {
+	iter := r.NewIter(&pebble.IterOptions{
+		KeyTypes:   pebble.IterKeyTypeRangesOnly,
+		LowerBound: lower,
+		UpperBound: upper,
+	})
+	defer func() {
+		// We handle errors during iteration.
+		_ = iter.Close()
+	}()
+
+	// Look for a range key. If none are found, return nil bounds.
+	if !iter.SeekGE(lower) {
+		return nil, nil, iter.Error()
+	}
+	rangeStart, _ := iter.RangeBounds()
+	start := append([]byte{}, rangeStart...)
+
+	// Find the end of the span.
+	if !iter.SeekLT(upper) {
+		if err := iter.Error(); err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, errors.AssertionFailedf("unexpected missing range key in %s-%s", lower, upper)
+	}
+	_, rangeEnd := iter.RangeBounds()
+	end := append([]byte{}, rangeEnd...)
+
+	if bytes.Compare(start, end) >= 0 {
+		return nil, nil, errors.AssertionFailedf("range key end %s at or before start %s", end, start)
+	}
+	return start, end, nil
 }
