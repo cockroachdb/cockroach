@@ -126,6 +126,10 @@ type Catalog interface {
 		ctx context.Context, name *tree.UnresolvedObjectName,
 	) (*types.T, error)
 
+	ResolveIndex(
+		ctx context.Context, flags Flags, name *tree.TableIndexName,
+	) (Index, DataSourceName, error)
+
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.
 	CheckPrivilege(ctx context.Context, o Object, priv privilege.Kind) error
