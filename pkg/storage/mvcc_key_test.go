@@ -536,7 +536,7 @@ func TestFirstRangeKeyAbove(t *testing.T) {
 }
 
 func pointKey(key string, ts int) MVCCKey {
-	return MVCCKey{Key: roachpb.Key(key), Timestamp: hlc.Timestamp{WallTime: int64(ts)}}
+	return MVCCKey{Key: roachpb.Key(key), Timestamp: wallTS(ts)}
 }
 
 func pointKV(key string, ts int, value string) MVCCKeyValue {
@@ -550,7 +550,7 @@ func rangeKey(start, end string, ts int) MVCCRangeKey {
 	return MVCCRangeKey{
 		StartKey:  roachpb.Key(start),
 		EndKey:    roachpb.Key(end),
-		Timestamp: hlc.Timestamp{WallTime: int64(ts)},
+		Timestamp: wallTS(ts),
 	}
 }
 
@@ -566,4 +566,8 @@ func rangeKV(start, end string, ts int, v MVCCValue) MVCCRangeKeyValue {
 		RangeKey: rangeKey(start, end, ts),
 		Value:    valueBytes,
 	}
+}
+
+func wallTS(ts int) hlc.Timestamp {
+	return hlc.Timestamp{WallTime: int64(ts)}
 }
