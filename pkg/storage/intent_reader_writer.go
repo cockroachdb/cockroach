@@ -68,13 +68,10 @@ func (idw intentDemuxWriter) PutIntent(
 	return buf, idw.w.PutEngineKey(engineKey, value)
 }
 
-// ClearMVCCRangeAndIntents has the same behavior as
-// Writer.ClearMVCCRangeAndIntents. buf is used as scratch-space to avoid
-// allocations -- its contents will be overwritten and not appended to, and a
-// possibly different buf returned.
-func (idw intentDemuxWriter) ClearMVCCRangeAndIntents(
-	start, end roachpb.Key, buf []byte,
-) ([]byte, error) {
+// ClearMVCCRange has the same behavior as Writer.ClearMVCCRange. buf is used as
+// scratch-space to avoid allocations -- its contents will be overwritten and
+// not appended to, and a possibly different buf returned.
+func (idw intentDemuxWriter) ClearMVCCRange(start, end roachpb.Key, buf []byte) ([]byte, error) {
 	err := idw.w.ClearRawRange(start, end)
 	if err != nil {
 		return buf, err
