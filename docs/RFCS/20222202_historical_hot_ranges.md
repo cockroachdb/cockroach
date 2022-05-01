@@ -47,6 +47,8 @@ the time period being visualized.
 longer experiencing hotness, or vice-versa. To increase usability, we want to
 create the illusion of continuous sampling across the keyspace over time, even
 if a sample didn't collect any metrics for a part of the keyspace.
+- We can include a "hottness per byte" mode, where a cell's color is normalized
+according to the number of bytes contained by the key span.
 
 
 ![Mockup](./images/20222202_historical_hot_ranges/mockup.png "Mockup")
@@ -68,6 +70,13 @@ properties - instead of an array. However, the requirement to maintain the full
 set of keys makes it difficult to render the visualization in batches. When a
 new sample is available, the keyspace will likely change, turning any on-screen
 samples stale, requiring a re-render of the whole time period.
+
+Here is an illustration that shows how the keyspace could change between samples. 
+To accomodate range splits and merges over time, the keyspace represented by the
+Y-axis includes all range boundaries present between Tmin and Tmax.
+![Keyspace Change](./images/20222202_historical_hot_ranges/keyspace-change.png "Keyspace Change")
+
+
 
 The process for requesting and rendering a set of samples is pictured here:
 ![Render](./images/20222202_historical_hot_ranges/render.png "Render")
@@ -162,7 +171,7 @@ For each range, here is the information captured:
 | store ids  | ~12     |
 | schema     | ~20     |
 | locality   | ~20     |
-| rangeBytes | 4       |
+| key bytes | 4       |
 
 The bytes required to store node ids, store ids, schema, and locality are
 estimates, as these values can vary in practice. The bytes required to start and
@@ -209,8 +218,8 @@ differences manifest in how aggregation is performed to keep samples within
 budget, and how the sampled metrics are written to `system.hot_ranges`.
 
 According to the sample rate, a job is executed to
-request the 128 hottest replicas from every store via `replRankings`. These hot
-replicas are then sorted alphabetically by their start keys. If tenant sampling
+request the QPS for all replicas from every store. These hot
+replicas are then sorted lexicographically by their start keys. If tenant sampling
 is being performed, each set of a tenant's reported replicas is
 limited to 1000 by a range reduction and aggregation scheme. This range
 reduction scheme is discussed in the next section. If host sampling is being
@@ -220,8 +229,7 @@ range reduction scheme.
 After ranges have been aggregated and reduced, they are written to
 `system.hot_ranges`. Tenant sampling creates a row per tenant per sample, while
 Host sampling creates a single row per sample, whose `tenant_id` value is set to
-`'host'`. To query `system.hot_ranges`, demateralized views are created for each
-tenant and for the host.
+`'host'`.
 
 Finally, existing samples older than 2 weeks will be deleted.
 
@@ -232,8 +240,8 @@ Finally, existing samples older than 2 weeks will be deleted.
 CREATE TABLE system.hot_ranges ( 
     sample_time INT NOT NULL,
     
-    -- When host sampling is being performed, 
-    -- tenant_id will be set to 'host'
+    -- When whole-cluster sampling is being performed, 
+    -- tenant_id will be set to 0
     tenant_id INT NOT NULL,
 
     -- info is defined below by `HHRSample`
@@ -260,23 +268,10 @@ message HHRSample {
         repeated int32 store_ids = 7; 
         repeated Schema schema = 8; 
         string locality = 9; 
-        int32 bytes = 10;
+        sfixed64 key_bytes = 10; // found from MVCCStats
     }
     repeated HotRange hotranges = 1;
 } 
-```
-
-
-```sql 
--- Dematerialzied view for a tenant with tenant id, t.
-CREATE VIEW system.tenant_hot_ranges 
-AS SELECT * FROM system.hot_ranges 
-WHERE tenant_id = t;
-
--- dematerialized view for a host
-CREATE VIEW system.host_hot_ranges 
-AS SELECT * FROM system.hot_ranges
-WHERE tenant_id = 'host';
 ```
 
 
@@ -303,13 +298,13 @@ cold.
 A new function will implement this behavior: 
 ```go 
 
-type HotReplica struct {
-    qps
-    float64 startKey
-    string endkey string
+type HotRange struct {
+    qps float64 
+    startKey string
+    endkey string
 }
 
-func HottestRangesAggregated(ranges []HotReplica) []HotReplica 
+func HottestRangesAggregated(ranges []HotRange) []HotRange 
 ```
 
 The functionality of `HottestRangesAggregated` is pictured here
@@ -370,8 +365,8 @@ message HHRRequest {
 message HHRResponse { 
     message HHRSample {
         util.hlc.Timestamp timestamp = 1;
-        double qps = 2;
-        string start_key = 3; 
+        repeated double qps = 2;
+        repeated string start_key = 3; 
     }
 
     repeated HHRSample samples = 1; 
@@ -394,7 +389,7 @@ message HHRCellInfoResponse {
     repeated int32 stores = 5; 
     repeated Schema schema = 6;
     string locality = 7; 
-    int32 bytes = 8;
+    sfixed64 key_bytes = 8;
 }
 
 service HHRQueryInterface  {
@@ -422,7 +417,6 @@ The full querying process is pictured here:
 
 
 
-
 ## Limitations and Alternatives 
 1. It is possible that a replica lifecycle event
 occurs before querying `replRankings` from each store has completed. If a
@@ -435,7 +429,7 @@ practice. The `HHRQueryInterface` proposed in the 'Querying' section of this RFC
 serves to decouple the visualization from changes to metric generation in the
 future.
 
-2. By sourcing QPS values from `replRankings`, we are only recording leaseholder
+2. By sourcing QPS values from every store, we are only recording leaseholder
 replica QPS. Metrics for follower replicas are not available, which prevents us
 from being able to provide hot range observability for follower reads.
 Additionally, the resolution available by only measuring the leaseholder replica
@@ -454,7 +448,17 @@ The `HHRQueryInterface` helps make sure that the visualization can tolerate a
 changing implementation.
 
 
-
 ## Open Questions
-1. Do we need confirmation from product that we want to provide this feature 
+
+1. What kind of secondary tenant support do we want? 
+If KV tends to pack a secondary tenant's schema into a single range, what can
+be done to provide higher resolution to secondary tenants? Instead of ranges,
+we can think of generalizing to key spans.
+
+2. How can the user get actionable SQL-level insights from keys/spans?
+
+3. How will secondary tenants access their historical metrics? If metrics are 
+stored by the system tenant, should secondary tenants request metrics via gRPC?
+
+4. Do we need confirmation from product that we want to provide this feature 
 for self-hosted customers if we want to provide differentiating features for cloud?
