@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -25,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,129 +46,193 @@ func (wb *wrappedBatch) ClearMVCCRange(start, end roachpb.Key) error {
 	return wb.Batch.ClearMVCCRange(start, end)
 }
 
-// TestCmdClearRangeBytesThreshold verifies that clear range resorts to
-// clearing keys individually if under the bytes threshold and issues a
-// clear range command to the batch otherwise.
-func TestCmdClearRangeBytesThreshold(t *testing.T) {
+// TestCmdClearRange verifies that ClearRange clears point and range keys in the
+// given span, and that MVCC stats are updated correctly (both when clearing a
+// complete range and just parts of it). It should clear keys using an iterator
+// if under the bytes threshold, or using a Pebble range tombstone otherwise.
+func TestCmdClearRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	startKey := roachpb.Key("0000")
+	nowNanos := int64(100e9)
+	startKey := roachpb.Key("000") // NB: not 0000, different bound lengths for MVCC stats testing
 	endKey := roachpb.Key("9999")
-	desc := roachpb.RangeDescriptor{
-		RangeID:  99,
-		StartKey: roachpb.RKey(startKey),
-		EndKey:   roachpb.RKey(endKey),
-	}
 	valueStr := strings.Repeat("0123456789", 1024)
 	var value roachpb.Value
 	value.SetString(valueStr) // 10KiB
+
 	halfFull := ClearRangeBytesThreshold / (2 * len(valueStr))
 	overFull := ClearRangeBytesThreshold/len(valueStr) + 1
-	tests := []struct {
-		keyCount           int
-		estimatedStats     bool
-		expClearIterCount  int
-		expClearRangeCount int
+	testcases := map[string]struct {
+		keyCount       int
+		estimatedStats bool
+		partialRange   bool
+		expClearIter   bool
 	}{
-		{
-			keyCount:           1,
-			expClearIterCount:  1,
-			expClearRangeCount: 0,
+		"single key": {
+			keyCount:     1,
+			expClearIter: true,
 		},
-		// More than a single key, but not enough to use ClearRange.
-		{
-			keyCount:           halfFull,
-			expClearIterCount:  1,
-			expClearRangeCount: 0,
+		"below threshold": {
+			keyCount:     halfFull,
+			expClearIter: true,
 		},
-		// With key sizes requiring additional space, this will overshoot.
-		{
-			keyCount:           overFull,
-			expClearIterCount:  0,
-			expClearRangeCount: 1,
+		"below threshold partial range": {
+			keyCount:     halfFull,
+			partialRange: true,
+			expClearIter: true,
 		},
-		// Estimated stats always use ClearRange.
-		{
-			keyCount:           1,
-			estimatedStats:     true,
-			expClearIterCount:  0,
-			expClearRangeCount: 1,
+		"above threshold": {
+			keyCount:     overFull,
+			expClearIter: false,
+		},
+		"above threshold partial range": {
+			keyCount:     overFull,
+			partialRange: true,
+			expClearIter: false,
+		},
+		"estimated stats": { // must not use iterator, since we can't trust stats
+			keyCount:       1,
+			estimatedStats: true,
+			expClearIter:   false,
+		},
+		"estimated stats and partial range": { // stats get computed for partial ranges
+			keyCount:       1,
+			estimatedStats: true,
+			partialRange:   true,
+			expClearIter:   true,
 		},
 	}
 
-	for _, test := range tests {
-		t.Run("", func(t *testing.T) {
-			ctx := context.Background()
-			eng := storage.NewDefaultInMemForTesting()
-			defer eng.Close()
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "spanningRangeTombstones", func(t *testing.T, spanningRangeTombstones bool) {
+				ctx := context.Background()
+				eng := storage.NewDefaultInMemForTesting()
+				defer eng.Close()
 
-			var stats enginepb.MVCCStats
-			for i := 0; i < test.keyCount; i++ {
-				key := roachpb.Key(fmt.Sprintf("%04d", i))
-				if err := storage.MVCCPut(ctx, eng, &stats, key, hlc.Timestamp{WallTime: int64(i % 2)}, hlc.ClockTimestamp{}, value, nil); err != nil {
-					t.Fatal(err)
+				// Set up range descriptor. If partialRange is true, we make the range
+				// wider than the cleared span, which disabled the MVCC stats fast path.
+				desc := roachpb.RangeDescriptor{
+					RangeID:  99,
+					StartKey: roachpb.RKey(startKey),
+					EndKey:   roachpb.RKey(endKey),
 				}
-			}
-			if test.estimatedStats {
-				stats.ContainsEstimates++
-			}
+				if tc.partialRange {
+					desc.StartKey = roachpb.RKey(keys.LocalMax)
+					desc.EndKey = roachpb.RKey(keys.MaxKey)
+				}
 
-			batch := &wrappedBatch{Batch: eng.NewBatch()}
-			defer batch.Close()
+				// Write some range tombstones at the bottom of the keyspace, some of
+				// which straddle the clear span bounds. In particular, we need to
+				// ensure MVCC stats are updated correctly for range tombstones that
+				// get truncated by the ClearRange.
+				//
+				// If spanningRangeTombstone is true, we write very wide range
+				// tombstones that engulf the entire cleared span. Otherwise, we write
+				// additional range tombstones that span the start/end bounds as well as
+				// some in the middle -- these will fragment the very wide range
+				// tombstones, which is why we need to test both cases separately.
+				rangeTombstones := []storage.MVCCRangeKey{
+					{StartKey: roachpb.Key("0"), EndKey: roachpb.Key("a"), Timestamp: hlc.Timestamp{WallTime: 1e9}},
+					{StartKey: roachpb.Key("0"), EndKey: roachpb.Key("a"), Timestamp: hlc.Timestamp{WallTime: 2e9}},
+				}
+				if !spanningRangeTombstones {
+					rangeTombstones = append(rangeTombstones, []storage.MVCCRangeKey{
+						{StartKey: roachpb.Key("00"), EndKey: roachpb.Key("111"), Timestamp: hlc.Timestamp{WallTime: 3e9}},
+						{StartKey: roachpb.Key("2"), EndKey: roachpb.Key("4"), Timestamp: hlc.Timestamp{WallTime: 3e9}},
+						{StartKey: roachpb.Key("6"), EndKey: roachpb.Key("8"), Timestamp: hlc.Timestamp{WallTime: 3e9}},
+						{StartKey: roachpb.Key("999"), EndKey: roachpb.Key("aa"), Timestamp: hlc.Timestamp{WallTime: 3e9}},
+					}...)
+				}
+				for _, rk := range rangeTombstones {
+					localTS := hlc.ClockTimestamp{WallTime: rk.Timestamp.WallTime - 1e9} // give range key a value if > 0
+					require.NoError(t, storage.ExperimentalMVCCDeleteRangeUsingTombstone(
+						ctx, eng, nil, rk.StartKey, rk.EndKey, rk.Timestamp, localTS, nil, nil, 0))
+				}
 
-			var h roachpb.Header
-			h.RangeID = desc.RangeID
+				// Write some random point keys within the cleared span, above the range tombstones.
+				for i := 0; i < tc.keyCount; i++ {
+					key := roachpb.Key(fmt.Sprintf("%04d", i))
+					require.NoError(t, storage.MVCCPut(ctx, eng, nil, key,
+						hlc.Timestamp{WallTime: int64(4+i%2) * 1e9}, hlc.ClockTimestamp{}, value, nil))
+				}
 
-			cArgs := CommandArgs{Header: h}
-			cArgs.EvalCtx = (&MockEvalCtx{
-				ClusterSettings: cluster.MakeTestingClusterSettings(),
-				Desc:            &desc,
-				Clock:           hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
-				Stats:           stats,
-			}).EvalContext()
-			cArgs.Args = &roachpb.ClearRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
-					Key:    startKey,
-					EndKey: endKey,
-				},
-			}
-			cArgs.Stats = &enginepb.MVCCStats{}
+				// Calculate the range stats.
+				stats := computeStats(t, eng, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), nowNanos)
+				if tc.estimatedStats {
+					stats.ContainsEstimates++
+				}
 
-			result, err := ClearRange(ctx, batch, cArgs, &roachpb.ClearRangeResponse{})
-			require.NoError(t, err)
-			require.NotNil(t, result.Replicated.MVCCHistoryMutation)
-			require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans, []roachpb.Span{{Key: startKey, EndKey: endKey}})
+				// Set up the evaluation context.
+				cArgs := CommandArgs{
+					EvalCtx: (&MockEvalCtx{
+						ClusterSettings: cluster.MakeTestingClusterSettings(),
+						Desc:            &desc,
+						Clock:           hlc.NewClockWithSystemTimeSource(time.Nanosecond),
+						Stats:           stats,
+					}).EvalContext(),
+					Header: roachpb.Header{
+						RangeID:   desc.RangeID,
+						Timestamp: hlc.Timestamp{WallTime: nowNanos},
+					},
+					Args: &roachpb.ClearRangeRequest{
+						RequestHeader: roachpb.RequestHeader{
+							Key:    startKey,
+							EndKey: endKey,
+						},
+					},
+					Stats: &enginepb.MVCCStats{},
+				}
 
-			// Verify cArgs.Stats is equal to the stats we wrote, ignoring some values.
-			newStats := stats
-			newStats.ContainsEstimates, cArgs.Stats.ContainsEstimates = 0, 0
-			newStats.SysBytes, cArgs.Stats.SysBytes = 0, 0
-			newStats.SysCount, cArgs.Stats.SysCount = 0, 0
-			newStats.AbortSpanBytes, cArgs.Stats.AbortSpanBytes = 0, 0
-			newStats.Add(*cArgs.Stats)
-			newStats.AgeTo(0) // pin at LastUpdateNanos==0
-			if !newStats.Equal(enginepb.MVCCStats{}) {
-				t.Errorf("expected stats on original writes to be negated on clear range: %+v vs %+v", stats, *cArgs.Stats)
-			}
+				// Use a spanset batch to assert latching of all accesses. In
+				// particular, to test the additional seeks necessary to peek for
+				// adjacent range keys that we may truncate (for stats purposes) which
+				// should not cross the range bounds.
+				var latchSpans, lockSpans spanset.SpanSet
+				declareKeysClearRange(&desc, &cArgs.Header, cArgs.Args, &latchSpans, &lockSpans, 0)
+				batch := &wrappedBatch{Batch: spanset.NewBatchAt(eng.NewBatch(), &latchSpans, cArgs.Header.Timestamp)}
+				defer batch.Close()
 
-			// Verify we see the correct counts for Clear and ClearRange.
-			if a, e := batch.clearIterCount, test.expClearIterCount; a != e {
-				t.Errorf("expected %d iter range clears; got %d", e, a)
-			}
-			if a, e := batch.clearRangeCount, test.expClearRangeCount; a != e {
-				t.Errorf("expected %d clear ranges; got %d", e, a)
-			}
+				// Run the request.
+				result, err := ClearRange(ctx, batch, cArgs, &roachpb.ClearRangeResponse{})
+				require.NoError(t, err)
+				require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+				require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans, []roachpb.Span{{Key: startKey, EndKey: endKey}})
 
-			// Now ensure that the data is gone, whether it was a ClearRange or individual calls to clear.
-			if err := batch.Commit(true /* commit */); err != nil {
-				t.Fatal(err)
-			}
-			if err := eng.MVCCIterate(startKey, endKey, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
-				return errors.New("expected no data in underlying engine")
-			}); err != nil {
-				t.Fatal(err)
-			}
+				require.NoError(t, batch.Commit(true /* sync */))
+
+				// Verify that we see the correct counts for ClearMVCCIteratorRange and ClearMVCCRange.
+				require.Equal(t, tc.expClearIter, batch.clearIterCount == 1)
+				require.Equal(t, tc.expClearIter, batch.clearRangeCount == 0)
+
+				// Ensure that the data is gone.
+				iter := eng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+					KeyTypes:   storage.IterKeyTypePointsAndRanges,
+					LowerBound: startKey,
+					UpperBound: endKey,
+				})
+				defer iter.Close()
+				iter.SeekGE(storage.MVCCKey{Key: keys.LocalMax})
+				ok, err := iter.Valid()
+				require.NoError(t, err)
+				require.False(t, ok, "expected empty span, found key %s", iter.UnsafeKey())
+
+				// Verify the stats delta by adding it to the original range stats and
+				// comparing with the computed range stats. If we're clearing the entire
+				// range then the new stats should be empty.
+				newStats := stats
+				newStats.ContainsEstimates, cArgs.Stats.ContainsEstimates = 0, 0
+				newStats.SysBytes, cArgs.Stats.SysBytes = 0, 0
+				newStats.SysCount, cArgs.Stats.SysCount = 0, 0
+				newStats.AbortSpanBytes, cArgs.Stats.AbortSpanBytes = 0, 0
+				newStats.Add(*cArgs.Stats)
+				require.Equal(t, newStats, computeStats(t, eng, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), nowNanos))
+				if !tc.partialRange {
+					newStats.LastUpdateNanos = 0
+					require.Empty(t, newStats)
+				}
+			})
 		})
 	}
 }
