@@ -128,6 +128,8 @@ func (fw *SSTWriter) Finish() error {
 }
 
 // ClearRawRange implements the Writer interface.
+//
+// TODO(erikgrinaker): This must clear range keys when SSTs support them.
 func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key) error {
 	return fw.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
 }
@@ -153,8 +155,10 @@ func (fw *SSTWriter) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error 
 }
 
 // ExperimentalClearAllMVCCRangeKeys implements the Writer interface.
+//
+// TODO(erikgrinaker): This must clear range keys when SSTs support them.
 func (fw *SSTWriter) ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error {
-	panic("not implemented")
+	return nil
 }
 
 func (fw *SSTWriter) clearRange(start, end MVCCKey) error {

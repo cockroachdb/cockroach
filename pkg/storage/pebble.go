@@ -1210,7 +1210,12 @@ func (p *Pebble) SingleClearEngineKey(key EngineKey) error {
 
 // ClearRawRange implements the Engine interface.
 func (p *Pebble) ClearRawRange(start, end roachpb.Key) error {
-	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+	startBuf := EncodeMVCCKey(MVCCKey{Key: start})
+	endBuf := EncodeMVCCKey(MVCCKey{Key: end})
+	if err := p.db.DeleteRange(startBuf, endBuf, pebble.Sync); err != nil {
+		return err
+	}
+	return p.ExperimentalClearAllMVCCRangeKeys(start, end)
 }
 
 // ClearMVCCRange implements the Engine interface.
@@ -1221,13 +1226,7 @@ func (p *Pebble) ClearMVCCRange(start, end roachpb.Key) error {
 
 // ClearMVCCVersions implements the Engine interface.
 func (p *Pebble) ClearMVCCVersions(start, end MVCCKey) error {
-	return p.clearRange(start, end)
-}
-
-func (p *Pebble) clearRange(start, end MVCCKey) error {
-	bufStart := EncodeMVCCKey(start)
-	bufEnd := EncodeMVCCKey(end)
-	return p.db.DeleteRange(bufStart, bufEnd, pebble.Sync)
+	return p.db.DeleteRange(EncodeMVCCKey(start), EncodeMVCCKey(end), pebble.Sync)
 }
 
 // ClearMVCCIteratorRange implements the Engine interface.
