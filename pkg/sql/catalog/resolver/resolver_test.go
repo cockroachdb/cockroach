@@ -15,19 +15,31 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeMetadata represents a fake table resolution environment for tests.
@@ -511,4 +523,155 @@ func TestResolveTablePatternOrName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	tDB.Exec(t, `
+CREATE SCHEMA test_sc;
+CREATE TABLE a (a INT, INDEX idx1(a));
+CREATE TABLE b (a INT, INDEX idx2(a));
+CREATE TABLE c (a INT, INDEX idx2(a));`,
+	)
+
+	makeTableIndexName := func(db, sc, tbl, idx string) *tree.TableIndexName {
+		name := &tree.TableIndexName{
+			Index: tree.UnrestrictedName(idx),
+			Table: tree.TableName{},
+		}
+		name.Table.ObjectName = tree.Name(tbl)
+		name.Table.CatalogName = tree.Name(db)
+		name.Table.SchemaName = tree.Name(sc)
+		if db != "" {
+			name.Table.ExplicitCatalog = true
+		}
+		if sc != "" {
+			name.Table.ExplicitSchema = true
+		}
+		return name
+	}
+
+	testCases := []struct {
+		testName         string
+		name             *tree.TableIndexName
+		expected         string
+		errIfNotRequired bool
+	}{
+		// Both table name and index are set.
+		{
+			testName: "both table name and index are set",
+			name:     makeTableIndexName("defaultdb", "public", "a", "idx1"),
+			expected: `defaultdb.public.a@idx1`,
+		},
+		{
+			testName: "both table name and index are set, but no index",
+			name:     makeTableIndexName("defaultdb", "public", "a", "idx2"),
+			expected: `error: index "idx2" does not exist`,
+		},
+
+		// Only table name is set.
+		{
+			testName: "only table name is set",
+			name:     makeTableIndexName("defaultdb", "public", "a", ""),
+			expected: `defaultdb.public.a@a_pkey`,
+		},
+		{
+			testName: "only table name is set, but bad db",
+			name:     makeTableIndexName("z", "public", "a", ""),
+			expected: `error: database "z" does not exist`,
+		},
+		{
+			testName: "only table name is set, but bad table",
+			name:     makeTableIndexName("defaultdb", "public", "z", ""),
+			expected: `error: relation "defaultdb.public.z" does not exist`,
+		},
+
+		// Only index name is set.
+		{
+			testName: "only index name is set",
+			name:     makeTableIndexName("", "", "", "idx1"),
+			expected: `defaultdb.public.a@idx1`,
+		},
+		{
+			testName: "only index name is set with db and schema",
+			name:     makeTableIndexName("defaultdb", "public", "", "idx1"),
+			expected: `defaultdb.public.a@idx1`,
+		},
+		{
+			testName: "only index name is set with schema",
+			name:     makeTableIndexName("", "public", "", "idx1"),
+			expected: `defaultdb.public.a@idx1`,
+		},
+		{
+			testName:         "only index name is set with bad db",
+			name:             makeTableIndexName("z", "public", "", "idx2"),
+			expected:         `error: target database or schema does not exist`,
+			errIfNotRequired: true,
+		},
+		{
+			testName:         "ambiguous index name",
+			name:             makeTableIndexName("", "", "", "idx2"),
+			expected:         `error: index name "idx2" is ambiguous (found in defaultdb.public.c and defaultdb.public.b)`,
+			errIfNotRequired: true,
+		},
+	}
+
+	var sessionData sessiondatapb.SessionData
+	{
+		var sessionSerialized []byte
+		tDB.QueryRow(t, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
+	}
+
+	sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+		planner, cleanup := sql.NewInternalPlanner(
+			"resolve-index", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
+		)
+		defer cleanup()
+
+		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
+		// Set "defaultdb" as current database.
+		ec.SessionData().Database = "defaultdb"
+		// Put a good schema before our target schema to make sure schemas are looped through.
+		searchPath := ec.SessionData().SearchPath.GetPathArray()
+		ec.SessionData().SearchPath = ec.SessionData().SearchPath.UpdatePaths(append([]string{"test_sc"}, searchPath...))
+		schemaResolver := sql.NewSkippingCacheSchemaResolver(
+			col, ec.SessionDataStack, txn, planner.(scbuild.AuthorizationAccessor),
+		)
+
+		// Make sure we're looking at correct default db and search path.
+		require.Equal(t, "defaultdb", schemaResolver.CurrentDatabase())
+		require.Equal(t, []string{"test_sc", "$user", "public"}, schemaResolver.CurrentSearchPath().GetPathArray())
+
+		for _, tc := range testCases {
+			t.Run(tc.testName, func(t *testing.T) {
+				_, prefix, tblDesc, idxDesc, err := resolver.ResolveIndex(
+					ctx, schemaResolver, tc.name, txn, execCfg.Codec, true, false)
+				var res string
+				if err != nil {
+					res = fmt.Sprintf("error: %s", err.Error())
+				} else {
+					res = fmt.Sprintf("%s.%s.%s@%s", prefix.Database.GetName(), prefix.Schema.GetName(), tblDesc.GetName(), idxDesc.GetName())
+				}
+				require.Equal(t, tc.expected, res)
+
+				_, _, _, _, err = resolver.ResolveIndex(
+					ctx, schemaResolver, tc.name, txn, execCfg.Codec, false, false)
+				if tc.errIfNotRequired {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
+		return nil
+	})
 }
