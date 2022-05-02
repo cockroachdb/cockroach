@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -673,9 +674,14 @@ func (opc *optPlanningCtx) runExecBuilder(
 	return nil
 }
 
-// DecodeGist Avoid an import cycle by keeping the cat out of the tree.
-func (p *planner) DecodeGist(gist string) ([]string, error) {
-	return explain.DecodePlanGistToRows(gist, &p.optPlanningCtx.catalog)
+// DecodeGist Avoid an import cycle by keeping the cat out of the tree. If
+// external is true gist is from a foreign database and we use nil catalog.
+func (p *planner) DecodeGist(gist string, external bool) ([]string, error) {
+	var cat cat.Catalog
+	if !external {
+		cat = &p.optPlanningCtx.catalog
+	}
+	return explain.DecodePlanGistToRows(gist, cat)
 }
 
 // makeQueryIndexRecommendation builds a statement and walks through it to find

@@ -199,6 +199,9 @@ func getResultColumns(
 }
 
 func tableColumns(table cat.Table, ordinals exec.TableColumnOrdinalSet) colinfo.ResultColumns {
+	if table == nil {
+		return nil
+	}
 	cols := make(colinfo.ResultColumns, 0, ordinals.Len())
 	for i, ok := ordinals.Next(0); ok; i, ok = ordinals.Next(i + 1) {
 		// Be defensive about bitset values because they may come from cached

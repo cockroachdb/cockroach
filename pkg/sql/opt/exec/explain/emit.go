@@ -181,7 +181,7 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 	case scanOp:
 		a := n.args.(*scanArgs)
 		if a.Table == nil {
-			return "unknown table", nil
+			return "scan", nil
 		}
 		if a.Table.IsVirtualTable() {
 			return "virtual table", nil
