@@ -286,7 +286,7 @@ func startTenantInternal(
 		return nil, nil, nil, "", "", err
 	}
 
-	connManager := netutil.MakeServer(
+	connManager := netutil.MakeServer(ctx,
 		args.stopper,
 		serverTLSConfig,                          // tlsConfig
 		http.HandlerFunc(httpServer.baseHandler), // handler

@@ -80,7 +80,9 @@ type Server struct {
 // When the HTTP facility is not used, the Go HTTP server object is
 // still used internally to maintain/register the connections via the
 // ConnState() method, for convenience.
-func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler) Server {
+func MakeServer(
+	ctx context.Context, stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler,
+) Server {
 	var mu syncutil.Mutex
 	activeConns := make(map[net.Conn]struct{})
 	server := Server{
@@ -100,8 +102,6 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 			ErrorLog: httpLogger,
 		},
 	}
-
-	ctx := context.TODO()
 
 	// net/http.(*Server).Serve/http2.ConfigureServer are not thread safe with
 	// respect to net/http.(*Server).TLSConfig, so we call it synchronously here.
