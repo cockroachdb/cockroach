@@ -18,6 +18,7 @@ SELECT node_id, name FROM crdb_internal.leases ORDER BY name
 0  scheduled_jobs
 0  settings
 0  statement_diagnostics_requests
+0  table_statistics
 0  test
 0  users
 

@@ -214,19 +214,46 @@ func decodeTableStatisticsKV(
 func (sc *TableStatisticsCache) GetTableStats(
 	ctx context.Context, table catalog.TableDescriptor,
 ) ([]*TableStatistic, error) {
-	if !hasStatistics(table) {
+	if !statsUsageAllowed(table, sc.Settings) {
 		return nil, nil
 	}
 	return sc.getTableStatsFromCache(ctx, table.GetID())
 }
 
-// hasStatistics returns true if the table can have statistics collected for it.
-func hasStatistics(table catalog.TableDescriptor) bool {
+// statsUsageAllowed returns true if statistics on `table` are allowed to be
+// used by the query optimizer.
+func statsUsageAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Settings) bool {
+	if catalog.IsSystemDescriptor(table) {
+		// Disable stats usage on system.table_statistics and system.lease. Looking
+		// up stats on system.lease is known to cause hangs, and the same could
+		// happen with system.table_statistics.
+		if table.GetID() == keys.TableStatisticsTableID ||
+			table.GetID() == keys.LeaseTableID {
+			return false
+		}
+		// Return whether the optimizer is allowed to use stats on system tables.
+		return UseStatisticsOnSystemTables.Get(&clusterSettings.SV)
+	}
+	return tableTypeCanHaveStats(table)
+}
+
+// autostatsCollectionAllowed returns true if statistics are allowed to be
+// automatically collected on the table.
+func autostatsCollectionAllowed(table catalog.TableDescriptor) bool {
 	if catalog.IsSystemDescriptor(table) {
 		// Don't try to get statistics for system tables (most importantly,
 		// for table_statistics itself).
 		return false
 	}
+	return tableTypeCanHaveStats(table)
+}
+
+// tableTypeCanHaveStats returns true if manual collection of statistics on the
+// table type via CREATE STATISTICS or ANALYZE is allowed. Note that specific
+// system tables may have stats collection disabled in create_stats.go. This
+// function just indicates if the type of table may have stats manually
+// collected.
+func tableTypeCanHaveStats(table catalog.TableDescriptor) bool {
 	if table.IsVirtualTable() {
 		// Don't try to get statistics for virtual tables.
 		return false
