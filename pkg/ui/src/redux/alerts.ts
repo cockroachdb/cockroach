@@ -35,7 +35,10 @@ import {
   refreshVersion,
   refreshHealth,
 } from "./apiReducers";
-import { singleVersionSelector, versionsSelector } from "src/redux/nodes";
+import {
+  singleVersionSelector,
+  numNodesByVersionsSelector,
+} from "src/redux/nodes";
 import { AdminUIState } from "./state";
 import * as docsURL from "src/util/docs";
 
@@ -134,23 +137,27 @@ export const staggeredVersionDismissedSetting = new LocalSetting(
  * This excludes decommissioned nodes.
  */
 export const staggeredVersionWarningSelector = createSelector(
-  versionsSelector,
+  numNodesByVersionsSelector,
   staggeredVersionDismissedSetting.selector,
-  (versions, versionMismatchDismissed): Alert => {
+  (versionsMap, versionMismatchDismissed): Alert => {
     if (versionMismatchDismissed) {
       return undefined;
     }
-
-    if (!versions || versions.length <= 1) {
+    if (!versionsMap || versionsMap.size < 2) {
       return undefined;
     }
-
+    const versionsText = Array.from(versionsMap)
+      .map(([k, v]) => `${v} nodes are running on ${k}`)
+      .join(" and ")
+      .concat(". ");
     return {
       level: AlertLevel.WARNING,
-      title: "Staggered Version",
-      text: `We have detected that multiple versions of CockroachDB are running
-      in this cluster. This may be part of a normal rolling upgrade process, but
-      should be investigated if this is unexpected.`,
+      title: "Multiple versions of CockroachDB are running on this cluster.",
+      text:
+        versionsText +
+        `You can see a list of all nodes and their versions below.
+        This may be part of a normal rolling upgrade process, but should be investigated
+        if unexpected.`,
       dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
         dispatch(staggeredVersionDismissedSetting.set(true));
         return Promise.resolve();
@@ -452,6 +459,18 @@ export const terminateQueryAlertSelector = createSelector(
         return Promise.resolve();
       },
     };
+  },
+);
+
+/**
+ * Selector which returns an array of all active alerts which should be
+ * displayed in the overview list page, these should be non-critical alerts.
+ */
+
+export const overviewListAlertsSelector = createSelector(
+  staggeredVersionWarningSelector,
+  (...alerts: Alert[]): Alert[] => {
+    return _.without(alerts, null, undefined);
   },
 );
 
