@@ -42,6 +42,10 @@ const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
 // cluster setting.
 const UseStatsOnSystemTables = "sql.stats.system_tables.enabled"
 
+// AutoStatsOnSystemTables is the name of the autostats on system tables
+// cluster setting.
+const AutoStatsOnSystemTables = "sql.stats.system_tables_autostats.enabled"
+
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
@@ -58,6 +62,17 @@ var UseStatisticsOnSystemTables = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	UseStatsOnSystemTables,
 	"when true, enables use of statistics on system tables by the query optimizer",
+	true,
+).WithPublic()
+
+// AutomaticStatisticsOnSystemTables controls the cluster setting for enabling
+// automatic statistics collection on system tables. Auto stats must be enabled
+// via a true setting of sql.stats.automatic_collection.enabled for this flag to
+// have any effect.
+var AutomaticStatisticsOnSystemTables = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	AutoStatsOnSystemTables,
+	"when true, enables automatic collection of statistics on system tables",
 	true,
 ).WithPublic()
 
@@ -403,8 +418,9 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 		// Automatic stats are disabled.
 		return
 	}
-	if !autostatsCollectionAllowed(table) {
-		// Don't collect stats for this kind of table: system, virtual, view, etc.
+	if !autostatsCollectionAllowed(table, r.st) {
+		// Don't collect stats for virtual tables or views. System tables may be
+		// allowed if enabled in cluster settings.
 		return
 	}
 

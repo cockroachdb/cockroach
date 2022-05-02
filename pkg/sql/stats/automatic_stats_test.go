@@ -108,6 +108,37 @@ func TestMaybeRefreshStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Auto stats collection on any system table except system.lease and
+	// system.table_statistics should succeed.
+	descRoleOptions :=
+		desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "system", "role_options")
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descRoleOptions.GetID(), 10000 /* rowsAffected */, time.Microsecond, /* asOf */
+	)
+	if err := checkStatsCount(ctx, cache, descRoleOptions, 4 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Auto stats collection on system.lease should fail (no stats should be collected).
+	descLease :=
+		desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "system", "lease")
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descLease.GetID(), 10000 /* rowsAffected */, time.Microsecond, /* asOf */
+	)
+	if err := checkStatsCount(ctx, cache, descLease, 0 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Auto stats collection on system.table_statistics should fail (no stats should be collected).
+	descTableStats :=
+		desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "system", "table_statistics")
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descTableStats.GetID(), 10000 /* rowsAffected */, time.Microsecond, /* asOf */
+	)
+	if err := checkStatsCount(ctx, cache, descTableStats, 0 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
 	// Ensure that attempt to refresh stats on view does not result in re-
 	// enqueuing the attempt.
 	// TODO(rytaft): Should not enqueue views to begin with.
