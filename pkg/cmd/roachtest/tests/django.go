@@ -251,7 +251,7 @@ func registerDjango(r registry.Registry) {
 // Test results are only in stderr, so stdout is redirected and printed later.
 const djangoRunTestCmd = `
 cd /mnt/data1/django/tests &&
-RUNNING_COCKROACH_BACKEND_TESTS=1 python3 runtests.py %[1]s --settings cockroach_settings --parallel 1 -v 2 > %[1]s.stdout
+python3 runtests.py %[1]s --settings cockroach_settings -v 2 > %[1]s.stdout
 `
 
 const cockroachDjangoSettings = `
