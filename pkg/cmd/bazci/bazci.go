@@ -163,7 +163,7 @@ func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
 	buf, err := exec.Command("bazel", arg...).Output()
 	if err != nil {
 		fmt.Println("Failed to run Bazel with args: ", arg)
-		return "", err
+		return "", errors.Wrapf(err, "output:\n%s", buf)
 	}
 	return strings.TrimSpace(string(buf)), nil
 }
