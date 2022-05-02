@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -227,6 +228,18 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	if tableDesc.IsView() {
 		return nil, pgerror.New(
 			pgcode.WrongObjectType, "cannot create statistics on views",
+		)
+	}
+
+	if tableDesc.GetID() == keys.TableStatisticsTableID {
+		return nil, pgerror.New(
+			pgcode.WrongObjectType, "cannot create statistics on system.table_statistics",
+		)
+	}
+
+	if tableDesc.GetID() == keys.LeaseTableID {
+		return nil, pgerror.New(
+			pgcode.WrongObjectType, "cannot create statistics on system.lease",
 		)
 	}
 
