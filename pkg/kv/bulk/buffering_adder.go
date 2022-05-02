@@ -392,13 +392,11 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 			continue
 		}
 		b.sink.stats.scatters++
-		if resp.MVCCStats != nil {
-			moved := sz(resp.MVCCStats.Total())
-			b.sink.stats.scatterMoved += moved
-			if moved > 0 {
-				log.VEventf(ctx, 1, "pre-split scattered %s in non-empty range %s",
-					moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
-			}
+		moved := sz(resp.ReplicasScatteredBytes)
+		b.sink.stats.scatterMoved += moved
+		if moved > 0 {
+			log.VEventf(ctx, 1, "pre-split scattered %s in non-empty range %s",
+				moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
 		}
 	}
 	scattersWait := timeutil.Since(beforeScatters)

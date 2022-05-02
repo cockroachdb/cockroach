@@ -1591,7 +1591,15 @@ message AdminScatterResponse {
   }
   reserved 2;
   repeated RangeInfo range_infos = 3 [(gogoproto.nullable) = false];
-  storage.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
+  storage.enginepb.MVCCStats mvcc_stats = 4 [
+    (gogoproto.customname) = "MVCCStats",
+    (gogoproto.nullable) = false];
+
+  // ReplicasScatteredBytes specifies the byte size of the ranges that were
+  // scattered
+  int64 replicas_scattered_bytes = 5;
+
+  // NB: if you add a field here, don't forget to update combine().
 }
 
 // AdminVerifyProtectedTimestampRequest is the argument to the
