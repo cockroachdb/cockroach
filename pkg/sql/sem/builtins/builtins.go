@@ -188,6 +188,12 @@ func init() {
 	}
 }
 
+// CommitWithCausalityTokenName is the name of the special builtin function
+// to commit a transaction and return the logical timestamp at which it
+// committed. The implementation of this function here is a shim; the function
+// is processed explicitly by the connExecutor.
+const CommitWithCausalityTokenName = "commit_with_causality_token"
+
 // builtins contains the built-in functions indexed by name.
 //
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().

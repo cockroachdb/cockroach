@@ -12,6 +12,7 @@ Aborted{WasUpgraded:false}
 		TxnFinishAborted{}
 		TxnRestart{}
 	missing events:
+		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishCommitted{}
 		TxnReleased{}
 		TxnStart{ImplicitTxn:false}
@@ -29,6 +30,7 @@ Aborted{WasUpgraded:true}
 		TxnFinishAborted{}
 		TxnRestart{}
 	missing events:
+		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishCommitted{}
 		TxnReleased{}
 		TxnStart{ImplicitTxn:false}
@@ -45,6 +47,7 @@ CommitWait{}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
+		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnReleased{}
 		TxnRestart{}
@@ -63,6 +66,7 @@ NoTxn{}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
+		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
 		TxnReleased{}
@@ -76,6 +80,7 @@ Open{ImplicitTxn:false, WasUpgraded:false}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
 		TxnReleased{}
@@ -93,6 +98,7 @@ Open{ImplicitTxn:false, WasUpgraded:true}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
 		TxnReleased{}
@@ -115,6 +121,7 @@ Open{ImplicitTxn:true, WasUpgraded:false}
 		TxnUpgradeToExplicit{}
 	missing events:
 		SavepointRollback{}
+		TxnCommittedWithShowCommitTimestamp{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}
@@ -132,6 +139,7 @@ Open{ImplicitTxn:true, WasUpgraded:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
+		TxnCommittedWithShowCommitTimestamp{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}
