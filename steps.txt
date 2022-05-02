@@ -2,10 +2,10 @@ roachprod create -n 10 --clouds aws --local-ssd=false tobias-lsm
 
 deploy master with #80702 and #80648
 
-roachprod sql tobias-lsm:1 -- -e "
+roachprod sql tobias-lsm:5 -- -e "
 set cluster setting kv.snapshot_recovery.max_rate = '500mb';
 set cluster setting kv.snapshot_rebalance.max_rate = '500mb';
-ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 60;
+ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 600;
 "
 
 # wait for replication
@@ -17,15 +17,17 @@ select count(range_id) from crdb_internal.ranges_no_leases where array_length(re
 
 roachprod run tobias-lsm:1 ./cockroach workload init kv
 
-# 10 hotspots
-roachprod ssh tobias-lsm -- sudo systemd-run -p LimitNOFILE=65535 --unit kv-seq -- ./cockroach workload run kv --read-percent 0 --concurrency 10 --min-block-bytes 10000 --max-block-bytes 10000 --sequential --tolerate-errors
+# 10 hotspots. Use different prometheus port.
+# I actually disabled this one later on, since with it the p99.999 is >= 10s
+# and so it's hard to tell when the decommissioning makes anything worse..
+roachprod ssh tobias-lsm -- sudo systemd-run -p LimitNOFILE=65535 --unit kv-seq -- ./cockroach workload run kv --read-percent 0 --concurrency 10 --min-block-bytes 10000 --max-block-bytes 10000 --sequential --tolerate-errors --prometheus-port 2113
 
 # Spray entire keyspace with writes too, so that "all" memtables on ranges overlap
 roachprod ssh tobias-lsm -- sudo systemd-run -p LimitNOFILE=65535 --unit kv-rand -- ./cockroach workload run kv --read-percent 0 --concurrency 10 --min-block-bytes 10000 --max-block-bytes 10000 --tolerate-errors
 
 # periodically clean up to not run out of disk, also it might trigger
 # something interesting.
-roachprod ssh tobias-lsm:1 -- sudo systemd-run --unit truncate-kv --on-calendar '*-*-* 11:00:00' -- ./cockroach sql --insecure -e 'TRUNCATE TABLE kv.kv;'
+roachprod ssh tobias-lsm:1 -- sudo systemd-run --unit truncate-kv --on-calendar '\*-\*-\*\ 11:00:00' -- ./cockroach sql --insecure -e 'TRUNCATE TABLE kv.kv;'
 
 # At this point, get L0Files shooting up past 600 and L0Sublevels heading straight to 20, within 10 minutes
 
@@ -33,11 +35,14 @@ roachprod ssh tobias-lsm:1 -- sudo systemd-run --unit truncate-kv --on-calendar 
 
 # let it run for a few hours
 
-# Fri Apr 29 11:31:34 BST 2022: 
-roachprod ssh tobias-lsm:1 -- ./cockroach node decommission --insecure --wait=none 1 2 3 4
+roachprod ssh tobias-lsm:1 -- sudo systemd-run --unit decommission --on-calendar '\*-\*-\*\ \*:30:00' -- ./cockroach node decommission --insecure --wait=none 1 2 3 4
 
-roachprod ssh tobias-lsm:1 -- ./cockroach workload fixtures import bank --payload-bytes=1024 --ranges=20000 --rows=65104166 --seed=0 --db=mediumbank
+roachprod ssh tobias-lsm:1 -- sudo systemd-run --unit recommission --on-calendar '\*-\*-\*\ \*:00:00' -- ./cockroach node decommission --insecure --wait=none 1 2 3 4
+
+
+# 2TB import
+roachprod ssh tobias-lsm:1 -- ./cockroach workload fixtures import bank --payload-bytes=10240 --ranges=20000 --rows=65104166 --seed=0 --db=bigbank
 
 dashboard:
 
-http://tobias-lsm-0001.roachprod.crdb.io:26258/#/debug/chart?charts=%5B%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A1%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.quota_pool.percent_used-p99%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A1%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.dropped_bytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.queued_bytes%22%7D%2C%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A2%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.stepped_bytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A3%2C%22aggregator%22%3A3%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.storage.l0-num-files%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.replicas.leaseholders%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.storage.l0-sublevels%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A1%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.admission.granter.io_tokens_exhausted_duration.kv%22%7D%5D%2C%22axisUnits%22%3A2%7D%5D&start=1651221423&end=1651222023
+http://tobias-lsm-0001.roachprod.crdb.io:26258/#/debug/chart?charts=%5B%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A3%2C%22aggregator%22%3A3%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.storage.l0-num-files%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.storage.l0-sublevels%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A2%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.range.snapshots.rcvd-bytes%22%7D%2C%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A2%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.range.snapshots.sent-bytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%2C%7B%22metrics%22%3A%5B%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A1%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.dropped_bytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.queued_bytes%22%7D%2C%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A2%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.stepped_bytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.replicas.leaseholders%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A1%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.admission.granter.io_tokens_exhausted_duration.kv%22%7D%5D%2C%22axisUnits%22%3A2%7D%5D&start=1651491933&end=1651495533
