@@ -17,19 +17,6 @@ vectorized: true
 • norows
 
 query T
-EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
-----
-distribution: local
-vectorized: true
-·
-• render
-│
-└── • scan
-      missing stats
-      table: jobs@jobs_status_created_idx
-      spans: FULL SCAN
-
-query T
 EXPLAIN (PLAN, VERBOSE) SELECT 1 a
 ----
 distribution: local
@@ -666,50 +653,68 @@ vectorized: true
             └── • virtual table
                   table: pg_namespace@primary
 
-query T
+statement OK
+ANALYZE system.users
+
+statement OK
+ANALYZE system.role_options
+
+statement OK
+ANALYZE system.role_members
+
+query T retry 
 EXPLAIN SHOW USERS
 ----
 distribution: local
 vectorized: true
 ·
 • sort
+│ estimated row count: 3
 │ order: +username
 │
 └── • render
+    │ estimated row count: 3
     │
     └── • group (hash)
+        │ estimated row count: 3
         │ group by: username
         │
         └── • sort
+            │ estimated row count: 3
             │ order: +"role"
             │
             └── • hash join (left outer)
+                │ estimated row count: 3
                 │ equality: (username) = (member)
                 │ left cols are key
                 │
                 ├── • group (hash)
+                │   │ estimated row count: 3
                 │   │ group by: username
                 │   │
                 │   └── • window
+                │       │ estimated row count: 3
                 │       │
                 │       └── • render
+                │           │ estimated row count: 3
                 │           │
                 │           └── • merge join (left outer)
+                │               │ estimated row count: 3
                 │               │ equality: (username) = (username)
                 │               │ left cols are key
                 │               │
                 │               ├── • scan
-                │               │     missing stats
+                │               │     estimated row count: 3 (100% of the table; stats collected <hidden> ago)
                 │               │     table: users@primary
                 │               │     spans: FULL SCAN
                 │               │
                 │               └── • scan
-                │                     missing stats
+                │                     estimated row count: 1 (100% of the table; stats collected <hidden> ago)
                 │                     table: role_options@primary
                 │                     spans: FULL SCAN
                 │
                 └── • scan
-                      missing stats
+                      estimated row count: 1 (100% of the table; stats collected <hidden> ago)
                       table: role_members@role_members_role_idx
                       spans: FULL SCAN
 
