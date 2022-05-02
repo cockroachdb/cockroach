@@ -13,6 +13,7 @@ package descs
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -52,14 +53,19 @@ func (cf *CollectionFactory) Txn(
 		// Wait for a single version on leased descriptors.
 		for _, ld := range modifiedDescriptors {
 			waitForNoVersion := deletedDescs.Contains(ld.ID)
+			retryOpts := retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     1.5,
+				MaxBackoff:     time.Second,
+			}
 			// Detect unpublished ones.
 			if waitForNoVersion {
-				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retry.Options{})
+				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
 				if err != nil {
 					return err
 				}
 			} else {
-				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retry.Options{})
+				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retryOpts)
 				if err != nil {
 					return err
 				}
