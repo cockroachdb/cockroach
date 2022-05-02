@@ -2039,30 +2039,56 @@ var pgCatalogNamespaceTable = virtualSchemaTable{
 	comment: `available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
 https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 	schema: vtable.PGCatalogNamespace,
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				if constraint == tree.DNull {
+					return false, nil
+				}
+				cs := constraint.(*tree.DString)
+				sc, err := p.Descriptors().GetSchemaByName(ctx, p.Txn(), db, *(*string)(cs), tree.SchemaLookupFlags{
+					Required: false,
+				})
+				if err != nil || sc == nil {
+					return false, err
+				}
+				return true, addNamespaceRow(makeOidHasher(), db, sc, addRow)
+			},
+		},
+	},
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
-					ownerOID := tree.DNull
-					if sc.SchemaKind() == catalog.SchemaUserDefined {
-						ownerOID = getOwnerOID(sc)
-					} else if sc.SchemaKind() == catalog.SchemaPublic {
-						// admin is the owner of the public schema.
-						//
-						// TODO(ajwerner): The public schema effectively carries the privileges
-						// of the database so consider using the database's owner for public.
-						ownerOID = h.UserOid(security.MakeSQLUsernameFromPreNormalizedString("admin"))
-					}
-					return addRow(
-						h.NamespaceOid(db.GetID(), sc.GetName()), // oid
-						tree.NewDString(sc.GetName()),            // nspname
-						ownerOID,                                 // nspowner
-						tree.DNull,                               // nspacl
-					)
+					return addNamespaceRow(h, db, sc, addRow)
 				})
 			})
 	},
+}
+
+func addNamespaceRow(
+	h oidHasher,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	addRow func(...tree.Datum) error,
+) error {
+	ownerOID := tree.DNull
+	if sc.SchemaKind() == catalog.SchemaUserDefined {
+		ownerOID = getOwnerOID(sc)
+	} else if sc.SchemaKind() == catalog.SchemaPublic {
+		// admin is the owner of the public schema.
+		//
+		// TODO(ajwerner): The public schema effectively carries the privileges
+		// of the database so consider using the database's owner for public.
+		ownerOID = h.UserOid(security.MakeSQLUsernameFromPreNormalizedString("admin"))
+	}
+	return addRow(
+		h.NamespaceOid(db.GetID(), sc.GetName()), // oid
+		tree.NewDString(sc.GetName()),            // nspname
+		ownerOID,                                 // nspowner
+		tree.DNull,                               // nspacl
+	)
 }
 
 var (
