@@ -133,14 +133,10 @@ func sortedClusters() []string {
 	return r
 }
 
-// newCluster initializes a SyncedCluster for the given cluster name.
-//
-// The cluster name can include a node selector (e.g. "foo:1-3").
-func newCluster(
-	l *logger.Logger, name string, opts ...install.ClusterSettingOption,
-) (*install.SyncedCluster, error) {
-	clusterSettings := install.MakeClusterSettings(opts...)
-	nodeSelector := "all"
+const allNodesSelector = "all"
+
+func parseClusterAndNodesName(name string) (string, string, error) {
+	nodeSelector := allNodesSelector
 	{
 		parts := strings.Split(name, ":")
 		switch len(parts) {
@@ -150,12 +146,26 @@ func newCluster(
 		case 1:
 			name = parts[0]
 		case 0:
-			return nil, fmt.Errorf("no cluster specified")
+			return "", "", fmt.Errorf("no cluster specified")
 		default:
-			return nil, fmt.Errorf("invalid cluster name: %s", name)
+			return "", "", fmt.Errorf("invalid cluster name: %s", name)
 		}
 	}
+	return name, nodeSelector, nil
+}
 
+// newCluster initializes a SyncedCluster for the given cluster name.
+//
+// The cluster name can include a node selector (e.g. "foo:1-3").
+func newCluster(
+	l *logger.Logger, name string, opts ...install.ClusterSettingOption,
+) (*install.SyncedCluster, error) {
+	clusterSettings := install.MakeClusterSettings(opts...)
+	name, nodeSelector, err := parseClusterAndNodesName(name)
+	if err != nil {
+		return nil, err
+	}
+	l.Printf("creating a new cluster %s, %s\n", name, nodeSelector)
 	metadata, ok := readSyncedClusters(name)
 	if !ok {
 		err := errors.Newf(`unknown cluster: %s`, name)
@@ -168,6 +178,7 @@ func newCluster(
 		clusterSettings.DebugDir = os.ExpandEnv(config.DefaultDebugDir)
 	}
 
+	l.Printf("really creating a new cluster\n")
 	c, err := install.NewSyncedCluster(metadata, nodeSelector, clusterSettings)
 	if err != nil {
 		return nil, err
@@ -639,6 +650,7 @@ func DefaultStartOpts() install.StartOpts {
 		SkipInit:        false,
 		StoreCount:      1,
 		TenantID:        2,
+		InitTarget:      1,
 	}
 }
 
@@ -706,11 +718,15 @@ func Init(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
+	_, nodeNames, err := parseClusterAndNodesName(clusterName)
+	if err != nil {
+		return err
+	}
 	c, err := newCluster(l, clusterName)
 	if err != nil {
 		return err
 	}
-	return c.Init(ctx, l)
+	return c.Init(ctx, l, nodeNames == allNodesSelector)
 }
 
 // Wipe wipes the nodes in a cluster.

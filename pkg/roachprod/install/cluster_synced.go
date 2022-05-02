@@ -2050,27 +2050,31 @@ func (c *SyncedCluster) ParallelE(
 // to maintain parity with auto-init behavior of `roachprod start` (when
 // --skip-init) is not specified. The implementation should be kept in
 // sync with Start().
-func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger) error {
+func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, allNodesSpecified bool) error {
 	// See Start(). We reserve a few special operations for the first node, so we
 	// strive to maintain the same here for interoperability.
-	const firstNodeIdx = 0
+	initNodes := 1
+	if !allNodesSpecified {
+		initNodes = len(c.Nodes)
+	}
+	return c.Parallel(l, "", initNodes, 1 /* concurrency */, func(nodeIdx int) ([]byte, error) {
+		l.Printf("%s: initializing cluster\n", c.Name)
+		initOut, err := c.initializeCluster(ctx, Node(nodeIdx))
+		if err != nil {
+			return nil, errors.WithDetail(err, "install.Init() failed: unable to initialize cluster.")
+		}
+		if initOut != "" {
+			l.Printf(initOut)
+		}
 
-	l.Printf("%s: initializing cluster\n", c.Name)
-	initOut, err := c.initializeCluster(ctx, firstNodeIdx)
-	if err != nil {
-		return errors.WithDetail(err, "install.Init() failed: unable to initialize cluster.")
-	}
-	if initOut != "" {
-		l.Printf(initOut)
-	}
-
-	l.Printf("%s: setting cluster settings", c.Name)
-	clusterSettingsOut, err := c.setClusterSettings(ctx, l, firstNodeIdx)
-	if err != nil {
-		return errors.WithDetail(err, "install.Init() failed: unable to set cluster settings.")
-	}
-	if clusterSettingsOut != "" {
-		l.Printf(clusterSettingsOut)
-	}
-	return nil
+		l.Printf("%s: setting cluster settings", c.Name)
+		clusterSettingsOut, err := c.setClusterSettings(ctx, l, Node(nodeIdx))
+		if err != nil {
+			return nil, errors.WithDetail(err, "install.Init() failed: unable to set cluster settings.")
+		}
+		if clusterSettingsOut != "" {
+			l.Printf(clusterSettingsOut)
+		}
+		return nil, err
+	})
 }

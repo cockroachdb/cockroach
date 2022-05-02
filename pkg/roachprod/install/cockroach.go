@@ -85,7 +85,10 @@ func argExists(args []string, target string) int {
 type StartOpts struct {
 	Target     StartTarget
 	Sequential bool
-	ExtraArgs  []string
+
+	// TODO(during review): should we use --join in ExtraArgs instead?
+	// don't know how to find node address port before Start().
+	ExtraArgs []string
 
 	// systemd limits on resources.
 	NumFilesLimit int64
@@ -95,6 +98,14 @@ type StartOpts struct {
 	SkipInit        bool
 	StoreCount      int
 	EncryptedStores bool
+
+	// Target node that we run Init on, which creates a new CRDB cluster.
+	// It is ignored is SkipInit is true.
+	InitTarget int
+
+	// TODO(durint review): do we need this, use --join in extra args insead?
+	//// Target node that starting nodes will join.
+	//JoinTarget int
 
 	// -- Options that apply only to StartTenantSQL target --
 	TenantID int
@@ -158,12 +169,6 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			return nil, nil
 		}
 
-		// We reserve a few special operations (bootstrapping, and setting
-		// cluster settings) for node 1.
-		if node != 1 {
-			return nil, nil
-		}
-
 		// NB: The code blocks below are not parallelized, so it's safe for us
 		// to use fmt.Printf style logging.
 
@@ -174,10 +179,16 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			return nil, nil
 		}
 
+		// We reserve a few special operations (bootstrapping, and setting
+		// cluster settings) for node 1.
+		if node != Node(startOpts.InitTarget) {
+			return nil, nil
+		}
+
 		shouldInit := !c.useStartSingleNode()
 		if shouldInit {
 			l.Printf("%s: initializing cluster", c.Name)
-			initOut, err := c.initializeCluster(ctx, node)
+			initOut, err := c.initializeCluster(ctx, node) // what does this do?
 			if err != nil {
 				return nil, errors.WithDetail(err, "unable to initialize cluster")
 			}
@@ -506,7 +517,8 @@ func (c *SyncedCluster) generateStartArgs(
 
 	// --join flags are unsupported/unnecessary in `cockroach start-single-node`.
 	if startOpts.Target == StartDefault && !c.useStartSingleNode() {
-		args = append(args, fmt.Sprintf("--join=%s:%d", c.Host(1), c.NodePort(1)))
+		args = append(args, fmt.Sprintf("--join=%s:%d",
+			c.Host(Node(startOpts.InitTarget)), c.NodePort(Node(startOpts.InitTarget))))
 	}
 	if startOpts.Target == StartTenantSQL {
 		args = append(args, fmt.Sprintf("--kv-addrs=%s", startOpts.KVAddrs))
@@ -665,7 +677,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) s
 func (c *SyncedCluster) generateInitCmd(node Node) string {
 	var initCmd string
 	if c.IsLocal() {
-		initCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
+		initCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 
 	path := fmt.Sprintf("%s/%s", c.NodeDir(node, 1 /* storeIndex */), "cluster-bootstrapped")
