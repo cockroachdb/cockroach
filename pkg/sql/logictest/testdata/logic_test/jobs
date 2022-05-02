@@ -24,6 +24,7 @@ CREATE INDEX ON t(x)
 
 query TTT
 SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name = 'root'
+AND job_type LIKE 'SCHEMA CHANGE%'
 ----
 SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE     updating version for role options table            root
@@ -33,6 +34,7 @@ SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name = 'root'
+AND job_type LIKE 'SCHEMA CHANGE%'
 ----
 SCHEMA CHANGE                    updating version for users table                   root
 SCHEMA CHANGE                    updating version for role options table            root
@@ -42,6 +44,7 @@ SCHEMA CHANGE GC                 GC for temporary index used during index backfi
 
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name = 'node'
+AND job_type LIKE 'AUTO SPAN%'
 ----
 AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                   node
 
@@ -84,6 +87,7 @@ user root
 
 query TTT
 SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name IN ('root', 'testuser', 'node')
+AND job_type LIKE 'SCHEMA CHANGE%'
 ----
 SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE     updating version for role options table            root
@@ -95,6 +99,7 @@ SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
 
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name IN ('root', 'testuser', 'node')
+AND (job_type LIKE 'AUTO SPAN%' OR job_type LIKE 'SCHEMA CHANGE%')
 ----
 AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                    node
 SCHEMA CHANGE                    updating version for users table                   root

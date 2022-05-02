@@ -57,6 +57,17 @@ var UseStatisticsOnSystemTables = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
+// AutomaticStatisticsOnSystemTables controls the cluster setting for enabling
+// automatic statistics collection on system tables. Auto stats must be enabled
+// via a true setting of sql.stats.automatic_collection.enabled for this flag to
+// have any effect.
+var AutomaticStatisticsOnSystemTables = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	catpb.AutoStatsOnSystemTables,
+	"when true, enables automatic collection of statistics on system tables",
+	true,
+).WithPublic()
+
 // MultiColumnStatisticsClusterMode controls the cluster setting for enabling
 // automatic collection of multi-column statistics.
 var MultiColumnStatisticsClusterMode = settings.RegisterBoolSetting(
@@ -607,8 +618,9 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 	if !r.autoStatsEnabled(table) {
 		return
 	}
-	if !autostatsCollectionAllowed(table) {
-		// Don't collect stats for this kind of table: system, virtual, view, etc.
+	if !autostatsCollectionAllowed(table, r.st) {
+		// Don't collect stats for virtual tables or views. System tables may be
+		// allowed if enabled in cluster settings.
 		return
 	}
 

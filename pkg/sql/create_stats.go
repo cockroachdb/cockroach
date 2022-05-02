@@ -243,6 +243,18 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		)
 	}
 
+	if tableDesc.GetID() == keys.JobsTableID {
+		return nil, pgerror.New(
+			pgcode.WrongObjectType, "cannot create statistics on system.jobs",
+		)
+	}
+
+	if tableDesc.GetID() == keys.ScheduledJobsTableID {
+		return nil, pgerror.New(
+			pgcode.WrongObjectType, "cannot create statistics on system.scheduled_jobs",
+		)
+	}
+
 	if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
 		return nil, err
 	}
