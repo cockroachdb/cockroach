@@ -2761,6 +2761,20 @@ nearest replica.`, defaultFollowerReadDuration),
 		},
 	),
 
+	"crdb_internal.commit_with_causality_token": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Decimal),
+			Fn: func(*eval.Context, tree.Datums) (tree.Datum, error) {
+				return nil, pgerror.Newf(pgcode.InvalidTransactionState,
+					"cannot execute commit_with_causality_token outside of an explicit "+
+						"transaction in the open state")
+			},
+		},
+	),
 	"cluster_logical_timestamp": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,

@@ -12,8 +12,27 @@ Aborted{}
 		TxnFinishAborted{}
 		TxnRestart{}
 	missing events:
+		TxnCommittedWithCausalityToken{}
 		TxnFinishCommitted{}
 		TxnReleased{}
+		TxnStart{ImplicitTxn:false}
+		TxnStart{ImplicitTxn:true}
+		TxnUpgradeToExplicit{}
+CommitOrReleaseWait{}
+	handled events:
+		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
+		TxnFinishCommitted{}
+		TxnReleased{}
+	missing events:
+		RetriableErr{CanAutoRetry:false, IsCommit:false}
+		RetriableErr{CanAutoRetry:false, IsCommit:true}
+		RetriableErr{CanAutoRetry:true, IsCommit:false}
+		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		SavepointRollback{}
+		TxnCommittedWithCausalityToken{}
+		TxnFinishAborted{}
+		TxnRestart{}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 		TxnUpgradeToExplicit{}
@@ -28,6 +47,7 @@ CommitWait{}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
+		TxnCommittedWithCausalityToken{}
 		TxnFinishAborted{}
 		TxnReleased{}
 		TxnRestart{}
@@ -46,6 +66,7 @@ NoTxn{}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
+		TxnCommittedWithCausalityToken{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
 		TxnReleased{}
@@ -59,6 +80,7 @@ Open{ImplicitTxn:false}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		TxnCommittedWithCausalityToken{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
 		TxnReleased{}
@@ -81,6 +103,7 @@ Open{ImplicitTxn:true}
 		TxnUpgradeToExplicit{}
 	missing events:
 		SavepointRollback{}
+		TxnCommittedWithCausalityToken{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}

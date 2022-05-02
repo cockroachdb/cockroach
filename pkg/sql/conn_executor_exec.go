@@ -154,6 +154,9 @@ func (ex *connExecutor) execStmt(
 	case stateCommitWait:
 		ev, payload = ex.execStmtInCommitWaitState(ctx, ast, res)
 
+	case stateCommitOrReleaseWait:
+		ev, payload = ex.execStmtInCommitOrReleaseWaitState(ctx, ast, res)
+
 	default:
 		panic(errors.AssertionFailedf("unexpected txn state: %#v", ex.machine.CurState()))
 	}
@@ -602,6 +605,11 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 
+	// Handle the special SELECT crdb_internal.commit_with_causality_token.
+	if !p.extendedEvalCtx.TxnImplicit && isSelectCommitWithCausalityToken(ast) {
+		return ex.handleCommitWithCausalityToken(ctx, res)
+	}
+
 	// For regular statements (the ones that get to this point), we
 	// don't return any event unless an error happens.
 
@@ -733,6 +741,39 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// No event was generated.
 	return nil, nil, nil
+}
+
+func isSelectCommitWithCausalityToken(ast tree.Statement) bool {
+	sel, ok := ast.(*tree.Select)
+	if !ok {
+		return false
+	}
+	selStmt := sel.Select
+	var parenSel *tree.ParenSelect
+	for parenSel, ok = selStmt.(*tree.ParenSelect); ok; parenSel, ok = selStmt.(*tree.ParenSelect) {
+		selStmt = parenSel.Select.Select
+	}
+	sc, ok := selStmt.(*tree.SelectClause)
+	if !ok {
+		return false
+	}
+	// TODO(ajwerner): Find a more exhaustive way to do this.
+	if len(sc.From.Tables) != 0 || len(sc.Exprs) != 1 || sc.Distinct ||
+		sc.Where != nil || sc.GroupBy != nil || sc.Having != nil || sc.Window != nil ||
+		sc.From.AsOf.Expr != nil {
+		return false
+	}
+	funcExpr, isFuncExpr := sc.Exprs[0].Expr.(*tree.FuncExpr)
+	if !isFuncExpr || len(funcExpr.Exprs) != 0 {
+		return false
+	}
+	name, isName := funcExpr.Func.FunctionReference.(*tree.UnresolvedName)
+	if !isName || name.NumParts != 2 ||
+		!strings.EqualFold(name.Parts[1], "crdb_internal") ||
+		!strings.EqualFold(name.Parts[0], "commit_with_causality_token") {
+		return false
+	}
+	return true
 }
 
 // handleAOST gets the AsOfSystemTime clause from the statement, and sets
@@ -1690,6 +1731,39 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 			ex.incrementExecutedStmtCounter(ast)
 		}
 	}()
+	return ex.handleCommitRollbackOrErrorInWait(ctx, ast, res)
+}
+
+// execStmtInCommitWaitState executes a statement in a txn that's in state
+// CommitWait.
+// Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
+func (ex *connExecutor) execStmtInCommitOrReleaseWaitState(
+	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
+) (ev fsm.Event, payload fsm.EventPayload) {
+	ex.incrementStartedStmtCounter(ast)
+	defer func() {
+		if !payloadHasError(payload) {
+			ex.incrementExecutedStmtCounter(ast)
+		}
+	}()
+	defer func() {
+		ex.extraTxnState.shouldAcceptReleaseSavepointCockroachRestart = false
+	}()
+	if s, ok := ast.(*tree.ReleaseSavepoint); ok &&
+		s.Savepoint == commitOnReleaseSavepointName &&
+		ex.extraTxnState.shouldAcceptReleaseSavepointCockroachRestart {
+		return eventTxnReleased{}, nil
+	}
+	return ex.handleCommitRollbackOrErrorInWait(ctx, ast, res)
+}
+
+// handleCommitRollbackOrAnyOtherStatementInWait is used to share code
+// between execStmtInCommitWaitState and execStmtInCommitOrReleaseWaitState.
+// It handles all statements in the former state, and all but the allowed
+// RELEASE SAVEPOINT cockroach_restart in the latter.
+func (ex *connExecutor) handleCommitRollbackOrErrorInWait(
+	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
+) (ev fsm.Event, payload fsm.EventPayload) {
 	switch ast.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we

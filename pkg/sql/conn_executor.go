@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1078,7 +1079,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		case stateAborted:
 			// A non-retriable error with IsCommit set to true causes the transaction
 			// to be cleaned up.
-		case stateCommitWait:
+		case stateCommitWait, stateCommitOrReleaseWait:
 			ex.state.finishSQLTxn()
 		default:
 			if buildutil.CrdbTestBuild {
@@ -1380,6 +1381,12 @@ type connExecutor struct {
 		// respectively.
 		rowsWrittenLogged bool
 		rowsReadLogged    bool
+
+		// shouldAcceptReleaseSavepointCockroachRestart is set to true
+		// when entering the commitOrReleaseWaitState. If set to true, the
+		// commitOrReleaseWaitState will allow one instance of RELEASE SAVEPOINT
+		// cockroach_restart.
+		shouldAcceptReleaseSavepointCockroachRestart bool
 
 		// hasAdminRole is used to cache if the user running the transaction
 		// has admin privilege. hasAdminRoleCache is set for the first statement
@@ -2302,7 +2309,7 @@ func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {
 		return InFailedTxnBlock
 	case stateNoTxn:
 		return IdleTxnBlock
-	case stateCommitWait:
+	case stateCommitWait, stateCommitOrReleaseWait:
 		return InTxnBlock
 	case stateInternalError:
 		return InTxnBlock
@@ -3204,6 +3211,52 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
 	}
 	return nil
+}
+
+func (ex *connExecutor) handleCommitWithCausalityToken(
+	ctx context.Context, res RestrictedCommandResult,
+) (fsm.Event, fsm.EventPayload, error) {
+	res.ResetStmtType((*tree.CommitTransaction)(nil))
+	err := ex.commitSQLTransactionInternal(ctx)
+	if err == nil {
+		res.SetColumns(ctx, colinfo.ResultColumns{
+			{
+				Name:   "causality_token",
+				Typ:    types.Decimal,
+				Hidden: false,
+			},
+		})
+		if err := res.AddRow(ctx, tree.Datums{
+			eval.TimestampToDecimalDatum(ex.planner.Txn().CommitTimestamp()),
+		}); err != nil {
+			return nil, nil, err
+		}
+		// If we have a SAVEPOINT cockroach_restart, then we need to note that
+		// fact now, as the SAVEPOINT stack will be destroyed as the state
+		// machine moves into COMMIT.
+		if entry, _ := ex.extraTxnState.savepoints.find(
+			commitOnReleaseSavepointName,
+		); entry != nil {
+			ex.extraTxnState.shouldAcceptReleaseSavepointCockroachRestart = true
+		}
+		return eventTxnCommittedWithCausalityToken{}, nil, nil
+	}
+
+	// Committing the transaction failed. We'll go to state RestartWait if
+	// it's a retriable error, or to state RollbackWait otherwise.
+	if errIsRetriable(err) {
+		rc, canAutoRetry := ex.getRewindTxnCapability()
+		ev := eventRetriableErr{
+			IsCommit:     fsm.FromBool(false /* isCommit */),
+			CanAutoRetry: fsm.FromBool(canAutoRetry),
+		}
+		payload := eventRetriableErrPayload{err: err, rewCap: rc}
+		return ev, payload, nil
+	}
+
+	ev := eventNonRetriableErr{IsCommit: fsm.FromBool(false)}
+	payload := eventNonRetriableErrPayload{err: err}
+	return ev, payload, nil
 }
 
 // StatementCounters groups metrics for counting different types of
