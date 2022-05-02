@@ -2,6 +2,10 @@
 # CREATE STATISTICS
 ###################
 
+# Keep auto stats jobs on system tables from disrupting tests in this file.
+statement ok
+SET CLUSTER SETTING sql.stats.system_tables_autostats.enabled = FALSE
+
 # This test verifies that events are posted for table statistics creation.
 statement ok
 SET CLUSTER SETTING sql.stats.post_events.enabled = TRUE
@@ -18,7 +22,7 @@ CREATE STATISTICS __auto__ FROM a
 query IIT
 SELECT "targetID", "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
-WHERE "eventType" = 'create_statistics'
+WHERE "eventType" = 'create_statistics' AND "targetID" <> 12
 ORDER BY "timestamp", info
 ----
 106  1  {"EventType": "create_statistics", "Statement": "CREATE STATISTICS s1 ON id FROM test.public.a", "TableName": "test.public.a", "Tag": "CREATE STATISTICS", "User": "root"}
