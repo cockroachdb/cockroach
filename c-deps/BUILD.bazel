@@ -37,8 +37,8 @@ configure_make(
         "//conditions:default": [],
     }),
     copts = select({
-        "//build/toolchains:force_build_cdeps": [],
-        "//conditions:default": ["-fPIC"],
+        "//build/toolchains:prebuild_cdeps": ["-fPIC"],
+        "//conditions:default": [],
     }),
     env = select({
         "//build/toolchains:dev": {"AR": ""},
@@ -65,39 +65,39 @@ cmake(
         # TODO(ricky): The repetition here is dumb, but I don't know a cleaner
         # way to do it?
         # https://github.com/bazelbuild/bazel/issues/12457 would help.
-        "//build/toolchains:is_windows_force_build_cdeps": {
+        "//build/toolchains:is_windows_prebuild_cdeps": {
             "BUILD_LIBPROJ_SHARED": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
             "CMAKE_SYSTEM_NAME": "Generic",
         },
         "@io_bazel_rules_go//go/platform:windows": {
             "BUILD_LIBPROJ_SHARED": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
-            "CMAKE_C_FLAGS": "-fPIC",
-            "CMAKE_CXX_FLAGS": "-fPIC",
             "CMAKE_SYSTEM_NAME": "Generic",
         },
-        "//build/toolchains:is_macos_force_build_cdeps": {
+        "//build/toolchains:is_macos_prebuild_cdeps": {
             "BUILD_LIBPROJ_SHARED": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
             "CMAKE_SYSTEM_NAME": "Generic",
         },
         "@io_bazel_rules_go//go/platform:darwin": {
             "BUILD_LIBPROJ_SHARED": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
-            "CMAKE_C_FLAGS": "-fPIC",
-            "CMAKE_CXX_FLAGS": "-fPIC",
             "CMAKE_SYSTEM_NAME": "Generic",
         },
-        "//build/toolchains:force_build_cdeps": {
+        "//build/toolchains:is_linux_prebuild_cdeps": {
             "BUILD_LIBPROJ_SHARED": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_C_FLAGS": "-fPIC",
+            "CMAKE_CXX_FLAGS": "-fPIC",
         },
         "//conditions:default": {
             "BUILD_LIBPROJ_SHARED": "OFF",
             "CMAKE_BUILD_TYPE": "Release",
-            "CMAKE_C_FLAGS": "-fPIC",
-            "CMAKE_CXX_FLAGS": "-fPIC",
         },
     }),
     generate_args = ["-GUnix Makefiles"],
@@ -216,10 +216,12 @@ configure_make(
     }),
     copts = select({
         # NB: We specify -fcommon to get around duplicate definition errors in recent gcc.
-        "//build/toolchains:force_build_cdeps": ["-fcommon"],
+        "//build/toolchains:prebuild_cdeps": [
+            "-fPIC",
+            "-fcommon",
+        ],
         "//conditions:default": [
             "-fcommon",
-            "-fPIC",
         ],
     }),
     data = [":autom4te"],
