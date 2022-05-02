@@ -356,12 +356,12 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 			clientSpan.Finish()
 			return cs, err
 		}
-		return newTracingClientStream(cs, method, desc, clientSpan), nil
+		return newTracingClientStream(ctx, cs, desc, clientSpan), nil
 	}
 }
 
 func newTracingClientStream(
-	cs grpc.ClientStream, method string, desc *grpc.StreamDesc, clientSpan *Span,
+	ctx context.Context, cs grpc.ClientStream, desc *grpc.StreamDesc, clientSpan *Span,
 ) grpc.ClientStream {
 	finishChan := make(chan struct{})
 
@@ -386,8 +386,14 @@ func newTracingClientStream(
 		case <-finishChan:
 			// The client span is being finished by another code path; hence, no
 			// action is necessary.
-		case <-cs.Context().Done():
-			finishFunc(nil)
+		case <-ctx.Done():
+			// A streaming RPC can be finished by the caller cancelling the ctx. If
+			// the ctx is cancelled, the caller doesn't necessarily need to interact
+			// with the stream anymore (see [1]), so finishChan might never be
+			// signaled). Thus, we listen for ctx cancellation and finish the span.
+			//
+			// [1] https://pkg.go.dev/google.golang.org/grpc#ClientConn.NewStream
+			finishFunc(nil /* err */)
 		}
 	}()
 	otcs := &tracingClientStream{
