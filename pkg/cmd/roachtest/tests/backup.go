@@ -645,6 +645,10 @@ func registerBackup(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(3),
 		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if c.Spec().Cloud != spec.AWS {
+				t.Skip("backup assumeRole is only configured to run on "+spec.AWS, "")
+			}
+
 			q := make(url.Values)
 			expect := map[string]string{
 				"AWS_ACCESS_KEY_ID_ASSUME_ROLE":     amazon.AWSAccessKeyParam,
@@ -662,9 +666,6 @@ func registerBackup(r registry.Registry) {
 			q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
 
 			rows := 100
-			if c.Spec().Cloud != spec.AWS {
-				t.Skip("backup assumeRole is only configured to run on "+spec.AWS, "")
-			}
 			dest := importBankData(ctx, rows, t, c)
 
 			m := c.NewMonitor(ctx)
