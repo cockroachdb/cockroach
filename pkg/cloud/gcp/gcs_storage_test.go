@@ -29,24 +29,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/oauth2/google"
 )
 
 func TestPutGoogleCloud(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	bucket := os.Getenv("GS_BUCKET")
+	bucket := os.Getenv("GOOGLE_BUCKET")
 	if bucket == "" {
-		skip.IgnoreLint(t, "GS_BUCKET env var must be set")
+		skip.IgnoreLint(t, "GOOGLE_BUCKET env var must be set")
 	}
 
 	user := username.RootUserName()
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	testutils.RunTrueAndFalse(t, "specified", func(t *testing.T, specified bool) {
-		credentials := os.Getenv("GS_JSONKEY")
+	testutils.RunTrueAndFalse(t, "auth-specified-with-auth-param", func(t *testing.T, specified bool) {
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
 		if credentials == "" {
-			skip.IgnoreLint(t, "GS_JSONKEY env var must be set")
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
@@ -58,7 +57,6 @@ func TestPutGoogleCloud(t *testing.T) {
 		if specified {
 			uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
 		}
-		t.Log(uri)
 		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t,
 			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
@@ -73,11 +71,11 @@ func TestPutGoogleCloud(t *testing.T) {
 			username.RootUserName(), nil, nil, testSettings,
 		)
 	})
-	t.Run("implicit", func(t *testing.T) {
-		// Only test these if they exist.
-		if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
-			skip.IgnoreLint(t, err)
+	t.Run("auth-implicit", func(t *testing.T) {
+		if !isImplicitAuthConfigured() {
+			skip.IgnoreLint(t, "implicit auth is not configured")
 		}
+
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
 			cloud.AuthParam, cloud.AuthParamImplicit), false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t,
@@ -93,19 +91,24 @@ func TestPutGoogleCloud(t *testing.T) {
 	})
 }
 
-func requireImplicitGoogleCredentials(t *testing.T) {
-	t.Helper()
-	// TODO(yevgeniy): Fix default credentials check.
-	skip.IgnoreLint(t, "implicit credentials not configured")
+// isImplicitAuthConfigured returns true if the `GOOGLE_APPLICATION_CREDENTIALS`
+// environment variable is set. This env variable points to the `keys.json` file
+// that is used for implicit authentication.
+func isImplicitAuthConfigured() bool {
+	credentials := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	return credentials != ""
 }
 
 func TestAntagonisticGCSRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	requireImplicitGoogleCredentials(t)
+
+	if !isImplicitAuthConfigured() {
+		skip.IgnoreLint(t, "implicit auth is not configured")
+	}
 
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/region.tbl?AUTH=implicit"
+	gsFile := "gs://nightly-cloud-unit-tests/antagonistic-read?AUTH=implicit"
 	conf, err := cloud.ExternalStorageConfFromURI(gsFile, username.RootUserName())
 	require.NoError(t, err)
 
@@ -117,7 +120,11 @@ func TestAntagonisticGCSRead(t *testing.T) {
 // exist.
 func TestFileDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	requireImplicitGoogleCredentials(t)
+
+	if !isImplicitAuthConfigured() {
+		skip.IgnoreLint(t, "implicit auth is not configured")
+	}
+
 	user := username.RootUserName()
 
 	testSettings := cluster.MakeTestingClusterSettings()
@@ -155,7 +162,10 @@ func TestFileDoesNotExist(t *testing.T) {
 
 func TestCompressedGCS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	requireImplicitGoogleCredentials(t)
+
+	if !isImplicitAuthConfigured() {
+		skip.IgnoreLint(t, "implicit auth is not configured")
+	}
 
 	user := username.RootUserName()
 	ctx := context.Background()
