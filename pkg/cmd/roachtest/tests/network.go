@@ -513,6 +513,7 @@ func registerNetwork(r registry.Registry) {
 		Name:    fmt.Sprintf("network/sanity/nodes=%d", numNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Skip:    "deleted in 22.2",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkSanity(ctx, t, c, numNodes)
 		},
