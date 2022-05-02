@@ -269,10 +269,10 @@ func Sync(l *logger.Logger) (*cloud.Cloud, error) {
 	// have a list of all VMs from both AWS and GCE (so if both providers have
 	// been used to get the VMs and for GCP also if we listed the VMs in the
 	// default project).
-	refreshDNS := true
+	var skipRefreshReason string
 
 	if p := vm.Providers[gce.ProviderName]; !p.Active() {
-		refreshDNS = false
+		skipRefreshReason = "GCE provider not active"
 	} else {
 		var defaultProjectFound bool
 		for _, prj := range p.(*gce.Provider).GetProjects() {
@@ -282,15 +282,15 @@ func Sync(l *logger.Logger) (*cloud.Cloud, error) {
 			}
 		}
 		if !defaultProjectFound {
-			refreshDNS = false
+			skipRefreshReason = fmt.Sprintf("default project %s not found", gce.DefaultProject())
 		}
 	}
 	if !vm.Providers[aws.ProviderName].Active() {
-		refreshDNS = false
+		skipRefreshReason = "AWS provider not active"
 	}
 	// DNS entries are maintained in the GCE DNS registry for all vms, from all
 	// clouds.
-	if refreshDNS {
+	if skipRefreshReason == "" {
 		if !config.Quiet {
 			l.Printf("Refreshing DNS entries...")
 		}
@@ -299,7 +299,7 @@ func Sync(l *logger.Logger) (*cloud.Cloud, error) {
 		}
 	} else {
 		if !config.Quiet {
-			l.Printf("Not refreshing DNS entries. We did not have all the VMs.")
+			l.Printf("Not refreshing DNS entries: %s", skipRefreshReason)
 		}
 	}
 
