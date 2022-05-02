@@ -275,14 +275,12 @@ func (f *PlanGistFactory) decodeID() cat.StableID {
 
 func (f *PlanGistFactory) decodeTable() cat.Table {
 	id := f.decodeID()
-	ds, _, err := f.catalog.ResolveDataSourceByID(context.TODO(), cat.Flags{}, id)
-	// If we can't resolve the id just return nil, this will result in the plan
-	// showing "unknown table".
-	if err != nil {
-		return nil
+	if f.catalog != nil {
+		if ds, _, err := f.catalog.ResolveDataSourceByID(context.TODO(), cat.Flags{}, id); err == nil {
+			return ds.(cat.Table)
+		}
 	}
-
-	return ds.(cat.Table)
+	return nil
 }
 
 func (f *PlanGistFactory) decodeIndex(tbl cat.Table) cat.Index {

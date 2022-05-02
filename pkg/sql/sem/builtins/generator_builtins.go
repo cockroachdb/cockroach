@@ -410,7 +410,7 @@ var generators = map[string]builtinDefinition{
 			},
 			showCreateAllSchemasGeneratorType,
 			makeShowCreateAllSchemasGenerator,
-			`Returns rows of CREATE schema statements. 
+			`Returns rows of CREATE schema statements.
 The output can be used to recreate a database.'
 `,
 			volatility.Volatile,
@@ -426,11 +426,11 @@ The output can be used to recreate a database.'
 			},
 			showCreateAllTablesGeneratorType,
 			makeShowCreateAllTablesGenerator,
-			`Returns rows of CREATE table statements followed by 
+			`Returns rows of CREATE table statements followed by
 ALTER table statements that add table constraints. The rows are ordered
 by dependencies. All foreign keys are added after the creation of the table
 in the alter statements.
-It is not recommended to perform this operation on a database with many 
+It is not recommended to perform this operation on a database with many
 tables.
 The output can be used to recreate a database.'
 `,
@@ -447,7 +447,7 @@ The output can be used to recreate a database.'
 			},
 			showCreateAllTypesGeneratorType,
 			makeShowCreateAllTypesGenerator,
-			`Returns rows of CREATE type statements. 
+			`Returns rows of CREATE type statements.
 The output can be used to recreate a database.'
 `,
 			volatility.Volatile,
@@ -468,15 +468,31 @@ The output can be used to recreate a database.'
 			volatility.Volatile,
 		),
 	),
+	"crdb_internal.decode_external_plan_gist": makeBuiltin(
+		tree.FunctionProperties{
+			Class: tree.GeneratorClass,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"gist", types.String},
+			},
+			decodePlanGistGeneratorType,
+			makeDecodeExternalPlanGistGenerator,
+			`Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table.
+			`,
+			volatility.Volatile,
+		),
+	),
 }
 
 var decodePlanGistGeneratorType = types.String
 
 type gistPlanGenerator struct {
-	gist  string
-	index int
-	rows  []string
-	p     eval.Planner
+	gist     string
+	index    int
+	rows     []string
+	evalCtx  *eval.Context
+	external bool
 }
 
 var _ eval.ValueGenerator = &gistPlanGenerator{}
@@ -486,7 +502,7 @@ func (g *gistPlanGenerator) ResolvedType() *types.T {
 }
 
 func (g *gistPlanGenerator) Start(_ context.Context, _ *kv.Txn) error {
-	rows, err := g.p.DecodeGist(g.gist)
+	rows, err := g.evalCtx.Planner.DecodeGist(g.gist, g.external)
 	if err != nil {
 		return err
 	}
@@ -509,7 +525,14 @@ func (g *gistPlanGenerator) Values() (tree.Datums, error) {
 
 func makeDecodePlanGistGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 	gist := string(tree.MustBeDString(args[0]))
-	return &gistPlanGenerator{gist: gist, p: ctx.Planner}, nil
+	return &gistPlanGenerator{gist: gist, evalCtx: ctx, external: false}, nil
+}
+
+func makeDecodeExternalPlanGistGenerator(
+	ctx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	gist := string(tree.MustBeDString(args[0]))
+	return &gistPlanGenerator{gist: gist, evalCtx: ctx, external: true}, nil
 }
 
 func makeGeneratorOverload(
@@ -1956,7 +1979,7 @@ func makePayloadsForTraceGenerator(
 									SELECT span_id
   	 							FROM crdb_internal.node_inflight_trace_spans
  		 							WHERE trace_id = $1
-									) SELECT * 
+									) SELECT *
 										FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)`
 
 	it, err := ctx.Planner.QueryIteratorEx(
