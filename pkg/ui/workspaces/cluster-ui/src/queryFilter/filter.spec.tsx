@@ -21,7 +21,9 @@ describe("Test filter functions", (): void => {
         sqlType: "",
         database: "",
         regions: "",
+        sessionStatus: "",
         nodes: "",
+        username: "",
       };
       const resultFilters = getFiltersFromQueryString("");
       expect(resultFilters).toEqual(expectedFilters);
@@ -37,10 +39,12 @@ describe("Test filter functions", (): void => {
       sqlType: "DML",
       database: "movr",
       regions: "us-central",
+      sessionStatus: "idle",
       nodes: "n1,n2",
+      username: "root",
     };
     const resultFilters = getFiltersFromQueryString(
-      "app=%24+internal&timeNumber=1&timeUnit=milliseconds&fullScan=true&sqlType=DML&database=movr&regions=us-central&nodes=n1,n2",
+      "app=%24+internal&timeNumber=1&timeUnit=milliseconds&fullScan=true&sqlType=DML&database=movr&sessionStatus=idle&username=root&regions=us-central&nodes=n1,n2",
     );
     expect(resultFilters).toEqual(expectedFilters);
   });
@@ -54,7 +58,9 @@ describe("Test filter functions", (): void => {
       sqlType: "",
       database: "",
       regions: "",
+      sessionStatus: "",
       nodes: "",
+      username: "",
     };
     const resultFilters = getFiltersFromQueryString("fullScan=true");
     expect(resultFilters).toEqual(expectedFilters);
@@ -69,9 +75,62 @@ describe("Test filter functions", (): void => {
       sqlType: "",
       database: "",
       regions: "",
+      sessionStatus: "",
       nodes: "",
+      username: "",
     };
     const resultFilters = getFiltersFromQueryString("fullScan=false");
+    expect(resultFilters).toEqual(expectedFilters);
+  });
+
+  it("testing open sessions", (): void => {
+    const expectedFilters: Filters = {
+      app: "",
+      timeNumber: "0",
+      timeUnit: "seconds",
+      fullScan: false,
+      sqlType: "",
+      database: "",
+      regions: "",
+      sessionStatus: "open",
+      nodes: "",
+      username: "",
+    };
+    const resultFilters = getFiltersFromQueryString("sessionStatus=open");
+    expect(resultFilters).toEqual(expectedFilters);
+  });
+
+  it("testing idle sessions", (): void => {
+    const expectedFilters: Filters = {
+      app: "",
+      timeNumber: "0",
+      timeUnit: "seconds",
+      fullScan: false,
+      sqlType: "",
+      database: "",
+      regions: "",
+      sessionStatus: "idle",
+      nodes: "",
+      username: "",
+    };
+    const resultFilters = getFiltersFromQueryString("sessionStatus=idle");
+    expect(resultFilters).toEqual(expectedFilters);
+  });
+
+  it("testing closed sessions", (): void => {
+    const expectedFilters: Filters = {
+      app: "",
+      timeNumber: "0",
+      timeUnit: "seconds",
+      fullScan: false,
+      sqlType: "",
+      database: "",
+      regions: "",
+      sessionStatus: "closed",
+      nodes: "",
+      username: "",
+    };
+    const resultFilters = getFiltersFromQueryString("sessionStatus=closed");
     expect(resultFilters).toEqual(expectedFilters);
   });
 });

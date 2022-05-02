@@ -18,6 +18,7 @@ go_library(
     deps = [
         "//pkg/sql/opt",
         "//pkg/sql/opt/partition",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
@@ -38,10 +39,11 @@ go_test(
     embed = [":constraint"],
     deps = [
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/opt",
         "//pkg/sql/opt/partition",
         "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",

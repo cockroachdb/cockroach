@@ -22,7 +22,7 @@ _gen_template = rule(
         "transitions_variable": attr.string(mandatory = True),
         "starting_state_name": attr.string(mandatory = True),
         "_template": attr.label(
-            default = Label("@com_github_cockroachdb_cockroach//pkg/util/fsm/gen:write_reports.go.tmpl"),
+            default = Label("//pkg/util/fsm/gen:write_reports.go.tmpl"),
             allow_single_file = True,
         ),
     },

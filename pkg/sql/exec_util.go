@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -82,6 +83,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -193,7 +196,10 @@ var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-const secondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.allow_for_secondary_tenant.enabled"
+// SecondaryTenantsZoneConfigsEnabledSettingName controls if secondary tenants
+// are allowed to set zone configurations. It has no effect for the system
+// tenant.
+const SecondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.allow_for_secondary_tenant.enabled"
 
 // secondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
 // to set zone configurations. It has no effect for the system tenant.
@@ -201,7 +207,7 @@ const secondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.allow_fo
 // This setting has no effect on zone configurations that have already been set.
 var secondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
-	secondaryTenantsZoneConfigsEnabledSettingName,
+	SecondaryTenantsZoneConfigsEnabledSettingName,
 	"allow secondary tenants to set zone configurations; does not affect the system tenant",
 	false,
 )
@@ -720,8 +726,9 @@ var enableSuperRegions = settings.RegisterBoolSetting(
 var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.defaults.override_alter_primary_region_in_super_region.enabled",
-	"default value for override_multi_region_zone_config; "+
-		"allows for overriding the zone configs of a multi-region table or database",
+	"default value for override_alter_primary_region_in_super_region; "+
+		"allows for altering the primary region even if the primary region is a "+
+		"member of a super region",
 	false,
 ).WithPublic()
 
@@ -1201,7 +1208,7 @@ type ExecutorConfig struct {
 	TypeSchemaChangerTestingKnobs        *TypeSchemaChangerTestingKnobs
 	GCJobTestingKnobs                    *GCJobTestingKnobs
 	DistSQLRunTestingKnobs               *execinfra.TestingKnobs
-	EvalContextTestingKnobs              tree.EvalContextTestingKnobs
+	EvalContextTestingKnobs              eval.TestingKnobs
 	TenantTestingKnobs                   *TenantTestingKnobs
 	TTLTestingKnobs                      *TTLTestingKnobs
 	BackupRestoreTestingKnobs            *BackupRestoreTestingKnobs
@@ -1267,7 +1274,7 @@ type ExecutorConfig struct {
 
 	// CompactEngineSpanFunc is used to inform a storage engine of the need to
 	// perform compaction over a key span.
-	CompactEngineSpanFunc tree.CompactEngineSpanFunc
+	CompactEngineSpanFunc eval.CompactEngineSpanFunc
 
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
@@ -1306,6 +1313,13 @@ type ExecutorConfig struct {
 	// SessionData and other ExtraTxnState.
 	// This is currently only for builtin functions where we need to execute sql.
 	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+
+	// ConsistencyChecker is to generate the results in calls to
+	// crdb_internal.check_consistency.
+	ConsistencyChecker eval.ConsistencyCheckRunner
+
+	// RangeProber is used in calls to crdb_internal.probe_ranges.
+	RangeProber eval.RangeProber
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
@@ -1449,7 +1463,7 @@ type ExecutorTestingKnobs struct {
 	DistSQLReceiverPushCallbackFactory func(query string) func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 
 	// OnTxnRetry, if set, will be called if there is a transaction retry.
-	OnTxnRetry func(autoRetryReason error, evalCtx *tree.EvalContext)
+	OnTxnRetry func(autoRetryReason error, evalCtx *eval.Context)
 
 	// BeforeTxnStatsRecorded, if set, will be called before the statistics
 	// of a transaction is being recorded.
@@ -1767,15 +1781,15 @@ func checkResultType(typ *types.T) error {
 // EvalAsOfTimestamp evaluates and returns the timestamp from an AS OF SYSTEM
 // TIME clause.
 func (p *planner) EvalAsOfTimestamp(
-	ctx context.Context, asOfClause tree.AsOfClause, opts ...tree.EvalAsOfTimestampOption,
-) (tree.AsOfSystemTime, error) {
-	asOf, err := tree.EvalAsOfTimestamp(ctx, asOfClause, &p.semaCtx, p.EvalContext(), opts...)
+	ctx context.Context, asOfClause tree.AsOfClause, opts ...asof.EvalOption,
+) (eval.AsOfSystemTime, error) {
+	asOf, err := asof.Eval(ctx, asOfClause, &p.semaCtx, p.EvalContext(), opts...)
 	if err != nil {
-		return tree.AsOfSystemTime{}, err
+		return eval.AsOfSystemTime{}, err
 	}
 	ts := asOf.Timestamp
 	if now := p.execCfg.Clock.Now(); now.Less(ts) && !ts.Synthetic {
-		return tree.AsOfSystemTime{}, errors.Errorf(
+		return eval.AsOfSystemTime{}, errors.Errorf(
 			"AS OF SYSTEM TIME: cannot specify timestamp in the future (%s > %s)", ts, now)
 	}
 	return asOf, nil
@@ -1786,7 +1800,7 @@ func (p *planner) EvalAsOfTimestamp(
 // timestamp is not nil, it is the timestamp to which a transaction
 // should be set. The statements that will be checked are Select,
 // ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
-func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*tree.AsOfSystemTime, error) {
+func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSystemTime, error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:
@@ -1823,7 +1837,7 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*tree.AsOfSy
 	default:
 		return nil, nil
 	}
-	asOfRet, err := p.EvalAsOfTimestamp(ctx, asOf, tree.EvalAsOfTimestampOptionAllowBoundedStaleness)
+	asOfRet, err := p.EvalAsOfTimestamp(ctx, asOf, asof.OptionAllowBoundedStaleness)
 	if err != nil {
 		return nil, err
 	}
@@ -1928,7 +1942,7 @@ type SessionArgs struct {
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	syncutil.Mutex
-	sessions            map[ClusterWideID]registrySession
+	sessions            map[clusterunique.ID]registrySession
 	sessionsByCancelKey map[pgwirecancel.BackendKeyData]registrySession
 }
 
@@ -1936,13 +1950,13 @@ type SessionRegistry struct {
 // of sessions.
 func NewSessionRegistry() *SessionRegistry {
 	return &SessionRegistry{
-		sessions:            make(map[ClusterWideID]registrySession),
+		sessions:            make(map[clusterunique.ID]registrySession),
 		sessionsByCancelKey: make(map[pgwirecancel.BackendKeyData]registrySession),
 	}
 }
 
 func (r *SessionRegistry) register(
-	id ClusterWideID, queryCancelKey pgwirecancel.BackendKeyData, s registrySession,
+	id clusterunique.ID, queryCancelKey pgwirecancel.BackendKeyData, s registrySession,
 ) {
 	r.Lock()
 	defer r.Unlock()
@@ -1950,7 +1964,9 @@ func (r *SessionRegistry) register(
 	r.sessionsByCancelKey[queryCancelKey] = s
 }
 
-func (r *SessionRegistry) deregister(id ClusterWideID, queryCancelKey pgwirecancel.BackendKeyData) {
+func (r *SessionRegistry) deregister(
+	id clusterunique.ID, queryCancelKey pgwirecancel.BackendKeyData,
+) {
 	r.Lock()
 	defer r.Unlock()
 	delete(r.sessions, id)
@@ -1959,7 +1975,7 @@ func (r *SessionRegistry) deregister(id ClusterWideID, queryCancelKey pgwirecanc
 
 type registrySession interface {
 	user() security.SQLUsername
-	cancelQuery(queryID ClusterWideID) bool
+	cancelQuery(queryID clusterunique.ID) bool
 	cancelCurrentQueries() bool
 	cancelSession()
 	// serialize serializes a Session into a serverpb.Session
@@ -1970,7 +1986,7 @@ type registrySession interface {
 // CancelQuery looks up the associated query in the session registry and cancels
 // it. The caller is responsible for all permission checks.
 func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
-	queryID, err := StringToClusterWideID(queryIDStr)
+	queryID, err := clusterunique.IDFromString(queryIDStr)
 	if err != nil {
 		return false, errors.Wrapf(err, "query ID %s malformed", queryID)
 	}
@@ -2011,7 +2027,7 @@ func (r *SessionRegistry) CancelSession(
 	if len(sessionIDBytes) != 16 {
 		return nil, errors.Errorf("invalid non-16-byte UUID %v", sessionIDBytes)
 	}
-	sessionID := BytesToClusterWideID(sessionIDBytes)
+	sessionID := clusterunique.IDFromBytes(sessionIDBytes)
 
 	r.Lock()
 	defer r.Unlock()
@@ -3213,6 +3229,10 @@ func (m *sessionDataMutator) SetExpectAndIgnoreNotVisibleColumnsInCopy(val bool)
 
 func (m *sessionDataMutator) SetMultipleModificationsOfTable(val bool) {
 	m.data.MultipleModificationsOfTable = val
+}
+
+func (m *sessionDataMutator) SetShowPrimaryKeyConstraintOnNotVisibleColumns(val bool) {
+	m.data.ShowPrimaryKeyConstraintOnNotVisibleColumns = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

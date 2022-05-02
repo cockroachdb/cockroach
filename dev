@@ -16,10 +16,11 @@ fi
 if [[ ! -f "$BINARY_PATH" ]]; then
     echo "$BINARY_PATH not found, building..."
     mkdir -p $BINARY_DIR
-    bazel build //pkg/cmd/dev --//build/toolchains:nogo_flag
-    cp $(bazel info bazel-bin --//build/toolchains:nogo_flag)/pkg/cmd/dev/dev_/dev $BINARY_PATH
+    bazel build //pkg/cmd/dev --//build/toolchains:nogo_disable_flag
+    cp $(bazel info bazel-bin --//build/toolchains:nogo_disable_flag)/pkg/cmd/dev/dev_/dev $BINARY_PATH
     # The Bazel-built binary won't have write permissions.
     chmod a+w $BINARY_PATH
 fi
 
+cd $THIS_DIR
 exec $BINARY_PATH "$@"

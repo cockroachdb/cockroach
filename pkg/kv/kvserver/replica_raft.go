@@ -538,8 +538,84 @@ type handleSnapshotStats struct {
 }
 
 type handleRaftReadyStats struct {
-	applyCommittedEntriesStats
-	snap handleSnapshotStats
+	tBegin, tEnd time.Time
+
+	tApplicationBegin, tApplicationEnd time.Time
+	apply                              applyCommittedEntriesStats
+
+	tAppendBegin, tAppendEnd time.Time
+	appendedRegularCount     int
+	appendedSideloadedCount  int
+	appendedSideloadedBytes  int64
+	appendedRegularBytes     int64
+
+	tPebbleCommitBegin, tPebbleCommitEnd time.Time
+	pebbleBatchBytes                     int64
+
+	tSnapBegin, tSnapEnd time.Time
+	snap                 handleSnapshotStats
+	sync                 bool
+}
+
+// SafeFormat implements redact.SafeFormatter
+func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
+	dTotal := s.tEnd.Sub(s.tBegin)
+	dAppend := s.tAppendEnd.Sub(s.tAppendBegin)
+	dApply := s.tApplicationEnd.Sub(s.tApplicationBegin)
+	dPebble := s.tPebbleCommitEnd.Sub(s.tPebbleCommitBegin)
+	dSnap := s.tSnapEnd.Sub(s.tSnapBegin)
+	dUnaccounted := dTotal - dSnap - dAppend - dApply - dPebble
+
+	{
+		var sync redact.SafeString
+		if s.sync {
+			sync = "-sync"
+		}
+		p.Printf("raft ready handling: %.2fs [append=%.2fs, apply=%.2fs, commit-batch%s=%.2fs",
+			dTotal.Seconds(), dAppend.Seconds(), dApply.Seconds(), sync, dPebble.Seconds())
+	}
+	if dSnap > 0 {
+		p.Printf(", snap=%.2fs", dSnap.Seconds())
+	}
+	p.Printf(", other=%.2fs]", dUnaccounted.Seconds())
+
+	p.Printf(", wrote %s",
+		humanizeutil.IBytes(s.pebbleBatchBytes),
+	)
+	if s.sync {
+		p.SafeString(" sync")
+	}
+	p.SafeString(" [")
+
+	if b, n := s.appendedRegularBytes, s.appendedRegularCount; n > 0 || b > 0 {
+		p.Printf("append-ent=%s (%d), ", humanizeutil.IBytes(b), n)
+	}
+	if b, n := s.appendedSideloadedBytes, s.appendedSideloadedCount; n > 0 || b > 0 {
+		p.Printf("append-sst=%s (%d), ", humanizeutil.IBytes(b), n)
+	}
+	if b, n := s.apply.entriesProcessedBytes, s.apply.entriesProcessed; n > 0 || b > 0 {
+		p.Printf("apply=%s (%d", humanizeutil.IBytes(b), n)
+		if c := s.apply.batchesProcessed; c > 1 {
+			p.Printf(" in %d batches", c)
+		}
+		p.SafeString(")")
+	}
+	p.SafeString("]")
+
+	if n := s.apply.stateAssertions; n > 0 {
+		p.Printf(", state_assertions=%d", n)
+	}
+	if s.snap.offered {
+		if s.snap.applied {
+			p.Printf(", snapshot applied")
+		} else {
+			p.Printf(", snapshot ignored")
+		}
+	}
+}
+
+func (s handleRaftReadyStats) String() string {
+	return redact.StringWithoutMarkers(s)
 }
 
 // noSnap can be passed to handleRaftReady when no snapshot should be processed.
@@ -575,7 +651,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			"handleRaftReadyRaftMuLocked cannot be called with a cancellable context")
 	}
 
-	var stats handleRaftReadyStats
+	stats := handleRaftReadyStats{
+		tBegin: timeutil.Now(),
+	}
 	if inSnap.Desc != nil {
 		stats.snap.offered = true
 	}
@@ -675,10 +753,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			subsumedRepls, releaseMergeLock := r.maybeAcquireSnapshotMergeLock(ctx, inSnap)
 			defer releaseMergeLock()
 
+			stats.tSnapBegin = timeutil.Now()
 			if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState, subsumedRepls); err != nil {
 				const expl = "while applying snapshot"
 				return stats, expl, errors.Wrap(err, expl)
 			}
+			stats.tSnapEnd = timeutil.Now()
 			stats.snap.applied = true
 
 			// r.mu.lastIndex, r.mu.lastTerm and r.mu.raftLogSize were updated in
@@ -810,9 +890,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	prevLastIndex := lastIndex
 	if len(rd.Entries) > 0 {
+		stats.tAppendBegin = timeutil.Now()
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
-		thinEntries, sideLoadedEntriesSize, err := r.maybeSideloadEntriesRaftMuLocked(ctx, rd.Entries)
+		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := r.maybeSideloadEntriesRaftMuLocked(ctx, rd.Entries)
 		if err != nil {
 			const expl = "during sideloading"
 			return stats, expl, errors.Wrap(err, expl)
@@ -824,7 +905,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			const expl = "during append"
 			return stats, expl, errors.Wrap(err, expl)
 		}
+		stats.appendedRegularCount += len(thinEntries) - numSideloaded
+		stats.appendedRegularBytes += otherEntriesSize
+		stats.appendedSideloadedCount += numSideloaded
+		stats.appendedSideloadedBytes += sideLoadedEntriesSize
+		stats.tAppendEnd = timeutil.Now()
 	}
+
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if !r.IsInitialized() && rd.HardState.Commit != 0 {
 			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
@@ -855,14 +942,18 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// uncommitted log entries, and even if they did include log entries that
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
-	commitStart := timeutil.Now()
-	if err := batch.Commit(rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
+	stats.tPebbleCommitBegin = timeutil.Now()
+	stats.pebbleBatchBytes = int64(batch.Len())
+	sync := rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)
+	if err := batch.Commit(sync); err != nil {
 		const expl = "while committing batch"
 		return stats, expl, errors.Wrap(err, expl)
 	}
+	stats.sync = sync
+	stats.tPebbleCommitEnd = timeutil.Now()
 	if rd.MustSync {
-		elapsed := timeutil.Since(commitStart)
-		r.store.metrics.RaftLogCommitLatency.RecordValue(elapsed.Nanoseconds())
+		r.store.metrics.RaftLogCommitLatency.RecordValue(
+			stats.tPebbleCommitEnd.Sub(stats.tPebbleCommitBegin).Nanoseconds())
 	}
 
 	if len(rd.Entries) > 0 {
@@ -914,10 +1005,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.sendRaftMessagesRaftMuLocked(ctx, otherMsgs)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 
-	applicationStart := timeutil.Now()
+	stats.tApplicationBegin = timeutil.Now()
 	if len(rd.CommittedEntries) > 0 {
 		err := appTask.ApplyCommittedEntries(ctx)
-		stats.applyCommittedEntriesStats = sm.moveStats()
+		stats.apply = sm.moveStats()
 		if errors.Is(err, apply.ErrRemoved) {
 			// We know that our replica has been removed. All future calls to
 			// r.withRaftGroup() will return errRemoved so no future Ready objects
@@ -936,7 +1027,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// resubmit pending config changes, but it's hard to distinguish so we
 		// resubmit everything anyway). We delay resubmission until after we have
 		// processed the entire batch of entries.
-		if stats.numEmptyEntries > 0 {
+		if stats.apply.numEmptyEntries > 0 {
 			// Overwrite unconditionally since this is the most aggressive
 			// reproposal mode.
 			if !r.store.TestingKnobs().DisableRefreshReasonNewLeaderOrConfigChange {
@@ -944,7 +1035,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 		}
 	}
-	applicationElapsed := timeutil.Since(applicationStart).Nanoseconds()
+	stats.tApplicationEnd = timeutil.Now()
+	applicationElapsed := stats.tApplicationEnd.Sub(stats.tApplicationBegin).Nanoseconds()
 	r.store.metrics.RaftApplyCommittedLatency.RecordValue(applicationElapsed)
 	r.store.metrics.RaftCommandsApplied.Inc(int64(len(rd.CommittedEntries)))
 	if r.store.TestingKnobs().EnableUnconditionalRefreshesInRaftReady {
@@ -965,7 +1057,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.Lock()
 	err = r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
-		if stats.numConfChangeEntries > 0 {
+		if stats.apply.numConfChangeEntries > 0 {
 			// If the raft leader got removed, campaign the first remaining voter.
 			//
 			// NB: this must be called after Advance() above since campaigning is
@@ -1001,6 +1093,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// quota back at the end of handleRaftReadyRaftMuLocked, the next write will
 	// get blocked.
 	r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
+	stats.tEnd = timeutil.Now()
 	return stats, "", nil
 }
 
@@ -1506,7 +1599,6 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 type snapTruncationInfo struct {
 	index          uint64
 	recipientStore roachpb.StoreID
-	deadline       time.Time
 }
 
 func (r *Replica) addSnapshotLogTruncationConstraint(
@@ -1541,46 +1633,39 @@ func (r *Replica) addSnapshotLogTruncationConstraintLocked(
 
 // completeSnapshotLogTruncationConstraint marks the given snapshot as finished,
 // releasing the lock on raft log truncation after a grace period.
-func (r *Replica) completeSnapshotLogTruncationConstraint(
-	ctx context.Context, snapUUID uuid.UUID, now time.Time,
-) {
+func (r *Replica) completeSnapshotLogTruncationConstraint(snapUUID uuid.UUID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	item, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
+	_, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
 	if !ok {
 		// UUID collision while adding the snapshot in originally. Nothing
 		// else to do.
 		return
 	}
-
-	deadline := now.Add(RaftLogQueuePendingSnapshotGracePeriod)
-	item.deadline = deadline
-	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
+	delete(r.mu.snapshotLogTruncationConstraints, snapUUID)
+	if len(r.mu.snapshotLogTruncationConstraints) == 0 {
+		// Save a little bit of memory.
+		r.mu.snapshotLogTruncationConstraints = nil
+	}
 }
 
-// getAndGCSnapshotLogTruncationConstraints returns the minimum index of any
+// getSnapshotLogTruncationConstraints returns the minimum index of any
 // currently outstanding snapshot being sent from this replica to the specified
 // recipient or 0 if there isn't one. Passing 0 for recipientStore means any
 // recipient.
-func (r *Replica) getAndGCSnapshotLogTruncationConstraints(
-	now time.Time, recipientStore roachpb.StoreID,
+func (r *Replica) getSnapshotLogTruncationConstraints(
+	recipientStore roachpb.StoreID,
 ) (minSnapIndex uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.getAndGCSnapshotLogTruncationConstraintsLocked(now, recipientStore)
+	return r.getSnapshotLogTruncationConstraintsLocked(recipientStore)
 }
 
-func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
-	now time.Time, recipientStore roachpb.StoreID,
+func (r *Replica) getSnapshotLogTruncationConstraintsLocked(
+	recipientStore roachpb.StoreID,
 ) (minSnapIndex uint64) {
-	for snapUUID, item := range r.mu.snapshotLogTruncationConstraints {
-		if item.deadline != (time.Time{}) && item.deadline.Before(now) {
-			// The snapshot has finished and its grace period has passed.
-			// Ignore it when making truncation decisions.
-			delete(r.mu.snapshotLogTruncationConstraints, snapUUID)
-			continue
-		}
+	for _, item := range r.mu.snapshotLogTruncationConstraints {
 		if recipientStore != 0 && item.recipientStore != recipientStore {
 			continue
 		}
@@ -1588,11 +1673,25 @@ func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
 			minSnapIndex = item.index
 		}
 	}
-	if len(r.mu.snapshotLogTruncationConstraints) == 0 {
-		// Save a little bit of memory.
-		r.mu.snapshotLogTruncationConstraints = nil
-	}
 	return minSnapIndex
+}
+
+// hasOutstandingLearnerSnapshotInFlight returns true if there is a snapshot in
+// progress from this replica to a learner replica for this range.
+func (r *Replica) hasOutstandingLearnerSnapshotInFlight() bool {
+	learners := r.Desc().Replicas().LearnerDescriptors()
+	for _, repl := range learners {
+		if r.hasOutstandingSnapshotInFlightToStore(repl.StoreID) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasOutstandingSnapshotInFlightToStore returns true if there is a snapshot in
+// flight from this replica to the store with the given ID.
+func (r *Replica) hasOutstandingSnapshotInFlightToStore(storeID roachpb.StoreID) bool {
+	return r.getSnapshotLogTruncationConstraints(storeID) > 0
 }
 
 func isRaftLeader(raftStatus *raft.Status) bool {

@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -84,7 +86,7 @@ func (cdd *ColumnDefDescs) ForEachTypedExpr(fn func(tree.TypedExpr) error) error
 //
 // See the ColumnDefDescs definition for a description of the return values.
 func MakeColumnDefDescs(
-	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *eval.Context,
 ) (*ColumnDefDescs, error) {
 	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
@@ -146,7 +148,7 @@ func MakeColumnDefDescs(
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
 		ret.DefaultExpr, err = schemaexpr.SanitizeVarFreeExpr(
-			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, tree.VolatilityVolatile,
+			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, volatility.Volatile,
 		)
 		if err != nil {
 			return nil, err
@@ -166,7 +168,7 @@ func MakeColumnDefDescs(
 		// Verify the on update expression type is compatible with the column type
 		// and does not contain invalid functions.
 		ret.OnUpdateExpr, err = schemaexpr.SanitizeVarFreeExpr(
-			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, tree.VolatilityVolatile,
+			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, volatility.Volatile,
 		)
 		if err != nil {
 			return nil, err
@@ -225,7 +227,7 @@ func MakeColumnDefDescs(
 func EvalShardBucketCount(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	shardBuckets tree.Expr,
 	storageParams tree.StorageParams,
 ) (int32, error) {
@@ -251,12 +253,12 @@ func EvalShardBucketCount(
 			shardBuckets = paramVal
 		}
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-			ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,
+			ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, volatility.Volatile,
 		)
 		if err != nil {
 			return 0, err
 		}
-		d, err := typedExpr.Eval(evalCtx)
+		d, err := eval.Expr(evalCtx, typedExpr)
 		if err != nil {
 			return 0, pgerror.Wrapf(err, pgcode.InvalidParameterValue, invalidBucketCountMsg, typedExpr)
 		}
@@ -315,24 +317,6 @@ func (desc *wrapper) collectConstraintInfo(
 			if _, ok := info[index.Name]; ok {
 				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
-			}
-			colHiddenMap := make(map[descpb.ColumnID]bool, len(desc.Columns))
-			for i := range desc.Columns {
-				col := &desc.Columns[i]
-				colHiddenMap[col.ID] = col.Hidden
-			}
-			// Don't include constraints against only hidden columns.
-			// This prevents the auto-created rowid primary key index from showing up
-			// in show constraints.
-			hidden := true
-			for _, id := range index.KeyColumnIDs {
-				if !colHiddenMap[id] {
-					hidden = false
-					break
-				}
-			}
-			if hidden {
-				continue
 			}
 			indexName := index.Name
 			// If a primary key swap is occurring, then the primary index name can

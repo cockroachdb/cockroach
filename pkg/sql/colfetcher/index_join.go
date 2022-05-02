@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -28,9 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -126,7 +127,7 @@ type ColIndexJoin struct {
 		*kvstreamer.Streamer
 		budgetAcc   *mon.BoundAccount
 		budgetLimit int64
-		diskMonitor *mon.BytesMonitor
+		diskBuffer  kvstreamer.ResultDiskBuffer
 	}
 }
 
@@ -163,8 +164,7 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 			mode,
 			kvstreamer.Hints{UniqueRequests: true},
 			int(s.cf.table.spec.MaxKeysPerRow),
-			s.flowCtx.Cfg.TempStorage,
-			s.streamerInfo.diskMonitor,
+			s.streamerInfo.diskBuffer,
 		)
 	}
 }
@@ -218,12 +218,15 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				continue
 			}
 
-			if !s.maintainOrdering {
+			if !s.usesStreamer && !s.maintainOrdering {
 				// Sort the spans when !maintainOrdering. This allows lower layers to
 				// optimize iteration over the data. Note that the looked up rows are
 				// output unchanged, in the retrieval order, so it is not safe to do
 				// this when maintainOrdering is true (the ordering to be maintained
 				// may be different than the ordering in the index).
+				//
+				// We don't want to sort the spans here if we're using the
+				// Streamer since it will perform the sort on its own.
 				sort.Sort(spans)
 			}
 
@@ -547,7 +550,9 @@ func NewColIndexJoin(
 		if spec.MaintainOrdering && diskMonitor == nil {
 			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
 		}
-		op.streamerInfo.diskMonitor = diskMonitor
+		op.streamerInfo.diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
+			flowCtx.Cfg.TempStorage, diskMonitor,
+		)
 		if memoryLimit < op.mem.inputBatchSizeLimit {
 			// If we have a low workmem limit, then we want to reduce the input
 			// batch size limit.

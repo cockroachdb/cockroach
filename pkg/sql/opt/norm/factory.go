@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -62,7 +64,7 @@ type AppliedRuleFunc func(ruleName opt.RuleName, source, target opt.Expr)
 // Optgen DSL, the factory always calls the `onConstruct` method as its last
 // step, in order to allow any custom manual code to execute.
 type Factory struct {
-	evalCtx *tree.EvalContext
+	evalCtx *eval.Context
 
 	// mem is the Memo data structure that the factory builds.
 	mem *memo.Memo
@@ -104,12 +106,18 @@ type Factory struct {
 // expression that is not fully optimized.
 const maxConstructorStackDepth = 10_000
 
+// Injecting this builtins dependency in the init function allows the memo
+// package to access builtin properties without importing the builtins package.
+func init() {
+	memo.GetBuiltinProperties = builtins.GetBuiltinProperties
+}
+
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
 //
 // By default, a factory only constant-folds immutable operators; this can be
 // changed using FoldingControl().AllowStableFolds().
-func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
+func (f *Factory) Init(evalCtx *eval.Context, catalog cat.Catalog) {
 	// Initialize (or reinitialize) the memo.
 	mem := f.mem
 	if mem == nil {
@@ -191,8 +199,8 @@ func (f *Factory) CustomFuncs() *CustomFuncs {
 	return &f.funcs
 }
 
-// EvalContext returns the *tree.EvalContext of the factory.
-func (f *Factory) EvalContext() *tree.EvalContext {
+// EvalContext returns the *eval.Context of the factory.
+func (f *Factory) EvalContext() *eval.Context {
 	return f.evalCtx
 }
 
@@ -284,7 +292,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	var replaceFn ReplaceFunc
 	replaceFn = func(e opt.Expr) opt.Expr {
 		if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
-			d, err := e.(*memo.PlaceholderExpr).Value.Eval(f.evalCtx)
+			d, err := eval.Expr(f.evalCtx, e.(*memo.PlaceholderExpr).Value)
 			if err != nil {
 				panic(err)
 			}
@@ -420,4 +428,34 @@ func (f *Factory) ConstructConstVal(d tree.Datum, t *types.T) opt.ScalarExpr {
 		return memo.FalseSingleton
 	}
 	return f.ConstructConst(d, t)
+}
+
+// ----------------------------------------------------------------------
+//
+// Convenience functions.
+//
+// ----------------------------------------------------------------------
+
+// RemapCols remaps columns IDs in the input ScalarExpr by replacing occurrences
+// of the keys of colMap with the corresponding values. If column IDs are
+// encountered in the input ScalarExpr that are not keys in colMap, they are not
+// remapped.
+func (f *Factory) RemapCols(scalar opt.ScalarExpr, colMap opt.ColMap) opt.ScalarExpr {
+	// Recursively walk the scalar sub-tree looking for references to columns
+	// that need to be replaced and then replace them appropriately.
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			dstCol, ok := colMap.Get(int(t.Col))
+			if !ok {
+				// The column ID is not in colMap so no replacement is required.
+				return e
+			}
+			return f.ConstructVariable(opt.ColumnID(dstCol))
+		}
+		return f.Replace(e, replace)
+	}
+
+	return replace(scalar).(opt.ScalarExpr)
 }

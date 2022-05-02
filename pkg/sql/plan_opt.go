@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -583,7 +584,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	stmt *Statement,
 	f exec.Factory,
 	mem *memo.Memo,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	allowAutoCommit bool,
 ) error {
 	var result *planComponents

@@ -370,11 +370,11 @@ func selectTargets(
 		for _, tenant := range lastBackupManifest.GetTenants() {
 			// TODO(dt): for now it is zero-or-one but when that changes, we should
 			// either keep it sorted or build a set here.
-			if tenant.ID == targets.TenantID.ToUint64() {
+			if tenant.ID == targets.TenantID.ID {
 				return nil, nil, []descpb.TenantInfoWithUsage{tenant}, nil
 			}
 		}
-		return nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.TenantID.ToUint64())
+		return nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.TenantID.ID)
 	}
 
 	matched, err := backupresolver.DescriptorsMatchingTargets(ctx,

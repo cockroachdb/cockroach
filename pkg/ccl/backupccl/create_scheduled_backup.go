@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -62,8 +63,8 @@ var scheduledBackupOptionExpectValues = map[string]sql.KVStringOptValidate{
 var scheduledBackupGCProtectionEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"schedules.backup.gc_protection.enabled",
-	"enable chaining of GC protection across backups run as part of a schedule; default is false",
-	false, /* defaultValue */
+	"enable chaining of GC protection across backups run as part of a schedule",
+	true, /* defaultValue */
 ).WithPublic()
 
 // scheduledBackupEval is a representation of tree.ScheduledBackup, prepared
@@ -169,7 +170,7 @@ func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error)
 	return details, nil
 }
 
-func scheduleFirstRun(evalCtx *tree.EvalContext, opts map[string]string) (*time.Time, error) {
+func scheduleFirstRun(evalCtx *eval.Context, opts map[string]string) (*time.Time, error) {
 	if v, ok := opts[optFirstRun]; ok {
 		firstRun, _, err := tree.ParseDTimestampTZ(evalCtx, v, time.Microsecond)
 		if err != nil {
@@ -235,42 +236,6 @@ func pickFullRecurrenceFromIncremental(inc *scheduleRecurrence) *scheduleRecurre
 }
 
 const scheduleBackupOp = "CREATE SCHEDULE FOR BACKUP"
-
-// canChainProtectedTimestampRecords returns true if the schedule is eligible to
-// participate in the chaining of protected timestamp records between backup
-// jobs running as part of the schedule.
-// Currently, full cluster backups, tenant backups and table backups with
-// revision history can enable chaining, as the spans to be protected remain
-// constant across all backups in the chain. Unlike in database backups where a
-// table could be created in between backups thereby widening the scope of what
-// is to be protected.
-func canChainProtectedTimestampRecords(p sql.PlanHookState, eval *scheduledBackupEval) bool {
-	if !scheduledBackupGCProtectionEnabled.Get(&p.ExecCfg().Settings.SV) ||
-		!eval.BackupOptions.CaptureRevisionHistory {
-		return false
-	}
-
-	// Check if this is a full cluster backup.
-	if eval.Coverage() == tree.AllDescriptors {
-		return true
-	}
-
-	// Check if there are any wildcard table selectors in the specified table
-	// targets. If we find a wildcard selector then we cannot chain PTS records
-	// because of the reason outlined in the comment above the method.
-	for _, t := range eval.Targets.Tables {
-		pattern, err := t.NormalizeTablePattern()
-		if err != nil {
-			return false
-		}
-		if _, ok := pattern.(*tree.AllTablesSelector); ok {
-			return false
-		}
-	}
-
-	// Return true if the backup has table targets or is backing up a tenant.
-	return eval.Targets.Tables != nil || eval.Targets.TenantID.IsSet()
-}
 
 // doCreateBackupSchedule creates requested schedule (or schedules).
 // It is a plan hook implementation responsible for the creating of scheduled backup.
@@ -415,7 +380,7 @@ func doCreateBackupSchedules(
 		}
 	}
 
-	evalCtx := &p.ExtendedEvalContext().EvalContext
+	evalCtx := &p.ExtendedEvalContext().Context
 	firstRun, err := scheduleFirstRun(evalCtx, scheduleOptions)
 	if err != nil {
 		return err
@@ -435,7 +400,7 @@ func doCreateBackupSchedules(
 	var inc *jobs.ScheduledJob
 	var incScheduledBackupArgs *ScheduledBackupExecutionArgs
 	if incRecurrence != nil {
-		chainProtectedTimestampRecords = canChainProtectedTimestampRecords(p, eval)
+		chainProtectedTimestampRecords = scheduledBackupGCProtectionEnabled.Get(&p.ExecCfg().Settings.SV)
 		backupNode.AppendToLatest = true
 
 		var incDests []string

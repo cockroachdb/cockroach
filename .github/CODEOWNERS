@@ -122,6 +122,7 @@
 /pkg/geo/                    @cockroachdb/geospatial
 
 /pkg/kv/                     @cockroachdb/kv-prs
+/pkg/kv/kvclient/kvstreamer  @cockroachdb/sql-queries
 
 /pkg/storage/                @cockroachdb/storage
 
@@ -182,6 +183,7 @@
 /pkg/cmd/docs-issue-generation/ @cockroachdb/dev-inf
 /pkg/cmd/fuzz/               @cockroachdb/test-eng
 /pkg/cmd/generate-binary/    @cockroachdb/sql-experience
+/pkg/cmd/generate-distdir/ @cockroachdb/dev-inf
 /pkg/cmd/generate-metadata-tables/ @cockroachdb/sql-experience
 /pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/geospatial
 /pkg/cmd/generate-test-suites/ @cockroachdb/dev-inf

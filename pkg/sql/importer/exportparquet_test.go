@@ -20,16 +20,20 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -147,7 +151,7 @@ func validateParquetFile(
 			// If we're encoding a DOidWrapper, then we want to cast the wrapped datum.
 			// Note that we pass in nil as the first argument since we're not interested
 			// in evaluating the placeholders.
-			validateDatum(t, tree.UnwrapDatum(nil, test.datums[i][j]), tree.UnwrapDatum(nil, datum),
+			validateDatum(t, eval.UnwrapDatum(nil, test.datums[i][j]), eval.UnwrapDatum(nil, datum),
 				test.cols[j].Typ)
 		}
 		i++
@@ -192,9 +196,11 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *ty
 
 func TestRandomParquetExports(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 80780, "flaky test")
 	defer log.Scope(t).Close(t)
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
+	defer utilccl.TestingEnableEnterprise()()
 	dbName := "rand"
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase:   dbName,
@@ -218,6 +224,7 @@ func TestRandomParquetExports(t *testing.T) {
 		)
 
 		stmts := randgen.RandCreateTables(rng, tablePrefix, numTables,
+			false, /* isMultiRegion */
 			randgen.PartialIndexMutator,
 			randgen.ForeignKeyMutator,
 		)

@@ -22,7 +22,7 @@ import (
 type LoadEvent struct {
 	isWrite bool
 	size    int64
-	key     int64
+	Key     int64
 }
 
 // WorkloadGenerator generates workload where each op contains: key,
@@ -94,7 +94,7 @@ func (rwg *RandomWorkloadGenerator) maybeUpdateBuffer(maxTime time.Time) {
 			LoadEvent{
 				size:    int64(rwg.rand.Intn(rwg.maxSize-rwg.minSize+1) + rwg.minSize),
 				isWrite: false,
-				key:     rwg.keyGenerator.readKey(),
+				Key:     rwg.keyGenerator.readKey(),
 			})
 	}
 	for write := 0; write < writes; write++ {
@@ -102,7 +102,7 @@ func (rwg *RandomWorkloadGenerator) maybeUpdateBuffer(maxTime time.Time) {
 			LoadEvent{
 				size:    int64(rwg.rand.Intn(rwg.maxSize-rwg.minSize+1) + rwg.minSize),
 				isWrite: true,
-				key:     rwg.keyGenerator.writeKey(),
+				Key:     rwg.keyGenerator.writeKey(),
 			})
 	}
 	rwg.lastRun = maxTime

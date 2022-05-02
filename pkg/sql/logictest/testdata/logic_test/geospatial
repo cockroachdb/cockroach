@@ -3447,6 +3447,35 @@ FROM (VALUES
 33    66
 NULL  NULL
 
+# ST_XMin, ST_XMax, ST_YMin, ST_YMax on point geometries
+query RR
+SELECT
+  st_xmin(a.geom),
+  st_ymin(a.geom)
+FROM (VALUES
+  ('POINT(1.0 2.0)'::geometry),
+  ('POINT(33.0 66.0)'::geometry),
+  ('POINT EMPTY'::geometry)
+) a(geom)
+----
+1     2
+33    66
+NULL  NULL
+
+query RR
+SELECT
+  st_xmax(a.geom),
+  st_ymax(a.geom)
+FROM (VALUES
+  ('POINT(1.0 2.0)'::geometry),
+  ('POINT(33.0 66.0)'::geometry),
+  ('POINT EMPTY'::geometry)
+) a(geom)
+----
+1     2
+33    66
+NULL  NULL
+
 statement error argument to st_x\(\) must have shape POINT
 SELECT st_x('LINESTRING(0.0 0.0, 1.0 1.0)')
 
@@ -3499,6 +3528,27 @@ FROM (VALUES
 2  1     1     LINESTRING (0 0, 1 0, 1 1, 0 0)            NULL  LINESTRING (0.1 0.1, 0.9 0.1, 0.9 0.9, 0.1 0.1)            NULL
 2  1     1     SRID=4326;LINESTRING (0 0, 1 0, 1 1, 0 0)  NULL  SRID=4326;LINESTRING (0.1 0.1, 0.9 0.1, 0.9 0.9, 0.1 0.1)  NULL
 0  NULL  NULL  NULL                                       NULL  NULL                                                       NULL
+
+# ST_XMin, ST_XMax, ST_YMin, ST_YMax on polygon and linestring geometries
+query RRRR
+SELECT
+  ST_xmin(a.geom),
+  ST_xmax(a.geom),
+  ST_ymin(a.geom),
+  ST_ymax(a.geom)
+FROM (VALUES
+  ('POLYGON EMPTY'::geometry),
+  ('POLYGON((0 0,1 0, 1 1, 0 0))'::geometry),
+  ('POLYGON((0 0,2 0, 2 2, 0 0),(0.1 0.1,0.9 0.1, 0.9 0.9, 0.1 0.1))'::geometry),
+  ('SRID=4326;POLYGON((0 0,1 0, 1 1, 0 0),(0.1 0.1,0.9 0.1, 0.9 0.9, 0.1 0.1))'::geometry),
+  ('LINESTRING EMPTY'::geometry)
+) a(geom)
+----
+NULL  NULL  NULL  NULL
+0     1     0     1
+0     2     0     2
+0     1     0     1
+NULL  NULL  NULL  NULL
 
 statement error argument must be LINESTRING geometries
 SELECT ST_MakePolygon('MULTIPOINT(0 0, 1 1)')
@@ -5892,3 +5942,14 @@ FROM ( VALUES
 ----
 false  false  false
 false  false  false
+
+# ST_MakeEnvelope
+query T
+SELECT ST_AsEWKT(ST_MakeEnvelope(30.01,50.01,72.01,52.01,4326))
+----
+SRID=4326;POLYGON ((30.010000000000002 50.009999999999998, 30.010000000000002 52.009999999999998, 72.010000000000005 52.009999999999998, 72.010000000000005 50.009999999999998, 30.010000000000002 50.009999999999998))
+
+query T
+SELECT ST_AsEWKT(ST_MakeEnvelope(30.01,50.01,72.01,52.01))
+----
+POLYGON ((30.010000000000002 50.009999999999998, 30.010000000000002 52.009999999999998, 72.010000000000005 52.009999999999998, 72.010000000000005 50.009999999999998, 30.010000000000002 50.009999999999998))

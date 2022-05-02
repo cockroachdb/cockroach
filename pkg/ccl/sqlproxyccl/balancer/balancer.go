@@ -12,12 +12,11 @@ import (
 	"container/list"
 	"context"
 	"math"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -90,15 +89,6 @@ func TimeSource(ts timeutil.TimeSource) Option {
 // Balancer handles load balancing of SQL connections within the proxy.
 // All methods on the Balancer instance are thread-safe.
 type Balancer struct {
-	// mu synchronizes access to fields in the struct.
-	mu struct {
-		syncutil.Mutex
-
-		// rng corresponds to the random number generator instance which will
-		// be used for load balancing.
-		rng *rand.Rand
-	}
-
 	// stopper is used to start async tasks (e.g. transfer requests) within the
 	// balancer.
 	stopper *stop.Stopper
@@ -111,6 +101,8 @@ type Balancer struct {
 	directoryCache tenant.DirectoryCache
 
 	// connTracker is used to track connections within the proxy.
+	//
+	// TODO(jaylim-crl): Rename connTracker to tracker.
 	connTracker *ConnTracker
 
 	// queue represents the rebalancer queue. All transfer requests should be
@@ -134,7 +126,6 @@ func NewBalancer(
 	stopper *stop.Stopper,
 	metrics *Metrics,
 	directoryCache tenant.DirectoryCache,
-	connTracker *ConnTracker,
 	opts ...Option,
 ) (*Balancer, error) {
 	// Handle options.
@@ -160,13 +151,15 @@ func NewBalancer(
 	b := &Balancer{
 		stopper:        stopper,
 		metrics:        metrics,
-		connTracker:    connTracker,
 		directoryCache: directoryCache,
 		queue:          q,
 		processSem:     semaphore.New(options.maxConcurrentRebalances),
 		timeSource:     options.timeSource,
 	}
-	b.mu.rng, _ = randutil.NewPseudoRand()
+	b.connTracker, err = NewConnTracker(ctx, b.stopper, b.timeSource)
+	if err != nil {
+		return nil, err
+	}
 
 	// Run queue processor to handle rebalance requests.
 	if err := b.stopper.RunAsyncTask(ctx, "processQueue", b.processQueue); err != nil {
@@ -186,20 +179,31 @@ func NewBalancer(
 // SelectTenantPod selects a tenant pod from the given list based on a weighted
 // CPU load algorithm. It is expected that all pods within the list belongs to
 // the same tenant. If no pods are available, this returns ErrNoAvailablePods.
+//
+// TODO(jaylim-crl): Rename this to SelectSQLServer(requester, tenantID, clusterName)
+// which returns a ServerAssignment.
 func (b *Balancer) SelectTenantPod(pods []*tenant.Pod) (*tenant.Pod, error) {
-	pod := selectTenantPod(b.randFloat32(), pods)
+	// The second case should not happen if the directory is returning the
+	// right data. Check it regardless or else roachpb.MakeTenantID will panic
+	// on a zero TenantID.
+	if len(pods) == 0 || pods[0].TenantID == 0 {
+		return nil, ErrNoAvailablePods
+	}
+	tenantID := roachpb.MakeTenantID(pods[0].TenantID)
+	tenantEntry := b.connTracker.getEntry(tenantID, true /* allowCreate */)
+	pod := selectTenantPod(pods, tenantEntry)
 	if pod == nil {
 		return nil, ErrNoAvailablePods
 	}
 	return pod, nil
 }
 
-// randFloat32 generates a random float32 within the bounds [0, 1) and is
-// thread-safe.
-func (b *Balancer) randFloat32() float32 {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.mu.rng.Float32()
+// GetTracker returns the tracker associated with the balancer.
+//
+// TODO(jaylim-crl): Remove GetTracker entirely once SelectTenantPod returns
+// a ServerAssignment instead of a pod.
+func (b *Balancer) GetTracker() *ConnTracker {
+	return b.connTracker
 }
 
 // processQueue runs on a background goroutine, and invokes TransferConnection
@@ -236,14 +240,12 @@ func (b *Balancer) processQueue(ctx context.Context) {
 
 			// Each request is retried up to maxTransferAttempts.
 			for i := 0; i < maxTransferAttempts && ctx.Err() == nil; i++ {
-				err := req.conn.TransferConnection(req.dst)
-				if err == nil || errors.Is(err, context.Canceled) ||
-					req.dst == req.conn.ServerRemoteAddr() {
+				err := req.conn.TransferConnection()
+				if err == nil || errors.Is(err, context.Canceled) {
 					break
 				}
 
-				// Retry again if the connection hasn't been closed or
-				// transferred to the destination.
+				// Retry again if the connection hasn't been closed.
 				time.Sleep(250 * time.Millisecond)
 			}
 		}); err != nil {
@@ -281,8 +283,8 @@ func (b *Balancer) rebalanceLoop(ctx context.Context) {
 // also want to rate limit the number of rebalances per tenant for requests
 // coming from the pod watcher.
 func (b *Balancer) rebalance(ctx context.Context) {
-	// GetTenantIDs ensures that tenants will have at least one connection.
-	tenantIDs := b.connTracker.GetTenantIDs()
+	// getTenantIDs ensures that tenants will have at least one connection.
+	tenantIDs := b.connTracker.getTenantIDs()
 
 	for _, tenantID := range tenantIDs {
 		tenantPods, err := b.directoryCache.TryLookupTenantPods(ctx, tenantID)
@@ -346,10 +348,6 @@ func (b *Balancer) rebalance(ctx context.Context) {
 			}
 
 			for _, c := range podConns {
-				// TODO(jaylim-crl): We currently transfer without a dest, which
-				// will result in using the weighted CPU algorithm to assign
-				// pods. Once we start using a leastconns algorithm, we can make
-				// better decisions here, and specify a destination.
 				b.queue.enqueue(&rebalanceRequest{
 					createdAt: b.timeSource.Now(),
 					conn:      c,
@@ -359,16 +357,10 @@ func (b *Balancer) rebalance(ctx context.Context) {
 	}
 }
 
-// rebalanceRequest corresponds to a rebalance request. For now, this only
-// indicates where the connection should be transferred to through dst.
-//
-// TODO(jaylim-crl): Consider adding src, and evaluating that before invoking
-// the transfer operation to handle the case where a transfer was in progress
-// when a new request was added to the queue.
+// rebalanceRequest corresponds to a rebalance request.
 type rebalanceRequest struct {
 	createdAt time.Time
 	conn      ConnectionHandle
-	dst       string
 }
 
 // balancerQueue represents the balancer's internal queue which is used for

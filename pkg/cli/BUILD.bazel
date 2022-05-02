@@ -68,7 +68,7 @@ go_library(
     ],
     # keep
     cdeps = [
-        "@com_github_cockroachdb_cockroach//c-deps:libjemalloc",
+        "//c-deps:libjemalloc",
     ],
     cgo = True,
     # keep
@@ -158,6 +158,7 @@ go_library(
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlstats",
         "//pkg/startupmigrations",

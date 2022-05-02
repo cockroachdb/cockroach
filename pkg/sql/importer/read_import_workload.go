@@ -21,11 +21,13 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -37,22 +39,24 @@ import (
 
 type workloadReader struct {
 	semaCtx     *tree.SemaContext
-	evalCtx     *tree.EvalContext
+	evalCtx     *eval.Context
 	table       catalog.TableDescriptor
 	kvCh        chan row.KVBatch
 	parallelism int
+	db          *kv.DB
 }
 
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	table catalog.TableDescriptor,
 	kvCh chan row.KVBatch,
 	parallelism int,
+	db *kv.DB,
 ) *workloadReader {
-	return &workloadReader{semaCtx: semaCtx, evalCtx: evalCtx, table: table, kvCh: kvCh, parallelism: parallelism}
+	return &workloadReader{semaCtx: semaCtx, evalCtx: evalCtx, table: table, kvCh: kvCh, parallelism: parallelism, db: db}
 }
 
 func (w *workloadReader) start(ctx ctxgroup.Group) {
@@ -61,7 +65,7 @@ func (w *workloadReader) start(ctx ctxgroup.Group) {
 // makeDatumFromColOffset tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
 func makeDatumFromColOffset(
-	alloc *tree.DatumAlloc, hint *types.T, evalCtx *tree.EvalContext, col coldata.Vec, rowIdx int,
+	alloc *tree.DatumAlloc, hint *types.T, evalCtx *eval.Context, col coldata.Vec, rowIdx int,
 ) (tree.Datum, error) {
 	if col.Nulls().NullAt(rowIdx) {
 		return tree.DNull, nil
@@ -164,7 +168,7 @@ func (w *workloadReader) readFiles(
 		}
 
 		wc := NewWorkloadKVConverter(
-			fileID, w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh)
+			fileID, w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh, w.db)
 		wcs = append(wcs, wc)
 	}
 
@@ -186,6 +190,7 @@ type WorkloadKVConverter struct {
 	batchIdxAtomic int64
 	batchEnd       int
 	kvCh           chan row.KVBatch
+	db             *kv.DB
 
 	// For progress reporting
 	fileID                int32
@@ -201,6 +206,7 @@ func NewWorkloadKVConverter(
 	rows workload.BatchedTuples,
 	batchStart, batchEnd int,
 	kvCh chan row.KVBatch,
+	db *kv.DB,
 ) *WorkloadKVConverter {
 	return &WorkloadKVConverter{
 		tableDesc:      tableDesc,
@@ -210,6 +216,7 @@ func NewWorkloadKVConverter(
 		kvCh:           kvCh,
 		totalBatches:   float32(batchEnd - batchStart),
 		fileID:         fileID,
+		db:             db,
 	}
 }
 
@@ -224,10 +231,10 @@ func NewWorkloadKVConverter(
 //
 // This worker needs its own EvalContext and DatumAlloc.
 func (w *WorkloadKVConverter) Worker(
-	ctx context.Context, evalCtx *tree.EvalContext, semaCtx *tree.SemaContext,
+	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext,
 ) error {
 	conv, err := row.NewDatumRowConverter(ctx, semaCtx, w.tableDesc, nil, /* targetColNames */
-		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */)
+		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */, w.db)
 	if err != nil {
 		return err
 	}

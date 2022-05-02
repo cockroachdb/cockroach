@@ -38,17 +38,20 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("error during open", func(t *testing.T) {
+		f := &forwarder{}
 		c := &connector{
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: make(map[string]string),
 			},
 		}
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context, opts *dialOptions) (net.Conn, error) {
-			require.Equal(t, "custom-addr", opts.dstAddr)
+		c.testingKnobs.dialTenantCluster = func(
+			ctx context.Context, requester balancer.ConnectionHandle,
+		) (net.Conn, error) {
+			require.Equal(t, f, requester)
 			return nil, errors.New("foo")
 		}
 
-		crdbConn, err := c.OpenTenantConnWithToken(ctx, token, "custom-addr")
+		crdbConn, err := c.OpenTenantConnWithToken(ctx, f, token)
 		require.EqualError(t, err, "foo")
 		require.Nil(t, crdbConn)
 
@@ -59,6 +62,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 	})
 
 	t.Run("error during auth", func(t *testing.T) {
+		f := &forwarder{}
 		c := &connector{
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: make(map[string]string),
@@ -68,9 +72,10 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 		defer conn.Close()
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context, opts *dialOptions) (net.Conn, error) {
-			require.Equal(t, "custom-addr", opts.dstAddr)
-
+		c.testingKnobs.dialTenantCluster = func(
+			ctx context.Context, requester balancer.ConnectionHandle,
+		) (net.Conn, error) {
+			require.Equal(t, f, requester)
 			openCalled = true
 
 			// Validate that token is set.
@@ -88,7 +93,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 			},
 		)()
 
-		crdbConn, err := c.OpenTenantConnWithToken(ctx, token, "custom-addr")
+		crdbConn, err := c.OpenTenantConnWithToken(ctx, f, token)
 		require.True(t, openCalled)
 		require.EqualError(t, err, "bar")
 		require.Nil(t, crdbConn)
@@ -103,6 +108,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 	})
 
 	t.Run("successful", func(t *testing.T) {
+		f := &forwarder{}
 		c := &connector{
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: make(map[string]string),
@@ -112,9 +118,10 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 		defer conn.Close()
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context, opts *dialOptions) (net.Conn, error) {
-			require.Equal(t, "custom-addr", opts.dstAddr)
-
+		c.testingKnobs.dialTenantCluster = func(
+			ctx context.Context, requester balancer.ConnectionHandle,
+		) (net.Conn, error) {
+			require.Equal(t, f, requester)
 			openCalled = true
 
 			// Validate that token is set.
@@ -135,7 +142,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 			},
 		)()
 
-		crdbConn, err := c.OpenTenantConnWithToken(ctx, token, "custom-addr")
+		crdbConn, err := c.OpenTenantConnWithToken(ctx, f, token)
 		require.True(t, openCalled)
 		require.True(t, authCalled)
 		require.NoError(t, err)
@@ -148,6 +155,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 
 	t.Run("idle monitor wrapper is called", func(t *testing.T) {
 		var wrapperCalled bool
+		f := &forwarder{}
 		c := &connector{
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: make(map[string]string),
@@ -162,9 +170,10 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 		defer conn.Close()
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context, opts *dialOptions) (net.Conn, error) {
-			require.Equal(t, "custom-addr", opts.dstAddr)
-
+		c.testingKnobs.dialTenantCluster = func(
+			ctx context.Context, requester balancer.ConnectionHandle,
+		) (net.Conn, error) {
+			require.Equal(t, f, requester)
 			openCalled = true
 
 			// Validate that token is set.
@@ -185,7 +194,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 			},
 		)()
 
-		crdbConn, err := c.OpenTenantConnWithToken(ctx, token, "custom-addr")
+		crdbConn, err := c.OpenTenantConnWithToken(ctx, f, token)
 		require.True(t, wrapperCalled)
 		require.True(t, openCalled)
 		require.True(t, authCalled)
@@ -207,16 +216,20 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 	}
 
 	t.Run("error during open", func(t *testing.T) {
+		f := &forwarder{}
 		c := &connector{
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: make(map[string]string),
 			},
 		}
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context, opts *dialOptions) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(
+			ctx context.Context, requester balancer.ConnectionHandle,
+		) (net.Conn, error) {
+			require.Equal(t, f, requester)
 			return nil, errors.New("foo")
 		}
 
-		crdbConn, sentToClient, err := c.OpenTenantConnWithAuth(ctx,
+		crdbConn, sentToClient, err := c.OpenTenantConnWithAuth(ctx, f,
 			nil /* clientConn */, nil /* throttleHook */)
 		require.EqualError(t, err, "foo")
 		require.False(t, sentToClient)
@@ -227,6 +240,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		conn, _ := net.Pipe()
 		defer conn.Close()
 
+		f := &forwarder{}
 		c := &connector{
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: make(map[string]string),
@@ -234,7 +248,10 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		}
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context, opts *dialOptions) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(
+			ctx context.Context, requester balancer.ConnectionHandle,
+		) (net.Conn, error) {
+			require.Equal(t, f, requester)
 			openCalled = true
 			return conn, nil
 		}
@@ -250,7 +267,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 			},
 		)()
 
-		crdbConn, sentToClient, err := c.OpenTenantConnWithAuth(ctx,
+		crdbConn, sentToClient, err := c.OpenTenantConnWithAuth(ctx, f,
 			nil /* clientConn */, nil /* throttleHook */)
 		require.True(t, openCalled)
 		require.EqualError(t, err, "bar")
@@ -269,6 +286,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		serverConn, _ := net.Pipe()
 		defer serverConn.Close()
 
+		f := &forwarder{}
 		c := &connector{
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: map[string]string{
@@ -279,7 +297,10 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		}
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context, opts *dialOptions) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(
+			ctx context.Context, requester balancer.ConnectionHandle,
+		) (net.Conn, error) {
+			require.Equal(t, f, requester)
 			openCalled = true
 
 			// Validate that token is not set.
@@ -306,7 +327,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 			},
 		)()
 
-		crdbConn, sentToClient, err := c.OpenTenantConnWithAuth(ctx, clientConn, dummyHook)
+		crdbConn, sentToClient, err := c.OpenTenantConnWithAuth(ctx, f, clientConn, dummyHook)
 		require.True(t, openCalled)
 		require.True(t, authCalled)
 		require.NoError(t, err)
@@ -322,6 +343,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		defer serverConn.Close()
 
 		var wrapperCalled bool
+		f := &forwarder{}
 		c := &connector{
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: map[string]string{
@@ -336,7 +358,10 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		}
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context, opts *dialOptions) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(
+			ctx context.Context, requester balancer.ConnectionHandle,
+		) (net.Conn, error) {
+			require.Equal(t, f, requester)
 			openCalled = true
 
 			// Validate that token is not set.
@@ -363,7 +388,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 			},
 		)()
 
-		crdbConn, sentToClient, err := c.OpenTenantConnWithAuth(ctx, clientConn, dummyHook)
+		crdbConn, sentToClient, err := c.OpenTenantConnWithAuth(ctx, f, clientConn, dummyHook)
 		require.True(t, openCalled)
 		require.True(t, wrapperCalled)
 		require.True(t, authCalled)
@@ -385,8 +410,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 
 		c := &connector{}
 		var lookupAddrCount int
-		c.testingKnobs.lookupValidAddr = func(ctx context.Context, dstAddr string) (string, error) {
-			require.Empty(t, dstAddr)
+		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
 			lookupAddrCount++
 			if lookupAddrCount >= 2 {
 				// Cancel context to trigger loop exit on next retry.
@@ -395,7 +419,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 			return "", markAsRetriableConnectorError(errors.New("baz"))
 		}
 
-		conn, err := c.dialTenantCluster(ctx, &dialOptions{})
+		conn, err := c.dialTenantCluster(ctx, nil /* requester */)
 		require.EqualError(t, err, "baz")
 		require.True(t, errors.Is(err, context.Canceled))
 		require.Nil(t, conn)
@@ -409,12 +433,11 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		defer cancel()
 
 		c := &connector{}
-		c.testingKnobs.lookupValidAddr = func(ctx context.Context, dstAddr string) (string, error) {
-			require.Empty(t, dstAddr)
+		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
 			return "", errors.Wrap(context.Canceled, "foobar")
 		}
 
-		conn, err := c.dialTenantCluster(ctx, &dialOptions{})
+		conn, err := c.dialTenantCluster(ctx, nil /* requester */)
 		require.EqualError(t, err, "foobar: context canceled")
 		require.True(t, errors.Is(err, context.Canceled))
 		require.Nil(t, conn)
@@ -426,12 +449,11 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		defer cancel()
 
 		c := &connector{}
-		c.testingKnobs.lookupValidAddr = func(ctx context.Context, dstAddr string) (string, error) {
-			require.Empty(t, dstAddr)
+		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
 			return "", errors.New("baz")
 		}
 
-		conn, err := c.dialTenantCluster(ctx, &dialOptions{})
+		conn, err := c.dialTenantCluster(ctx, nil /* requester */)
 		require.EqualError(t, err, "baz")
 		require.Nil(t, conn)
 	})
@@ -440,6 +462,9 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		// This should not take more than 5 seconds.
 		ctx, cancel := context.WithTimeout(bgCtx, 5*time.Second)
 		defer cancel()
+
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
 
 		crdbConn, _ := net.Pipe()
 		defer crdbConn.Close()
@@ -457,28 +482,36 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 				return nil
 			},
 		}
+		b, err := balancer.NewBalancer(
+			ctx,
+			stopper,
+			balancer.NewMetrics(),
+			c.DirectoryCache,
+			balancer.NoRebalanceLoop(),
+		)
+		require.NoError(t, err)
+		c.Balancer = b
 
 		// We will exercise the following events:
 		// 1. retriable error on lookupAddr.
 		// 2. retriable error on dialSQLServer.
 		var addrLookupFnCount, dialSQLServerCount int
-		c.testingKnobs.lookupValidAddr = func(ctx context.Context, dstAddr string) (string, error) {
-			require.Equal(t, "bar", dstAddr)
+		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
 			addrLookupFnCount++
 			if addrLookupFnCount == 1 {
 				return "", markAsRetriableConnectorError(errors.New("foo"))
 			}
 			return "127.0.0.10:42", nil
 		}
-		c.testingKnobs.dialSQLServer = func(serverAddr string) (net.Conn, error) {
-			require.Equal(t, serverAddr, "127.0.0.10:42")
+		c.testingKnobs.dialSQLServer = func(serverAssignment *balancer.ServerAssignment) (net.Conn, error) {
+			require.Equal(t, serverAssignment.Addr(), "127.0.0.10:42")
 			dialSQLServerCount++
 			if dialSQLServerCount == 1 {
 				return nil, markAsRetriableConnectorError(errors.New("bar"))
 			}
 			return crdbConn, nil
 		}
-		conn, err := c.dialTenantCluster(ctx, &dialOptions{dstAddr: "bar"})
+		conn, err := c.dialTenantCluster(ctx, nil /* requester */)
 		require.NoError(t, err)
 		require.Equal(t, crdbConn, conn)
 
@@ -487,9 +520,102 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		require.Equal(t, 2, dialSQLServerCount)
 		require.Equal(t, 1, reportFailureFnCount)
 	})
+
+	t.Run("load balancing", func(t *testing.T) {
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+
+		crdbConn, _ := net.Pipe()
+		defer crdbConn.Close()
+
+		var mu struct {
+			syncutil.Mutex
+			pods map[string]struct{}
+		}
+		mu.pods = make(map[string]struct{})
+		addPod := func(addr string) {
+			mu.Lock()
+			defer mu.Unlock()
+			mu.pods[addr] = struct{}{}
+		}
+		removePod := func(addr string) {
+			mu.Lock()
+			defer mu.Unlock()
+			delete(mu.pods, addr)
+		}
+
+		tenantID := roachpb.MakeTenantID(42)
+		directoryCache := &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				mu.Lock()
+				defer mu.Unlock()
+
+				pods := make([]*tenant.Pod, 0, len(mu.pods))
+				for addr := range mu.pods {
+					pods = append(pods, &tenant.Pod{
+						TenantID: tenantID.ToUint64(),
+						Addr:     addr,
+						State:    tenant.RUNNING,
+					})
+				}
+				return pods, nil
+			},
+		}
+
+		b, err := balancer.NewBalancer(
+			ctx,
+			stopper,
+			nil, /* metrics */
+			directoryCache,
+			balancer.NoRebalanceLoop(),
+		)
+		require.NoError(t, err)
+
+		c := &connector{
+			ClusterName:    "my-foo",
+			TenantID:       tenantID,
+			DirectoryCache: directoryCache,
+			Balancer:       b,
+		}
+
+		// Create two pods with similar number of assignments.
+		const (
+			addr1 = "127.0.0.10:80"
+			addr2 = "127.0.0.20:90"
+		)
+		addPod(addr1)
+		addPod(addr2)
+
+		// Requests should be evenly distributed.
+		responses := map[string]int{}
+		c.testingKnobs.dialSQLServer = func(serverAssignment *balancer.ServerAssignment) (net.Conn, error) {
+			responses[serverAssignment.Addr()]++
+			return crdbConn, nil
+		}
+		for i := 0; i < 100; i++ {
+			conn, err := c.dialTenantCluster(ctx, nil /* requester */)
+			require.NoError(t, err)
+			require.Equal(t, crdbConn, conn)
+		}
+		require.Equal(t, map[string]int{addr1: 50, addr2: 50}, responses)
+
+		// Delete the first pod.
+		removePod(addr1)
+
+		responses = map[string]int{}
+		for i := 0; i < 100; i++ {
+			conn, err := c.dialTenantCluster(ctx, nil /* requester */)
+			require.NoError(t, err)
+			require.Equal(t, crdbConn, conn)
+		}
+		require.Equal(t, map[string]int{addr2: 100}, responses)
+	})
 }
 
-func TestConnector_lookupValidAddr(t *testing.T) {
+func TestConnector_lookupAddr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -500,7 +626,6 @@ func TestConnector_lookupValidAddr(t *testing.T) {
 		stopper,
 		nil, /* metrics */
 		nil, /* directoryCache */
-		nil, /* connTracker */
 		balancer.NoRebalanceLoop(),
 	)
 	require.NoError(t, err)
@@ -522,156 +647,16 @@ func TestConnector_lookupValidAddr(t *testing.T) {
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
 				return []*tenant.Pod{
-					{Addr: "127.0.0.10:70", State: tenant.DRAINING},
-					{Addr: "127.0.0.10:80", State: tenant.RUNNING},
+					{TenantID: c.TenantID.ToUint64(), Addr: "127.0.0.10:70", State: tenant.DRAINING},
+					{TenantID: c.TenantID.ToUint64(), Addr: "127.0.0.10:80", State: tenant.RUNNING},
 				}, nil
 			},
 		}
 
-		addr, err := c.lookupValidAddr(ctx, "" /* dstAddr */)
+		addr, err := c.lookupAddr(ctx)
 		require.NoError(t, err)
 		require.Equal(t, "127.0.0.10:80", addr)
 		require.Equal(t, 1, lookupTenantPodsFnCount)
-	})
-
-	t.Run("load balancing", func(t *testing.T) {
-		var mu struct {
-			syncutil.Mutex
-			pods map[string]float32
-		}
-		mu.pods = make(map[string]float32)
-		addPod := func(addr string, load float32) {
-			mu.Lock()
-			defer mu.Unlock()
-			mu.pods[addr] = load
-		}
-		removePod := func(addr string) {
-			mu.Lock()
-			defer mu.Unlock()
-			delete(mu.pods, addr)
-		}
-		c := &connector{
-			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer,
-		}
-		c.DirectoryCache = &testTenantDirectoryCache{
-			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
-			) ([]*tenant.Pod, error) {
-				mu.Lock()
-				defer mu.Unlock()
-
-				pods := make([]*tenant.Pod, 0, len(mu.pods))
-				for addr, load := range mu.pods {
-					pods = append(pods, &tenant.Pod{
-						Addr:  addr,
-						Load:  load,
-						State: tenant.RUNNING,
-					})
-				}
-				return pods, nil
-			},
-		}
-
-		// Create two pods with similar load.
-		const (
-			addr1 = "127.0.0.10:80"
-			addr2 = "127.0.0.20:90"
-		)
-		addPod(addr1, 0)
-		addPod(addr2, 0)
-
-		// lookupValidAddr should evenly distribute the load.
-		responses := map[string]int{}
-		for i := 0; i < 100; i++ {
-			addr, err := c.lookupValidAddr(ctx, "" /* dstAddr */)
-			require.NoError(t, err)
-			responses[addr]++
-		}
-		require.InDelta(t, responses[addr1], 50, 25)
-		require.InDelta(t, responses[addr2], 50, 25)
-
-		// Adjust load such that the distribution will be a 1/9 split.
-		addPod(addr1, 0.1)
-		addPod(addr2, 0.9)
-
-		// We should see that the distribution is skewed towards addr1.
-		responses = map[string]int{}
-		for i := 0; i < 100; i++ {
-			addr, err := c.lookupValidAddr(ctx, "" /* dstAddr */)
-			require.NoError(t, err)
-			responses[addr]++
-		}
-		require.InDelta(t, responses[addr1], 90, 25)
-		require.InDelta(t, responses[addr2], 10, 25)
-
-		// Delete the first pod.
-		removePod(addr1)
-
-		// Lookup will still work.
-		addr, err := c.lookupValidAddr(ctx, "" /* dstAddr */)
-		require.NoError(t, err)
-		require.Equal(t, addr2, addr)
-	})
-
-	t.Run("with dstAddr", func(t *testing.T) {
-		var mu syncutil.Mutex
-		var lookupTenantPodsFnCount int
-
-		c := &connector{
-			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer,
-		}
-		c.DirectoryCache = &testTenantDirectoryCache{
-			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
-			) ([]*tenant.Pod, error) {
-				mu.Lock()
-				defer mu.Unlock()
-
-				lookupTenantPodsFnCount++
-				require.Equal(t, ctx, fnCtx)
-				require.Equal(t, c.TenantID, tenantID)
-				require.Equal(t, c.ClusterName, clusterName)
-				return []*tenant.Pod{
-					{Addr: "127.0.0.10:70", State: tenant.DRAINING},
-					{Addr: "127.0.0.10:80", State: tenant.RUNNING},
-					{Addr: "127.0.0.20:70", State: tenant.RUNNING},
-				}, nil
-			},
-		}
-
-		reset := func() {
-			mu.Lock()
-			defer mu.Unlock()
-			lookupTenantPodsFnCount = 0
-		}
-
-		t.Run("successful", func(t *testing.T) {
-			defer reset()
-			addr, err := c.lookupValidAddr(ctx, "127.0.0.20:70")
-			require.NoError(t, err)
-			require.Equal(t, "127.0.0.20:70", addr)
-			require.Equal(t, 1, lookupTenantPodsFnCount)
-		})
-
-		t.Run("draining pod", func(t *testing.T) {
-			defer reset()
-			addr, err := c.lookupValidAddr(ctx, "127.0.0.10:70")
-			require.EqualError(t, err, "could not connect to invalid address '127.0.0.10:70'")
-			require.Empty(t, addr)
-			require.Equal(t, 1, lookupTenantPodsFnCount)
-		})
-
-		t.Run("invalid pod", func(t *testing.T) {
-			defer reset()
-			addr, err := c.lookupValidAddr(ctx, "other-tenant:70")
-			require.EqualError(t, err, "could not connect to invalid address 'other-tenant:70'")
-			require.Empty(t, addr)
-			require.Equal(t, 1, lookupTenantPodsFnCount)
-		})
 	})
 
 	t.Run("FailedPrecondition error", func(t *testing.T) {
@@ -693,7 +678,7 @@ func TestConnector_lookupValidAddr(t *testing.T) {
 			},
 		}
 
-		addr, err := c.lookupValidAddr(ctx, "" /* dstAddr */)
+		addr, err := c.lookupAddr(ctx)
 		require.EqualError(t, err, "codeUnavailable: foo")
 		require.Equal(t, "", addr)
 		require.Equal(t, 1, lookupTenantPodsFnCount)
@@ -718,7 +703,7 @@ func TestConnector_lookupValidAddr(t *testing.T) {
 			},
 		}
 
-		addr, err := c.lookupValidAddr(ctx, "" /* dstAddr */)
+		addr, err := c.lookupAddr(ctx)
 		require.EqualError(t, err, "codeParamsRoutingFailed: cluster my-foo-10 not found")
 		require.Equal(t, "", addr)
 		require.Equal(t, 1, lookupTenantPodsFnCount)
@@ -743,7 +728,7 @@ func TestConnector_lookupValidAddr(t *testing.T) {
 			},
 		}
 
-		addr, err := c.lookupValidAddr(ctx, "" /* dstAddr */)
+		addr, err := c.lookupAddr(ctx)
 		require.EqualError(t, err, "foo")
 		require.True(t, isRetriableConnectorError(err))
 		require.Equal(t, "", addr)
@@ -753,6 +738,15 @@ func TestConnector_lookupValidAddr(t *testing.T) {
 
 func TestConnector_dialSQLServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	tracker, err := balancer.NewConnTracker(ctx, stopper, nil /* timeSource */)
+	require.NoError(t, err)
+
+	tenantID := roachpb.MakeTenantID(10)
 
 	t.Run("with tlsConfig", func(t *testing.T) {
 		c := &connector{
@@ -771,9 +765,19 @@ func TestConnector_dialSQLServer(t *testing.T) {
 				return crdbConn, nil
 			},
 		)()
-		conn, err := c.dialSQLServer("10.11.12.13:80")
+
+		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "10.11.12.13:80")
+		conn, err := c.dialSQLServer(sa)
 		require.NoError(t, err)
-		require.Equal(t, crdbConn, conn)
+		defer conn.Close()
+
+		wrappedConn, ok := conn.(*onConnectionClose)
+		require.True(t, ok)
+		require.Equal(t, crdbConn, wrappedConn.Conn)
+
+		conn.Close()
+		conns := tracker.GetConnsMap(tenantID)
+		require.Empty(t, conns)
 	})
 
 	t.Run("invalid serverAddr with tlsConfig", func(t *testing.T) {
@@ -781,7 +785,10 @@ func TestConnector_dialSQLServer(t *testing.T) {
 			StartupMsg: &pgproto3.StartupMessage{},
 			TLSConfig:  &tls.Config{InsecureSkipVerify: true},
 		}
-		conn, err := c.dialSQLServer("!@#$::")
+		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "!@#$::")
+		defer sa.Close()
+
+		conn, err := c.dialSQLServer(sa)
 		require.Error(t, err)
 		require.Regexp(t, "invalid address format", err)
 		require.False(t, isRetriableConnectorError(err))
@@ -802,9 +809,18 @@ func TestConnector_dialSQLServer(t *testing.T) {
 				return crdbConn, nil
 			},
 		)()
-		conn, err := c.dialSQLServer("10.11.12.13:1234")
+		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "10.11.12.13:1234")
+		conn, err := c.dialSQLServer(sa)
 		require.NoError(t, err)
-		require.Equal(t, crdbConn, conn)
+		defer conn.Close()
+
+		wrappedConn, ok := conn.(*onConnectionClose)
+		require.True(t, ok)
+		require.Equal(t, crdbConn, wrappedConn.Conn)
+
+		conn.Close()
+		conns := tracker.GetConnsMap(tenantID)
+		require.Empty(t, conns)
 	})
 
 	t.Run("failed to dial with non-transient error", func(t *testing.T) {
@@ -818,7 +834,10 @@ func TestConnector_dialSQLServer(t *testing.T) {
 				return nil, errors.New("foo")
 			},
 		)()
-		conn, err := c.dialSQLServer("127.0.0.1:1234")
+		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "127.0.0.1:1234")
+		defer sa.Close()
+
+		conn, err := c.dialSQLServer(sa)
 		require.EqualError(t, err, "foo")
 		require.False(t, isRetriableConnectorError(err))
 		require.Nil(t, conn)
@@ -835,7 +854,10 @@ func TestConnector_dialSQLServer(t *testing.T) {
 				return nil, newErrorf(codeBackendDown, "bar")
 			},
 		)()
-		conn, err := c.dialSQLServer("127.0.0.2:4567")
+		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "127.0.0.2:4567")
+		defer sa.Close()
+
+		conn, err := c.dialSQLServer(sa)
 		require.EqualError(t, err, "codeBackendDown: bar")
 		require.True(t, isRetriableConnectorError(err))
 		require.Nil(t, conn)

@@ -10,7 +10,6 @@ package balancer
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -40,7 +39,6 @@ func TestBalancer_SelectTenantPod(t *testing.T) {
 		stopper,
 		nil, /* metrics */
 		nil, /* directoryCache */
-		nil, /* connTracker */
 		NoRebalanceLoop(),
 	)
 	require.NoError(t, err)
@@ -52,7 +50,10 @@ func TestBalancer_SelectTenantPod(t *testing.T) {
 	})
 
 	t.Run("few pods", func(t *testing.T) {
-		pod, err := b.SelectTenantPod([]*tenant.Pod{{Addr: "1"}, {Addr: "2"}})
+		pod, err := b.SelectTenantPod([]*tenant.Pod{
+			{TenantID: 10, Addr: "1"},
+			{TenantID: 10, Addr: "2"}},
+		)
 		require.NoError(t, err)
 		require.Contains(t, []string{"1", "2"}, pod.Addr)
 	})
@@ -70,7 +71,6 @@ func TestRebalancer_processQueue(t *testing.T) {
 		stopper,
 		NewMetrics(),
 		nil, /* directoryCache */
-		nil, /* connTracker */
 		MaxConcurrentRebalances(1),
 		NoRebalanceLoop(),
 	)
@@ -85,13 +85,12 @@ func TestRebalancer_processQueue(t *testing.T) {
 	syncCh := make(chan struct{})
 	syncReq := &rebalanceRequest{
 		createdAt: timeSource.Now(),
-		conn: &testBalancerConnHandle{
-			onTransferConnection: func(dstAddr string) error {
+		conn: &testConnHandle{
+			onTransferConnection: func() error {
 				syncCh <- struct{}{}
 				return nil
 			},
 		},
-		dst: "foo",
 	}
 
 	// assertNoRunningRequests asserts that the rebalance loop isn't processing
@@ -110,15 +109,13 @@ func TestRebalancer_processQueue(t *testing.T) {
 		count := 0
 		req := &rebalanceRequest{
 			createdAt: timeSource.Now(),
-			conn: &testBalancerConnHandle{
-				onTransferConnection: func(dstAddr string) error {
-					require.Equal(t, "foo", dstAddr)
+			conn: &testConnHandle{
+				onTransferConnection: func() error {
 					count++
 					require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
 					return errors.New("cannot transfer")
 				},
 			},
-			dst: "foo",
 		}
 		b.queue.enqueue(req)
 
@@ -132,48 +129,17 @@ func TestRebalancer_processQueue(t *testing.T) {
 		require.Equal(t, 3, count)
 	})
 
-	t.Run("conn_was_transferred_by_other", func(t *testing.T) {
-		count := 0
-		conn := &testBalancerConnHandle{}
-		conn.onTransferConnection = func(dstAddr string) error {
-			require.Equal(t, "foo", dstAddr)
-			count++
-			// Simulate that connection was transferred by someone else.
-			conn.remoteAddr = "foo"
-			require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
-			return errors.New("cannot transfer")
-		}
-		req := &rebalanceRequest{
-			createdAt: timeSource.Now(),
-			conn:      conn,
-			dst:       "foo",
-		}
-		b.queue.enqueue(req)
-
-		// Wait until the item has been processed.
-		b.queue.enqueue(syncReq)
-		<-syncCh
-
-		assertNoRunningRequests(t)
-
-		// We should only retry once.
-		require.Equal(t, 1, count)
-	})
-
 	t.Run("conn_was_transferred", func(t *testing.T) {
 		count := 0
-		conn := &testBalancerConnHandle{}
-		conn.onTransferConnection = func(dstAddr string) error {
-			require.Equal(t, "foo", dstAddr)
-			count++
-			conn.remoteAddr = "foo"
-			require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
-			return nil
-		}
 		req := &rebalanceRequest{
 			createdAt: timeSource.Now(),
-			conn:      conn,
-			dst:       "foo",
+			conn: &testConnHandle{
+				onTransferConnection: func() error {
+					count++
+					require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
+					return nil
+				},
+			},
 		}
 		b.queue.enqueue(req)
 
@@ -189,17 +155,15 @@ func TestRebalancer_processQueue(t *testing.T) {
 
 	t.Run("conn_was_closed", func(t *testing.T) {
 		count := 0
-		conn := &testBalancerConnHandle{}
-		conn.onTransferConnection = func(dstAddr string) error {
-			require.Equal(t, "foo", dstAddr)
-			count++
-			require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
-			return context.Canceled
-		}
 		req := &rebalanceRequest{
 			createdAt: timeSource.Now(),
-			conn:      conn,
-			dst:       "foo",
+			conn: &testConnHandle{
+				onTransferConnection: func() error {
+					count++
+					require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
+					return context.Canceled
+				},
+			},
 		}
 		b.queue.enqueue(req)
 
@@ -235,10 +199,8 @@ func TestRebalancer_processQueue(t *testing.T) {
 		for i := 0; i < reqCount; i++ {
 			req := &rebalanceRequest{
 				createdAt: timeSource.Now(),
-				conn: &testBalancerConnHandle{
-					onTransferConnection: func(dstAddr string) error {
-						require.Equal(t, "foo", dstAddr)
-
+				conn: &testConnHandle{
+					onTransferConnection: func() error {
 						// Block until all requests are enqueued.
 						<-waitCh
 
@@ -256,7 +218,6 @@ func TestRebalancer_processQueue(t *testing.T) {
 						return nil
 					},
 				},
-				dst: "foo",
 			}
 			b.queue.enqueue(req)
 		}
@@ -290,15 +251,13 @@ func TestRebalancer_rebalanceLoop(t *testing.T) {
 
 	metrics := NewMetrics()
 	directoryCache := newTestDirectoryCache()
-	connTracker, err := NewConnTracker(ctx, stopper, timeSource)
-	require.NoError(t, err)
 
-	_, err = NewBalancer(
+	b, err := NewBalancer(
 		ctx,
 		stopper,
 		metrics,
 		directoryCache,
-		connTracker,
+		MaxConcurrentRebalances(1),
 		TimeSource(timeSource),
 	)
 	require.NoError(t, err)
@@ -311,8 +270,16 @@ func TestRebalancer_rebalanceLoop(t *testing.T) {
 		require.True(t, directoryCache.upsertPod(pod))
 	}
 
-	h := newTestTrackerConnHandle(pods[0].Addr)
-	require.True(t, connTracker.OnConnect(roachpb.MakeTenantID(30), h))
+	// Manually assign a pod to the tracker in the balancer.
+	h := &testConnHandle{
+		onTransferConnection: func() error {
+			return nil
+		},
+	}
+	b.connTracker.registerAssignment(roachpb.MakeTenantID(30), &ServerAssignment{
+		addr:  pods[0].Addr,
+		owner: h,
+	})
 
 	// Wait until rebalance queue gets processed.
 	runs := 0
@@ -342,15 +309,12 @@ func TestRebalancer_rebalance(t *testing.T) {
 
 	metrics := NewMetrics()
 	directoryCache := newTestDirectoryCache()
-	connTracker, err := NewConnTracker(ctx, stopper, timeSource)
-	require.NoError(t, err)
 
 	b, err := NewBalancer(
 		ctx,
 		stopper,
 		metrics,
 		directoryCache,
-		connTracker,
 		NoRebalanceLoop(),
 		TimeSource(timeSource),
 	)
@@ -377,21 +341,28 @@ func TestRebalancer_rebalance(t *testing.T) {
 		{TenantID: 50, Addr: "127.0.0.50:80", State: tenant.RUNNING},
 	}
 
-	// reset resets the directory cache and connection tracker.
+	// reset recreates the directory cache.
 	reset := func(t *testing.T) {
 		t.Helper()
 
 		directoryCache = newTestDirectoryCache()
-		connTracker, err = NewConnTracker(ctx, stopper, timeSource)
-		require.NoError(t, err)
 		b.directoryCache = directoryCache
-		b.connTracker = connTracker
 
 		// Set it such that when the rebalance occurs, the pod goes into the
 		// DRAINING state.
 		recentlyDrainedPod.StateTimestamp = timeSource.Now().Add(rebalanceInterval)
 		for _, pod := range pods {
 			require.True(t, directoryCache.upsertPod(pod))
+		}
+	}
+
+	// makeHandle returns a handle that doesn't panic when TransferConnection
+	// is called.
+	makeHandle := func() *testConnHandle {
+		return &testConnHandle{
+			onTransferConnection: func() error {
+				return nil
+			},
 		}
 	}
 
@@ -406,10 +377,13 @@ func TestRebalancer_rebalance(t *testing.T) {
 			// been removed from the cache.
 			name: "no pods",
 			handlesFn: func(t *testing.T) []ConnectionHandle {
+				tenant10 := roachpb.MakeTenantID(10)
+
 				// Use a random IP since tenant-10 doesn't have a pod, and it
 				// does not matter.
-				tenant10, handle := makeConn(10, "foo-bar-baz")
-				require.True(t, connTracker.OnConnect(tenant10, handle))
+				handle := makeHandle()
+				sa := NewServerAssignment(tenant10, b.connTracker, handle, "foobarip")
+				handle.onClose = sa.Close
 				return []ConnectionHandle{handle}
 			},
 			expectedCounts: []int{0},
@@ -419,10 +393,11 @@ func TestRebalancer_rebalance(t *testing.T) {
 			// there's nothing to transfer to.
 			name: "no running pods",
 			handlesFn: func(t *testing.T) []ConnectionHandle {
-				// Use a random IP since tenant-10 doesn't have a pod, and it
-				// does not matter.
-				tenant20, handle := makeConn(20, pods[0].Addr)
-				require.True(t, connTracker.OnConnect(tenant20, handle))
+				tenant20 := roachpb.MakeTenantID(20)
+
+				handle := makeHandle()
+				sa := NewServerAssignment(tenant20, b.connTracker, handle, pods[0].Addr)
+				handle.onClose = sa.Close
 				return []ConnectionHandle{handle}
 			},
 			expectedCounts: []int{0},
@@ -432,11 +407,14 @@ func TestRebalancer_rebalance(t *testing.T) {
 			// a transfer. Use tenant-30's DRAINING pod here.
 			name: "connection closed",
 			handlesFn: func(t *testing.T) []ConnectionHandle {
+				tenant30 := roachpb.MakeTenantID(30)
 				cancelledCtx, cancel := context.WithCancel(context.Background())
 				cancel()
 
-				handle := newTestTrackerConnHandleWithContext(cancelledCtx, pods[1].Addr)
-				require.True(t, connTracker.OnConnect(roachpb.MakeTenantID(30), handle))
+				handle := makeHandle()
+				handle.ctx = cancelledCtx
+				sa := NewServerAssignment(tenant30, b.connTracker, handle, pods[1].Addr)
+				handle.onClose = sa.Close
 				return []ConnectionHandle{handle}
 			},
 			expectedCounts: []int{0},
@@ -446,9 +424,11 @@ func TestRebalancer_rebalance(t *testing.T) {
 			// because minDrainPeriod hasn't elapsed.
 			name: "recently drained pod",
 			handlesFn: func(t *testing.T) []ConnectionHandle {
+				tenant30 := roachpb.MakeTenantID(30)
 
-				tenant30, handle := makeConn(30, recentlyDrainedPod.Addr)
-				require.True(t, connTracker.OnConnect(tenant30, handle))
+				handle := makeHandle()
+				sa := NewServerAssignment(tenant30, b.connTracker, handle, recentlyDrainedPod.Addr)
+				handle.onClose = sa.Close
 				return []ConnectionHandle{handle}
 			},
 			expectedCounts: []int{0},
@@ -476,9 +456,15 @@ func TestRebalancer_rebalance(t *testing.T) {
 				}
 				var handles []ConnectionHandle
 				for _, c := range conns {
-					h := newTestTrackerConnHandle(c.Addr)
-					handles = append(handles, h)
-					require.True(t, connTracker.OnConnect(roachpb.MakeTenantID(c.TenantID), h))
+					handle := makeHandle()
+					sa := NewServerAssignment(
+						roachpb.MakeTenantID(c.TenantID),
+						b.connTracker,
+						handle,
+						c.Addr,
+					)
+					handle.onClose = sa.Close
+					handles = append(handles, handle)
 				}
 				return handles
 			},
@@ -496,13 +482,18 @@ func TestRebalancer_rebalance(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				var counts []int
 				for _, h := range handles {
-					counts = append(counts, h.(*testTrackerConnHandle).transferConnectionCount())
+					counts = append(counts, h.(*testConnHandle).transferConnectionCount())
 				}
 				if !reflect.DeepEqual(tc.expectedCounts, counts) {
 					return errors.Newf("require %v, but got %v", tc.expectedCounts, counts)
 				}
 				return nil
 			})
+
+			// Clean up the handles.
+			for _, h := range handles {
+				h.Close()
+			}
 		})
 	}
 }
@@ -521,23 +512,20 @@ func TestRebalancerQueue(t *testing.T) {
 	timeSource := timeutil.NewManualTime(t0)
 
 	// Create rebalance requests for the same connection handle.
-	conn1 := &testBalancerConnHandle{}
+	conn1 := &testConnHandle{}
 	req1 := &rebalanceRequest{
 		createdAt: timeSource.Now(),
 		conn:      conn1,
-		dst:       "foo1",
 	}
 	timeSource.Advance(5 * time.Second)
 	req2 := &rebalanceRequest{
 		createdAt: timeSource.Now(),
 		conn:      conn1,
-		dst:       "foo2",
 	}
 	timeSource.Advance(5 * time.Second)
 	req3 := &rebalanceRequest{
 		createdAt: timeSource.Now(),
 		conn:      conn1,
-		dst:       "foo3",
 	}
 
 	// Enqueue in a specific order. req3 overrides req1; req2 is a no-op.
@@ -551,11 +539,10 @@ func TestRebalancerQueue(t *testing.T) {
 	require.Equal(t, int64(1), q.metrics.rebalanceReqQueued.Value())
 
 	// Create another request.
-	conn2 := &testBalancerConnHandle{}
+	conn2 := &testConnHandle{}
 	req4 := &rebalanceRequest{
 		createdAt: timeSource.Now(),
 		conn:      conn2,
-		dst:       "bar1",
 	}
 	q.enqueue(req4)
 	require.Equal(t, int64(2), q.metrics.rebalanceReqQueued.Value())
@@ -582,6 +569,8 @@ func TestRebalancerQueue(t *testing.T) {
 	require.Equal(t, int64(0), q.metrics.rebalanceReqQueued.Value())
 }
 
+// TestRebalancerQueueBlocking tests the blocking behavior when invoking
+// dequeue.
 func TestRebalancerQueueBlocking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -610,8 +599,7 @@ func TestRebalancerQueueBlocking(t *testing.T) {
 	for i := 0; i < reqCount; i++ {
 		req := &rebalanceRequest{
 			createdAt: timeSource.Now(),
-			conn:      &testBalancerConnHandle{},
-			dst:       fmt.Sprint(i),
+			conn:      &testConnHandle{id: i},
 		}
 		q.enqueue(req)
 		timeSource.Advance(1 * time.Second)
@@ -619,28 +607,8 @@ func TestRebalancerQueueBlocking(t *testing.T) {
 
 	for i := 0; i < reqCount; i++ {
 		req := <-reqCh
-		require.Equal(t, fmt.Sprint(i), req.dst)
+		require.Equal(t, i, (req.conn.(*testConnHandle)).id)
 	}
-}
-
-// testBalancerConnHandle is a test connection handle that is used for testing
-// the balancer.
-type testBalancerConnHandle struct {
-	ConnectionHandle
-	remoteAddr           string
-	onTransferConnection func(dstAddr string) error
-}
-
-var _ ConnectionHandle = &testBalancerConnHandle{}
-
-// TransferConnection implements the ConnectionHandle interface.
-func (h *testBalancerConnHandle) TransferConnection(dstAddr string) error {
-	return h.onTransferConnection(dstAddr)
-}
-
-// ServerRemoteAddr implements the ConnectionHandle interface.
-func (h *testBalancerConnHandle) ServerRemoteAddr() string {
-	return h.remoteAddr
 }
 
 // testDirectoryCache is a test implementation of the tenant directory cache.

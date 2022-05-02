@@ -35,13 +35,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -231,7 +232,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	defer s.Stopper().Stop(ctx)
 	init(s.ClusterSettings())
 
-	evalCtx := tree.EvalContext{Settings: s.ClusterSettings()}
+	evalCtx := eval.Context{Settings: s.ClusterSettings()}
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			DB: kvDB,
@@ -239,10 +240,11 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
 					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil, nil)
 			},
-			Settings: s.ClusterSettings(),
-			Codec:    keys.SystemSQLCodec,
+			Settings:      s.ClusterSettings(),
+			Codec:         keys.SystemSQLCodec,
+			BackupMonitor: mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, 0, s.ClusterSettings()),
 		},
-		EvalCtx: &tree.EvalContext{
+		EvalCtx: &eval.Context{
 			Codec:    keys.SystemSQLCodec,
 			Settings: s.ClusterSettings(),
 		},
@@ -405,7 +407,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 
 func newTestingRestoreDataProcessor(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec execinfrapb.RestoreDataSpec,
 ) (*restoreDataProcessor, error) {

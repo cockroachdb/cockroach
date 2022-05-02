@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -158,7 +159,9 @@ func (p *planner) LookupSchema(
 	}, nil
 }
 
-func (p *planner) GetSchemasForDB(ctx context.Context, dbName string, ) (map[descpb.ID]string, error) {
+func (p *planner) GetSchemasForDB(
+	ctx context.Context, dbName string,
+) (map[descpb.ID]string, error) {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{AvoidLeased: p.avoidLeasedDescriptors})
 	if err != nil {
@@ -173,7 +176,7 @@ func (p *planner) GetSchemasForDB(ctx context.Context, dbName string, ) (map[des
 	return schemas, nil
 }
 
-// SchemaExists implements the tree.EvalDatabase interface.
+// SchemaExists implements the eval.DatabaseCatalog interface.
 func (p *planner) SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error) {
 	found, _, err = p.LookupSchema(ctx, dbName, scName)
 	return found, err
@@ -224,7 +227,7 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	}
 }
 
-// IsTableVisible is part of the tree.EvalDatabase interface.
+// IsTableVisible is part of the eval.DatabaseCatalog interface.
 func (p *planner) IsTableVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
 ) (isVisible, exists bool, err error) {
@@ -272,7 +275,7 @@ func (p *planner) IsTableVisible(
 	return false, true, nil
 }
 
-// IsTypeVisible is part of the tree.EvalDatabase interface.
+// IsTypeVisible is part of the eval.DatabaseCatalog interface.
 func (p *planner) IsTypeVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 ) (isVisible bool, exists bool, err error) {
@@ -314,22 +317,22 @@ func (p *planner) IsTypeVisible(
 	return false, true, nil
 }
 
-// HasAnyPrivilege is part of the tree.EvalDatabase interface.
+// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
 func (p *planner) HasAnyPrivilege(
 	ctx context.Context,
-	specifier tree.HasPrivilegeSpecifier,
+	specifier eval.HasPrivilegeSpecifier,
 	user security.SQLUsername,
 	privs []privilege.Privilege,
-) (tree.HasAnyPrivilegeResult, error) {
+) (eval.HasAnyPrivilegeResult, error) {
 	desc, err := p.ResolveDescriptorForPrivilegeSpecifier(
 		ctx,
 		specifier,
 	)
 	if err != nil {
-		return tree.HasNoPrivilege, err
+		return eval.HasNoPrivilege, err
 	}
 	if desc == nil {
-		return tree.ObjectNotFound, nil
+		return eval.ObjectNotFound, nil
 	}
 
 	for _, priv := range privs {
@@ -345,7 +348,7 @@ func (p *planner) HasAnyPrivilege(
 			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
 				continue
 			}
-			return tree.HasNoPrivilege, err
+			return eval.HasNoPrivilege, err
 		}
 
 		if priv.GrantOption {
@@ -354,27 +357,27 @@ func (p *planner) HasAnyPrivilege(
 					if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
 						continue
 					}
-					return tree.HasNoPrivilege, err
+					return eval.HasNoPrivilege, err
 				}
 			} else {
 				if err := p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, user, true /* isGrant */); err != nil {
 					if pgerror.GetPGCode(err) == pgcode.WarningPrivilegeNotGranted {
 						continue
 					}
-					return tree.HasNoPrivilege, err
+					return eval.HasNoPrivilege, err
 				}
 			}
 		}
-		return tree.HasPrivilege, nil
+		return eval.HasPrivilege, nil
 	}
 
-	return tree.HasNoPrivilege, nil
+	return eval.HasNoPrivilege, nil
 }
 
 // ResolveDescriptorForPrivilegeSpecifier resolves a tree.HasPrivilegeSpecifier
 // and returns the descriptor for the given object.
 func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
-	ctx context.Context, specifier tree.HasPrivilegeSpecifier,
+	ctx context.Context, specifier eval.HasPrivilegeSpecifier,
 ) (catalog.Descriptor, error) {
 	if specifier.DatabaseName != nil {
 		return p.Descriptors().GetImmutableDatabaseByName(
@@ -450,7 +453,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 }
 
 func validateColumnForHasPrivilegeSpecifier(
-	table catalog.TableDescriptor, specifier tree.HasPrivilegeSpecifier,
+	table catalog.TableDescriptor, specifier eval.HasPrivilegeSpecifier,
 ) error {
 	if specifier.ColumnName != nil {
 		_, err := table.FindColumnWithName(*specifier.ColumnName)

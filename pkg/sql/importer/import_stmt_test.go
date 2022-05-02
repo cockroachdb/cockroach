@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -840,7 +841,10 @@ END;
 
 				// Verify the constraint is unvalidated.
 				`SHOW CONSTRAINTS FROM weather
-				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities(city) NOT VALID", "false"}},
+				`: {
+					{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities(city) NOT VALID", "false"},
+					{"weather", "weather_pkey", "PRIMARY KEY", "PRIMARY KEY (rowid ASC)", "true"},
+				},
 			},
 		},
 		{
@@ -905,7 +909,9 @@ END;
 				},
 				// Verify the constraint is skipped.
 				`SELECT dependson_name FROM crdb_internal.backward_dependencies`: {},
-				`SHOW CONSTRAINTS FROM weather`:                                  {},
+				`SHOW CONSTRAINTS FROM weather`: {
+					{"weather", "weather_pkey", "PRIMARY KEY", "PRIMARY KEY (rowid ASC)", "true"},
+				},
 			},
 		},
 		{
@@ -3787,10 +3793,13 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+
+	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
+
 	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup, descpb.ID(100), NoFKs, 1)
 	if err != nil {
@@ -3810,6 +3819,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 		tableDesc:  tableDesc.ImmutableCopy().(catalog.TableDescriptor),
 		kvCh:       kvCh,
 		numWorkers: 1,
+		db:         db,
 	}
 
 	producer := &csvBenchmarkStream{
@@ -4685,6 +4695,7 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 // BenchmarkDelimitedConvertRecord-16    	  500000	      2966 ns/op	  40.45 MB/s
 func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	ctx := context.Background()
+	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
 
 	tpchLineItemDataRows := [][]string{
 		{"1", "155190", "7706", "1", "17", "21168.23", "0.04", "0.02", "N", "O", "1996-03-13", "1996-02-12", "1996-03-22", "DELIVER IN PERSON", "TRUCK", "egular courts above the"},
@@ -4733,7 +4744,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup, descpb.ID(100), NoFKs, 1)
 	if err != nil {
@@ -4755,7 +4766,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
 	}, kvCh, 0, 1,
-		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx)
+		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx, db)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -4786,6 +4797,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 // BenchmarkPgCopyConvertRecord-16    	  307701	      3833 ns/op	  31.30 MB/s
 func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	ctx := context.Background()
+	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
 
 	tpchLineItemDataRows := [][]string{
 		{"1", "155190", "7706", "1", "17", "21168.23", "0.04", "0.02", "N", "O", "1996-03-13", "1996-02-12", "1996-03-22", "DELIVER IN PERSON", "TRUCK", "egular courts above the"},
@@ -4834,7 +4846,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	create := stmt.AST.(*tree.CreateTable)
 	semaCtx := tree.MakeSemaContext()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContext(st)
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaIDForBackup,
 		descpb.ID(100), NoFKs, 1)
@@ -4858,7 +4870,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		Null:       `\N`,
 		MaxRowSize: 4096,
 	}, kvCh, 0, 1,
-		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx)
+		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx, db)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{

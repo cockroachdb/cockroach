@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/stretchr/testify/require"
@@ -57,7 +58,7 @@ func getRandomTypeFavorNative(rng *rand.Rand) *types.T {
 func assertProjOpAgainstRowByRow(
 	t *testing.T,
 	flowCtx *execinfra.FlowCtx,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	projExpr string,
 	inputTypes []*types.T,
 	inputRows rowenc.EncDatumRows,

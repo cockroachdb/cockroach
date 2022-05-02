@@ -27,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -271,7 +273,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 	if err != nil {
 		return err
 	}
-	enumOID := typedesc.TypeIDToOID(enumTypeID)
+	enumOID := catid.TypeIDToOID(enumTypeID)
 
 	var newColumnID *descpb.ColumnID
 	var newColumnDefaultExpr *string
@@ -284,7 +286,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 
 		// If we already have a column with the given name, check it is compatible to be made
 		// a PRIMARY KEY.
-		if partCol.GetType().Oid() != typedesc.TypeIDToOID(enumTypeID) {
+		if partCol.GetType().Oid() != catid.TypeIDToOID(enumTypeID) {
 			return pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"cannot use column %s for REGIONAL BY ROW table as it does not have the %s type",
@@ -370,7 +372,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			col.Type,
 			"REGIONAL BY ROW DEFAULT",
 			params.p.SemaCtx(),
-			tree.VolatilityVolatile,
+			volatility.Volatile,
 		)
 		if err != nil {
 			return err

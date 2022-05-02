@@ -28,16 +28,22 @@ import (
 // TODO(jaylim-crl): Move dialer into connector in the future.
 var BackendDial = func(
 	msg *pgproto3.StartupMessage, serverAddress string, tlsConfig *tls.Config,
-) (net.Conn, error) {
-	// TODO this behavior may need to change once multi-region multi-tenant
-	// clusters are supported. The fixed timeout may need to be replaced by an
-	// adaptive timeout or the timeout could be replaced by speculative retries.
+) (_ net.Conn, retErr error) {
+	// TODO(JeffSwenson): This behavior may need to change once multi-region
+	// multi-tenant clusters are supported. The fixed timeout may need to be
+	// replaced by an adaptive timeout or the timeout could be replaced by
+	// speculative retries.
 	conn, err := net.DialTimeout("tcp", serverAddress, time.Second*5)
 	if err != nil {
 		return nil, newErrorf(
 			codeBackendDown, "unable to reach backend SQL server: %v", err,
 		)
 	}
+	defer func() {
+		if retErr != nil {
+			conn.Close()
+		}
+	}()
 	conn, err = sslOverlay(conn, tlsConfig)
 	if err != nil {
 		return nil, err

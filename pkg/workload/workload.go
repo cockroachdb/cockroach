@@ -74,6 +74,14 @@ type Flagser interface {
 // to have been created and initialized before running these.
 type Opser interface {
 	Generator
+	// Ops sets up the QueryLoad.
+	//
+	// NB: Ops is problematic to implement. In practice, it is possibly invoked
+	// multiple times with the same registry (see workload/cli.runRun), so naive
+	// implementations are prone to panics due to double-registration of metrics.
+	// We need to either avoid the required idempotency or tease apart a call-once
+	// registration part so that the registration happens in a separate, call-once
+	// method.
 	Ops(ctx context.Context, urls []string, reg *histogram.Registry) (QueryLoad, error)
 }
 

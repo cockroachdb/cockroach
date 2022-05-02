@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -241,7 +243,7 @@ func makeImportRand(c *CellInfoAnnotation) randomSource {
 // TODO(anzoteh96): As per the issue in #51004, having too many columns with
 // default expression unique_rowid() could cause collisions when IMPORTs are run
 // too close to each other. It will therefore be nice to fix this problem.
-func importUniqueRowID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+func importUniqueRowID(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	avoidCollisionsWithSQLsIDs := uint64(1 << 63)
 	shiftedIndex := int64(c.uniqueRowIDTotal)*c.rowID + int64(c.uniqueRowIDInstance)
@@ -251,7 +253,7 @@ func importUniqueRowID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum,
 	return tree.NewDInt(tree.DInt(avoidCollisionsWithSQLsIDs | returnIndex)), nil
 }
 
-func importRandom(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+func importRandom(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	if c.randSource == nil {
 		c.randSource = makeImportRand(c)
@@ -259,7 +261,7 @@ func importRandom(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, erro
 	return tree.NewDFloat(tree.DFloat(c.randSource.Float64(c))), nil
 }
 
-func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+func importGenUUID(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	if c.randSource == nil {
 		c.randSource = makeImportRand(c)
@@ -275,6 +277,7 @@ func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 type SeqChunkProvider struct {
 	JobID    jobspb.JobID
 	Registry *jobs.Registry
+	DB       *kv.DB
 }
 
 // RequestChunk updates seqMetadata with information about the chunk of sequence
@@ -282,10 +285,10 @@ type SeqChunkProvider struct {
 // first checks if there is a previously allocated chunk associated with the
 // row, and if not goes on to allocate a new chunk.
 func (j *SeqChunkProvider) RequestChunk(
-	evalCtx *tree.EvalContext, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
+	evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
 ) error {
 	var hasAllocatedChunk bool
-	return evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
+	return j.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		var foundFromPreviouslyAllocatedChunk bool
 		resolveChunkFunc := func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
@@ -304,7 +307,7 @@ func (j *SeqChunkProvider) RequestChunk(
 
 			// Reserve a new sequence value chunk at the KV level.
 			if !hasAllocatedChunk {
-				if err := reserveChunkOfSeqVals(evalCtx, c, seqMetadata); err != nil {
+				if err := reserveChunkOfSeqVals(evalCtx, c, seqMetadata, j.DB); err != nil {
 					return err
 				}
 				hasAllocatedChunk = true
@@ -442,7 +445,7 @@ func (j *SeqChunkProvider) checkForPreviouslyAllocatedChunks(
 // reserveChunkOfSeqVals ascertains the size of the next chunk, and reserves it
 // at the KV level. The seqMetadata is updated to reflect this.
 func reserveChunkOfSeqVals(
-	evalCtx *tree.EvalContext, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
+	evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata, db *kv.DB,
 ) error {
 	seqOpts := seqMetadata.seqDesc.GetSequenceOpts()
 	newChunkSize := int64(initialChunkSize)
@@ -466,7 +469,7 @@ func reserveChunkOfSeqVals(
 	incrementValBy := newChunkSize * seqOpts.Increment
 	// incrementSequenceByVal keeps retrying until it is able to find a slot
 	// of incrementValBy.
-	seqVal, err := incrementSequenceByVal(evalCtx.Context, seqMetadata.seqDesc, evalCtx.DB,
+	seqVal, err := incrementSequenceByVal(evalCtx.Context, seqMetadata.seqDesc, db,
 		evalCtx.Codec, incrementValBy)
 	if err != nil {
 		return err
@@ -482,7 +485,7 @@ func reserveChunkOfSeqVals(
 	return nil
 }
 
-func importNextVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+func importNextVal(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	seqName := tree.MustBeDString(args[0])
 	seqMetadata, ok := c.seqNameToMetadata[string(seqName)]
@@ -492,7 +495,7 @@ func importNextVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 	return importNextValHelper(evalCtx, c, seqMetadata)
 }
 
-func importNextValByID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+func importNextValByID(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	oid := tree.MustBeDOid(args[0])
 	seqMetadata, ok := c.seqIDToMetadata[descpb.ID(oid.DInt)]
@@ -505,7 +508,7 @@ func importNextValByID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum,
 // importDefaultToDatabasePrimaryRegion returns the primary region of the
 // database being imported into.
 func importDefaultToDatabasePrimaryRegion(
-	evalCtx *tree.EvalContext, _ tree.Datums,
+	evalCtx *eval.Context, _ tree.Datums,
 ) (tree.Datum, error) {
 	regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
 	if err != nil {
@@ -520,7 +523,7 @@ func importDefaultToDatabasePrimaryRegion(
 }
 
 func importNextValHelper(
-	evalCtx *tree.EvalContext, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
+	evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
 ) (tree.Datum, error) {
 	seqOpts := seqMetadata.seqDesc.GetSequenceOpts()
 	if c.seqChunkProvider == nil {
@@ -584,7 +587,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				ReturnType: tree.FixedReturnType(types.Int),
 				Fn:         importUniqueRowID,
 				Info:       "Returns a unique rowid based on row position and time",
-				Volatility: tree.VolatilityVolatile,
+				Volatility: volatility.Volatile,
 			},
 		),
 	},
@@ -600,7 +603,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				ReturnType: tree.FixedReturnType(types.Float),
 				Fn:         importRandom,
 				Info:       "Returns a random number between 0 and 1 based on row position and time.",
-				Volatility: tree.VolatilityVolatile,
+				Volatility: volatility.Volatile,
 			},
 		),
 	},
@@ -617,7 +620,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				Fn:         importGenUUID,
 				Info: "Generates a random UUID based on row position and time, " +
 					"and returns it as a value of UUID type.",
-				Volatility: tree.VolatilityVolatile,
+				Volatility: volatility.Volatile,
 			},
 		),
 	},
@@ -703,7 +706,7 @@ type unsafeErrExpr struct {
 var _ tree.TypedExpr = &unsafeErrExpr{}
 
 // Eval implements the TypedExpr interface.
-func (e *unsafeErrExpr) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+func (e *unsafeErrExpr) Eval(_ tree.ExprEvaluator) (tree.Datum, error) {
 	return nil, e.err
 }
 
@@ -731,7 +734,7 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 		return expr
 	}
 	fn, ok := expr.(*tree.FuncExpr)
-	if !ok || fn.ResolvedOverload().Volatility <= tree.VolatilityImmutable {
+	if !ok || fn.ResolvedOverload().Volatility <= volatility.Immutable {
 		// If an expression is not a function, or is an immutable function, then
 		// we can use it as it is.
 		return expr
@@ -775,13 +778,13 @@ func (v *importDefaultExprVisitor) VisitPost(expr tree.Expr) (newExpr tree.Expr)
 // sanitizeExprsForImport checks whether default expressions are supported
 // for import.
 func sanitizeExprsForImport(
-	ctx context.Context, evalCtx *tree.EvalContext, expr tree.Expr, targetType *types.T,
+	ctx context.Context, evalCtx *eval.Context, expr tree.Expr, targetType *types.T,
 ) (tree.TypedExpr, overrideVolatility, error) {
 	semaCtx := tree.MakeSemaContext()
 
 	// If we have immutable expressions, then we can just return it right away.
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		ctx, expr, targetType, "import_default", &semaCtx, tree.VolatilityImmutable)
+		ctx, expr, targetType, "import_default", &semaCtx, volatility.Immutable)
 	if err == nil {
 		return typedExpr, overrideImmutable, nil
 	}

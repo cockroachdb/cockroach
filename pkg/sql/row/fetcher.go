@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -48,13 +49,36 @@ const DebugRowFetch = false
 // part of the output.
 const noOutputColumn = -1
 
+// kvBatchFetcherResponse contains a response from the KVBatchFetcher.
+type kvBatchFetcherResponse struct {
+	// moreKVs indicates whether this response contains some keys from the
+	// fetch.
+	//
+	// If true, then the fetch might (or might not) be complete at this point -
+	// another call to nextBatch() is needed to find out. If false, then the
+	// fetch has already been completed and this response doesn't have any
+	// fetched data.
+	moreKVs bool
+	// Only one of kvs and batchResponse will be set. Which one is set depends
+	// on the server version. Both must be handled by calling code.
+	//
+	// kvs, if set, is a slice of roachpb.KeyValue, the deserialized kv pairs
+	// that were fetched.
+	kvs []roachpb.KeyValue
+	// batchResponse, if set, is a packed byte slice containing the keys and
+	// values. An empty batchResponse indicates that nothing was fetched for the
+	// corresponding ScanRequest, and the caller is expected to skip over the
+	// response.
+	batchResponse []byte
+	// spanID is the ID associated with the span that generated this response.
+	spanID int
+}
+
 // KVBatchFetcher abstracts the logic of fetching KVs in batches.
 type KVBatchFetcher interface {
-	// nextBatch returns the next batch of rows. Returns false in the first
-	// parameter if there are no more keys in the scan. May return either a slice
-	// of KeyValues or a batchResponse, numKvs pair, depending on the server
-	// version - both must be handled by calling code.
-	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error)
+	// nextBatch returns the next batch of rows. See kvBatchFetcherResponse for
+	// details on what is returned.
+	nextBatch(ctx context.Context) (kvBatchFetcherResponse, error)
 
 	close(ctx context.Context)
 }
@@ -169,6 +193,9 @@ type Fetcher struct {
 	kv                roachpb.KeyValue
 	keyRemainingBytes []byte
 	kvEnd             bool
+
+	// spanID is associated with the input span that produced the data in kv.
+	spanID int
 
 	// IgnoreUnexpectedNulls allows Fetcher to return null values for non-nullable
 	// columns and is only used for decoding for error messages or debugging.
@@ -331,6 +358,24 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 //
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly (if Init() was called with
+// non-nil memory monitor). The caller can only reuse the spans slice after the
+// fetcher has been closed, and if the caller does, it becomes responsible for
+// the memory accounting.
+//
+// The fetcher also takes ownership of the spanIDs slice - it can modify the
+// slice, but it will **not** perform the memory accounting. It is the caller's
+// responsibility to track the memory under the spanIDs slice, and the slice
+// can only be reused once the fetcher has been closed. Notably, the capacity of
+// the slice will not be increased by the fetcher.
+//
+// spanIDs is a slice of user-defined identifiers of spans. If spanIDs is
+// non-nil, then it must be of the same length as spans, and some methods of the
+// Fetcher will return the fetched row with the span ID that corresponds to the
+// original span that the row belongs to. Nil spanIDs can be used to indicate
+// that the caller is not interested in that information.
+//
 // batchBytesLimit controls whether bytes limits are placed on the batches. If
 // set, bytes limits will be used to protect against running out of memory (on
 // both this client node, and on the server).
@@ -349,6 +394,7 @@ func (rf *Fetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	rowLimitHint rowinfra.RowLimit,
 	traceKV bool,
@@ -363,6 +409,7 @@ func (rf *Fetcher) StartScan(
 		kvBatchFetcherArgs{
 			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
 			spans:                      spans,
+			spanIDs:                    spanIDs,
 			reverse:                    rf.reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
@@ -466,6 +513,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		kvBatchFetcherArgs{
 			sendFn:                     sendFn,
 			spans:                      spans,
+			spanIDs:                    nil,
 			reverse:                    rf.reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
@@ -510,7 +558,8 @@ func (rf *Fetcher) StartScanFrom(ctx context.Context, f KVBatchFetcher, traceKV 
 	rf.kvFetcher = newKVFetcher(f)
 	rf.kvEnd = false
 	// Retrieve the first key.
-	_, err := rf.nextKey(ctx)
+	var err error
+	_, rf.spanID, err = rf.nextKey(ctx)
 	return err
 }
 
@@ -539,17 +588,17 @@ func (rf *Fetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 
 // nextKey retrieves the next key/value and sets kv/kvEnd. Returns whether the
 // key indicates a new row (as opposed to another family for the current row).
-func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, _ error) {
-	ok, kv, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, spanID int, _ error) {
+	ok, kv, spanID, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 	if err != nil {
-		return false, ConvertFetchError(&rf.table.spec, err)
+		return false, 0, ConvertFetchError(&rf.table.spec, err)
 	}
 	rf.setNextKV(kv, finalReferenceToBatch)
 
 	if !ok {
 		// No more keys in the scan.
 		rf.kvEnd = true
-		return true, nil
+		return true, 0, nil
 	}
 
 	// unchangedPrefix will be set to true if the current KV belongs to the same
@@ -559,7 +608,7 @@ func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, _ error) {
 	if unchangedPrefix {
 		// Skip decoding!
 		rf.keyRemainingBytes = rf.kv.Key[len(rf.indexKey):]
-		return false, nil
+		return false, spanID, nil
 	}
 
 	// The current key belongs to a new row.
@@ -567,7 +616,7 @@ func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, _ error) {
 		var foundNull bool
 		rf.keyRemainingBytes, foundNull, err = rf.DecodeIndexKey(rf.kv.Key)
 		if err != nil {
-			return false, err
+			return false, 0, err
 		}
 		// For unique secondary indexes, the index-key does not distinguish one row
 		// from the next if both rows contain identical values along with a NULL.
@@ -592,7 +641,7 @@ func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, _ error) {
 				// Slice off an extra encoded column from rf.keyRemainingBytes.
 				rf.keyRemainingBytes, err = keyside.Skip(rf.keyRemainingBytes)
 				if err != nil {
-					return false, err
+					return false, 0, err
 				}
 			}
 		}
@@ -602,14 +651,14 @@ func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, _ error) {
 		// row or not.
 		prefixLen, err := keys.GetRowPrefixLength(rf.kv.Key)
 		if err != nil {
-			return false, err
+			return false, 0, err
 		}
 
 		rf.keyRemainingBytes = rf.kv.Key[prefixLen:]
 	}
 
 	rf.indexKey = nil
-	return true, nil
+	return true, spanID, nil
 }
 
 func (rf *Fetcher) prettyKeyDatums(
@@ -927,13 +976,15 @@ func (rf *Fetcher) processValueBytes(
 
 // NextRow processes keys until we complete one row, which is returned as an
 // EncDatumRow. The row contains one value per IndexFetchSpec.FetchedColumns.
+// The ID associated with the span that produced this row is returned (0 if nil
+// spanIDs were provided to StartScan).
 //
 // The EncDatumRow should not be modified and is only valid until the next call.
 //
 // When there are no more rows, the EncDatumRow is nil.
-func (rf *Fetcher) NextRow(ctx context.Context) (row rowenc.EncDatumRow, err error) {
+func (rf *Fetcher) NextRow(ctx context.Context) (row rowenc.EncDatumRow, spanID int, err error) {
 	if rf.kvEnd {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	// All of the columns for a particular row will be grouped together. We
@@ -945,19 +996,21 @@ func (rf *Fetcher) NextRow(ctx context.Context) (row rowenc.EncDatumRow, err err
 	for {
 		prettyKey, prettyVal, err := rf.processKV(ctx, rf.kv)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if rf.traceKV {
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
 
-		rowDone, err := rf.nextKey(ctx)
+		rowDone, spanID, err := rf.nextKey(ctx)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if rowDone {
 			err := rf.finalizeRow()
-			return rf.table.row, err
+			rowSpanID := rf.spanID
+			rf.spanID = spanID
+			return rf.table.row, rowSpanID, err
 		}
 	}
 }
@@ -972,7 +1025,7 @@ func (rf *Fetcher) NextRow(ctx context.Context) (row rowenc.EncDatumRow, err err
 func (rf *Fetcher) NextRowInto(
 	ctx context.Context, destination rowenc.EncDatumRow, colIdxMap catalog.TableColMap,
 ) (ok bool, err error) {
-	row, err := rf.NextRow(ctx)
+	row, _, err := rf.NextRow(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -992,7 +1045,7 @@ func (rf *Fetcher) NextRowInto(
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
 func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, err error) {
-	row, err := rf.NextRow(ctx)
+	row, _, err := rf.NextRow(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1025,7 +1078,7 @@ func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, err 
 func (rf *Fetcher) NextRowDecodedInto(
 	ctx context.Context, destination tree.Datums, colIdxMap catalog.TableColMap,
 ) (ok bool, err error) {
-	row, err := rf.NextRow(ctx)
+	row, _, err := rf.NextRow(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -1076,7 +1129,7 @@ func (rf *Fetcher) finalizeRow() error {
 		// TODO (rohany): Datums are immutable, so we can't store a DDecimal on the
 		//  fetcher and change its contents with each row. If that assumption gets
 		//  lifted, then we can avoid an allocation of a new decimal datum here.
-		dec := rf.alloc.NewDDecimal(tree.DDecimal{Decimal: tree.TimestampToDecimal(rf.RowLastModified())})
+		dec := rf.alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.RowLastModified())})
 		table.row[table.timestampOutputIdx] = rowenc.EncDatum{Datum: dec}
 	}
 	if table.oidOutputIdx != noOutputColumn {
@@ -1129,24 +1182,6 @@ func (rf *Fetcher) finalizeRow() error {
 // Key returns nil when there are no more rows.
 func (rf *Fetcher) Key() roachpb.Key {
 	return rf.kv.Key
-}
-
-// PartialKey returns a partial slice of the next key (the key that follows the
-// last returned row) containing nCols columns, without the ending column
-// family. Returns nil when there are no more rows.
-func (rf *Fetcher) PartialKey(nCols int) (roachpb.Key, error) {
-	if rf.kv.Key == nil {
-		return nil, nil
-	}
-	partialKeyLength := int(rf.table.spec.KeyPrefixLength)
-	for consumedCols := 0; consumedCols < nCols; consumedCols++ {
-		l, err := encoding.PeekLength(rf.kv.Key[partialKeyLength:])
-		if err != nil {
-			return nil, err
-		}
-		partialKeyLength += l
-	}
-	return rf.kv.Key[:partialKeyLength], nil
 }
 
 // GetBytesRead returns total number of bytes read by the underlying KVFetcher.

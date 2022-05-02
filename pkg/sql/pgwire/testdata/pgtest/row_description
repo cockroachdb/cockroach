@@ -140,24 +140,14 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Regression test for not setting OIDs in some cases (#71891).
-send
+send crdb_only
 Query {"String": "SELECT a, tab1_a FROM tab2 INNER MERGE JOIN tab1 ON a = tab1_a WHERE a = 1"}
 ----
 
-# With postgres we don't control the table OID.
-until ignore_table_oids noncrdb_only
-RowDescription
-----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"tab1_a","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
-
 until crdb_only
-RowDescription
-----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":104,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"tab1_a","TableOID":105,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
-
-until ignore_table_oids
 ReadyForQuery
 ----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":104,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"tab1_a","TableOID":105,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"1"},{"text":"1"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -388,5 +378,19 @@ DataRow
 until
 ReadyForQuery
 ----
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that STRING is reported as text (oid=25) and
+# STRING(2) is reported as varchar (oid=1043).
+send
+Query {"String": "SELECT 'foo'::STRING, 'bar'::STRING(2)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"text","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0},{"Name":"text","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1043,"DataTypeSize":-1,"TypeModifier":6,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"foo"},{"text":"ba"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

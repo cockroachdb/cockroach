@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -275,7 +276,7 @@ func rewriteTypesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, er
 				return
 			}
 			if rw, ok := rewrites[id]; ok {
-				newRef = &tree.OIDTypeReference{OID: typedesc.TypeIDToOID(rw.ID)}
+				newRef = &tree.OIDTypeReference{OID: catid.TypeIDToOID(rw.ID)}
 			}
 			ctx.WriteString(newRef.SQLString())
 		}),
@@ -371,7 +372,7 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 	// Collect potential new OID values.
 	var newOID, newArrayOID oid.Oid
 	if rw, ok := descriptorRewrites[tid]; ok {
-		newOID = typedesc.TypeIDToOID(rw.ID)
+		newOID = catid.TypeIDToOID(rw.ID)
 	}
 	if typ.Family() != types.ArrayFamily {
 		tid, err = typedesc.GetUserDefinedArrayTypeDescID(typ)
@@ -379,7 +380,7 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 			return err
 		}
 		if rw, ok := descriptorRewrites[tid]; ok {
-			newArrayOID = typedesc.TypeIDToOID(rw.ID)
+			newArrayOID = catid.TypeIDToOID(rw.ID)
 		}
 	}
 	types.RemapUserDefinedTypeOIDs(typ, newOID, newArrayOID)

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
@@ -48,13 +49,20 @@ type pubsubClient interface {
 	flushTopics()
 	sendMessage(content []byte, topic string, key string) error
 	sendMessageToAllTopics(content []byte) error
+	connectivityError() error
+}
+
+type jsonPayload struct {
+	Key   json.RawMessage `json:"key"`
+	Value json.RawMessage `json:"value"`
+	Topic string          `json:"topic"`
 }
 
 // payload struct is sent to the sink
 type payload struct {
-	Key   json.RawMessage `json:"key"`
-	Value json.RawMessage `json:"value"`
-	Topic string          `json:"topic"`
+	Key   []byte
+	Value []byte
+	Topic string
 }
 
 // pubsubMessage is sent to worker channels for workers to consume
@@ -72,6 +80,12 @@ type gcpPubsubClient struct {
 	region     string
 	topicNamer *TopicNamer
 	url        sinkURL
+
+	mu struct {
+		syncutil.Mutex
+		autocreateError error
+		publishError    error
+	}
 }
 
 type pubsubSink struct {
@@ -91,6 +105,8 @@ type pubsubSink struct {
 
 	client     pubsubClient
 	topicNamer *TopicNamer
+
+	format changefeedbase.FormatType
 }
 
 // TODO: unify gcp credentials code with gcp cloud storage credentials code
@@ -142,8 +158,12 @@ func MakePubsubSink(
 	pubsubURL := sinkURL{URL: u, q: u.Query()}
 	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
 
+	var formatType changefeedbase.FormatType
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case changefeedbase.OptFormatJSON:
+		formatType = changefeedbase.OptFormatJSON
+	case changefeedbase.OptFormatCSV:
+		formatType = changefeedbase.OptFormatCSV
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
@@ -161,6 +181,7 @@ func MakePubsubSink(
 		workerCtx:   ctx,
 		numWorkers:  numOfWorkers,
 		exitWorkers: cancel,
+		format:      formatType,
 	}
 
 	// creates custom pubsub object based on scheme
@@ -247,6 +268,13 @@ func (p *pubsubSink) EmitResolvedTimestamp(
 
 // Flush blocks until all messages in the event channels are sent
 func (p *pubsubSink) Flush(ctx context.Context) error {
+	if err := p.flush(ctx); err != nil {
+		return errors.CombineErrors(p.client.connectivityError(), err)
+	}
+	return nil
+}
+
+func (p *pubsubSink) flush(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -341,12 +369,24 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 				// Signals a flush request, makes sure that the messages in eventsChans are finished sending
 				continue
 			}
-			m := msg.message
-			b, err := json.Marshal(m)
-			if err != nil {
-				p.exitWorkersWithError(err)
+
+			var content []byte
+			var err error
+			switch p.format {
+			case changefeedbase.OptFormatJSON:
+				content, err = json.Marshal(jsonPayload{
+					Key:   msg.message.Key,
+					Value: msg.message.Value,
+					Topic: msg.message.Topic,
+				})
+				if err != nil {
+					p.exitWorkersWithError(err)
+				}
+			case changefeedbase.OptFormatCSV:
+				content = msg.message.Value
 			}
-			err = p.client.sendMessage(b, msg.message.Topic, string(msg.message.Key))
+
+			err = p.client.sendMessage(content, msg.message.Topic, string(msg.message.Key))
 			if err != nil {
 				p.exitWorkersWithError(err)
 			}
@@ -438,9 +478,16 @@ func (p *gcpPubsubClient) init() error {
 func (p *gcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, error) {
 	t, err := p.client.CreateTopic(p.ctx, topicName)
 	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
+		switch status.Code(err) {
+		case codes.AlreadyExists:
 			t = p.client.Topic(topicName)
-		} else {
+		case codes.PermissionDenied:
+			// PermissionDenied may not be fatal if the topic already exists,
+			// but record it in case it turns out not to.
+			p.recordAutocreateError(err)
+			t = p.client.Topic(topicName)
+		default:
+			p.recordAutocreateError(err)
 			return nil, err
 		}
 	}
@@ -470,6 +517,7 @@ func (p *gcpPubsubClient) sendMessage(m []byte, topic string, key string) error 
 	// an error is returned for the published message.
 	_, err = res.Get(p.ctx)
 	if err != nil {
+		p.recordPublishError(err)
 		return err
 	}
 
@@ -504,6 +552,31 @@ func (p *gcpPubsubClient) forEachTopic(f func(name string, topicClient *pubsub.T
 		}
 		return f(n, t)
 	})
+}
+
+func (p *gcpPubsubClient) recordAutocreateError(e error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.autocreateError = e
+}
+
+func (p *gcpPubsubClient) recordPublishError(e error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.publishError = e
+}
+
+// connectivityError returns any errors encountered while writing to gcp.
+func (p *gcpPubsubClient) connectivityError() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if status.Code(p.mu.publishError) == codes.NotFound && p.mu.autocreateError != nil {
+		return errors.WithHint(
+			errors.Wrap(p.mu.autocreateError,
+				"Topic not found, and attempt to autocreate it failed."),
+			"Create topics in advance or grant this service account the pubsub.editor role on your project.")
+	}
+	return errors.CombineErrors(p.mu.publishError, p.mu.autocreateError)
 }
 
 // Generate the cloud endpoint that's specific to a region (e.g. us-east1).

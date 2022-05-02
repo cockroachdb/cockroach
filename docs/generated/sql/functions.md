@@ -382,6 +382,10 @@
 </span></td></tr>
 <tr><td><a name="digest"></a><code>digest(data: <a href="string.html">string</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Computes a binary hash of the given <code>data</code>. <code>type</code> is the algorithm to use (md5, sha1, sha224, sha256, sha384, or sha512).</p>
 </span></td></tr>
+<tr><td><a name="gen_salt"></a><code>gen_salt(type: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a salt for input into the <code>crypt</code> function using the default number of rounds.</p>
+</span></td></tr>
+<tr><td><a name="gen_salt"></a><code>gen_salt(type: <a href="string.html">string</a>, iter_count: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a salt for input into the <code>crypt</code> function using <code>iter_count</code> number of rounds.</p>
+</span></td></tr>
 <tr><td><a name="hmac"></a><code>hmac(data: <a href="bytes.html">bytes</a>, key: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates hashed MAC for <code>data</code> with key <code>key</code>. <code>type</code> is the same as in <code>digest()</code>.</p>
 </span></td></tr>
 <tr><td><a name="hmac"></a><code>hmac(data: <a href="string.html">string</a>, key: <a href="string.html">string</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Calculates hashed MAC for <code>data</code> with key <code>key</code>. <code>type</code> is the same as in <code>digest()</code>.</p>
@@ -2203,6 +2207,10 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_makebox2d"></a><code>st_makebox2d(geometry_a: geometry, geometry_b: geometry) &rarr; box2d</code></td><td><span class="funcdesc"><p>Creates a box2d from two points. Errors if arguments are not two non-empty points.</p>
 </span></td></tr>
+<tr><td><a name="st_makeenvelope"></a><code>st_makeenvelope(xmin: <a href="float.html">float</a>, ymin: <a href="float.html">float</a>, xmax: <a href="float.html">float</a>, ymax: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a rectangular Polygon from the minimum and maximum values for X and Y with SRID 0.</p>
+</span></td></tr>
+<tr><td><a name="st_makeenvelope"></a><code>st_makeenvelope(xmin: <a href="float.html">float</a>, ymin: <a href="float.html">float</a>, xmax: <a href="float.html">float</a>, ymax: <a href="float.html">float</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a rectangular Polygon from the minimum and maximum values for X and Y with the given SRID.</p>
+</span></td></tr>
 <tr><td><a name="st_makepoint"></a><code>st_makepoint(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X and Y coordinates.</p>
 </span></td></tr>
 <tr><td><a name="st_makepoint"></a><code>st_makepoint(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>, z: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X, Y, and Z coordinates.</p>
@@ -2570,7 +2578,23 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr>
 <tr><td><a name="st_x"></a><code>st_x(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the X coordinate of a geometry if it is a Point.</p>
 </span></td></tr>
+<tr><td><a name="st_xmax"></a><code>st_xmax(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the maximum X ordinate of a box2d.</p>
+</span></td></tr>
+<tr><td><a name="st_xmax"></a><code>st_xmax(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the maximum X ordinate of a geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_xmin"></a><code>st_xmin(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the minimum X ordinate of a box2d.</p>
+</span></td></tr>
+<tr><td><a name="st_xmin"></a><code>st_xmin(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the minimum X ordinate of a geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_y"></a><code>st_y(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Y coordinate of a geometry if it is a Point.</p>
+</span></td></tr>
+<tr><td><a name="st_ymax"></a><code>st_ymax(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the maximum Y ordinate of a box2d.</p>
+</span></td></tr>
+<tr><td><a name="st_ymax"></a><code>st_ymax(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the maximum Y ordinate of a geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_ymin"></a><code>st_ymin(box2d: box2d) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the minimum Y ordinate of a box2d.</p>
+</span></td></tr>
+<tr><td><a name="st_ymin"></a><code>st_ymin(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the minimum Y ordinate of a geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_z"></a><code>st_z(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Z coordinate of a geometry if it is a Point.</p>
 </span></td></tr>
@@ -3152,6 +3176,25 @@ table. Returns an error if validation fails.</p>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
 <tr><td><a name="row_to_json"></a><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
+</span></td></tr></tbody>
+</table>
+
+### TUPLE{INT AS RANGE_ID, STRING AS ERROR, INT AS END_TO_END_LATENCY_MS, STRING AS VERBOSE_TRACE} functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="crdb_internal.probe_ranges"></a><code>crdb_internal.probe_ranges(timeout: <a href="interval.html">interval</a>, probe_type: unknown_enum) &rarr; tuple{int AS range_id, string AS error, int AS end_to_end_latency_ms, string AS verbose_trace}</code></td><td><span class="funcdesc"><p>Returns rows of range data based on the results received when using the prober.
+Parameters
+timeout: interval for the maximum time the user wishes the prober to probe a range.
+probe_type: enum indicating which kind of probe the prober should conduct (options are read or write).
+Example usage
+number of failed write probes: select count(1) from crdb_internal.probe_ranges(INTERVAL ‘1000ms’, ‘write’) where error != ‘’;
+50 slowest probes: select range_id, error, end_to_end_latency_ms from crdb_internal.probe_ranges(INTERVAL ‘1000ms’, true) order by end_to_end_latency_ms desc limit 50;
+Notes
+If a probe should fail, the latency will be set to MaxInt64 in order to naturally sort above other latencies.
+Read probes are cheaper than write probes. If write probes have already ran, it’s not necessary to also run a read probe.
+A write probe will effectively probe reads as well.</p>
 </span></td></tr></tbody>
 </table>
 

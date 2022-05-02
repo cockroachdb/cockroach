@@ -72,7 +72,7 @@ func newDistSQLSpecExecFactory(p *planner, planningMode distSQLPlanningMode) exe
 		distribute = DistributionTypeSystemTenantOnly
 	}
 	evalCtx := p.ExtendedEvalContext()
-	e.planCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner,
+	e.planCtx = e.dsp.NewPlanningCtx(evalCtx.Ctx(), evalCtx, e.planner,
 		e.planner.txn, distribute)
 	return e
 }
@@ -253,16 +253,14 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	if err := rowenc.InitIndexFetchSpec(&trSpec.FetchSpec, e.planner.ExecCfg().Codec, tabDesc, idx, columnIDs); err != nil {
 		return nil, err
 	}
-	if params.Locking.IsLocking() {
-		trSpec.LockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
-		trSpec.LockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
-		if trSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE {
-			// Scans that are performing row-level locking cannot currently be
-			// distributed because their locks would not be propagated back to
-			// the root transaction coordinator.
-			// TODO(nvanbenschoten): lift this restriction.
-			recommendation = cannotDistribute
-		}
+	trSpec.LockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
+	trSpec.LockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
+	if trSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+		// Scans that are performing row-level locking cannot currently be
+		// distributed because their locks would not be propagated back to
+		// the root transaction coordinator.
+		// TODO(nvanbenschoten): lift this restriction.
+		recommendation = cannotDistribute
 	}
 
 	// Note that we don't do anything about the possible filter here since we
@@ -646,6 +644,7 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 	keyCols []exec.NodeColumnOrdinal,
 	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
+	locking opt.Locking,
 	limitHint int64,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: index join")
@@ -683,6 +682,7 @@ func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
 	onCond tree.TypedExpr,
 	isFirstJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
+	locking opt.Locking,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: inverted join")
 }
@@ -694,6 +694,7 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 	wantedCols exec.TableColumnOrdinalSet,
 	fixedVals []tree.TypedExpr,
 	eqCols []exec.TableColumnOrdinal,
+	locking opt.Locking,
 ) (zigzagPlanningSide, error) {
 	desc := table.(*optTable).desc
 	colCfg := makeScanColumnsConfig(table, wantedCols)
@@ -719,11 +720,13 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 	// TODO (cucaroach): update indexUsageStats.
 
 	return zigzagPlanningSide{
-		desc:        desc,
-		index:       index.(*optIndex).idx,
-		cols:        cols,
-		eqCols:      eqColOrdinals,
-		fixedValues: valuesSpec,
+		desc:              desc,
+		index:             index.(*optIndex).idx,
+		cols:              cols,
+		eqCols:            eqColOrdinals,
+		fixedValues:       valuesSpec,
+		lockingStrength:   descpb.ToScanLockingStrength(locking.Strength),
+		lockingWaitPolicy: descpb.ToScanLockingWaitPolicy(locking.WaitPolicy),
 	}, nil
 }
 
@@ -733,11 +736,13 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 	leftCols exec.TableColumnOrdinalSet,
 	leftFixedVals []tree.TypedExpr,
 	leftEqCols []exec.TableColumnOrdinal,
+	leftLocking opt.Locking,
 	rightTable cat.Table,
 	rightIndex cat.Index,
 	rightCols exec.TableColumnOrdinalSet,
 	rightFixedVals []tree.TypedExpr,
 	rightEqCols []exec.TableColumnOrdinal,
+	rightLocking opt.Locking,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
@@ -747,11 +752,11 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 
 	sides := make([]zigzagPlanningSide, 2)
 	var err error
-	sides[0], err = e.constructZigzagJoinSide(planCtx, leftTable, leftIndex, leftCols, leftFixedVals, leftEqCols)
+	sides[0], err = e.constructZigzagJoinSide(planCtx, leftTable, leftIndex, leftCols, leftFixedVals, leftEqCols, leftLocking)
 	if err != nil {
 		return nil, err
 	}
-	sides[1], err = e.constructZigzagJoinSide(planCtx, rightTable, rightIndex, rightCols, rightFixedVals, rightEqCols)
+	sides[1], err = e.constructZigzagJoinSide(planCtx, rightTable, rightIndex, rightCols, rightFixedVals, rightEqCols, rightLocking)
 	if err != nil {
 		return nil, err
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -258,7 +259,7 @@ type rowsIterator struct {
 }
 
 var _ sqlutil.InternalRows = &rowsIterator{}
-var _ tree.InternalRows = &rowsIterator{}
+var _ eval.InternalRows = &rowsIterator{}
 
 func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 	// Due to recursive calls to Next() below, this deferred function might get
@@ -727,9 +728,6 @@ func (ie *InternalExecutor) execInternal(
 	// errCallback is called if an error is returned from the connExecutor's
 	// run() loop.
 	errCallback := func(err error) {
-		// The connExecutor exited its run() loop, so the stmtBuf must have been
-		// closed. Still, since Close() is idempotent, we'll call it here too.
-		stmtBuf.Close()
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
 	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)

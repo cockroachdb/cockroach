@@ -18,11 +18,13 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/errors"
@@ -43,7 +45,8 @@ func newMysqloutfileReader(
 	parallelism int,
 	tableDesc catalog.TableDescriptor,
 	targetCols tree.NameList,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
+	db *kv.DB,
 ) (*mysqloutfileReader, error) {
 	return &mysqloutfileReader{
 		importCtx: &parallelImportContext{
@@ -54,6 +57,7 @@ func newMysqloutfileReader(
 			tableDesc:  tableDesc,
 			targetCols: targetCols,
 			kvCh:       kvCh,
+			db:         db,
 		},
 		opts: opts,
 	}, nil

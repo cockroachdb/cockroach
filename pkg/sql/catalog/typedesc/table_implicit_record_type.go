@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -68,7 +69,7 @@ func CreateImplicitRecordTypeFromTableDesc(
 	// names.
 	typ := types.MakeLabeledTuple(typs, names)
 	tableID := descriptor.GetID()
-	typeOID := TypeIDToOID(tableID)
+	typeOID := catid.TypeIDToOID(tableID)
 	// Setting the type's OID allows us to properly report and display this type
 	// as having ID <tableID> + 100000 in the pg_type table and ::REGTYPE casts.
 	// It will also be used to serialize expressions casted to this type for
@@ -237,7 +238,7 @@ func (v TableImplicitRecordType) HydrateTypeInfoWithName(
 		return errors.AssertionFailedf("unexpected hydration of non-tuple type %s with table implicit record type %d",
 			typ, v.GetID())
 	}
-	if typ.Oid() != TypeIDToOID(v.GetID()) {
+	if typ.Oid() != catid.TypeIDToOID(v.GetID()) {
 		return errors.AssertionFailedf("unexpected mismatch during table implicit record type hydration: "+
 			"type %s has id %d, descriptor has id %d", typ, typ.Oid(), v.GetID())
 	}

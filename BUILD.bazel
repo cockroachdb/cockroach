@@ -9,6 +9,7 @@ load("//build/bazelutil/staticcheckanalyzers:def.bzl", "STATICCHECK_CHECKS")
 exports_files([
     "DEPS.bzl",
     "TEAMS.yaml",
+    "WORKSPACE",
     "go.mod",
     "go.sum",
 ])
@@ -49,11 +50,11 @@ exports_files([
 # gazelle:resolve proto io/prometheus/client/metrics.proto @com_github_prometheus_client_model//io/prometheus/client:client_proto
 # gazelle:resolve proto go io/prometheus/client/metrics.proto @com_github_prometheus_client_model//go
 # gazelle:resolve go github.com/prometheus/client_model/go @com_github_prometheus_client_model//go
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl @com_github_cockroachdb_cockroach//pkg/ccl/gssapiccl
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cli_test @com_github_cockroachdb_cockroach//pkg/cli:cli_test
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test @com_github_cockroachdb_cockroach//pkg/sql/colflow:colflow_test
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test @com_github_cockroachdb_cockroach//pkg/util/caller:caller_test
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test @com_github_cockroachdb_cockroach//pkg/util/json:json_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl //pkg/ccl/gssapiccl
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cli_test //pkg/cli:cli_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test //pkg/sql/colflow:colflow_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test //pkg/util/caller:caller_test
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test //pkg/util/json:json_test
 # gazelle:resolve go google.golang.org/genproto/googleapis/pubsub/v1 @org_golang_google_genproto//googleapis/pubsub/v1:pubsub
 # gazelle:resolve go google.golang.org/genproto/googleapis/cloud/kms/v1 @org_golang_google_genproto//googleapis/cloud/kms/v1:kms
 
@@ -193,6 +194,7 @@ nogo(
             "//pkg/testutils/lint/passes/leaktestcall",
             "//pkg/testutils/lint/passes/nilness",
             "//pkg/testutils/lint/passes/nocopy",
+            "//pkg/testutils/lint/passes/returncheck",
             "//pkg/testutils/lint/passes/returnerrcheck",
             "//pkg/testutils/lint/passes/timer",
             "//pkg/testutils/lint/passes/unconvert",

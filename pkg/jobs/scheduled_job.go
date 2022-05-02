@@ -516,7 +516,7 @@ func marshalProto(message protoutil.Message) (tree.Datum, error) {
 // datumToNative is a helper to convert tree.Datum into Go native
 // types.  We only care about types stored in the system.scheduled_jobs table.
 func datumToNative(datum tree.Datum) (interface{}, error) {
-	datum = tree.UnwrapDatum(nil, datum)
+	datum = tree.UnwrapDOidWrapper(datum)
 	if datum == tree.DNull {
 		return nil, nil
 	}

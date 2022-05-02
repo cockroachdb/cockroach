@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -33,34 +34,158 @@ type raftRequestInfo struct {
 	respStream RaftMessageResponseStream
 }
 
-type raftRequestQueue struct {
-	syncutil.Mutex
-	infos []raftRequestInfo
+type raftReceiveQueue struct {
+	mu struct { // not to be locked directly
+		syncutil.Mutex
+		infos []raftRequestInfo
+	}
 }
 
-func (q *raftRequestQueue) drain() ([]raftRequestInfo, bool) {
-	q.Lock()
-	defer q.Unlock()
-	if len(q.infos) == 0 {
+// Len returns the number of requests in the queue.
+func (q *raftReceiveQueue) Len() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.mu.infos)
+}
+
+// Drain moves the stored requests out of the queue, returning them to
+// the caller. Returns true if the returned slice was not empty.
+func (q *raftReceiveQueue) Drain() ([]raftRequestInfo, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.drainLocked()
+}
+
+func (q *raftReceiveQueue) drainLocked() ([]raftRequestInfo, bool) {
+	if len(q.mu.infos) == 0 {
 		return nil, false
 	}
-	infos := q.infos
-	q.infos = nil
+	infos := q.mu.infos
+	q.mu.infos = nil
 	return infos, true
 }
 
-func (q *raftRequestQueue) recycle(processed []raftRequestInfo) {
+// Recycle makes a slice that the caller knows will no longer be accessed
+// available for reuse.
+func (q *raftReceiveQueue) Recycle(processed []raftRequestInfo) {
 	if cap(processed) > 4 {
 		return // cap recycled slice lengths
 	}
-	q.Lock()
-	defer q.Unlock()
-	if q.infos == nil {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.mu.infos == nil {
 		for i := range processed {
 			processed[i] = raftRequestInfo{}
 		}
-		q.infos = processed[:0]
+		q.mu.infos = processed[:0]
 	}
+}
+
+func (q *raftReceiveQueue) Append(
+	req *kvserverpb.RaftMessageRequest, s RaftMessageResponseStream,
+) (shouldQueue, appended bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.mu.infos) >= replicaRequestQueueSize {
+		return false, false
+	}
+	q.mu.infos = append(q.mu.infos, raftRequestInfo{
+		req:        req,
+		respStream: s,
+	})
+	// The operation that enqueues the first message will
+	// be put in charge of triggering a drain of the queue.
+	return len(q.mu.infos) == 1, true
+}
+
+type raftReceiveQueues struct {
+	m syncutil.IntMap // RangeID -> *raftReceiveQueue
+	// delMu is held while deleting an entry from `m`. This
+	// is necessary since `IntMap` does not return the element
+	// being removed (if any) and we want stronger synchronization
+	// to prevent memory accounting leaks.
+	delMu syncutil.Mutex
+}
+
+func (qs *raftReceiveQueues) Load(rangeID roachpb.RangeID) (*raftReceiveQueue, bool) {
+	value, ok := qs.m.Load(int64(rangeID))
+	return (*raftReceiveQueue)(value), ok
+}
+
+func (qs *raftReceiveQueues) LoadOrCreate(
+	rangeID roachpb.RangeID,
+) (_ *raftReceiveQueue, loaded bool) {
+	if q, ok := qs.Load(rangeID); ok {
+		return q, ok // fast path
+	}
+	q := &raftReceiveQueue{}
+	value, loaded := qs.m.LoadOrStore(int64(rangeID), unsafe.Pointer(q))
+	return (*raftReceiveQueue)(value), loaded
+}
+
+func (qs *raftReceiveQueues) Delete(rangeID roachpb.RangeID) {
+	qs.delMu.Lock()
+	defer qs.delMu.Unlock()
+	if q, ok := qs.Load(rangeID); ok {
+		qs.m.Delete(int64(rangeID))
+		// NB: this is inconsequential today but in the future will
+		// allow for sane memory accounting.
+		// Also, we want to make `q` refuse further additions, since
+		// `Delete` is called from the replica removal path which is
+		// not under the raft scheduler. So we may delete this queue
+		// but the scheduler may be adding a request to it after due
+		// to loose synchronization. This would similarly upset mem
+		// accounting (and also today it leaks memory when it happens).
+		q.Drain()
+	}
+}
+
+// HandleDelegatedSnapshot reads the incoming delegated snapshot message and
+// throttles sending snapshots before passing the request to the sender replica.
+func (s *Store) HandleDelegatedSnapshot(
+	ctx context.Context,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream DelegateSnapshotResponseStream,
+	span *tracing.Span,
+) error {
+	ctx = s.AnnotateCtx(ctx)
+	const name = "storage.Store: handle snapshot delegation"
+	return s.stopper.RunTaskWithErr(
+		ctx, name, func(ctx context.Context) error {
+			sender, err := s.GetReplica(req.RangeID)
+			if err != nil {
+				return err
+			}
+			// Pass the request to the sender replica.
+			err = sender.followerSendSnapshot(ctx, req.RecipientReplica, req, stream)
+
+			// Get the recording of the child RPC and serialize it in the response.
+			recording := span.FinishAndGetConfiguredRecording()
+			resp := &kvserverpb.DelegateSnapshotResponse{
+				SnapResponse: &kvserverpb.SnapshotResponse{
+					Status:  kvserverpb.SnapshotResponse_APPLIED,
+					Message: "Snapshot successfully applied by recipient",
+				},
+			}
+			if recording != nil {
+				resp.CollectedSpans = recording
+			}
+			// If an error occurred during snapshot sending, send an error response.
+			if err != nil {
+				return stream.Send(
+					&kvserverpb.DelegateSnapshotResponse{
+						SnapResponse: &kvserverpb.SnapshotResponse{
+							Status:  kvserverpb.SnapshotResponse_ERROR,
+							Message: err.Error(),
+						},
+						CollectedSpans: resp.CollectedSpans,
+					},
+				)
+			}
+			// Send a final response that snapshot sending is completed.
+			return stream.Send(resp)
+		},
+	)
 }
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
@@ -166,28 +291,15 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	// count them.
 	s.metrics.RaftRcvdMessages[req.Message.Type].Inc(1)
 
-	value, ok := s.replicaQueues.Load(int64(req.RangeID))
-	if !ok {
-		value, _ = s.replicaQueues.LoadOrStore(int64(req.RangeID), unsafe.Pointer(&raftRequestQueue{}))
-	}
-	q := (*raftRequestQueue)(value)
-	q.Lock()
-	defer q.Unlock()
-	if len(q.infos) >= replicaRequestQueueSize {
+	q, _ := s.raftRecvQueues.LoadOrCreate(req.RangeID)
+	enqueue, appended := q.Append(req, respStream)
+	if !appended {
 		// TODO(peter): Return an error indicating the request was dropped. Note
 		// that dropping the request is safe. Raft will retry.
 		s.metrics.RaftRcvdMsgDropped.Inc(1)
 		return false
 	}
-	q.infos = append(q.infos, raftRequestInfo{
-		req:        req,
-		respStream: respStream,
-	})
-	// processRequestQueue will process all infos in the slice each time it
-	// runs, so we only need to schedule a Raft request event if we added the
-	// first info in the slice. Everyone else can rely on the request that added
-	// the first info already having scheduled a Raft request event.
-	return len(q.infos) == 1 /* enqueue */
+	return enqueue
 }
 
 // withReplicaForRequest calls the supplied function with the (lazily
@@ -440,16 +552,15 @@ func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID) bool {
-	value, ok := s.replicaQueues.Load(int64(rangeID))
+	q, ok := s.raftRecvQueues.Load(rangeID)
 	if !ok {
 		return false
 	}
-	q := (*raftRequestQueue)(value)
-	infos, ok := q.drain()
+	infos, ok := q.Drain()
 	if !ok {
 		return false
 	}
-	defer q.recycle(infos)
+	defer q.Recycle(infos)
 
 	var hadError bool
 	for i := range infos {
@@ -479,12 +590,8 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		// forgiving.
 		//
 		// See https://github.com/cockroachdb/cockroach/issues/30951#issuecomment-428010411.
-		if _, exists := s.mu.replicasByRangeID.Load(rangeID); !exists {
-			q.Lock()
-			if len(q.infos) == 0 {
-				s.replicaQueues.Delete(int64(rangeID))
-			}
-			q.Unlock()
+		if _, exists := s.mu.replicasByRangeID.Load(rangeID); !exists && q.Len() == 0 {
+			s.raftRecvQueues.Delete(rangeID)
 		}
 	}
 
@@ -501,10 +608,9 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	}
 
 	ctx := r.raftCtx
-	start := timeutil.Now()
 	stats, expl, err := r.handleRaftReady(ctx, noSnap)
 	maybeFatalOnRaftReadyErr(ctx, expl, err)
-	elapsed := timeutil.Since(start)
+	elapsed := stats.tEnd.Sub(stats.tBegin)
 	s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
 	s.metrics.RaftHandleReadyLatency.RecordValue(elapsed.Nanoseconds())
 	// Warn if Raft processing took too long. We use the same duration as we
@@ -512,8 +618,7 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	// processing time means we'll have starved local replicas of ticks and
 	// remote replicas will likely start campaigning.
 	if elapsed >= defaultReplicaRaftMuWarnThreshold {
-		log.Infof(ctx, "handle raft ready: %.1fs [applied=%d, batches=%d, state_assertions=%d]; node might be overloaded",
-			elapsed.Seconds(), stats.entriesProcessed, stats.batchesProcessed, stats.stateAssertions)
+		log.Infof(ctx, "%s; node might be overloaded", stats)
 	}
 }
 

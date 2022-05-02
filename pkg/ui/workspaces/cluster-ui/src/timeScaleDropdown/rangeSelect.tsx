@@ -16,6 +16,7 @@ import { CaretDown } from "src/icon/caretDown";
 import classNames from "classnames/bind";
 
 import styles from "./rangeSelector.module.scss";
+import { TimeWindow } from "./timeScaleTypes";
 
 const cx = classNames.bind(styles);
 
@@ -32,6 +33,7 @@ export type Selected = {
   timeEnd?: string;
   title?: string;
   timeLabel?: string;
+  timeWindow: TimeWindow;
 };
 
 interface RangeSelectProps {
@@ -123,8 +125,8 @@ const RangeSelect = ({
       {custom ? (
         <div className={cx("custom-menu")}>
           <DateRangeMenu
-            startInit={moment.utc().subtract(10, "minutes")}
-            endInit={moment.utc()}
+            startInit={selected.timeWindow.start}
+            endInit={selected.timeWindow.end}
             onSubmit={onChangeDate}
             onCancel={() => setCustom(false)}
           />

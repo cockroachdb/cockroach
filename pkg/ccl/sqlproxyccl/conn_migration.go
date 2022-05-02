@@ -16,6 +16,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,7 +36,9 @@ import (
 var defaultTransferTimeout = 15 * time.Second
 
 // Used in testing.
-var transferConnectionConnectorTestHook func(context.Context, string, string) (net.Conn, error) = nil
+var transferConnectionConnectorTestHook func(
+	context.Context, balancer.ConnectionHandle, string,
+) (net.Conn, error) = nil
 
 type transferContext struct {
 	context.Context
@@ -74,6 +77,11 @@ func (f *forwarder) tryBeginTransfer() (started bool, cleanupFn func()) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	// Forwarder hasn't been initialized.
+	if !f.isInitializedLocked() {
+		return false, nil
+	}
+
 	// Transfer is already in progress. No concurrent transfers are allowed.
 	if f.mu.isTransferring {
 		return false, nil
@@ -105,15 +113,12 @@ func (f *forwarder) tryBeginTransfer() (started bool, cleanupFn func()) {
 
 var errTransferCannotStart = errors.New("transfer cannot be started")
 
-// TransferConnection attempts a best-effort connection migration to the SQL pod
-// with dstAddr as address. dstAddr, if not empty, has to be an address of a
-// RUNNING pod for the associated tenant. On the other hand, if the connection
-// is already connected to dstAddr, TransferConnection will succeed implicitly.
-//
-// If a transfer has already been started, or the forwarder has been closed,
-// this returns an error. This is a best-effort process because there could be a
-// situation where the forwarder is not in a state that is eligible for a
-// connection migration.
+// TransferConnection attempts a best-effort connection migration to an
+// available SQL pod based on the load-balancing algorithm. If a transfer has
+// already been started, or the forwarder has been closed, this returns an
+// error. This is a best-effort process because there could be a situation
+// where the forwarder is not in a state that is eligible for a connection
+// migration.
 //
 // NOTE: If the forwarder hasn't been closed, runTransfer has an invariant
 // where the processors have been resumed prior to calling this method. When
@@ -122,16 +127,11 @@ var errTransferCannotStart = errors.New("transfer cannot be started")
 // error).
 //
 // TransferConnection implements the balancer.ConnectionHandle interface.
-func (f *forwarder) TransferConnection(dstAddr string) (retErr error) {
+func (f *forwarder) TransferConnection() (retErr error) {
 	// A previous non-recoverable transfer would have closed the forwarder, so
 	// return right away.
 	if f.ctx.Err() != nil {
 		return f.ctx.Err()
-	}
-
-	// Transfer succeeded implicitly since the connection is already at dstAddr.
-	if f.ServerRemoteAddr() == dstAddr {
-		return nil
 	}
 
 	started, cleanupFn := f.tryBeginTransfer()
@@ -210,7 +210,7 @@ func (f *forwarder) TransferConnection(dstAddr string) (retErr error) {
 
 	// Transfer the connection.
 	clientConn, serverConn := f.getConns()
-	newServerConn, err := transferConnection(ctx, f.connector, f.metrics, clientConn, serverConn, dstAddr)
+	newServerConn, err := transferConnection(ctx, f, f.connector, f.metrics, clientConn, serverConn)
 	if err != nil {
 		return errors.Wrap(err, "transferring connection")
 	}
@@ -225,11 +225,10 @@ func (f *forwarder) TransferConnection(dstAddr string) (retErr error) {
 // connection got transferred to.
 func transferConnection(
 	ctx *transferContext,
+	requester balancer.ConnectionHandle,
 	connector *connector,
 	metrics *metrics,
-	clientConn *interceptor.PGConn,
-	serverConn *interceptor.PGConn,
-	dstAddr string,
+	clientConn, serverConn *interceptor.PGConn,
 ) (_ *interceptor.PGConn, retErr error) {
 	ctx.markRecoverable(true)
 
@@ -267,12 +266,12 @@ func transferConnection(
 		return nil, errors.Newf("%s", transferErr)
 	}
 
-	// Connect to the SQL pod at dstAddr.
+	// Connect to a new SQL pod.
 	connectFn := connector.OpenTenantConnWithToken
 	if transferConnectionConnectorTestHook != nil {
 		connectFn = transferConnectionConnectorTestHook
 	}
-	netConn, err := connectFn(ctx, revivalToken, dstAddr)
+	netConn, err := connectFn(ctx, requester, revivalToken)
 	if err != nil {
 		return nil, errors.Wrap(err, "opening connection")
 	}

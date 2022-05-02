@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlstats",
@@ -64,7 +65,7 @@ go_test(
     ],
     data = [
         ":testdata",
-        "@com_github_cockroachdb_cockroach//c-deps:libgeos",
+        "//c-deps:libgeos",
         "@com_github_cockroachdb_sqllogictest//:testfiles",
     ],
     embed = [":logictest"],

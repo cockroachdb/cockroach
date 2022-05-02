@@ -154,7 +154,9 @@ func (os *optSchema) getDescriptorForPermissionsCheck() catalog.Descriptor {
 	return os.database
 }
 
-func (oc *optCatalog) GetAllSchemaNamesForDB(ctx context.Context, dbName string) ([]cat.SchemaName, error) {
+func (oc *optCatalog) GetAllSchemaNamesForDB(
+	ctx context.Context, dbName string,
+) ([]cat.SchemaName, error) {
 	schemas, err := oc.planner.GetSchemasForDB(ctx, dbName)
 	if err != nil {
 		return nil, err

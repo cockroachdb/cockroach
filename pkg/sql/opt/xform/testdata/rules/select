@@ -1133,6 +1133,7 @@ SELECT * FROM b WHERE v >= 1 AND v <= 10 FOR UPDATE
 ----
 index-join b
  ├── columns: k:1!null u:2 v:3!null j:4
+ ├── locking: for-update
  ├── cardinality: [0 - 10]
  ├── volatile
  ├── key: (1)
@@ -1157,6 +1158,7 @@ select
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  ├── index-join b
  │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── locking: for-update
  │    ├── cardinality: [0 - 10]
  │    ├── volatile
  │    ├── key: (1)
@@ -6151,26 +6153,21 @@ memo (optimized, ~7KB, required=[presentation: c:3])
  ├── G7: (variable b)
  └── G8: (const 1)
 
-# GenerateZigzagJoins is disabled in the presence of a row-level locking clause.
-opt
+# GenerateZigzagJoins propagates row-level locking information.
+opt expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2 FOR UPDATE
 ----
-select
+inner-join (zigzag pqr@q pqr@r)
  ├── columns: q:2!null r:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [2]
+ ├── left locking: for-update
+ ├── right locking: for-update
  ├── volatile
  ├── fd: ()-->(2,3)
- ├── index-join pqr
- │    ├── columns: q:2 r:3
- │    ├── volatile
- │    ├── fd: ()-->(2)
- │    └── scan pqr@q
- │         ├── columns: p:1!null q:2!null
- │         ├── constraint: /2/1: [/1 - /1]
- │         ├── locking: for-update
- │         ├── volatile
- │         ├── key: (1)
- │         └── fd: ()-->(2)
  └── filters
+      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
 
 # Zigzag join hinting tests
@@ -6459,40 +6456,28 @@ select
  └── filters
       └── (j:4 @> '[3]') OR (j:4 @> '[[1, 2]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
-# GenerateInvertedIndexZigzagJoins is disabled in the presence of a row-level
-# locking clause.
-opt expect-not=GenerateInvertedIndexZigzagJoins
+# GenerateInvertedIndexZigzagJoins propagates row-level locking information.
+opt expect=GenerateInvertedIndexZigzagJoins
 SELECT * FROM b WHERE j @> '{"a":1, "c":2}' FOR UPDATE
 ----
-index-join b
+inner-join (lookup b)
  ├── columns: k:1!null u:2 v:3 j:4!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── locking: for-update
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── inverted-filter
-      ├── columns: k:1!null
-      ├── inverted expression: /9
-      │    ├── tight: true, unique: true
-      │    ├── union spans: empty
-      │    └── INTERSECTION
-      │         ├── span expression
-      │         │    ├── tight: true, unique: true
-      │         │    └── union spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      │         └── span expression
-      │              ├── tight: true, unique: true
-      │              └── union spans: ["7c\x00\x01*\x04\x00", "7c\x00\x01*\x04\x00"]
-      ├── volatile
-      ├── key: (1)
-      └── scan b@j_inv_idx
-           ├── columns: k:1!null j_inverted_key:9!null
-           ├── inverted constraint: /9/1
-           │    └── spans
-           │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-           │         └── ["7c\x00\x01*\x04\x00", "7c\x00\x01*\x04\x00"]
-           ├── locking: for-update
-           ├── volatile
-           ├── key: (1)
-           └── fd: (1)-->(9)
+ ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+ │    ├── columns: k:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [9] = ['\x376100012a0200']
+ │    ├── right fixed columns: [9] = ['\x376300012a0400']
+ │    ├── left locking: for-update
+ │    ├── right locking: for-update
+ │    └── filters (true)
+ └── filters
+      └── j:4 @> '{"a": 1, "c": 2}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Zigzag join should not be produced when there is a NO_ZIGZAG_JOIN hint.
 opt expect-not=GenerateInvertedIndexZigzagJoins

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -291,7 +293,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		}
 
 		// Construct an optimized logical plan of the AS source stmt.
-		localPlanner.stmt = makeStatement(stmt, ClusterWideID{} /* queryID */)
+		localPlanner.stmt = makeStatement(stmt, clusterunique.ID{} /* queryID */)
 		localPlanner.optPlanningCtx.init(localPlanner)
 
 		localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
@@ -2431,7 +2433,7 @@ func createSchemaChangeEvalCtx(
 		Tracing: &SessionTracing{},
 		ExecCfg: execCfg,
 		Descs:   descriptors,
-		EvalContext: tree.EvalContext{
+		Context: eval.Context{
 			SessionDataStack: sessiondata.NewStack(sd),
 			// TODO(andrei): This is wrong (just like on the main code path on
 			// setupFlow). Each processor should override Ctx with its own context.

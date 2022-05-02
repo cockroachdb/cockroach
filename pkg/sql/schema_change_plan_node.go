@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -65,13 +66,14 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p.ExecCfg().Codec,
 		p.Txn(),
 		p.Descriptors(),
-		p,
-		p,
-		p,
-		p,
+		p, /* schemaResolver */
+		p, /* authAccessor */
+		p, /* astFormatter */
+		p, /* featureChecker */
 		p.SessionData(),
 		p.ExecCfg().Settings,
 		scs.stmts,
+		p.execCfg.InternalExecutor,
 	)
 	state, err := scbuild.Build(ctx, deps, scs.state, stmt)
 	if scerrors.HasNotImplemented(err) &&
@@ -194,7 +196,7 @@ func newSchemaChangerTxnRunDependencies(
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
 	descriptors *descs.Collection,
-	evalContext *tree.EvalContext,
+	evalContext *eval.Context,
 	kvTrace bool,
 	schemaChangerJobID jobspb.JobID,
 	stmts []string,

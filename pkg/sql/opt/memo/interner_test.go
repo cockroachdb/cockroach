@@ -20,12 +20,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"golang.org/x/tools/container/intsets"
@@ -151,6 +153,13 @@ func TestInterner(t *testing.T) {
 		Function:           RankSingleton,
 		WindowsItemPrivate: WindowsItemPrivate{Col: 0, Frame: frame2},
 	}}
+
+	viewDep1 := opt.ViewDep{}
+	viewDep2 := opt.ViewDep{}
+	viewDeps1 := opt.ViewDeps{viewDep1}
+	viewDeps2 := opt.ViewDeps{viewDep1}
+	viewDeps3 := opt.ViewDeps{viewDep2}
+	viewDeps4 := opt.ViewDeps{viewDep1, viewDep2}
 
 	invSpan1 := inverted.MakeSingleValSpan([]byte("abc"))
 	invSpan2 := inverted.MakeSingleValSpan([]byte("abc"))
@@ -327,6 +336,13 @@ func TestInterner(t *testing.T) {
 			{val1: opt.ColList{1, 2}, val2: opt.ColList{1, 2, 3}, equal: false},
 		}},
 
+		{hashFn: in.hasher.HashOptionalColList, eqFn: in.hasher.IsOptionalColListEqual, variations: []testVariation{
+			{val1: opt.OptionalColList{}, val2: opt.OptionalColList{}, equal: true},
+			{val1: opt.OptionalColList{1, 2, 3}, val2: opt.OptionalColList{1, 2, 3}, equal: true},
+			{val1: opt.OptionalColList{1, 2, 3}, val2: opt.OptionalColList{3, 2, 1}, equal: false},
+			{val1: opt.OptionalColList{1, 2}, val2: opt.OptionalColList{1, 2, 3}, equal: false},
+		}},
+
 		{hashFn: in.hasher.HashOrdering, eqFn: in.hasher.IsOrderingEqual, variations: []testVariation{
 			{val1: opt.Ordering{}, val2: opt.Ordering{}, equal: true},
 			{val1: opt.Ordering{-1, 1}, val2: opt.Ordering{-1, 1}, equal: true},
@@ -361,6 +377,9 @@ func TestInterner(t *testing.T) {
 		}},
 
 		{hashFn: in.hasher.HashScanFlags, eqFn: in.hasher.IsScanFlagsEqual, variations: []testVariation{
+			// Use unnamed fields so that compilation fails if a new field is
+			// added to ScanFlags.
+			{val1: ScanFlags{false, false, false, false, false, 0, 0, util.FastIntSet{}}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{NoIndexJoin: false}, val2: ScanFlags{NoIndexJoin: true}, equal: false},
 			{val1: ScanFlags{NoIndexJoin: true}, val2: ScanFlags{NoIndexJoin: true}, equal: true},
@@ -415,6 +434,38 @@ func TestInterner(t *testing.T) {
 		{hashFn: in.hasher.HashShowTraceType, eqFn: in.hasher.IsShowTraceTypeEqual, variations: []testVariation{
 			{val1: tree.ShowTraceKV, val2: tree.ShowTraceKV, equal: true},
 			{val1: tree.ShowTraceKV, val2: tree.ShowTraceRaw, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashIndexOrdinal, eqFn: in.hasher.IsIndexOrdinalEqual, variations: []testVariation{
+			{val1: 0, val2: 0, equal: true},
+			{val1: 0, val2: 1, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashIndexOrdinals, eqFn: in.hasher.IsIndexOrdinalsEqual, variations: []testVariation{
+			{val1: cat.IndexOrdinals{}, val2: cat.IndexOrdinals{}, equal: true},
+			{val1: cat.IndexOrdinals{1, 2, 3}, val2: cat.IndexOrdinals{1, 2, 3}, equal: true},
+			{val1: cat.IndexOrdinals{1, 2, 3}, val2: cat.IndexOrdinals{3, 2, 1}, equal: false},
+			{val1: cat.IndexOrdinals{1, 2}, val2: cat.IndexOrdinals{1, 2, 3}, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashUniqueOrdinals, eqFn: in.hasher.IsUniqueOrdinalsEqual, variations: []testVariation{
+			{val1: cat.UniqueOrdinals{}, val2: cat.UniqueOrdinals{}, equal: true},
+			{val1: cat.UniqueOrdinals{1, 2, 3}, val2: cat.UniqueOrdinals{1, 2, 3}, equal: true},
+			{val1: cat.UniqueOrdinals{1, 2, 3}, val2: cat.UniqueOrdinals{3, 2, 1}, equal: false},
+			{val1: cat.UniqueOrdinals{1, 2}, val2: cat.UniqueOrdinals{1, 2, 3}, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashViewDeps, eqFn: in.hasher.IsViewDepsEqual, variations: []testVariation{
+			{val1: viewDeps1, val2: viewDeps1, equal: true},
+			{val1: viewDeps1, val2: viewDeps2, equal: false},
+			{val1: viewDeps1, val2: viewDeps3, equal: false},
+			{val1: viewDeps1, val2: viewDeps4, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashViewTypeDeps, eqFn: in.hasher.IsViewTypeDepsEqual, variations: []testVariation{
+			{val1: util.MakeFastIntSet(), val2: util.MakeFastIntSet(), equal: true},
+			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(3, 2, 1), equal: true},
+			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(1, 2), equal: false},
 		}},
 
 		{hashFn: in.hasher.HashWindowFrame, eqFn: in.hasher.IsWindowFrameEqual, variations: []testVariation{
@@ -523,6 +574,54 @@ func TestInterner(t *testing.T) {
 			{val1: invSpans2, val2: invSpans4, equal: false},
 			{val1: invSpans4, val2: invSpans5, equal: true},
 			{val1: invSpans5, val2: invSpans6, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashZipExpr, eqFn: in.hasher.IsZipExprEqual, variations: []testVariation{
+			// Use unnamed fields so that compilation fails if a new field is
+			// added to ZipExpr.
+			{
+				val1:  ZipExpr{{TrueSingleton, nil, types.Bool, props.Scalar{}}},
+				val2:  ZipExpr{{TrueSingleton, nil, types.Bool, props.Scalar{}}},
+				equal: true,
+			},
+			{
+				val1:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2}}},
+				val2:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2}}},
+				equal: true,
+			},
+			{
+				val1:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2}}},
+				val2:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2, 3}}},
+				equal: false,
+			},
+			{
+				val1:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2}}, ZipItem{Fn: TrueSingleton}},
+				val2:  ZipExpr{ZipItem{Fn: TrueSingleton, Cols: opt.ColList{1, 2, 3}}},
+				equal: false,
+			},
+		}},
+
+		{hashFn: in.hasher.HashMaterializeClause, eqFn: in.hasher.IsMaterializeClauseEqual, variations: []testVariation{
+			{
+				val1:  tree.MaterializeClause{Set: true, Materialize: true},
+				val2:  tree.MaterializeClause{Set: true, Materialize: true},
+				equal: true,
+			},
+			{
+				val1:  tree.MaterializeClause{Set: true, Materialize: false},
+				val2:  tree.MaterializeClause{Set: true, Materialize: false},
+				equal: true,
+			},
+			{
+				val1:  tree.MaterializeClause{Set: true, Materialize: false},
+				val2:  tree.MaterializeClause{Set: false, Materialize: true},
+				equal: false,
+			},
+		}},
+
+		{hashFn: in.hasher.HashPersistence, eqFn: in.hasher.IsPersistenceEqual, variations: []testVariation{
+			{val1: tree.PersistencePermanent, val2: tree.PersistencePermanent, equal: true},
+			{val1: tree.PersistencePermanent, val2: tree.PersistenceTemporary, equal: false},
 		}},
 	}
 

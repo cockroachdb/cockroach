@@ -81,6 +81,7 @@ go_library(
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqltelemetry",
@@ -145,9 +146,7 @@ go_test(
         "read_import_pgdump_test.go",
         "testutils_test.go",
     ],
-    data = glob(["testdata/**"]) + [
-        "@com_github_cockroachdb_cockroach//c-deps:libgeos",
-    ],
+    data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":importer"],
     # It's a large test, so use 16 shards to run test cases.
     # See https://docs.bazel.build/versions/master/be/common-definitions.html#test.shard_count
@@ -155,6 +154,8 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
+        "//pkg/ccl",
+        "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/cloud/nodelocal",
@@ -194,6 +195,7 @@ go_test(
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/stats",

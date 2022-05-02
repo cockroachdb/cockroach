@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -3452,6 +3453,15 @@ func (errorChannelTestHandler) HandleSnapshot(
 	panic("unimplemented")
 }
 
+func (errorChannelTestHandler) HandleDelegatedSnapshot(
+	ctx context.Context,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream kvserver.DelegateSnapshotResponseStream,
+	span *tracing.Span,
+) error {
+	panic("unimplemented")
+}
+
 // This test simulates a scenario where one replica has been removed from the
 // range's Raft group but it is unaware of the fact. We check that this replica
 // coming back from the dead cannot cause elections.
@@ -4253,8 +4263,11 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 		log.Errorf(ctx, "expected raft group to be uninitialized")
 	}
 	// Send an increment and verify that initializes the Raft group.
-	kv.SendWrapped(ctx,
+	_, pErr := kv.SendWrapped(ctx,
 		followerStore.TestSender(), incrementArgs(splitKey, 1))
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
 
 	if !repl.IsRaftGroupInitialized() {
 		t.Fatal("expected raft group to be initialized")

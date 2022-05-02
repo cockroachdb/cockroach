@@ -74,13 +74,14 @@ func WithBuilderDependenciesFromTestServer(
 		execCfg.Codec,
 		planner.Txn(),
 		planner.Descriptors(),
-		planner,
-		planner,
-		planner,
-		planner,
+		planner, /* schemaResolver */
+		planner, /* authAccessor */
+		planner, /* astFormatter */
+		planner, /* featureChecker */
 		planner.SessionData(),
 		execCfg.Settings,
 		nil, /* statements */
+		execCfg.InternalExecutor,
 	))
 }
 

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -378,13 +379,19 @@ func (r opResult) createDiskBackedSort(
 	} else if matchLen > 0 {
 		// The input is already partially ordered. Use a chunks sorter to avoid
 		// loading all the rows into memory.
+		opName := opNamePrefix + "sort-chunks"
+		deselectorUnlimitedAllocator := colmem.NewAllocator(
+			ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
+				ctx, flowCtx, opName, processorID,
+			), factory,
+		)
 		var sortChunksMemAccount *mon.BoundAccount
 		sortChunksMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
-			ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
+			ctx, flowCtx, spoolMemLimit, opName, processorID,
 		)
 		inMemorySorter = colexec.NewSortChunks(
-			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
-			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
+			deselectorUnlimitedAllocator, colmem.NewAllocator(ctx, sortChunksMemAccount, factory),
+			input, inputTypes, ordering.Columns, int(matchLen), maxOutputBatchMemSize,
 		)
 	} else {
 		// No optimizations possible. Default to the standard sort operator.
@@ -1762,7 +1769,7 @@ func addProjection(
 
 func planSelectionOperators(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
 	input colexecop.Operator,
@@ -1938,7 +1945,7 @@ func planCastOperator(
 	fromType *types.T,
 	toType *types.T,
 	factory coldata.ColumnFactory,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	outputIdx := len(columnTypes)
 	op, err = colexecbase.GetCastOperator(colmem.NewAllocator(ctx, acc, factory), input, inputIdx, outputIdx, fromType, toType, evalCtx)
@@ -1952,7 +1959,7 @@ func planCastOperator(
 // resulting batches.
 func planProjectionOperators(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
 	input colexecop.Operator,
@@ -1984,7 +1991,7 @@ func planProjectionOperators(
 		}
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, t.Fn.Fn, nil /* cmpExpr */, releasables,
+			columnTypes, input, acc, factory, t.Op.EvalOp, nil /* cmpExpr */, releasables,
 		)
 	case *tree.CaseExpr:
 		allocator := colmem.NewAllocator(ctx, acc, factory)
@@ -2292,7 +2299,7 @@ func checkSupportedBinaryExpr(left, right tree.TypedExpr, outputType *types.T) e
 
 func planProjectionExpr(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	projOp tree.Operator,
 	outputType *types.T,
 	left, right tree.TypedExpr,
@@ -2300,7 +2307,7 @@ func planProjectionExpr(
 	input colexecop.Operator,
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
-	binFn tree.TwoArgFn,
+	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
 	releasables *[]execreleasable.Releasable,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
@@ -2339,7 +2346,7 @@ func planProjectionExpr(
 		// appended to the input batch.
 		op, err = colexecprojconst.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
-			rightIdx, lConstArg, resultIdx, evalCtx, binFn, cmpExpr,
+			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr,
 		)
 	} else {
 		var leftIdx int
@@ -2416,7 +2423,7 @@ func planProjectionExpr(
 				// all other projection operators.
 				op, err = colexecprojconst.GetProjectionRConstOperator(
 					allocator, typs, right.ResolvedType(), outputType, projOp,
-					input, leftIdx, rConstArg, resultIdx, evalCtx, binFn, cmpExpr,
+					input, leftIdx, rConstArg, resultIdx, evalCtx, binOp, cmpExpr,
 				)
 			}
 		} else {
@@ -2431,7 +2438,7 @@ func planProjectionExpr(
 			resultIdx = len(typs)
 			op, err = colexecproj.GetProjectionOperator(
 				allocator, typs, outputType, projOp, input, leftIdx, rightIdx,
-				resultIdx, evalCtx, binFn, cmpExpr,
+				resultIdx, evalCtx, binOp, cmpExpr,
 			)
 		}
 	}
@@ -2449,7 +2456,7 @@ func planProjectionExpr(
 // a logical operation (either AND or OR).
 func planLogicalProjectionOp(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
 	input colexecop.Operator,
@@ -2516,7 +2523,7 @@ func planLogicalProjectionOp(
 // expressions (tree.IsNullExpr and tree.IsNotNullExpr, respectively).
 func planIsNullProjectionOp(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	outputType *types.T,
 	expr tree.TypedExpr,
 	columnTypes []*types.T,
@@ -2571,14 +2578,14 @@ func useDefaultCmpOpForIn(tuple *tree.DTuple) bool {
 
 // evalTupleIfConst checks whether t contains only constant (i.e. tree.Datum)
 // expressions and evaluates the tuple if so.
-func evalTupleIfConst(evalCtx *tree.EvalContext, t *tree.Tuple) (_ tree.Datum, ok bool) {
+func evalTupleIfConst(evalCtx *eval.Context, t *tree.Tuple) (_ tree.Datum, ok bool) {
 	for _, expr := range t.Exprs {
 		if _, isDatum := expr.(tree.Datum); !isDatum {
 			// Not a constant expression.
 			return nil, false
 		}
 	}
-	tuple, err := t.Eval(evalCtx)
+	tuple, err := eval.Expr(evalCtx, t)
 	if err != nil {
 		return nil, false
 	}

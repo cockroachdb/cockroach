@@ -3214,7 +3214,7 @@ opt_as_tenant_clause:
     if tenID == 0 {
       return setErr(sqllex, errors.New("invalid tenant ID"))
     }
-    $$.val = tree.TenantID{Specified: true, TenantID: roachpb.MakeTenantID(tenID)}
+    $$.val = tree.TenantID{Specified: true, ID: tenID}
   }
 | AS TENANT IDENT
   {
@@ -6836,7 +6836,7 @@ targets:
     if tenID == 0 {
       return setErr(sqllex, errors.New("invalid tenant ID"))
     }
-    $$.val = tree.TargetList{TenantID: tree.TenantID{Specified: true, TenantID: roachpb.MakeTenantID(tenID)}}
+    $$.val = tree.TargetList{TenantID: tree.TenantID{Specified: true, ID: tenID}}
   }
 | TENANT IDENT
   {

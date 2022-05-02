@@ -27,8 +27,8 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/build/starlarkutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/google/skylark/syntax"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/googleapi"
 )
@@ -48,11 +48,6 @@ type listedModule struct {
 	Path    string        `json:"Path"`
 	Version string        `json:"Version"`
 	Replace *listedModule `json:"Replace,omitempty"`
-}
-
-type existingMirror struct {
-	url    string
-	sha256 string
 }
 
 func canMirror() bool {
@@ -201,143 +196,12 @@ func listAllModules(tmpdir string) (map[string]listedModule, error) {
 	return ret, nil
 }
 
-func getExistingMirrors() (map[string]existingMirror, error) {
+func getExistingMirrors() (map[string]starlarkutil.DownloadableArtifact, error) {
 	depsbzl, err := bazel.Runfile("DEPS.bzl")
 	if err != nil {
 		return nil, err
 	}
-	in, err := os.Open(depsbzl)
-	if err != nil {
-		return nil, err
-	}
-	defer in.Close()
-	return getExistingMirrorsFromDepsBzl(in)
-}
-
-func getExistingMirrorsFromDepsBzl(in interface{}) (map[string]existingMirror, error) {
-	parsed, err := syntax.Parse("DEPS.bzl", in, 0)
-	if err != nil {
-		return nil, err
-	}
-	for _, stmt := range parsed.Stmts {
-		switch s := stmt.(type) {
-		case *syntax.DefStmt:
-			if s.Name.Name == "go_deps" {
-				return existingMirrorsFromGoDeps(s)
-			}
-		default:
-			continue
-		}
-	}
-	return nil, fmt.Errorf("could not find go_deps function in DEPS.bzl")
-}
-
-func existingMirrorsFromGoDeps(def *syntax.DefStmt) (map[string]existingMirror, error) {
-	ret := make(map[string]existingMirror)
-	for _, stmt := range def.Function.Body {
-		switch s := stmt.(type) {
-		case *syntax.ExprStmt:
-			switch x := s.X.(type) {
-			case *syntax.CallExpr:
-				name, mirror, err := maybeGetExistingMirror(x)
-				if err != nil {
-					return nil, err
-				}
-				if name != "" {
-					ret[name] = mirror
-				}
-			default:
-				return nil, fmt.Errorf("unexpected expression in DEPS.bzl: %v", x)
-			}
-		}
-	}
-	return ret, nil
-}
-
-// maybeGetExistingMirror returns the existing mirror pointed to by the given
-// go_repository expression, returning the name of the repo and the location of
-// the mirror if one can be found, or the empty string/an empty existingMirror
-// if not. Returns an error iff an unrecoverable problem occurred.
-func maybeGetExistingMirror(call *syntax.CallExpr) (string, existingMirror, error) {
-	fn, err := expectIdent(call.Fn)
-	if err != nil {
-		return "", existingMirror{}, err
-	}
-	if fn != "go_repository" {
-		return "", existingMirror{}, fmt.Errorf("expected go_repository, got %s", fn)
-	}
-	var name, sha256, url string
-	for _, arg := range call.Args {
-		switch bx := arg.(type) {
-		case *syntax.BinaryExpr:
-			if bx.Op != syntax.EQ {
-				return "", existingMirror{}, fmt.Errorf("unexpected binary expression Op %d", bx.Op)
-			}
-			kwarg, err := expectIdent(bx.X)
-			if err != nil {
-				return "", existingMirror{}, err
-			}
-			if kwarg == "name" {
-				name, err = expectLiteralString(bx.Y)
-				if err != nil {
-					return "", existingMirror{}, err
-				}
-			}
-			if kwarg == "sha256" {
-				sha256, err = expectLiteralString(bx.Y)
-				if err != nil {
-					return "", existingMirror{}, err
-				}
-			}
-			if kwarg == "urls" {
-				url, err = expectSingletonStringList(bx.Y)
-				if err != nil {
-					return "", existingMirror{}, err
-				}
-			}
-		default:
-			return "", existingMirror{}, fmt.Errorf("unexpected expression in DEPS.bzl: %v", bx)
-		}
-	}
-	if url != "" {
-		return name, existingMirror{url: url, sha256: sha256}, nil
-	}
-	return "", existingMirror{}, nil
-}
-
-func expectIdent(x syntax.Expr) (string, error) {
-	switch i := x.(type) {
-	case *syntax.Ident:
-		return i.Name, nil
-	default:
-		return "", fmt.Errorf("expected identifier, got %v of type %T", i, i)
-	}
-}
-
-func expectLiteralString(x syntax.Expr) (string, error) {
-	switch l := x.(type) {
-	case *syntax.Literal:
-		switch s := l.Value.(type) {
-		case string:
-			return s, nil
-		default:
-			return "", fmt.Errorf("expected literal string, got %v of type %T", s, s)
-		}
-	default:
-		return "", fmt.Errorf("expected literal string, got %v of type %T", l, l)
-	}
-}
-
-func expectSingletonStringList(x syntax.Expr) (string, error) {
-	switch l := x.(type) {
-	case *syntax.ListExpr:
-		if len(l.List) != 1 {
-			return "", fmt.Errorf("expected list to have one item, got %d in %v", len(l.List), l)
-		}
-		return expectLiteralString(l.List[0])
-	default:
-		return "", fmt.Errorf("expected list of strings, got %v of type %T", l, l)
-	}
+	return starlarkutil.ListArtifactsInDepsBzl(depsbzl)
 }
 
 func mungeBazelRepoNameComponent(component string) string {
@@ -402,7 +266,7 @@ func dumpBuildNamingConventionArgsForRepo(repoName string) {
 func dumpNewDepsBzl(
 	listed map[string]listedModule,
 	downloaded map[string]downloadedModule,
-	existingMirrors map[string]existingMirror,
+	existingMirrors map[string]starlarkutil.DownloadableArtifact,
 ) error {
 	var sorted []string
 	repoNameToModPath := make(map[string]string)
@@ -466,14 +330,14 @@ def go_deps():
 			return err
 		}
 		oldMirror, ok := existingMirrors[repoName]
-		if ok && oldMirror.url == expectedURL {
+		if ok && oldMirror.URL == expectedURL {
 			// The URL matches, so just reuse the old mirror.
 			fmt.Printf(`        sha256 = "%s",
         strip_prefix = "%s@%s",
         urls = [
             "%s",
         ],
-`, oldMirror.sha256, replaced.Path, replaced.Version, oldMirror.url)
+`, oldMirror.Sha256, replaced.Path, replaced.Version, oldMirror.URL)
 		} else if canMirror() {
 			// We'll have to mirror our copy of the zip ourselves.
 			d := downloaded[replaced.Path]

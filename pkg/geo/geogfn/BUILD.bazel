@@ -48,7 +48,7 @@ go_test(
         "topology_operations_test.go",
         "unary_operators_test.go",
     ],
-    data = ["@com_github_cockroachdb_cockroach//c-deps:libgeos"],
+    data = ["//c-deps:libgeos"],
     embed = [":geogfn"],
     deps = [
         "//pkg/geo",

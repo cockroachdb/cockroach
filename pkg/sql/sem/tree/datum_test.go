@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -139,13 +139,7 @@ func TestCompareTimestamps(t *testing.T) {
 		t.Run(
 			tc.desc,
 			func(t *testing.T) {
-				ctx := &EvalContext{
-					SessionDataStack: sessiondata.NewStack(
-						&sessiondata.SessionData{
-							Location: tc.location,
-						},
-					),
-				}
+				ctx := &testTimestampCompareContext{loc: tc.location}
 				res, err := compareTimestamps(ctx, tc.left, tc.right)
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expected, res)
@@ -159,76 +153,30 @@ func TestCompareTimestamps(t *testing.T) {
 	assert.Error(t, err, "should not be able to compare infinite timestamps")
 }
 
-func TestCastStringToRegClassTableName(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		in       string
-		expected TableName
-	}{
-		{"a", MakeUnqualifiedTableName("a")},
-		{`a"`, MakeUnqualifiedTableName(`a"`)},
-		{`"a""".bB."cD" `, MakeTableNameWithSchema(`a"`, "bb", "cD")},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.in, func(t *testing.T) {
-			out, err := castStringToRegClassTableName(tc.in)
-			require.NoError(t, err)
-			require.Equal(t, tc.expected, out)
-		})
-	}
-
-	errorTestCases := []struct {
-		in            string
-		expectedError string
-	}{
-		{"a.b.c.d", "too many components: a.b.c.d"},
-		{"", `invalid table name: `},
-	}
-
-	for _, tc := range errorTestCases {
-		t.Run(tc.in, func(t *testing.T) {
-			_, err := castStringToRegClassTableName(tc.in)
-			require.EqualError(t, err, tc.expectedError)
-		})
-	}
-
+type testTimestampCompareContext struct {
+	loc *time.Location
 }
 
-func TestSplitIdentifierList(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+func (fcc *testTimestampCompareContext) MustGetPlaceholderValue(p *Placeholder) Datum {
+	panic("not implemented")
+}
 
-	testCases := []struct {
-		in       string
-		expected []string
-	}{
-		{`abc`, []string{"abc"}},
-		{`abc.dEf  `, []string{"abc", "def"}},
-		{` "aBc"  . d  ."HeLLo"""`, []string{"aBc", "d", `HeLLo"`}},
-	}
+var _ CompareContext = (*testTimestampCompareContext)(nil)
 
-	for _, tc := range testCases {
-		t.Run(tc.in, func(t *testing.T) {
-			out, err := splitIdentifierList(tc.in)
-			require.NoError(t, err)
-			require.Equal(t, tc.expected, out)
-		})
+func (fcc *testTimestampCompareContext) GetRelativeParseTime() time.Time {
+	if fcc.loc != nil {
+		return timeutil.Now().In(fcc.loc)
 	}
+	return timeutil.Now()
+}
 
-	errorTestCases := []struct {
-		in            string
-		expectedError string
-	}{
-		{`"unclosed`, `invalid name: unclosed ": "unclosed`},
-		{`"unclosed""`, `invalid name: unclosed ": "unclosed""`},
-		{`hello !`, `invalid name: expected separator .: hello !`},
+func (fcc *testTimestampCompareContext) GetLocation() *time.Location {
+	if fcc.loc != nil {
+		return fcc.loc
 	}
+	return time.UTC
+}
 
-	for _, tc := range errorTestCases {
-		t.Run(tc.in, func(t *testing.T) {
-			_, err := splitIdentifierList(tc.in)
-			require.EqualError(t, err, tc.expectedError)
-		})
-	}
+func (fcc *testTimestampCompareContext) UnwrapDatum(d Datum) Datum {
+	return d
 }

@@ -263,6 +263,7 @@ vectorized: true
         │ estimated row count: 990 (missing stats)
         │ table: xyz@xyz_pkey
         │ key columns: x
+        │ locking strength: for update
         │
         └── • scan
               columns: (x, y)
@@ -562,6 +563,7 @@ vectorized: true
     │
     └── • index join
         │ table: kv3@kv3_pkey
+        │ locking strength: for update
         │
         └── • scan
               missing stats
@@ -582,6 +584,7 @@ vectorized: true
 │
 └── • index join
     │ table: kv3@kv3_pkey
+    │ locking strength: for update
     │
     └── • scan
           missing stats

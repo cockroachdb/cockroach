@@ -968,6 +968,24 @@ type WindowFrame struct {
 	Exclusion treewindow.WindowFrameExclusion // optional frame exclusion
 }
 
+// IsDefaultFrame returns whether a frame equivalent to the default frame
+// is being used (default is RANGE UNBOUNDED PRECEDING).
+func (f *WindowFrame) IsDefaultFrame() bool {
+	if f == nil {
+		return true
+	}
+	if f.Bounds.StartBound.BoundType == treewindow.UnboundedPreceding {
+		return f.DefaultFrameExclusion() && f.Mode == treewindow.RANGE &&
+			(f.Bounds.EndBound == nil || f.Bounds.EndBound.BoundType == treewindow.CurrentRow)
+	}
+	return false
+}
+
+// DefaultFrameExclusion returns true if optional frame exclusion is omitted.
+func (f *WindowFrame) DefaultFrameExclusion() bool {
+	return f == nil || f.Exclusion == treewindow.NoExclusion
+}
+
 // Format implements the NodeFormatter interface.
 func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 	switch node.BoundType {
@@ -989,20 +1007,20 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *WindowFrame) Format(ctx *FmtCtx) {
-	ctx.WriteString(treewindow.WindowModeName(node.Mode))
+func (f *WindowFrame) Format(ctx *FmtCtx) {
+	ctx.WriteString(treewindow.WindowModeName(f.Mode))
 	ctx.WriteByte(' ')
-	if node.Bounds.EndBound != nil {
+	if f.Bounds.EndBound != nil {
 		ctx.WriteString("BETWEEN ")
-		ctx.FormatNode(node.Bounds.StartBound)
+		ctx.FormatNode(f.Bounds.StartBound)
 		ctx.WriteString(" AND ")
-		ctx.FormatNode(node.Bounds.EndBound)
+		ctx.FormatNode(f.Bounds.EndBound)
 	} else {
-		ctx.FormatNode(node.Bounds.StartBound)
+		ctx.FormatNode(f.Bounds.StartBound)
 	}
-	if node.Exclusion != treewindow.NoExclusion {
+	if f.Exclusion != treewindow.NoExclusion {
 		ctx.WriteByte(' ')
-		ctx.WriteString(node.Exclusion.String())
+		ctx.WriteString(f.Exclusion.String())
 	}
 }
 

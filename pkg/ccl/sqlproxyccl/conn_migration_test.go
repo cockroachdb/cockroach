@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -56,6 +57,20 @@ func TestTransferContext(t *testing.T) {
 
 func TestForwarder_tryBeginTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Run("not_initialized", func(t *testing.T) {
+		defer testutils.TestingHook(&isSafeTransferPointLocked,
+			func(req *processor, res *processor) bool {
+				return false
+			},
+		)()
+
+		f := &forwarder{}
+
+		started, cleanupFn := f.tryBeginTransfer()
+		require.False(t, started)
+		require.Nil(t, cleanupFn)
+	})
 
 	t.Run("isTransferring=true", func(t *testing.T) {
 		f := &forwarder{}
@@ -114,7 +129,7 @@ func TestTransferConnection(t *testing.T) {
 		ctx, cancel := newTransferContext(context.Background())
 		cancel()
 
-		conn, err := transferConnection(ctx, nil, nil, nil, nil, "")
+		conn, err := transferConnection(ctx, nil, nil, nil, nil, nil)
 		require.EqualError(t, err, context.Canceled.Error())
 		require.Nil(t, conn)
 		require.True(t, ctx.isRecoverable())
@@ -136,9 +151,9 @@ func TestTransferConnection(t *testing.T) {
 			ctx,
 			nil,
 			nil,
+			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.Regexp(t, "foo", err)
 		require.Nil(t, conn)
@@ -177,9 +192,9 @@ func TestTransferConnection(t *testing.T) {
 			ctx,
 			nil,
 			nil,
+			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.Regexp(t, "foobar", err)
 		require.Nil(t, conn)
@@ -218,9 +233,9 @@ func TestTransferConnection(t *testing.T) {
 			ctx,
 			nil,
 			nil,
+			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.Regexp(t, "foobaz", err)
 		require.Nil(t, conn)
@@ -258,23 +273,22 @@ func TestTransferConnection(t *testing.T) {
 		defer testutils.TestingHook(&transferConnectionConnectorTestHook,
 			func(
 				tCtx context.Context,
+				requestor balancer.ConnectionHandle,
 				token string,
-				dstAddr string,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
 				require.Equal(t, "token", token)
-				require.Equal(t, "dst-addr", dstAddr)
 				return nil, errors.New("foobarbaz")
 			},
 		)()
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			&connector{},
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.Regexp(t, "foobarbaz", err)
 		require.Nil(t, conn)
@@ -315,12 +329,11 @@ func TestTransferConnection(t *testing.T) {
 		defer testutils.TestingHook(&transferConnectionConnectorTestHook,
 			func(
 				tCtx context.Context,
+				requestor balancer.ConnectionHandle,
 				token string,
-				dstAddr string,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
 				require.Equal(t, "token", token)
-				require.Equal(t, "dst-addr", dstAddr)
 				return netConn, nil
 			},
 		)()
@@ -340,11 +353,11 @@ func TestTransferConnection(t *testing.T) {
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			&connector{},
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.Regexp(t, "foobar", err)
 		require.Nil(t, conn)
@@ -389,12 +402,11 @@ func TestTransferConnection(t *testing.T) {
 		defer testutils.TestingHook(&transferConnectionConnectorTestHook,
 			func(
 				tCtx context.Context,
+				requestor balancer.ConnectionHandle,
 				token string,
-				dstAddr string,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
 				require.Equal(t, "token", token)
-				require.Equal(t, "dst-addr", dstAddr)
 				return netConn, nil
 			},
 		)()
@@ -414,11 +426,11 @@ func TestTransferConnection(t *testing.T) {
 
 		conn, err := transferConnection(
 			ctx,
+			nil,
 			&connector{},
 			nil,
 			interceptor.NewPGConn(p1),
 			interceptor.NewPGConn(p2),
-			"dst-addr",
 		)
 		require.NoError(t, err)
 		require.NotNil(t, conn)

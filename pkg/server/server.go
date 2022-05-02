@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverrules"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -307,8 +308,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		log.Errorf(ctx, "unable to initialize periodic license metric update: %v", err)
 	}
 
-	// Create and add KV metric rules
+	// Create and add KV metric rules.
 	kvserver.CreateAndAddRules(ctx, ruleRegistry)
+	// Create and add server metric rules.
+	serverrules.CreateAndAddRules(ctx, ruleRegistry)
 
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during
@@ -565,6 +568,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				keys.SpanConfigurationsTableID,
 				1<<20, /* 1 MB */
 				fallbackConf,
+				cfg.Settings,
 				spanConfigKnobs,
 			)
 		}
@@ -955,6 +959,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Start a context for the asynchronous network workers.
+	workersCtx := s.AnnotateCtx(context.Background())
+
 	// connManager tracks incoming connections accepted via listeners
 	// and automatically closes them when the stopper indicates a
 	// shutdown.
@@ -963,10 +970,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// - SQL client connections with a TLS handshake over TCP.
 	// (gRPC connections are handled separately via s.grpc and perform
 	// their TLS handshake on their own)
-	connManager := netutil.MakeServer(s.stopper, uiTLSConfig, http.HandlerFunc(s.http.baseHandler))
-
-	// Start a context for the asynchronous network workers.
-	workersCtx := s.AnnotateCtx(context.Background())
+	connManager := netutil.MakeServer(workersCtx, s.stopper, uiTLSConfig, http.HandlerFunc(s.http.baseHandler))
 
 	// Start the admin UI server. This opens the HTTP listen socket,
 	// optionally sets up TLS, and dispatches the server worker for the

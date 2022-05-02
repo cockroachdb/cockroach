@@ -23,9 +23,10 @@ CREATE TABLE public.t (
 query TT
 SELECT conname, contype FROM pg_catalog.pg_constraint ORDER BY conname
 ----
-cc  c
-cf  f
-cu  u
+cc      c
+cf      f
+cu      u
+t_pkey  p
 
 subtest rename_works
 
@@ -50,9 +51,10 @@ CREATE TABLE public.t (
 query TT
 SELECT conname, contype FROM pg_catalog.pg_constraint ORDER BY conname
 ----
-cc2  c
-cf2  f
-cu2  u
+cc2     c
+cf2     f
+cu2     u
+t_pkey  p
 
 
 subtest duplicate_constraints
@@ -101,6 +103,23 @@ CREATE TABLE public.t (
 query TT
 SELECT conname, contype FROM pg_catalog.pg_constraint ORDER BY conname
 ----
-cc4  c
-cf4  f
-cu4  u
+cc4     c
+cf4     f
+cu4     u
+t_pkey  p
+
+# Allow renames of the implicit primary key.
+statement ok
+CREATE TABLE implicit (a int, b int)
+
+statement ok
+ALTER TABLE implicit RENAME CONSTRAINT implicit_pkey TO something_else
+
+query TTTTB colnames
+SHOW CONSTRAINTS FROM implicit
+----
+table_name  constraint_name  constraint_type  details                  validated
+implicit    something_else   PRIMARY KEY      PRIMARY KEY (rowid ASC)  true
+
+statement error duplicate constraint name: \"something_else\"
+ALTER TABLE implicit ADD CONSTRAINT something_else CHECK(b > 0)

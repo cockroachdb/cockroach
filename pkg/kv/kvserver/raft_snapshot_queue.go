@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
@@ -109,15 +108,12 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
 	snapType := kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE
-	skipSnapLogLimiter := log.Every(10 * time.Second)
 
 	if typ := repDesc.GetType(); typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
 		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
 			return nil
 		}
-		if index := repl.getAndGCSnapshotLogTruncationConstraints(
-			timeutil.Now(), repDesc.StoreID,
-		); index > 0 {
+		if repl.hasOutstandingSnapshotInFlightToStore(repDesc.StoreID) {
 			// There is a snapshot being transferred. It's probably an INITIAL snap,
 			// so bail for now and try again later.
 			err := errors.Errorf(
@@ -125,11 +121,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 				typ,
 				repDesc,
 			)
-			if skipSnapLogLimiter.ShouldLog() {
-				log.Infof(ctx, "%v", err)
-			} else {
-				log.VEventf(ctx, 3, "%v", err)
-			}
+			log.VEventf(ctx, 2, "%v", err)
 			// TODO(dan): This is super brittle and non-obvious. In the common case,
 			// this check avoids duplicate work, but in rare cases, we send the
 			// learner snap at an index before the one raft wanted here. The raft

@@ -20,19 +20,9 @@ type ConnectionHandle interface {
 	Close()
 
 	// TransferConnection performs a connection migration on the connection
-	// handle to the given SQL pod at the dstAddr address. Invoking this blocks
-	// until the connection migration process has been completed.
-	//
-	// NOTE: dstAddr, if not empty, has to be a valid RUNNING address for the
-	// tenant associated with the connection handle, or else an error will be
-	// returned.
-	TransferConnection(dstAddr string) error
-
-	// ServerRemoteAddr returns the remote address of the connection between
-	// the proxy and the server, which is basically the SQL pod's address
-	// (e.g. 10.15.42.36:26257). This will be used to identify which pod the
-	// connection handle is attached to.
-	ServerRemoteAddr() string
+	// handle. Invoking this blocks until the connection migration process has
+	// been completed.
+	TransferConnection() error
 
 	// IsIdle returns true if the connection is idle, and false otherwise.
 	IsIdle() bool

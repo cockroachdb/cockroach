@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -361,7 +363,7 @@ func (expr *BinaryExpr) TypeCheck(
 	}
 
 	expr.Left, expr.Right = leftTyped, rightTyped
-	expr.Fn = binOp
+	expr.Op = binOp
 	expr.typ = binOp.returnType()(typedSubExprs)
 	return expr, nil
 }
@@ -425,7 +427,7 @@ func invalidCastError(castFrom, castTo *types.T) error {
 }
 
 // resolveCast checks that the cast from the two types is valid. If allowStable
-// is false, it also checks that the cast has VolatilityImmutable.
+// is false, it also checks that the cast has Immutable.
 //
 // On success, any relevant telemetry counters are incremented.
 func resolveCast(
@@ -450,7 +452,7 @@ func resolveCast(
 		if err != nil {
 			return err
 		}
-		telemetry.Inc(GetCastCounter(fromFamily, toFamily))
+		telemetry.Inc(getCastCounter(fromFamily, toFamily))
 		return nil
 
 	case toFamily == types.EnumFamily && fromFamily == types.EnumFamily:
@@ -459,7 +461,7 @@ func resolveCast(
 		if !castFrom.Equivalent(castTo) {
 			return invalidCastError(castFrom, castTo)
 		}
-		telemetry.Inc(GetCastCounter(fromFamily, toFamily))
+		telemetry.Inc(getCastCounter(fromFamily, toFamily))
 		return nil
 
 	case toFamily == types.TupleFamily && fromFamily == types.TupleFamily:
@@ -489,25 +491,68 @@ func resolveCast(
 				return err
 			}
 		}
-		telemetry.Inc(GetCastCounter(fromFamily, toFamily))
+		telemetry.Inc(getCastCounter(fromFamily, toFamily))
 		return nil
 
 	default:
-		cast, ok := lookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
+		cast, ok := cast.LookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
 		if !ok {
 			return invalidCastError(castFrom, castTo)
 		}
-		if !allowStable && cast.volatility >= VolatilityStable {
+		if !allowStable && cast.Volatility >= volatility.Stable {
 			err := NewContextDependentOpsNotAllowedError(context)
 			err = pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, castTo)
-			if cast.volatilityHint != "" {
-				err = errors.WithHint(err, cast.volatilityHint)
+			if cast.VolatilityHint != "" {
+				err = errors.WithHint(err, cast.VolatilityHint)
 			}
 			return err
 		}
-		telemetry.Inc(GetCastCounter(fromFamily, toFamily))
+		telemetry.Inc(getCastCounter(fromFamily, toFamily))
 		return nil
 	}
+}
+
+// castCounterType represents a cast from one family to another.
+type castCounterType struct {
+	from, to types.Family
+}
+
+// castCounterMap is a map of cast counter types to their corresponding
+// telemetry counters.
+var castCounters map[castCounterType]telemetry.Counter
+
+// Initialize castCounters.
+func init() {
+	castCounters = make(map[castCounterType]telemetry.Counter)
+	for fromID := range types.Family_name {
+		for toID := range types.Family_name {
+			from := types.Family(fromID)
+			to := types.Family(toID)
+			var c telemetry.Counter
+			switch {
+			case from == types.ArrayFamily && to == types.ArrayFamily:
+				c = sqltelemetry.ArrayCastCounter
+			case from == types.TupleFamily && to == types.TupleFamily:
+				c = sqltelemetry.TupleCastCounter
+			case from == types.EnumFamily && to == types.EnumFamily:
+				c = sqltelemetry.EnumCastCounter
+			default:
+				c = sqltelemetry.CastOpCounter(from.Name(), to.Name())
+			}
+			castCounters[castCounterType{from, to}] = c
+		}
+	}
+}
+
+// getCastCounter returns the telemetry counter for the cast from one family to
+// another family.
+func getCastCounter(from, to types.Family) telemetry.Counter {
+	if c, ok := castCounters[castCounterType{from, to}]; ok {
+		return c
+	}
+	panic(errors.AssertionFailedf(
+		"no cast counter found for cast from %s to %s", from.Name(), to.Name(),
+	))
 }
 
 func isArrayExpr(expr Expr) bool {
@@ -851,7 +896,7 @@ func (expr *ComparisonExpr) TypeCheck(
 	}
 
 	expr.Left, expr.Right = leftTyped, rightTyped
-	expr.Fn = cmpOp
+	expr.Op = cmpOp
 	expr.typ = types.Bool
 	return expr, nil
 }
@@ -963,14 +1008,14 @@ func NewContextDependentOpsNotAllowedError(context string) error {
 	)
 }
 
-// checkVolatility checks whether an operator with the given volatility is
+// checkVolatility checks whether an operator with the given Volatility is
 // allowed in the current context.
-func (sc *SemaContext) checkVolatility(v Volatility) error {
+func (sc *SemaContext) checkVolatility(v volatility.V) error {
 	if sc == nil {
 		return nil
 	}
 	switch v {
-	case VolatilityVolatile:
+	case volatility.Volatile:
 		if sc.Properties.required.rejectFlags&RejectVolatileFunctions != 0 {
 			// The code FeatureNotSupported is a bit misleading here,
 			// because we probably can't support the feature at all. However
@@ -978,7 +1023,7 @@ func (sc *SemaContext) checkVolatility(v Volatility) error {
 			return pgerror.Newf(pgcode.FeatureNotSupported,
 				"volatile functions are not allowed in %s", sc.Properties.required.context)
 		}
-	case VolatilityStable:
+	case volatility.Stable:
 		if sc.Properties.required.rejectFlags&RejectStableOperators != 0 {
 			return NewContextDependentOpsNotAllowedError(sc.Properties.required.context)
 		}
@@ -1464,7 +1509,7 @@ func (expr *UnaryExpr) TypeCheck(
 	}
 
 	expr.Expr = exprTyped
-	expr.fn = unaryOp
+	expr.op = unaryOp
 	expr.typ = unaryOp.returnType()(typedSubExprs)
 	return expr, nil
 }
@@ -2829,11 +2874,11 @@ type stripFuncsVisitor struct{}
 func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	switch t := expr.(type) {
 	case *UnaryExpr:
-		t.fn = nil
+		t.op = nil
 	case *BinaryExpr:
-		t.Fn = nil
+		t.Op = nil
 	case *ComparisonExpr:
-		t.Fn = nil
+		t.Op = nil
 	case *FuncExpr:
 		t.fn = nil
 		t.fnProps = nil

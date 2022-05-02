@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -76,7 +78,7 @@ func DequalifyAndValidateExpr(
 	typ *types.T,
 	context string,
 	semaCtx *tree.SemaContext,
-	maxVolatility tree.Volatility,
+	maxVolatility volatility.V,
 	tn *tree.TableName,
 ) (string, *types.T, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
@@ -293,13 +295,13 @@ func deserializeExprForFormatting(
 	// typedExpr.
 	if fmtFlags == tree.FmtPGCatalog {
 		sanitizedExpr, err := SanitizeVarFreeExpr(ctx, expr, typedExpr.ResolvedType(), "FORMAT", semaCtx,
-			tree.VolatilityImmutable)
-		// If the expr has no variables and has VolatilityImmutable, we can evaluate
+			volatility.Immutable)
+		// If the expr has no variables and has Immutable, we can evaluate
 		// it and turn it into a constant.
 		if err == nil {
 			// An empty EvalContext is fine here since the expression has
-			// VolatilityImmutable.
-			d, err := sanitizedExpr.Eval(&tree.EvalContext{})
+			// Immutable.
+			d, err := eval.Expr(&eval.Context{}, sanitizedExpr)
 			if err == nil {
 				return d, nil
 			}
@@ -312,7 +314,7 @@ func deserializeExprForFormatting(
 // nameResolver is used to replace unresolved names in expressions with
 // IndexedVars.
 type nameResolver struct {
-	evalCtx    *tree.EvalContext
+	evalCtx    *eval.Context
 	tableID    descpb.ID
 	source     *colinfo.DataSourceInfo
 	nrc        *nameResolverIVarContainer
@@ -321,7 +323,7 @@ type nameResolver struct {
 
 // newNameResolver creates and returns a nameResolver.
 func newNameResolver(
-	evalCtx *tree.EvalContext, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
+	evalCtx *eval.Context, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
 ) *nameResolver {
 	source := colinfo.NewSourceInfoForSingleTable(
 		*tn,
@@ -371,7 +373,7 @@ type nameResolverIVarContainer struct {
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
 // Evaluation is not support, so this function panics.
 func (nrc *nameResolverIVarContainer) IndexedVarEval(
-	idx int, ctx *tree.EvalContext,
+	idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
 	panic("unsupported")
 }
@@ -395,7 +397,7 @@ func SanitizeVarFreeExpr(
 	expectedType *types.T,
 	context string,
 	semaCtx *tree.SemaContext,
-	maxVolatility tree.Volatility,
+	maxVolatility volatility.V,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(expr) {
 		return nil, pgerror.Newf(pgcode.Syntax,
@@ -411,14 +413,14 @@ func SanitizeVarFreeExpr(
 	flags := tree.RejectSpecial
 
 	switch maxVolatility {
-	case tree.VolatilityImmutable:
+	case volatility.Immutable:
 		flags |= tree.RejectStableOperators
 		fallthrough
 
-	case tree.VolatilityStable:
+	case volatility.Stable:
 		flags |= tree.RejectVolatileFunctions
 
-	case tree.VolatilityVolatile:
+	case volatility.Volatile:
 		// Allow anything (no flags needed).
 
 	default:

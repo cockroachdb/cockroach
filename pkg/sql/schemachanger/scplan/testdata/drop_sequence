@@ -19,7 +19,6 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.DrainDescriptorName
       Namespace:
@@ -98,7 +97,6 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -205,10 +203,6 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [Owner:{DescID: 104}, ABSENT]
-  to:   [Sequence:{DescID: 104}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [TableComment:{DescID: 104}, ABSENT]
   to:   [Sequence:{DescID: 104}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop

@@ -27,11 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -61,6 +63,13 @@ type incomingSnapshotStream interface {
 type outgoingSnapshotStream interface {
 	Send(*kvserverpb.SnapshotRequest) error
 	Recv() (*kvserverpb.SnapshotResponse, error)
+}
+
+// outgoingSnapshotStream is the minimal interface on a GRPC stream required
+// to send a snapshot over the network.
+type outgoingDelegatedStream interface {
+	Send(*kvserverpb.DelegateSnapshotRequest) error
+	Recv() (*kvserverpb.DelegateSnapshotResponse, error)
 }
 
 // snapshotStrategy is an approach to sending and receiving Range snapshots.
@@ -423,18 +432,48 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 	}
 }
 
-// reserveSnapshot throttles incoming snapshots. The returned closure is used
-// to cleanup the reservation and release its resources.
+// reserveSnapshot throttles incoming snapshots.
 func (s *Store) reserveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
 ) (_cleanup func(), _err error) {
-	tBegin := timeutil.Now()
+	return s.throttleSnapshot(
+		ctx, s.snapshotApplySem, header.RangeSize,
+		header.RaftMessageRequest.RangeID, header.RaftMessageRequest.ToReplica.ReplicaID,
+	)
+}
 
+// reserveSendSnapshot throttles outgoing snapshots.
+func (s *Store) reserveSendSnapshot(
+	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest, rangeSize int64,
+) (_cleanup func(), _err error) {
+	sem := s.initialSnapshotSendSem
+	if req.Type == kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE {
+		sem = s.raftSnapshotSendSem
+	}
+	if fn := s.cfg.TestingKnobs.BeforeSendSnapshotThrottle; fn != nil {
+		fn()
+	}
+	return s.throttleSnapshot(ctx, sem, rangeSize,
+		req.RangeID, req.DelegatedSender.ReplicaID,
+	)
+}
+
+// throttleSnapshot is a helper function to throttle snapshot sending and
+// receiving. The returned closure is used to cleanup the reservation and
+// release its resources.
+func (s *Store) throttleSnapshot(
+	ctx context.Context,
+	snapshotSem chan struct{},
+	rangeSize int64,
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+) (_cleanup func(), _err error) {
+	tBegin := timeutil.Now()
 	// Empty snapshots are exempt from rate limits because they're so cheap to
 	// apply. This vastly speeds up rebalancing any empty ranges created by a
 	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 	// getting stuck behind large snapshots managed by the replicate queue.
-	if header.RangeSize != 0 {
+	if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
 		queueCtx := ctx
 		if deadline, ok := queueCtx.Deadline(); ok {
 			// Enforce a more strict timeout for acquiring the snapshot reservation to
@@ -448,14 +487,20 @@ func (s *Store) reserveSnapshot(
 			defer cancel()
 		}
 		select {
-		case s.snapshotApplySem <- struct{}{}:
+		case snapshotSem <- struct{}{}:
+			// Got a spot in the semaphore, continue with sending the snapshot.
+			if fn := s.cfg.TestingKnobs.AfterSendSnapshotThrottle; fn != nil {
+				fn()
+			}
 		case <-queueCtx.Done():
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
 			}
-			return nil, errors.Wrapf(queueCtx.Err(),
+			return nil, errors.Wrapf(
+				queueCtx.Err(),
 				"giving up during snapshot reservation due to %q",
-				snapshotReservationQueueTimeoutFraction.Key())
+				snapshotReservationQueueTimeoutFraction.Key(),
+			)
 		case <-s.stopper.ShouldQuiesce():
 			return nil, errors.Errorf("stopped")
 		}
@@ -465,24 +510,27 @@ func (s *Store) reserveSnapshot(
 	// Raft snapshot rate limiting of 32mb/s, we expect to spend less than 16s per snapshot.
 	// which is what we want to log.
 	const snapshotReservationWaitWarnThreshold = 32 * time.Second
-	if elapsed := timeutil.Since(tBegin); elapsed > snapshotReservationWaitWarnThreshold {
-		replDesc, _ := header.State.Desc.GetReplicaDescriptor(s.StoreID())
+	elapsed := timeutil.Since(tBegin)
+	// NB: this log message is skipped in test builds as many tests do not mock
+	// all of the objects being logged.
+	if elapsed > snapshotReservationWaitWarnThreshold && !buildutil.CrdbTestBuild {
 		log.Infof(
 			ctx,
 			"waited for %.1fs to acquire snapshot reservation to r%d/%d",
 			elapsed.Seconds(),
-			header.State.Desc.RangeID,
-			replDesc.ReplicaID,
+			rangeID,
+			replicaID,
 		)
 	}
 
 	s.metrics.ReservedReplicaCount.Inc(1)
-	s.metrics.Reserved.Inc(header.RangeSize)
+	s.metrics.Reserved.Inc(rangeSize)
 	return func() {
 		s.metrics.ReservedReplicaCount.Dec(1)
-		s.metrics.Reserved.Dec(header.RangeSize)
-		if header.RangeSize != 0 {
-			<-s.snapshotApplySem
+		s.metrics.Reserved.Dec(rangeSize)
+
+		if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
+			<-snapshotSem
 		}
 	}, nil
 }
@@ -1227,6 +1275,89 @@ func sendSnapshot(
 		return nil
 	default:
 		return errors.Errorf("%s: server sent an invalid status during finalization: %s",
-			to, resp.Status)
+			to, resp.Status,
+		)
 	}
+}
+
+// delegateSnapshot sends an outgoing delegated snapshot request via a
+// pre-opened GRPC stream. It sends the delegated snapshot request to the
+// sender and waits for confirmation that the snapshot has been applied.
+func delegateSnapshot(
+	ctx context.Context, stream outgoingDelegatedStream, req *kvserverpb.DelegateSnapshotRequest,
+) error {
+
+	delegatedSender := req.DelegatedSender
+	if err := stream.Send(req); err != nil {
+		return err
+	}
+	// Wait for a response from the sender.
+	resp, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	switch resp.SnapResponse.Status {
+	case kvserverpb.SnapshotResponse_ERROR:
+		return errors.Errorf(
+			"%s: sender couldn't accept %s with error: %s", delegatedSender,
+			req, resp.SnapResponse.Message,
+		)
+	case kvserverpb.SnapshotResponse_ACCEPTED:
+		// The sender accepted the request, it will continue with sending.
+		log.VEventf(
+			ctx, 2, "sender %s accepted snapshot request %s", delegatedSender,
+			req,
+		)
+	default:
+		err := errors.Errorf(
+			"%s: server sent an invalid status while negotiating %s: %s",
+			delegatedSender, req, resp.SnapResponse.Status,
+		)
+		return err
+	}
+
+	// Wait for response to see if the receiver successfully applied the snapshot.
+	resp, err = stream.Recv()
+	if err != nil {
+		return errors.Wrapf(err, "%s: remote failed to send snapshot", delegatedSender)
+	}
+	// Wait for EOF to ensure server side processing is complete.
+	if unexpectedResp, err := stream.Recv(); err != io.EOF {
+		if err != nil {
+			return errors.Wrapf(
+				err, "%s: expected EOF, got resp=%v with error",
+				delegatedSender.StoreID, unexpectedResp,
+			)
+		}
+		return errors.Newf(
+			"%s: expected EOF, got resp=%v", delegatedSender.StoreID,
+			unexpectedResp,
+		)
+	}
+	// Import the remotely collected spans, if any.
+	if len(resp.CollectedSpans) != 0 {
+		span := tracing.SpanFromContext(ctx)
+		if span == nil {
+			log.Warningf(
+				ctx,
+				"trying to ingest remote spans but there is no recording span set up",
+			)
+		} else {
+			span.ImportRemoteSpans(resp.CollectedSpans)
+		}
+	}
+	switch resp.SnapResponse.Status {
+	case kvserverpb.SnapshotResponse_ERROR:
+		return errors.Newf("%s", resp.SnapResponse.Message)
+	case kvserverpb.SnapshotResponse_APPLIED:
+		// This is the response we're expecting. Snapshot successfully applied.
+		log.VEventf(ctx, 2, "%s: delegated snapshot was successfully applied", delegatedSender)
+		return nil
+	default:
+		return errors.Errorf(
+			"%s: server sent an invalid status during finalization: %s",
+			delegatedSender, resp.SnapResponse.Status,
+		)
+	}
+
 }

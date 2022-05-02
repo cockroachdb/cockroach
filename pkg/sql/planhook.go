@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -76,6 +78,7 @@ func (p *planner) RunParams(ctx context.Context) runParams {
 // that gets passed back due to this inversion of roles.
 type PlanHookState interface {
 	resolver.SchemaResolver
+	SpanConstrainer
 	RunParams(ctx context.Context) runParams
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
@@ -98,8 +101,8 @@ type PlanHookState interface {
 	EvalAsOfTimestamp(
 		ctx context.Context,
 		asOf tree.AsOfClause,
-		opts ...tree.EvalAsOfTimestampOption,
-	) (tree.AsOfSystemTime, error)
+		opts ...asof.EvalOption,
+	) (eval.AsOfSystemTime, error)
 	ResolveMutableTableDescriptor(ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind) (prefix catalog.ResolvedObjectPrefix, table *tabledesc.Mutable, err error)
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc catalog.TableDescriptor, displayOptions ShowCreateDisplayOptions,

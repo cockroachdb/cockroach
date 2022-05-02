@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -48,6 +47,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -250,6 +251,16 @@ func (n *createTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 
 	colsWithPrimaryKeyConstraint := make(map[tree.Name]bool)
+
+	// Copy column definition slice, since we will modify it below. This
+	// ensures, that  nothing bad happens on a transaction retry errors, for
+	// example we implicitly add columns for REGIONAL BY ROW.
+	// Note: This is only a shallow copy and meant to deal with addition /
+	// deletion into the slice.
+	defsCopy := make(tree.TableDefs, 0, len(n.n.Defs))
+	defsCopy = append(defsCopy, n.n.Defs...)
+	defer func(originalDefs tree.TableDefs) { n.n.Defs = originalDefs }(n.n.Defs)
+	n.n.Defs = defsCopy
 
 	for _, def := range n.n.Defs {
 		switch v := def.(type) {
@@ -629,7 +640,7 @@ const (
 // given table descriptor.
 func addUniqueWithoutIndexColumnTableDef(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	sessionData *sessiondata.SessionData,
 	d *tree.ColumnTableDef,
 	desc *tabledesc.Mutable,
@@ -661,7 +672,7 @@ func addUniqueWithoutIndexColumnTableDef(
 // constraint to the given table descriptor.
 func addUniqueWithoutIndexTableDef(
 	ctx context.Context,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	sessionData *sessiondata.SessionData,
 	d *tree.UniqueConstraintTableDef,
 	desc *tabledesc.Mutable,
@@ -830,7 +841,7 @@ func ResolveFK(
 	backrefs map[descpb.ID]*tabledesc.Mutable,
 	ts TableState,
 	validationBehavior tree.ValidationBehavior,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 ) error {
 	var originColSet catalog.TableColSet
 	originCols := make([]catalog.Column, len(d.FromCols))
@@ -1056,7 +1067,7 @@ func ResolveFK(
 func CreatePartitioning(
 	ctx context.Context,
 	st *cluster.Settings,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	tableDesc catalog.TableDescriptor,
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
@@ -1092,7 +1103,7 @@ func CreatePartitioning(
 var CreatePartitioningCCL = func(
 	ctx context.Context,
 	st *cluster.Settings,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	columnLookupFn func(tree.Name) (catalog.Column, error),
 	oldNumImplicitColumns int,
 	oldKeyColumnNames []string,
@@ -1105,7 +1116,7 @@ var CreatePartitioningCCL = func(
 }
 
 func getFinalSourceQuery(
-	params runParams, source *tree.Select, evalCtx *tree.EvalContext,
+	params runParams, source *tree.Select, evalCtx *eval.Context,
 ) (string, error) {
 	// Ensure that all the table names pretty-print as fully qualified, so we
 	// store that in the table descriptor.
@@ -1136,7 +1147,7 @@ func getFinalSourceQuery(
 	ctx := evalCtx.FmtCtx(
 		tree.FmtSerializable,
 		tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
-			d, err := placeholder.Eval(evalCtx)
+			d, err := eval.Expr(evalCtx, placeholder)
 			if err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
 			}
@@ -1165,7 +1176,7 @@ func newTableDescIfAs(
 	creationTime hlc.Timestamp,
 	resultColumns []colinfo.ResultColumn,
 	privileges *catpb.PrivilegeDescriptor,
-	evalContext *tree.EvalContext,
+	evalContext *eval.Context,
 ) (desc *tabledesc.Mutable, err error) {
 	if err := validateUniqueConstraintParamsForCreateTableAs(p); err != nil {
 		return nil, err
@@ -1280,7 +1291,7 @@ func NewTableDesc(
 	privileges *catpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
 	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	sessionData *sessiondata.SessionData,
 	persistence tree.Persistence,
 	inOpts ...NewTableDescOption,
@@ -1376,7 +1387,7 @@ func NewTableDesc(
 					if err != nil {
 						return nil, errors.Wrap(err, "error resolving REGIONAL BY ROW column type")
 					}
-					if t.Oid() != typedesc.TypeIDToOID(regionConfig.RegionEnumID()) {
+					if t.Oid() != catid.TypeIDToOID(regionConfig.RegionEnumID()) {
 						err = pgerror.Newf(
 							pgcode.InvalidTableDefinition,
 							"cannot use column %s which has type %s in REGIONAL BY ROW",
@@ -1385,7 +1396,7 @@ func NewTableDesc(
 						)
 						if t, terr := vt.ResolveTypeByOID(
 							ctx,
-							typedesc.TypeIDToOID(regionConfig.RegionEnumID()),
+							catid.TypeIDToOID(regionConfig.RegionEnumID()),
 						); terr == nil {
 							if n.Locality.RegionalByRowColumn != tree.RegionalByRowRegionNotSpecifiedName {
 								// In this case, someone used REGIONAL BY ROW AS <col> where
@@ -1421,7 +1432,7 @@ func NewTableDesc(
 					regionalByRowCol.String(),
 				)
 			}
-			oid := typedesc.TypeIDToOID(regionConfig.RegionEnumID())
+			oid := catid.TypeIDToOID(regionConfig.RegionEnumID())
 			n.Defs = append(
 				n.Defs,
 				regionalByRowDefaultColDef(
@@ -2747,7 +2758,7 @@ func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
 
 // maybeRegionalByRowOnUpdateExpr returns a gateway region default statement if
 // the auto rehoming session setting is enabled, nil otherwise.
-func maybeRegionalByRowOnUpdateExpr(evalCtx *tree.EvalContext, enumOid oid.Oid) tree.Expr {
+func maybeRegionalByRowOnUpdateExpr(evalCtx *eval.Context, enumOid oid.Oid) tree.Expr {
 	if evalCtx.SessionData().AutoRehomingEnabled {
 		return &tree.CastExpr{
 			Expr: &tree.FuncExpr{

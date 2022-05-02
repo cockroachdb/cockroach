@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -22,7 +24,7 @@ import (
 
 // ParseConstraint parses a constraint in the format of Constraint.String, e.g:
 //   "/1/2/3: [/1 - /2]".
-func ParseConstraint(evalCtx *tree.EvalContext, str string) Constraint {
+func ParseConstraint(evalCtx *eval.Context, str string) Constraint {
 	s := strings.SplitN(str, ": ", 2)
 	if len(s) != 2 {
 		panic(errors.AssertionFailedf("invalid constraint format: %s", str))
@@ -39,7 +41,7 @@ func ParseConstraint(evalCtx *tree.EvalContext, str string) Constraint {
 
 // parseSpans parses a list of spans with integer values like:
 //   "[/1 - /2] [/5 - /6]".
-func parseSpans(evalCtx *tree.EvalContext, str string) Spans {
+func parseSpans(evalCtx *eval.Context, str string) Spans {
 	if str == "" || str == "contradiction" {
 		return Spans{}
 	}
@@ -65,7 +67,7 @@ func parseSpans(evalCtx *tree.EvalContext, str string) Spans {
 // If no types are passed in, the type is inferred as being an int if possible;
 // otherwise a string. If any types are specified, they must be specified for
 // every datum.
-func ParseSpan(evalCtx *tree.EvalContext, str string, typs ...types.Family) Span {
+func ParseSpan(evalCtx *eval.Context, str string, typs ...types.Family) Span {
 	if len(str) < len("[ - ]") {
 		panic(str)
 	}
@@ -96,8 +98,8 @@ func ParseSpan(evalCtx *tree.EvalContext, str string, typs ...types.Family) Span
 	}
 
 	var sp Span
-	startVals := tree.ParseDatumPath(evalCtx, keys[0], typs)
-	endVals := tree.ParseDatumPath(evalCtx, keys[1], typs)
+	startVals := partition.ParseDatumPath(evalCtx, keys[0], typs)
+	endVals := partition.ParseDatumPath(evalCtx, keys[1], typs)
 	sp.Init(
 		MakeCompositeKey(startVals...), boundary[s],
 		MakeCompositeKey(endVals...), boundary[e],

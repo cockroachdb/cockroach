@@ -136,11 +136,11 @@ func (d *dev) setUpCache(ctx context.Context) (string, error) {
 
 	log.Printf("Configuring cache...\n")
 
-	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", bazelRemoteTarget, "--//build/toolchains:nonogo_explicit_flag")
+	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", bazelRemoteTarget, nogoDisableFlag)
 	if err != nil {
 		return "", err
 	}
-	bazelRemoteLoc, err := d.exec.CommandContextSilent(ctx, "bazel", "run", bazelRemoteTarget, "--//build/toolchains:nonogo_explicit_flag", "--run_under=//build/bazelutil/whereis")
+	bazelRemoteLoc, err := d.exec.CommandContextSilent(ctx, "bazel", "run", bazelRemoteTarget, nogoDisableFlag, "--run_under=//build/bazelutil/whereis")
 	if err != nil {
 		return "", err
 	}

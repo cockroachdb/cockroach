@@ -37,12 +37,18 @@ files_unchanged_from_upstream () {
   return 1
 }
 
+find_relevant() {
+    DIR=$1
+    shift
+    find "$DIR" -name node_modules -prune -o "$@"
+}
+
 # Even with --symlink_prefix, some sub-command somewhere hardcodes the
 # creation of a "bazel-out" symlink. This bazel-out symlink can only
 # be blocked by the existence of a file before the bazel command is
 # invoked. For now, this is left as an exercise for the user.
 
-if files_unchanged_from_upstream go.mod go.sum DEPS.bzl $(find ./pkg/cmd/mirror -name BUILD.bazel -or -name '*.go') $(find ./pkg/cmd/generate-staticcheck -name BUILD.bazel -or -name '*.go') $(find ./build/patches -name '*.patch'); then
+if files_unchanged_from_upstream go.mod go.sum DEPS.bzl $(find_relevant ./pkg/cmd/mirror -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg/cmd/generate-staticcheck -name BUILD.bazel -or -name '*.go') $(find_relevant ./build/patches -name '*.patch'); then
   echo "Skipping //pkg/cmd/mirror (relevant files are unchanged from upstream)."
   echo "Skipping //pkg/cmd/generate-staticcheck (relevant files are unchanged from upstream)."
 else
@@ -53,13 +59,20 @@ fi
 
 bazel run //:gazelle
 
-if files_unchanged_from_upstream $(find ./pkg -name '*.proto') $(find ./pkg -name BUILD.bazel) $(find ./pkg -name '*.bzl') $(find ./docs -name 'BUILD.bazel') $(find ./docs -name '*.bzl') $(find ./pkg/gen/genbzl -name '*.go'); then
+if files_unchanged_from_upstream DEPS.bzl WORKSPACE $(find_relevant ./pkg/cmd/generate-distdir -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg/build/bazel -name BUILD.bazel -or -name '*.go') $(find_relevant pkg/build/starlarkutil -name BUILD.bazel -or -name '*.go'); then
+    echo "Skipping //pkg/cmd/generate-distdir (relevant files are unchanged from upstream)."
+else
+    CONTENTS=$(bazel run //pkg/cmd/generate-distdir)
+    echo "$CONTENTS" > build/bazelutil/distdir_files.bzl
+fi
+
+if files_unchanged_from_upstream $(find_relevant ./pkg -name '*.proto') $(find_relevant ./pkg -name BUILD.bazel) $(find_relevant ./pkg -name '*.bzl') $(find_relevant ./docs -name 'BUILD.bazel') $(find_relevant ./docs -name '*.bzl') $(find_relevant ./pkg/gen/genbzl -name '*.go'); then
   echo "Skipping //pkg/gen/genbzl (relevant files are unchanged from upstream)."
 else
   bazel run pkg/gen/genbzl --run_under="cd $PWD && " -- --out-dir pkg/gen
 fi
 
-if files_unchanged_from_upstream $(find ./pkg/cmd/generate-test-suites -name BUILD.bazel -or -name '*.go') $(find ./pkg -name BUILD.bazel) $(find ./pkg -name '*.bzl'); then
+if files_unchanged_from_upstream $(find_relevant ./pkg/cmd/generate-test-suites -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg -name BUILD.bazel) $(find_relevant ./pkg -name '*.bzl'); then
   echo "Skipping //pkg/cmd/generate-test-suites (relevant files are unchanged from upstream)."
 else
   CONTENTS=$(bazel run //pkg/cmd/generate-test-suites --run_under="cd $PWD && ")

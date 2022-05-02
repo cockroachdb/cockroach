@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -57,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -478,8 +480,8 @@ CREATE TABLE crdb_internal.tables (
 					tree.NewDString(table.GetName()),
 					dbName,
 					tree.NewDInt(tree.DInt(int64(table.GetVersion()))),
-					tree.TimestampToInexactDTimestamp(table.GetModificationTime()),
-					tree.TimestampToDecimalDatum(table.GetModificationTime()),
+					eval.TimestampToInexactDTimestamp(table.GetModificationTime()),
+					eval.TimestampToDecimalDatum(table.GetModificationTime()),
 					tree.NewDString(table.GetFormatVersion().String()),
 					tree.NewDString(table.GetState().String()),
 					leaseNodeDatum,
@@ -861,7 +863,7 @@ CREATE TABLE crdb_internal.jobs (
 					// marshalled.
 					id = tree.NewDInt(tree.DInt(job.JobID))
 					status = tree.NewDString(string(jobs.StatusPending))
-					created = tree.TimestampToInexactDTimestamp(p.txn.ReadTimestamp())
+					created = eval.TimestampToInexactDTimestamp(p.txn.ReadTimestamp())
 					progressBytes, payloadBytes, err = getPayloadAndProgressFromJobsRecord(p, job)
 					if err != nil {
 						return nil, err
@@ -951,7 +953,7 @@ CREATE TABLE crdb_internal.jobs (
 						// Progress contains either fractionCompleted for traditional jobs,
 						// or the highWaterTimestamp for change feeds.
 						if highwater := progress.GetHighWater(); highwater != nil {
-							highWaterTimestamp = tree.TimestampToDecimalDatum(*highwater)
+							highWaterTimestamp = eval.TimestampToDecimalDatum(*highwater)
 						} else {
 							fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
 						}
@@ -1750,7 +1752,7 @@ func (p *planner) makeSessionsRequest(
 func getSessionID(session serverpb.Session) tree.Datum {
 	// TODO(knz): serverpb.Session is always constructed with an ID
 	// set from a 16-byte session ID. Yet we get crash reports
-	// that fail in BytesToClusterWideID() with a byte slice that's
+	// that fail in IDFromBytes() with a byte slice that's
 	// too short. See #32517.
 	var sessionID tree.Datum
 	if session.ID == nil {
@@ -1766,7 +1768,7 @@ func getSessionID(session serverpb.Session) tree.Datum {
 			pgerror.NewInternalTrackingError(32517 /* issue */, fmt.Sprintf("len=%d", len(session.ID))))
 		sessionID = tree.NewDString("<invalid>")
 	} else {
-		clusterSessionID := BytesToClusterWideID(session.ID)
+		clusterSessionID := clusterunique.IDFromBytes(session.ID)
 		sessionID = tree.NewDString(clusterSessionID.String())
 	}
 	return sessionID
@@ -3395,7 +3397,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 
 			splitEnforcedUntil := tree.DNull
 			if !desc.GetStickyBit().IsEmpty() {
-				splitEnforcedUntil = tree.TimestampToInexactDTimestamp(*desc.StickyBit)
+				splitEnforcedUntil = eval.TimestampToInexactDTimestamp(*desc.StickyBit)
 			}
 
 			return tree.Datums{
@@ -5064,7 +5066,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		INTEGER NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		maxDescIDKeyVal, err := p.extendedEvalCtx.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
+		maxDescIDKeyVal, err := p.execCfg.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
 		if err != nil {
 			return err
 		}
@@ -5093,7 +5095,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			scanRequest := roachpb.NewScan(unusedDescSpan.Key, unusedDescSpan.EndKey, false).(*roachpb.ScanRequest)
 			scanRequest.ScanFormat = roachpb.BATCH_RESPONSE
 			b.AddRawRequest(scanRequest)
-			err = p.extendedEvalCtx.DB.Run(ctx, &b)
+			err = p.execCfg.DB.Run(ctx, &b)
 			if err != nil {
 				return err
 			}
@@ -5109,7 +5111,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 					scanRequest.ScanFormat = roachpb.BATCH_RESPONSE
 					b.AddRawRequest(scanRequest)
 				}
-				err = p.extendedEvalCtx.DB.Run(ctx, &b)
+				err = p.execCfg.DB.Run(ctx, &b)
 				if err != nil {
 					return err
 				}
@@ -6018,7 +6020,7 @@ CREATE TABLE crdb_internal.cluster_locks (
 			if waiterIdx < 0 {
 				if curLock.LockHolder != nil {
 					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: curLock.LockHolder.ID})
-					tsDatum = tree.TimestampToInexactDTimestamp(curLock.LockHolder.WriteTimestamp)
+					tsDatum = eval.TimestampToInexactDTimestamp(curLock.LockHolder.WriteTimestamp)
 					strengthDatum = tree.NewDString(lock.Exclusive.String())
 					durationDatum = tree.NewDInterval(
 						duration.MakeDuration(curLock.HoldDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
@@ -6030,7 +6032,7 @@ CREATE TABLE crdb_internal.cluster_locks (
 				waiter := curLock.Waiters[waiterIdx]
 				if waiter.WaitingTxn != nil {
 					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: waiter.WaitingTxn.ID})
-					tsDatum = tree.TimestampToInexactDTimestamp(waiter.WaitingTxn.WriteTimestamp)
+					tsDatum = eval.TimestampToInexactDTimestamp(waiter.WaitingTxn.WriteTimestamp)
 				}
 				strengthDatum = tree.NewDString(waiter.Strength.String())
 				durationDatum = tree.NewDInterval(

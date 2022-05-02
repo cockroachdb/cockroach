@@ -633,7 +633,7 @@ func (c *sqlConn) fillPassword() error {
 		connURL.Host,
 		connURL.User.Username())
 
-	pwd, err := pprompt.PromptForPassword()
+	pwd, err := pprompt.PromptForPassword("" /* prompt */)
 	if err != nil {
 		return err
 	}

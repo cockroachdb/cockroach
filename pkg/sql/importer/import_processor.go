@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -171,6 +173,7 @@ func newReadImportDataProcessor(
 		cp.seqChunkProvider = &row.SeqChunkProvider{
 			JobID:    cp.spec.Progress.JobID,
 			Registry: cp.flowCtx.Cfg.JobRegistry,
+			DB:       cp.flowCtx.Cfg.DB,
 		}
 	}
 
@@ -226,7 +229,7 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 	}, nil
 }
 
-func injectTimeIntoEvalCtx(ctx *tree.EvalContext, walltime int64) {
+func injectTimeIntoEvalCtx(ctx *eval.Context, walltime int64) {
 	sec := walltime / int64(time.Second)
 	nsec := walltime % int64(time.Second)
 	unixtime := timeutil.Unix(sec, nsec)
@@ -238,9 +241,10 @@ func makeInputConverter(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	spec *execinfrapb.ReadImportDataSpec,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	kvCh chan row.KVBatch,
 	seqChunkProvider *row.SeqChunkProvider,
+	db *kv.DB,
 ) (inputConverter, error) {
 	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
 	var singleTable catalog.TableDescriptor
@@ -301,28 +305,28 @@ func makeInputConverter(
 			}
 		}
 		if isWorkload {
-			return newWorkloadReader(semaCtx, evalCtx, singleTable, kvCh, readerParallelism), nil
+			return newWorkloadReader(semaCtx, evalCtx, singleTable, kvCh, readerParallelism, db), nil
 		}
 		return newCSVInputReader(
 			semaCtx, kvCh, spec.Format.Csv, spec.WalltimeNanos, readerParallelism,
-			singleTable, singleTableTargetCols, evalCtx, seqChunkProvider), nil
+			singleTable, singleTableTargetCols, evalCtx, seqChunkProvider, db), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
 			semaCtx, spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
-			readerParallelism, singleTable, singleTableTargetCols, evalCtx)
+			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
 	case roachpb.IOFileFormat_Mysqldump:
 		return newMysqldumpReader(ctx, semaCtx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx,
-			spec.Format.MysqlDump)
+			spec.Format.MysqlDump, db)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(semaCtx, spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
-			readerParallelism, singleTable, singleTableTargetCols, evalCtx)
+			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
 	case roachpb.IOFileFormat_PgDump:
 		return newPgDumpReader(ctx, semaCtx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
-			spec.WalltimeNanos, spec.Tables, evalCtx)
+			spec.WalltimeNanos, spec.Tables, evalCtx, db)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			semaCtx, kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
-			readerParallelism, evalCtx)
+			readerParallelism, evalCtx, db)
 	default:
 		return nil, errors.Errorf(
 			"Requested IMPORT format (%d) not supported by this node", spec.Format.Format)

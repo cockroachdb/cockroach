@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -120,14 +121,6 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	shouldSkipRetry := false
 	var onCheckpointInterceptor func() error
 
-	if knobs := execCtx.ExecCfg().SpanConfigTestingKnobs; knobs != nil {
-		if knobs.JobDisablePersistingCheckpoints {
-			checkpointingDisabled = true
-		}
-		shouldSkipRetry = knobs.JobDisableInternalRetry
-		onCheckpointInterceptor = knobs.JobOnCheckpointInterceptor
-	}
-
 	retryOpts := retry.Options{
 		InitialBackoff: 5 * time.Second,
 		MaxBackoff:     30 * time.Second,
@@ -135,10 +128,22 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 		MaxRetries:     40, // ~20 mins
 	}
 
+	if knobs := execCtx.ExecCfg().SpanConfigTestingKnobs; knobs != nil {
+		if knobs.JobDisablePersistingCheckpoints {
+			checkpointingDisabled = true
+		}
+		shouldSkipRetry = knobs.JobDisableInternalRetry
+		onCheckpointInterceptor = knobs.JobOnCheckpointInterceptor
+		if knobs.JobOverrideRetryOptions != nil {
+			retryOpts = *knobs.JobOverrideRetryOptions
+		}
+	}
+
+	var lastCheckpoint = hlc.Timestamp{}
 	const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
 	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
 		started := timeutil.Now()
-		if err := rc.Reconcile(ctx, hlc.Timestamp{}, r.job.Session(), func() error {
+		if err := rc.Reconcile(ctx, lastCheckpoint, r.job.Session(), func() error {
 			if onCheckpointInterceptor != nil {
 				if err := onCheckpointInterceptor(); err != nil {
 					return err
@@ -160,14 +165,31 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 				retrier.Reset()
 			}
 
+			lastCheckpoint = rc.Checkpoint()
 			return r.job.SetProgress(ctx, nil, jobspb.AutoSpanConfigReconciliationProgress{
 				Checkpoint: rc.Checkpoint(),
 			})
 		}); err != nil {
-			log.Errorf(ctx, "reconciler failed with %v, retrying...", err)
 			if shouldSkipRetry {
 				break
 			}
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+			if spanconfig.IsMismatchedDescriptorTypesError(err) {
+				// It's possible to observe mismatched descriptor types for the same ID
+				// post-RESTORE, an invariant the span configs infrastructure relies on
+				// (see #75831). We'll just paper over it here and kick off full
+				// reconciliation, which is safe -- doing something better (like pausing
+				// the reconciliation job during restore, or observing a checkpoint in
+				// the restore job, or re-keying restored descriptors to not re-use the
+				// same IDs as previously existing ones) is a lot more invasive.
+				log.Warningf(ctx, "observed %v, kicking off full reconciliation...", err)
+				lastCheckpoint = hlc.Timestamp{}
+				continue
+			}
+
+			log.Errorf(ctx, "reconciler failed with %v, retrying...", err)
 			continue
 		}
 		return nil // we're done here (the stopper was stopped, Reconcile exited cleanly)

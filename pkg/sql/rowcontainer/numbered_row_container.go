@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -61,7 +62,7 @@ type DiskBackedNumberedRowContainer struct {
 func NewDiskBackedNumberedRowContainer(
 	deDup bool,
 	types []*types.T,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,

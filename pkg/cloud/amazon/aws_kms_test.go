@@ -33,7 +33,6 @@ func init() {
 
 func TestEncryptDecryptAWS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	// If environment credentials are not present, we want to
 	// skip all AWS KMS tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
@@ -54,7 +53,6 @@ func TestEncryptDecryptAWS(t *testing.T) {
 		}
 		q.Add(param, v)
 	}
-
 	// Get AWS KMS region from env variable.
 	kmsRegion := os.Getenv("AWS_KMS_REGION_A")
 	if kmsRegion == "" {
@@ -117,6 +115,78 @@ func TestEncryptDecryptAWS(t *testing.T) {
 			q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 
+			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+				Settings:         cluster.NoSettings,
+				ExternalIOConfig: &base.ExternalIODirConfig{},
+			})
+		})
+	}
+}
+
+func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// If environment credentials are not present, we want to
+	// skip all AWS KMS tests, including auth-implicit, even though
+	// it is not used in auth-implicit.
+	_, err := credentials.NewEnvCredentials().Get()
+	if err != nil {
+		skip.IgnoreLint(t, "Test only works with AWS credentials")
+	}
+
+	q := make(url.Values)
+	expect := map[string]string{
+		"AWS_ACCESS_KEY_ID":     AWSAccessKeyParam,
+		"AWS_SECRET_ACCESS_KEY": AWSSecretParam,
+		"AWS_ROLE_ARN":          AWSRoleArnParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			skip.IgnoreLintf(t, "%s env var must be set", env)
+		}
+		q.Add(param, v)
+	}
+	// Get AWS KMS region from env variable.
+	kmsRegion := os.Getenv("AWS_KMS_REGION_A")
+	if kmsRegion == "" {
+		skip.IgnoreLint(t, "AWS_KMS_REGION_A env var must be set")
+	}
+	q.Add(KMSRegionParam, kmsRegion)
+	q.Set(cloud.AuthParam, cloud.AuthParamAssume)
+
+	for _, id := range []string{"AWS_KMS_KEY_ARN_A", "AWS_KEY_ID", "AWS_KEY_ALIAS"} {
+		// Get AWS Key identifier from env variable.
+		keyID := os.Getenv(id)
+		if keyID == "" {
+			skip.IgnoreLint(t, fmt.Sprintf("%s env var must be set", id))
+		}
+
+		t.Run(fmt.Sprintf("auth-implicit-%s", id), func(t *testing.T) {
+			// You can create an IAM that can access AWS KMS
+			// in the AWS console, then set it up locally.
+			// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
+			// We only run this test if default role exists.
+			credentialsProvider := credentials.SharedCredentialsProvider{}
+			_, err := credentialsProvider.Retrieve()
+			if err != nil {
+				skip.IgnoreLint(t, err)
+			}
+
+			// Create params for implicit user.
+			params := make(url.Values)
+			params.Add(cloud.AuthParam, cloud.AuthParamAssume)
+			params.Add(AWSRoleArnParam, q.Get(AWSRoleArnParam))
+			params.Add(KMSRegionParam, kmsRegion)
+
+			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
+			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+				Settings:         cluster.NoSettings,
+				ExternalIOConfig: &base.ExternalIODirConfig{},
+			})
+		})
+
+		t.Run(fmt.Sprintf("specified-%s", id), func(t *testing.T) {
+			uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
 				Settings:         cluster.NoSettings,
 				ExternalIOConfig: &base.ExternalIODirConfig{},

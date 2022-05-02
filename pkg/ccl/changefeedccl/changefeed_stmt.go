@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -328,7 +329,7 @@ func createChangefeedJobRecord(
 	endTime := hlc.Timestamp{}
 	if endTimeOpt, ok := opts[changefeedbase.OptEndTime]; ok {
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(endTimeOpt)}
-		asOf, err := tree.EvalAsOfTimestamp(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().EvalContext)
+		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context)
 		if err != nil {
 			return nil, err
 		}
@@ -422,6 +423,18 @@ func createChangefeedJobRecord(
 
 	if details, err = validateDetails(details); err != nil {
 		return nil, err
+	}
+
+	if filterExpr, isSet := details.Opts[changefeedbase.OptPrimaryKeyFilter]; isSet {
+		policy := changefeedbase.SchemaChangePolicy(details.Opts[changefeedbase.OptSchemaChangePolicy])
+		if policy != changefeedbase.OptSchemaChangePolicyStop {
+			return nil, errors.Newf("option %s can only be used with %s=%s",
+				changefeedbase.OptPrimaryKeyFilter, changefeedbase.OptSchemaChangePolicy,
+				changefeedbase.OptSchemaChangePolicyStop)
+		}
+		if err := validatePrimaryKeyFilterExpression(ctx, p, filterExpr, targetDescs); err != nil {
+			return nil, err
+		}
 	}
 
 	if _, err := getEncoder(details.Opts, AllTargets(details)); err != nil {
@@ -759,6 +772,10 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		// the job gets restarted.
 		details.Opts = map[string]string{}
 	}
+	initialScanType, err := initialScanTypeFromOpts(details.Opts)
+	if err != nil {
+		return jobspb.ChangefeedDetails{}, err
+	}
 	{
 		const opt = changefeedbase.OptResolvedTimestamps
 		if o, ok := details.Opts[opt]; ok && o != `` {
@@ -820,6 +837,13 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		switch v := changefeedbase.FormatType(details.Opts[opt]); v {
 		case ``, changefeedbase.OptFormatJSON:
 			details.Opts[opt] = string(changefeedbase.OptFormatJSON)
+		case changefeedbase.OptFormatCSV:
+			if initialScanType != changefeedbase.OnlyInitialScan {
+				return jobspb.ChangefeedDetails{}, errors.Errorf(
+					`%s=%s is only usable with %s='only'`,
+					changefeedbase.OptFormat, changefeedbase.OptFormatCSV, changefeedbase.OptInitialScan)
+			}
+			details.Opts[opt] = string(changefeedbase.OptFormatCSV)
 		case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
 			// No-op.
 		default:
@@ -854,18 +878,13 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	{
-		initialScanType := details.Opts[changefeedbase.OptInitialScan]
-		_, onlyInitialScan := details.Opts[changefeedbase.OptInitialScanOnly]
-		_, endTime := details.Opts[changefeedbase.OptEndTime]
-		if endTime && onlyInitialScan {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`cannot specify both %s and %s`, changefeedbase.OptInitialScanOnly,
-				changefeedbase.OptEndTime)
-		}
-
-		if strings.ToLower(initialScanType) == `only` && endTime {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`cannot specify both %s='only' and %s`, changefeedbase.OptInitialScan, changefeedbase.OptEndTime)
+		if initialScanType == changefeedbase.OnlyInitialScan {
+			for opt := range changefeedbase.InitialScanOnlyUnsupportedOptions {
+				if _, ok := details.Opts[opt]; ok {
+					return jobspb.ChangefeedDetails{}, errors.Errorf(
+						`cannot specify both %s='only' and %s`, changefeedbase.OptInitialScan, opt)
+				}
+			}
 		}
 
 		if !details.EndTime.IsEmpty() && details.EndTime.Less(details.StatementTime) {
@@ -877,6 +896,28 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	return details, nil
+}
+
+func validatePrimaryKeyFilterExpression(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	filterExpr string,
+	descriptors map[tree.TablePattern]catalog.Descriptor,
+) error {
+	if len(descriptors) > 1 {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"option %s can only be used with 1 changefeed target (found %d)",
+			changefeedbase.OptPrimaryKeyFilter, len(descriptors),
+		)
+	}
+
+	var tableDescr catalog.TableDescriptor
+	for _, d := range descriptors {
+		tableDescr = d.(catalog.TableDescriptor)
+	}
+
+	_, err := constrainSpansByExpression(ctx, execCtx, filterExpr, tableDescr)
+	return err
 }
 
 type changefeedResumer struct {

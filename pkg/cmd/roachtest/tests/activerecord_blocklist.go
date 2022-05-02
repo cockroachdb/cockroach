@@ -42,6 +42,7 @@ var activeRecordIgnoreList22_1 = blocklist{
 	"FixturesTest#test_create_fixtures":                                    "flaky - FK constraint violated sometimes when loading all fixture data",
 	"IgnoreFixturesTest#test_ignores_books_fixtures":                       "flaky - FK constraint violated sometimes when loading all fixture data",
 	"IgnoreFixturesTest#test_ignores_parrots_fixtures":                     "flaky - FK constraint violated sometimes when loading all fixture data",
+	"PostgresqlIntervalTest#test_interval_type":                            "flaky",
 }
 
 var activeRecordIgnoreList21_2 = blocklist{

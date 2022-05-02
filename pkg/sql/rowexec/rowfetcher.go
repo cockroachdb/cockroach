@@ -28,7 +28,7 @@ import (
 // collector wrapper can be plugged in.
 type rowFetcher interface {
 	StartScan(
-		_ context.Context, _ *kv.Txn, _ roachpb.Spans, batchBytesLimit rowinfra.BytesLimit,
+		_ context.Context, _ *kv.Txn, _ roachpb.Spans, spanIDs []int, batchBytesLimit rowinfra.BytesLimit,
 		rowLimitHint rowinfra.RowLimit, traceKV bool, forceProductionKVBatchSize bool,
 	) error
 	StartScanFrom(_ context.Context, _ row.KVBatchFetcher, traceKV bool) error
@@ -45,13 +45,11 @@ type rowFetcher interface {
 		qualityOfService sessiondatapb.QoSLevel,
 	) error
 
-	NextRow(ctx context.Context) (rowenc.EncDatumRow, error)
+	NextRow(ctx context.Context) (_ rowenc.EncDatumRow, spanID int, _ error)
 	NextRowInto(
 		ctx context.Context, destination rowenc.EncDatumRow, colIdxMap catalog.TableColMap,
 	) (ok bool, err error)
 
-	// PartialKey is not stat-related but needs to be supported.
-	PartialKey(nCols int) (roachpb.Key, error)
 	Reset()
 	GetBytesRead() int64
 	// Close releases any resources held by this fetcher.

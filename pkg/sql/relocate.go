@@ -123,33 +123,35 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	existingNonVoters := rangeDesc.Replicas().NonVoters().ReplicationTargets()
 	switch n.subjectReplicas {
 	case tree.RelocateLease:
-		if err := params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
+		if err = params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
 			return false, err
 		}
 	case tree.RelocateNonVoters:
-		if err := params.p.ExecCfg().DB.AdminRelocateRange(
+		err = params.p.ExecCfg().DB.AdminRelocateRange(
 			params.ctx,
 			rowKey,
 			existingVoters,
 			relocationTargets,
 			true, /* transferLeaseToFirstVoter */
-		); err != nil {
-			return false, err
-		}
+		)
 	case tree.RelocateVoters:
-		if err := params.p.ExecCfg().DB.AdminRelocateRange(
+		err = params.p.ExecCfg().DB.AdminRelocateRange(
 			params.ctx,
 			rowKey,
 			relocationTargets,
 			existingNonVoters,
 			true, /* transferLeaseToFirstVoter */
-		); err != nil {
-			return false, err
-		}
+		)
 	default:
 		return false, errors.AssertionFailedf("unknown relocate mode: %v", n.subjectReplicas)
 	}
-
+	// TODO(aayush): If the `AdminRelocateRange` call failed because it found that
+	// the range was already in the process of being rebalanced, we currently fail
+	// the statement. We should consider instead force-removing these learners
+	// when `AdminRelocateRange` calls are issued by SQL.
+	if err != nil {
+		return false, err
+	}
 	return true, nil
 }
 

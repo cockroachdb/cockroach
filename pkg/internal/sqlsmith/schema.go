@@ -16,10 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -188,7 +189,7 @@ FROM
 	}
 	defer rows.Close()
 
-	evalCtx := tree.EvalContext{}
+	evalCtx := eval.Context{}
 	udtMapping := make(map[tree.TypeName]*types.T)
 
 	for rows.Next() {
@@ -213,7 +214,7 @@ FROM
 		// Try to construct type information from the resulting row.
 		switch {
 		case len(members) > 0:
-			typ := types.MakeEnum(typedesc.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeID */)
+			typ := types.MakeEnum(catid.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeID */)
 			typ.TypeMeta = types.UserDefinedTypeMetadata{
 				Name: &types.UserDefinedTypeName{
 					Schema: scName,

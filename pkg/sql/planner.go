@@ -27,10 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -47,13 +49,13 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// extendedEvalContext extends tree.EvalContext with fields that are needed for
+// extendedEvalContext extends eval.Context with fields that are needed for
 // distsql planning.
 type extendedEvalContext struct {
-	tree.EvalContext
+	eval.Context
 
 	// SessionID for this connection.
-	SessionID ClusterWideID
+	SessionID clusterunique.ID
 
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
@@ -111,7 +113,6 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.Settings = execCfg.Settings
 	evalCtx.Codec = execCfg.Codec
 	evalCtx.Tracer = execCfg.AmbientCtx.Tracer
-	evalCtx.DB = execCfg.DB
 	evalCtx.SQLLivenessReader = execCfg.SQLLiveness
 	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
 	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
@@ -130,7 +131,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 // copy returns a deep copy of ctx.
 func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 	cpy := *evalCtx
-	cpy.EvalContext = *evalCtx.EvalContext.Copy()
+	cpy.Context = *evalCtx.Context.Copy()
 	return &cpy
 }
 
@@ -250,7 +251,7 @@ type planner struct {
 	contextDatabaseID descpb.ID
 }
 
-func (evalCtx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
+func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
 	evalCtx.SessionID = sessionID
 }
 
@@ -451,8 +452,8 @@ func internalExtendedEvalCtx(
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
-	var sqlStatsController tree.SQLStatsController
-	var indexUsageStatsController tree.IndexUsageStatsController
+	var sqlStatsController eval.SQLStatsController
+	var indexUsageStatsController eval.IndexUsageStatsController
 	if execCfg.InternalExecutor != nil {
 		if execCfg.InternalExecutor.s != nil {
 			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
@@ -470,7 +471,7 @@ func internalExtendedEvalCtx(
 		}
 	}
 	ret := extendedEvalContext{
-		EvalContext: tree.EvalContext{
+		Context: eval.Context{
 			Txn:                       txn,
 			SessionDataStack:          sds,
 			TxnReadOnly:               false,
@@ -522,8 +523,8 @@ func (p *planner) CurrentSearchPath() sessiondata.SearchPath {
 }
 
 // EvalContext() provides convenient access to the planner's EvalContext().
-func (p *planner) EvalContext() *tree.EvalContext {
-	return &p.extendedEvalCtx.EvalContext
+func (p *planner) EvalContext() *eval.Context {
+	return &p.extendedEvalCtx.Context
 }
 
 func (p *planner) Descriptors() *descs.Collection {
@@ -580,7 +581,7 @@ func (p *planner) SpanConfigReconciler() spanconfig.Reconciler {
 	return p.execCfg.SpanConfigReconciler
 }
 
-// GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.
+// GetTypeFromValidSQLSyntax implements the eval.Planner interface.
 // We define this here to break the dependency from eval.go to the parser.
 func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 	ref, err := parser.GetTypeFromValidSQLSyntax(sql)
@@ -590,7 +591,7 @@ func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 	return tree.ResolveType(context.TODO(), ref, p.semaCtx.GetTypeResolver())
 }
 
-// ParseQualifiedTableName implements the tree.EvalDatabase interface.
+// ParseQualifiedTableName implements the eval.DatabaseCatalog interface.
 // This exists to get around a circular dependency between sql/sem/tree and
 // sql/parser. sql/parser depends on tree to make objects, so tree cannot import
 // ParseQualifiedTableName even though some builtins need that function.
@@ -599,7 +600,7 @@ func (p *planner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return parser.ParseQualifiedTableName(sql)
 }
 
-// ResolveTableName implements the tree.EvalDatabase interface.
+// ResolveTableName implements the eval.DatabaseCatalog interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
 	_, desc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
@@ -660,7 +661,7 @@ func (p *planner) TypeAsStringOrNull(
 
 func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, error) {
 	return func() (bool, string, error) {
-		d, err := typedE.Eval(p.EvalContext())
+		d, err := eval.Expr(p.EvalContext(), typedE)
 		if err != nil {
 			return false, "", err
 		}
@@ -689,7 +690,7 @@ const (
 // evalStringOptions evaluates the KVOption values as strings and returns them
 // in a map. Options with no value have an empty string.
 func evalStringOptions(
-	evalCtx *tree.EvalContext, opts []exec.KVOption, optValidate map[string]KVStringOptValidate,
+	evalCtx *eval.Context, opts []exec.KVOption, optValidate map[string]KVStringOptValidate,
 ) (map[string]string, error) {
 	res := make(map[string]string, len(opts))
 	for _, opt := range opts {
@@ -698,7 +699,7 @@ func evalStringOptions(
 		if !ok {
 			return nil, errors.Errorf("invalid option %q", k)
 		}
-		val, err := opt.Value.Eval(evalCtx)
+		val, err := eval.Expr(evalCtx, opt.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -758,7 +759,7 @@ func (p *planner) TypeAsStringOpts(
 				res[name] = ""
 				continue
 			}
-			d, err := e.Eval(p.EvalContext())
+			d, err := eval.Expr(p.EvalContext(), e)
 			if err != nil {
 				return nil, err
 			}
@@ -790,7 +791,7 @@ func (p *planner) TypeAsStringArray(
 	fn := func() ([]string, error) {
 		strs := make([]string, len(exprs))
 		for i := range exprs {
-			d, err := typedExprs[i].Eval(p.EvalContext())
+			d, err := eval.Expr(p.EvalContext(), typedExprs[i])
 			if err != nil {
 				return nil, err
 			}
@@ -817,10 +818,10 @@ func (p *planner) SessionDataMutatorIterator() *sessionDataMutatorIterator {
 
 // Ann is a shortcut for the Annotations from the eval context.
 func (p *planner) Ann() *tree.Annotations {
-	return p.ExtendedEvalContext().EvalContext.Annotations
+	return p.ExtendedEvalContext().Context.Annotations
 }
 
-// ExecutorConfig implements EvalPlanner interface.
+// ExecutorConfig implements Planner interface.
 func (p *planner) ExecutorConfig() interface{} {
 	return p.execCfg
 }
@@ -871,13 +872,12 @@ func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Desc
 func (p *planner) QueryRowEx(
 	ctx context.Context,
 	opName string,
-	txn *kv.Txn,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	return ie.QueryRowEx(ctx, opName, txn, override, stmt, qargs...)
+	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
 // QueryIteratorEx executes the query, returning an iterator that can be used
@@ -889,12 +889,11 @@ func (p *planner) QueryRowEx(
 func (p *planner) QueryIteratorEx(
 	ctx context.Context,
 	opName string,
-	txn *kv.Txn,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
-) (tree.InternalRows, error) {
+) (eval.InternalRows, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
-	return rows.(tree.InternalRows), err
+	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
+	return rows.(eval.InternalRows), err
 }

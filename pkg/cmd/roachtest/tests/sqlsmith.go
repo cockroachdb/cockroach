@@ -253,11 +253,10 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 				es := err.Error()
 				if strings.Contains(es, "internal error") {
 					// TODO(yuzefovich): we temporarily ignore internal errors
-					// that are because of #40929 and #79886.
+					// that are because of #40929.
 					var expectedError bool
 					for _, exp := range []string{
 						"could not parse \"0E-2019\" as type decimal",
-						"Constraint needs a valid start or end key",
 					} {
 						expectedError = expectedError || strings.Contains(es, exp)
 					}
@@ -298,9 +297,10 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 		r.Add(registry.TestSpec{
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
-			Owner:   registry.OwnerSQLQueries,
-			Cluster: clusterSpec,
-			Timeout: time.Minute * 20,
+			Owner:           registry.OwnerSQLQueries,
+			Cluster:         clusterSpec,
+			Timeout:         time.Minute * 20,
+			RequiresLicense: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
 			},

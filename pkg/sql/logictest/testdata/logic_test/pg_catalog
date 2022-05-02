@@ -1272,15 +1272,21 @@ ORDER BY con.oid
 oid         conname        connamespace  contype  condef
 36403682    check_b        3082627813    c        CHECK ((b > 11))
 108480825   uwi_b_c        3082627813    u        UNIQUE WITHOUT INDEX (b, c)
+180431994   t5_pkey        3082627813    p        PRIMARY KEY (rowid ASC)
 192087236   fk_b_c         3082627813    f        FOREIGN KEY (b, c) REFERENCES t4(b, c) MATCH FULL ON UPDATE RESTRICT
 296187876   check_c        3082627813    c        CHECK ((c != ''::STRING))
 1002858066  t6_expr_key    3082627813    u        UNIQUE (lower(c) ASC)
 1034567609  uwi_b_partial  3082627813    u        UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
+1265772734  t2_pkey        3082627813    p        PRIMARY KEY (rowid ASC)
+1525509005  t3_pkey        3082627813    p        PRIMARY KEY (rowid ASC)
 1568726274  index_key      3082627813    u        UNIQUE (b ASC, c ASC)
 1568726275  t1_a_key       3082627813    u        UNIQUE (a ASC)
 1622172050  unique_a       3082627813    u        UNIQUE WITHOUT INDEX (a)
+2044981543  t6_pkey        3082627813    p        PRIMARY KEY (rowid ASC)
 2061447344  fk             3082627813    f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
 2610849745  t1_pkey        3082627813    p        PRIMARY KEY (p ASC)
+3130322283  t4_pkey        3082627813    p        PRIMARY KEY (rowid ASC)
+3390058550  mv1_pkey       3082627813    p        PRIMARY KEY (rowid ASC)
 3764151187  t5_a_fkey      3082627813    f        FOREIGN KEY (a) REFERENCES t4(a) ON DELETE CASCADE
 3836426375  fk             3082627813    f        FOREIGN KEY (t1_id) REFERENCES t1(a)
 3955926752  primary        3082627813    p        PRIMARY KEY (value ASC)
@@ -1296,15 +1302,21 @@ ORDER BY con.oid
 conname        contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
 check_b        c        false          false        true          114       0         0
 uwi_b_c        u        false          false        true          116       0         0
+t5_pkey        p        false          false        true          117       0         1869730585
 fk_b_c         f        false          false        true          117       0         0
 check_c        c        false          false        true          114       0         0
 t6_expr_key    u        false          false        true          120       0         2129466848
 uwi_b_partial  u        false          false        true          116       0         0
+t2_pkey        p        false          false        true          113       0         2955071325
+t3_pkey        p        false          false        true          114       0         2695335054
 index_key      u        false          false        true          110       0         3687884464
 t1_a_key       u        false          false        true          110       0         3687884465
 unique_a       u        false          false        true          116       0         0
+t6_pkey        p        false          false        true          120       0         2129466852
 fk             f        false          false        true          114       0         3687884464
 t1_pkey        p        false          false        true          110       0         3687884466
+t4_pkey        p        false          false        true          116       0         3214807592
+mv1_pkey       p        false          false        true          121       0         784389845
 t5_a_fkey      f        false          false        true          117       0         0
 fk             f        false          false        true          113       0         3687884465
 primary        p        false          false        true          111       0         2342807459
@@ -1328,13 +1340,19 @@ ORDER BY con.oid
 conname        confrelid  confupdtype  confdeltype  confmatchtype
 check_b        0          NULL         NULL         NULL
 uwi_b_c        0          NULL         NULL         NULL
+t5_pkey        0          NULL         NULL         NULL
 check_c        0          NULL         NULL         NULL
 t6_expr_key    0          NULL         NULL         NULL
 uwi_b_partial  0          NULL         NULL         NULL
+t2_pkey        0          NULL         NULL         NULL
+t3_pkey        0          NULL         NULL         NULL
 index_key      0          NULL         NULL         NULL
 t1_a_key       0          NULL         NULL         NULL
 unique_a       0          NULL         NULL         NULL
+t6_pkey        0          NULL         NULL         NULL
 t1_pkey        0          NULL         NULL         NULL
+t4_pkey        0          NULL         NULL         NULL
+mv1_pkey       0          NULL         NULL         NULL
 primary        0          NULL         NULL         NULL
 primary        0          NULL         NULL         NULL
 
@@ -1361,15 +1379,21 @@ ORDER BY con.oid
 conname        conislocal  coninhcount  connoinherit  conkey
 check_b        true        0            true          {2}
 uwi_b_c        true        0            true          NULL
+t5_pkey        true        0            true          {4}
 fk_b_c         true        0            true          {2,3}
 check_c        true        0            true          {3}
 t6_expr_key    true        0            true          {7}
 uwi_b_partial  true        0            true          NULL
+t2_pkey        true        0            true          {2}
+t3_pkey        true        0            true          {4}
 index_key      true        0            true          {3,4}
 t1_a_key       true        0            true          {2}
 unique_a       true        0            true          NULL
+t6_pkey        true        0            true          {6}
 fk             true        0            true          {1,2}
 t1_pkey        true        0            true          {1}
+t4_pkey        true        0            true          {4}
+mv1_pkey       true        0            true          {2}
 t5_a_fkey      true        0            true          {1}
 fk             true        0            true          {1}
 primary        true        0            true          {1}
@@ -1385,13 +1409,19 @@ ORDER BY con.oid
 conname        confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin             consrc             condef
 check_b        NULL     NULL       NULL       NULL       NULL       (b > 11)           (b > 11)           CHECK ((b > 11))
 uwi_b_c        NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b, c)
+t5_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
 check_c        NULL     NULL       NULL       NULL       NULL       (c != ''::STRING)  (c != ''::STRING)  CHECK ((c != ''::STRING))
 t6_expr_key    NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (lower(c) ASC)
 uwi_b_partial  NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
+t2_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
+t3_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
 index_key      NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (b ASC, c ASC)
 t1_a_key       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (a ASC)
 unique_a       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (a)
+t6_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
 t1_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
+t4_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
+mv1_pkey       NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
 primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (value ASC)
 primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (value ASC)
 
@@ -4161,6 +4191,7 @@ server_encoding                                       UTF8                NULL  
 server_version                                        13.0.0              NULL      NULL        NULL        string
 server_version_num                                    130000              NULL      NULL        NULL        string
 session_user                                          root                NULL      NULL        NULL        string
+show_primary_key_constraint_on_not_visible_columns    on                  NULL      NULL        NULL        string
 sql_safe_updates                                      off                 NULL      NULL        NULL        string
 standard_conforming_strings                           on                  NULL      NULL        NULL        string
 statement_timeout                                     0                   NULL      NULL        NULL        string
@@ -4281,6 +4312,7 @@ server_encoding                                       UTF8                NULL  
 server_version                                        13.0.0              NULL  user     NULL      13.0.0              13.0.0
 server_version_num                                    130000              NULL  user     NULL      130000              130000
 session_user                                          root                NULL  user     NULL      root                root
+show_primary_key_constraint_on_not_visible_columns    on                  NULL  user     NULL      on                  on
 sql_safe_updates                                      off                 NULL  user     NULL      off                 off
 standard_conforming_strings                           on                  NULL  user     NULL      on                  on
 statement_timeout                                     0                   NULL  user     NULL      0s                  0s
@@ -4399,6 +4431,7 @@ server_version                                        NULL    NULL     NULL     
 server_version_num                                    NULL    NULL     NULL     NULL        NULL
 session_id                                            NULL    NULL     NULL     NULL        NULL
 session_user                                          NULL    NULL     NULL     NULL        NULL
+show_primary_key_constraint_on_not_visible_columns    NULL    NULL     NULL     NULL        NULL
 sql_safe_updates                                      NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings                           NULL    NULL     NULL     NULL        NULL
 statement_timeout                                     NULL    NULL     NULL     NULL        NULL
@@ -4807,6 +4840,7 @@ CREATE TABLE t(x INT UNIQUE);
 query TTT
 SELECT conname, confupdtype, confdeltype FROM pg_constraint ORDER BY conname
 ----
+t_pkey    NULL  NULL
 t_x_key   NULL  NULL
 u_a_fkey  a     a
 u_b_fkey  a     r
@@ -4819,6 +4853,7 @@ u_h_fkey  n     a
 u_i_fkey  d     a
 u_j_fkey  c     a
 u_k_fkey  n     r
+u_pkey    NULL  NULL
 
 statement ok
 DROP TABLE u; DROP TABLE t
@@ -4836,9 +4871,11 @@ CREATE TABLE w(
 query TT
 SELECT conname, confmatchtype FROM pg_constraint ORDER BY conname
 ----
+v_pkey      NULL
 v_x_y_key   NULL
 w_a_b_fkey  f
 w_c_d_fkey  s
+w_pkey      NULL
 
 statement ok
 DROP DATABASE d34862 CASCADE; SET database=test
@@ -4954,6 +4991,7 @@ ORDER BY conname
 conname                     condef
 partial_index_table_a_key   UNIQUE (a ASC) WHERE (a > 0)
 partial_index_table_a_key1  UNIQUE (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
+partial_index_table_pkey    PRIMARY KEY (rowid ASC)
 
 subtest regression_46799
 statement ok
@@ -5649,3 +5687,170 @@ SELECT pg_type.oid
 FROM (SELECT null::OID AS b) AS a
 INNER LOOKUP JOIN pg_type ON pg_type.oid=a.b
 ----
+
+## pg_cast
+
+query OOOOTT colnames
+SELECT * FROM pg_cast
+ORDER BY oid
+----
+oid         castsource  casttarget  castfunc  castcontext  castmethod
+140679991   1042        25          NULL      i            NULL
+140679996   1042        18          NULL      a            NULL
+140679997   1042        19          NULL      i            NULL
+186882866   869         1042        NULL      a            NULL
+186882867   869         1043        NULL      a            NULL
+207790440   1042        1042        NULL      i            NULL
+207790441   1042        1043        NULL      i            NULL
+253993333   869         25          NULL      a            NULL
+398529196   90002       90002       NULL      i            NULL
+398529198   90002       90000       NULL      e            NULL
+486164264   1266        1266        NULL      i            NULL
+486164449   1266        1083        NULL      a            NULL
+519779712   25          25          NULL      i            NULL
+519779722   25          19          NULL      i            NULL
+519779723   25          18          NULL      a            NULL
+586890230   25          1043        NULL      i            NULL
+586890231   25          1042        NULL      i            NULL
+637806108   700         1700        NULL      a            NULL
+641069276   1700        700         NULL      i            NULL
+641069277   1700        701         NULL      i            NULL
+654000812   25          2205        NULL      i            NULL
+674624401   1700        23          NULL      a            NULL
+674624402   1700        20          NULL      a            NULL
+674624403   1700        21          NULL      a            NULL
+704916921   700         701         NULL      i            NULL
+705151184   3802        16          NULL      e            NULL
+705151188   3802        20          NULL      e            NULL
+705151189   3802        21          NULL      e            NULL
+705151191   3802        23          NULL      e            NULL
+708179464   1700        1700        NULL      i            NULL
+718142737   1186        1083        NULL      a            NULL
+718142856   1186        1186        NULL      i            NULL
+738471997   700         23          NULL      a            NULL
+738471998   700         20          NULL      a            NULL
+738471999   700         21          NULL      a            NULL
+738706266   3802        700         NULL      e            NULL
+738706267   3802        701         NULL      e            NULL
+805816982   3802        1700        NULL      e            NULL
+939073229   25          90000       NULL      i            NULL
+1019153911  90002       17          NULL      i            NULL
+1039252266  19          25          NULL      i            NULL
+1106362732  19          1043        NULL      a            NULL
+1106362733  19          1042        NULL      a            NULL
+1298988567  16          23          NULL      e            NULL
+1298988569  16          25          NULL      a            NULL
+1366099038  16          1042        NULL      a            NULL
+1366099039  16          1043        NULL      a            NULL
+1418646496  1043        1043        NULL      i            NULL
+1418646497  1043        1042        NULL      i            NULL
+1485756966  1043        25          NULL      i            NULL
+1485756972  1043        19          NULL      i            NULL
+1485756973  1043        18          NULL      a            NULL
+1619977802  1043        2205        NULL      i            NULL
+1646747850  26          4089        NULL      i            NULL
+1730635912  26          2202        NULL      i            NULL
+1730635916  26          2206        NULL      i            NULL
+1730635919  26          2205        NULL      i            NULL
+1864856754  26          24          NULL      i            NULL
+1864856765  26          23          NULL      a            NULL
+1864856766  26          20          NULL      a            NULL
+1940039391  23          4089        NULL      i            NULL
+1984069072  1560        1560        NULL      i            NULL
+1984069074  1560        1562        NULL      i            NULL
+1990371905  23          2206        NULL      i            NULL
+1990371906  23          2205        NULL      i            NULL
+1990371909  23          2202        NULL      i            NULL
+2083548972  701         23          NULL      a            NULL
+2083548974  701         21          NULL      a            NULL
+2083548975  701         20          NULL      a            NULL
+2084734765  1560        23          NULL      e            NULL
+2084734766  1560        20          NULL      e            NULL
+2091037769  23          1560        NULL      e            NULL
+2091037941  23          1700        NULL      i            NULL
+2117104349  701         700         NULL      a            NULL
+2124592994  23          21          NULL      a            NULL
+2124592995  23          20          NULL      i            NULL
+2124592997  23          18          NULL      e            NULL
+2124592999  23          16          NULL      e            NULL
+2124593005  23          26          NULL      i            NULL
+2124593007  23          24          NULL      i            NULL
+2133298650  26          4096        NULL      i            NULL
+2146493458  1114        1184        NULL      i            NULL
+2146493576  1114        1082        NULL      a            NULL
+2146493577  1114        1083        NULL      a            NULL
+2146493672  1114        1114        NULL      i            NULL
+2158148128  23          701         NULL      i            NULL
+2158148129  23          700         NULL      i            NULL
+2173360273  2205        20          NULL      a            NULL
+2173360274  2205        23          NULL      a            NULL
+2173360287  2205        26          NULL      i            NULL
+2184214537  701         1700        NULL      a            NULL
+2188735018  1184        1114        NULL      a            NULL
+2188735050  1184        1082        NULL      a            NULL
+2188735051  1184        1083        NULL      a            NULL
+2188735106  1184        1266        NULL      a            NULL
+2188735184  1184        1184        NULL      i            NULL
+2233330912  20          4089        NULL      i            NULL
+2250108209  20          2205        NULL      i            NULL
+2250108210  20          2206        NULL      i            NULL
+2250108214  20          2202        NULL      i            NULL
+2350774022  20          1560        NULL      e            NULL
+2350774202  20          1700        NULL      i            NULL
+2384329297  20          21          NULL      a            NULL
+2384329299  20          23          NULL      a            NULL
+2384329308  20          24          NULL      i            NULL
+2384329310  20          26          NULL      i            NULL
+2393034919  23          4096        NULL      i            NULL
+2417884630  20          700         NULL      i            NULL
+2417884631  20          701         NULL      i            NULL
+2424867656  1082        1114        NULL      i            NULL
+2424867762  1082        1184        NULL      i            NULL
+2433096517  2202        23          NULL      a            NULL
+2433096518  2202        20          NULL      a            NULL
+2433096520  2202        26          NULL      i            NULL
+2433096522  2202        24          NULL      i            NULL
+2456191196  90000       3802        NULL      e            NULL
+2493265536  4089        20          NULL      a            NULL
+2493265539  4089        23          NULL      a            NULL
+2493265550  4089        26          NULL      i            NULL
+2623967189  90000       17          NULL      i            NULL
+2623967197  90000       25          NULL      i            NULL
+2652771188  20          4096        NULL      i            NULL
+2794916917  17          90000       NULL      i            NULL
+2794916919  17          90002       NULL      i            NULL
+3132647220  90004       90000       NULL      i            NULL
+3335448938  24          2202        NULL      i            NULL
+3460964389  21          4096        NULL      i            NULL
+3469670034  24          26          NULL      i            NULL
+3469670044  24          20          NULL      a            NULL
+3469670047  24          23          NULL      a            NULL
+3518437249  2206        23          NULL      a            NULL
+3518437250  2206        20          NULL      a            NULL
+3518437260  2206        26          NULL      i            NULL
+3628740423  21          1700        NULL      i            NULL
+3635723561  1083        1186        NULL      i            NULL
+3635723641  1083        1266        NULL      i            NULL
+3635723696  1083        1083        NULL      i            NULL
+3695851154  21          701         NULL      i            NULL
+3695851155  21          700         NULL      i            NULL
+3729406273  21          20          NULL      i            NULL
+3729406274  21          23          NULL      i            NULL
+3729406285  21          24          NULL      i            NULL
+3729406287  21          26          NULL      i            NULL
+3746183697  21          4089        NULL      i            NULL
+3790213776  1562        1562        NULL      i            NULL
+3790213778  1562        1560        NULL      i            NULL
+3815325360  90000       90000       NULL      i            NULL
+3815325362  90000       90002       NULL      i            NULL
+3815325364  90000       90004       NULL      i            NULL
+3854332660  4096        20          NULL      a            NULL
+3854332663  4096        23          NULL      a            NULL
+3854332666  4096        26          NULL      i            NULL
+3863627120  21          2205        NULL      i            NULL
+3863627123  21          2206        NULL      i            NULL
+3863627127  21          2202        NULL      i            NULL
+3922032068  18          1042        NULL      a            NULL
+3922032069  18          1043        NULL      a            NULL
+3989142581  18          23          NULL      e            NULL
+3989142587  18          25          NULL      i            NULL

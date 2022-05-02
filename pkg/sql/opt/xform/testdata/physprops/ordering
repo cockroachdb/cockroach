@@ -1473,6 +1473,97 @@ distinct-on
       └── first-agg [as=b:2, outer=(2)]
            └── b:2
 
+# Regression test for #79644
+exec-ddl
+CREATE TABLE t1 (
+  id INT8 PRIMARY KEY,
+  col2 INT8 NOT NULL,
+  name STRING(1024),
+  UNIQUE (col2, name)
+)
+----
+
+exec-ddl
+CREATE TABLE t2 (
+  col1 INT8 NOT NULL REFERENCES t1,
+  col2 INT4 NOT NULL,
+  PRIMARY KEY (col1, col2)
+)
+----
+
+exec-ddl
+CREATE TABLE t3 (
+  col1 INT8 NOT NULL,
+  col2 INT4 NOT NULL,
+  col3 INT8 NOT NULL,
+  PRIMARY KEY (col1, col2, col3),
+  CONSTRAINT fk_t2 FOREIGN KEY (col1, col2) REFERENCES t2 (col1, col2)
+)
+----
+
+# DISTINCT ON + GROUP BY + ORDER BY should not use the GROUP BY's empty
+# OrderingChoice to try and fulfill the required ordering.
+opt format=hide-stats
+SELECT
+DISTINCT ON (t2.col1)
+t1.col2, t2.col1, array_agg(t3.col3) FROM t2
+INNER JOIN t1 ON t1.id = t2.col1
+INNER JOIN t3 ON t2.col2 = t3.col2
+GROUP BY (t2.col1, t1.col2, t2.col2)
+ORDER BY (t2.col1, t2.col2)
+----
+distinct-on
+ ├── columns: col2:6!null col1:1!null array_agg:15!null
+ ├── grouping columns: t2.col1:1!null
+ ├── internal-ordering: +2 opt(1,6)
+ ├── key: (1)
+ ├── fd: (1)-->(6,15)
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: t2.col1:1!null t2.col2:2!null t1.col2:6!null array_agg:15!null
+ │    ├── key: (1,2)
+ │    ├── fd: (1)-->(6), (1,2)-->(6,15)
+ │    ├── ordering: +1,+2
+ │    └── group-by (hash)
+ │         ├── columns: t2.col1:1!null t2.col2:2!null t1.col2:6!null array_agg:15!null
+ │         ├── grouping columns: t2.col1:1!null t2.col2:2!null
+ │         ├── key: (1,2)
+ │         ├── fd: (1)-->(6), (1,2)-->(6,15)
+ │         ├── inner-join (hash)
+ │         │    ├── columns: t2.col1:1!null t2.col2:2!null id:5!null t1.col2:6!null t3.col2:11!null col3:12!null
+ │         │    ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-more)
+ │         │    ├── fd: (5)-->(6), (1)==(5), (5)==(1), (2)==(11), (11)==(2)
+ │         │    ├── inner-join (merge)
+ │         │    │    ├── columns: t2.col1:1!null t2.col2:2!null id:5!null t1.col2:6!null
+ │         │    │    ├── left ordering: +1
+ │         │    │    ├── right ordering: +5
+ │         │    │    ├── key: (2,5)
+ │         │    │    ├── fd: (5)-->(6), (1)==(5), (5)==(1)
+ │         │    │    ├── scan t2
+ │         │    │    │    ├── columns: t2.col1:1!null t2.col2:2!null
+ │         │    │    │    ├── key: (1,2)
+ │         │    │    │    └── ordering: +1
+ │         │    │    ├── scan t1
+ │         │    │    │    ├── columns: id:5!null t1.col2:6!null
+ │         │    │    │    ├── key: (5)
+ │         │    │    │    ├── fd: (5)-->(6)
+ │         │    │    │    └── ordering: +5
+ │         │    │    └── filters (true)
+ │         │    ├── scan t3
+ │         │    │    └── columns: t3.col2:11!null col3:12!null
+ │         │    └── filters
+ │         │         └── t2.col2:2 = t3.col2:11 [outer=(2,11), fd=(2)==(11), (11)==(2)]
+ │         └── aggregations
+ │              ├── array-agg [as=array_agg:15, outer=(12)]
+ │              │    └── col3:12
+ │              └── const-agg [as=t1.col2:6, outer=(6)]
+ │                   └── t1.col2:6
+ └── aggregations
+      ├── first-agg [as=t1.col2:6, outer=(6)]
+      │    └── t1.col2:6
+      └── first-agg [as=array_agg:15, outer=(15)]
+           └── array_agg:15
+
 # --------------------------------------------------
 # Set Operations.
 # --------------------------------------------------

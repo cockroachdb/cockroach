@@ -437,6 +437,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		disallowShadowingBelow,
 		writeAtBatchTS,
 		false, /* splitFilledRanges */
+		rd.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
 	)
 	if err != nil {
 		return summary, err

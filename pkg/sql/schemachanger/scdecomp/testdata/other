@@ -1,6 +1,8 @@
 setup
 CREATE DATABASE db1;
+COMMENT ON DATABASE db1 IS 'db1 is good';
 CREATE SCHEMA db1.sc1;
+COMMENT ON SCHEMA db1.sc1 IS 'sc1 is good';
 CREATE SEQUENCE db1.public.sq1;
 CREATE SEQUENCE db1.sc1.sq1;
 CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, val INT DEFAULT nextval('db1.sc1.sq1'));
@@ -45,7 +47,7 @@ ElementState:
     schemaId: 106
   Status: PUBLIC
 - SchemaComment:
-    comment: __placeholder_comment__
+    comment: sc1 is good
     schemaId: 106
   Status: PUBLIC
 
@@ -89,10 +91,6 @@ ElementState:
     parentDatabaseId: 104
     schemaId: 105
   Status: PUBLIC
-- SchemaComment:
-    comment: __placeholder_comment__
-    schemaId: 105
-  Status: PUBLIC
 
 decompose
 db1
@@ -134,7 +132,7 @@ ElementState:
     roleName: __placeholder_role_name__
   Status: PUBLIC
 - DatabaseComment:
-    comment: __placeholder_comment__
+    comment: db1 is good
     databaseId: 104
   Status: PUBLIC
 
@@ -202,10 +200,6 @@ ElementState:
     pgAttributeNum: 1
     tableId: 112
   Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 112
-  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: id
@@ -236,12 +230,6 @@ ElementState:
     isNullable: true
     isRelationBeingDropped: false
     isVirtual: false
-    tableId: 112
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
     tableId: 112
   Status: PUBLIC
 - Namespace:
@@ -300,10 +288,6 @@ ElementState:
     isHidden: false
     isInaccessible: false
     pgAttributeNum: 2
-    tableId: 113
-  Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
     tableId: 113
   Status: PUBLIC
 - ColumnName:
@@ -368,18 +352,6 @@ ElementState:
     isNullable: true
     isRelationBeingDropped: false
     isVirtual: false
-    tableId: 113
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 113
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
     tableId: 113
   Status: PUBLIC
 - Namespace:

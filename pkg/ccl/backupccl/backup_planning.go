@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -725,7 +726,7 @@ func backupPlanHook(
 			if !p.ExecCfg().Codec.ForSystemTenant() {
 				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
 			}
-			initialDetails.SpecificTenantIds = []roachpb.TenantID{backupStmt.Targets.TenantID.TenantID}
+			initialDetails.SpecificTenantIds = []roachpb.TenantID{roachpb.MakeTenantID(backupStmt.Targets.TenantID.ID)}
 		}
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
@@ -826,7 +827,10 @@ func backupPlanHook(
 			return err
 		}
 
-		if len(backupManifest.Spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.EnableProtectedTimestampsForTenant) {
+			protectedtsID := uuid.MakeV4()
+			backupDetails.ProtectedTimestampRecord = &protectedtsID
+		} else if len(backupManifest.Spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
 			protectedtsID := uuid.MakeV4()
 			backupDetails.ProtectedTimestampRecord = &protectedtsID
 		}
@@ -851,10 +855,12 @@ func backupPlanHook(
 			p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(), "",
 		) != nil
 
-		if err := protectTimestampForBackup(
-			ctx, p.ExecCfg(), plannerTxn, jobID, backupManifest, backupDetails,
-		); err != nil {
-			return err
+		if backupDetails.ProtectedTimestampRecord != nil {
+			if err := protectTimestampForBackup(
+				ctx, p.ExecCfg(), plannerTxn, jobID, backupManifest, backupDetails,
+			); err != nil {
+				return err
+			}
 		}
 
 		if backupStmt.Options.Detached {
@@ -975,9 +981,30 @@ func collectTelemetry(
 	}
 	if backupDetails.CollectionURI != "" {
 		countSource("backup.nested")
-		if initialDetails.Destination.Subdir == latestFileName {
-			countSource("backup.into-latest")
+		timeBaseSubdir := true
+		if _, err := time.Parse(DateBasedIntoFolderName,
+			initialDetails.Destination.Subdir); err != nil {
+			timeBaseSubdir = false
 		}
+		if backupDetails.StartTime.IsEmpty() {
+			if !timeBaseSubdir {
+				countSource("backup.deprecated-full-nontime-subdir")
+			} else if initialDetails.Destination.Exists {
+				countSource("backup.deprecated-full-time-subdir")
+			} else {
+				countSource("backup.full-no-subdir")
+			}
+		} else {
+			if initialDetails.Destination.Subdir == latestFileName {
+				countSource("backup.incremental-latest-subdir")
+			} else if !timeBaseSubdir {
+				countSource("backup.deprecated-incremental-nontime-subdir")
+			} else {
+				countSource("backup.incremental-explicit-subdir")
+			}
+		}
+	} else {
+		countSource("backup.deprecated-non-collection")
 	}
 	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
 		countSource("backup.targets.full_cluster")
@@ -1144,6 +1171,8 @@ func planSchedulePTSChaining(
 	if err != nil {
 		return err
 	}
+
+	// If chaining of protected timestamp records is disabled, noop.
 	if !args.ChainProtectedTimestampRecords {
 		return nil
 	}
@@ -1151,6 +1180,7 @@ func planSchedulePTSChaining(
 	if args.BackupType == ScheduledBackupExecutionArgs_FULL {
 		// Check if there is a dependent incremental schedule associated with the
 		// full schedule running the current backup.
+		//
 		// If present, the full backup on successful completion, will release the
 		// pts record found on the incremental schedule, and replace it with a new
 		// pts record protecting after the EndTime of the full backup.
@@ -1161,18 +1191,11 @@ func planSchedulePTSChaining(
 		_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(
 			ctx, env, txn, execCfg.InternalExecutor, args.DependentScheduleID)
 		if err != nil {
-			// If we are unable to resolve the dependent incremental schedule (it
-			// could have been dropped) we do not need to perform any chaining.
-			//
-			// TODO(adityamaru): Update this comment when DROP SCHEDULE is taught
-			// to clear the dependent ID. Once that is done, we should not encounter
-			// this error.
-			if jobs.HasScheduledJobNotFoundError(err) {
-				log.Warningf(ctx, "could not find dependent schedule with id %d",
-					args.DependentScheduleID)
-				return nil
-			}
-			return err
+			// We should always be able to resolve the dependent schedule ID. If the
+			// incremental schedule was dropped then it would have unlinked itself
+			// from the full schedule. Thus, we treat all errors as a problem.
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"dependent schedule %d could not be resolved", args.DependentScheduleID)
 		}
 		backupDetails.SchedulePTSChainingRecord = &jobspb.SchedulePTSChainingRecord{
 			ProtectedTimestampRecord: incArgs.ProtectedTimestampRecord,
@@ -1183,7 +1206,7 @@ func planSchedulePTSChaining(
 		// that the job should update on successful completion, to protect data
 		// after the current backups' EndTime.
 		// We save this information on the job instead of reading it from the
-		// schedule on completion, so as to prevent an "overhang" incremental from
+		// schedule on completion, to prevent an "overhang" incremental from
 		// incorrectly pulling forward a pts record that was written by a new full
 		// backup that completed while the incremental was still executing.
 		//
@@ -1311,32 +1334,23 @@ func protectTimestampForBackup(
 	backupManifest BackupManifest,
 	backupDetails jobspb.BackupDetails,
 ) error {
-	if backupDetails.ProtectedTimestampRecord == nil {
-		return nil
+	tsToProtect := backupManifest.EndTime
+	if !backupManifest.StartTime.IsEmpty() {
+		tsToProtect = backupManifest.StartTime
 	}
-	if len(backupManifest.Spans) > 0 {
-		tsToProtect := backupManifest.EndTime
-		if !backupManifest.StartTime.IsEmpty() {
-			tsToProtect = backupManifest.StartTime
-		}
 
-		// Resolve the target that the PTS record will protect as part of this
-		// backup.
-		target := getProtectedTimestampTargetForBackup(backupManifest)
+	// Resolve the target that the PTS record will protect as part of this
+	// backup.
+	target := getProtectedTimestampTargetForBackup(backupManifest)
 
-		// Records written by the backup job should be ignored when making GC
-		// decisions on any table that has been marked as
-		// `exclude_data_from_backup`. This ensures that the backup job does not
-		// holdup GC on that table span for the duration of execution.
-		target.IgnoreIfExcludedFromBackup = true
-		rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, int64(jobID),
-			tsToProtect, backupManifest.Spans, jobsprotectedts.Jobs, target)
-		err := execCfg.ProtectedTimestampProvider.Protect(ctx, txn, rec)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	// Records written by the backup job should be ignored when making GC
+	// decisions on any table that has been marked as
+	// `exclude_data_from_backup`. This ensures that the backup job does not
+	// holdup GC on that table span for the duration of execution.
+	target.IgnoreIfExcludedFromBackup = true
+	rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, int64(jobID),
+		tsToProtect, backupManifest.Spans, jobsprotectedts.Jobs, target)
+	return execCfg.ProtectedTimestampProvider.Protect(ctx, txn, rec)
 }
 
 // checkForNewDatabases returns an error if any new complete databases were

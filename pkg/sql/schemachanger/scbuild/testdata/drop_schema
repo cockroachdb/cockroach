@@ -42,6 +42,13 @@ create-view
 CREATE VIEW sc2.v6 AS (SELECT 'a'::sc1.typ::string AS k, n2, n1 from sc1.v4)
 ----
 
+setup
+COMMENT ON SCHEMA sc1 IS 'sc1 is good';
+COMMENT ON TABLE sc1.t1 IS 't1 is good';
+COMMENT ON COLUMN sc1.t1.id IS 'id is good';
+COMMENT ON INDEX sc1.t1@t1_pkey IS 't1_pkey is good';
+----
+
 build
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
@@ -141,102 +148,12 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     columnId: 3
     pgAttributeNum: 3
     tableId: 115
-- [[ColumnComment:{DescID: 107, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 107, PgAttributeNum: 1, Comment: id is good}, ABSENT], PUBLIC]
   details:
     columnId: 1
-    comment: __placeholder_comment__
+    comment: id is good
     pgAttributeNum: 1
     tableId: 107
-- [[ColumnComment:{DescID: 107, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 107
-- [[ColumnComment:{DescID: 107, PgAttributeNum: 3}, ABSENT], PUBLIC]
-  details:
-    columnId: 3
-    comment: __placeholder_comment__
-    pgAttributeNum: 3
-    tableId: 107
-- [[ColumnComment:{DescID: 108, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 108
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 109
-- [[ColumnComment:{DescID: 109, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 109
-- [[ColumnComment:{DescID: 110, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 110
-- [[ColumnComment:{DescID: 110, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 110
-- [[ColumnComment:{DescID: 111, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 111
-- [[ColumnComment:{DescID: 111, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 111
-- [[ColumnComment:{DescID: 114, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 114
-- [[ColumnComment:{DescID: 114, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 114
-- [[ColumnComment:{DescID: 114, PgAttributeNum: 3}, ABSENT], PUBLIC]
-  details:
-    columnId: 3
-    comment: __placeholder_comment__
-    pgAttributeNum: 3
-    tableId: 114
-- [[ColumnComment:{DescID: 115, PgAttributeNum: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    comment: __placeholder_comment__
-    pgAttributeNum: 1
-    tableId: 115
-- [[ColumnComment:{DescID: 115, PgAttributeNum: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    comment: __placeholder_comment__
-    pgAttributeNum: 2
-    tableId: 115
-- [[ColumnComment:{DescID: 115, PgAttributeNum: 3}, ABSENT], PUBLIC]
-  details:
-    columnId: 3
-    comment: __placeholder_comment__
-    pgAttributeNum: 3
-    tableId: 115
 - [[ColumnDefaultExpression:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
@@ -518,9 +435,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   details:
     arrayTypeId: 113
     typeId: 112
-- [[IndexComment:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC]
+- [[IndexComment:{DescID: 107, IndexID: 1, Comment: t1_pkey is good}, ABSENT], PUBLIC]
   details:
-    comment: __placeholder_comment__
+    comment: t1_pkey is good
     indexId: 1
     tableId: 107
 - [[IndexName:{DescID: 107, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
@@ -694,9 +611,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Schema:{DescID: 104}, ABSENT], PUBLIC]
   details:
     schemaId: 104
-- [[SchemaComment:{DescID: 104}, ABSENT], PUBLIC]
+- [[SchemaComment:{DescID: 104, Comment: sc1 is good}, ABSENT], PUBLIC]
   details:
-    comment: __placeholder_comment__
+    comment: sc1 is good
     schemaId: 104
 - [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
@@ -708,38 +625,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Table:{DescID: 107}, ABSENT], PUBLIC]
   details:
     tableId: 107
-- [[TableComment:{DescID: 106}, ABSENT], PUBLIC]
+- [[TableComment:{DescID: 107, Comment: t1 is good}, ABSENT], PUBLIC]
   details:
-    comment: __placeholder_comment__
-    tableId: 106
-- [[TableComment:{DescID: 107}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
+    comment: t1 is good
     tableId: 107
-- [[TableComment:{DescID: 108}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 108
-- [[TableComment:{DescID: 109}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 109
-- [[TableComment:{DescID: 110}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 110
-- [[TableComment:{DescID: 111}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 111
-- [[TableComment:{DescID: 114}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 114
-- [[TableComment:{DescID: 115}, ABSENT], PUBLIC]
-  details:
-    comment: __placeholder_comment__
-    tableId: 115
 - [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 104

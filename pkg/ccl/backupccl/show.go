@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -448,7 +449,15 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 						len(dest)))
 			}
 		}
-		return infoReader.showBackup(ctx, &mem, mkStore, info, p.User(), resultsCh)
+		if err := infoReader.showBackup(ctx, &mem, mkStore, info, p.User(), resultsCh); err != nil {
+			return err
+		}
+		if backup.InCollection == nil {
+			telemetry.Count("show-backup.deprecated-subdir-syntax")
+		} else {
+			telemetry.Count("show-backup.collection")
+		}
+		return nil
 	}
 
 	return fn, infoReader.header(), nil, false, nil

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1146,7 +1147,8 @@ func (r *Replica) changeReplicasImpl(
 		// If we demoted or swapped any voters with non-voters, we likely are in a
 		// joint config or have learners on the range. Let's exit the joint config
 		// and remove the learners.
-		return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
+		desc, _, err = r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
+		return desc, err
 	}
 	return desc, nil
 }
@@ -1301,25 +1303,51 @@ func (r *Replica) TestingRemoveLearner(
 	return desc, err
 }
 
+// errCannotRemoveLearnerWhileSnapshotInFlight is returned when we cannot remove
+// a learner replica because it is in the process of receiving its initial
+// snapshot.
+var errCannotRemoveLearnerWhileSnapshotInFlight = errors.Mark(
+	errors.New("cannot remove learner while snapshot is in flight"),
+	errMarkReplicationChangeInProgress,
+)
+
 // maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
 // returns, all remaining replicas will be of type VOTER_FULL or NON_VOTER.
 func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	ctx context.Context, desc *roachpb.RangeDescriptor,
-) (rangeDesc *roachpb.RangeDescriptor, err error) {
+) (rangeDesc *roachpb.RangeDescriptor, learnersRemoved int64, err error) {
 	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
-		return nil, err
+		return nil /* desc */, 0 /* learnersRemoved */, err
+	}
+
+	// If we detect that there are learners in the process of receiving their
+	// initial upreplication snapshot, we don't want to remove them and we bail
+	// out.
+	//
+	// Currently, the only callers of this method are the replicateQueue, the
+	// StoreRebalancer, the mergeQueue and SQL (which calls into
+	// `AdminRelocateRange` via the `EXPERIMENTAL_RELOCATE` syntax). All these
+	// callers will fail-fast when they encounter this error and move on to other
+	// ranges. This is intentional and desirable because we want to avoid
+	// head-of-line blocking scenarios where these callers are blocked for long
+	// periods of time on a single range without making progress, which can stall
+	// other operations that they are expected to perform (see
+	// https://github.com/cockroachdb/cockroach/issues/79249 for example).
+	if r.hasOutstandingLearnerSnapshotInFlight() {
+		return nil /* desc */, 0, /* learnersRemoved */
+			errCannotRemoveLearnerWhileSnapshotInFlight
 	}
 
 	if fn := r.store.TestingKnobs().BeforeRemovingDemotedLearner; fn != nil {
 		fn()
 	}
 	// Now the config isn't joint any more, but we may have demoted some voters
-	// into learners. These learners should go as well.
+	// into learners. If so, we need to remove them.
 	learners := desc.Replicas().LearnerDescriptors()
 	if len(learners) == 0 {
-		return desc, nil
+		return desc, 0 /* learnersRemoved */, nil /* err */
 	}
 	targets := make([]roachpb.ReplicationTarget, len(learners))
 	for i := range learners {
@@ -1346,10 +1374,11 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 			},
 		)
 		if err != nil {
-			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
+			return desc, learnersRemoved, errors.Wrapf(err, `removing learners from %s`, origDesc)
 		}
+		learnersRemoved++
 	}
-	return desc, nil
+	return desc, learnersRemoved, nil
 }
 
 // validateAdditionsPerStore ensures that we're not trying to add the same type
@@ -1812,9 +1841,8 @@ func (r *Replica) lockLearnerSnapshot(
 		r.addSnapshotLogTruncationConstraint(ctx, lockUUID, 1, addition.StoreID)
 	}
 	return func() {
-		now := timeutil.Now()
 		for _, lockUUID := range lockUUIDs {
-			r.completeSnapshotLogTruncationConstraint(ctx, lockUUID, now)
+			r.completeSnapshotLogTruncationConstraint(lockUUID)
 		}
 	}
 }
@@ -1881,7 +1909,8 @@ func (r *Replica) execReplicationChangesForVoters(
 
 	// Leave the joint config if we entered one. Also, remove any learners we
 	// might have picked up due to removal-via-demotion.
-	return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
+	desc, _, err = r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
+	return desc, err
 }
 
 // tryRollbackRaftLearner attempts to remove a learner specified by the target.
@@ -2446,6 +2475,15 @@ func recordRangeEventsInLog(
 	return nil
 }
 
+// getSenderReplica returns a replica descriptor for a follower replica to act as
+// the sender for snapshots.
+// TODO(amy): select a follower based on locality matching.
+func (r *Replica) getSenderReplica(ctx context.Context) (roachpb.ReplicaDescriptor, error) {
+	log.Fatal(ctx, "follower snapshots not implemented")
+	return r.GetReplicaDescriptor()
+}
+
+// TODO(amy): update description when patch for follower snapshots are completed.
 // sendSnapshot sends a snapshot of the replica state to the specified replica.
 // Currently only invoked from replicateQueue and raftSnapshotQueue. Be careful
 // about adding additional calls as generating a snapshot is moderately
@@ -2569,6 +2607,102 @@ func (r *Replica) sendSnapshot(
 		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
 
+	sender, err := r.GetReplicaDescriptor()
+	if err != nil {
+		return err
+	}
+	// Check follower snapshots cluster setting.
+	if followerSnapshotsEnabled.Get(&r.ClusterSettings().SV) {
+		sender, err = r.getSenderReplica(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	log.VEventf(
+		ctx, 2, "delegating snapshot transmission for %v to %v", recipient, sender,
+	)
+	desc, err := r.GetReplicaDescriptor()
+	if err != nil {
+		return err
+	}
+	status := r.RaftStatus()
+	if status == nil {
+		// This code path is sometimes hit during scatter for replicas that
+		// haven't woken up yet.
+		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
+	}
+
+	// Create new delegate snapshot request with only required metadata.
+	delegateRequest := &kvserverpb.DelegateSnapshotRequest{
+		RangeID:            r.RangeID,
+		CoordinatorReplica: desc,
+		RecipientReplica:   recipient,
+		Priority:           priority,
+		Type:               snapType,
+		Term:               status.Term,
+		DelegatedSender:    sender,
+	}
+	err = contextutil.RunWithTimeout(
+		ctx, "delegate-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
+			return r.store.cfg.Transport.DelegateSnapshot(
+				ctx,
+				delegateRequest,
+			)
+		},
+	)
+
+	if err != nil {
+		return errors.Mark(err, errMarkSnapshotError)
+	}
+	return nil
+}
+
+// followerSnapshotsEnabled is used to enable or disable follower snapshots.
+var followerSnapshotsEnabled = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"kv.snapshot_delegation.enabled",
+		"set to true to allow snapshots from follower replicas",
+		false,
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
+
+// followerSendSnapshot receives a delegate snapshot request and generates the
+// snapshot from this replica. The entire process of generating and transmitting
+// the snapshot is handled, and errors are propagated back to the leaseholder.
+func (r *Replica) followerSendSnapshot(
+	ctx context.Context,
+	recipient roachpb.ReplicaDescriptor,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream DelegateSnapshotResponseStream,
+) (retErr error) {
+	ctx = r.AnnotateCtx(ctx)
+
+	// TODO(amy): when delegating to different senders, check raft applied state
+	// to determine if this follower replica is fit to send.
+	// Acknowledge that the request has been accepted.
+	if err := stream.Send(
+		&kvserverpb.DelegateSnapshotResponse{
+			SnapResponse: &kvserverpb.SnapshotResponse{
+				Status: kvserverpb.SnapshotResponse_ACCEPTED,
+			},
+		},
+	); err != nil {
+		return err
+	}
+
+	// Throttle snapshot sending.
+	rangeSize := r.GetMVCCStats().Total()
+	cleanup, err := r.store.reserveSendSnapshot(ctx, req, rangeSize)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	snapType := req.Type
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
 	if err != nil {
 		err = errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
@@ -2583,21 +2717,11 @@ func (r *Replica) sendSnapshot(
 	// the leaseholder and we haven't yet applied the configuration change that's
 	// adding the recipient to the range.
 	if _, ok := snap.State.Desc.GetReplicaDescriptor(recipient.StoreID); !ok {
-		return errors.Wrapf(errMarkSnapshotError,
+		return errors.Wrapf(
+			errMarkSnapshotError,
 			"attempting to send snapshot that does not contain the recipient as a replica; "+
-				"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc)
-	}
-
-	sender, err := r.GetReplicaDescriptor()
-	if err != nil {
-		return errors.Wrapf(err, "%s: change replicas failed", r)
-	}
-
-	status := r.RaftStatus()
-	if status == nil {
-		// This code path is sometimes hit during scatter for replicas that
-		// haven't woken up yet.
-		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
+				"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc,
+		)
 	}
 
 	// We avoid shipping over the past Raft log in the snapshot by changing
@@ -2615,25 +2739,26 @@ func (r *Replica) sendSnapshot(
 	// explicitly for snapshots going out to followers.
 	snap.State.DeprecatedUsingAppliedStateKey = true
 
-	req := kvserverpb.SnapshotRequest_Header{
+	// Create new snapshot request header using the delegate snapshot request.
+	header := kvserverpb.SnapshotRequest_Header{
 		State:                                snap.State,
 		DeprecatedUnreplicatedTruncatedState: true,
 		RaftMessageRequest: kvserverpb.RaftMessageRequest{
-			RangeID:     r.RangeID,
-			FromReplica: sender,
-			ToReplica:   recipient,
+			RangeID:     req.RangeID,
+			FromReplica: req.CoordinatorReplica,
+			ToReplica:   req.RecipientReplica,
 			Message: raftpb.Message{
 				Type:     raftpb.MsgSnap,
-				To:       uint64(recipient.ReplicaID),
-				From:     uint64(sender.ReplicaID),
-				Term:     status.Term,
+				From:     uint64(req.CoordinatorReplica.ReplicaID),
+				To:       uint64(req.RecipientReplica.ReplicaID),
+				Term:     req.Term,
 				Snapshot: snap.RaftSnap,
 			},
 		},
-		RangeSize: r.GetMVCCStats().Total(),
-		Priority:  priority,
+		RangeSize: rangeSize,
+		Priority:  req.Priority,
 		Strategy:  kvserverpb.SnapshotRequest_KV_BATCH,
-		Type:      snapType,
+		Type:      req.Type,
 	}
 	newBatchFn := func() storage.Batch {
 		return r.store.Engine().NewUnindexedBatch(true /* writeOnly */)
@@ -2641,18 +2766,20 @@ func (r *Replica) sendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
+
 	err = contextutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			return r.store.cfg.Transport.SendSnapshot(
 				ctx,
 				r.store.cfg.StorePool,
-				req,
+				header,
 				snap,
 				newBatchFn,
 				sent,
 				r.store.metrics.RangeSnapshotSentBytes,
 			)
-		})
+		},
+	)
 	if err != nil {
 		if errors.Is(err, errMalformedSnapshot) {
 			tag := fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short())
@@ -2840,8 +2967,7 @@ func (r *Replica) AdminRelocateRange(
 
 	// Remove learners so we don't have to think about relocating them, and leave
 	// the joint config if we're in one.
-	newDesc, err :=
-		r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
+	newDesc, _, err := r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
 		return err

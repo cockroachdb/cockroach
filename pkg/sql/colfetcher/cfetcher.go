@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -32,11 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
-	"github.com/cockroachdb/cockroach/pkg/sql/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -546,6 +547,7 @@ func (cf *cFetcher) StartScan(
 		ctx,
 		txn,
 		spans,
+		nil, /* spanIDs */
 		bsHeader,
 		cf.reverse,
 		batchBytesLimit,
@@ -577,7 +579,7 @@ func (cf *cFetcher) StartScanStreaming(
 	spans roachpb.Spans,
 	limitHint rowinfra.RowLimit,
 ) error {
-	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, cf.lockStrength)
+	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, nil /* spanIDs */, cf.lockStrength)
 	if err != nil {
 		return err
 	}
@@ -696,7 +698,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKVs, kv, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
+			moreKVs, kv, _, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, cf.convertFetchError(ctx, err)
 			}
@@ -846,7 +848,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			cf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
+			moreKVs, kv, _, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, cf.convertFetchError(ctx, err)
 			}
@@ -901,7 +903,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// on a per row basis since each row can be modified at a different
 			// time.
 			if cf.table.timestampOutputIdx != noOutputColumn {
-				cf.machine.timestampCol[cf.machine.rowIdx] = tree.TimestampToDecimal(cf.table.rowLastModified)
+				cf.machine.timestampCol[cf.machine.rowIdx] = eval.TimestampToDecimal(cf.table.rowLastModified)
 			}
 
 			// We're finished with a row. Fill the row in with nulls if

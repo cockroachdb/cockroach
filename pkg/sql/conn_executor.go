@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
@@ -42,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -922,7 +925,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
-	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
+	ex.mu.ActiveQueries = make(map[clusterunique.ID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
 	ex.sessionTracing.ex = ex
@@ -1443,7 +1446,7 @@ type connExecutor struct {
 		syncutil.RWMutex
 
 		// ActiveQueries contains all queries in flight.
-		ActiveQueries map[ClusterWideID]*queryMeta
+		ActiveQueries map[clusterunique.ID]*queryMeta
 
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
@@ -1467,7 +1470,7 @@ type connExecutor struct {
 	// pgwire cancellation protocol.
 	queryCancelKey pgwirecancel.BackendKeyData
 
-	sessionID ClusterWideID
+	sessionID clusterunique.ID
 
 	// activated determines whether activate() was called already.
 	// When this is set, close() must be called to release resources.
@@ -2440,8 +2443,8 @@ func stmtHasNoData(stmt tree.Statement) bool {
 // generateID generates a unique ID based on the SQL instance ID and its current
 // HLC timestamp. These IDs are either scoped at the query level or at the
 // session level.
-func (ex *connExecutor) generateID() ClusterWideID {
-	return GenerateClusterWideID(ex.server.cfg.Clock.Now(), ex.server.cfg.NodeID.SQLInstanceID())
+func (ex *connExecutor) generateID() clusterunique.ID {
+	return clusterunique.GenerateID(ex.server.cfg.Clock.Now(), ex.server.cfg.NodeID.SQLInstanceID())
 }
 
 // commitPrepStmtNamespace deallocates everything in
@@ -2641,7 +2644,7 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 // NOTE: this cannot live in pkg/sql/sem/tree due to the call to WrapFunction,
 // which fails before the pkg/sql/sem/builtins package has been initialized.
 var followerReadTimestampExpr = &tree.FuncExpr{
-	Func: tree.WrapFunction(tree.FollowerReadTimestampFunctionName),
+	Func: tree.WrapFunction(asof.FollowerReadTimestampFunctionName),
 }
 
 func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.AsOfClause {
@@ -2659,7 +2662,7 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 // statement, to reinitialize other fields.
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
 	*evalCtx = extendedEvalContext{
-		EvalContext: tree.EvalContext{
+		Context: eval.Context{
 			Planner:                   p,
 			PrivilegedAccessor:        p,
 			SessionAccessor:           p,
@@ -2674,6 +2677,8 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ReCache:                   ex.server.reCache,
 			SQLStatsController:        ex.server.sqlStatsController,
 			IndexUsageStatsController: ex.server.indexUsageStatsController,
+			ConsistencyChecker:        p.execCfg.ConsistencyChecker,
+			RangeProber:               p.execCfg.RangeProber,
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,
@@ -2711,7 +2716,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil
-	evalCtx.Context = ex.Ctx()
+	evalCtx.Context.Context = ex.Ctx()
 	evalCtx.Txn = txn
 	evalCtx.Mon = ex.state.mon
 	evalCtx.PrepareOnly = false
@@ -2988,7 +2993,7 @@ func (ex *connExecutor) initStatementResult(
 }
 
 // cancelQuery is part of the registrySession interface.
-func (ex *connExecutor) cancelQuery(queryID ClusterWideID) bool {
+func (ex *connExecutor) cancelQuery(queryID clusterunique.ID) bool {
 	ex.mu.Lock()
 	defer ex.mu.Unlock()
 	if queryMeta, exists := ex.mu.ActiveQueries[queryID]; exists {

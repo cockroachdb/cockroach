@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
@@ -479,7 +481,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			)
 		}()
 		// TODO(radu): consider removing this if/when #46164 is addressed.
-		p.extendedEvalCtx.Context = ctx
+		p.extendedEvalCtx.Context.Context = ctx
 	}
 
 	// We exempt `SET` statements from the statement timeout, particularly so as
@@ -798,7 +800,7 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 	return nil
 }
 
-func formatWithPlaceholders(ast tree.Statement, evalCtx *tree.EvalContext) string {
+func formatWithPlaceholders(ast tree.Statement, evalCtx *eval.Context) string {
 	var fmtCtx *tree.FmtCtx
 	fmtFlags := tree.FmtSimple
 
@@ -806,7 +808,7 @@ func formatWithPlaceholders(ast tree.Statement, evalCtx *tree.EvalContext) strin
 		fmtCtx = evalCtx.FmtCtx(
 			fmtFlags,
 			tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
-				d, err := placeholder.Eval(evalCtx)
+				d, err := eval.Expr(evalCtx, placeholder)
 				if err != nil {
 					// Fall back to the default behavior if something goes wrong.
 					ctx.Printf("$%d", placeholder.Idx+1)
@@ -2004,7 +2006,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 
 // addActiveQuery adds a running query to the list of running queries.
 func (ex *connExecutor) addActiveQuery(
-	ast tree.Statement, rawStmt string, queryID ClusterWideID, cancelFun context.CancelFunc,
+	ast tree.Statement, rawStmt string, queryID clusterunique.ID, cancelFun context.CancelFunc,
 ) {
 	_, hidden := ast.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
@@ -2021,7 +2023,7 @@ func (ex *connExecutor) addActiveQuery(
 	ex.mu.Unlock()
 }
 
-func (ex *connExecutor) removeActiveQuery(queryID ClusterWideID, ast tree.Statement) {
+func (ex *connExecutor) removeActiveQuery(queryID clusterunique.ID, ast tree.Statement) {
 	ex.mu.Lock()
 	_, ok := ex.mu.ActiveQueries[queryID]
 	if !ok {

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -82,7 +83,7 @@ func GetUserSessionInitInfo(
 	canLoginDBConsole bool,
 	isSuperuser bool,
 	defaultSettings []sessioninit.SettingsCacheEntry,
-	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword security.PasswordHash, err error),
+	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	err error,
 ) {
 	runFn := getUserInfoRunFn(execCfg, username, "get-user-timeout")
@@ -91,7 +92,7 @@ func GetUserSessionInitInfo(
 		// As explained above, for root we report that the user exists
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
-		rootFn := func(ctx context.Context) (expired bool, ret security.PasswordHash, err error) {
+		rootFn := func(ctx context.Context) (expired bool, ret password.PasswordHash, err error) {
 			err = runFn(ctx, func(ctx context.Context) error {
 				authInfo, _, err := retrieveSessionInitInfoWithCache(ctx, execCfg, ie, username, databaseName)
 				if err != nil {
@@ -101,7 +102,7 @@ func GetUserSessionInitInfo(
 				return nil
 			})
 			if ret == nil {
-				ret = security.MissingPasswordHash
+				ret = password.MissingPasswordHash
 			}
 			// NB: Root user password does not expire.
 			return false /* expired */, ret, err
@@ -156,7 +157,7 @@ func GetUserSessionInitInfo(
 		authInfo.CanLoginDBConsole,
 		isSuperuser,
 		settingsEntries,
-		func(ctx context.Context) (expired bool, ret security.PasswordHash, err error) {
+		func(ctx context.Context) (expired bool, ret password.PasswordHash, err error) {
 			ret = authInfo.HashedPassword
 			if authInfo.ValidUntil != nil {
 				// NB: we compute the expiration as late as possible,
@@ -169,7 +170,7 @@ func GetUserSessionInitInfo(
 				}
 			}
 			if ret == nil {
-				ret = security.MissingPasswordHash
+				ret = password.MissingPasswordHash
 			}
 			return expired, ret, nil
 		},
@@ -262,7 +263,7 @@ func retrieveAuthInfo(
 			hashedPassword = []byte(*(v.(*tree.DBytes)))
 		}
 	}
-	aInfo.HashedPassword = security.LoadPasswordHash(ctx, hashedPassword)
+	aInfo.HashedPassword = password.LoadPasswordHash(ctx, hashedPassword)
 
 	if !aInfo.UserExists {
 		return aInfo, nil
@@ -638,11 +639,17 @@ func MaybeUpgradeStoredPasswordHash(
 	execCfg *ExecutorConfig,
 	username security.SQLUsername,
 	cleartext string,
-	currentHash security.PasswordHash,
+	currentHash password.PasswordHash,
 ) {
 	// This call also checks whether the conversion has been disabled by
 	// configuration.
-	converted, prevHash, newHash, newMethod, err := security.MaybeUpgradePasswordHash(ctx, &execCfg.Settings.SV, cleartext, currentHash)
+
+	autoUpgradePasswordHashesBool := security.AutoUpgradePasswordHashes.Get(&execCfg.Settings.SV)
+	hashMethod := security.GetConfiguredPasswordHashMethod(ctx, &execCfg.Settings.SV)
+
+	converted, prevHash, newHash, newMethod, err := password.MaybeUpgradePasswordHash(ctx,
+		autoUpgradePasswordHashesBool, hashMethod, cleartext, currentHash,
+		security.GetExpensiveHashComputeSem(ctx), log.Infof)
 	if err != nil {
 		// We're not returning an error: clients should not be refused a
 		// session just because a password conversion failed.

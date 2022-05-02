@@ -36,8 +36,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -479,13 +482,23 @@ var pgCatalogCastTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 	schema: vtable.PGCatalogCast,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// TODO(someone): to populate this, we should split up the big PerformCast
-		// method in tree/eval.go into schemasByName in a list. Then, this virtual table
-		// can simply range over the list. This would probably be better for
-		// maintainability anyway.
+		h := makeOidHasher()
+		cast.ForEachCast(func(src, tgt oid.Oid, cCtx cast.Context, ctxOrigin cast.ContextOrigin, _ volatility.V) {
+			if ctxOrigin == cast.ContextOriginPgCast {
+				castCtx := cCtx.PGString()
+
+				_ = addRow(
+					h.CastOid(src, tgt),          //oid
+					tree.NewDOid(tree.DInt(src)), //cast source
+					tree.NewDOid(tree.DInt(tgt)), //casttarget
+					tree.DNull,                   //castfunc
+					tree.NewDString(castCtx),     //castcontext
+					tree.DNull,                   //castmethod
+				)
+			}
+		})
 		return nil
 	},
-	unimplemented: true,
 }
 
 func userIsSuper(
@@ -843,6 +856,23 @@ func populateTableConstraints(
 		var err error
 		switch con.Kind {
 		case descpb.ConstraintTypePK:
+			if !p.SessionData().ShowPrimaryKeyConstraintOnNotVisibleColumns {
+				colHiddenMap := make(map[descpb.ColumnID]bool, len(table.AllColumns()))
+				for i := range table.AllColumns() {
+					col := table.AllColumns()[i]
+					colHiddenMap[col.GetID()] = col.IsHidden()
+				}
+				allHidden := true
+				for _, colIdx := range con.Index.KeyColumnIDs {
+					if !colHiddenMap[colIdx] {
+						allHidden = false
+						break
+					}
+				}
+				if allHidden {
+					continue
+				}
+			}
 			oid = h.PrimaryKeyConstraintOid(db.GetID(), scName, table.GetID(), con.Index)
 			contype = conTypePKey
 			conindid = h.IndexOid(table.GetID(), con.Index.ID)
@@ -1685,7 +1715,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 			// Generate a row for each member of the enum. We don't represent enums
 			// internally using floats for ordering like Postgres, so just pick a
 			// float entry for the rows.
-			typOID := tree.NewDOid(tree.DInt(typedesc.TypeIDToOID(typDesc.GetID())))
+			typOID := tree.NewDOid(tree.DInt(catid.TypeIDToOID(typDesc.GetID())))
 			for i := 0; i < typDesc.NumEnumMembers(); i++ {
 				if err := addRow(
 					h.EnumEntryOid(typOID, typDesc.GetMemberPhysicalRepresentation(i)),
@@ -2777,7 +2807,7 @@ func tableIDToTypeOID(table catalog.TableDescriptor) tree.Datum {
 	// We re-use the type ID to OID logic, as type IDs and table IDs share the
 	// same ID space.
 	if !table.IsVirtualTable() {
-		return tree.NewDOid(tree.DInt(typedesc.TypeIDToOID(table.GetID())))
+		return tree.NewDOid(tree.DInt(catid.TypeIDToOID(table.GetID())))
 	}
 	// Virtual table OIDs start at max UInt32, so doing OID math would overflow.
 	// As such, just use the virtual table ID.
@@ -4274,6 +4304,7 @@ const (
 	enumEntryTypeTag
 	rewriteTypeTag
 	dbSchemaRoleTypeTag
+	castTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -4467,5 +4498,12 @@ func dbOid(id descpb.ID) *tree.DOid {
 func stringOid(s string) *tree.DOid {
 	h := makeOidHasher()
 	h.writeStr(s)
+	return h.getOid()
+}
+
+func (h oidHasher) CastOid(srcID oid.Oid, tgtID oid.Oid) *tree.DOid {
+	h.writeTypeTag(castTypeTag)
+	h.writeUInt32(uint32(srcID))
+	h.writeUInt32(uint32(tgtID))
 	return h.getOid()
 }

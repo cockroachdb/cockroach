@@ -144,11 +144,6 @@ type proxyHandler struct {
 	// balancer is used to load balance incoming connections.
 	balancer *balancer.Balancer
 
-	// connTracker is used to track all forwarder instances. The proxy handler
-	// uses this to register/unregister forwarders, whereas the balancer uses
-	// this to rebalance connections.
-	connTracker *balancer.ConnTracker
-
 	// certManager keeps up to date the certificates used.
 	certManager *certmgr.CertManager
 }
@@ -254,18 +249,9 @@ func newProxyHandler(
 		return nil, err
 	}
 
-	// Create the connection tracker and balancer components.
 	balancerMetrics := balancer.NewMetrics()
 	registry.AddMetricStruct(balancerMetrics)
-
-	handler.connTracker, err = balancer.NewConnTracker(ctx, stopper, nil /* timeSource */)
-	if err != nil {
-		return nil, err
-	}
-
-	handler.balancer, err = balancer.NewBalancer(
-		ctx, stopper, balancerMetrics, handler.directoryCache, handler.connTracker,
-	)
+	handler.balancer, err = balancer.NewBalancer(ctx, stopper, balancerMetrics, handler.directoryCache)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +359,10 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		}
 	}
 
-	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, fe.conn,
+	f := newForwarder(ctx, connector, handler.metrics, nil /* timeSource */)
+	defer f.Close()
+
+	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, f, fe.conn,
 		func(status throttler.AttemptStatus) error {
 			if err := handler.throttleService.ReportAttempt(
 				ctx, throttleTags, throttleTime, status,
@@ -404,17 +393,11 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}()
 
 	// Pass ownership of conn and crdbConn to the forwarder.
-	f, err := forward(ctx, connector, handler.metrics, fe.conn, crdbConn, nil /* timeSource */)
-	if err != nil {
+	if err := f.run(fe.conn, crdbConn); err != nil {
 		// Don't send to the client here for the same reason below.
 		handler.metrics.updateForError(err)
 		return err
 	}
-	defer f.Close()
-
-	// Register the forwarder with the connection tracker.
-	handler.connTracker.OnConnect(tenID, f)
-	defer handler.connTracker.OnDisconnect(tenID, f)
 
 	// Block until an error is received, or when the stopper starts quiescing,
 	// whichever that happens first.

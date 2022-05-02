@@ -9229,9 +9229,30 @@ func TestReplicaMetrics(t *testing.T) {
 				ctx, hlc.Timestamp{}, &cfg.RaftConfig, spanConfig,
 				c.liveness, 0, &c.desc, c.raftStatus, kvserverpb.LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking,
-				concurrency.LatchMetrics{}, concurrency.LockTableMetrics{}, c.raftLogSize, true)
+				concurrency.LatchMetrics{}, concurrency.LockTableMetrics{}, c.raftLogSize, true, 0, 0)
 			require.Equal(t, c.expected, metrics)
 		})
+	}
+}
+
+func TestCalcQuotaPoolPercentUsed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const mb = 1 << 20
+
+	for _, tc := range []struct {
+		qpUsed, qpCap int64
+		exp           int64
+	}{
+		{0, 0, 0},
+		{0, 16 * mb, 0},
+		{1, 16 * mb, 0},
+		{8 * mb, 16 * mb, 50},
+		{16 * mb, 16 * mb, 100},
+		{16*mb - 1, 16 * mb, 100},
+		{32 * mb, 16 * mb, 200},
+	} {
+		assert.Equal(t, tc.exp, calcQuotaPoolPercentUsed(tc.qpUsed, tc.qpCap), "%+v", tc)
 	}
 }
 

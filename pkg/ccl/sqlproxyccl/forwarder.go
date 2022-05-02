@@ -93,7 +93,8 @@ type forwarder struct {
 		serverConn *interceptor.PGConn // proxy <-> server
 
 		// request and response both represent the processors used to handle
-		// client-to-server and server-to-client messages.
+		// client-to-server and server-to-client messages. These will only be
+		// set once Run has been invoked on the forwarder.
 		//
 		// WARNING: When acquiring locks on both of the processors, they should
 		// be acquired in the following order: request->response to avoid any
@@ -122,28 +123,19 @@ type forwarder struct {
 
 var _ balancer.ConnectionHandle = &forwarder{}
 
-// forward returns a new instance of forwarder, and starts forwarding messages
-// from clientConn to serverConn (and vice-versa). When this is called, it is
-// expected that the caller passes ownership of both clientConn and serverConn
-// to the forwarder, which implies that the forwarder will clean them up.
-// clientConn and serverConn must not be nil in all cases except for testing.
+// newForwarder returns a new instance of forwarder. If timeSource is nil,
+// timeutil.DefaultTimeSource will be used.
 //
 // Note that callers MUST call Close in all cases, even if ctx was cancelled,
 // and callers will need to detect that (for now).
-func forward(
-	ctx context.Context,
-	connector *connector,
-	metrics *metrics,
-	clientConn net.Conn,
-	serverConn net.Conn,
-	timeSource timeutil.TimeSource,
-) (_ *forwarder, retErr error) {
+func newForwarder(
+	ctx context.Context, connector *connector, metrics *metrics, timeSource timeutil.TimeSource,
+) *forwarder {
 	if timeSource == nil {
 		timeSource = timeutil.DefaultTimeSource{}
 	}
-
 	ctx, cancelFn := context.WithCancel(ctx)
-	f := &forwarder{
+	return &forwarder{
 		ctx:        ctx,
 		ctxCancel:  cancelFn,
 		errCh:      make(chan error, 1),
@@ -151,24 +143,52 @@ func forward(
 		metrics:    metrics,
 		timeSource: timeSource,
 	}
-	f.mu.clientConn = interceptor.NewPGConn(clientConn)
-	f.mu.serverConn = interceptor.NewPGConn(serverConn)
+}
 
-	// Note that we don't obtain the f.mu lock here since the processors have
-	// not been resumed yet.
-	clockFn := makeLogicalClockFn()
-	f.mu.request = newProcessor(clockFn, f.mu.clientConn, f.mu.serverConn)  // client -> server
-	f.mu.response = newProcessor(clockFn, f.mu.serverConn, f.mu.clientConn) // server -> client
+// run starts forwarding messages from clientConn to serverConn (and vice-versa).
+// When this is called, it is expected that the caller passes ownership of both
+// clientConn and serverConn to the forwarder, which implies that the forwarder
+// will clean them up. clientConn and serverConn must not be nil in all cases
+// except for testing. If Close has been invoked on the forwarder, run will
+// return a context cancellation error.
+//
+// run can only be called once throughout the lifetime of the forwarder.
+func (f *forwarder) run(clientConn net.Conn, serverConn net.Conn) error {
+	initialize := func() error {
+		f.mu.Lock()
+		defer f.mu.Unlock()
 
-	// Forwarder is considered active initially.
-	f.mu.activity.lastRequestTransferredAt = f.mu.request.lastMessageTransferredAt()
-	f.mu.activity.lastResponseTransferredAt = f.mu.response.lastMessageTransferredAt()
-	f.mu.activity.lastUpdated = f.timeSource.Now()
+		// Forwarder has been closed. It is deliberate to check this in the scope
+		// of the lock to handle concurrent Close calls. That way we can ensure that
+		// we will never leak connections.
+		if f.ctx.Err() != nil {
+			return f.ctx.Err()
+		}
 
-	if err := f.resumeProcessors(); err != nil {
-		return nil, err
+		// Run can only be called once.
+		if f.isInitializedLocked() {
+			return errors.AssertionFailedf("forwarder has already been started")
+		}
+
+		f.mu.clientConn = interceptor.NewPGConn(clientConn)
+		f.mu.serverConn = interceptor.NewPGConn(serverConn)
+
+		// Note that we don't obtain the f.mu lock here since the processors have
+		// not been resumed yet.
+		clockFn := makeLogicalClockFn()
+		f.mu.request = newProcessor(clockFn, f.mu.clientConn, f.mu.serverConn)  // client -> server
+		f.mu.response = newProcessor(clockFn, f.mu.serverConn, f.mu.clientConn) // server -> client
+
+		// Forwarder is considered active initially.
+		f.mu.activity.lastRequestTransferredAt = f.mu.request.lastMessageTransferredAt()
+		f.mu.activity.lastResponseTransferredAt = f.mu.response.lastMessageTransferredAt()
+		f.mu.activity.lastUpdated = f.timeSource.Now()
+		return nil
 	}
-	return f, nil
+	if err := initialize(); err != nil {
+		return err
+	}
+	return f.resumeProcessors()
 }
 
 // Context returns the context associated with the forwarder.
@@ -199,18 +219,12 @@ func (f *forwarder) Close() {
 	// Since Close is idempotent, we'll ignore the error from Close calls in
 	// case they have already been closed.
 	clientConn, serverConn := f.getConns()
-	clientConn.Close()
-	serverConn.Close()
-}
-
-// ServerRemoteAddr returns the remote address associated with serverConn, i.e.
-// the address of the SQL pod.
-//
-// ServerRemoteAddr implements the balancer.ConnectionHandle interface.
-func (f *forwarder) ServerRemoteAddr() string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.mu.serverConn.RemoteAddr().String()
+	if clientConn != nil {
+		clientConn.Close()
+	}
+	if serverConn != nil {
+		serverConn.Close()
+	}
 }
 
 // IsIdle returns true if the forwarder is idle, and false otherwise.
@@ -219,6 +233,11 @@ func (f *forwarder) ServerRemoteAddr() string {
 func (f *forwarder) IsIdle() (idle bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	// If the forwarder hasn't been initialized, it is considered active.
+	if !f.isInitializedLocked() {
+		return false
+	}
 
 	reqAt := f.mu.request.lastMessageTransferredAt()
 	resAt := f.mu.response.lastMessageTransferredAt()
@@ -247,6 +266,12 @@ func (f *forwarder) IsIdle() (idle bool) {
 	// No activity from the forwarder. If the idle timeout hasn't elapsed, the
 	// forwarder is still considered active.
 	return now.Sub(f.mu.activity.lastUpdated) >= idleTimeout
+}
+
+// isInitializedLocked returns true if the forwarder has been initialized
+// through Run, or false otherwise.
+func (f *forwarder) isInitializedLocked() bool {
+	return f.mu.request != nil && f.mu.response != nil
 }
 
 // resumeProcessors starts both the request and response processors

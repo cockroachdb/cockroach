@@ -78,7 +78,7 @@ func (g *sqlSmith) Tables() []workload.Table {
 	rng := rand.New(rand.NewSource(g.seed))
 	var tables []workload.Table
 	for idx := 0; idx < g.tables; idx++ {
-		schema := randgen.RandCreateTable(rng, "table", idx)
+		schema := randgen.RandCreateTable(rng, "table", idx, false /* isMultiRegion */)
 		table := workload.Table{
 			Name:   schema.Table.String(),
 			Schema: tree.Serialize(schema),

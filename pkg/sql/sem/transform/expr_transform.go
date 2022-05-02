@@ -11,6 +11,8 @@
 package transform
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -20,20 +22,20 @@ import (
 // should be used in planner instance to avoid re-allocation of these
 // visitors between uses.
 type ExprTransformContext struct {
-	normalizeVisitor   tree.NormalizeVisitor
+	normalizeVisitor   normalize.Visitor
 	isAggregateVisitor IsAggregateVisitor
 }
 
-// NormalizeExpr is a wrapper around EvalContex.NormalizeExpr which
-// avoids allocation of a normalizeVisitor. See normalize.go for
+// NormalizeExpr is a wrapper around EvalContex.Expr which
+// avoids allocation of a normalizeVisitor. See var_expr.go for
 // details.
 func (t *ExprTransformContext) NormalizeExpr(
-	ctx *tree.EvalContext, typedExpr tree.TypedExpr,
+	ctx *eval.Context, typedExpr tree.TypedExpr,
 ) (tree.TypedExpr, error) {
 	if ctx.SkipNormalize {
 		return typedExpr, nil
 	}
-	t.normalizeVisitor = tree.MakeNormalizeVisitor(ctx)
+	t.normalizeVisitor = normalize.MakeNormalizeVisitor(ctx)
 	expr, _ := tree.WalkExpr(&t.normalizeVisitor, typedExpr)
 	if err := t.normalizeVisitor.Err(); err != nil {
 		return nil, err

@@ -150,7 +150,7 @@ pg_auth_members                  false
 pg_authid                        false
 pg_available_extension_versions  true
 pg_available_extensions          true
-pg_cast                          true
+pg_cast                          false
 pg_class                         false
 pg_collation                     false
 pg_config                        true
@@ -531,7 +531,7 @@ select crdb_internal.get_vmodule()
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-21.2
+22.1
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -690,7 +690,7 @@ select * from crdb_internal.node_inflight_trace_spans
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-21.2
+22.1
 
 user root
 
@@ -1130,3 +1130,8 @@ statement ok
 CREATE TABLE t69684(a NAME);
 INSERT INTO t69684 VALUES ('foo');
 SELECT * FROM t69684 WHERE crdb_internal.increment_feature_counter(a)
+
+# Just verify that crdb_internal.probe_ranges doesn't error when called.
+# The output is non-deterministic.
+statement ok
+SELECT crdb_internal.probe_ranges(INTERVAL '1000ms', 'write')

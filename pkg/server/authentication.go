@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -420,7 +421,7 @@ WHERE id = $1`
 // The caller is responsible for ensuring that the username is normalized.
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) verifyPasswordDBConsole(
-	ctx context.Context, username security.SQLUsername, password string,
+	ctx context.Context, username security.SQLUsername, passwordStr string,
 ) (valid bool, expired bool, err error) {
 	exists, _, canLoginDBConsole, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
@@ -444,7 +445,7 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 		return false, true, nil
 	}
 
-	ok, err := security.CompareHashAndCleartextPassword(ctx, hashedPassword, password)
+	ok, err := password.CompareHashAndCleartextPassword(ctx, hashedPassword, passwordStr, security.GetExpensiveHashComputeSem(ctx))
 	if ok && err == nil {
 		// Password authentication succeeded using cleartext.  If the
 		// stored hash was encoded using crdb-bcrypt, we might want to
@@ -456,7 +457,7 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 		sql.MaybeUpgradeStoredPasswordHash(ctx,
 			s.sqlServer.execCfg,
 			username,
-			password, hashedPassword)
+			passwordStr, hashedPassword)
 	}
 	return ok, false, err
 }

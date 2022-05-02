@@ -53,7 +53,7 @@ func (c *CustomFuncs) MapSetOpFilterLeft(
 	filter *memo.FiltersItem, set *memo.SetPrivate,
 ) opt.ScalarExpr {
 	colMap := makeMapFromColLists(set.OutCols, set.LeftCols)
-	return c.RemapCols(filter.Condition, colMap)
+	return c.f.RemapCols(filter.Condition, colMap)
 }
 
 // MapSetOpFilterRight maps the filter onto the right expression by replacing
@@ -64,7 +64,7 @@ func (c *CustomFuncs) MapSetOpFilterRight(
 	filter *memo.FiltersItem, set *memo.SetPrivate,
 ) opt.ScalarExpr {
 	colMap := makeMapFromColLists(set.OutCols, set.RightCols)
-	return c.RemapCols(filter.Condition, colMap)
+	return c.f.RemapCols(filter.Condition, colMap)
 }
 
 // makeMapFromColLists maps each column ID in src to a column ID in dst. The

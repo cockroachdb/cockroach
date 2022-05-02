@@ -511,7 +511,7 @@ EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
-│       ├── • 9 elements transitioning toward ABSENT
+│       ├── • 8 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 113, Name: sq1, ReferencedDescID: 104}
 │       │   │     PUBLIC → ABSENT
@@ -552,9 +552,6 @@ EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
 │       │   │   ├── • Precedence dependency from ABSENT ObjectParent:{DescID: 113, ReferencedDescID: 105}
 │       │   │   │     rule: "dependent element removal before descriptor drop"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT TableComment:{DescID: 113}
-│       │   │   │     rule: "dependent element removal before descriptor drop"
-│       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 114, ColumnID: 2}
 │       │   │   │     rule: "column DEFAULT removed before dropping dependent types and sequences"
 │       │   │   │
@@ -563,12 +560,6 @@ EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
 │       │   │
 │       │   ├── • ObjectParent:{DescID: 113, ReferencedDescID: 105}
 │       │   │     PUBLIC → ABSENT
-│       │   │
-│       │   ├── • TableComment:{DescID: 113}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip table comment removal ops on descriptor drop"
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 114, ColumnID: 2}
 │       │   │     PUBLIC → ABSENT
@@ -683,6 +674,7 @@ EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
+
 
 
 # Success with cascade
@@ -881,63 +873,52 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │              └── MarkDescriptorAsDroppedSynthetically {"DescID":150}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
- │         ├── 56 elements transitioning toward ABSENT
+ │         ├── 45 elements transitioning toward ABSENT
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 147, Name: v1dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 147}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 147, Name: admin}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 147, Name: root}
  │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 147}
  │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 147, ReferencedDescID: 105}
- │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 147}
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 147, ColumnID: 1, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 147, Name: name, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 147, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 148, Name: v2dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 148}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 148, Name: admin}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 148, Name: root}
  │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 148}
  │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 148, ReferencedDescID: 105}
- │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 148}
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 1, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 148, Name: n1, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 148, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 2, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 148, Name: n2, ColumnID: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 2}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 148, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 149, Name: v3dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 149}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 149, Name: admin}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 149, Name: root}
  │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 149}
  │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 149, ReferencedDescID: 105}
- │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 149}
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 1, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 149, Name: name, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 149, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 2, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 149, Name: n1, ColumnID: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 2}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 149, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 150, Name: v4dep, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 150}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 150, Name: admin}
  │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 150, Name: root}
  │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 150}
  │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 150, ReferencedDescID: 105}
- │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 150}
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 1, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 150, Name: n2, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 150, PgAttributeNum: 1}
  │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 2, PgAttributeNum: 2}
  │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 150, Name: n1, ColumnID: 2}
- │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 2}
- │         │    └── PUBLIC      → ABSENT     ColumnComment:{DescID: 150, PgAttributeNum: 2}
+ │         │    └── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 2}
  │         └── 29 Mutation operations
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":147,"Name":"v1dep","SchemaID":105}}
  │              ├── RemoveDroppedColumnType {"ColumnID":1,"TableID":147}
@@ -1004,6 +985,7 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":149}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":150}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
+
 
 
 statement error pq: cannot drop relation "v1dep" because view "v3dep" depends on it

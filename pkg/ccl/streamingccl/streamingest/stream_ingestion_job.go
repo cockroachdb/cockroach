@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -30,16 +30,12 @@ import (
 
 // completeStreamIngestion terminates the stream as of specified time.
 func completeStreamIngestion(
-	evalCtx *tree.EvalContext,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
-	cutoverTimestamp hlc.Timestamp,
+	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID, cutoverTimestamp hlc.Timestamp,
 ) error {
 	// Get the job payload for job_id.
 	const jobsQuery = `SELECT progress FROM system.jobs WHERE id=$1 FOR UPDATE`
 	row, err := evalCtx.Planner.QueryRowEx(evalCtx.Context,
-		"get-stream-ingestion-job-metadata",
-		txn, sessiondata.NodeUserSessionDataOverride, jobsQuery, streamID)
+		"get-stream-ingestion-job-metadata", sessiondata.NodeUserSessionDataOverride, jobsQuery, streamID)
 	if err != nil {
 		return err
 	}
@@ -92,7 +88,7 @@ func completeStreamIngestion(
 	}
 	updateJobQuery := `UPDATE system.jobs SET progress=$1 WHERE id=$2`
 	_, err = evalCtx.Planner.QueryRowEx(evalCtx.Context,
-		"set-stream-ingestion-job-metadata", txn,
+		"set-stream-ingestion-job-metadata",
 		sessiondata.NodeUserSessionDataOverride, updateJobQuery, progressBytes, streamID)
 	return err
 }

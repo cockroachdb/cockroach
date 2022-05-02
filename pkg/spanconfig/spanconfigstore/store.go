@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -36,7 +37,7 @@ var EnabledSetting = settings.RegisterBoolSetting(
 
 // Store is an in-memory data structure to store, retrieve, and incrementally
 // update the span configuration state. Internally, it makes use of an interval
-// tree based spanConfigStore to store non-overlapping span configurations that
+// btree based spanConfigStore to store non-overlapping span configurations that
 // target keyspans. It's safe for concurrent use.
 type Store struct {
 	mu struct {
@@ -51,17 +52,28 @@ type Store struct {
 	// key is within the tenant's keyspace. We'd have to thread that through the
 	// KVAccessor interface by reserving special keys for these default configs.
 
+	settings *cluster.Settings
 	// fallback is the span config we'll fall back on in the absence of
 	// something more specific.
 	fallback roachpb.SpanConfig
+	knobs    *spanconfig.TestingKnobs
 }
 
 var _ spanconfig.Store = &Store{}
 
 // New instantiates a span config store with the given fallback.
-func New(fallback roachpb.SpanConfig) *Store {
-	s := &Store{fallback: fallback}
-	s.mu.spanConfigStore = newSpanConfigStore()
+func New(
+	fallback roachpb.SpanConfig, settings *cluster.Settings, knobs *spanconfig.TestingKnobs,
+) *Store {
+	if knobs == nil {
+		knobs = &spanconfig.TestingKnobs{}
+	}
+	s := &Store{
+		settings: settings,
+		fallback: fallback,
+		knobs:    knobs,
+	}
+	s.mu.spanConfigStore = newSpanConfigStore(settings, s.knobs)
 	s.mu.systemSpanConfigStore = newSystemSpanConfigStore()
 	return s
 }
@@ -72,11 +84,15 @@ func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
 }
 
 // ComputeSplitKey is part of the spanconfig.StoreReader interface.
-func (s *Store) ComputeSplitKey(_ context.Context, start, end roachpb.RKey) roachpb.RKey {
+func (s *Store) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.mu.spanConfigStore.computeSplitKey(start, end)
+	splitKey, err := s.mu.spanConfigStore.computeSplitKey(start, end)
+	if err != nil {
+		log.FatalfDepth(ctx, 3, "unable to compute split key: %v", err)
+	}
+	return splitKey
 }
 
 // GetSpanConfigForKey is part of the spanconfig.StoreReader interface.
@@ -94,10 +110,7 @@ func (s *Store) GetSpanConfigForKey(
 func (s *Store) getSpanConfigForKeyRLocked(
 	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, error) {
-	conf, found, err := s.mu.spanConfigStore.getSpanConfigForKey(ctx, key)
-	if err != nil {
-		return roachpb.SpanConfig{}, err
-	}
+	conf, found := s.mu.spanConfigStore.getSpanConfigForKey(ctx, key)
 	if !found {
 		conf = s.fallback
 	}
@@ -108,7 +121,7 @@ func (s *Store) getSpanConfigForKeyRLocked(
 func (s *Store) Apply(
 	ctx context.Context, dryrun bool, updates ...spanconfig.Update,
 ) (deleted []spanconfig.Target, added []spanconfig.Record) {
-	deleted, added, err := s.applyInternal(dryrun, updates...)
+	deleted, added, err := s.applyInternal(ctx, dryrun, updates...)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
@@ -121,28 +134,28 @@ func (s *Store) ForEachOverlappingSpanConfig(
 ) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.mu.spanConfigStore.forEachOverlapping(span, func(entry spanConfigEntry) error {
-		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(entry.span.Key))
+	return s.mu.spanConfigStore.forEachOverlapping(span, func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(sp.Key))
 		if err != nil {
 			return err
 		}
-		return f(entry.span, config)
+		return f(sp, config)
 	})
 }
 
-// Copy returns a copy of the Store.
-func (s *Store) Copy(ctx context.Context) *Store {
+// Clone returns a copy of the Store.
+func (s *Store) Clone() *Store {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	clone := New(s.fallback)
-	clone.mu.spanConfigStore = s.mu.spanConfigStore.copy(ctx)
-	clone.mu.systemSpanConfigStore = s.mu.systemSpanConfigStore.copy()
+	clone := New(s.fallback, s.settings, s.knobs)
+	clone.mu.spanConfigStore = s.mu.spanConfigStore.clone()
+	clone.mu.systemSpanConfigStore = s.mu.systemSpanConfigStore.clone()
 	return clone
 }
 
 func (s *Store) applyInternal(
-	dryrun bool, updates ...spanconfig.Update,
+	ctx context.Context, dryrun bool, updates ...spanconfig.Update,
 ) (deleted []spanconfig.Target, added []spanconfig.Record, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -162,7 +175,7 @@ func (s *Store) applyInternal(
 			return nil, nil, errors.AssertionFailedf("unknown target type")
 		}
 	}
-	deletedSpans, addedEntries, err := s.mu.spanConfigStore.apply(dryrun, spanStoreUpdates...)
+	deletedSpans, addedEntries, err := s.mu.spanConfigStore.apply(ctx, dryrun, spanStoreUpdates...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -172,8 +185,10 @@ func (s *Store) applyInternal(
 	}
 
 	for _, entry := range addedEntries {
-		record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(entry.span),
-			entry.config)
+		record, err := spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSpan(entry.span),
+			entry.conf(),
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -204,8 +219,8 @@ func (s *Store) Iterate(f func(spanconfig.Record) error) error {
 	}
 	return s.mu.spanConfigStore.forEachOverlapping(
 		keys.EverythingSpan,
-		func(s spanConfigEntry) error {
-			record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(s.span), s.config)
+		func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+			record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(sp), conf)
 			if err != nil {
 				return err
 			}

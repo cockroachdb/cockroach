@@ -295,7 +295,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
 		Version:           execinfra.Version,
-		EvalContext:       execinfrapb.MakeEvalContext(&evalCtx.EvalContext),
+		EvalContext:       execinfrapb.MakeEvalContext(&evalCtx.Context),
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      collectStats,
 		StatementSQL:      statementSQL,
@@ -422,7 +422,7 @@ func (dsp *DistSQLPlanner) Run(
 	)
 	// NB: putting part of evalCtx in localState means it might be mutated down
 	// the line.
-	localState.EvalContext = &evalCtx.EvalContext
+	localState.EvalContext = &evalCtx.Context
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
 	// If we need to perform some operation on the flow specs, we want to
@@ -462,9 +462,10 @@ func (dsp *DistSQLPlanner) Run(
 	if row.CanUseStreamer(ctx, dsp.st) {
 		for _, proc := range plan.Processors {
 			if jr := proc.Spec.Core.JoinReader; jr != nil {
-				if jr.IsIndexJoin() {
-					// Index joins are executed via the Streamer API that has
-					// concurrency.
+				if jr.IsIndexJoin() || !jr.MaintainOrdering {
+					// Index joins with and without ordering as well as lookup
+					// joins without ordering are executed via the Streamer API
+					// that has concurrency.
 					localState.HasConcurrency = true
 					break
 				}
@@ -1346,7 +1347,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 			// we've already accounted for. That's ok because below we will
 			// reconcile the incremental accounting with the final result's
 			// memory footprint.
-			result.Normalize(&evalCtx.EvalContext)
+			result.Normalize(&evalCtx.Context)
 		}
 		subqueryPlans[planIdx].result = &result
 	case rowexec.SubqueryExecModeOneRow:
@@ -1496,7 +1497,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			allowAutoCommit = false
 		}
 		cascadePlan, err := plan.cascades[i].PlanFn(
-			ctx, &planner.semaCtx, &evalCtx.EvalContext, execFactory,
+			ctx, &planner.semaCtx, &evalCtx.Context, execFactory,
 			buf, numBufferedRows, allowAutoCommit,
 		)
 		if err != nil {

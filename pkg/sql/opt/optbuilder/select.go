@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1229,12 +1230,12 @@ func (b *Builder) buildFromWithLateral(
 // validateAsOf ensures that any AS OF SYSTEM TIME timestamp is consistent with
 // that of the root statement.
 func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
-	asOf, err := tree.EvalAsOfTimestamp(
+	asOf, err := asof.Eval(
 		b.ctx,
 		asOfClause,
 		b.semaCtx,
 		b.evalCtx,
-		tree.EvalAsOfTimestampOptionAllowBoundedStaleness,
+		asof.OptionAllowBoundedStaleness,
 	)
 	if err != nil {
 		panic(err)

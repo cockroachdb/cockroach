@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	tu "github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -60,7 +61,7 @@ func TestIndexConstraints(t *testing.T) {
 
 	datadriven.Walk(t, tu.TestDataPath(t), func(t *testing.T, path string) {
 		semaCtx := tree.MakeSemaContext()
-		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var sv testutils.ScalarVars
@@ -216,7 +217,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 	}
 
 	semaCtx := tree.MakeSemaContext()
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
@@ -289,7 +290,7 @@ func parseIndexColumns(tb testing.TB, md *opt.Metadata, colStrs []string) []opt.
 }
 
 func buildFilters(
-	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
+	input string, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
 ) (memo.FiltersExpr, error) {
 	if input == "" {
 		return memo.TrueFilter, nil

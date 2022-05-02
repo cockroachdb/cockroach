@@ -888,7 +888,7 @@ func TestConnectionMigration(t *testing.T) {
 
 		var f *forwarder
 		require.Eventually(t, func() bool {
-			connsMap := proxy.handler.connTracker.GetConnsMap(tenantID)
+			connsMap := proxy.handler.balancer.GetTracker().GetConnsMap(tenantID)
 			for _, conns := range connsMap {
 				if len(conns) != 0 {
 					f = conns[0].(*forwarder)
@@ -901,10 +901,7 @@ func TestConnectionMigration(t *testing.T) {
 		// Set up forwarder hooks.
 		prevTenant1 := true
 		var lookupAddrDelayDuration time.Duration
-		f.connector.testingKnobs.lookupValidAddr = func(ctx context.Context, dstAddr string) (string, error) {
-			if dstAddr != "dst-addr" {
-				return "", errors.Newf("invalid dstAddr '%s'", dstAddr)
-			}
+		f.connector.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
 			if lookupAddrDelayDuration != 0 {
 				select {
 				case <-ctx.Done():
@@ -927,13 +924,7 @@ func TestConnectionMigration(t *testing.T) {
 			require.NoError(t, err)
 
 			// Show that we get alternating SQL pods when we transfer.
-			require.NoError(t, f.TransferConnection("dst-addr"))
-			require.Equal(t, int64(1), f.metrics.ConnMigrationSuccessCount.Count())
-			require.Equal(t, tenant2.SQLAddr(), queryAddr(t, tCtx, db))
-
-			// Trying to transfer to the same destination should be a no-op.
-			// Metrics do not get incremented.
-			require.NoError(t, f.TransferConnection(tenant2.SQLAddr()))
+			require.NoError(t, f.TransferConnection())
 			require.Equal(t, int64(1), f.metrics.ConnMigrationSuccessCount.Count())
 			require.Equal(t, tenant2.SQLAddr(), queryAddr(t, tCtx, db))
 
@@ -944,7 +935,7 @@ func TestConnectionMigration(t *testing.T) {
 			_, err = db.Exec("SET application_name = 'bar'")
 			require.NoError(t, err)
 
-			require.NoError(t, f.TransferConnection("dst-addr"))
+			require.NoError(t, f.TransferConnection())
 			require.Equal(t, int64(2), f.metrics.ConnMigrationSuccessCount.Count())
 			require.Equal(t, tenant1.SQLAddr(), queryAddr(t, tCtx, db))
 
@@ -961,7 +952,7 @@ func TestConnectionMigration(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for subCtx.Err() == nil {
-					_ = f.TransferConnection("dst-addr")
+					_ = f.TransferConnection()
 					time.Sleep(100 * time.Millisecond)
 				}
 			}()
@@ -1007,7 +998,7 @@ func TestConnectionMigration(t *testing.T) {
 			err = crdb.ExecuteTx(tCtx, db, nil /* txopts */, func(tx *gosql.Tx) error {
 				// Run multiple times to ensure that connection isn't closed.
 				for i := 0; i < 5; i++ {
-					err := f.TransferConnection("dst-addr")
+					err := f.TransferConnection()
 					if err == nil {
 						return errors.New("no error")
 					}
@@ -1035,7 +1026,7 @@ func TestConnectionMigration(t *testing.T) {
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
 
 			// Once the transaction is closed, transfers should work.
-			require.NoError(t, f.TransferConnection("dst-addr"))
+			require.NoError(t, f.TransferConnection())
 			require.NotEqual(t, initAddr, queryAddr(t, tCtx, db))
 			require.Nil(t, f.ctx.Err())
 			require.Equal(t, initSuccessCount+1, f.metrics.ConnMigrationSuccessCount.Count())
@@ -1057,7 +1048,7 @@ func TestConnectionMigration(t *testing.T) {
 			lookupAddrDelayDuration = 10 * time.Second
 			defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Second)()
 
-			err := f.TransferConnection("dst-addr")
+			err := f.TransferConnection()
 			require.Error(t, err)
 			require.Regexp(t, "injected delays", err.Error())
 			require.Equal(t, initAddr, queryAddr(t, tCtx, db))
@@ -1107,7 +1098,7 @@ func TestConnectionMigration(t *testing.T) {
 
 		var f *forwarder
 		require.Eventually(t, func() bool {
-			connsMap := proxy.handler.connTracker.GetConnsMap(tenantID)
+			connsMap := proxy.handler.balancer.GetTracker().GetConnsMap(tenantID)
 			for _, conns := range connsMap {
 				if len(conns) != 0 {
 					f = conns[0].(*forwarder)
@@ -1122,10 +1113,7 @@ func TestConnectionMigration(t *testing.T) {
 
 		// Set up forwarder hooks.
 		prevTenant1 := true
-		f.connector.testingKnobs.lookupValidAddr = func(ctx context.Context, dstAddr string) (string, error) {
-			if dstAddr != "dst-addr" {
-				return "", errors.Newf("invalid dstAddr '%s'", dstAddr)
-			}
+		f.connector.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
 			if prevTenant1 {
 				prevTenant1 = false
 				return tenant2.SQLAddr(), nil
@@ -1157,7 +1145,7 @@ func TestConnectionMigration(t *testing.T) {
 		<-goCh
 		time.Sleep(2 * time.Second)
 		// This should be an error because the transfer timed out.
-		require.Error(t, f.TransferConnection("dst-addr"))
+		require.Error(t, f.TransferConnection())
 
 		// Connection should be closed because this is a non-recoverable error,
 		// i.e. timeout after sending the request, but before fully receiving
@@ -1193,7 +1181,7 @@ func TestConnectionMigration(t *testing.T) {
 
 	// All connections should eventually be terminated.
 	require.Eventually(t, func() bool {
-		connsMap := proxy.handler.connTracker.GetConnsMap(tenantID)
+		connsMap := proxy.handler.balancer.GetTracker().GetConnsMap(tenantID)
 		return len(connsMap) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 }

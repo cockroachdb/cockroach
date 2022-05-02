@@ -601,7 +601,7 @@ func (bq *baseQueue) MaybeAddAsync(
 // for other operations to finish instead of turning into a noop (because
 // unlikely MaybeAdd, Add is not subject to being called opportunistically).
 func (bq *baseQueue) AddAsync(ctx context.Context, repl replicaInQueue, prio float64) {
-	bq.Async(ctx, "Add", false /* wait */, func(ctx context.Context, h queueHelper) {
+	bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.Add(ctx, repl, prio)
 	})
 }

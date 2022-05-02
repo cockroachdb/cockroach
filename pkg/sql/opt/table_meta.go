@@ -13,6 +13,7 @@ package opt
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -362,7 +363,7 @@ func (tm *TableMeta) AddIndexPartitionLocality(ord cat.IndexOrdinal, ps *partiti
 
 // IndexPartitionLocality returns the given index's PrefixSorter.
 func (tm *TableMeta) IndexPartitionLocality(
-	ord cat.IndexOrdinal, index cat.Index, evalCtx *tree.EvalContext,
+	ord cat.IndexOrdinal, index cat.Index, evalCtx *eval.Context,
 ) (ps *partition.PrefixSorter, ok bool) {
 	ps, ok = tm.indexPartitionLocalities[ord]
 	if !ok {

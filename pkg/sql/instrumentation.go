@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -103,7 +104,7 @@ type instrumentationHelper struct {
 	// instrumentationHelper.Finish.
 	shouldFinishSpan bool
 	origCtx          context.Context
-	evalCtx          *tree.EvalContext
+	evalCtx          *eval.Context
 
 	// If savePlanForStats is true, the explainPlan will be collected and returned
 	// via PlanForStats().
@@ -322,7 +323,10 @@ func (ih *instrumentationHelper) Finish(
 
 	var bundle diagnosticsBundle
 	if ih.collectBundle {
-		ie := p.extendedEvalCtx.ExecCfg.InternalExecutor
+		ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(
+			p.EvalContext().Context,
+			p.SessionData(),
+		)
 		phaseTimes := statsCollector.PhaseTimes()
 		if ih.stmtDiagnosticsRecorder.IsExecLatencyConditionMet(
 			ih.diagRequestID, ih.diagRequest, phaseTimes.GetServiceLatencyNoOverhead(),
@@ -334,7 +338,7 @@ func (ih *instrumentationHelper) Finish(
 				&queryLevelStats,
 			)
 			bundle = buildStatementBundle(
-				ih.origCtx, cfg.DB, ie, &p.curPlan, ob.BuildString(), trace, placeholders,
+				ih.origCtx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
 			)
 			bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
 			ih.stmtDiagnosticsRecorder.RemoveOngoing(ih.diagRequestID, ih.diagRequest)

@@ -52,12 +52,13 @@
 <tr><td><code>kv.replica_circuit_breaker.slow_replication_threshold</code></td><td>duration</td><td><code>1m0s</code></td><td>duration after which slow proposals trip the per-Replica circuit breaker (zero duration disables breakers)</td></tr>
 <tr><td><code>kv.replica_stats.addsst_request_size_factor</code></td><td>integer</td><td><code>50000</code></td><td>the divisor that is applied to addsstable request sizes, then recorded in a leaseholders QPS; 0 means all requests are treated as cost 1</td></tr>
 <tr><td><code>kv.replication_reports.interval</code></td><td>duration</td><td><code>1m0s</code></td><td>the frequency for generating the replication_constraint_stats, replication_stats_report and replication_critical_localities reports (set to 0 to disable)</td></tr>
+<tr><td><code>kv.snapshot_delegation.enabled</code></td><td>boolean</td><td><code>false</code></td><td>set to true to allow snapshots from follower replicas</td></tr>
 <tr><td><code>kv.snapshot_rebalance.max_rate</code></td><td>byte size</td><td><code>32 MiB</code></td><td>the rate limit (bytes/sec) to use for rebalance and upreplication snapshots</td></tr>
 <tr><td><code>kv.snapshot_recovery.max_rate</code></td><td>byte size</td><td><code>32 MiB</code></td><td>the rate limit (bytes/sec) to use for recovery snapshots</td></tr>
 <tr><td><code>kv.transaction.max_intents_bytes</code></td><td>integer</td><td><code>4194304</code></td><td>maximum number of bytes used to track locks in transactions</td></tr>
 <tr><td><code>kv.transaction.max_refresh_spans_bytes</code></td><td>integer</td><td><code>4194304</code></td><td>maximum number of bytes used to track refresh spans in serializable transactions</td></tr>
 <tr><td><code>kv.transaction.reject_over_max_intents_budget.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed</td></tr>
-<tr><td><code>schedules.backup.gc_protection.enabled</code></td><td>boolean</td><td><code>false</code></td><td>enable chaining of GC protection across backups run as part of a schedule; default is false</td></tr>
+<tr><td><code>schedules.backup.gc_protection.enabled</code></td><td>boolean</td><td><code>true</code></td><td>enable chaining of GC protection across backups run as part of a schedule</td></tr>
 <tr><td><code>security.ocsp.mode</code></td><td>enumeration</td><td><code>off</code></td><td>use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]</td></tr>
 <tr><td><code>security.ocsp.timeout</code></td><td>duration</td><td><code>3s</code></td><td>timeout before considering the OCSP server unreachable</td></tr>
 <tr><td><code>server.auth_log.sql_connections.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)</td></tr>
@@ -136,7 +137,7 @@
 <tr><td><code>sql.defaults.on_update_rehome_row.enabled</code></td><td>boolean</td><td><code>true</code></td><td>default value for on_update_rehome_row; enables ON UPDATE rehome_row() expressions to trigger on updates</td></tr>
 <tr><td><code>sql.defaults.optimizer_use_histograms.enabled</code></td><td>boolean</td><td><code>true</code></td><td>default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default</td></tr>
 <tr><td><code>sql.defaults.optimizer_use_multicol_stats.enabled</code></td><td>boolean</td><td><code>true</code></td><td>default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default</td></tr>
-<tr><td><code>sql.defaults.override_alter_primary_region_in_super_region.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for override_multi_region_zone_config; allows for overriding the zone configs of a multi-region table or database</td></tr>
+<tr><td><code>sql.defaults.override_alter_primary_region_in_super_region.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for override_alter_primary_region_in_super_region; allows for altering the primary region even if the primary region is a member of a super region</td></tr>
 <tr><td><code>sql.defaults.override_multi_region_zone_config.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for override_multi_region_zone_config; allows for overriding the zone configs of a multi-region table or database</td></tr>
 <tr><td><code>sql.defaults.prefer_lookup_joins_for_fks.enabled</code></td><td>boolean</td><td><code>false</code></td><td>default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible</td></tr>
 <tr><td><code>sql.defaults.primary_region</code></td><td>string</td><td><code></code></td><td>if not empty, all databases created without a PRIMARY REGION will implicitly have the given PRIMARY REGION</td></tr>
@@ -210,6 +211,6 @@
 <tr><td><code>trace.opentelemetry.collector</code></td><td>string</td><td><code></code></td><td>address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.</td></tr>
 <tr><td><code>trace.span_registry.enabled</code></td><td>boolean</td><td><code>true</code></td><td>if set, ongoing traces can be seen at https://<ui>/#/debug/tracez</td></tr>
 <tr><td><code>trace.zipkin.collector</code></td><td>string</td><td><code></code></td><td>the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.</td></tr>
-<tr><td><code>version</code></td><td>version</td><td><code>21.2-112</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
+<tr><td><code>version</code></td><td>version</td><td><code>22.1</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
 </tbody>
 </table>

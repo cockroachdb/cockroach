@@ -18,8 +18,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -225,7 +226,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 		},
 	}
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
@@ -519,7 +520,7 @@ func TestAdjustCounts(t *testing.T) {
 		},
 	}
 
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
@@ -619,7 +620,7 @@ func TestAdjustCounts(t *testing.T) {
 func makeEnums(t *testing.T) tree.Datums {
 	t.Helper()
 	enumMembers := []string{"a", "b", "c", "d", "e"}
-	enumType := types.MakeEnum(typedesc.TypeIDToOID(500), typedesc.TypeIDToOID(100500))
+	enumType := types.MakeEnum(catid.TypeIDToOID(500), catid.TypeIDToOID(100500))
 	enumType.TypeMeta = types.UserDefinedTypeMetadata{
 		Name: &types.UserDefinedTypeName{
 			Schema: "test",

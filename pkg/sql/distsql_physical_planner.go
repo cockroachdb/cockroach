@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -456,6 +457,13 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return rec.compose(shouldDistribute), nil
 
 	case *indexJoinNode:
+		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+			// Index joins that are performing row-level locking cannot
+			// currently be distributed because their locks would not be
+			// propagated back to the root transaction coordinator.
+			// TODO(nvanbenschoten): lift this restriction.
+			return cannotDistribute, cannotDistributeRowLevelLockingErr
+		}
 		// n.table doesn't have meaningful spans, but we need to check support (e.g.
 		// for any filtering expression).
 		if _, err := checkSupportForPlanNode(n.table); err != nil {
@@ -467,6 +475,13 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return checkSupportForInvertedFilterNode(n)
 
 	case *invertedJoinNode:
+		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+			// Inverted joins that are performing row-level locking cannot
+			// currently be distributed because their locks would not be
+			// propagated back to the root transaction coordinator.
+			// TODO(nvanbenschoten): lift this restriction.
+			return cannotDistribute, cannotDistributeRowLevelLockingErr
+		}
 		if err := checkExpr(n.onExpr); err != nil {
 			return cannotDistribute, err
 		}
@@ -622,6 +637,15 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return canDistribute, nil
 
 	case *zigzagJoinNode:
+		for _, side := range n.sides {
+			if side.scan.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+				// ZigZag joins that are performing row-level locking cannot
+				// currently be distributed because their locks would not be
+				// propagated back to the root transaction coordinator.
+				// TODO(nvanbenschoten): lift this restriction.
+				return cannotDistribute, cannotDistributeRowLevelLockingErr
+			}
+		}
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
@@ -750,11 +774,11 @@ func (p *PlanningCtx) NewPhysicalPlan() *PhysicalPlan {
 }
 
 // EvalContext returns the associated EvalContext, or nil if there isn't one.
-func (p *PlanningCtx) EvalContext() *tree.EvalContext {
+func (p *PlanningCtx) EvalContext() *eval.Context {
 	if p.ExtendedEvalCtx == nil {
 		return nil
 	}
-	return &p.ExtendedEvalCtx.EvalContext
+	return &p.ExtendedEvalCtx.Context
 }
 
 // IsLocal returns true if this PlanningCtx is being used to plan a query that
@@ -1382,7 +1406,7 @@ func (dsp *DistSQLPlanner) maybeParallelizeLocalScans(
 	// - there is still quota for running more parallel local TableReaders,
 	// then we will split all spans according to the leaseholder boundaries and
 	// will create a separate TableReader for each node.
-	sd := planCtx.ExtendedEvalCtx.EvalContext.SessionData()
+	sd := planCtx.ExtendedEvalCtx.SessionData()
 	// If we have locality optimized search enabled and we won't use the
 	// vectorized engine, using the parallel scans might actually be
 	// significantly worse, so we prohibit it. This is the case because if we
@@ -2425,6 +2449,8 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		Type:                              n.joinType,
 		MaintainOrdering:                  len(n.reqOrdering) > 0,
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
+		LockingStrength:                   n.table.lockingStrength,
+		LockingWaitPolicy:                 n.table.lockingWaitPolicy,
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
@@ -2514,11 +2540,13 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		}
 
 		sides[i] = zigzagPlanningSide{
-			desc:        side.scan.desc,
-			index:       side.scan.index,
-			cols:        side.scan.cols,
-			eqCols:      side.eqCols,
-			fixedValues: valuesSpec,
+			desc:              side.scan.desc,
+			index:             side.scan.index,
+			cols:              side.scan.cols,
+			eqCols:            side.eqCols,
+			fixedValues:       valuesSpec,
+			lockingStrength:   side.scan.lockingStrength,
+			lockingWaitPolicy: side.scan.lockingWaitPolicy,
 		}
 	}
 
@@ -2531,11 +2559,13 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 }
 
 type zigzagPlanningSide struct {
-	desc        catalog.TableDescriptor
-	index       catalog.Index
-	cols        []catalog.Column
-	eqCols      []int
-	fixedValues *execinfrapb.ValuesCoreSpec
+	desc              catalog.TableDescriptor
+	index             catalog.Index
+	cols              []catalog.Column
+	eqCols            []int
+	fixedValues       *execinfrapb.ValuesCoreSpec
+	lockingStrength   descpb.ScanLockingStrength
+	lockingWaitPolicy descpb.ScanLockingWaitPolicy
 }
 
 type zigzagPlanningInfo struct {
@@ -3219,7 +3249,7 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 	planCtx *PlanningCtx, tuples [][]tree.TypedExpr, resultTypes []*types.T,
 ) (*execinfrapb.ValuesCoreSpec, error) {
 	var a tree.DatumAlloc
-	evalCtx := &planCtx.ExtendedEvalCtx.EvalContext
+	evalCtx := &planCtx.ExtendedEvalCtx.Context
 	numRows := len(tuples)
 	if len(resultTypes) == 0 {
 		// Optimization for zero-column sets.
@@ -3230,7 +3260,7 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 	for rowIdx, tuple := range tuples {
 		var buf []byte
 		for colIdx, typedExpr := range tuple {
-			datum, err := typedExpr.Eval(evalCtx)
+			datum, err := eval.Expr(evalCtx, typedExpr)
 			if err != nil {
 				return nil, err
 			}

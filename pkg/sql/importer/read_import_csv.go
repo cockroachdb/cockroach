@@ -16,11 +16,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
@@ -44,8 +46,9 @@ func newCSVInputReader(
 	parallelism int,
 	tableDesc catalog.TableDescriptor,
 	targetCols tree.NameList,
-	evalCtx *tree.EvalContext,
+	evalCtx *eval.Context,
 	seqChunkProvider *row.SeqChunkProvider,
+	db *kv.DB,
 ) *csvInputReader {
 	numExpectedDataCols := len(targetCols)
 	if numExpectedDataCols == 0 {
@@ -62,6 +65,7 @@ func newCSVInputReader(
 			targetCols:       targetCols,
 			kvCh:             kvCh,
 			seqChunkProvider: seqChunkProvider,
+			db:               db,
 		},
 		numExpectedDataCols: numExpectedDataCols,
 		opts:                opts,
