@@ -83,6 +83,12 @@ func registerRebalanceLoad(r registry.Registry) {
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 		}
 
+		statCollector, err := newClusterStatsCollector(ctx, t, c, time.Second*10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer statCollector.cleanup()
+
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
 		c.Run(ctx, appNode, fmt.Sprintf("./workload init kv --drop --splits=%d {pgurl:1}", splits))
 
@@ -127,13 +133,30 @@ func registerRebalanceLoad(r registry.Registry) {
 				return err
 			}
 
-			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= maxDuration; {
+			startTime := timeutil.Now()
+			statCollector.startTime = startTime
+			for tBegin := startTime; timeutil.Since(tBegin) <= maxDuration; {
 				if done, err := isLoadEvenlyDistributed(t.L(), db, len(roachNodes)); err != nil {
 					return err
 				} else if done {
 					t.Status("successfully achieved lease balance; waiting for kv to finish running")
+					if !mixedVersion {
+						endTime := timeutil.Now()
+						err = statCollector.finalize(
+							ctx,
+							c,
+							t.L(),
+							t.PerfArtifactsDir(),
+							startTime, endTime,
+							joinSummaryQueries(actionsSummary, rangeBalanceSummary, requestBalanceSummary, resourceBalanceSummary),
+							// NB: We record the time taken to reach balance.
+							func(stats map[tag]StatSummary) (string, float64) {
+								return "t-balance", endTime.Sub(startTime).Seconds()
+							},
+						)
+					}
 					cancel()
-					return nil
+					return err
 				}
 
 				select {
