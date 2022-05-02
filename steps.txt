@@ -5,6 +5,7 @@ deploy master with #80702 and #80648
 roachprod sql tobias-lsm:1 -- -e "
 set cluster setting kv.snapshot_recovery.max_rate = '500mb';
 set cluster setting kv.snapshot_rebalance.max_rate = '500mb';
+ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 60;
 "
 
 # wait for replication
@@ -21,6 +22,10 @@ roachprod ssh tobias-lsm -- sudo systemd-run -p LimitNOFILE=65535 --unit kv-seq 
 
 # Spray entire keyspace with writes too, so that "all" memtables on ranges overlap
 roachprod ssh tobias-lsm -- sudo systemd-run -p LimitNOFILE=65535 --unit kv-rand -- ./cockroach workload run kv --read-percent 0 --concurrency 10 --min-block-bytes 10000 --max-block-bytes 10000 --tolerate-errors
+
+# periodically clean up to not run out of disk, also it might trigger
+# something interesting.
+roachprod ssh tobias-lsm:1 -- sudo systemd-run --unit truncate-kv --on-calendar '*-*-* 11:00:00' -- ./cockroach sql --insecure -e 'TRUNCATE TABLE kv.kv;'
 
 # At this point, get L0Files shooting up past 600 and L0Sublevels heading straight to 20, within 10 minutes
 
