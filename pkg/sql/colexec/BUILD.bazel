@@ -13,13 +13,7 @@ go_library(
         "columnarizer.go",
         "constants.go",
         "count.go",
-        "disk_spiller.go",
-        "external_distinct.go",
-        "external_hash_aggregator.go",
-        "external_hash_joiner.go",
-        "external_sort.go",
         "hash_aggregator.go",
-        "hash_based_partitioner.go",
         "invariants_checker.go",
         "limit.go",
         "materializer.go",
@@ -35,7 +29,6 @@ go_library(
         "sorttopk.go",
         "tuple_proj_op.go",
         "unordered_distinct.go",
-        "utils.go",
         "values.go",
         ":gen-exec",  # keep
         ":gen-sort-partitioner",  # keep
@@ -51,14 +44,12 @@ go_library(
         "//pkg/settings",
         "//pkg/sql/catalog/colinfo",  # keep
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/colcontainer",
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecagg",  # keep
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecbase",
         "//pkg/sql/colexec/colexeccmp",  # keep
         "//pkg/sql/colexec/colexechash",  # keep
-        "//pkg/sql/colexec/colexecjoin",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
         "//pkg/sql/colexecerror",
@@ -72,23 +63,17 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
-        "//pkg/util/humanizeutil",
         "//pkg/util/json",  # keep
-        "//pkg/util/log",
-        "//pkg/util/mon",
         "//pkg/util/stringarena",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
-        "@com_github_marusama_semaphore//:semaphore",
     ],
 )
 
@@ -227,6 +212,7 @@ gen_sort_partitioner_rule(
 disallowed_imports_test(
     "colexec",
     [
+        "//pkg/sql/colexec/colexecjoin",
         "//pkg/sql/colflow",
         "//pkg/sql/rowexec",
         "//pkg/sql/rowflow",

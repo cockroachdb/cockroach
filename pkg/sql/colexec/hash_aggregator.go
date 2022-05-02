@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
@@ -483,3 +484,17 @@ func (op *hashAggregator) Close(ctx context.Context) error {
 	}
 	return retErr
 }
+
+// HashAggregationDiskSpillingEnabledSettingName is the cluster setting name for
+// HashAggregationDiskSpillingEnabled.
+const HashAggregationDiskSpillingEnabledSettingName = "sql.distsql.temp_storage.hash_agg.enabled"
+
+// HashAggregationDiskSpillingEnabled is a cluster setting that allows to
+// disable hash aggregator disk spilling.
+var HashAggregationDiskSpillingEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	HashAggregationDiskSpillingEnabledSettingName,
+	"set to false to disable hash aggregator disk spilling "+
+		"(this will improve performance, but the query might hit the memory limit)",
+	true,
+)

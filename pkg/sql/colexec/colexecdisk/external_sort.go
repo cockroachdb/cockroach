@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexecdisk
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -269,12 +270,12 @@ func NewExternalSorter(
 	inputPartitioner := newInputPartitioningOperator(sortUnlimitedAllocator, input, inputTypes, inMemSortPartitionLimit)
 	var inMemSorter colexecop.ResettableOperator
 	if topK > 0 {
-		inMemSorter = NewTopKSorter(sortUnlimitedAllocator, inputPartitioner, inputTypes, ordering.Columns, matchLen, topK, inMemSortOutputLimit)
+		inMemSorter = colexec.NewTopKSorter(sortUnlimitedAllocator, inputPartitioner, inputTypes, ordering.Columns, matchLen, topK, inMemSortOutputLimit)
 	} else {
-		inMemSorter = newSorter(
-			sortUnlimitedAllocator, newAllSpooler(sortUnlimitedAllocator, inputPartitioner, inputTypes),
-			inputTypes, ordering.Columns, inMemSortOutputLimit,
-		)
+		inMemSorter = colexec.NewSorter(
+			sortUnlimitedAllocator, inputPartitioner, inputTypes,
+			ordering.Columns, inMemSortOutputLimit,
+		).(colexecop.ResettableOperator)
 	}
 	partitionedDiskQueueSemaphore := fdSemaphore
 	if !delegateFDAcquisitions {
@@ -643,7 +644,7 @@ func (s *externalSorter) createPartitionerToOperators(n int) {
 
 // createMergerForPartitions creates an ordered synchronizer that will merge
 // the last n current partitions.
-func (s *externalSorter) createMergerForPartitions(n int) *OrderedSynchronizer {
+func (s *externalSorter) createMergerForPartitions(n int) *colexec.OrderedSynchronizer {
 	s.createPartitionerToOperators(n)
 	syncInputs := make([]colexecargs.OpWithMetaInfo, n)
 	for i := range syncInputs {
@@ -680,7 +681,7 @@ func (s *externalSorter) createMergerForPartitions(n int) *OrderedSynchronizer {
 	if outputBatchMemSize < minOutputBatchMemSize {
 		outputBatchMemSize = minOutputBatchMemSize
 	}
-	return NewOrderedSynchronizer(
+	return colexec.NewOrderedSynchronizer(
 		s.outputUnlimitedAllocator, outputBatchMemSize, syncInputs, s.inputTypes, s.columnOrdering,
 	)
 }

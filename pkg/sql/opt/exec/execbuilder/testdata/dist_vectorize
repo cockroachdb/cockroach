@@ -207,7 +207,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             │ └ *colexec.countOp
 │             │   └ *colexec.invariantsChecker
 │             │     └ *colexecbase.simpleProjectOp
-│             │       └ *colexec.diskSpillerBase
+│             │       └ *colexecdisk.diskSpillerBase
 │             │         ├ *colexecjoin.hashJoiner
 │             │         │ ├ *colexec.invariantsChecker
 │             │         │ │ └ *colexec.ParallelUnorderedSynchronizer
@@ -245,9 +245,9 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │             │         │       └ *colrpc.Inbox
 │             │         ├ *colexec.invariantsChecker
 │             │         ├ *colexec.invariantsChecker
-│             │         └ *colexec.hashBasedPartitioner
-│             │           ├ *colexec.bufferExportingOperator
-│             │           └ *colexec.bufferExportingOperator
+│             │         └ *colexecdisk.hashBasedPartitioner
+│             │           ├ *colexecdisk.bufferExportingOperator
+│             │           └ *colexecdisk.bufferExportingOperator
 │             ├ *colexec.invariantsChecker
 │             │ └ *colrpc.Inbox
 │             ├ *colexec.invariantsChecker
@@ -263,7 +263,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │       └ *colexec.countOp
 │         └ *colexec.invariantsChecker
 │           └ *colexecbase.simpleProjectOp
-│             └ *colexec.diskSpillerBase
+│             └ *colexecdisk.diskSpillerBase
 │               ├ *colexecjoin.hashJoiner
 │               │ ├ *colexec.invariantsChecker
 │               │ │ └ *colexec.ParallelUnorderedSynchronizer
@@ -301,9 +301,9 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │       └ *colrpc.Inbox
 │               ├ *colexec.invariantsChecker
 │               ├ *colexec.invariantsChecker
-│               └ *colexec.hashBasedPartitioner
-│                 ├ *colexec.bufferExportingOperator
-│                 └ *colexec.bufferExportingOperator
+│               └ *colexecdisk.hashBasedPartitioner
+│                 ├ *colexecdisk.bufferExportingOperator
+│                 └ *colexecdisk.bufferExportingOperator
 ├ Node 3
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
@@ -311,7 +311,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │       └ *colexec.countOp
 │         └ *colexec.invariantsChecker
 │           └ *colexecbase.simpleProjectOp
-│             └ *colexec.diskSpillerBase
+│             └ *colexecdisk.diskSpillerBase
 │               ├ *colexecjoin.hashJoiner
 │               │ ├ *colexec.invariantsChecker
 │               │ │ └ *colexec.ParallelUnorderedSynchronizer
@@ -349,9 +349,9 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │       └ *colrpc.Inbox
 │               ├ *colexec.invariantsChecker
 │               ├ *colexec.invariantsChecker
-│               └ *colexec.hashBasedPartitioner
-│                 ├ *colexec.bufferExportingOperator
-│                 └ *colexec.bufferExportingOperator
+│               └ *colexecdisk.hashBasedPartitioner
+│                 ├ *colexecdisk.bufferExportingOperator
+│                 └ *colexecdisk.bufferExportingOperator
 ├ Node 4
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
@@ -359,7 +359,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │       └ *colexec.countOp
 │         └ *colexec.invariantsChecker
 │           └ *colexecbase.simpleProjectOp
-│             └ *colexec.diskSpillerBase
+│             └ *colexecdisk.diskSpillerBase
 │               ├ *colexecjoin.hashJoiner
 │               │ ├ *colexec.invariantsChecker
 │               │ │ └ *colexec.ParallelUnorderedSynchronizer
@@ -397,9 +397,9 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │               │       └ *colrpc.Inbox
 │               ├ *colexec.invariantsChecker
 │               ├ *colexec.invariantsChecker
-│               └ *colexec.hashBasedPartitioner
-│                 ├ *colexec.bufferExportingOperator
-│                 └ *colexec.bufferExportingOperator
+│               └ *colexecdisk.hashBasedPartitioner
+│                 ├ *colexecdisk.bufferExportingOperator
+│                 └ *colexecdisk.bufferExportingOperator
 └ Node 5
   └ *colrpc.Outbox
     └ *colexecutils.deselectorOp
@@ -407,7 +407,7 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
         └ *colexec.countOp
           └ *colexec.invariantsChecker
             └ *colexecbase.simpleProjectOp
-              └ *colexec.diskSpillerBase
+              └ *colexecdisk.diskSpillerBase
                 ├ *colexecjoin.hashJoiner
                 │ ├ *colexec.invariantsChecker
                 │ │ └ *colexec.ParallelUnorderedSynchronizer
@@ -445,6 +445,6 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
                 │                 └ *colfetcher.ColBatchScan
                 ├ *colexec.invariantsChecker
                 ├ *colexec.invariantsChecker
-                └ *colexec.hashBasedPartitioner
-                  ├ *colexec.bufferExportingOperator
-                  └ *colexec.bufferExportingOperator
+                └ *colexecdisk.hashBasedPartitioner
+                  ├ *colexecdisk.bufferExportingOperator
+                  └ *colexecdisk.bufferExportingOperator

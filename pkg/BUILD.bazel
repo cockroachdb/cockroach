@@ -253,6 +253,7 @@ ALL_TESTS = [
     "//pkg/sql/colexec/colexecbase:colexecbase_disallowed_imports_test",
     "//pkg/sql/colexec/colexecbase:colexecbase_test",
     "//pkg/sql/colexec/colexeccmp:colexeccmp_test",
+    "//pkg/sql/colexec/colexecdisk:colexecdisk_test",
     "//pkg/sql/colexec/colexechash:colexechash_disallowed_imports_test",
     "//pkg/sql/colexec/colexechash:colexechash_test",
     "//pkg/sql/colexec/colexecjoin:colexecjoin_disallowed_imports_test",

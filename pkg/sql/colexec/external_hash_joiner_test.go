@@ -77,7 +77,7 @@ func TestExternalHashJoiner(t *testing.T) {
 					tc.skipAllNullsInjection = true
 				}
 				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
-					sem := colexecop.NewTestingSemaphore(externalHJMinPartitions)
+					sem := colexecop.NewTestingSemaphore(colexecop.ExternalHJMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
 					spec := createSpecForHashJoiner(tc)
 					// TODO(asubiotto): Pass in the testing.T of the caller to this
@@ -150,7 +150,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
-	sem := colexecop.NewTestingSemaphore(externalHJMinPartitions)
+	sem := colexecop.NewTestingSemaphore(colexecop.ExternalHJMinPartitions)
 	// Ignore closers since the sorter should close itself when it is drained of
 	// all tuples. We assert this by checking that the semaphore reports a count
 	// of 0.

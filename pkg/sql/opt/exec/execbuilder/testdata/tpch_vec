@@ -20850,7 +20850,7 @@ EXPLAIN (VEC) SELECT p_brand, p_type, p_size, count(distinct ps_suppkey) AS supp
 └ Node 1
   └ *colexec.sortOp
     └ *colexec.hashAggregator
-      └ *colexec.unorderedDistinct
+      └ *colexec.UnorderedDistinct
         └ *colexecjoin.hashJoiner
           ├ *rowexec.joinReader
           │ └ *colexec.selectInOpInt64
@@ -20957,7 +20957,7 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
   └ *colexec.sortOp
     └ *rowexec.joinReader
       └ *rowexec.joinReader
-        └ *colexec.unorderedDistinct
+        └ *colexec.UnorderedDistinct
           └ *rowexec.joinReader
             └ *colexecsel.selGTInt64Float64Op
               └ *colexecprojconst.projMultFloat64Float64ConstOp

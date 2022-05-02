@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -125,7 +126,7 @@ func newWindower(
 		for i, argIdx := range windowFn.ArgsIdxs {
 			argTypes[i] = w.inputTypes[argIdx]
 		}
-		windowConstructor, outputType, err := execinfra.GetWindowFunctionInfo(windowFn.Func, argTypes...)
+		windowConstructor, outputType, err := execagg.GetWindowFunctionInfo(windowFn.Func, argTypes...)
 		if err != nil {
 			return nil, err
 		}
