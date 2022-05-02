@@ -2,6 +2,10 @@
 # CREATE STATISTICS
 ###################
 
+# Keep auto stats jobs on system tables from disrupting tests in this file.
+statement ok
+SET CLUSTER SETTING sql.stats.system_tables_autostats.enabled = FALSE
+
 # This test verifies that events are posted for table statistics creation.
 statement ok
 SET CLUSTER SETTING sql.stats.post_events.enabled = TRUE

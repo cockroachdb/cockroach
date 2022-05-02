@@ -108,6 +108,37 @@ func TestMaybeRefreshStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Auto stats collection on any system table except system.lease and
+	// system.table_statistics should succeed.
+	descRoleOptions :=
+		desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "system", "role_options")
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descRoleOptions.GetID(), 10000 /* rowsAffected */, time.Microsecond, /* asOf */
+	)
+	if err := checkStatsCount(ctx, cache, descRoleOptions, 4 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Auto stats collection on system.lease should fail (no stats should be collected).
+	descLease :=
+		desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "system", "lease")
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descLease.GetID(), 10000 /* rowsAffected */, time.Microsecond, /* asOf */
+	)
+	if err := checkStatsCount(ctx, cache, descLease, 0 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Auto stats collection on system.table_statistics should fail (no stats should be collected).
+	descTableStats :=
+		desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "system", "table_statistics")
+	refresher.maybeRefreshStats(
+		ctx, s.Stopper(), descTableStats.GetID(), 10000 /* rowsAffected */, time.Microsecond, /* asOf */
+	)
+	if err := checkStatsCount(ctx, cache, descTableStats, 0 /* expected */); err != nil {
+		t.Fatal(err)
+	}
+
 	// Ensure that attempt to refresh stats on view does not result in re-
 	// enqueuing the attempt.
 	// TODO(rytaft): Should not enqueue views to begin with.
@@ -527,6 +558,69 @@ func TestDefaultColumns(t *testing.T) {
 		})
 }
 
+func TestAnalyzeSystemTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	evalCtx := eval.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	cache := NewTableStatisticsCache(
+		ctx,
+		10, /* cacheSize */
+		kvDB,
+		executor,
+		keys.SystemSQLCodec,
+		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
+	)
+
+	var tableNames []string
+	tableNames = make([]string, 0, 40)
+
+	it, err := executor.QueryIterator(
+		ctx,
+		"get-system-tables",
+		nil, /* txn */
+		"SELECT table_name FROM [SHOW TABLES FROM SYSTEM]",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		row := it.Cur()
+		tableName := string(*row[0].(*tree.DOidWrapper).Wrapped.(*tree.DString))
+		tableNames = append(tableNames, tableName)
+	}
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	expectZeroRows := false
+	for _, tableName := range tableNames {
+		// Stats may not be collected on system.lease and system.table_statistics.
+		if tableName == "lease" || tableName == "table_statistics" {
+			continue
+		}
+		sql := fmt.Sprintf("ANALYZE system.%s", tableName)
+		sqlRun.Exec(t, sql)
+		// We're testing that ANALYZE on every system table except the above two
+		// doesn't error out, and populates system.table_statistics.
+		if err := compareStatsCountWithZero(ctx, cache, tableName, s, expectZeroRows); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func checkStatsCount(
 	ctx context.Context, cache *TableStatisticsCache, table catalog.TableDescriptor, expected int,
 ) error {
@@ -537,6 +631,33 @@ func checkStatsCount(
 		}
 		if len(stats) != expected {
 			return fmt.Errorf("expected %d stat(s) but found %d", expected, len(stats))
+		}
+		return nil
+	})
+}
+
+func compareStatsCountWithZero(
+	ctx context.Context,
+	cache *TableStatisticsCache,
+	tableName string,
+	s serverutils.TestServerInterface,
+	zero bool,
+) error {
+	desc :=
+		desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "system", tableName)
+	return testutils.SucceedsSoonError(func() error {
+		stats, err := cache.GetTableStats(ctx, desc)
+		if err != nil {
+			return err
+		}
+		if zero {
+			if len(stats) != 0 {
+				return fmt.Errorf("expected no stats but found %d stats rows", len(stats))
+			}
+		} else {
+			if len(stats) == 0 {
+				return fmt.Errorf("expected stats but found no stats rows")
+			}
 		}
 		return nil
 	})

@@ -239,11 +239,21 @@ func statsUsageAllowed(table catalog.TableDescriptor, clusterSettings *cluster.S
 
 // autostatsCollectionAllowed returns true if statistics are allowed to be
 // automatically collected on the table.
-func autostatsCollectionAllowed(table catalog.TableDescriptor) bool {
+func autostatsCollectionAllowed(
+	table catalog.TableDescriptor, clusterSettings *cluster.Settings,
+) bool {
 	if catalog.IsSystemDescriptor(table) {
-		// Don't try to get statistics for system tables (most importantly,
-		// for table_statistics itself).
-		return false
+		// Disable autostats on system.table_statistics and system.lease. Looking
+		// up stats on system.lease is known to cause hangs, and the same could
+		// happen with system.table_statistics. No need to collect stats if we
+		// cannot use them.
+		if table.GetID() == keys.TableStatisticsTableID ||
+			table.GetID() == keys.LeaseTableID {
+			return false
+		}
+		// Return whether autostats collection is allowed on system tables,
+		// according to the cluster settings.
+		return AutomaticStatisticsOnSystemTables.Get(&clusterSettings.SV)
 	}
 	return tableTypeCanHaveStats(table)
 }

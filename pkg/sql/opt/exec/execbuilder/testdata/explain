@@ -17,19 +17,6 @@ vectorized: true
 • norows
 
 query T
-EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
-----
-distribution: local
-vectorized: true
-·
-• render
-│
-└── • scan
-      missing stats
-      table: jobs@jobs_status_created_idx
-      spans: FULL SCAN
-
-query T
 EXPLAIN (PLAN, VERBOSE) SELECT 1 a
 ----
 distribution: local
@@ -666,52 +653,18 @@ vectorized: true
             └── • virtual table
                   table: pg_namespace@primary
 
+# The query plan can vary based on autostats. Check only the first 8 rows.
 query T
-EXPLAIN SHOW USERS
+SELECT * FROM [EXPLAIN (OPT) SHOW USERS] LIMIT 8
 ----
-distribution: local
-vectorized: true
-·
-• sort
-│ order: +username
-│
-└── • render
-    │
-    └── • group (hash)
-        │ group by: username
-        │
-        └── • sort
-            │ order: +"role"
-            │
-            └── • hash join (left outer)
-                │ equality: (username) = (member)
-                │ left cols are key
-                │
-                ├── • group (hash)
-                │   │ group by: username
-                │   │
-                │   └── • window
-                │       │
-                │       └── • render
-                │           │
-                │           └── • merge join (left outer)
-                │               │ equality: (username) = (username)
-                │               │ left cols are key
-                │               │
-                │               ├── • scan
-                │               │     missing stats
-                │               │     table: users@primary
-                │               │     spans: FULL SCAN
-                │               │
-                │               └── • scan
-                │                     missing stats
-                │                     table: role_options@primary
-                │                     spans: FULL SCAN
-                │
-                └── • scan
-                      missing stats
-                      table: role_members@role_members_role_idx
-                      spans: FULL SCAN
+sort
+ └── project
+      ├── group-by (hash)
+      │    ├── sort
+      │    │    └── left-join (hash)
+      │    │         ├── group-by (hash)
+      │    │         │    ├── window partition=(1) ordering=+7 opt(1-5,12)
+      │    │         │    │    ├── project
 
 # EXPLAIN selecting from a sequence.
 statement ok
