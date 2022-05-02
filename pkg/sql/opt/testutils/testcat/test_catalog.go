@@ -50,6 +50,18 @@ type Catalog struct {
 	enumTypes  map[string]*types.T
 }
 
+func (tc *Catalog) GetAllSchemaNamesForDB(ctx context.Context, dbName string) ([]cat.SchemaName, error) {
+	var schemaNames []cat.SchemaName
+	var scName cat.SchemaName
+	scName.SchemaName = tree.PublicSchemaName
+	scName.ExplicitSchema = true
+	scName.CatalogName = tree.Name(dbName)
+	scName.ExplicitCatalog = true
+	schemaNames = append(schemaNames, scName)
+
+	return schemaNames, nil
+}
+
 type dataSource interface {
 	cat.DataSource
 	fqName() cat.DataSourceName

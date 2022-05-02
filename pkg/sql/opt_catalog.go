@@ -154,6 +154,25 @@ func (os *optSchema) getDescriptorForPermissionsCheck() catalog.Descriptor {
 	return os.database
 }
 
+func (oc *optCatalog) GetAllSchemaNamesForDB(ctx context.Context, dbName string) ([]cat.SchemaName, error) {
+	schemas, err := oc.planner.GetSchemasForDB(ctx, dbName)
+	if err != nil {
+		return nil, err
+	}
+
+	var schemaNames []cat.SchemaName
+	for _, name := range schemas {
+		var scName cat.SchemaName
+		scName.SchemaName = tree.Name(name)
+		scName.ExplicitSchema = true
+		scName.CatalogName = tree.Name(dbName)
+		scName.ExplicitCatalog = true
+		schemaNames = append(schemaNames, scName)
+	}
+
+	return schemaNames, nil
+}
+
 // ResolveSchema is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveSchema(
 	ctx context.Context, flags cat.Flags, name *cat.SchemaName,

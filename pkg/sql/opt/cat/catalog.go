@@ -14,7 +14,6 @@ package cat
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -85,6 +84,9 @@ type Catalog interface {
 	// NOTE: The returned schema must be immutable after construction, and so can
 	// be safely copied or used across goroutines.
 	ResolveSchema(ctx context.Context, flags Flags, name *SchemaName) (Schema, SchemaName, error)
+
+	// GetAllSchemaNamesForDB Get all the SchemaNames for a database
+	GetAllSchemaNamesForDB(ctx context.Context, dbName string) ([]SchemaName, error)
 
 	// ResolveDataSource locates a data source with the given name and returns it
 	// along with the resolved DataSourceName.

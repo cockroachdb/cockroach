@@ -1250,8 +1250,9 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name opt_in_schema
-%type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name
+%type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name wildcard_pattern
 %type <tree.ObjectNamePrefixList> schema_name_list
+%type <tree.ObjectNamePrefixList> schema_wildcard
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target create_stats_target analyze_target
@@ -6863,11 +6864,16 @@ targets_roles:
   {
      $$.val = tree.TargetList{Schemas: $2.objectNamePrefixList()}
   }
+| SCHEMA schema_wildcard
+	{
+     $$.val = tree.TargetList{Schemas: $2.objectNamePrefixList()}
+	}
 | TYPE type_name_list
   {
     $$.val = tree.TargetList{Types: $2.unresolvedObjectNames()}
   }
 | targets
+
 
 for_grantee_clause:
   FOR role_spec_list
@@ -13763,6 +13769,17 @@ schema_name_list:
     $$.val = append($1.objectNamePrefixList(), $3.objectNamePrefix())
   }
 
+schema_wildcard:
+	wildcard_pattern
+	{
+    $$.val = tree.ObjectNamePrefixList{$1.objectNamePrefix()}
+	}
+
+wildcard_pattern:
+	name '.' '*'
+	{
+		$$.val = tree.ObjectNamePrefix{CatalogName: tree.Name($1), SchemaName: tree.Name('*'), ExplicitCatalog: true, ExplicitSchema: true}
+	}
 
 opt_schema_name:
 	qualifiable_schema_name

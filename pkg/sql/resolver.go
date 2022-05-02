@@ -158,6 +158,21 @@ func (p *planner) LookupSchema(
 	}, nil
 }
 
+func (p *planner) GetSchemasForDB(ctx context.Context, dbName string, ) (map[descpb.ID]string, error) {
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
+		tree.DatabaseLookupFlags{AvoidLeased: p.avoidLeasedDescriptors})
+	if err != nil {
+		return nil, err
+	}
+
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.Txn(), dbDesc)
+	if err != nil {
+		return nil, err
+	}
+
+	return schemas, nil
+}
+
 // SchemaExists implements the tree.EvalDatabase interface.
 func (p *planner) SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error) {
 	found, _, err = p.LookupSchema(ctx, dbName, scName)

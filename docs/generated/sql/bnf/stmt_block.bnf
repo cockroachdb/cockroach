@@ -2377,6 +2377,7 @@ extra_var_value ::=
 targets_roles ::=
 	'ROLE' role_spec_list
 	| 'SCHEMA' schema_name_list
+	| 'SCHEMA' schema_wildcard
 	| 'TYPE' type_name_list
 	| targets
 
@@ -2844,6 +2845,9 @@ for_locking_item ::=
 var_list ::=
 	( var_value ) ( ( ',' var_value ) )*
 
+schema_wildcard ::=
+	wildcard_pattern
+
 opt_ordinality ::=
 	'WITH' 'ORDINALITY'
 	| 
@@ -3176,6 +3180,9 @@ opt_locked_rels ::=
 opt_nowait_or_skip ::=
 	'SKIP' 'LOCKED'
 	| 'NOWAIT'
+
+wildcard_pattern ::=
+	name '.' '*'
 
 opt_join_hint ::=
 	'HASH'
