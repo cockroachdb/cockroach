@@ -2,9 +2,10 @@ load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain")
 
-# NB: This URL is used by generate-distdir. Don't change the format or name of
-# this definition unless you update generate-distdir accordingly.
-URL_TMPL = "https://storage.googleapis.com/public-bazel-artifacts/c-deps/20220412-205412/{}_foreign.{}.tar.gz"
+# NB: URL_TMPL and LOC are used by generate-distdir. Don't change the format or
+# name of these definitions unless you update generate-distdir accordingly.
+LOC = "20220502-162142"
+URL_TMPL = "https://storage.googleapis.com/public-bazel-artifacts/c-deps/{loc}/{lib}_foreign.{config}.{loc}.tar.gz"
 
 # NB: When we link with the krb5 libraries, we want the linker to see them in
 # this exact order. To that end we pass this list verbatim to the configure_make
@@ -120,7 +121,11 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 """.format("bin" if (config == "windows" and lib == "libgeos") else "lib"),
-        url = URL_TMPL.format(lib, config),
+        url = URL_TMPL.format(
+            config=config,
+            lib=lib,
+            loc=LOC,
+        ),
         sha256 = sha256,
     )
 

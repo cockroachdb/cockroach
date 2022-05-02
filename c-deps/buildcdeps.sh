@@ -16,7 +16,7 @@ for CONFIG in $CONFIGS; do
         TARGETS="$TARGETS libkrb5"
     fi
     bazel clean
-    bazel build --config ci --config cross$CONFIG $(echo "$TARGETS" | python3 -c 'import sys; input = sys.stdin.read().strip(); print(" ".join("//c-deps:{}_foreign".format(w) for w in input.split(" ")))')
+    bazel build --config ci --config cross$CONFIG --//build/toolchains:prebuild_cdeps_flag $(echo "$TARGETS" | python3 -c 'import sys; input = sys.stdin.read().strip(); print(" ".join("//c-deps:{}_foreign".format(w) for w in input.split(" ")))')
     BAZEL_BIN=$(bazel info bazel-bin --config ci --config cross$CONFIG)
     for TARGET in $TARGETS; do
         bundle $CONFIG $BAZEL_BIN/c-deps/${TARGET}_foreign

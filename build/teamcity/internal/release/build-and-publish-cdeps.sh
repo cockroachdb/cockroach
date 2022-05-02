@@ -16,5 +16,9 @@ tc_end_block "Build c-deps"
 
 tc_start_block "Publish artifacts"
 loc=$(date +%Y%m%d-%H%M%S)
-gsutil cp -r $root/artifacts gs://public-bazel-artifacts/c-deps/$loc
+for FILE in `find $root/artifacts -name '*.tar.gz'`; do
+    BASE=$(basename $FILE)
+    DEST=${BASE/.tar.gz/".$loc.tar.gz"}
+    gsutil cp $FILE gs://public-bazel-artifacts/c-deps/$loc/$DEST
+done
 tc_end_block "Publish artifacts"
