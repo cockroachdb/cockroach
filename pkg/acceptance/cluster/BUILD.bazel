@@ -16,6 +16,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/config/zonepb",
         "//pkg/security",
         "//pkg/util/contextutil",

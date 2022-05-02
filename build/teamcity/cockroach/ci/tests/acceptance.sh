@@ -25,6 +25,7 @@ $BAZCI run --config=crosslinux --config=test --artifacts_dir=$PWD/artifacts \
   --test_arg=-b=$PWD/artifacts/cockroach \
   --test_env=TZ=America/New_York \
   --test_env=GO_TEST_WRAP_TESTV=1 \
+  --test_env=LANG \
   --test_timeout=1800 || status=$?
 
 # Some unit tests test automatic ballast creation. These ballasts can be
