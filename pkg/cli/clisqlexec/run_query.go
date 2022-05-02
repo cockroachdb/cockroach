@@ -73,28 +73,16 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 				}
 
 				// This may be either something like INSERT with a valid
-				// RowsAffected value, or a statement like SET. The pq driver
+				// RowsAffected value, or a statement like SET. The pgx driver
 				// uses both driver.RowsAffected for both.  So we need to be a
 				// little more manual.
 				tag := rows.Tag()
 				if tag == "SELECT" && nRows == 0 {
-					// As explained above, the pq driver unhelpfully does not
+					// As explained above, the pgx driver unhelpfully does not
 					// distinguish between a statement returning zero rows and a
 					// statement returning an affected row count of zero.
 					// noRowsHook is called non-discriminatingly for both
 					// situations.
-					//
-					// TODO(knz): meanwhile, there are rare, non-SELECT
-					// statements that have tag "SELECT" but are legitimately of
-					// type RowsAffected. CREATE TABLE AS is one. pq's inability
-					// to distinguish those two cases means that any non-SELECT
-					// statement that legitimately returns 0 rows affected, and
-					// for which the user would expect to see "SELECT 0", will
-					// be incorrectly displayed as an empty row result set
-					// instead. This needs to be addressed by ensuring pq can
-					// distinguish the two cases, or switching to an entirely
-					// different driver altogether.
-					//
 					return false, nil
 				} else if _, ok := tagsWithRowsAffected[tag]; ok {
 					// INSERT, DELETE, etc.: print the row count.
@@ -278,13 +266,14 @@ func (sqlExecCtx *Context) maybeShowTimes(
 // All tags where the RowsAffected value should be reported to
 // the user.
 var tagsWithRowsAffected = map[string]struct{}{
-	"INSERT":    {},
-	"UPDATE":    {},
-	"DELETE":    {},
-	"MOVE":      {},
-	"DROP USER": {},
-	"COPY":      {},
-	// This one is used with e.g. CREATE TABLE AS (other SELECT
+	"INSERT":          {},
+	"UPDATE":          {},
+	"DELETE":          {},
+	"MOVE":            {},
+	"DROP USER":       {},
+	"COPY":            {},
+	"CREATE TABLE AS": {},
+	// This one is used with e.g. CREATE TABLE AS on older servers (other SELECT
 	// statements have type Rows, not RowsAffected).
 	"SELECT": {},
 }
