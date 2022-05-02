@@ -159,6 +159,13 @@ func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
 	arg = append([]string{subcmd}, arg...)
 	buf, err := exec.Command("bazel", arg...).Output()
 	if err != nil {
+		if len(buf) > 0 {
+			fmt.Printf("COMMAND STDOUT:\n%s\n", string(buf))
+		}
+		var cmderr exec.ExitError
+		if errors.As(err, &cmderr) && len(cmderr.Stderr) > 0 {
+			fmt.Printf("COMMAND STDERR:\n%s\n", string(cmderr.Stderr))
+		}
 		fmt.Println("Failed to run Bazel with args: ", arg)
 		return "", err
 	}
@@ -211,7 +218,6 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 			// We can find it by finding the location of the binary
 			// and munging it a bit.
 			args := []string{fullTarget, "-c", compilationMode, "--run_under=realpath"}
-			args = append(args, configArgList()...)
 			runOutput, err := runBazelReturningStdout("run", args...)
 			if err != nil {
 				return buildInfo{}, err
