@@ -513,7 +513,7 @@ func evalAsOfTimestamp(
 	}
 	// Attempt to parse as a decimal.
 	if dec, _, err := apd.NewFromString(readTime); err == nil {
-		if readTS, err := tree.DecimalToHLC(dec); err == nil {
+		if readTS, err := hlc.DecimalToHLC(dec); err == nil {
 			return readTS, nil
 		}
 	}

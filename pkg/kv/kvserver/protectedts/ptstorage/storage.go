@@ -394,7 +394,7 @@ func rowToRecord(
 ) error {
 	r.ID = row[0].(*tree.DUuid).UUID.GetBytes()
 	tsDecimal := row[1].(*tree.DDecimal)
-	ts, err := tree.DecimalToHLC(&tsDecimal.Decimal)
+	ts, err := hlc.DecimalToHLC(&tsDecimal.Decimal)
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse timestamp for %v", r.ID)
 	}
