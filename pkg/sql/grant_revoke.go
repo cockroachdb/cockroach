@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -47,7 +48,9 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	grantees, err := decodeusername.FromRoleSpecList(
+		p.SessionData(), username.PurposeValidation, n.Grantees,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +61,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		targets:         n.Targets,
 		grantees:        grantees,
 		desiredprivs:    n.Privileges,
-		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
+		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee username.SQLUsername) {
 			privDesc.Grant(grantee, privileges, n.WithGrantOption)
 		},
 		grantOn:          grantOn,
@@ -79,7 +82,9 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 
-	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	grantees, err := decodeusername.FromRoleSpecList(
+		p.SessionData(), username.PurposeValidation, n.Grantees,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +94,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		targets:         n.Targets,
 		grantees:        grantees,
 		desiredprivs:    n.Privileges,
-		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
+		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee username.SQLUsername) {
 			privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor)
 		},
 		grantOn:          grantOn,
@@ -101,9 +106,9 @@ type changePrivilegesNode struct {
 	isGrant         bool
 	withGrantOption bool
 	targets         tree.TargetList
-	grantees        []security.SQLUsername
+	grantees        []username.SQLUsername
 	desiredprivs    privilege.List
-	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, security.SQLUsername)
+	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername)
 	grantOn         privilege.ObjectType
 
 	// granteesNameList is used for creating an AST node for alter default
@@ -137,7 +142,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				return pgerror.Newf(
 					pgcode.InvalidGrantOperation,
 					"grant options cannot be granted to %q role",
-					security.PublicRoleName(),
+					username.PublicRoleName(),
 				)
 			}
 		}
@@ -387,14 +392,14 @@ func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privi
 // validateRoles checks that all the roles are valid users.
 // isPublicValid determines whether or not Public is a valid role.
 func (p *planner) validateRoles(
-	ctx context.Context, roles []security.SQLUsername, isPublicValid bool,
+	ctx context.Context, roles []username.SQLUsername, isPublicValid bool,
 ) error {
 	users, err := p.GetAllRoles(ctx)
 	if err != nil {
 		return err
 	}
 	if isPublicValid {
-		users[security.PublicRoleName()] = true // isRole
+		users[username.PublicRoleName()] = true // isRole
 	}
 	for i, grantee := range roles {
 		if _, ok := users[grantee]; !ok {

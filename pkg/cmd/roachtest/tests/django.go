@@ -28,7 +28,7 @@ var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)(
 var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)$`)
 
 var djangoSupportedTag = "cockroach-4.0.x"
-var djangoCockroachDBSupportedTag = "4.0.1"
+var djangoCockroachDBSupportedTag = "4.0.*"
 
 func registerDjango(r registry.Registry) {
 	runDjango := func(
@@ -111,8 +111,25 @@ func registerDjango(r registry.Registry) {
 			t.Fatal(err)
 		}
 
+		djangoCockroachDBLatestTag, err := repeatGetLatestTag(
+			ctx, t, "cockroachdb", "django-cockroachdb", djangoCockroachDBReleaseTagRegex,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.L().Printf("Latest django-cockroachdb release is %s.", djangoCockroachDBLatestTag)
+		t.L().Printf("Supported django-cockroachdb release is %s.", djangoCockroachDBSupportedTag)
+
 		if err := repeatRunE(
-			ctx, t, c, node, "remove old django", `rm -rf /mnt/data1/django`,
+			ctx,
+			t,
+			c,
+			node,
+			"install django-cockroachdb",
+			fmt.Sprintf(
+				`pip3 install django-cockroachdb==%s`,
+				djangoCockroachDBSupportedTag,
+			),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -138,41 +155,12 @@ func registerDjango(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		djangoCockroachDBLatestTag, err := repeatGetLatestTag(
-			ctx, t, "cockroachdb", "django-cockroachdb", djangoCockroachDBReleaseTagRegex,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.L().Printf("Latest django-cockroachdb release is %s.", djangoCockroachDBLatestTag)
-		t.L().Printf("Supported django-cockroachdb release is %s.", djangoCockroachDBSupportedTag)
-
-		if err := repeatGitCloneE(
-			ctx,
-			t,
-			c,
-			"https://github.com/cockroachdb/django-cockroachdb",
-			"/mnt/data1/django/tests/django-cockroachdb",
-			djangoCockroachDBSupportedTag,
-			node,
-		); err != nil {
-			t.Fatal(err)
-		}
-
 		if err := repeatRunE(
 			ctx, t, c, node, "install django's dependencies", `
 				cd /mnt/data1/django/tests &&
 				pip3 install -e .. &&
 				pip3 install -r requirements/py3.txt &&
 				pip3 install -r requirements/postgres.txt`,
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := repeatRunE(
-			ctx, t, c, node, "install django-cockroachdb", `
-					cd /mnt/data1/django/tests/django-cockroachdb/ &&
-					pip3 install .`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -251,7 +239,7 @@ func registerDjango(r registry.Registry) {
 // Test results are only in stderr, so stdout is redirected and printed later.
 const djangoRunTestCmd = `
 cd /mnt/data1/django/tests &&
-RUNNING_COCKROACH_BACKEND_TESTS=1 python3 runtests.py %[1]s --settings cockroach_settings --parallel 1 -v 2 > %[1]s.stdout
+python3 runtests.py %[1]s --settings cockroach_settings -v 2 > %[1]s.stdout
 `
 
 const cockroachDjangoSettings = `

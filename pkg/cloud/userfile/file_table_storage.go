@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile/filetable"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -54,7 +54,7 @@ func parseUserfileURL(
 	// If the import statement does not specify a qualified table name then use
 	// the default to attempt to locate the file(s).
 	if qualifiedTableName == "" {
-		composedTableName := security.MakeSQLUsernameFromPreNormalizedString(
+		composedTableName := username.MakeSQLUsernameFromPreNormalizedString(
 			DefaultQualifiedNamePrefix + normUser)
 		qualifiedTableName = DefaultQualifiedNamespace +
 			// Escape special identifiers as needed.
@@ -111,11 +111,11 @@ func makeFileTableStorage(
 	}
 
 	// cfg.User is already a normalized SQL username.
-	username := security.MakeSQLUsernameFromPreNormalizedString(cfg.User)
+	user := username.MakeSQLUsernameFromPreNormalizedString(cfg.User)
 	executor := filetable.MakeInternalFileToTableExecutor(args.InternalExecutor, args.DB)
 
 	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx,
-		cfg.QualifiedTableName, executor, username)
+		cfg.QualifiedTableName, executor, user)
 	if err != nil {
 		return nil, err
 	}
@@ -140,10 +140,10 @@ func MakeSQLConnFileTableStorage(
 	executor := filetable.MakeSQLConnFileToTableExecutor(conn)
 
 	// cfg.User is already a normalized username,
-	username := security.MakeSQLUsernameFromPreNormalizedString(cfg.User)
+	user := username.MakeSQLUsernameFromPreNormalizedString(cfg.User)
 
 	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx,
-		cfg.QualifiedTableName, executor, username)
+		cfg.QualifiedTableName, executor, user)
 	if err != nil {
 		return nil, err
 	}

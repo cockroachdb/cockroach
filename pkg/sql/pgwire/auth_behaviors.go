@@ -13,7 +13,7 @@ package pgwire
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,7 +26,7 @@ import (
 type AuthBehaviors struct {
 	authenticator       Authenticator
 	connClose           func()
-	replacementIdentity security.SQLUsername
+	replacementIdentity username.SQLUsername
 	replacedIdentity    bool
 	roleMapper          RoleMapper
 }
@@ -48,7 +48,7 @@ var _ = (*AuthBehaviors)(nil).SetReplacementIdentity
 // called.
 func (b *AuthBehaviors) Authenticate(
 	ctx context.Context,
-	systemIdentity security.SQLUsername,
+	systemIdentity username.SQLUsername,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
 ) error {
@@ -82,13 +82,13 @@ func (b *AuthBehaviors) SetConnClose(fn func()) {
 // This allows "ambient" authentication mechanisms, such as GSSAPI, to
 // provide replacement values. This method will return ok==false if
 // SetReplacementIdentity has not been called.
-func (b *AuthBehaviors) ReplacementIdentity() (_ security.SQLUsername, ok bool) {
+func (b *AuthBehaviors) ReplacementIdentity() (_ username.SQLUsername, ok bool) {
 	return b.replacementIdentity, b.replacedIdentity
 }
 
 // SetReplacementIdentity allows the AuthMethod to override the
 // client-reported system identity.
-func (b *AuthBehaviors) SetReplacementIdentity(id security.SQLUsername) {
+func (b *AuthBehaviors) SetReplacementIdentity(id username.SQLUsername) {
 	b.replacementIdentity = id
 	b.replacedIdentity = true
 }
@@ -96,8 +96,8 @@ func (b *AuthBehaviors) SetReplacementIdentity(id security.SQLUsername) {
 // MapRole delegates to the RoleMapper passed to SetRoleMapper or
 // returns an error if SetRoleMapper has not been called.
 func (b *AuthBehaviors) MapRole(
-	ctx context.Context, systemIdentity security.SQLUsername,
-) ([]security.SQLUsername, error) {
+	ctx context.Context, systemIdentity username.SQLUsername,
+) ([]username.SQLUsername, error) {
 	if found := b.roleMapper; found != nil {
 		return found(ctx, systemIdentity)
 	}

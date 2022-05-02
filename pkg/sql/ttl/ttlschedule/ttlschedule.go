@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -133,7 +133,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 	p, cleanup := cfg.PlanHookMaker(
 		fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID),
 		txn,
-		security.NodeUserName(),
+		username.NodeUserName(),
 	)
 	defer cleanup()
 
@@ -223,7 +223,7 @@ func createRowLevelTTLJob(
 	}
 	record := jobs.Record{
 		Description: fmt.Sprintf("ttl for %s", tn.FQString()),
-		Username:    security.NodeUserName(),
+		Username:    username.NodeUserName(),
 		Details: jobspb.RowLevelTTLDetails{
 			TableID: ttlDetails.TableID,
 			Cutoff:  timeutil.Now(),

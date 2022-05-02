@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -47,7 +46,7 @@ type SemaContext struct {
 	// SearchPath indicates where to search for unqualified function
 	// names. The path elements must be normalized via Name.Normalize()
 	// already.
-	SearchPath sessiondata.SearchPath
+	SearchPath SearchPath
 
 	// TypeResolver manages resolving type names into *types.T's.
 	TypeResolver TypeReferenceResolver
@@ -58,10 +57,7 @@ type SemaContext struct {
 
 	// IntervalStyleEnabled determines whether IntervalStyle is enabled.
 	// TODO(sql-exp): remove this field in 22.2, since it will always be true.
-	IntervalStyleEnabled bool
-	// DateStyleEnabled determines whether DateStyle is enabled.
-	// TODO(sql-exp): remove this field in 22.2, since it will always be true.
-	DateStyleEnabled bool
+	CastSessionOptions cast.SessionOptions
 
 	Properties SemaProperties
 
@@ -431,11 +427,7 @@ func invalidCastError(castFrom, castTo *types.T) error {
 //
 // On success, any relevant telemetry counters are incremented.
 func resolveCast(
-	context string,
-	castFrom, castTo *types.T,
-	allowStable bool,
-	intervalStyleEnabled bool,
-	dateStyleEnabled bool,
+	context string, castFrom, castTo *types.T, allowStable bool, opts cast.SessionOptions,
 ) error {
 	toFamily := castTo.Family()
 	fromFamily := castFrom.Family()
@@ -446,8 +438,7 @@ func resolveCast(
 			castFrom.ArrayContents(),
 			castTo.ArrayContents(),
 			allowStable,
-			intervalStyleEnabled,
-			dateStyleEnabled,
+			opts,
 		)
 		if err != nil {
 			return err
@@ -484,8 +475,7 @@ func resolveCast(
 				from,
 				to,
 				allowStable,
-				intervalStyleEnabled,
-				dateStyleEnabled,
+				opts,
 			)
 			if err != nil {
 				return err
@@ -495,7 +485,7 @@ func resolveCast(
 		return nil
 
 	default:
-		cast, ok := cast.LookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
+		cast, ok := cast.LookupCast(castFrom, castTo, opts)
 		if !ok {
 			return invalidCastError(castFrom, castTo)
 		}
@@ -628,13 +618,16 @@ func (expr *CastExpr) TypeCheck(
 		allowStable = false
 		context = semaCtx.Properties.required.context
 	}
+	var castOpts cast.SessionOptions
+	if semaCtx != nil {
+		castOpts = semaCtx.CastSessionOptions
+	}
 	err = resolveCast(
 		context,
 		castFrom,
 		exprType,
 		allowStable,
-		semaCtx != nil && semaCtx.IntervalStyleEnabled,
-		semaCtx != nil && semaCtx.DateStyleEnabled,
+		castOpts,
 	)
 	if err != nil {
 		return nil, err
@@ -1049,7 +1042,7 @@ func CheckIsWindowOrAgg(def *FunctionDefinition) error {
 func (expr *FuncExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	var searchPath sessiondata.SearchPath
+	searchPath := EmptySearchPath
 	if semaCtx != nil {
 		searchPath = semaCtx.SearchPath
 	}

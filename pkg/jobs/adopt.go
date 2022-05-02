@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -164,7 +164,7 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 
 	it, err := r.ex.QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, query, args...,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, query, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
@@ -243,7 +243,7 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, resumeQuery, args...,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, resumeQuery, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "job %d: could not query job table row", jobID)
@@ -448,7 +448,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 		// error (otherwise, the system.jobs table might diverge from the jobs
 		// registry).
 		rows, err := r.ex.QueryBufferedEx(
-			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 			pauseAndCancelUpdate, s.ID().UnsafeBytes(), r.ID(),
 		)
 		if err != nil {

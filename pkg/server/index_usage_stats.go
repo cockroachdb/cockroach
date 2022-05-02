@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -338,7 +338,7 @@ func getTableIDFromDatabaseAndTableName(
 	database string,
 	table string,
 	ie *sql.InternalExecutor,
-	userName security.SQLUsername,
+	userName username.SQLUsername,
 ) (int, error) {
 	// Fully qualified table name is either database.table or database.schema.table
 	fqtName, err := getFullyQualifiedTableName(database, table)

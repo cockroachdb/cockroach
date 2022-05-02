@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -69,7 +69,7 @@ func TestCreateSystemTable(t *testing.T) {
 		NextIndexID: 2,
 		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
 			privilege.ReadData,
-			security.NodeUserName(),
+			username.NodeUserName(),
 		),
 	}
 

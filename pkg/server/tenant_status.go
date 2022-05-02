@@ -26,16 +26,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -222,7 +222,7 @@ func (t *tenantStatusServer) CancelQuery(
 		return statusClient.CancelQuery(ctx, req)
 	}
 
-	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(req.Username)
+	reqUsername := username.MakeSQLUsernameFromPreNormalizedString(req.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(req.QueryID)); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
@@ -323,7 +323,7 @@ func (t *tenantStatusServer) CancelSession(
 		return statusClient.CancelSession(ctx, req)
 	}
 
-	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(req.Username)
+	reqUsername := username.MakeSQLUsernameFromPreNormalizedString(req.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(req.SessionID)); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.

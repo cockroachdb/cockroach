@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
@@ -116,7 +116,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	sql.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
 	registry := source.JobRegistry().(*jobs.Registry)
 	ptp := source.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
-	timeout, username := 1*time.Second, security.MakeSQLUsernameFromPreNormalizedString("user")
+	timeout, username := 1*time.Second, username.MakeSQLUsernameFromPreNormalizedString("user")
 
 	registerConstructor := func(initialTime time.Time) (*timeutil.ManualTime, func(), func(), func()) {
 		mt := timeutil.NewManualTime(initialTime)

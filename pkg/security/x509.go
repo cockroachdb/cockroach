@@ -20,6 +20,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -122,7 +123,7 @@ func GenerateServerCert(
 	caPrivateKey crypto.PrivateKey,
 	nodePublicKey crypto.PublicKey,
 	lifetime time.Duration,
-	user SQLUsername,
+	user username.SQLUsername,
 	hosts []string,
 ) ([]byte, error) {
 	// Create template for user.
@@ -246,7 +247,7 @@ func GenerateClientCert(
 	caPrivateKey crypto.PrivateKey,
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
-	user SQLUsername,
+	user username.SQLUsername,
 ) ([]byte, error) {
 
 	// TODO(marc): should we add extra checks?

@@ -43,7 +43,7 @@ go_test(
         "//pkg/build",
         "//pkg/cli",
         "//pkg/cli/clisqlclient",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql/lexbase",
         "//pkg/sql/sem/tree",

@@ -23,7 +23,7 @@ go_test(
         "//pkg/base",
         "//pkg/cloud",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

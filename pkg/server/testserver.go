@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -102,7 +103,7 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	baseCfg.SplitListenSQL = true
 	baseCfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
-	baseCfg.User = security.NodeUserName()
+	baseCfg.User = username.NodeUserName()
 	// Enable web session authentication.
 	baseCfg.EnableWebSessionAuthentication = true
 	return baseCfg
@@ -870,14 +871,14 @@ func (ts *TestServer) DiagnosticsReporter() interface{} {
 
 const authenticatedUser = "authentic_user"
 
-func authenticatedUserName() security.SQLUsername {
-	return security.MakeSQLUsernameFromPreNormalizedString(authenticatedUser)
+func authenticatedUserName() username.SQLUsername {
+	return username.MakeSQLUsernameFromPreNormalizedString(authenticatedUser)
 }
 
 const authenticatedUserNoAdmin = "authentic_user_noadmin"
 
-func authenticatedUserNameNoAdmin() security.SQLUsername {
-	return security.MakeSQLUsernameFromPreNormalizedString(authenticatedUserNoAdmin)
+func authenticatedUserNameNoAdmin() username.SQLUsername {
+	return username.MakeSQLUsernameFromPreNormalizedString(authenticatedUserNoAdmin)
 }
 
 type v2AuthDecorator struct {
@@ -1282,7 +1283,7 @@ func (ts *TestServer) ForceTableGC(
  `
 	row, err := ts.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "resolve-table-id", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		tableIDQuery, database, table)
 	if err != nil {
 		return err

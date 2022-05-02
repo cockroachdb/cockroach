@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -280,6 +281,17 @@ func (ec *Context) SessionData() *sessiondata.SessionData {
 		return nil
 	}
 	return ec.SessionDataStack.Top()
+}
+
+// CastSessionOptions returns the SessionOptions for casts.
+func (ec *Context) CastSessionOptions() cast.SessionOptions {
+	if ec.SessionData() == nil {
+		return cast.SessionOptions{}
+	}
+	return cast.SessionOptions{
+		IntervalStyleEnabled: ec.SessionData().IntervalStyleEnabled,
+		DateStyleEnabled:     ec.SessionData().DateStyleEnabled,
+	}
 }
 
 // Copy returns a deep copy of ctx.

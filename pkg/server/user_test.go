@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -35,7 +35,7 @@ func TestValidRoles(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	ctx := context.Background()
-	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
+	fooUser := username.MakeSQLUsernameFromPreNormalizedString("foo")
 	_, err := sqlDB.Exec(fmt.Sprintf("CREATE USER %s", fooUser))
 	require.NoError(t, err)
 

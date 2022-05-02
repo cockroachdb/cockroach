@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -605,7 +605,7 @@ func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 	// Create a one off job which writes some values into 'foo' table.
 	schedule := NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 	schedule.SetScheduleLabel("test schedule")
-	schedule.SetOwner(security.TestUserName())
+	schedule.SetOwner(username.TestUserName())
 	schedule.SetNextRun(timeutil.Now())
 	any, err := types.MarshalAny(
 		&jobspb.SqlStatementExecutionArg{Statement: "INSERT INTO defaultdb.foo VALUES (1), (2), (3)"})
@@ -711,7 +711,7 @@ INSERT INTO defaultdb.foo VALUES(1, 1)
 	// Setup schedule with our test executor.
 	schedule := NewScheduledJob(h.env)
 	schedule.SetScheduleLabel("test schedule")
-	schedule.SetOwner(security.TestUserName())
+	schedule.SetOwner(username.TestUserName())
 	nextRun := h.env.Now().Add(time.Hour)
 	schedule.SetNextRun(nextRun)
 	schedule.SetExecutionDetails(execName, jobspb.ExecutionArguments{})
@@ -901,7 +901,7 @@ func TestDisablingSchedulerCancelsSchedules(t *testing.T) {
 	// than one doesn't change anything since we block.
 	schedule := NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 	schedule.SetScheduleLabel("test schedule")
-	schedule.SetOwner(security.TestUserName())
+	schedule.SetOwner(username.TestUserName())
 	schedule.SetNextRun(timeutil.Now())
 	schedule.SetExecutionDetails(executorName, jobspb.ExecutionArguments{})
 	require.NoError(t, schedule.Create(
@@ -939,7 +939,7 @@ func TestSchedulePlanningRespectsTimeout(t *testing.T) {
 	// than one doesn't change anything since we block.
 	schedule := NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 	schedule.SetScheduleLabel("test schedule")
-	schedule.SetOwner(security.TestUserName())
+	schedule.SetOwner(username.TestUserName())
 	schedule.SetNextRun(timeutil.Now())
 	schedule.SetExecutionDetails(executorName, jobspb.ExecutionArguments{})
 	require.NoError(t, schedule.Create(

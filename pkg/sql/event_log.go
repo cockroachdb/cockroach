@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -354,7 +354,7 @@ func LogEventForJobs(
 	event eventpb.EventPayload,
 	jobID int64,
 	payload jobspb.Payload,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	status jobs.Status,
 ) error {
 	event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime

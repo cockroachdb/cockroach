@@ -14,7 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -79,7 +79,7 @@ func (d *immutable) grantOrRevokeDefaultPrivilegesHelper(
 	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
 	role catpb.DefaultPrivilegesRole,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
-	grantee security.SQLUsername,
+	grantee username.SQLUsername,
 	privList privilege.List,
 	withGrantOption bool,
 	isGrant bool,
@@ -114,7 +114,7 @@ func (d *immutable) grantOrRevokeDefaultPrivilegesHelper(
 func (d *Mutable) GrantDefaultPrivileges(
 	role catpb.DefaultPrivilegesRole,
 	privileges privilege.List,
-	grantees []security.SQLUsername,
+	grantees []username.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	withGrantOption bool,
 	deprecateGrant bool,
@@ -129,7 +129,7 @@ func (d *Mutable) GrantDefaultPrivileges(
 func (d *Mutable) RevokeDefaultPrivileges(
 	role catpb.DefaultPrivilegesRole,
 	privileges privilege.List,
-	grantees []security.SQLUsername,
+	grantees []username.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	grantOptionFor bool,
 	deprecateGrant bool,
@@ -173,14 +173,14 @@ func CreatePrivilegesFromDefaultPrivileges(
 	dbDefaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor,
 	schemaDefaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor,
 	dbID descpb.ID,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	databasePrivileges *catpb.PrivilegeDescriptor,
 ) *catpb.PrivilegeDescriptor {
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
 	if dbID == keys.SystemDatabaseID {
-		return catpb.NewBasePrivilegeDescriptor(security.NodeUserName())
+		return catpb.NewBasePrivilegeDescriptor(username.NodeUserName())
 	}
 
 	defaultPrivilegeDescriptors := []catalog.DefaultPrivilegeDescriptor{
@@ -296,13 +296,13 @@ func foldPrivileges(
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
 	if targetObject == tree.Types &&
-		privileges.CheckPrivilege(security.PublicRoleName(), privilege.USAGE) {
-		publicUser, ok := privileges.FindUser(security.PublicRoleName())
+		privileges.CheckPrivilege(username.PublicRoleName(), privilege.USAGE) {
+		publicUser, ok := privileges.FindUser(username.PublicRoleName())
 		if ok {
 			if !privilege.USAGE.IsSetIn(publicUser.WithGrantOption) {
 				setPublicHasUsageOnTypes(defaultPrivilegesForRole, true)
 				privileges.Revoke(
-					security.PublicRoleName(),
+					username.PublicRoleName(),
 					privilege.List{privilege.USAGE},
 					privilege.Type,
 					false, /* grantOptionFor */
@@ -335,7 +335,7 @@ func expandPrivileges(
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
 	if targetObject == tree.Types && GetPublicHasUsageOnTypes(defaultPrivilegesForRole) {
-		privileges.Grant(security.PublicRoleName(), privilege.List{privilege.USAGE}, false /* withGrantOption */)
+		privileges.Grant(username.PublicRoleName(), privilege.List{privilege.USAGE}, false /* withGrantOption */)
 		setPublicHasUsageOnTypes(defaultPrivilegesForRole, false)
 	}
 	// ForAllRoles cannot be a grantee, nothing left to do.
@@ -359,7 +359,7 @@ func GetUserPrivilegesForObject(
 	}
 	if GetPublicHasUsageOnTypes(&p) && targetObject == tree.Types {
 		userPrivileges = append(userPrivileges, catpb.UserPrivileges{
-			UserProto:  security.PublicRoleName().EncodeProto(),
+			UserProto:  username.PublicRoleName().EncodeProto(),
 			Privileges: privilege.USAGE.Mask(),
 		})
 	}
@@ -427,7 +427,7 @@ func setPublicHasUsageOnTypes(
 // and the grant options being granted could be different
 func applyDefaultPrivileges(
 	p *catpb.PrivilegeDescriptor,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	privList privilege.List,
 	grantOptionList privilege.List,
 ) {

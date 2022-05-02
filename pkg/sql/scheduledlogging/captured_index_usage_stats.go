@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -200,7 +200,7 @@ func captureIndexUsageStats(
 			ctx,
 			"capture-index-usage-stats",
 			nil,
-			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 			stmt,
 		)
 		if err != nil {
@@ -292,7 +292,7 @@ func getAllDatabaseNames(ctx context.Context, ie sqlutil.InternalExecutor) ([]st
 		ctx,
 		"get-all-db-names",
 		nil,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		`SELECT database_name FROM [SHOW DATABASES]`,
 	)
 	if err != nil {

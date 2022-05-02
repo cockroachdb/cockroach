@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -60,7 +60,7 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 						ctx, "read-setting",
 						txn,
-						sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+						sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 						"SELECT value FROM system.settings WHERE name = $1", name,
 					)
 					if err != nil {

@@ -48,6 +48,7 @@ go_test(
         "//pkg/keys",
         "//pkg/security",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",

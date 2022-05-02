@@ -169,7 +169,7 @@ message LocalOnlySessionData {
   // established the connection before SET ROLE was first performed.
   // This is only populated when SET ROLE is used, otherwise the session_user
   // is the same as the UserProto in SessionData.
-  string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
   // TxnRowsWrittenLog is the threshold for the number of rows written by a SQL
   // transaction which - once exceeded - will trigger a logging event to SQL_PERF
   // (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.

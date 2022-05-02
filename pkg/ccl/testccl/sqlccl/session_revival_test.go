@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -52,7 +52,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 			t,
 			tenant.SQLAddr(),
 			"TestToken1",
-			url.UserPassword(security.TestUser, "hunter2"),
+			url.UserPassword(username.TestUser, "hunter2"),
 		)
 		defer cleanup()
 
@@ -67,7 +67,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 			t,
 			tenant.SQLAddr(),
 			"TestToken2",
-			url.User(security.TestUser),
+			url.User(username.TestUser),
 		)
 		defer cleanup()
 
@@ -92,7 +92,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 			t,
 			tenant.SQLAddr(),
 			"TestToken",
-			url.User(security.TestUser),
+			url.User(username.TestUser),
 		)
 		defer cleanup()
 
@@ -102,7 +102,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 			return p
 		}
 		payload := &sessiondatapb.SessionRevivalToken_Payload{
-			User:      security.TestUser,
+			User:      username.TestUser,
 			Algorithm: x509.Ed25519.String(),
 			ExpiresAt: timestampProto(timeutil.Now().Add(5 * time.Minute)),
 			IssuedAt:  timestampProto(timeutil.Now().Add(-3 * time.Minute)),
@@ -128,7 +128,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 			t,
 			tenant.SQLAddr(),
 			"TestToken",
-			url.User(security.TestUser),
+			url.User(username.TestUser),
 		)
 		defer cleanup()
 

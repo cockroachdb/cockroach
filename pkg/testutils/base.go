@@ -13,17 +13,18 @@ package testutils
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 )
 
 // NewNodeTestBaseContext creates a base context for testing. This uses
 // embedded certs and the default node user. The default node user has both
 // server and client certificates.
 func NewNodeTestBaseContext() *base.Config {
-	return NewTestBaseContext(security.NodeUserName())
+	return NewTestBaseContext(username.NodeUserName())
 }
 
 // NewTestBaseContext creates a secure base context for user.
-func NewTestBaseContext(user security.SQLUsername) *base.Config {
+func NewTestBaseContext(user username.SQLUsername) *base.Config {
 	cfg := &base.Config{
 		Insecure: false,
 		User:     user,

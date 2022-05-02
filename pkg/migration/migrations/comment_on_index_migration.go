@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
@@ -33,7 +33,7 @@ func ensureCommentsHaveNonDroppedIndexes(
 			ctx,
 			"select-comments-with-missing-indexes",
 			txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			`DELETE FROM system.comments
       WHERE type = $1
             AND (object_id, sub_id)

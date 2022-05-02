@@ -18,13 +18,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -597,14 +597,14 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 ) sessiondata.InternalExecutorOverride {
 	if ie.sessionDataStack == nil {
 		return sessiondata.InternalExecutorOverride{
-			User:            security.RootUserName(),
+			User:            username.RootUserName(),
 			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
 		}
 	}
 	o := sessiondata.InternalExecutorOverride{}
 	sd := ie.sessionDataStack.Top()
 	if sd.User().Undefined() {
-		o.User = security.RootUserName()
+		o.User = username.RootUserName()
 	}
 	if sd.ApplicationName == "" {
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName

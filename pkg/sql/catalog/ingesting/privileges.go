@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -41,7 +41,7 @@ func GetIngestingDescriptorPrivileges(
 	txn *kv.Txn,
 	descsCol *descs.Collection,
 	desc catalog.Descriptor,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	wroteSchemas map[descpb.ID]catalog.SchemaDescriptor,
 	descCoverage tree.DescriptorCoverage,
@@ -94,7 +94,7 @@ func getIngestingPrivilegesForTableOrSchema(
 	txn *kv.Txn,
 	descsCol *descs.Collection,
 	desc catalog.Descriptor,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	wroteSchemas map[descpb.ID]catalog.SchemaDescriptor,
 	descCoverage tree.DescriptorCoverage,

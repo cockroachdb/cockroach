@@ -13,7 +13,6 @@ package tree
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -42,9 +41,7 @@ func (fn *ResolvableFunctionReference) String() string { return AsString(fn) }
 
 // Resolve checks if the function name is already resolved and
 // resolves it as necessary.
-func (fn *ResolvableFunctionReference) Resolve(
-	searchPath sessiondata.SearchPath,
-) (*FunctionDefinition, error) {
+func (fn *ResolvableFunctionReference) Resolve(searchPath SearchPath) (*FunctionDefinition, error) {
 	switch t := fn.FunctionReference.(type) {
 	case *FunctionDefinition:
 		return t, nil

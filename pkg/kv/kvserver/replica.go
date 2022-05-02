@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1997,7 +1997,7 @@ func (r *Replica) GetExternalStorage(
 
 // GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
 func (r *Replica) GetExternalStorageFromURI(
-	ctx context.Context, uri string, user security.SQLUsername,
+	ctx context.Context, uri string, user username.SQLUsername,
 ) (cloud.ExternalStorage, error) {
 	return r.store.cfg.ExternalStorageFromURI(ctx, uri, user)
 }

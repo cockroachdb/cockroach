@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -232,7 +232,7 @@ func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (boo
 		case *tree.FunctionDefinition:
 			name = t.Name
 		case *tree.UnresolvedName:
-			fn, err := t.ResolveFunction(params.SessionData().SearchPath)
+			fn, err := t.ResolveFunction(&params.SessionData().SearchPath)
 			if err != nil {
 				return false, err
 			}
@@ -2373,7 +2373,7 @@ func newTableDesc(
 // for a given table.
 func newRowLevelTTLScheduledJob(
 	env scheduledjobs.JobSchedulerEnv,
-	owner security.SQLUsername,
+	owner username.SQLUsername,
 	tblID descpb.ID,
 	ttl *catpb.RowLevelTTL,
 ) (*jobs.ScheduledJob, error) {
@@ -2418,7 +2418,7 @@ func CreateRowLevelTTLScheduledJob(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
-	owner security.SQLUsername,
+	owner username.SQLUsername,
 	tblID descpb.ID,
 	ttl *catpb.RowLevelTTL,
 ) (*jobs.ScheduledJob, error) {

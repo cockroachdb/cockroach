@@ -44,9 +44,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/security",
-        "//pkg/sql/catalog/catconstants",
+        "//pkg/security/username",
         "//pkg/sql/privilege",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",
@@ -60,7 +60,7 @@ go_test(
     deps = [
         ":catpb",
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/catid",

@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
@@ -153,14 +153,14 @@ func readMysqlCreateFrom(
 		expectedParentID,
 	).Scan(&expectedSchemaID)
 	expectedParent := dbdesc.NewInitial(
-		expectedParentID, "test", security.RootUserName(),
+		expectedParentID, "test", username.RootUserName(),
 		dbdesc.WithPublicSchemaID(expectedSchemaID),
 	)
 
 	p := sql.FakeJobExecContext{ExecutorConfig: &execCfg}
 
 	tbl, err := readMysqlCreateTable(context.Background(), f, testEvalCtx, &p, id, expectedParent,
-		name, fks, map[descpb.ID]int64{}, security.RootUserName(), walltime)
+		name, fks, map[descpb.ID]int64{}, username.RootUserName(), walltime)
 	if err != nil {
 		t.Fatal(err)
 	}

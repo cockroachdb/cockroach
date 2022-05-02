@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
@@ -76,7 +76,7 @@ func TestTenantUpgrade(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	connectToTenant := func(t *testing.T, addr string) (_ *gosql.DB, cleanup func()) {
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, addr, "Tenant", url.User(security.RootUser))
+		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, addr, "Tenant", url.User(username.RootUser))
 		tenantDB, err := gosql.Open("postgres", pgURL.String())
 		require.NoError(t, err)
 		return tenantDB, func() {
@@ -228,7 +228,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		tenant, err := tc.Server(0).StartTenant(ctx, *tenantInfo.tenantArgs)
 		require.NoError(t, err)
 		tenantInfo.tenantArgs.Existing = true
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(security.RootUser))
+		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(username.RootUser))
 		tenantDB, err := gosql.Open("postgres", pgURL.String())
 		require.NoError(t, err)
 		return tenantDB, func() {
@@ -396,7 +396,7 @@ func TestTenantSystemConfigUpgrade(t *testing.T) {
 	hostDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
 	defer tc.Stopper().Stop(ctx)
 	connectToTenant := func(t *testing.T, addr string) (_ *gosql.DB, cleanup func()) {
-		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, addr, "Tenant", url.User(security.RootUser))
+		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, addr, "Tenant", url.User(username.RootUser))
 		tenantDB, err := gosql.Open("postgres", pgURL.String())
 		require.NoError(t, err)
 		return tenantDB, func() {

@@ -47,7 +47,7 @@ func TestResolveFunction(t *testing.T) {
 			t.Fatalf("%s does not parse to a tree.FuncExpr", tc.in)
 		}
 		q := f.Func
-		_, err = q.Resolve(searchPath)
+		_, err = q.Resolve(&searchPath)
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)

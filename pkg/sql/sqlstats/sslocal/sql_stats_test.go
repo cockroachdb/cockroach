@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -662,7 +662,7 @@ func TestUnprivilegedUserReset(t *testing.T) {
 		"test-reset-sql-stats-as-non-admin-user",
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: security.MakeSQLUsernameFromPreNormalizedString("nonAdminUser"),
+			User: username.MakeSQLUsernameFromPreNormalizedString("nonAdminUser"),
 		},
 		"SELECT crdb_internal.reset_sql_stats()",
 	)

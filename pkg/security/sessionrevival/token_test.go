@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -30,7 +30,7 @@ func timestampProto(t *testing.T, ts time.Time) *pbtypes.Timestamp {
 
 func TestValidatePayloadContents(t *testing.T) {
 	now := timeutil.Now().Add(-1 * time.Second)
-	username := security.MakeSQLUsernameFromPreNormalizedString("testuser")
+	username := username.MakeSQLUsernameFromPreNormalizedString("testuser")
 	testCases := []struct {
 		description string
 		payload     *sessiondatapb.SessionRevivalToken_Payload

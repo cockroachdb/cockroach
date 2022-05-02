@@ -14,7 +14,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",

@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -82,7 +82,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	}
 
 	firstPgURL, firstServerConnCleanup := sqlutils.PGUrl(
-		t, firstServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
+		t, firstServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer firstServerConnCleanup()
 
 	firstServerSQLConn, err := gosql.Open("postgres", firstPgURL.String())
@@ -141,7 +141,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	secondLocalStatsReader := secondServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
 	secondPgURL, secondServerConnCleanup := sqlutils.PGUrl(
-		t, secondServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
+		t, secondServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer secondServerConnCleanup()
 
 	secondServerSQLConn, err := gosql.Open("postgres", secondPgURL.String())

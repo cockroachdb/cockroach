@@ -18,11 +18,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -152,7 +152,7 @@ func collectCombinedStatements(
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-by-interval", nil,
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		}, query, args...)
 
 	if err != nil {
@@ -264,7 +264,7 @@ func collectCombinedTransactions(
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-txns-by-interval", nil,
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		}, query, args...)
 
 	if err != nil {
@@ -476,7 +476,7 @@ func getTotalStatementDetails(
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-total", nil,
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		}, query, args...)
 
 	if err != nil {
@@ -525,7 +525,7 @@ func getTotalStatementDetails(
 		tree.ConsoleLineWidth, tree.PrettyAlignAndDeindent, tree.UpperCase)
 	row, err = ie.QueryRowEx(ctx, "combined-stmts-details-format-query", nil,
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		}, query, args...)
 
 	if err != nil {
@@ -570,7 +570,7 @@ func getStatementDetailsPerAggregatedTs(
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp", nil,
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		}, query, args...)
 
 	if err != nil {
@@ -645,7 +645,7 @@ func getExplainPlanFromGist(ctx context.Context, ie *sql.InternalExecutor, planG
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-get-explain-plan", nil,
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		}, query, args...)
 
 	if err != nil {
@@ -699,7 +699,7 @@ func getStatementDetailsPerPlanHash(
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash", nil,
 		sessiondata.InternalExecutorOverride{
-			User: security.NodeUserName(),
+			User: username.NodeUserName(),
 		}, query, args...)
 
 	if err != nil {

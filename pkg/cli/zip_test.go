@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -498,7 +498,7 @@ func TestZipRetries(t *testing.T) {
 
 		sqlURL := url.URL{
 			Scheme:   "postgres",
-			User:     url.User(security.RootUser),
+			User:     url.User(username.RootUser),
 			Host:     s.ServingSQLAddr(),
 			RawQuery: "sslmode=disable",
 		}

@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -27,7 +27,7 @@ import (
 // Base config defaults.
 const (
 	defaultInsecure = false
-	defaultUser     = security.RootUser
+	defaultUser     = username.RootUser
 	httpScheme      = "http"
 	httpsScheme     = "https"
 
@@ -170,7 +170,7 @@ type Config struct {
 
 	// User running this process. It could be the user under which
 	// the server is running or the user passed in client calls.
-	User security.SQLUsername
+	User username.SQLUsername
 
 	// Addr is the address the server is listening on.
 	Addr string
@@ -256,7 +256,7 @@ func (*Config) HistogramWindowInterval() time.Duration {
 // This is also used in tests to reset global objects.
 func (cfg *Config) InitDefaults() {
 	cfg.Insecure = defaultInsecure
-	cfg.User = security.MakeSQLUsernameFromPreNormalizedString(defaultUser)
+	cfg.User = username.MakeSQLUsernameFromPreNormalizedString(defaultUser)
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr

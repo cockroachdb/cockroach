@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/errors"
@@ -78,7 +78,7 @@ func (e *externalStorageBuilder) makeExternalStorage(
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
-	ctx context.Context, uri string, user security.SQLUsername,
+	ctx context.Context, uri string, user username.SQLUsername,
 ) (cloud.ExternalStorage, error) {
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -31,13 +32,17 @@ func (b buildCtx) SemaCtx() *tree.SemaContext {
 func newSemaCtx(d Dependencies) *tree.SemaContext {
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.Annotations = nil
-	semaCtx.SearchPath = d.SessionData().SearchPath
+	semaCtx.SearchPath = &d.SessionData().SearchPath
 	if d.ClusterSettings().Version.IsActive(context.Background(), clusterversion.IncrementalBackupSubdir) {
-		semaCtx.IntervalStyleEnabled = true
-		semaCtx.DateStyleEnabled = true
+		semaCtx.CastSessionOptions = cast.SessionOptions{
+			IntervalStyleEnabled: true,
+			DateStyleEnabled:     true,
+		}
 	} else {
-		semaCtx.IntervalStyleEnabled = d.SessionData().IntervalStyleEnabled
-		semaCtx.DateStyleEnabled = d.SessionData().DateStyleEnabled
+		semaCtx.CastSessionOptions = cast.SessionOptions{
+			IntervalStyleEnabled: d.SessionData().IntervalStyleEnabled,
+			DateStyleEnabled:     d.SessionData().DateStyleEnabled,
+		}
 	}
 	semaCtx.TypeResolver = d.CatalogReader()
 	semaCtx.TableNameResolver = d.CatalogReader()
