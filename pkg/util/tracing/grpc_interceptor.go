@@ -13,7 +13,6 @@ package tracing
 import (
 	"context"
 	"io"
-	"runtime"
 	"strings"
 	"sync/atomic"
 
@@ -356,12 +355,12 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 			clientSpan.Finish()
 			return cs, err
 		}
-		return newTracingClientStream(cs, method, desc, clientSpan), nil
+		return newTracingClientStream(ctx, cs, desc, clientSpan), nil
 	}
 }
 
 func newTracingClientStream(
-	cs grpc.ClientStream, method string, desc *grpc.StreamDesc, clientSpan *Span,
+	ctx context.Context, cs grpc.ClientStream, desc *grpc.StreamDesc, clientSpan *Span,
 ) grpc.ClientStream {
 	finishChan := make(chan struct{})
 
@@ -386,26 +385,21 @@ func newTracingClientStream(
 		case <-finishChan:
 			// The client span is being finished by another code path; hence, no
 			// action is necessary.
-		case <-cs.Context().Done():
-			finishFunc(nil)
+		case <-ctx.Done():
+			// A streaming RPC can be finished by the caller cancelling the ctx. If
+			// the ctx is cancelled, the caller doesn't necessarily need to interact
+			// with the stream anymore (see [1]), so finishChan might never be
+			// signaled). Thus, we listen for ctx cancellation and finish the span.
+			//
+			// [1] https://pkg.go.dev/google.golang.org/grpc#ClientConn.NewStream
+			finishFunc(nil /* err */)
 		}
 	}()
-	otcs := &tracingClientStream{
+	return &tracingClientStream{
 		ClientStream: cs,
 		desc:         desc,
 		finishFunc:   finishFunc,
 	}
-
-	// The `ClientStream` interface allows one to omit calling `Recv` if it's
-	// known that the result will be `io.EOF`. See
-	// http://stackoverflow.com/q/42915337
-	// In such cases, there's nothing that triggers the span to finish. We,
-	// therefore, set a finalizer so that the span and the context goroutine will
-	// at least be cleaned up when the garbage collector is run.
-	runtime.SetFinalizer(otcs, func(otcs *tracingClientStream) {
-		otcs.finishFunc(nil)
-	})
-	return otcs
 }
 
 type tracingClientStream struct {
