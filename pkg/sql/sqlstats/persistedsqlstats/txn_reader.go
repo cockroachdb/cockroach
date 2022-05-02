@@ -44,19 +44,14 @@ func (s *PersistedSQLStats) IterateTransactionStats(
 	memIter := newMemTxnStatsIterator(s.SQLStats, options, curAggTs, aggInterval)
 
 	var persistedIter sqlutil.InternalRows
-	var colCnt int
-	persistedIter, colCnt, err = s.persistedTxnStatsIter(ctx, options)
+	persistedIter, err = s.persistedTxnStatsIter(ctx, options)
 	if err != nil {
 		return err
 	}
+	combinedIter := NewCombinedTxnStatsIterator(memIter, &txnStatsWrapper{rows: persistedIter})
 	defer func() {
-		closeError := persistedIter.Close()
-		if closeError != nil {
-			err = errors.CombineErrors(err, closeError)
-		}
+		err = errors.CombineErrors(err, combinedIter.Close())
 	}()
-
-	combinedIter := NewCombinedTxnStatsIterator(memIter, persistedIter, colCnt)
 
 	for {
 		var ok bool
@@ -80,27 +75,26 @@ func (s *PersistedSQLStats) IterateTransactionStats(
 
 func (s *PersistedSQLStats) persistedTxnStatsIter(
 	ctx context.Context, options *sqlstats.IteratorOptions,
-) (iter sqlutil.InternalRows, expectedColCnt int, err error) {
-	query, expectedColCnt := s.getFetchQueryForTxnStatsTable(options)
+) (sqlutil.InternalRows, error) {
 
 	persistedIter, err := s.cfg.InternalExecutor.QueryIteratorEx(
 		ctx,
 		"read-txn-stats",
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
-		query,
+		s.getFetchQueryForTxnStatsTable(options),
 	)
 
 	if err != nil {
-		return nil /* iter */, 0 /* expectedColCnt */, err
+		return nil, err
 	}
 
-	return persistedIter, expectedColCnt, err
+	return persistedIter, err
 }
 
 func (s *PersistedSQLStats) getFetchQueryForTxnStatsTable(
 	options *sqlstats.IteratorOptions,
-) (query string, colCnt int) {
+) (query string) {
 	selectedColumns := []string{
 		"aggregated_ts",
 		"fingerprint_id",
@@ -134,7 +128,7 @@ FROM
 
 	query = fmt.Sprintf("%s ORDER BY %s", query, strings.Join(orderByColumns, ","))
 
-	return query, len(selectedColumns)
+	return query
 }
 
 func rowToTxnStats(row tree.Datums) (*roachpb.CollectedTransactionStatistics, error) {
