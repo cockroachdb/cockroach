@@ -378,22 +378,8 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 					j.Progress().Progress, jobID)
 			}
 			// Job has been signaled to complete.
-			if !sp.StreamIngest.CutoverTime.IsEmpty() {
-				// Sanity check that the requested cutover time is less than equal to
-				// the resolved ts recorded in the job progress. This should already
-				// have been enforced when the cutover was signaled via the builtin.
-				// TODO(adityamaru): Remove this when we allow users to specify a
-				// cutover time in the future.
-				resolvedTimestamp := progress.GetHighWater()
-				if resolvedTimestamp == nil {
-					return errors.AssertionFailedf("cutover has been requested before job %d has had a chance to"+
-						" record a resolved ts", jobID)
-				}
-				if resolvedTimestamp.Less(sp.StreamIngest.CutoverTime) {
-					return errors.AssertionFailedf("requested cutover time %s is before the resolved time %s recorded"+
-						" in job %d", sp.StreamIngest.CutoverTime.String(), resolvedTimestamp.String(),
-						jobID)
-				}
+			if resolvedTimestamp := progress.GetHighWater(); !sp.StreamIngest.CutoverTime.IsEmpty() &&
+				resolvedTimestamp != nil && sp.StreamIngest.CutoverTime.Less(*resolvedTimestamp) {
 				sip.cutoverCh <- struct{}{}
 				return nil
 			}

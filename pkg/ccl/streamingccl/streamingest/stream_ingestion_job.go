@@ -55,19 +55,6 @@ func completeStreamIngestion(
 		return errors.Newf("job %d: not of expected type StreamIngest", streamID)
 	}
 
-	// Check that the supplied cutover time is a valid one.
-	// TODO(adityamaru): This will change once we allow a future cutover time to
-	// be specified.
-	hw := progress.GetHighWater()
-	if hw == nil || hw.Less(cutoverTimestamp) {
-		var highWaterTimestamp hlc.Timestamp
-		if hw != nil {
-			highWaterTimestamp = *hw
-		}
-		return errors.Newf("cannot cutover to a timestamp %s that is after the latest resolved time"+
-			" %s for job %d", cutoverTimestamp.String(), highWaterTimestamp.String(), streamID)
-	}
-
 	// Reject setting a cutover time, if an earlier request to cutover has already
 	// been set.
 	// TODO(adityamaru): This should change in the future, a user should be
