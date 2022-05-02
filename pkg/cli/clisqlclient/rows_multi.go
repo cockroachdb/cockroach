@@ -91,23 +91,33 @@ func (r *sqlRowsMultiResultSet) Next(values []driver.Value) error {
 			len(values),
 		)
 	}
-	rawVals := make([]interface{}, len(values))
-	for i := range rawVals {
-		err := r.connInfo.Scan(
-			rd.FieldDescriptions()[i].DataTypeOID,
-			rd.FieldDescriptions()[i].Format,
-			rd.Values()[i],
-			&rawVals[i],
-		)
-		if err != nil {
-			return pgx.ScanArgError{ColumnIndex: i, Err: err}
-		}
-	}
-	for i, v := range rawVals {
-		if b, ok := (v).([]byte); ok {
+	for i := range values {
+		if dt, ok := r.connInfo.DataTypeForOID(rd.FieldDescriptions()[i].DataTypeOID); !ok || strings.HasPrefix(dt.Name, "_") {
+			// User-defined types and array types are all decoded as raw bytes.
+			var b []byte
+			err := r.connInfo.Scan(
+				rd.FieldDescriptions()[i].DataTypeOID,
+				rd.FieldDescriptions()[i].Format,
+				rd.Values()[i],
+				&b,
+			)
+			if err != nil {
+				return pgx.ScanArgError{ColumnIndex: i, Err: err}
+			}
 			// Copy byte slices as per the comment on Rows.Next.
 			values[i] = append([]byte{}, b...)
 		} else {
+			// For all other SQL types, let pgconn figure out the go type.
+			var v interface{}
+			err := r.connInfo.Scan(
+				rd.FieldDescriptions()[i].DataTypeOID,
+				rd.FieldDescriptions()[i].Format,
+				rd.Values()[i],
+				&v,
+			)
+			if err != nil {
+				return pgx.ScanArgError{ColumnIndex: i, Err: err}
+			}
 			values[i] = v
 		}
 	}
