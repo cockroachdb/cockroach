@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1657,7 +1658,8 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, m *pebble.Metrics) {
 	// so smooth out what is being removed by compactions.
 	io.smoothedBytesRemoved =
 		int64(alpha*float64(bytesRemoved) + (1-alpha)*float64(io.smoothedBytesRemoved))
-	// admitted represents what we actually admitted.
+	// admitted represents the number of requests (i.e. BatchRequests) we actually admitted
+	// over the current interval.
 	var admitted uint64
 	doLog := true
 	if admittedCount < io.admittedCount {
@@ -1722,11 +1724,17 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, m *pebble.Metrics) {
 			io.totalTokens = int64(io.smoothedNumAdmit)
 		}
 		if doLog {
+			avgAdded := bytesAdded / int64(admitted)
 			log.Infof(ctx,
-				"IO overload on store %d (files %d, sub-levels %d): admitted: %d, added: %d, "+
-					"removed (%d, %d), admit: (%f, %d)",
-				io.storeID, m.Levels[0].NumFiles, m.Levels[0].Sublevels, admitted, bytesAdded,
-				bytesRemoved, io.smoothedBytesRemoved, numAdmit, io.totalTokens)
+				"IO overload on s%d (%d ssts, %d L0 sub-levels): "+
+					"added %s (n=%d, avg=%s), "+
+					"removed %s (smoothed from %s), "+
+					"admitting %d tokens (smoothed from %d)",
+				io.storeID, m.Levels[0].NumFiles, m.Levels[0].Sublevels,
+				humanizeutil.IBytes(bytesAdded), humanizeutil.Count(admitted), humanizeutil.IBytes(avgAdded),
+				humanizeutil.IBytes(io.smoothedBytesRemoved), humanizeutil.IBytes(bytesRemoved),
+				humanizeutil.Count(uint64(io.totalTokens)), humanizeutil.Count(uint64(numAdmit)),
+			)
 		}
 	} else {
 		// Under the threshold. Maintain a smoothedNumAdmit so that it is not 0
