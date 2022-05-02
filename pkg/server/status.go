@@ -2317,7 +2317,7 @@ type hotRangeReportMeta struct {
 func (s *statusServer) HotRangesV2(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponseV2, error) {
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 
