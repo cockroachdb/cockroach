@@ -19,6 +19,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_redact//:redact",
     ],
@@ -36,6 +37,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/syncutil",
@@ -43,6 +45,7 @@ go_test(
         "//pkg/util/tracing",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
 )
