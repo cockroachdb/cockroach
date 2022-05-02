@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -23,11 +24,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -445,11 +448,11 @@ func TestIOLoadListener(t *testing.T) {
 
 			case "prep-admission-stats":
 				req.stats = storeAdmissionStats{
-					admittedCount:          0,
-					admittedWithBytesCount: 0,
-					admittedBytes:          0,
-					ingestedBytes:          0,
-					ingestedIntoL0Bytes:    0,
+					admittedCount:            0,
+					admittedWithBytesCount:   0,
+					admittedBytes:            0,
+					ingestedBytes:            0,
+					ingestedAccountedL0Bytes: 0,
 				}
 				d.ScanArgs(t, "admitted", &req.stats.admittedCount)
 				if d.HasArg("admitted-bytes") {
@@ -459,7 +462,7 @@ func TestIOLoadListener(t *testing.T) {
 					d.ScanArgs(t, "ingested-bytes", &req.stats.ingestedBytes)
 				}
 				if d.HasArg("ingested-into-l0") {
-					d.ScanArgs(t, "ingested-into-l0", &req.stats.ingestedIntoL0Bytes)
+					d.ScanArgs(t, "ingested-into-l0", &req.stats.ingestedAccountedL0Bytes)
 				}
 				return fmt.Sprintf("%+v", req.stats)
 
@@ -482,13 +485,7 @@ func TestIOLoadListener(t *testing.T) {
 				ioll.pebbleMetricsTick(ctx, &metrics)
 				// Do the ticks until just before next adjustment.
 				var buf strings.Builder
-				fmt.Fprintf(&buf, "admitted: %d, bytes: %d, added-bytes: %d,\nsmoothed-removed: %d, "+
-					"smoothed-byte-tokens: %d, smoothed-bytes-unaccounted-per-work: %d,\ntokens: %s, tokens-allocated: %s\n",
-					ioll.admissionStats.admittedCount,
-					ioll.l0Bytes, ioll.l0AddedBytes, ioll.smoothedBytesRemoved,
-					int64(ioll.smoothedNumByteTokens), int64(ioll.smoothedPerWorkUnaccountedBytesAdded),
-					tokensForIntervalToString(ioll.totalTokens),
-					tokensFor1sToString(ioll.tokensAllocated))
+				fmt.Fprintln(&buf, redact.StringWithoutMarkers(&ioll.adjustTokensResult))
 				if req.buf.Len() > 0 {
 					fmt.Fprintf(&buf, "%s\n", req.buf.String())
 					req.buf.Reset()
@@ -517,10 +514,10 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	}
 	ioll.mu.Mutex = &syncutil.Mutex{}
 	ioll.mu.kvGranter = kvGranter
-	// Bug 1: overflow when totalTokens is too large.
+	// Bug 1: overflow when totalNumByteTokens is too large.
 	for i := int64(0); i < adjustmentInterval; i++ {
-		// Override the totalTokens manually to trigger the overflow bug.
-		ioll.totalTokens = math.MaxInt64 - i
+		// Override the totalNumByteTokens manually to trigger the overflow bug.
+		ioll.totalNumByteTokens = math.MaxInt64 - i
 		ioll.tokensAllocated = 0
 		for j := 0; j < adjustmentInterval; j++ {
 			ioll.allocateTokensTick()
@@ -545,6 +542,67 @@ func (g *testGranterNonNegativeTokens) setAvailableIOTokensLocked(tokens int64) 
 	require.LessOrEqual(g.t, int64(0), tokens)
 }
 
+func TestAdjustTokensInnerAndLogging(t *testing.T) {
+	const mb = 12 + 1<<20
+	prevAdmStats := storeAdmissionStats{
+		admittedCount:            100,
+		admittedWithBytesCount:   80,
+		admittedBytes:            420 * mb,
+		ingestedBytes:            200 * mb,
+		ingestedAccountedL0Bytes: 100 * mb,
+	}
+	admStats := prevAdmStats
+	admStats.admittedCount = 721
+	admStats.admittedWithBytesCount += 123
+	admStats.admittedBytes += 371 * mb
+	admStats.ingestedBytes += 193 * mb
+	admStats.ingestedAccountedL0Bytes += 73 * mb
+	tests := []struct {
+		name           redact.SafeString
+		prev           ioLoadListenerState
+		admissionStats storeAdmissionStats
+		l0Metrics      pebble.LevelMetrics
+	}{
+		{
+			name: "zero",
+		},
+		{
+			name: "real-numbers",
+			prev: ioLoadListenerState{
+				cumAdmissionStats:                    prevAdmStats,
+				cumL0AddedBytes:                      1402 * mb,
+				curL0Bytes:                           400 * mb,
+				smoothedIntL0CompactedBytes:          47 * mb,
+				smoothedIntPerWorkUnaccountedL0Bytes: 2204, // 2kb
+				smoothedIntL0BytesIngestFraction:     0.3,
+				smoothedTotalNumByteTokens:           201 * mb,
+				totalNumByteTokens:                   int64(201 * mb),
+			},
+			admissionStats: admStats,
+			l0Metrics: pebble.LevelMetrics{
+				Sublevels:     27,
+				NumFiles:      195,
+				Size:          900 * mb,
+				BytesIngested: 1801 * mb,
+				BytesFlushed:  178 * mb,
+			},
+		},
+	}
+	ctx := context.Background()
+	var buf redact.StringBuilder
+	for _, tt := range tests {
+		buf.Printf("%s:\n", tt.name)
+		res := (*ioLoadListener)(nil).adjustTokensInner(
+			ctx, tt.prev, tt.admissionStats, tt.l0Metrics, 100, 10)
+		buf.Printf("%s\n", res)
+	}
+	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(testutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))
+}
+
+// TODO(sumeer):
+// - Test metrics
+// - Test GrantCoordinator with multi-tenant configurations
+
 // TestBadIOLoadListenerStats tests that bad stats (non-monotonic cumulative
 // stats and negative values) don't cause panics or tokens to be negative.
 func TestBadIOLoadListenerStats(t *testing.T) {
@@ -563,7 +621,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		req.stats.admittedWithBytesCount = rand.Uint64()
 		req.stats.admittedBytes = rand.Uint64()
 		req.stats.ingestedBytes = rand.Uint64()
-		req.stats.ingestedIntoL0Bytes = rand.Uint64()
+		req.stats.ingestedAccountedL0Bytes = rand.Uint64()
 	}
 	kvGranter := &testGranterNonNegativeTokens{t: t}
 	st := cluster.MakeTestingClusterSettings()
@@ -578,16 +636,12 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		ioll.pebbleMetricsTick(ctx, &m)
 		for j := 0; j < adjustmentInterval; j++ {
 			ioll.allocateTokensTick()
-			require.LessOrEqual(t, int64(0), ioll.smoothedBytesRemoved)
-			require.LessOrEqual(t, float64(0), ioll.smoothedPerWorkUnaccountedBytesAdded)
-			require.LessOrEqual(t, float64(0), ioll.smoothedFractionOfIngestIntoL0)
-			require.LessOrEqual(t, float64(0), ioll.smoothedNumByteTokens)
-			require.LessOrEqual(t, int64(0), ioll.totalTokens)
+			require.LessOrEqual(t, int64(0), ioll.smoothedIntL0CompactedBytes)
+			require.LessOrEqual(t, float64(0), ioll.smoothedIntPerWorkUnaccountedL0Bytes)
+			require.LessOrEqual(t, float64(0), ioll.smoothedIntL0BytesIngestFraction)
+			require.LessOrEqual(t, float64(0), ioll.smoothedTotalNumByteTokens)
+			require.LessOrEqual(t, int64(0), ioll.totalNumByteTokens)
 			require.LessOrEqual(t, int64(0), ioll.tokensAllocated)
 		}
 	}
 }
-
-// TODO(sumeer):
-// - Test metrics
-// - Test GrantCoordinator with multi-tenant configurations

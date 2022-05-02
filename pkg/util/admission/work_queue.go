@@ -1648,7 +1648,7 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, ingestedIntoL0Bytes
 			q.mu.stats.admittedBytes += uint64(h.writeBytes)
 			if h.ingestRequest {
 				q.mu.stats.ingestedBytes += uint64(h.writeBytes)
-				q.mu.stats.ingestedIntoL0Bytes += uint64(ingestedIntoL0Bytes)
+				q.mu.stats.ingestedAccountedL0Bytes += uint64(ingestedIntoL0Bytes)
 			}
 		}
 		q.mu.Unlock()
