@@ -208,6 +208,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:show_backup.html",
   "//docs/generated/sql/bnf:show_cluster_setting.html",
   "//docs/generated/sql/bnf:show_columns.html",
+  "//docs/generated/sql/bnf:show_commit_timestamp.html",
   "//docs/generated/sql/bnf:show_constraints.html",
   "//docs/generated/sql/bnf:show_create.html",
   "//docs/generated/sql/bnf:show_create_external_connections.html",

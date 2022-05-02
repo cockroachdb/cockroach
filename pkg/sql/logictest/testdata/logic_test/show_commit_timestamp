@@ -1,0 +1,345 @@
+statement ok
+create table foo (i int primary key)
+
+subtest basic
+
+statement ok
+begin;
+insert into foo values (1)
+
+let $commit_ts
+show commit timestamp
+
+statement ok
+commit
+
+let $commit_ts_after_txn
+show commit timestamp
+
+query B
+select $commit_ts_after_txn = $commit_ts
+----
+true
+
+query I
+select * from foo where crdb_internal_mvcc_timestamp = $commit_ts
+----
+1
+
+subtest after_release_cockroach_restart
+
+statement ok
+begin;
+savepoint cockroach_restart;
+insert into foo values (2);
+release cockroach_restart
+
+let $commit_ts
+show commit timestamp
+
+let $commit_ts_again
+show commit timestamp
+
+statement ok
+commit
+
+let $commit_ts_after_txn
+show commit timestamp
+
+query BB
+select $commit_ts_after_txn = $commit_ts, $commit_ts = $commit_ts_again
+----
+true  true
+
+query I
+select * from foo where crdb_internal_mvcc_timestamp = $commit_ts
+----
+2
+
+subtest after_release_cockroach_restart_txn
+
+statement ok
+begin;
+savepoint cockroach_restart;
+insert into foo values (3);
+release cockroach_restart;
+commit
+
+let $commit_ts
+show commit timestamp
+
+let $commit_ts_again
+show commit timestamp
+
+query BB
+select $commit_ts_after_txn = $commit_ts, $commit_ts = $commit_ts_again
+----
+false  true
+
+query I
+select * from foo where crdb_internal_mvcc_timestamp = $commit_ts
+----
+3
+
+subtest implicit_txn
+
+statement ok
+insert into foo values (4);
+
+let $commit_ts
+show commit timestamp
+
+let $commit_ts_again
+show commit timestamp
+
+query I
+select * from foo where crdb_internal_mvcc_timestamp = $commit_ts
+----
+4
+
+query I
+select * from foo where crdb_internal_mvcc_timestamp = $commit_ts_again
+----
+4
+
+query I
+select * from foo where crdb_internal_mvcc_timestamp = ($commit_ts) + 0.0000000001
+----
+
+query I
+select * from foo where crdb_internal_mvcc_timestamp = ($commit_ts) + 1
+----
+
+subtest invalid_transaction_state
+
+statement ok
+begin;
+rollback
+
+statement error pgcode 25000 no previous transaction
+show commit timestamp
+
+statement ok
+insert into foo values (5)
+
+statement ok
+show commit timestamp
+
+statement error pgcode 22012 division by zero
+begin;
+select 1/0;
+
+statement error pgcode 25P02 current transaction is aborted, commands ignored until end of transaction block
+show commit timestamp
+
+statement ok
+rollback
+
+statement error pgcode 25000 no previous transaction
+show commit timestamp
+
+subtest multistatement_explicit_transaction
+
+let $commit_ts
+insert into foo values (6);
+insert into foo values (7);
+show commit timestamp
+
+query I
+select * from foo where crdb_internal_mvcc_timestamp = $commit_ts order by i
+----
+6
+7
+
+statement error pgcode 25000 cannot use SHOW COMMIT TIMESTAMP in multi-statement implicit transaction
+insert into foo values (8);
+show commit timestamp;
+insert into foo values (9)
+
+
+# Note that this will become two transaction and we'll get the commit timestamp
+# of the second one.
+let $commit_ts
+insert into foo values(8);
+insert into foo values(9);
+begin;
+insert into foo values(10);
+commit;
+insert into foo values(11);
+insert into foo values (12);
+show commit timestamp
+
+query I
+select * from foo where crdb_internal_mvcc_timestamp = $commit_ts order by i
+----
+11
+12
+
+# Ensure that show commit timestamp can be used in upgraded explicit
+# transactions.
+
+let $commit_ts
+insert into foo values(13);
+insert into foo values(14);
+begin;
+insert into foo values(15);
+show commit timestamp;
+
+# Despite this error, the transaction has committed at this point and we
+# have the causality token.
+
+statement error pgcode 25000 current transaction is committed, commands ignored until end of transaction block
+insert into foo values(16);
+
+statement ok
+commit
+
+query I
+select * from foo where crdb_internal_mvcc_timestamp = $commit_ts order by i
+----
+13
+14
+15
+
+subtest udf
+
+statement error pgcode 0A000 unimplemented: SHOW COMMIT TIMESTAMP usage inside a function definition
+create function f() returns decimal volatile language sql as $$ show commit timestamp $$;
+
+subtest prepare
+
+# You cannot prepare SHOW COMMIT TIMESTAMP because it is not preparable.
+
+statement error pgcode 42601 at or near "commit": syntax error
+prepare s as show commit timestamp;
+
+subtest cte
+
+# You cannot use SHOW COMMIT TIMESTAMP because it is not a row source, nor
+# is it preparable, so it cannot be used in a CTE or square brackets.
+
+statement error pgcode 42601 at or near "commit": syntax error
+with committs as (show commit timestamp) select * from committs;
+
+statement error pgcode 42601 at or near "commit": syntax error
+select * from [show commit timestamp]
+
+# Test that jobs still run and are waited for as a part of committing
+# internally.
+subtest ddl
+
+statement ok
+drop table foo;
+create table foo (i int primary key)
+
+statement ok
+insert into foo values (1)
+
+statement ok
+begin;
+alter table foo add column j int default 42
+
+let $commit_ts
+show commit timestamp
+
+statement ok
+commit;
+
+query II
+select * from foo
+----
+1  42
+
+# Note that the causality token of the DDL is the timestamp when the user
+# transaction commits, it does not tell you about the timestamp when the
+# asynchronous schema change job[s] complete.
+query I
+select * from foo as of system time $commit_ts
+----
+1
+
+statement ok
+drop table foo;
+create table foo (i int primary key);
+insert into foo values (1);
+
+statement ok
+begin;
+alter table foo add check (i <= 0)
+
+# Verify that SHOW COMMIT TIMESTAMP will wait for the schema changes.
+
+statement error pgcode XXA00 transaction committed but schema change aborted with error: \(23514\): validation of CHECK "i <= 0:::INT8" failed on row: i=1
+show commit timestamp
+
+statement ok
+rollback;
+drop table foo
+
+# Above we tested that we can issue RELEASE SAVEPOINT cockroach_restart after
+# SHOW COMMIT TIMESTAMP if we had set it up. Here test that it is not allowed
+# if it had not been added.
+subtest disallow_cockroach_restart_without_savepoint
+
+statement ok
+begin;
+show commit timestamp
+
+statement error pgcode 25000 current transaction is committed, commands ignored until end of transaction block
+release savepoint cockroach_restart;
+
+statement ok
+rollback
+
+# Test that the causality token is the same timestamp as ends up on rows,
+# even if the transaction gets pushed.
+subtest causality_token_equals_mvcc_timestamp
+
+user testuser
+
+statement ok
+create table foo (i int primary key);
+
+statement ok
+begin;
+insert into foo values (1), (3);
+
+let $ts1
+show commit timestamp
+
+statement ok
+commit
+
+statement ok
+begin;
+insert into foo values (2), (4);
+
+user root
+
+statement ok
+begin priority high; select * from foo; commit;
+
+user testuser
+
+let $ts2
+show commit timestamp
+
+statement ok
+commit
+
+query IT
+  SELECT i,
+         CASE
+         WHEN ts = $ts1 THEN 'ts1'
+         WHEN ts = $ts2 THEN 'ts2'
+         END
+    FROM (SELECT i, crdb_internal_mvcc_timestamp AS ts FROM foo)
+ORDER BY i ASC;
+----
+1  ts1
+2  ts2
+3  ts1
+4  ts2
+
+statement ok
+drop table foo

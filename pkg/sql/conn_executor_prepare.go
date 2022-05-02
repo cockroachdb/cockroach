@@ -40,7 +40,13 @@ func (ex *connExecutor) execPrepare(
 	// descriptors for type checking. This implicit txn will be open until
 	// the Sync message is handled.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
-		return ex.beginImplicitTxn(ctx, parseCmd.AST)
+		// The one exception is that we must not open a new transaction when
+		// preparing SHOW COMMIT TIMESTAMP. If we did, it would destroy the
+		// information about the previous transaction. We expect to execute
+		// this command in NoTxn.
+		if _, ok := parseCmd.AST.(*tree.ShowCommitTimestamp); !ok {
+			return ex.beginImplicitTxn(ctx, parseCmd.AST)
+		}
 	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
 		if !ex.isAllowedInAbortedTxn(parseCmd.AST) {
 			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
@@ -315,7 +321,12 @@ func (ex *connExecutor) execBind(
 	// SQL EXECUTE command (which also needs to bind and resolve types) is
 	// handled separately in conn_executor_exec.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
-		return ex.beginImplicitTxn(ctx, ps.AST)
+		// The one critical exception is that we must not open a transaction when
+		// executing SHOW COMMIT TIMESTAMP as it would destroy the information
+		// about the previously committed transaction.
+		if _, ok := ps.AST.(*tree.ShowCommitTimestamp); !ok {
+			return ex.beginImplicitTxn(ctx, ps.AST)
+		}
 	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
 		if !ex.isAllowedInAbortedTxn(ps.AST) {
 			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))

@@ -140,6 +140,15 @@ type ExecStmt struct {
 	// LastInBatch indicates if this command contains the last query in a
 	// simple protocol Query message that contains a batch of 1 or more queries.
 	LastInBatch bool
+	// LastInBatchBeforeShowCommitTimestamp indicates that this command contains
+	// the second-to-last query in a simple protocol Query message that contains
+	// a batch of 2 or more queries and the last query is SHOW COMMIT TIMESTAMP.
+	// Detecting this case allows us to treat this command as the LastInBatch
+	// such that the SHOW COMMIT TIMESTAMP statement can return the timestamp of
+	// the transaction which applied to all the other statements in the batch.
+	// Note that SHOW COMMIT TIMESTAMP is not permitted in any other position in
+	// such a multi-statement implicit transaction.
+	LastInBatchBeforeShowCommitTimestamp bool
 }
 
 // command implements the Command interface.
