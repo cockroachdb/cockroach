@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -405,7 +405,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 			userGrants := make(map[string][]string)
 			for _, grant := range details.Grants {
 				switch grant.User {
-				case security.AdminRole, security.RootUser, authenticatedUserNoAdmin:
+				case username.AdminRole, username.RootUser, authenticatedUserNoAdmin:
 					userGrants[grant.User] = append(userGrants[grant.User], grant.Privileges...)
 				default:
 					t.Fatalf("unknown grant to user %s", grant.User)
@@ -413,11 +413,11 @@ func TestAdminAPIDatabases(t *testing.T) {
 			}
 			for u, p := range userGrants {
 				switch u {
-				case security.AdminRole:
+				case username.AdminRole:
 					if !reflect.DeepEqual(p, []string{"ALL"}) {
 						t.Fatalf("privileges %v != expected %v", p, privileges)
 					}
-				case security.RootUser:
+				case username.RootUser:
 					if !reflect.DeepEqual(p, []string{"ALL"}) {
 						t.Fatalf("privileges %v != expected %v", p, privileges)
 					}
@@ -432,7 +432,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			databaseID, err := ts.admin.queryDatabaseID(ctx, security.RootUserName(), testdb)
+			databaseID, err := ts.admin.queryDatabaseID(ctx, username.RootUserName(), testdb)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -679,7 +679,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 				fmt.Sprintf("CREATE STATISTICS test_stats FROM %s.%s", escDBName, tblName),
 			}
 			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
 			defer cleanupGoDB()
 			pgURL.Path = tc.dbName
 			db, err := gosql.Open("postgres", pgURL.String())
@@ -722,8 +722,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			// Verify grants.
 			expGrants := []serverpb.TableDetailsResponse_Grant{
-				{User: security.AdminRole, Privileges: []string{"ALL"}},
-				{User: security.RootUser, Privileges: []string{"ALL"}},
+				{User: username.AdminRole, Privileges: []string{"ALL"}},
+				{User: username.RootUser, Privileges: []string{"ALL"}},
 				{User: "app", Privileges: []string{"DELETE"}},
 				{User: "app", Privileges: []string{"SELECT"}},
 				{User: "app", Privileges: []string{"UPDATE"}},
@@ -800,7 +800,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			tableID, err := ts.admin.queryTableID(ctx, security.RootUserName(), tc.dbName, tc.tblName)
+			tableID, err := ts.admin.queryTableID(ctx, username.RootUserName(), tc.dbName, tc.tblName)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -890,11 +890,11 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	verifyDbZone(s.(*TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
 	verifyTblZone(s.(*TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
 
-	databaseID, err := ts.admin.queryDatabaseID(ctx, security.RootUserName(), "test")
+	databaseID, err := ts.admin.queryDatabaseID(ctx, username.RootUserName(), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	tableID, err := ts.admin.queryTableID(ctx, security.RootUserName(), "test", "tbl")
+	tableID, err := ts.admin.queryTableID(ctx, username.RootUserName(), "test", "tbl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1517,20 +1517,20 @@ func TestAdminAPIJobs(t *testing.T) {
 		status   jobs.Status
 		details  jobspb.Details
 		progress jobspb.ProgressDetails
-		username security.SQLUsername
+		username username.SQLUsername
 		numRuns  int64
 		lastRun  time.Time
 	}{
-		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, security.RootUserName(), 1, time.Time{}},
-		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute)},
-		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 1, time.Time{}},
-		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName(), 2, time.Time{}},
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}},
+		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute)},
+		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, time.Time{}},
+		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, time.Time{}},
 		{5, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, authenticatedUserNameNoAdmin(), 1, time.Time{}},
-		{6, jobs.StatusRunning, jobspb.ImportDetails{}, jobspb.ImportProgress{}, security.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute)},
-		{7, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, security.RootUserName(), 1, time.Time{}},
-		{8, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, security.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute)},
-		{9, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, security.RootUserName(), 2, time.Time{}},
-		{10, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, security.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute)},
+		{6, jobs.StatusRunning, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute)},
+		{7, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 1, time.Time{}},
+		{8, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute)},
+		{9, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, time.Time{}},
+		{10, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute)},
 	}
 	for _, job := range testJobs {
 		payload := jobspb.Payload{UsernameProto: job.username.EncodeProto(), Details: jobspb.WrapPayloadDetails(job.details)}
@@ -1685,19 +1685,19 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 		status       jobs.Status
 		details      jobspb.Details
 		progress     jobspb.ProgressDetails
-		username     security.SQLUsername
+		username     username.SQLUsername
 		numRuns      int64
 		lastRun      time.Time
 		executionLog []*jobspb.RetriableExecutionFailure
 	}{
-		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, security.RootUserName(), 1, time.Time{}, nil},
-		{2, jobs.StatusReverting, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 1, time.Time{}, nil},
-		{3, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 1, now.Add(10 * time.Minute), nil},
-		{4, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName(), 1, now.Add(10 * time.Minute), nil},
-		{5, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 2, time.Time{}, nil},
-		{6, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName(), 2, time.Time{}, nil},
-		{7, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUserName(), 2, now.Add(10 * time.Minute), nil},
-		{8, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUserName(), 2, now.Add(10 * time.Minute), []*jobspb.RetriableExecutionFailure{
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{2, jobs.StatusReverting, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{3, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, now.Add(10 * time.Minute), nil},
+		{4, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 1, now.Add(10 * time.Minute), nil},
+		{5, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 2, time.Time{}, nil},
+		{6, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, time.Time{}, nil},
+		{7, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 2, now.Add(10 * time.Minute), nil},
+		{8, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, now.Add(10 * time.Minute), []*jobspb.RetriableExecutionFailure{
 			{
 				Status:               string(jobs.StatusRunning),
 				ExecutionStartMicros: now.Add(-time.Minute).UnixMicro(),
@@ -2565,40 +2565,40 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 		ie: s.InternalExecutor().(*sql.InternalExecutor),
 	}
 
-	withAdmin, err := security.MakeSQLUsernameFromPreNormalizedStringChecked("withadmin")
+	withAdmin, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withadmin")
 	require.NoError(t, err)
-	withVa, err := security.MakeSQLUsernameFromPreNormalizedStringChecked("withva")
+	withVa, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withva")
 	require.NoError(t, err)
-	withVaRedacted, err := security.MakeSQLUsernameFromPreNormalizedStringChecked("withvaredacted")
+	withVaRedacted, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvaredacted")
 	require.NoError(t, err)
-	withVaAndRedacted, err := security.MakeSQLUsernameFromPreNormalizedStringChecked("withvaandredacted")
+	withVaAndRedacted, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withvaandredacted")
 	require.NoError(t, err)
-	withoutPrivs, err := security.MakeSQLUsernameFromPreNormalizedStringChecked("withoutprivs")
+	withoutPrivs, err := username.MakeSQLUsernameFromPreNormalizedStringChecked("withoutprivs")
 	require.NoError(t, err)
 
 	tests := []struct {
 		name            string
 		checkerFun      func(context.Context) error
-		usernameWantErr map[security.SQLUsername]bool
+		usernameWantErr map[username.SQLUsername]bool
 	}{
 		{
 			"requireViewActivityPermission",
 			underTest.requireViewActivityPermission,
-			map[security.SQLUsername]bool{
+			map[username.SQLUsername]bool{
 				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: false, withoutPrivs: true,
 			},
 		},
 		{
 			"requireViewActivityOrViewActivityRedactedPermission",
 			underTest.requireViewActivityOrViewActivityRedactedPermission,
-			map[security.SQLUsername]bool{
+			map[username.SQLUsername]bool{
 				withAdmin: false, withVa: false, withVaRedacted: false, withVaAndRedacted: false, withoutPrivs: true,
 			},
 		},
 		{
 			"requireViewActivityAndNoViewActivityRedactedPermission",
 			underTest.requireViewActivityAndNoViewActivityRedactedPermission,
-			map[security.SQLUsername]bool{
+			map[username.SQLUsername]bool{
 				withAdmin: false, withVa: false, withVaRedacted: true, withVaAndRedacted: true, withoutPrivs: true,
 			},
 		},

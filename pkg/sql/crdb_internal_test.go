@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -156,7 +156,7 @@ func TestGossipAlertsTable(t *testing.T) {
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"SELECT * FROM crdb_internal.gossip_alerts WHERE store_id = 123")
 	if err != nil {
 		t.Fatal(err)

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -173,7 +173,7 @@ func (b *selectQueryBuilder) run(
 		b.selectOpName,
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User:             security.RootUserName(),
+			User:             username.RootUserName(),
 			QualityOfService: &qosLevel,
 		},
 		q,
@@ -289,7 +289,7 @@ func (b *deleteQueryBuilder) run(
 		b.deleteOpName,
 		txn,
 		sessiondata.InternalExecutorOverride{
-			User:             security.RootUserName(),
+			User:             username.RootUserName(),
 			QualityOfService: &qosLevel,
 		},
 		q,

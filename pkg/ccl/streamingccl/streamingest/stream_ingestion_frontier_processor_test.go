@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -200,7 +200,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			// Create a mock ingestion job.
 			record := jobs.Record{
 				Description: "fake ingestion job",
-				Username:    security.TestUserName(),
+				Username:    username.TestUserName(),
 				Details:     jobspb.StreamIngestionDetails{StreamAddress: "foo"},
 				// We don't use this so it does not matter what we set it too, as long
 				// as it is non-nil.

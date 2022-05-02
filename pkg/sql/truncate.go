@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -397,7 +397,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 	}
 	row, err := p.execCfg.InternalExecutor.QueryRowEx(
 		// Run as Root, since ordinary users can't select from this table.
-		ctx, "count-active-nodes", nil, sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		ctx, "count-active-nodes", nil, sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"SELECT count(*) FROM crdb_internal.kv_node_status")
 	if err != nil || row == nil {
 		return err
@@ -533,7 +533,7 @@ func (p *planner) reassignIndexComments(
 		ctx,
 		"update-table-comments",
 		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		`SELECT count(*) FROM system.comments WHERE object_id = $1 AND type = $2`,
 		table.ID,
 		keys.IndexCommentType,
@@ -550,7 +550,7 @@ func (p *planner) reassignIndexComments(
 				ctx,
 				"update-table-comments",
 				p.txn,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				`UPDATE system.comments SET sub_id=$1 WHERE sub_id=$2 AND object_id=$3 AND type=$4`,
 				new,
 				old,

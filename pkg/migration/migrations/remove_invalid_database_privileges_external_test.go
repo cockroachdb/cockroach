@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -88,8 +88,8 @@ func TestConvertIncompatibleDatabasePrivilegesToDefaultPrivileges(t *testing.T) 
 	var desc descpb.Descriptor
 	require.NoError(t, protoutil.Unmarshal(encoded, &desc))
 
-	testuser := security.MakeSQLUsernameFromPreNormalizedString("testuser")
-	testuser2 := security.MakeSQLUsernameFromPreNormalizedString("testuser2")
+	testuser := username.MakeSQLUsernameFromPreNormalizedString("testuser")
+	testuser2 := username.MakeSQLUsernameFromPreNormalizedString("testuser2")
 	_, dbDesc, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, hlc.Timestamp{WallTime: 1})
 	privilegesForTestuser := dbDesc.Privileges.FindOrCreateUser(testuser)
 	privilegesForTestuser2 := dbDesc.Privileges.FindOrCreateUser(testuser2)

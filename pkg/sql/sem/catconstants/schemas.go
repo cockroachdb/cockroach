@@ -10,12 +10,15 @@
 
 package catconstants
 
-import "github.com/cockroachdb/cockroach/pkg/keys"
+// PublicSchemaID redefines keys.PublicSchemaID to avoid an import. It exists
+// to deal with time-travel queries from moments before the time when all
+// databases other than system were given a public schema.
+const PublicSchemaID = 29
 
 // StaticSchemaIDMapVirtualPublicSchema is a map of statically known schema IDs
 // on versions prior to PublicSchemasWithDescriptors.
 var StaticSchemaIDMapVirtualPublicSchema = map[uint32]string{
-	keys.PublicSchemaID: PublicSchemaName,
+	PublicSchemaID:      PublicSchemaName,
 	PgCatalogID:         PgCatalogName,
 	InformationSchemaID: InformationSchemaName,
 	CrdbInternalID:      CRDBInternalSchemaName,

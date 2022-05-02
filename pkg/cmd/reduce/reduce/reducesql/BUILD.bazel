@@ -22,7 +22,7 @@ go_test(
         ":reducesql",
         "//pkg/base",
         "//pkg/cmd/reduce/reduce",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/testutils/skip",
         "@com_github_jackc_pgx_v4//:pgx",

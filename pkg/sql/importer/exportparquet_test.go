@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/importer"
@@ -113,7 +113,7 @@ func validateParquetFile(
 		"",
 		nil,
 		sessiondata.InternalExecutorOverride{
-			User:     security.RootUserName(),
+			User:     username.RootUserName(),
 			Database: test.dbName,
 		},
 		validationStmt)
@@ -249,7 +249,7 @@ func TestRandomParquetExports(t *testing.T) {
 						"",
 						nil,
 						sessiondata.InternalExecutorOverride{
-							User:     security.RootUserName(),
+							User:     username.RootUserName(),
 							Database: dbName},
 						fmt.Sprintf("SELECT * FROM %s LIMIT 1", tableName))
 					require.NoError(t, err)

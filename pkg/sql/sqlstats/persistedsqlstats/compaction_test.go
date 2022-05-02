@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -151,7 +151,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 				"truncate-stmt-stats",
 				nil,
 				sessiondata.InternalExecutorOverride{
-					User: security.NodeUserName(),
+					User: username.NodeUserName(),
 				},
 				"TRUNCATE system.statement_statistics",
 			)
@@ -161,7 +161,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 				"truncate-txn-stats",
 				nil,
 				sessiondata.InternalExecutorOverride{
-					User: security.NodeUserName(),
+					User: username.NodeUserName(),
 				},
 				"TRUNCATE system.transaction_statistics",
 			)

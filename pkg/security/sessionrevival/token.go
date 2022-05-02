@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -27,7 +28,7 @@ const tokenLifetime = 10 * time.Minute
 // CreateSessionRevivalToken creates a token that can be used to log in
 // the given user.
 func CreateSessionRevivalToken(
-	cm *security.CertificateManager, user security.SQLUsername,
+	cm *security.CertificateManager, user username.SQLUsername,
 ) ([]byte, error) {
 	cert, err := cm.GetTenantSigningCert()
 	if err != nil {
@@ -76,7 +77,7 @@ func CreateSessionRevivalToken(
 // ValidateSessionRevivalToken checks if the given bytes are a valid
 // session revival token for the user.
 func ValidateSessionRevivalToken(
-	cm *security.CertificateManager, user security.SQLUsername, tokenBytes []byte,
+	cm *security.CertificateManager, user username.SQLUsername, tokenBytes []byte,
 ) error {
 	cert, err := cm.GetTenantSigningCert()
 	if err != nil {
@@ -105,7 +106,7 @@ func ValidateSessionRevivalToken(
 }
 
 func validatePayloadContents(
-	payload *sessiondatapb.SessionRevivalToken_Payload, user security.SQLUsername,
+	payload *sessiondatapb.SessionRevivalToken_Payload, user username.SQLUsername,
 ) error {
 	issuedAt, err := pbtypes.TimestampFromProto(payload.IssuedAt)
 	if err != nil {

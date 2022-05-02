@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -122,7 +123,7 @@ func authPassword(
 	b.SetRoleMapper(UseProvidedIdentity)
 	b.SetAuthenticator(func(
 		ctx context.Context,
-		systemIdentity security.SQLUsername,
+		systemIdentity username.SQLUsername,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
@@ -137,7 +138,7 @@ var errExpiredPassword = errors.New("password is expired")
 // behavior constructed by authPassword().
 func passwordAuthenticator(
 	ctx context.Context,
-	systemIdentity security.SQLUsername,
+	systemIdentity username.SQLUsername,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
 	c AuthConn,
@@ -240,7 +241,7 @@ func authScram(
 	b.SetRoleMapper(UseProvidedIdentity)
 	b.SetAuthenticator(func(
 		ctx context.Context,
-		systemIdentity security.SQLUsername,
+		systemIdentity username.SQLUsername,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
@@ -253,7 +254,7 @@ func authScram(
 // behavior constructed by authScram().
 func scramAuthenticator(
 	ctx context.Context,
-	systemIdentity security.SQLUsername,
+	systemIdentity username.SQLUsername,
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
 	c AuthConn,
@@ -417,7 +418,7 @@ func authCert(
 	b.SetRoleMapper(HbaMapper(hbaEntry, identMap))
 	b.SetAuthenticator(func(
 		ctx context.Context,
-		systemIdentity security.SQLUsername,
+		systemIdentity username.SQLUsername,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
@@ -503,7 +504,7 @@ func authAutoSelectPasswordProtocol(
 	b.SetRoleMapper(UseProvidedIdentity)
 	b.SetAuthenticator(func(
 		ctx context.Context,
-		systemIdentity security.SQLUsername,
+		systemIdentity username.SQLUsername,
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
@@ -571,7 +572,7 @@ func authTrust(
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(_ context.Context, _ security.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
+	b.SetAuthenticator(func(_ context.Context, _ username.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
 		return nil
 	})
 	return b, nil
@@ -589,7 +590,7 @@ func authReject(
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(_ context.Context, _ security.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
+	b.SetAuthenticator(func(_ context.Context, _ username.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
 		return errors.New("authentication rejected by configuration")
 	})
 	return b, nil
@@ -608,7 +609,7 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 	) (*AuthBehaviors, error) {
 		b := &AuthBehaviors{}
 		b.SetRoleMapper(UseProvidedIdentity)
-		b.SetAuthenticator(func(ctx context.Context, user security.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
+		b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
 			c.LogAuthInfof(ctx, "session revival token detected; attempting to use it")
 			if !sql.AllowSessionRevival.Get(&execCfg.Settings.SV) || execCfg.Codec.ForSystemTenant() {
 				return errors.New("session revival tokens are not supported on this cluster")

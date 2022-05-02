@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -167,7 +167,7 @@ type Registry struct {
 // subpackage like sqlbase is difficult because of the amount of sql-only
 // stuff that JobExecContext exports. One other choice is to merge this package
 // back into the sql package. There's maybe a better way that I'm unaware of.
-type jobExecCtxMaker func(opName string, user security.SQLUsername) (interface{}, func())
+type jobExecCtxMaker func(opName string, user username.SQLUsername) (interface{}, func())
 
 // PreventAdoptionFile is the name of the file which, if present in the first
 // on-disk store, will prevent the adoption of background jobs by that node.
@@ -719,7 +719,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := r.ex.ExecEx(
 				ctx, "expire-sessions", nil,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				removeClaimsForDeadSessionsQuery,
 				s.ID().UnsafeBytes(),
 				cancellationsUpdateLimitSetting.Get(&r.settings.SV),
@@ -766,7 +766,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := r.ex.ExecEx(
 				ctx, "remove-claims-for-session", nil,
-				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				removeClaimsForSessionQuery, s.ID().UnsafeBytes(),
 			)
 			return err

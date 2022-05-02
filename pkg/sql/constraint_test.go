@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -68,7 +68,7 @@ func TestSpanConstrainer(t *testing.T) {
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		security.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{},
+		username.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{},
 	)
 	defer cleanup()
 

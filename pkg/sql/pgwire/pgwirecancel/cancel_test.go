@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -141,7 +141,7 @@ func TestCancelQueryOtherNode(t *testing.T) {
 		t,
 		proxy.Addr().String(),
 		"TestCancelQueryOtherNode",
-		url.User(security.RootUser),
+		url.User(username.RootUser),
 	)
 	defer cleanup()
 	db, err := gosql.Open("postgres", pgURL.String())

@@ -14,7 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/ttycolor"
@@ -49,7 +49,7 @@ func runConvertURL(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	u.
-		WithDefaultUsername(security.RootUser).
+		WithDefaultUsername(username.RootUser).
 		WithDefaultDatabase(catalogkeys.DefaultDatabaseName).
 		WithDefaultHost("localhost").
 		WithDefaultPort(cliCtx.clientConnPort)

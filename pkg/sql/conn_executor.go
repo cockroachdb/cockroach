@@ -26,11 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -44,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2788,13 +2789,17 @@ func (ex *connExecutor) resetPlanner(
 
 	p.semaCtx = tree.MakeSemaContext()
 	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
-		p.semaCtx.IntervalStyleEnabled = true
-		p.semaCtx.DateStyleEnabled = true
+		p.semaCtx.CastSessionOptions = cast.SessionOptions{
+			IntervalStyleEnabled: true,
+			DateStyleEnabled:     true,
+		}
 	} else {
-		p.semaCtx.IntervalStyleEnabled = ex.sessionData().IntervalStyleEnabled
-		p.semaCtx.DateStyleEnabled = ex.sessionData().DateStyleEnabled
+		p.semaCtx.CastSessionOptions = cast.SessionOptions{
+			IntervalStyleEnabled: ex.sessionData().IntervalStyleEnabled,
+			DateStyleEnabled:     ex.sessionData().DateStyleEnabled,
+		}
 	}
-	p.semaCtx.SearchPath = ex.sessionData().SearchPath
+	p.semaCtx.SearchPath = &ex.sessionData().SearchPath
 	p.semaCtx.Annotations = nil
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.TableNameResolver = p
@@ -3025,7 +3030,7 @@ func (ex *connExecutor) cancelSession() {
 }
 
 // user is part of the registrySession interface.
-func (ex *connExecutor) user() security.SQLUsername {
+func (ex *connExecutor) user() username.SQLUsername {
 	return ex.sessionData().User()
 }
 

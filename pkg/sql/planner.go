@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -283,7 +284,7 @@ func WithDescCollection(collection *descs.Collection) InternalPlannerParamsOptio
 func NewInternalPlanner(
 	opName string,
 	txn *kv.Txn,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
 	sessionData sessiondatapb.SessionData,
@@ -304,7 +305,7 @@ func newInternalPlanner(
 	// TODO(yuzefovich): make this redact.RedactableString.
 	opName string,
 	txn *kv.Txn,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
 	sessionData sessiondatapb.SessionData,
@@ -359,13 +360,17 @@ func newInternalPlanner(
 
 	p.semaCtx = tree.MakeSemaContext()
 	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
-		p.semaCtx.IntervalStyleEnabled = true
-		p.semaCtx.DateStyleEnabled = true
+		p.semaCtx.CastSessionOptions = cast.SessionOptions{
+			IntervalStyleEnabled: true,
+			DateStyleEnabled:     true,
+		}
 	} else {
-		p.semaCtx.IntervalStyleEnabled = sd.IntervalStyleEnabled
-		p.semaCtx.DateStyleEnabled = sd.DateStyleEnabled
+		p.semaCtx.CastSessionOptions = cast.SessionOptions{
+			IntervalStyleEnabled: sd.IntervalStyleEnabled,
+			DateStyleEnabled:     sd.DateStyleEnabled,
+		}
 	}
-	p.semaCtx.SearchPath = sd.SearchPath
+	p.semaCtx.SearchPath = &sd.SearchPath
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
@@ -558,7 +563,7 @@ func (p *planner) Txn() *kv.Txn {
 	return p.txn
 }
 
-func (p *planner) User() security.SQLUsername {
+func (p *planner) User() username.SQLUsername {
 	return p.SessionData().User()
 }
 

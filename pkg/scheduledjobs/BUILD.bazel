@@ -9,7 +9,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlutil",
         "//pkg/util/hlc",

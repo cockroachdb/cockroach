@@ -132,7 +132,7 @@ import (
 const (
 	testdata            = "testdata" // testdata directory
 	catalogPkg          = "catalog"
-	catconstantsPkg     = "catconstants"
+	catconstantsPkg     = "catconstants2"
 	constantsGo         = "constants.go"
 	vtablePkg           = "vtable"
 	pgCatalogGo         = "pg_catalog.go"
@@ -218,12 +218,12 @@ var mappedPopulateFunctions = map[string]string{
 // schemaCodeFixer have specific configurations to fix the files with virtual
 // schema definitions.
 type schemaCodeFixer struct {
-	// catConstantsSchemaID contains the constant in catconstants which is the
+	// catConstantsSchemaID contains the constant in catconstants2 which is the
 	// id for the virtualSchema, it usually have the same prefix as in
 	// catConstantsPrefix + ID but this is sorted and placed before the other
 	// ids that are for the tables in that virtualSchema.
 	catConstantsSchemaID string
-	// catConstantsPrefix is the prefix for the catconstants of the tables in
+	// catConstantsPrefix is the prefix for the catconstants2 of the tables in
 	// this virtualSchema.
 	catConstantsPrefix string
 	// vtableFilename is the location of the vtable constants for the
@@ -369,7 +369,7 @@ func (d *VirtualSchemaDiffTool) rewriteDiffs(
 	}
 }
 
-// fixConstants updates catconstants that are needed for pgCatalog.
+// fixConstants updates catconstants2 that are needed for pgCatalog.
 func (scf schemaCodeFixer) fixConstants(t *testing.T, unimplementedTables PGMetadataTables) {
 	constantsFileName := filepath.Join(".", catalogPkg, catconstantsPkg, constantsGo)
 	// pgConstants will contains all the pgCatalog tableID constant adding the
@@ -922,7 +922,7 @@ func (scf schemaCodeFixer) getTableDefinitionsText(unimplementedTables PGMetadat
 	}
 
 	for tableName := range unimplementedTables {
-		defName := "catconstants." + scf.constantName(tableName, tableIDSuffix)
+		defName := "catconstants2." + scf.constantName(tableName, tableIDSuffix)
 		if _, ok := tableDefs[defName]; ok {
 			// Not overriding existing tableDefinitions
 			delete(unimplementedTables, tableName)

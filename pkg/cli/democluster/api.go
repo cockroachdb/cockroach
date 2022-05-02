@@ -15,7 +15,7 @@ import (
 	gosql "database/sql"
 
 	democlusterapi "github.com/cockroachdb/cockroach/pkg/cli/democluster/api"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -40,7 +40,7 @@ type DemoCluster interface {
 	// (These are already embedded in the connection URL produced
 	// by GetConnURL() however a client may wish to have them
 	// available as discrete values.)
-	GetSQLCredentials() (adminUser security.SQLUsername, adminPassword, certsDir string)
+	GetSQLCredentials() (adminUser username.SQLUsername, adminPassword, certsDir string)
 
 	// Close shuts down the demo cluster.
 	Close(ctx context.Context)

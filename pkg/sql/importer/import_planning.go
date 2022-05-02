@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1099,7 +1099,7 @@ const (
 // statements seen during the import.
 type unsupportedStmtLogger struct {
 	ctx   context.Context
-	user  security.SQLUsername
+	user  username.SQLUsername
 	jobID int64
 
 	// Values are initialized based on the options specified in the IMPORT PGDUMP
@@ -1121,7 +1121,7 @@ type unsupportedStmtLogger struct {
 
 func makeUnsupportedStmtLogger(
 	ctx context.Context,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	jobID int64,
 	ignoreUnsupported bool,
 	unsupportedLogDest string,

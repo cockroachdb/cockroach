@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -93,7 +93,7 @@ SET enable_experimental_stream_replication = true;
 		";")...)
 
 	// Sink to read data from.
-	pgURL, cleanupSink := sqlutils.PGUrl(t, source.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanupSink := sqlutils.PGUrl(t, source.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
 	var ingestionJobID int
@@ -161,7 +161,7 @@ func TestCutoverBuiltin(t *testing.T) {
 	startTimestamp := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	streamIngestJobRecord := jobs.Record{
 		Description: "test stream ingestion",
-		Username:    security.RootUserName(),
+		Username:    username.RootUserName(),
 		Details: jobspb.StreamIngestionDetails{
 			StreamAddress: "randomgen://test",
 			Span:          roachpb.Span{Key: keys.LocalMax, EndKey: keys.LocalMax.Next()},

@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -65,7 +65,7 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 	pgURL, cleanupFunc := sqlutils.PGUrl(t,
 		s.ServingSQLAddr(),
 		"TestStatsWithLowTTL",
-		url.User(security.RootUser),
+		url.User(username.RootUser),
 	)
 	defer cleanupFunc()
 

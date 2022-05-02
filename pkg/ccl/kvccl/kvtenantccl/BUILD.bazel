@@ -67,6 +67,7 @@ go_test(
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings",
         "//pkg/settings/cluster",

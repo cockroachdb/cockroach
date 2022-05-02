@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -44,11 +43,10 @@ func (si *SeqIdentifier) IsByID() bool {
 // a sequence name or an ID), wrapped in the SeqIdentifier type.
 // Returns the identifier of the sequence or nil if no sequence was found.
 func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
-	searchPath := sessiondata.SearchPath{}
 
 	// Resolve doesn't use the searchPath for resolving FunctionDefinitions
 	// so we can pass in an empty SearchPath.
-	def, err := funcExpr.Func.Resolve(searchPath)
+	def, err := funcExpr.Func.Resolve(tree.EmptySearchPath)
 	if err != nil {
 		return nil, err
 	}

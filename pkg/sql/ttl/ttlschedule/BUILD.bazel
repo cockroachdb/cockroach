@@ -10,7 +10,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/kv",
         "//pkg/scheduledjobs",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descs",

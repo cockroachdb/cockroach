@@ -18,6 +18,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
+        "//pkg/security/username",
         "//pkg/server/status",
         "//pkg/settings/cluster",
         "//pkg/storage",

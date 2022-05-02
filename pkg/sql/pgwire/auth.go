@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
@@ -118,7 +119,7 @@ func (c *conn) handleAuthentication(
 
 	// Choose the system identity that we'll use below for mapping
 	// externally-provisioned principals to database users.
-	var systemIdentity security.SQLUsername
+	var systemIdentity username.SQLUsername
 	if found, ok := behaviors.ReplacementIdentity(); ok {
 		systemIdentity = found
 		ac.SetSystemIdentity(systemIdentity)
@@ -224,7 +225,7 @@ func (c *conn) authOKMessage() error {
 // database users. We're going to go with a first-one-wins approach
 // until the session can have multiple roles.
 func (c *conn) chooseDbRole(
-	ctx context.Context, ac AuthConn, mapper RoleMapper, systemIdentity security.SQLUsername,
+	ctx context.Context, ac AuthConn, mapper RoleMapper, systemIdentity username.SQLUsername,
 ) error {
 	if mapped, err := mapper(ctx, systemIdentity); err != nil {
 		return err
@@ -369,11 +370,11 @@ type AuthConn interface {
 	SetAuthMethod(method string)
 	// SetDbUser updates the AuthConn with the actual database username
 	// the connection has authenticated to.
-	SetDbUser(dbUser security.SQLUsername)
+	SetDbUser(dbUser username.SQLUsername)
 	// SetSystemIdentity updates the AuthConn with an externally-defined
 	// identity for the connection. This is useful for "ambient"
 	// authentication mechanisms, such as GSSAPI.
-	SetSystemIdentity(systemIdentity security.SQLUsername)
+	SetSystemIdentity(systemIdentity username.SQLUsername)
 	// LogAuthInfof logs details about the progress of the
 	// authentication.
 	LogAuthInfof(ctx context.Context, format string, args ...interface{})
@@ -406,7 +407,7 @@ type authRes struct {
 }
 
 func newAuthPipe(
-	c *conn, logAuthn bool, authOpt authOptions, systemIdentity security.SQLUsername,
+	c *conn, logAuthn bool, authOpt authOptions, systemIdentity username.SQLUsername,
 ) *authPipe {
 	ap := &authPipe{
 		c:           c,
@@ -467,11 +468,11 @@ func (p *authPipe) SetAuthMethod(method string) {
 	p.authMethod = method
 }
 
-func (p *authPipe) SetDbUser(dbUser security.SQLUsername) {
+func (p *authPipe) SetDbUser(dbUser username.SQLUsername) {
 	p.authDetails.User = dbUser.Normalized()
 }
 
-func (p *authPipe) SetSystemIdentity(systemIdentity security.SQLUsername) {
+func (p *authPipe) SetSystemIdentity(systemIdentity username.SQLUsername) {
 	p.authDetails.SystemIdentity = systemIdentity.Normalized()
 }
 

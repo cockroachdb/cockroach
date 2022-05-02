@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -768,7 +769,7 @@ func (l *DockerCluster) InternalIP(ctx context.Context, i int) net.IP {
 
 // PGUrl returns a URL string for the given node postgres server.
 func (l *DockerCluster) PGUrl(ctx context.Context, i int) string {
-	certUser := security.RootUser
+	certUser := username.RootUser
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
 	options.Add("sslcert", filepath.Join(certsDir, security.EmbeddedRootCert))

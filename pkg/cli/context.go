@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -224,7 +224,7 @@ func setCliContextDefaults() {
 	cliCtx.clientConnPort = base.DefaultPort
 	cliCtx.certPrincipalMap = nil
 	cliCtx.sqlConnURL = nil
-	cliCtx.sqlConnUser = security.RootUser
+	cliCtx.sqlConnUser = username.RootUser
 	cliCtx.sqlConnDBName = ""
 	cliCtx.allowUnencryptedClientPassword = false
 	cliCtx.logConfigInput = settableString{s: ""}

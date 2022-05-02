@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -546,7 +546,7 @@ func TestAdminUserExists(t *testing.T) {
 	// Create a user named "admin". We have to do a manual insert as "CREATE USER"
 	// knows about "isRole", but the migration hasn't run yet.
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`,
-		security.AdminRole)
+		username.AdminRole)
 
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
 	if err := mt.runMigration(ctx, migration); err != nil {
@@ -567,7 +567,7 @@ func TestPublicRoleExists(t *testing.T) {
 	// Create a user (we check for user or role) named "public".
 	// We have to do a manual insert as "CREATE USER" knows to disallow "public".
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)`,
-		security.PublicRole)
+		username.PublicRole)
 
 	e := `found a user named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -576,9 +576,9 @@ func TestPublicRoleExists(t *testing.T) {
 	}
 
 	// Now try with a role instead of a user.
-	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, security.PublicRole)
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, username.PublicRole)
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)`,
-		security.PublicRole)
+		username.PublicRole)
 
 	e = `found a role named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -587,7 +587,7 @@ func TestPublicRoleExists(t *testing.T) {
 	}
 
 	// Drop it and try again.
-	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, security.PublicRole)
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, username.PublicRole)
 	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Errorf("expected success, got %q", err)
 	}

@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -69,7 +69,7 @@ func GetLiveClusterRegions(ctx context.Context, p PlanHookState) (LiveClusterReg
 	// Non-admin users can't access the crdb_internal.kv_node_status table, which
 	// this query hits, so we must override the user here.
 	override := sessiondata.InternalExecutorOverride{
-		User: security.RootUserName(),
+		User: username.RootUserName(),
 	}
 
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(

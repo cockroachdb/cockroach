@@ -14,7 +14,7 @@ go_library(
         "//pkg/cloud/amazon",
         "//pkg/cloud/azure",
         "//pkg/cloud/gcp",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/util/ctxgroup",
         "//pkg/util/humanizeutil",

@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	security "github.com/cockroachdb/cockroach/pkg/security"
+	username "github.com/cockroachdb/cockroach/pkg/security/username"
 	catalog "github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	scexec "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	scmutationexec "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
@@ -305,10 +305,10 @@ func (mr *MockDependenciesMockRecorder) TransactionalJobRegistry() *gomock.Call 
 }
 
 // User mocks base method.
-func (m *MockDependencies) User() security.SQLUsername {
+func (m *MockDependencies) User() username.SQLUsername {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "User")
-	ret0, _ := ret[0].(security.SQLUsername)
+	ret0, _ := ret[0].(username.SQLUsername)
 	return ret0
 }
 

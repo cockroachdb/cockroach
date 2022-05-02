@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -268,7 +268,7 @@ func (c *Cluster) RPCPort(nodeIdx int) string {
 
 func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*Node, <-chan error) {
 	baseCtx := &base.Config{
-		User:     security.NodeUserName(),
+		User:     username.NodeUserName(),
 		Insecure: true,
 	}
 	rpcCtx := rpc.NewContext(ctx, rpc.ContextOptions{

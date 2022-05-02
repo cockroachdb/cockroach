@@ -31,7 +31,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -156,13 +156,13 @@ func TestCloudStorageSink(t *testing.T) {
 	require.NoError(t, err)
 
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
-	externalStorageFromURI := func(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
+	externalStorageFromURI := func(ctx context.Context, uri string, user username.SQLUsername) (cloud.ExternalStorage,
 		error) {
 		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
 			clientFactory, user, nil, nil, nil)
 	}
 
-	user := security.RootUserName()
+	user := username.RootUserName()
 
 	sinkURI := func(dir string, maxFileSize int64) sinkURL {
 		uri := `nodelocal://0/` + dir

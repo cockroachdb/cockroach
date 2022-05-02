@@ -36,6 +36,7 @@ go_test(
         "//pkg/base",
         "//pkg/security",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/execinfra",

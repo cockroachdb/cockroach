@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -47,7 +47,7 @@ func WriteDescriptors(
 	ctx context.Context,
 	codec keys.SQLCodec,
 	txn *kv.Txn,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	descsCol *descs.Collection,
 	databases []catalog.DatabaseDescriptor,
 	schemas []catalog.SchemaDescriptor,

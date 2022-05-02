@@ -48,7 +48,7 @@ message ChangeAggregatorSpec {
 
   // User who initiated the changefeed. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user_proto = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  optional string user_proto = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
 
   // JobID is the id of this changefeed in the system jobs.
   optional int64 job_id = 4 [
@@ -80,5 +80,5 @@ message ChangeFrontierSpec {
 
   // User who initiated the changefeed. This is used to check access privileges
   // when using FileTable ExternalStorage.
-  optional string user_proto = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  optional string user_proto = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
 }

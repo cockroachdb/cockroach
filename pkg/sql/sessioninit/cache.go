@@ -16,8 +16,8 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -55,7 +55,7 @@ type Cache struct {
 	dbRoleSettingsTableVersion descpb.DescriptorVersion
 	boundAccount               mon.BoundAccount
 	// authInfoCache is a mapping from username to AuthInfo.
-	authInfoCache map[security.SQLUsername]AuthInfo
+	authInfoCache map[username.SQLUsername]AuthInfo
 	// settingsCache is a mapping from (dbID, username) to default settings.
 	settingsCache map[SettingsCacheKey][]string
 	// populateCacheGroup is used to ensure that there is at most one in-flight
@@ -81,7 +81,7 @@ type AuthInfo struct {
 // SettingsCacheKey is the key used for the settingsCache.
 type SettingsCacheKey struct {
 	DatabaseID descpb.ID
-	Username   security.SQLUsername
+	Username   username.SQLUsername
 }
 
 // SettingsCacheEntry represents an entry in the settingsCache. It is
@@ -109,11 +109,11 @@ func (a *Cache) GetAuthInfo(
 	ie sqlutil.InternalExecutor,
 	db *kv.DB,
 	f *descs.CollectionFactory,
-	username security.SQLUsername,
+	username username.SQLUsername,
 	readFromSystemTables func(
 		ctx context.Context,
 		ie sqlutil.InternalExecutor,
-		username security.SQLUsername,
+		username username.SQLUsername,
 	) (AuthInfo, error),
 ) (aInfo AuthInfo, err error) {
 	if !CacheEnabled.Get(&settings.SV) {
@@ -187,7 +187,7 @@ func (a *Cache) readAuthInfoFromCache(
 	ctx context.Context,
 	usersTableVersion descpb.DescriptorVersion,
 	roleOptionsTableVersion descpb.DescriptorVersion,
-	username security.SQLUsername,
+	username username.SQLUsername,
 ) (AuthInfo, bool) {
 	a.Lock()
 	defer a.Unlock()
@@ -240,7 +240,7 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 	usersTableVersion descpb.DescriptorVersion,
 	roleOptionsTableVersion descpb.DescriptorVersion,
 	aInfo AuthInfo,
-	username security.SQLUsername,
+	user username.SQLUsername,
 ) bool {
 	a.Lock()
 	defer a.Unlock()
@@ -249,7 +249,7 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 		return false
 	}
 	// Table version remains the same: update map, unlock, return.
-	const sizeOfUsername = int(unsafe.Sizeof(security.SQLUsername{}))
+	const sizeOfUsername = int(unsafe.Sizeof(username.SQLUsername{}))
 	const sizeOfAuthInfo = int(unsafe.Sizeof(AuthInfo{}))
 	const sizeOfTimestamp = int(unsafe.Sizeof(tree.DTimestamp{}))
 
@@ -258,7 +258,7 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 		hpSize = aInfo.HashedPassword.Size()
 	}
 
-	sizeOfEntry := sizeOfUsername + len(username.Normalized()) +
+	sizeOfEntry := sizeOfUsername + len(user.Normalized()) +
 		sizeOfAuthInfo + hpSize +
 		sizeOfTimestamp
 	if err := a.boundAccount.Grow(ctx, int64(sizeOfEntry)); err != nil {
@@ -267,7 +267,7 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 		// the database.
 		log.Ops.Warningf(ctx, "no memory available to cache authentication info: %v", err)
 	} else {
-		a.authInfoCache[username] = aInfo
+		a.authInfoCache[user] = aInfo
 	}
 	return true
 }
@@ -283,12 +283,12 @@ func (a *Cache) GetDefaultSettings(
 	ie sqlutil.InternalExecutor,
 	db *kv.DB,
 	f *descs.CollectionFactory,
-	username security.SQLUsername,
+	userName username.SQLUsername,
 	databaseName string,
 	readFromSystemTables func(
 		ctx context.Context,
 		ie sqlutil.InternalExecutor,
-		username security.SQLUsername,
+		userName username.SQLUsername,
 		databaseID descpb.ID,
 	) ([]SettingsCacheEntry, error),
 ) (settingsEntries []SettingsCacheEntry, err error) {
@@ -331,7 +331,7 @@ func (a *Cache) GetDefaultSettings(
 		settingsEntries, err = readFromSystemTables(
 			ctx,
 			ie,
-			username,
+			userName,
 			databaseID,
 		)
 		return settingsEntries, err
@@ -341,7 +341,7 @@ func (a *Cache) GetDefaultSettings(
 
 	// Check version and maybe clear cache while holding the mutex.
 	var found bool
-	settingsEntries, found = a.readDefaultSettingsFromCache(ctx, dbRoleSettingsTableVersion, username, databaseID)
+	settingsEntries, found = a.readDefaultSettingsFromCache(ctx, dbRoleSettingsTableVersion, userName, databaseID)
 
 	if found {
 		return settingsEntries, nil
@@ -352,9 +352,9 @@ func (a *Cache) GetDefaultSettings(
 	// also part of the request key so that we don't read data from an old
 	// version of the table.
 	val, err := a.loadValueOutsideOfCache(
-		ctx, fmt.Sprintf("defaultsettings-%s-%d-%d", username.Normalized(), databaseID, dbRoleSettingsTableVersion),
+		ctx, fmt.Sprintf("defaultsettings-%s-%d-%d", userName.Normalized(), databaseID, dbRoleSettingsTableVersion),
 		func(loadCtx context.Context) (interface{}, error) {
-			return readFromSystemTables(loadCtx, ie, username, databaseID)
+			return readFromSystemTables(loadCtx, ie, userName, databaseID)
 		},
 	)
 	if err != nil {
@@ -375,7 +375,7 @@ func (a *Cache) GetDefaultSettings(
 func (a *Cache) readDefaultSettingsFromCache(
 	ctx context.Context,
 	dbRoleSettingsTableVersion descpb.DescriptorVersion,
-	username security.SQLUsername,
+	userName username.SQLUsername,
 	databaseID descpb.ID,
 ) ([]SettingsCacheEntry, bool) {
 	a.Lock()
@@ -396,7 +396,7 @@ func (a *Cache) readDefaultSettingsFromCache(
 	// so the order of the returned []SettingsCacheEntry is important and the
 	// caller must take care not to apply a setting if it has already appeared
 	// earlier in the list.
-	for _, k := range GenerateSettingsCacheKeys(databaseID, username) {
+	for _, k := range GenerateSettingsCacheKeys(databaseID, userName) {
 		s, ok := a.settingsCache[k]
 		if !ok {
 			foundAllDefaultSettings = false
@@ -474,7 +474,7 @@ func (a *Cache) clearCacheIfStale(
 		a.usersTableVersion = usersTableVersion
 		a.roleOptionsTableVersion = roleOptionsTableVersion
 		a.dbRoleSettingsTableVersion = dbRoleSettingsTableVersion
-		a.authInfoCache = make(map[security.SQLUsername]AuthInfo)
+		a.authInfoCache = make(map[username.SQLUsername]AuthInfo)
 		a.settingsCache = make(map[SettingsCacheKey][]string)
 		a.boundAccount.Empty(ctx)
 	} else if a.usersTableVersion > usersTableVersion ||
@@ -491,16 +491,16 @@ func (a *Cache) clearCacheIfStale(
 // that are relevant for the given databaseID and username. The slice is
 // ordered in descending order of precedence.
 func GenerateSettingsCacheKeys(
-	databaseID descpb.ID, username security.SQLUsername,
+	databaseID descpb.ID, userName username.SQLUsername,
 ) []SettingsCacheKey {
 	return []SettingsCacheKey{
 		{
 			DatabaseID: databaseID,
-			Username:   username,
+			Username:   userName,
 		},
 		{
 			DatabaseID: defaultDatabaseID,
-			Username:   username,
+			Username:   userName,
 		},
 		{
 			DatabaseID: databaseID,

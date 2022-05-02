@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -51,7 +51,7 @@ func TestSessionMigration(t *testing.T) {
 			pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
 				tc.Server(0).ServingSQLAddr(),
 				"StartServer", /* prefix */
-				url.User(security.RootUser),
+				url.User(username.RootUser),
 			)
 			require.NoError(t, err)
 			pgURL.Path = "defaultdb"

@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -363,7 +363,7 @@ func Example_sql_lex() {
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard,
 		fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
-			security.RootUser, c.ServingSQLAddr()))
+			username.RootUser, c.ServingSQLAddr()))
 	defer func() {
 		if err := conn.Close(); err != nil {
 			fmt.Printf("error closing connection: %v\n", err)

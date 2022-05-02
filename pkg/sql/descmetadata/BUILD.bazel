@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",

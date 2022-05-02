@@ -47,7 +47,7 @@ go_test(
         "//pkg/col/coldatatestutils",
         "//pkg/keys",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -23,8 +24,8 @@ import (
 
 // LoadSecurityOptions extends a url.Values with SSL settings suitable for
 // the given server config.
-func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.SQLUsername) error {
-	u.WithUsername(username.Normalized())
+func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLUsername) error {
+	u.WithUsername(user.Normalized())
 	if ctx.config.Insecure {
 		u.WithInsecure()
 	} else if net, _, _ := u.GetNetworking(); net == pgurl.ProtoTCP {
@@ -82,8 +83,8 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.
 
 		// Fetch client certs, but don't fail if they're absent, we may be
 		// using a password.
-		certPath := ctx.ClientCertPath(username)
-		keyPath := ctx.ClientKeyPath(username)
+		certPath := ctx.ClientCertPath(user)
+		keyPath := ctx.ClientKeyPath(user)
 		_, err1 := loader.Stat(certPath)
 		_, err2 := loader.Stat(keyPath)
 		if err1 != nil || err2 != nil {
@@ -91,7 +92,7 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, username security.
 		}
 		// If the command specifies user node, and we did not find
 		// client.node.crt, try with just node.crt.
-		if missing && username.IsNodeUser() {
+		if missing && user.IsNodeUser() {
 			missing = false
 			certPath = ctx.NodeCertPath()
 			keyPath = ctx.NodeKeyPath()
@@ -124,7 +125,7 @@ func (ctx *SecurityContext) PGURL(user *url.Userinfo) (*pgurl.URL, error) {
 		WithNet(pgurl.NetTCP(host, port)).
 		WithDatabase(catalogkeys.DefaultDatabaseName)
 
-	username, _ := security.MakeSQLUsernameFromUserInput(user.Username(), security.UsernameValidation)
+	username, _ := username.MakeSQLUsernameFromUserInput(user.Username(), username.PurposeValidation)
 	if err := ctx.LoadSecurityOptions(u, username); err != nil {
 		return nil, err
 	}

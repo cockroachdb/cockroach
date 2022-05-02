@@ -14,7 +14,7 @@ go_library(
         "//pkg/ccl/streamingccl/streampb",
         "//pkg/keys",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",

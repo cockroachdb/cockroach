@@ -31,13 +31,14 @@ _deps_aspect = aspect(
   provides = [_DepsInfo],
 )
 
-def _find_deps_with_disallowed_prefixes(dep_pkgs, prefixes):
+def _find_deps_with_disallowed_prefixes(current_pkg, dep_pkgs, prefixes):
   return [dp for dp_list in [
-      [(d, p) for p in prefixes if d.startswith(p)] for d in dep_pkgs
+      [(d, p) for p in prefixes if d.startswith(p) and d != current_pkg] for d in dep_pkgs
     ] for dp in dp_list]
 
 def _deps_rule_impl(ctx):
   failed_prefixes = _find_deps_with_disallowed_prefixes(
+    current_pkg = ctx.attr.src[GoLibrary].importpath,
     dep_pkgs = ctx.attr.src[_DepsInfo].dep_pkgs,
     prefixes = ctx.attr.disallowed_prefixes,
   )
@@ -77,7 +78,23 @@ _deps_rule = rule(
   },
 )
 
+def _validate_disallowed_prefixes(prefixes):
+  validated = []
+  repo_prefix = "github.com/cockroachdb/cockroach/"
+  short_prefix = "pkg/"
+  for prefix in prefixes:
+    if prefix.startswith(repo_prefix):
+      validated.append(prefix)
+    elif prefix.startswith(short_prefix):
+      validated.append(repo_prefix + prefix)
+    else:
+      fail("invalid prefix {}: should start with {} or {}".format(
+        prefix, repo_prefix, short_prefix,
+      ))
+  return validated
+
 def disallowed_imports_test(src, disallowed_list = [], disallowed_prefixes = []):
+  disallowed_prefixes = _validate_disallowed_prefixes(disallowed_prefixes)
   script = src.strip(":") + "_disallowed_imports_script"
   _deps_rule(
     name = script,

@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -153,7 +153,7 @@ func ReadBackupManifestFromURI(
 	ctx context.Context,
 	mem *mon.BoundAccount,
 	uri string,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, int64, error) {
@@ -606,7 +606,7 @@ func loadBackupManifests(
 	ctx context.Context,
 	mem *mon.BoundAccount,
 	uris []string,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 ) ([]BackupManifest, int64, error) {
@@ -724,7 +724,7 @@ func resolveBackupManifestsExplicitIncrementals(
 	from [][]string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
-	user security.SQLUsername,
+	user username.SQLUsername,
 ) (
 	defaultURIs []string,
 	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
@@ -804,7 +804,7 @@ func resolveBackupManifests(
 	fullyResolvedIncrementalsDirectory []string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
-	user security.SQLUsername,
+	user username.SQLUsername,
 ) (
 	defaultURIs []string,
 	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.

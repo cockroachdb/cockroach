@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -100,7 +100,7 @@ type Record struct {
 	JobID         jobspb.JobID
 	Description   string
 	Statements    []string
-	Username      security.SQLUsername
+	Username      username.SQLUsername
 	DescriptorIDs descpb.IDs
 	Details       jobspb.Details
 	Progress      jobspb.ProgressDetails
@@ -808,7 +808,7 @@ func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
 			queryNoSessionID   = "SELECT payload, progress, created_by_type, created_by_id, status FROM system.jobs WHERE id = $1"
 			queryWithSessionID = queryNoSessionID + " AND claim_session_id = $2"
 		)
-		sess := sessiondata.InternalExecutorOverride{User: security.RootUserName()}
+		sess := sessiondata.InternalExecutorOverride{User: username.RootUserName()}
 
 		var err error
 		var row tree.Datums

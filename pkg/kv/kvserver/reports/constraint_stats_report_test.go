@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -783,7 +783,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 			}
 		}
 		sysCfgBuilder.addDBDesc(dbID,
-			dbdesc.NewInitial(descpb.ID(dbID), db.name, security.AdminRoleName()))
+			dbdesc.NewInitial(descpb.ID(dbID), db.name, username.AdminRoleName()))
 
 		for _, table := range db.tables {
 			tableID := objectCounter

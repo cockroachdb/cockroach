@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -66,7 +66,7 @@ func (ti testInfra) newExecDeps(
 		ti.lm.Codec(),
 		&sessiondata.SessionData{},
 		txn,
-		security.RootUserName(),
+		username.RootUserName(),
 		descsCollection,
 		noopJobRegistry{},
 		noopBackfiller{},

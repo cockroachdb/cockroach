@@ -10,7 +10,7 @@ go_library(
         "//pkg/gossip",
         "//pkg/kv",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/sem/tree",

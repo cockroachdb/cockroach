@@ -18,15 +18,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -731,7 +731,7 @@ func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 		Version: 1,
 		// Assign max privileges to root user.
 		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
-			priv, security.NodeUserName()),
+			priv, username.NodeUserName()),
 	}).BuildImmutableDatabase()
 }
 
@@ -798,7 +798,7 @@ func registerSystemTable(
 		if privs == nil {
 			log.Fatalf(ctx, "no superuser privileges found when building descriptor of system table %q", tbl.Name)
 		}
-		tbl.Privileges = catpb.NewCustomSuperuserPrivilegeDescriptor(privs, security.NodeUserName())
+		tbl.Privileges = catpb.NewCustomSuperuserPrivilegeDescriptor(privs, username.NodeUserName())
 	}
 	for _, fn := range fns {
 		fn(&tbl)
@@ -1468,7 +1468,7 @@ var (
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Privileges.Version = catpb.Version21_2
 			tbl.Privileges.Users = append(tbl.Privileges.Users, catpb.UserPrivileges{
-				UserProto:  security.PublicRoleName().EncodeProto(),
+				UserProto:  username.PublicRoleName().EncodeProto(),
 				Privileges: privilege.List{privilege.SELECT}.ToBitField(),
 			})
 			sort.Slice(tbl.Privileges.Users, func(i, j int) bool {

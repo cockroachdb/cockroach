@@ -21,7 +21,7 @@ go_library(
     deps = select({
         "@io_bazel_rules_go//go/platform:linux_amd64": [
             "//pkg/ccl/utilccl",
-            "//pkg/security",
+            "//pkg/security/username",
             "//pkg/settings",
             "//pkg/sql",
             "//pkg/sql/sem/tree",

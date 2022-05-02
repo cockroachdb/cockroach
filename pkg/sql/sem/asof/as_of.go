@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,7 +46,7 @@ const WithMaxStalenessFunctionName = "with_max_staleness"
 
 // IsFollowerReadTimestampFunction determines whether the AS OF SYSTEM TIME
 // clause contains a simple invocation of the follower_read_timestamp function.
-func IsFollowerReadTimestampFunction(asOf tree.AsOfClause, searchPath sessiondata.SearchPath) bool {
+func IsFollowerReadTimestampFunction(asOf tree.AsOfClause, searchPath tree.SearchPath) bool {
 	return resolveFuncType(asOf, searchPath) == funcTypeFollowerRead
 }
 
@@ -59,7 +58,7 @@ const (
 	funcTypeBoundedStaleness
 )
 
-func resolveFuncType(asOf tree.AsOfClause, searchPath sessiondata.SearchPath) funcType {
+func resolveFuncType(asOf tree.AsOfClause, searchPath tree.SearchPath) funcType {
 	fe, ok := asOf.Expr.(*tree.FuncExpr)
 	if !ok {
 		return funcTypeInvalid

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -146,7 +147,7 @@ func (s *authenticationServer) UserLogin(
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := security.MakeSQLUsernameFromUserInput(req.Username, security.UsernameValidation)
+	username, _ := username.MakeSQLUsernameFromUserInput(req.Username, username.PurposeValidation)
 
 	// Verify the provided username/password pair.
 	verified, expired, err := s.verifyPasswordDBConsole(ctx, username, req.Password)
@@ -211,7 +212,7 @@ func (s *authenticationServer) demoLogin(w http.ResponseWriter, req *http.Reques
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := security.MakeSQLUsernameFromUserInput(userInput, security.UsernameValidation)
+	username, _ := username.MakeSQLUsernameFromUserInput(userInput, username.PurposeValidation)
 	// Verify the provided username/password pair.
 	verified, expired, err := s.verifyPasswordDBConsole(ctx, username, password)
 	if err != nil {
@@ -256,7 +257,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
+	username, _ := username.MakeSQLUsernameFromUserInput(reqUsername, username.PurposeValidation)
 
 	exists, _, canLoginDBConsole, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
@@ -280,10 +281,10 @@ func (s *authenticationServer) UserLoginFromSSO(
 //
 // The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) createSessionFor(
-	ctx context.Context, username security.SQLUsername,
+	ctx context.Context, userName username.SQLUsername,
 ) (*http.Cookie, error) {
 	// Create a new database session, generating an ID and secret key.
-	id, secret, err := s.newAuthSession(ctx, username)
+	id, secret, err := s.newAuthSession(ctx, userName)
 	if err != nil {
 		return nil, apiInternalError(ctx, err)
 	}
@@ -323,7 +324,7 @@ func (s *authenticationServer) UserLogout(
 		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionID,
 	); err != nil {
@@ -364,7 +365,7 @@ WHERE id = $1`
 
 	var (
 		hashedSecret []byte
-		username     string
+		userName     string
 		expiresAt    time.Time
 		isRevoked    bool
 	)
@@ -373,7 +374,7 @@ WHERE id = $1`
 		ctx,
 		"lookup-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		sessionQuery, cookie.ID)
 	if row == nil || err != nil {
 		return false, "", err
@@ -388,7 +389,7 @@ WHERE id = $1`
 
 	// Extract datum values.
 	hashedSecret = []byte(*row[0].(*tree.DBytes))
-	username = string(*row[1].(*tree.DString))
+	userName = string(*row[1].(*tree.DString))
 	expiresAt = row[2].(*tree.DTimestamp).Time
 	isRevoked = row[3].ResolvedType().Family() != types.UnknownFamily
 
@@ -407,7 +408,7 @@ WHERE id = $1`
 		return false, "", nil
 	}
 
-	return true, username, nil
+	return true, userName, nil
 }
 
 // verifyPasswordDBConsole verifies the passed username/password pair against the
@@ -421,13 +422,13 @@ WHERE id = $1`
 // The caller is responsible for ensuring that the username is normalized.
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) verifyPasswordDBConsole(
-	ctx context.Context, username security.SQLUsername, passwordStr string,
+	ctx context.Context, userName username.SQLUsername, passwordStr string,
 ) (valid bool, expired bool, err error) {
 	exists, _, canLoginDBConsole, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.execCfg,
 		s.sqlServer.execCfg.InternalExecutor,
-		username,
+		userName,
 		"", /* databaseName */
 	)
 	if err != nil {
@@ -445,7 +446,9 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 		return false, true, nil
 	}
 
-	ok, err := password.CompareHashAndCleartextPassword(ctx, hashedPassword, passwordStr, security.GetExpensiveHashComputeSem(ctx))
+	ok, err := password.CompareHashAndCleartextPassword(
+		ctx, hashedPassword, passwordStr, security.GetExpensiveHashComputeSem(ctx),
+	)
 	if ok && err == nil {
 		// Password authentication succeeded using cleartext.  If the
 		// stored hash was encoded using crdb-bcrypt, we might want to
@@ -456,7 +459,7 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 		// SCRAM-SHA-256.
 		sql.MaybeUpgradeStoredPasswordHash(ctx,
 			s.sqlServer.execCfg,
-			username,
+			userName,
 			passwordStr, hashedPassword)
 	}
 	return ok, false, err
@@ -480,7 +483,7 @@ func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
 //
 // The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) newAuthSession(
-	ctx context.Context, username security.SQLUsername,
+	ctx context.Context, userName username.SQLUsername,
 ) (int64, []byte, error) {
 	secret, hashedSecret, err := CreateAuthSecret()
 	if err != nil {
@@ -500,10 +503,10 @@ RETURNING id
 		ctx,
 		"create-auth-session",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		insertSessionStmt,
 		hashedSecret,
-		username.Normalized(),
+		userName.Normalized(),
 		expiration,
 	)
 	if err != nil {

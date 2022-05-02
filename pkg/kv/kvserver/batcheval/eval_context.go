@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -114,7 +114,7 @@ type EvalContext interface {
 	GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary
 
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
-	GetExternalStorageFromURI(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
+	GetExternalStorageFromURI(ctx context.Context, uri string, user username.SQLUsername) (cloud.ExternalStorage,
 		error)
 
 	// RevokeLease stops the replica from using its current lease, if that lease
@@ -281,7 +281,7 @@ func (m *mockEvalCtxImpl) GetExternalStorage(
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) GetExternalStorageFromURI(
-	ctx context.Context, uri string, user security.SQLUsername,
+	ctx context.Context, uri string, user username.SQLUsername,
 ) (cloud.ExternalStorage, error) {
 	panic("unimplemented")
 }

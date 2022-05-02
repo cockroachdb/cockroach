@@ -198,7 +198,7 @@ func (v *fastIsConstVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 	// If the parent expression is a variable or non-immutable operator, we know
 	// that it is not constant.
 
-	if !tree.OperatorIsImmutable(expr, v.ctx.SessionData()) ||
+	if !tree.OperatorIsImmutable(expr, v.ctx.CastSessionOptions()) ||
 		eval.IsVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 		v.isConst = false
 		return false, expr

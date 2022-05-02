@@ -11,7 +11,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/kv",
         "//pkg/migration",
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/sem/tree",

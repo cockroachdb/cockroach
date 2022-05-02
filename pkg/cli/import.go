@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -120,7 +120,7 @@ func runImport(
 		return err
 	}
 
-	username, err := security.MakeSQLUsernameFromUserInput(connURL.User.Username(), security.UsernameCreation)
+	username, err := username.MakeSQLUsernameFromUserInput(connURL.User.Username(), username.PurposeCreation)
 	if err != nil {
 		return err
 	}

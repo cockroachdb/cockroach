@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -254,7 +255,7 @@ func OpenDBConnE(
 	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) (*gosql.DB, error) {
 	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
-		sqlAddr, "StartServer" /* prefix */, url.User(security.RootUser))
+		sqlAddr, "StartServer" /* prefix */, url.User(username.RootUser))
 	if err != nil {
 		return nil, err
 	}

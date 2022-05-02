@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -83,7 +83,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			txn := kvDB.NewTxn(ctx, "test")
-			p, cleanup := sql.NewInternalPlanner("asdf", txn, security.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData)
+			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData)
 			defer cleanup()
 
 			// The internal planner overrides the database to "system", here we

@@ -12,7 +12,7 @@ package dbdesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -253,7 +253,7 @@ func WithPublicSchemaID(publicSchemaID descpb.ID) NewInitialOption {
 // NewInitial constructs a new Mutable for an initial version from an id and
 // name with default privileges.
 func NewInitial(
-	id descpb.ID, name string, owner security.SQLUsername, options ...NewInitialOption,
+	id descpb.ID, name string, owner username.SQLUsername, options ...NewInitialOption,
 ) *Mutable {
 	return newInitialWithPrivileges(
 		id,

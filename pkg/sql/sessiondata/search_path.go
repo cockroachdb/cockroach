@@ -14,11 +14,12 @@ import (
 	"bytes"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
 // DefaultSearchPath is the search path used by virgin sessions.
@@ -42,8 +43,8 @@ var EmptySearchPath = SearchPath{}
 
 // DefaultSearchPathForUser returns the default search path with the user
 // specific schema name set so that it can be expanded during resolution.
-func DefaultSearchPathForUser(username security.SQLUsername) SearchPath {
-	return DefaultSearchPath.WithUserSchemaName(username.Normalized())
+func DefaultSearchPathForUser(userName username.SQLUsername) SearchPath {
+	return DefaultSearchPath.WithUserSchemaName(userName.Normalized())
 }
 
 // MakeSearchPath returns a new immutable SearchPath struct. The paths slice
@@ -289,4 +290,20 @@ func (iter *SearchPathIter) Next() (path string, ok bool) {
 		return iter.paths[iter.i-1], true
 	}
 	return "", false
+}
+
+// IterateSearchPath iterates the search path. If a non-nil error is
+// returned, iteration is stopped. If iterutils.StopIteration() is returned
+// from the iteration function,  a nil error is returned to the caller.
+func (s *SearchPath) IterateSearchPath(f func(schema string) error) error {
+	iter := s.Iter()
+	for schema, ok := iter.Next(); ok; schema, ok = iter.Next() {
+		if err := f(schema); err != nil {
+			if iterutil.Done(err) {
+				err = nil
+			}
+			return err
+		}
+	}
+	return nil
 }

@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -64,7 +64,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			internalPlanner, cleanup := NewInternalPlanner(
 				"test",
 				kv.NewTxn(ctx, db, s.NodeID()),
-				security.RootUserName(),
+				username.RootUserName(),
 				&MemoryMetrics{},
 				&execCfg,
 				sessiondatapb.SessionData{},

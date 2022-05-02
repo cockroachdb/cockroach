@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -53,7 +53,7 @@ func writeFile(t *testing.T, testSendFile string, fileContent []byte) {
 }
 
 func prepareFileUploadURI(
-	user security.SQLUsername, testSendFile, copyInternalTable string,
+	user username.SQLUsername, testSendFile, copyInternalTable string,
 ) (string, error) {
 	var uri string
 	switch copyInternalTable {
@@ -77,7 +77,7 @@ func prepareFileUploadURI(
 }
 
 func runCopyFile(
-	t *testing.T, db *gosql.DB, user security.SQLUsername, testSendFile, copyInternalTable string,
+	t *testing.T, db *gosql.DB, user username.SQLUsername, testSendFile, copyInternalTable string,
 ) error {
 	// Make sure we can open this file first
 	reader, err := os.Open(testSendFile)
@@ -140,7 +140,7 @@ func checkUserFileContent(
 	ctx context.Context,
 	t *testing.T,
 	s serverutils.TestServerInterface,
-	user security.SQLUsername,
+	user username.SQLUsername,
 	filename string,
 	expectedContent []byte,
 ) {
@@ -176,13 +176,13 @@ func TestFileUpload(t *testing.T) {
 	writeFile(t, testSendFile, fileContent)
 
 	for _, table := range fileUploadModes {
-		err := runCopyFile(t, db, security.RootUserName(), testSendFile, table)
+		err := runCopyFile(t, db, username.RootUserName(), testSendFile, table)
 		require.NoError(t, err)
 	}
 
 	// Verify contents of the uploaded file.
 	checkNodelocalContent(t, localExternalDir, testSendFile, fileContent)
-	checkUserFileContent(ctx, t, s, security.RootUserName(), testSendFile, fileContent)
+	checkUserFileContent(ctx, t, s, username.RootUserName(), testSendFile, fileContent)
 }
 
 func TestUploadEmptyFile(t *testing.T) {
@@ -204,13 +204,13 @@ func TestUploadEmptyFile(t *testing.T) {
 	writeFile(t, testSendFile, fileContent)
 
 	for _, table := range fileUploadModes {
-		err := runCopyFile(t, db, security.RootUserName(), testSendFile, table)
+		err := runCopyFile(t, db, username.RootUserName(), testSendFile, table)
 		require.NoError(t, err)
 	}
 
 	// Verify contents of the uploaded file.
 	checkNodelocalContent(t, localExternalDir, testSendFile, fileContent)
-	checkUserFileContent(ctx, t, s, security.RootUserName(), testSendFile, fileContent)
+	checkUserFileContent(ctx, t, s, username.RootUserName(), testSendFile, fileContent)
 }
 
 func TestFileNotExist(t *testing.T) {
@@ -226,7 +226,7 @@ func TestFileNotExist(t *testing.T) {
 
 	expectedErr := "no such file"
 	for _, table := range fileUploadModes {
-		err := runCopyFile(t, db, security.RootUserName(), filename, table)
+		err := runCopyFile(t, db, username.RootUserName(), filename, table)
 		require.True(t, testutils.IsError(err, expectedErr))
 	}
 }
@@ -249,13 +249,13 @@ func TestFileExist(t *testing.T) {
 
 	// Write successfully the first time.
 	for _, table := range fileUploadModes {
-		err := runCopyFile(t, db, security.RootUserName(), testSendFile, table)
+		err := runCopyFile(t, db, username.RootUserName(), testSendFile, table)
 		require.NoError(t, err)
 	}
 
 	// Writes fail the second time.
 	for _, table := range fileUploadModes {
-		require.True(t, testutils.IsError(runCopyFile(t, db, security.RootUserName(), testSendFile,
+		require.True(t, testutils.IsError(runCopyFile(t, db, username.RootUserName(), testSendFile,
 			table), "file already exists"))
 	}
 }
@@ -275,7 +275,7 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	const smithUser = "jsmith"
-	smithUserName := security.MakeSQLUsernameFromPreNormalizedString(smithUser)
+	smithUserName := username.MakeSQLUsernameFromPreNormalizedString(smithUser)
 
 	_, err := rootDB.Exec("CREATE USER " + smithUser)
 	require.NoError(t, err)
@@ -315,7 +315,7 @@ func TestUserfileNotAdmin(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	const smithUser = "jsmith"
-	smithUserName := security.MakeSQLUsernameFromPreNormalizedString(smithUser)
+	smithUserName := username.MakeSQLUsernameFromPreNormalizedString(smithUser)
 
 	_, err := rootDB.Exec("CREATE USER " + smithUser)
 	require.NoError(t, err)

@@ -29,7 +29,7 @@ message SessionData {
   // session. This can be used for logging and per-application statistics.
   string application_name = 2;
   // User is the name of the user logged into the session.
-  string user_proto = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+  string user_proto = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
   // DataConversion gives access to the data conversion configuration.
   DataConversionConfig data_conversion_config = 4 [(gogoproto.nullable) = false];
   // VectorizeMode indicates which kinds of queries to use vectorized execution

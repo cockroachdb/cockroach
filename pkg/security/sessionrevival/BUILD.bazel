@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/sessiondatapb",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",
@@ -20,7 +21,7 @@ go_test(
     srcs = ["token_test.go"],
     embed = [":sessionrevival"],
     deps = [
-        "//pkg/security",
+        "//pkg/security/username",
         "//pkg/sql/sessiondatapb",
         "//pkg/util/timeutil",
         "@com_github_gogo_protobuf//types",

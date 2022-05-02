@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,7 +46,7 @@ func TestShowTransferState(t *testing.T) {
 			t,
 			tenant.SQLAddr(),
 			"TestShowTransferState-without_transfer_key",
-			url.UserPassword(security.TestUser, "hunter2"),
+			url.UserPassword(username.TestUser, "hunter2"),
 		)
 		defer cleanup()
 
@@ -84,7 +84,7 @@ func TestShowTransferState(t *testing.T) {
 			t,
 			tenant.SQLAddr(),
 			"TestShowTransferState-with_transfer_key",
-			url.UserPassword(security.TestUser, "hunter2"),
+			url.UserPassword(username.TestUser, "hunter2"),
 		)
 		defer cleanup()
 
@@ -137,7 +137,7 @@ func TestShowTransferState(t *testing.T) {
 			t,
 			tenant.SQLAddr(),
 			"TestShowTransferState-successful_transfer",
-			url.User(security.TestUser), // Do not use a password here.
+			url.User(username.TestUser), // Do not use a password here.
 		)
 		defer cleanup()
 
@@ -186,7 +186,7 @@ func TestShowTransferState(t *testing.T) {
 				t,
 				tenant.SQLAddr(),
 				"TestShowTransferState-errors-transaction",
-				url.UserPassword(security.TestUser, "hunter2"),
+				url.UserPassword(username.TestUser, "hunter2"),
 			)
 			defer cleanup()
 
@@ -211,7 +211,7 @@ func TestShowTransferState(t *testing.T) {
 				t,
 				tenant.SQLAddr(),
 				"TestShowTransferState-errors-temp_tables",
-				url.UserPassword(security.TestUser, "hunter2"),
+				url.UserPassword(username.TestUser, "hunter2"),
 			)
 			defer cleanup()
 

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -81,7 +81,7 @@ DO UPDATE SET span_count = $1
 RETURNING span_count
 `
 		datums, err := d.InternalExecutor.QueryRowEx(ctx, "seed-span-count", txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			seedSpanCountStmt, spanCount)
 		if err != nil {
 			return err

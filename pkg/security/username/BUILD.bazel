@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "username",
+    srcs = ["username.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/username",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/lexbase",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "username_test",
+    srcs = ["username_test.go"],
+    deps = [
+        ":username",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+    ],
+)
+
+disallowed_imports_test(
+    "username",
+    disallowed_list = [
+        "//pkg/util/log",
+    ],
+)
