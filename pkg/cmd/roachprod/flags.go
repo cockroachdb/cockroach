@@ -185,6 +185,9 @@ func initFlags() {
 		"skip-init", startOpts.SkipInit, "skip initializing the cluster")
 	startCmd.Flags().IntVar(&startOpts.StoreCount,
 		"store-count", startOpts.StoreCount, "number of stores to start each node with")
+	// TODO(during review): should we add flags here?
+	startCmd.Flags().IntVar(&startOpts.InitTarget,
+		"init-target", startOpts.InitTarget, "target node to initialize the cluster on")
 
 	startTenantCmd.Flags().StringVarP(&hostCluster,
 		"host-cluster", "H", "", "host cluster")
