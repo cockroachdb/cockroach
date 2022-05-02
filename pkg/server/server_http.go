@@ -256,7 +256,7 @@ func (s *httpServer) start(
 			})
 			mux.Handle(healthPath, http.HandlerFunc(s.baseHandler))
 
-			plainRedirectServer := netutil.MakeServer(stopper, uiTLSConfig, mux)
+			plainRedirectServer := netutil.MakeServer(workersCtx, stopper, uiTLSConfig, mux)
 
 			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
 		}); err != nil {
