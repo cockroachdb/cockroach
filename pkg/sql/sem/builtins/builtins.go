@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -239,6 +240,12 @@ func mustBeDIntInTenantRange(e tree.Expr) (tree.DInt, error) {
 	}
 	return tenID, nil
 }
+
+// CommitWithCausalityTokenName is the name of the special builtin function
+// to commit a transaction and return the logical timestamp at which it
+// committed. The implementation of this function here is a shim; the function
+// is processed explicitly by the connExecutor.
+const CommitWithCausalityTokenName = "commit_with_causality_token"
 
 // builtins contains the built-in functions indexed by name.
 //
@@ -2758,6 +2765,28 @@ nearest replica.`, defaultFollowerReadDuration),
 			},
 			Info:       withMaxStalenessInfo(true /* nearestOnly */),
 			Volatility: volatility.Volatile,
+		},
+	),
+
+	// CommitWithCausalityToken is a special sentinel builtin which returns an
+	// error when invoked directly. The connExecutor state machine detects
+	// invocations of this function as the sole expression in a simple select.
+	// When this happens, during an explicit transaction, the transaction is
+	// committed, the side-effects of that commit, if there are any, are run,
+	// and the timestamp at which the commit ocurred is returned.
+	catconstants.CRDBInternalSchemaName + "." + CommitWithCausalityTokenName: makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			Volatility: volatility.Volatile,
+			ReturnType: tree.FixedReturnType(types.Decimal),
+			Fn: func(*eval.Context, tree.Datums) (tree.Datum, error) {
+				return nil, pgerror.Newf(pgcode.InvalidTransactionState,
+					"cannot execute "+CommitWithCausalityTokenName+" outside of an "+
+						"explicit transaction in the open state")
+			},
 		},
 	),
 

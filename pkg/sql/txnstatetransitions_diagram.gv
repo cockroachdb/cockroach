@@ -35,6 +35,7 @@ digraph finite_state_machine {
 	"Open{ImplicitTxn:false}" -> "NoTxn{}" [label = <RetriableErr{CanAutoRetry:false, IsCommit:true}<BR/><I>Retriable err on COMMIT</I>>]
 	"Open{ImplicitTxn:false}" -> "Open{ImplicitTxn:false}" [label = <RetriableErr{CanAutoRetry:true, IsCommit:false}<BR/><I>Retriable err; will auto-retry</I>>]
 	"Open{ImplicitTxn:false}" -> "Open{ImplicitTxn:false}" [label = <RetriableErr{CanAutoRetry:true, IsCommit:true}<BR/><I>Retriable err; will auto-retry</I>>]
+	"Open{ImplicitTxn:false}" -> "CommitWait{}" [label = <TxnCommittedWithCausalityToken{}<BR/><I>SELECT crdb_internal.commit_with_causality_token()</I>>]
 	"Open{ImplicitTxn:false}" -> "NoTxn{}" [label = <TxnFinishAborted{}<BR/><I>ROLLBACK, or after a statement running as an implicit txn fails</I>>]
 	"Open{ImplicitTxn:false}" -> "NoTxn{}" [label = <TxnFinishCommitted{}<BR/><I>COMMIT, or after a statement running as an implicit txn</I>>]
 	"Open{ImplicitTxn:false}" -> "CommitWait{}" [label = <TxnReleased{}<BR/><I>RELEASE SAVEPOINT cockroach_restart</I>>]

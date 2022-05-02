@@ -1383,6 +1383,12 @@ type connExecutor struct {
 		rowsWrittenLogged bool
 		rowsReadLogged    bool
 
+		// shouldAcceptReleaseSavepointCockroachRestart is set to true
+		// when entering the commitOrReleaseWaitState. If set to true, the
+		// commitOrReleaseWaitState will allow one instance of RELEASE SAVEPOINT
+		// cockroach_restart.
+		shouldAcceptReleaseSavepointCockroachRestart bool
+
 		// hasAdminRole is used to cache if the user running the transaction
 		// has admin privilege. hasAdminRoleCache is set for the first statement
 		// in a transaction.

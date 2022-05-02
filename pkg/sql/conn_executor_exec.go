@@ -603,6 +603,11 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 
+	// Handle the special SELECT crdb_internal.commit_with_causality_token.
+	if !p.extendedEvalCtx.TxnImplicit && isSelectCommitWithCausalityToken(ast) {
+		return ex.handleCommitWithCausalityToken(ctx, res)
+	}
+
 	// For regular statements (the ones that get to this point), we
 	// don't return any event unless an error happens.
 
@@ -1691,6 +1696,14 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 			ex.incrementExecutedStmtCounter(ast)
 		}
 	}()
+	defer func() {
+		ex.extraTxnState.shouldAcceptReleaseSavepointCockroachRestart = false
+	}()
+	if s, ok := ast.(*tree.ReleaseSavepoint); ok &&
+		s.Savepoint == commitOnReleaseSavepointName &&
+		ex.extraTxnState.shouldAcceptReleaseSavepointCockroachRestart {
+		return nil, nil
+	}
 	switch ast.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we

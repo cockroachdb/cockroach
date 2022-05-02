@@ -1,0 +1,214 @@
+user testuser
+
+statement error pgcode 25000 cannot execute commit_with_causality_token outside of an explicit transaction in the open state
+select crdb_internal.commit_with_causality_token()
+
+# Test that calling the statement during execution leads to an error.
+subtest calling_during_execution
+
+statement ok
+create table bar(i int primary key)
+
+statement ok
+begin
+
+# If you don't call the function, you don't get an error. Maybe this is a
+# bad design decision and we should fail to resolve the function.
+statement ok
+select crdb_internal.commit_with_causality_token() from bar
+
+statement ok
+commit
+
+statement ok
+begin;
+insert into bar values (1)
+
+statement error pgcode 25000 cannot execute commit_with_causality_token outside of an explicit transaction in the open state
+select crdb_internal.commit_with_causality_token() from bar
+
+statement ok
+rollback
+
+statement ok
+drop table bar
+
+
+statement ok
+begin;
+
+let $tok
+select crdb_internal.commit_with_causality_token()
+
+statement ok
+commit
+
+query B
+select $tok < cluster_logical_timestamp()
+----
+true
+
+subtest basic
+
+statement ok
+begin;
+savepoint cockroach_restart;
+
+let $tok
+select crdb_internal.commit_with_causality_token()
+
+statement ok
+release savepoint cockroach_restart
+
+statement ok
+commit
+
+
+subtest perform_some_dmls
+
+statement ok
+create table foo (i int primary key);
+
+statement ok
+begin;
+savepoint cockroach_restart;
+insert into foo values(1)
+
+query I
+select * from foo
+----
+1
+
+statement ok
+select crdb_internal.commit_with_causality_token()
+
+statement ok
+commit
+
+query I
+select * from foo
+----
+1
+
+# Do the same, but this time, release the savepoint.
+
+statement ok
+begin;
+savepoint cockroach_restart;
+insert into foo values(2)
+
+query I
+select * from foo
+----
+1
+2
+
+statement ok
+select crdb_internal.commit_with_causality_token()
+
+statement ok
+release savepoint cockroach_restart;
+commit
+
+query I
+select * from foo
+----
+1
+2
+
+subtest perform_some_ddls
+
+statement ok
+begin;
+savepoint cockroach_restart;
+create table t (i int primary key);
+drop table foo;
+
+let $tok
+select crdb_internal.commit_with_causality_token()
+
+statement ok
+commit
+
+
+# Above we tested that we can issue RELEASE SAVEPOINT cockroach_restart
+# after crdb_internal.commit_with_causality_token() if we had set it up.
+# Now we test that it is not allowed if it had not been added.
+subtest disallow_cockroach_restart_without_savepoint
+
+statement ok
+begin;
+select crdb_internal.commit_with_causality_token();
+
+statement error pgcode 25000 current transaction is committed, commands ignored until end of transaction block
+release savepoint cockroach_restart;
+
+statement ok
+rollback
+
+# Test that the function can be used with wacky capitalization and
+# with quotes.
+subtest capitalization
+
+statement ok
+begin;
+savepoint cockroach_restart;
+select cRdB_Internal.Commit_With_causality_token();
+commit;
+
+statement ok
+begin;
+savepoint cockroach_restart;
+select cRdB_Internal."commit_with_causality_token"();
+commit;
+
+# Test that the causality token is the same timestamp as ends up on rows,
+# even if the transaction gets pushed.
+subtest causality_token_equals_mvcc_timestamp
+
+statement ok
+create table foo (i int primary key);
+
+statement ok
+begin;
+   insert into foo values (1), (3);
+
+let $ts1
+select crdb_internal.commit_with_causality_token()
+
+statement ok
+commit
+
+statement ok
+begin;
+   insert into foo values (2), (4);
+
+user root
+
+statement ok
+begin priority high; select * from foo; commit;
+
+user testuser
+
+let $ts2
+select crdb_internal.commit_with_causality_token()
+
+statement ok
+commit
+
+query IT
+  SELECT i,
+         CASE
+         WHEN ts = $ts1 THEN 'ts1'
+         WHEN ts = $ts2 THEN 'ts2'
+         END
+    FROM (SELECT i, crdb_internal_mvcc_timestamp AS ts FROM foo)
+ORDER BY i ASC;
+----
+1  ts1
+2  ts2
+3  ts1
+4  ts2
+
+statement ok
+drop table foo
