@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+set -xeuo pipefail
+
+dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
+source "$dir/teamcity-bazel-support.sh"  # For process_test_json
+source "$dir/teamcity-support.sh"  # For log_into_gcloud
+
+bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
+BAZEL_BIN=$(bazel info bazel-bin --config=ci)
+
+ARTIFACTS_DIR=/artifacts
+GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
+
+echo "$GOOGLE_EPHEMERAL_CREDENTIALS" > creds.json
+gcloud auth activate-service-account --key-file=creds.json
+
+exit_status=0
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
+    test //pkg/cloud/gcp:gcp_test -- \
+    --test_env=GO_TEST_WRAP_TESTV=1 \
+    --test_env=GO_TEST_WRAP=1 \
+    --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE \
+    --test_env=GOOGLE_CREDENTIALS_JSON="$GOOGLE_EPHEMERAL_CREDENTIALS" \
+    --test_env=GOOGLE_APPLICATION_CREDENTIALS="creds.json" \
+    --test_env=GOOGLE_BUCKET="cockroachdb-backup-testing" \
+    --test_timeout=7200 \
+    || exit_status=$?
+
+process_test_json \
+  $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
+  $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
+  $ARTIFACTS_DIR \
+  $GO_TEST_JSON_OUTPUT_FILE \
+  $exit_status
+
+exit $exit_status

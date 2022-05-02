@@ -35,18 +35,18 @@ import (
 func TestPutGoogleCloud(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	bucket := os.Getenv("GS_BUCKET")
+	bucket := os.Getenv("GOOGLE_BUCKET")
 	if bucket == "" {
-		skip.IgnoreLint(t, "GS_BUCKET env var must be set")
+		skip.IgnoreLint(t, "GOOGLE_BUCKET env var must be set")
 	}
 
 	user := username.RootUserName()
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	testutils.RunTrueAndFalse(t, "specified", func(t *testing.T, specified bool) {
-		credentials := os.Getenv("GS_JSONKEY")
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
 		if credentials == "" {
-			skip.IgnoreLint(t, "GS_JSONKEY env var must be set")
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
@@ -58,7 +58,6 @@ func TestPutGoogleCloud(t *testing.T) {
 		if specified {
 			uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
 		}
-		t.Log(uri)
 		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t,
 			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
@@ -93,15 +92,13 @@ func TestPutGoogleCloud(t *testing.T) {
 	})
 }
 
-func requireImplicitGoogleCredentials(t *testing.T) {
-	t.Helper()
-	// TODO(yevgeniy): Fix default credentials check.
-	skip.IgnoreLint(t, "implicit credentials not configured")
-}
-
 func TestAntagonisticGCSRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	requireImplicitGoogleCredentials(t)
+
+	// Only test if default credentials are configured.
+	if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
+		skip.IgnoreLint(t, err)
+	}
 
 	testSettings := cluster.MakeTestingClusterSettings()
 
@@ -117,7 +114,12 @@ func TestAntagonisticGCSRead(t *testing.T) {
 // exist.
 func TestFileDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	requireImplicitGoogleCredentials(t)
+
+	// Only test if default credentials are configured.
+	if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
+		skip.IgnoreLint(t, err)
+	}
+
 	user := username.RootUserName()
 
 	testSettings := cluster.MakeTestingClusterSettings()
@@ -155,7 +157,11 @@ func TestFileDoesNotExist(t *testing.T) {
 
 func TestCompressedGCS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	requireImplicitGoogleCredentials(t)
+
+	// Only test if default credentials are configured.
+	if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
+		skip.IgnoreLint(t, err)
+	}
 
 	user := username.RootUserName()
 	ctx := context.Background()
