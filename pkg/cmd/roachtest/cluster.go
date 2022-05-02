@@ -1193,8 +1193,16 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t test.Test) erro
 		if node > c.spec.NodeCount {
 			return errors.New("no node responds to SQL, cannot fetch tsdata")
 		}
+		sec := "--insecure"
+		if c.IsSecure() {
+			certs := "certs"
+			if c.IsLocal() {
+				certs = c.localCertsDir
+			}
+			sec = fmt.Sprintf("--certs-dir=%s", certs)
+		}
 		if err := c.RunE(
-			ctx, c.Node(node), "./cockroach debug tsdump --insecure --format=raw > tsdump.gob",
+			ctx, c.Node(node), fmt.Sprintf("./cockroach debug tsdump %s --format=raw > tsdump.gob", sec),
 		); err != nil {
 			return err
 		}
@@ -2352,7 +2360,12 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 }
 
 func (c *clusterImpl) IsLocal() bool {
+	// FIXME: I think radu made local more flexible and local is a prefix?
 	return c.name == "local"
+}
+
+func (c *clusterImpl) IsSecure() bool {
+	return c.localCertsDir != ""
 }
 
 // Extend extends the cluster's expiration by d.
