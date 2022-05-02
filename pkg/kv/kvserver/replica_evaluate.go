@@ -506,8 +506,15 @@ func evaluateCommand(
 			}
 			return s
 		}
+		var resp string
+		switch r := reply.(type) {
+		case *roachpb.ScanResponse:
+			resp = trunc(r.ResponseHeader.String())
+		default:
+			resp = trunc(reply.String())
+		}
 		log.VEventf(ctx, 2, "evaluated %s command %s, txn=%v : resp=%s, err=%v",
-			args.Method(), trunc(args.String()), h.Txn, trunc(reply.String()), err)
+			args.Method(), trunc(args.String()), h.Txn, resp, err)
 	}
 	return pd, err
 }
