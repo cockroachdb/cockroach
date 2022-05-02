@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/lib/pq/auth/kerberos"
+	_ "github.com/otan/gopgkrb5" // need a comment until the dependency is used
 )
 
 func init() {
