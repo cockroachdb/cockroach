@@ -94,6 +94,9 @@ type Conn interface {
 	// GetDriverConn exposes the underlying driver connection object
 	// for use by the cli package.
 	GetDriverConn() DriverConn
+
+	// Cancel sends a query cancellation request to the server.
+	Cancel(ctx context.Context) error
 }
 
 // Rows describes a result set.

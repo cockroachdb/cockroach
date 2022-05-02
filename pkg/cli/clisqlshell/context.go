@@ -76,7 +76,7 @@ type internalContext struct {
 	// state about the current query.
 	mu struct {
 		syncutil.Mutex
-		cancelFn func()
+		cancelFn func() error
 		doneCh   chan struct{}
 	}
 }

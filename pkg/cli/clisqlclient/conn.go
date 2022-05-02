@@ -140,6 +140,10 @@ func (c *sqlConn) GetDriverConn() DriverConn {
 	return &driverConnAdapter{c}
 }
 
+func (c *sqlConn) Cancel(ctx context.Context) error {
+	return c.conn.PgConn().CancelRequest(ctx)
+}
+
 // SetCurrentDatabase implements the Conn interface.
 func (c *sqlConn) SetCurrentDatabase(dbName string) {
 	c.dbName = dbName
