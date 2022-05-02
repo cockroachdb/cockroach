@@ -37,14 +37,17 @@ func TestConnTracker(t *testing.T) {
 	tracker, err := NewConnTracker(ctx, stopper, nil /* timeSource */)
 	require.NoError(t, err)
 
-	tenantID := roachpb.MakeTenantID(20)
+	tenant20 := roachpb.MakeTenantID(20)
 	sa := &ServerAssignment{addr: "127.0.0.10:8090", owner: &testConnHandle{}}
 
 	// Run twice for idempotency.
-	tracker.registerAssignment(tenantID, sa)
-	tracker.registerAssignment(tenantID, sa)
+	tracker.registerAssignment(tenant20, sa)
+	tracker.registerAssignment(tenant20, sa)
+	activeList, idleList := tracker.listAssignments(tenant20)
+	require.Equal(t, []*ServerAssignment{sa}, activeList)
+	require.Empty(t, idleList)
 
-	connsMap := tracker.GetConnsMap(tenantID)
+	connsMap := tracker.GetConnsMap(tenant20)
 	require.Len(t, connsMap, 1)
 	h, ok := connsMap[sa.Addr()]
 	require.True(t, ok)
@@ -52,15 +55,21 @@ func TestConnTracker(t *testing.T) {
 
 	tenantIDs := tracker.getTenantIDs()
 	require.Len(t, tenantIDs, 1)
-	require.Equal(t, tenantID, tenantIDs[0])
+	require.Equal(t, tenant20, tenantIDs[0])
 
 	// Non-existent.
 	connsMap = tracker.GetConnsMap(roachpb.MakeTenantID(42))
 	require.Empty(t, connsMap)
+	activeList, idleList = tracker.listAssignments(roachpb.MakeTenantID(42))
+	require.Empty(t, activeList)
+	require.Empty(t, idleList)
 
 	// Run twice for idempotency.
-	tracker.unregisterAssignment(tenantID, sa)
-	tracker.unregisterAssignment(tenantID, sa)
+	tracker.unregisterAssignment(tenant20, sa)
+	tracker.unregisterAssignment(tenant20, sa)
+	activeList, idleList = tracker.listAssignments(tenant20)
+	require.Empty(t, activeList)
+	require.Empty(t, idleList)
 
 	// Once the assignment gets unregistered, we shouldn't return that tenant
 	// since there are no active connections.
@@ -94,6 +103,9 @@ func TestConnTracker(t *testing.T) {
 		require.Empty(t, entry.assignments.active)
 		require.Empty(t, entry.assignments.idle)
 	}
+	activeList, idleList = tracker.listAssignments(tenant20)
+	require.Empty(t, activeList)
+	require.Empty(t, idleList)
 }
 
 func TestConnTracker_GetConnsMap(t *testing.T) {

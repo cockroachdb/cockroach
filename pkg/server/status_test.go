@@ -1128,6 +1128,37 @@ func TestHotRanges2Response(t *testing.T) {
 	}
 }
 
+func TestHotRanges2ResponseWithViewActivityOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	req := &serverpb.HotRangesRequest{}
+	var hotRangesResp serverpb.HotRangesResponseV2
+	if err := postStatusJSONProtoWithAdminOption(s, "v2/hotranges", req, &hotRangesResp, false); err != nil {
+		if !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
+	}
+
+	// Grant VIEWACTIVITY and all test should work.
+	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	if err := postStatusJSONProtoWithAdminOption(s, "v2/hotranges", req, &hotRangesResp, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Grant VIEWACTIVITYREDACTED and all test should get permission errors.
+	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+	if err := postStatusJSONProtoWithAdminOption(s, "v2/hotranges", req, &hotRangesResp, false); err != nil {
+		if !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
+	}
+}
+
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

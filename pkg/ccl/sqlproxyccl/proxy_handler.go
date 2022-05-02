@@ -441,6 +441,8 @@ func (handler *proxyHandler) startPodWatcher(ctx context.Context, podWatcher cha
 		case <-ctx.Done():
 			return
 		case pod := <-podWatcher:
+			// TODO(jaylim-crl): Invoke rebalance logic here whenever we see
+			// a new SQL pod.
 			if pod.State == tenant.DRAINING {
 				handler.idleMonitor.SetIdleChecks(pod.Addr)
 			} else {
