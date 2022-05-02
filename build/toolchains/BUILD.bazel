@@ -456,24 +456,53 @@ config_setting(
     visibility = ["//c-deps:__pkg__"],
 )
 
+bool_flag(
+    name = "prebuild_cdeps_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
 config_setting(
-    name = "is_macos_force_build_cdeps",
-    constraint_values = [
-        "@io_bazel_rules_go//go/toolchain:darwin",
-    ],
+    name = "prebuild_cdeps",
     flag_values = {
-        ":force_build_cdeps_flag": "true",
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
     },
     visibility = ["//c-deps:__pkg__"],
 )
 
 config_setting(
-    name = "is_windows_force_build_cdeps",
+    name = "is_windows_prebuild_cdeps",
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:windows",
     ],
     flag_values = {
-        ":force_build_cdeps_flag": "true",
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
+    },
+    visibility = ["//c-deps:__pkg__"],
+)
+
+config_setting(
+    name = "is_linux_prebuild_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
+    },
+    visibility = ["//c-deps:__pkg__"],
+)
+
+config_setting(
+    name = "is_macos_prebuild_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+    ],
+    flag_values = {
+        ":cross_flag": "true",
+        ":prebuild_cdeps_flag": "true",
     },
     visibility = ["//c-deps:__pkg__"],
 )
