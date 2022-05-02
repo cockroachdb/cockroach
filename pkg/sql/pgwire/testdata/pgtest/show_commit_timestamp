@@ -1,0 +1,68 @@
+# This test relies on a CoockroachDB-specific feature, so everything
+# is marked as crdb_only.
+
+only crdb
+----
+
+# Run a statement so we can show the commit timestamp.
+
+send
+Parse {"Query": "SELECT 1"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Grab the commit timestamp of the previous transaction using the simple
+# query protocol and a let binding.
+
+let $commit_ts
+Query {"String": "SHOW COMMIT TIMESTAMP"}
+----
+
+# Use the extended protocol to parse, bind, and execute SHOW COMMIT TIMESTAMP.
+
+send
+Parse {"Query": "SHOW COMMIT TIMESTAMP"}
+Bind
+Execute
+Sync
+----
+
+# Observe that the timestamp is the same as the expectation.
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"$commit_ts"}]}
+{"Type":"CommandComplete","CommandTag":"SHOW COMMIT TIMESTAMP 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Show that you can use portals to execute SHOW COMMIT TIMESTAMP.
+
+send
+Parse {"Name": "s0", "Query": "SHOW COMMIT TIMESTAMP"}
+Bind {"DestinationPortal": "p0", "PreparedStatement": "s0"}
+Execute {"Portal": "p0"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"$commit_ts"}]}
+{"Type":"CommandComplete","CommandTag":"SHOW COMMIT TIMESTAMP 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

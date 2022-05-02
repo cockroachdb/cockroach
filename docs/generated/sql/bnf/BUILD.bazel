@@ -210,6 +210,7 @@ FILES = [
     "show_backup",
     "show_cluster_setting",
     "show_columns_stmt",
+    "show_commit_timestamp_stmt",
     "show_constraints_stmt",
     "show_create_stmt",
     "show_create_schedules_stmt",

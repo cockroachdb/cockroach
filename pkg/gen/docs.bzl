@@ -222,6 +222,7 @@ DOCS_SRCS = [
   "//docs/generated/sql/bnf:show_backup.bnf",
   "//docs/generated/sql/bnf:show_cluster_setting.bnf",
   "//docs/generated/sql/bnf:show_columns_stmt.bnf",
+  "//docs/generated/sql/bnf:show_commit_timestamp_stmt.bnf",
   "//docs/generated/sql/bnf:show_constraints_stmt.bnf",
   "//docs/generated/sql/bnf:show_create_external_connections_stmt.bnf",
   "//docs/generated/sql/bnf:show_create_schedules_stmt.bnf",
