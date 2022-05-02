@@ -10,9 +10,9 @@ export TMPDIR=$PWD/artifacts/testrace
 mkdir -p "$TMPDIR"
 
 tc_start_block "Determine changed packages"
-if tc_release_branch; then
-  pkgspec=./pkg/...
-  echo "On release branch ($TC_BUILD_BRANCH), so running testrace on all packages ($pkgspec)"
+if tc_release_branch || tc_bors_branch; then
+  pkgspec=./pkg/server
+  echo "On release or bors branch ($TC_BUILD_BRANCH), so running testrace canary only ($pkgspec)"
 else
   pkgspec=$(changed_go_pkgs)
   if [[ $(echo "$pkgspec" | wc -w) -gt 10 ]]; then
