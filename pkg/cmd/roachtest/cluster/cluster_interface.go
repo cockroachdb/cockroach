@@ -105,6 +105,7 @@ type Cluster interface {
 	Spec() spec.ClusterSpec
 	Name() string
 	IsLocal() bool
+	IsSecure() bool
 
 	// Deleting CockroachDB data and logs on nodes.
 
