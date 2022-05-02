@@ -13,7 +13,7 @@ package colexecagg
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,7 +32,7 @@ type NewAggregatorArgs struct {
 	InputTypes     []*types.T
 	Spec           *execinfrapb.AggregatorSpec
 	EvalCtx        *eval.Context
-	Constructors   []execinfra.AggregateConstructor
+	Constructors   []execagg.AggregateConstructor
 	ConstArguments []tree.Datums
 	OutputTypes    []*types.T
 }

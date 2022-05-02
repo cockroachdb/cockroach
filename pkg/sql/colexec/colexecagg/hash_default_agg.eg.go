@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -89,7 +89,7 @@ func (a *defaultHashAgg) Reset() {
 
 func newDefaultHashAggAlloc(
 	allocator *colmem.Allocator,
-	constructor execinfra.AggregateConstructor,
+	constructor execagg.AggregateConstructor,
 	evalCtx *eval.Context,
 	inputArgsConverter *colconv.VecToDatumConverter,
 	numArguments int,
@@ -119,7 +119,7 @@ type defaultHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []defaultHashAgg
 
-	constructor execinfra.AggregateConstructor
+	constructor execagg.AggregateConstructor
 	evalCtx     *eval.Context
 	// inputArgsConverter is a converter from coldata.Vecs to tree.Datums that
 	// is shared among all aggregate functions and is managed by the aggregator

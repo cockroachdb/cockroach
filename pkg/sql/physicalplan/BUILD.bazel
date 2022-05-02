@@ -64,6 +64,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execagg",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/physicalplan/replicaoracle",

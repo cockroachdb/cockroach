@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecbase",
+        "//pkg/sql/colexec/colexecdisk",
         "//pkg/sql/colexec/colexecjoin",
         "//pkg/sql/colexec/colexecproj",
         "//pkg/sql/colexec/colexecprojconst",

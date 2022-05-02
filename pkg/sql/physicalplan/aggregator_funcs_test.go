@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -188,7 +189,7 @@ func checkDistAggregationInfo(
 	intermediaryTypes := make([]*types.T, numIntermediary)
 	for i, fn := range info.LocalStage {
 		var err error
-		_, returnTyp, err := execinfra.GetAggregateInfo(fn, colTypes...)
+		_, returnTyp, err := execagg.GetAggregateInfo(fn, colTypes...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -207,7 +208,7 @@ func checkDistAggregationInfo(
 			inputTypes[i] = intermediaryTypes[localIdx]
 		}
 		var err error
-		_, finalOutputTypes[i], err = execinfra.GetAggregateInfo(finalInfo.Fn, inputTypes...)
+		_, finalOutputTypes[i], err = execagg.GetAggregateInfo(finalInfo.Fn, inputTypes...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -509,7 +510,7 @@ func TestSingleArgumentDistAggregateFunctions(t *testing.T) {
 				continue
 			}
 			// See if this column works with this function.
-			_, _, err := execinfra.GetAggregateInfo(fn, col.GetType())
+			_, _, err := execagg.GetAggregateInfo(fn, col.GetType())
 			if err != nil {
 				continue
 			}
