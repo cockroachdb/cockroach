@@ -27,14 +27,12 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
-	"github.com/lib/pq"
-	"github.com/lib/pq/auth/kerberos"
-	_ "github.com/otan/gopgkrb5" // need a comment until the dependency is used
+	"github.com/otan/gopgkrb5"
 )
 
 func init() {
 	// Ensure that the CLI client commands can use GSSAPI authentication.
-	pq.RegisterGSSProvider(func() (pq.GSS, error) { return kerberos.NewGSS() })
+	pgconn.RegisterGSSProvider(func() (pgconn.GSS, error) { return gopgkrb5.NewGSS() })
 }
 
 type sqlConn struct {
