@@ -29,6 +29,7 @@ go_proto_library(
 go_library(
     name = "catpb",
     srcs = [
+        "catalog.go",
         "constraint.go",
         "default_privilege.go",
         "doc.go",
