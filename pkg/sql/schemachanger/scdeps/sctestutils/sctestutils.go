@@ -74,10 +74,10 @@ func WithBuilderDependenciesFromTestServer(
 		execCfg.Codec,
 		planner.Txn(),
 		planner.Descriptors(),
-		planner, /* schemaResolver */
-		planner, /* authAccessor */
-		planner, /* astFormatter */
-		planner, /* featureChecker */
+		sql.NewSkippingCacheSchemaResolver, /* schemaResolverFactory */
+		planner,                            /* authAccessor */
+		planner,                            /* astFormatter */
+		planner,                            /* featureChecker */
 		planner.SessionData(),
 		execCfg.Settings,
 		nil, /* statements */
