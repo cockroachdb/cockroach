@@ -64,11 +64,8 @@ func distChangefeedFlow(
 	progress jobspb.Progress,
 	resultsCh chan<- tree.Datums,
 ) error {
-	var err error
-	details, err = validateDetails(details)
-	if err != nil {
-		return err
-	}
+
+	opts := changefeedbase.MakeStatementOptions(details.Opts)
 
 	// NB: A non-empty high water indicates that we have checkpointed a resolved
 	// timestamp. Skipping the initial scan is equivalent to starting the
@@ -80,7 +77,7 @@ func distChangefeedFlow(
 		// We want to set the highWater and thus avoid an initial scan if either
 		// this is a cursor and there was no request for one, or we don't have a
 		// cursor but we have a request to not have an initial scan.
-		initialScanType, err := initialScanTypeFromOpts(details.Opts)
+		initialScanType, err := opts.GetInitialScanType()
 		if err != nil {
 			return err
 		}
@@ -120,14 +117,16 @@ func distChangefeedFlow(
 			return err
 		}
 
-		if filterExpr, isSet := details.Opts[changefeedbase.OptPrimaryKeyFilter]; isSet {
+		filters := opts.GetFilters()
+
+		if filters.WithPredicate {
 			if len(tableDescs) > 1 {
 				return pgerror.Newf(pgcode.InvalidParameterValue,
 					"option %s can only be used with 1 changefeed target (found %d)",
 					changefeedbase.OptPrimaryKeyFilter, len(tableDescs),
 				)
 			}
-			trackedSpans, err = constrainSpansByExpression(ctx, execCtx, filterExpr, tableDescs[0])
+			trackedSpans, err = constrainSpansByExpression(ctx, execCtx, filters.PrimaryKeyFilter, tableDescs[0])
 			if err != nil {
 				return err
 			}

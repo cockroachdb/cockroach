@@ -34,7 +34,7 @@ type confluentAvroEncoder struct {
 	schemaRegistry                     schemaRegistry
 	schemaPrefix                       string
 	updatedField, beforeField, keyOnly bool
-	virtualColumnVisibility            string
+	virtualColumnVisibility            changefeedbase.VirtualColumnVisibility
 	targets                            []jobspb.ChangefeedTargetSpecification
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
@@ -73,47 +73,47 @@ var encoderCacheConfig = cache.Config{
 }
 
 func newConfluentAvroEncoder(
-	opts map[string]string, targets []jobspb.ChangefeedTargetSpecification,
+	opts changefeedbase.EncodingOptions, targets []jobspb.ChangefeedTargetSpecification,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{
-		schemaPrefix:            opts[changefeedbase.OptAvroSchemaPrefix],
+		schemaPrefix:            opts.AvroSchemaPrefix,
 		targets:                 targets,
-		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
+		virtualColumnVisibility: opts.VirtualColumns,
 	}
 
-	switch opts[changefeedbase.OptEnvelope] {
-	case string(changefeedbase.OptEnvelopeKeyOnly):
+	switch opts.Envelope {
+	case changefeedbase.OptEnvelopeKeyOnly:
 		e.keyOnly = true
-	case string(changefeedbase.OptEnvelopeWrapped):
+	case changefeedbase.OptEnvelopeWrapped:
 	default:
 		return nil, errors.Errorf(`%s=%s is not supported with %s=%s`,
-			changefeedbase.OptEnvelope, opts[changefeedbase.OptEnvelope], changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
+			changefeedbase.OptEnvelope, opts.Envelope, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
-	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
+	e.updatedField = opts.UpdatedTimestamps
 	if e.updatedField && e.keyOnly {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
 			changefeedbase.OptUpdatedTimestamps, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
-	_, e.beforeField = opts[changefeedbase.OptDiff]
+	e.beforeField = opts.Diff
 	if e.beforeField && e.keyOnly {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
 			changefeedbase.OptDiff, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
 
-	if _, ok := opts[changefeedbase.OptKeyInValue]; ok {
+	if opts.KeyInValue {
 		return nil, errors.Errorf(`%s is not supported with %s=%s`,
 			changefeedbase.OptKeyInValue, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
-	if _, ok := opts[changefeedbase.OptTopicInValue]; ok {
+	if opts.TopicInValue {
 		return nil, errors.Errorf(`%s is not supported with %s=%s`,
 			changefeedbase.OptTopicInValue, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
-	if len(opts[changefeedbase.OptConfluentSchemaRegistry]) == 0 {
+	if len(opts.ConfluentSchemaRegistry) == 0 {
 		return nil, errors.Errorf(`WITH option %s is required for %s=%s`,
 			changefeedbase.OptConfluentSchemaRegistry, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
 
-	reg, err := newConfluentSchemaRegistry(opts[changefeedbase.OptConfluentSchemaRegistry])
+	reg, err := newConfluentSchemaRegistry(opts.ConfluentSchemaRegistry)
 	if err != nil {
 		return nil, err
 	}
