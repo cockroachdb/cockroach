@@ -1053,6 +1053,11 @@ func (ot *optTable) IsVirtualTable() bool {
 	return false
 }
 
+// IsSystemTable is part of the cat.Table interface.
+func (ot *optTable) IsSystemTable() bool {
+	return catalog.IsSystemDescriptor(ot.desc)
+}
+
 // IsMaterializedView implements the cat.Table interface.
 func (ot *optTable) IsMaterializedView() bool {
 	return ot.desc.MaterializedView()
@@ -1970,6 +1975,11 @@ func (ot *optVirtualTable) Name() tree.Name {
 // IsVirtualTable is part of the cat.Table interface.
 func (ot *optVirtualTable) IsVirtualTable() bool {
 	return true
+}
+
+// IsSystemTable is part of the cat.Table interface.
+func (ot *optVirtualTable) IsSystemTable() bool {
+	return false
 }
 
 // IsMaterializedView implements the cat.Table interface.
