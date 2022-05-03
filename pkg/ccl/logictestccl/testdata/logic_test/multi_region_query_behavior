@@ -1,4 +1,4 @@
-# LogicTest: multiregion-9node-3region-3azs
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-no-los
 # TODO(#75864): enable multiregion-9node-3region-3azs-tenant.
 
 # Set the closed timestamp interval to be short to shorten the amount of time
@@ -256,6 +256,7 @@ ALTER TABLE history INJECT STATISTICS '[
 
 # Regression test for #63735. Ensure that we choose locality optimized anti
 # joins for the foreign key checks.
+skipif config multiregion-9node-3region-3azs-no-los
 query T retry
 EXPLAIN INSERT
 INTO
@@ -338,6 +339,7 @@ INSERT INTO promos VALUES ('7fe2dce4-ecac-4d12-87b6-e1c1f837d835', 50, '{"some":
 INSERT INTO orders
   VALUES ('94e4b847-8f2f-4ac5-83f1-641d6e3df727', 100, '7fe2dce4-ecac-4d12-87b6-e1c1f837d835', '{"some": "info"}')
 
+skipif config multiregion-9node-3region-3azs-no-los
 query T nodeidx=3
 USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
     order_id, promo_id, price AS price_without_promo, price * discount AS price_with_promo
@@ -371,6 +373,7 @@ vectorized: true
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9tO20wQx--_pxjNDQdtlPgACZaQjPhSGpQGmlC1UjeKjHcCW5Jdd3etpkK56rP1vSp7SUNQgwTthb2n-e_M72_PPdqvM0yw--myf9IbwO7_vdHV6H1_D0bdfvf0CrQRZCZSMCiMnuuHmcwJTkZ-Mvkm3a0u3aQOWJ3ug5A216Vym4E-Ct4ML975uy2cX_QG_nYLH0a9wRnsrnLtwce33WH3dxVwDDtHMcXXnbjd6EzDaSPO8oNGJ5oGjcM4EIcUiWk7bO8gQ6UFDbI5WUw-Y4xjhoXROVmrTbV1Xwf0xAKTFkOpitJV22OGuTaEyT066WaECV5l1zMaUibINFvIUJDL5Ky-1hOkfpgUd_QdGZ7qWTlXNtnwTua0thAZjoqsCmlyTDk2OXK-OIo5X1D1uu6ccb7oTJvnP39wvpgGgvNFINRxtWjvcGy2IFMCAtDulgyOlwx16dYI1mU3hEmwZK_DDP49ZgXUehXqVrxwK96aypKR2QxKVVdJYgNsvPyDDwPd0EUz3HSgL-fSQbC1lNZLnD7XUj0YHW2m8V2Q-mFldF_ru7KAL1oq0CqBNHrs_rotVw2HDIekBJkE0oBBGjFIw-rZTw-2AkQvARiSLbSy9MTMbdaMGZK4If9hrC5NTpdG53Uav7yodfWGIOv8aegXPVUf1f_yY3HwN-LwWXG0IW49FUfPiuMn4vHyv18BAAD__47ayRw=
 
+skipif config multiregion-9node-3region-3azs-no-los
 query T nodeidx=3
 USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
     order_id, promos.promo_id, price AS price_without_promo, price * discount AS price_with_promo
