@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"net"
 	"net/url"
 	"sort"
@@ -2742,7 +2743,8 @@ CREATE TABLE crdb_internal.table_indexes (
   is_inverted         BOOL NOT NULL,
   is_sharded          BOOL NOT NULL,
   shard_bucket_count  INT,
-  created_at          TIMESTAMP
+  created_at          TIMESTAMP,
+  create_statement    STRING NOT NULL
 )
 `,
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -2777,6 +2779,28 @@ CREATE TABLE crdb_internal.table_indexes (
 						if idx.IsSharded() {
 							shardBucketCnt = tree.NewDInt(tree.DInt(idx.GetSharded().ShardBuckets))
 						}
+						// Build the PARTITION BY clause.
+						var partitionBuf bytes.Buffer
+						a := &tree.DatumAlloc{}
+						if err := ShowCreatePartitioning(
+							a, p.ExecCfg().Codec, table, idx, idx.GetPartitioning(), &partitionBuf, 1 /* indent */, 0, /* colOffset */
+						); err != nil {
+							return err
+						}
+						createIdxStmt, err := catformat.IndexForDisplay(
+							ctx,
+							table,
+							&descpb.AnonymousTable,
+							idx,
+							partitionBuf.String(),
+							tree.FmtSimple,
+							p.RunParams(ctx).p.SemaCtx(),
+							p.RunParams(ctx).p.SessionData(),
+							catformat.IndexDisplayDefOnly,
+						)
+						if err != nil {
+							return err
+						}
 						row = append(row,
 							tableID,
 							tableName,
@@ -2788,6 +2812,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.MakeDBool(tree.DBool(idx.IsSharded())),
 							shardBucketCnt,
 							createdAt,
+							tree.NewDString("CREATE "+createIdxStmt),
 						)
 						return pusher.pushRow(row...)
 					})
