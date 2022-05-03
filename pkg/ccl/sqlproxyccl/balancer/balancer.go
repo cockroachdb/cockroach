@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -38,6 +38,28 @@ const (
 	// DRAINING state before the proxy starts moving connections away from it.
 	minDrainPeriod = 1 * time.Minute
 
+	// rebalancePercentDeviation defines the percentage threshold that the
+	// current number of assignments can deviate away from the mean. Having a
+	// 15% "deadzone" reduces frequent transfers especially when load is
+	// fluctuating.
+	//
+	// For example, if the percent deviation is 0.15, and mean is 10, the
+	// number of assignments for every pod has to be between [8, 12] to be
+	// considered balanced.
+	//
+	// NOTE: This must be between 0 and 1 inclusive.
+	rebalancePercentDeviation = 0.15
+
+	// rebalanceRate defines the rate of rebalancing assignments across SQL
+	// pods. This rate applies to both RUNNING and DRAINING pods. For example,
+	// consider the case where the rate is 0.50; if we have decided that we need
+	// to move 15 assignments away from a particular pod, only 7 pods will be
+	// moved at a time.
+	//
+	// NOTE: This must be between 0 and 1 inclusive. 0 means no rebalancing
+	// will occur.
+	rebalanceRate = 0.50
+
 	// defaultMaxConcurrentRebalances represents the maximum number of
 	// concurrent rebalance requests that are being processed. This effectively
 	// limits the number of concurrent transfers per proxy.
@@ -48,8 +70,6 @@ const (
 	// an unsafe transfer point). Note that each transfer attempt currently has
 	// a timeout of 15 seconds, so retrying up to 3 times may hold onto
 	// processSem up to 45 seconds for each rebalance request.
-	//
-	// TODO(jaylim-crl): Reduce transfer timeout to 5 seconds.
 	maxTransferAttempts = 3
 )
 
@@ -92,24 +112,20 @@ func TimeSource(ts timeutil.TimeSource) Option {
 // Balancer handles load balancing of SQL connections within the proxy.
 // All methods on the Balancer instance are thread-safe.
 type Balancer struct {
-	// mu synchronizes access to fields in the struct.
-	mu struct {
-		syncutil.Mutex
-
-		// rng corresponds to the random number generator instance which will
-		// be used for load balancing.
-		rng *rand.Rand
-	}
-
 	// stopper is used to start async tasks (e.g. transfer requests) within the
 	// balancer.
 	stopper *stop.Stopper
+
+	// metrics contains various counters reflecting the balancer operations.
+	metrics *Metrics
 
 	// directoryCache corresponds to the tenant directory cache, which will be
 	// used to lookup IP addresses of SQL pods for tenants.
 	directoryCache tenant.DirectoryCache
 
 	// connTracker is used to track connections within the proxy.
+	//
+	// TODO(jaylim-crl): Rename connTracker to tracker.
 	connTracker *ConnTracker
 
 	// queue represents the rebalancer queue. All transfer requests should be
@@ -131,8 +147,8 @@ type Balancer struct {
 func NewBalancer(
 	ctx context.Context,
 	stopper *stop.Stopper,
+	metrics *Metrics,
 	directoryCache tenant.DirectoryCache,
-	connTracker *ConnTracker,
 	opts ...Option,
 ) (*Balancer, error) {
 	// Handle options.
@@ -150,20 +166,23 @@ func NewBalancer(
 	// Ensure that ctx gets cancelled on stopper's quiescing.
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
-	q, err := newRebalancerQueue(ctx)
+	q, err := newRebalancerQueue(ctx, metrics)
 	if err != nil {
 		return nil, err
 	}
 
 	b := &Balancer{
 		stopper:        stopper,
-		connTracker:    connTracker,
+		metrics:        metrics,
 		directoryCache: directoryCache,
 		queue:          q,
 		processSem:     semaphore.New(options.maxConcurrentRebalances),
 		timeSource:     options.timeSource,
 	}
-	b.mu.rng, _ = randutil.NewPseudoRand()
+	b.connTracker, err = NewConnTracker(ctx, b.stopper, b.timeSource)
+	if err != nil {
+		return nil, err
+	}
 
 	// Run queue processor to handle rebalance requests.
 	if err := b.stopper.RunAsyncTask(ctx, "processQueue", b.processQueue); err != nil {
@@ -183,20 +202,31 @@ func NewBalancer(
 // SelectTenantPod selects a tenant pod from the given list based on a weighted
 // CPU load algorithm. It is expected that all pods within the list belongs to
 // the same tenant. If no pods are available, this returns ErrNoAvailablePods.
+//
+// TODO(jaylim-crl): Rename this to SelectSQLServer(requester, tenantID, clusterName)
+// which returns a ServerAssignment.
 func (b *Balancer) SelectTenantPod(pods []*tenant.Pod) (*tenant.Pod, error) {
-	pod := selectTenantPod(b.randFloat32(), pods)
+	// The second case should not happen if the directory is returning the
+	// right data. Check it regardless or else roachpb.MakeTenantID will panic
+	// on a zero TenantID.
+	if len(pods) == 0 || pods[0].TenantID == 0 {
+		return nil, ErrNoAvailablePods
+	}
+	tenantID := roachpb.MakeTenantID(pods[0].TenantID)
+	tenantEntry := b.connTracker.getEntry(tenantID, true /* allowCreate */)
+	pod := selectTenantPod(pods, tenantEntry)
 	if pod == nil {
 		return nil, ErrNoAvailablePods
 	}
 	return pod, nil
 }
 
-// randFloat32 generates a random float32 within the bounds [0, 1) and is
-// thread-safe.
-func (b *Balancer) randFloat32() float32 {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.mu.rng.Float32()
+// GetTracker returns the tracker associated with the balancer.
+//
+// TODO(jaylim-crl): Remove GetTracker entirely once SelectTenantPod returns
+// a ServerAssignment instead of a pod.
+func (b *Balancer) GetTracker() *ConnTracker {
+	return b.connTracker
 }
 
 // processQueue runs on a background goroutine, and invokes TransferConnection
@@ -219,8 +249,7 @@ func (b *Balancer) processQueue(ctx context.Context) {
 		}
 
 		// TODO(jaylim-crl): implement enhancements:
-		//   1. Add metrics to track the number of active transfers.
-		//   2. Rate limit the number of transfers per connection (e.g. once
+		//   1. Rate limit the number of transfers per connection (e.g. once
 		//      every 5 minutes). This ensures that the connection isn't
 		//      ping-ponged between pods within a short interval. However, for
 		//      draining ones, we may want to move right away (or after 60 secs),
@@ -229,18 +258,17 @@ func (b *Balancer) processQueue(ctx context.Context) {
 		if err := b.stopper.RunAsyncTask(ctx, "processQueue-item", func(ctx context.Context) {
 			defer b.processSem.Release(1)
 
+			b.metrics.processRebalanceStart()
+			defer b.metrics.processRebalanceFinish()
+
 			// Each request is retried up to maxTransferAttempts.
 			for i := 0; i < maxTransferAttempts && ctx.Err() == nil; i++ {
-				// TODO(jaylim-crl): Once the TransferConnection API accepts a
-				// destination, we could update this code, and pass along dst.
-				err := req.conn.TransferConnection( /* req.dst */ )
-				if err == nil || errors.Is(err, context.Canceled) ||
-					req.dst == req.conn.ServerRemoteAddr() {
+				err := req.conn.TransferConnection()
+				if err == nil || errors.Is(err, context.Canceled) {
 					break
 				}
 
-				// Retry again if the connection hasn't been closed or
-				// transferred to the destination.
+				// Retry again if the connection hasn't been closed.
 				time.Sleep(250 * time.Millisecond)
 			}
 		}); err != nil {
@@ -278,10 +306,10 @@ func (b *Balancer) rebalanceLoop(ctx context.Context) {
 // also want to rate limit the number of rebalances per tenant for requests
 // coming from the pod watcher.
 func (b *Balancer) rebalance(ctx context.Context) {
-	// getAllConns ensures that tenants will have at least one connection.
-	tenantConns := b.connTracker.GetAllConns()
+	// getTenantIDs ensures that tenants will have at least one connection.
+	tenantIDs := b.connTracker.getTenantIDs()
 
-	for tenantID, allConns := range tenantConns {
+	for _, tenantID := range tenantIDs {
 		tenantPods, err := b.directoryCache.TryLookupTenantPods(ctx, tenantID)
 		if err != nil {
 			// This case shouldn't really occur unless there's a bug in the
@@ -291,8 +319,9 @@ func (b *Balancer) rebalance(ctx context.Context) {
 			continue
 		}
 
+		// Construct a map so we could easily retrieve the pod by address.
 		podMap := make(map[string]*tenant.Pod)
-		hasRunningPod := false
+		var hasRunningPod bool
 		for _, pod := range tenantPods {
 			podMap[pod.Addr] = pod
 
@@ -310,81 +339,236 @@ func (b *Balancer) rebalance(ctx context.Context) {
 			continue
 		}
 
-		connMap := make(map[string][]ConnectionHandle)
-		for _, conn := range allConns {
-			// Connection has been closed.
-			if conn.Context().Err() != nil {
-				continue
-			}
-			addr := conn.ServerRemoteAddr()
-			connMap[addr] = append(connMap[addr], conn)
-		}
-
-		for addr, podConns := range connMap {
-			pod, ok := podMap[addr]
-			if !ok {
-				// We have a connection to the pod, but the pod is not in the
-				// directory cache. This race case happens if the connection
-				// was transferred by a different goroutine to this new pod
-				// right after we fetch the list of pods from the directory
-				// cache above. Ignore here, and this connection will be handled
-				// on the next rebalance loop.
-				continue
-			}
-
-			// Transfer all connections in DRAINING pods.
-			if pod.State != tenant.DRAINING {
-				continue
-			}
-
-			// Only move connections for pods which have been draining for
-			// at least 1 minute. When load is fluctuating, the pod may
-			// transition back and forth between the DRAINING and RUNNING
-			// states. This check prevents us from moving connections around
-			// when that happens.
-			drainingFor := b.timeSource.Now().Sub(pod.StateTimestamp)
-			if drainingFor < minDrainPeriod {
-				continue
-			}
-
-			for _, c := range podConns {
-				// TODO(jaylim-crl): We currently transfer without a dest, which
-				// will result in using the weighted CPU algorithm to assign
-				// pods. Once we start using a leastconns algorithm, we can make
-				// better decisions here, and specify a destination.
-				b.queue.enqueue(&rebalanceRequest{
-					createdAt: b.timeSource.Now(),
-					conn:      c,
-				})
-			}
-		}
+		activeList, idleList := b.connTracker.listAssignments(tenantID)
+		b.rebalancePartition(podMap, activeList)
+		b.rebalancePartition(podMap, idleList)
 	}
 }
 
-// rebalanceRequest corresponds to a rebalance request. For now, this only
-// indicates where the connection should be transferred to through dst.
+// rebalancePartition rebalances the given assignments partition.
+func (b *Balancer) rebalancePartition(
+	pods map[string]*tenant.Pod, assignments []*ServerAssignment,
+) {
+	// Nothing to do here.
+	if len(pods) == 0 || len(assignments) == 0 {
+		return
+	}
+
+	// Transfer assignments away if the partition is in an imbalanced state.
+	toMove := collectRunningPodAssignments(pods, assignments, rebalancePercentDeviation)
+	b.enqueueRebalanceRequests(toMove)
+
+	// Move all assignments away from DRAINING pods if and only if the pods have
+	// been draining for at least minDrainPeriod.
+	toMove = collectDrainingPodAssignments(pods, assignments, b.timeSource)
+	b.enqueueRebalanceRequests(toMove)
+}
+
+// enqueueRebalanceRequests enqueues N random server assignments for a transfer
+// operation based on the defined rebalance rate. For example, if there are 10
+// server assignments in the input list, and rebalance rate is 0.4, four server
+// assignments will be selected at random, and enqueued for a transfer.
 //
-// TODO(jaylim-crl): Consider adding src, and evaluating that before invoking
-// the transfer operation to handle the case where a transfer was in progress
-// when a new request was added to the queue.
+// NOTE: Elements in the list may be shuffled around once this method returns.
+func (b *Balancer) enqueueRebalanceRequests(list []*ServerAssignment) {
+	toMoveCount := int(math.Ceil(float64(len(list)) * float64(rebalanceRate)))
+	partition, _ := partitionNRandom(list, toMoveCount)
+	for _, a := range partition {
+		b.queue.enqueue(&rebalanceRequest{
+			createdAt: b.timeSource.Now(),
+			conn:      a.Owner(),
+		})
+	}
+}
+
+// collectRunningPodAssignments returns a set of ServerAssignments that have to
+// be moved because the partition is in an imbalanced state. Only assignments to
+// RUNNING pods will be accounted for.
+//
+// NOTE: pods should not be nil, and percentDeviation must be between [0, 1].
+func collectRunningPodAssignments(
+	pods map[string]*tenant.Pod, partition []*ServerAssignment, percentDeviation float64,
+) []*ServerAssignment {
+	// Construct a map indexed by addresses of pods.
+	podAssignments := make(map[string][]*ServerAssignment)
+
+	// Ensure that all RUNNING pods have an entry in podAssignments. Doing that
+	// allows us to account for new or underutilized pods.
+	for _, pod := range pods {
+		if pod.State == tenant.RUNNING {
+			podAssignments[pod.Addr] = nil
+		}
+	}
+	numAssignments := 0
+	for _, a := range partition {
+		// If the assignment's address was not found in podAssignments, this
+		// means that we have a connection to the pod, but the pod is not in the
+		// directory cache. This race case happens if the connection was
+		// transferred by a different goroutine to this new pod right after we
+		// fetch the list of pods from the directory cache. Ignore here, and
+		// this connection will be handled on the next rebalance loop.
+		if _, ok := podAssignments[a.Addr()]; ok {
+			numAssignments++
+			podAssignments[a.Addr()] = append(podAssignments[a.Addr()], a)
+		}
+	}
+
+	// No pods or assignments to work with.
+	if len(podAssignments) == 0 || numAssignments == 0 {
+		return nil
+	}
+
+	// Calculate average number of assignments, and lower/upper bounds based
+	// on the rebalance percent deviation. We want to ensure that the number
+	// of assignments on each pod is within [lowerBound, upperBound]. If all
+	// of the pods are within that interval, the partition is considered to be
+	// balanced.
+	//
+	// Note that bounds cannot be 0, or else the addition of a new pod with no
+	// connections may still result in a balanced state.
+	avgAssignments := float64(numAssignments) / float64(len(podAssignments))
+	lowerBound := int(math.Max(1, math.Floor(avgAssignments*(1-percentDeviation))))
+	upperBound := int(math.Max(1, math.Ceil(avgAssignments*(1+percentDeviation))))
+
+	// Normalize average to fit between [lowerBound, upperBound]. This implies
+	// that average must be at least 1, and we don't end up moving assignments
+	// away resulting in 0 assignments to a pod.
+	avgAssignments = float64(lowerBound+upperBound) / 2.0
+
+	// Construct a set of assignments that we want to move, and the algorithm to
+	// do so would be as follows:
+	//
+	//   1. Compute the number of assignments that we need to move. This would
+	//      be X = MAX(n, m), where:
+	//        n = total number of assignments that exceed the upper bound
+	//        m = total number of assignments that fall short of lower bound
+	//
+	//   2. First pass on podAssignments: collect assignments that exceed the
+	//      upper bound. Update podAssignments and X to reflect the remaining
+	//      assignments accordingly.
+	//
+	//   3. Second pass on podAssignments: greedily collect as many assignments
+	//      up to X without violating the average.
+	//
+	// The implementation below is an optimization of the algorithm described
+	// above, where steps 1 and 2 are combined. We also randomize the collection
+	// process to ensure that there are no biases.
+
+	// Steps 1 and 2.
+	missingCount := 0
+	var mustMove, eligibleToMove []*ServerAssignment
+	var random []*ServerAssignment
+	for addr, d := range podAssignments {
+		missingCount += int(math.Max(float64(lowerBound-len(d)), 0.0))
+
+		// Move everything that exceed the upper bound.
+		excess := len(d) - upperBound
+		if excess > 0 {
+			random, d = partitionNRandom(d, excess)
+			mustMove = append(mustMove, random...)
+			missingCount -= excess
+		}
+
+		// The remaining ones that exceed the average are eligible for a move.
+		// Within each pod, choose `excess` assignments randomly.
+		excess = len(d) - int(avgAssignments)
+		if excess > 0 {
+			random, d = partitionNRandom(d, excess)
+			eligibleToMove = append(eligibleToMove, random...)
+		}
+
+		podAssignments[addr] = d
+	}
+
+	// Step 3.
+	// Across all pods, choose `missingCount` assignments randomly.
+	if missingCount > 0 {
+		random, _ = partitionNRandom(eligibleToMove, missingCount)
+		mustMove = append(mustMove, random...)
+	}
+
+	return mustMove
+}
+
+// collectDrainingPodAssignments returns a set of ServerAssignments that have to
+// be moved because the pods that they are in have been draining for at least
+// minDrainPeriod.
+//
+// NOTE: pods and timeSource should not be nil.
+func collectDrainingPodAssignments(
+	pods map[string]*tenant.Pod, partition []*ServerAssignment, timeSource timeutil.TimeSource,
+) []*ServerAssignment {
+	var collected []*ServerAssignment
+	for _, a := range partition {
+		pod, ok := pods[a.Addr()]
+		if !ok || pod.State != tenant.DRAINING {
+			// We have a connection to the pod, but the pod is not in the
+			// directory cache. This race case happens if the connection was
+			// transferred by a different goroutine to this new pod right after
+			// we fetch the list of pods from the directory cache. Ignore here,
+			// and this connection will be handled on the next rebalance loop.
+			continue
+		}
+
+		// Only move connections for pods which have been draining for at least
+		// 1 minute. When load is fluctuating, the pod may transition back and
+		// forth between the DRAINING and RUNNING states. This check prevents us
+		// from moving connections around when that happens.
+		drainingFor := timeSource.Now().Sub(pod.StateTimestamp)
+		if drainingFor < minDrainPeriod {
+			continue
+		}
+		collected = append(collected, a)
+	}
+	return collected
+}
+
+// partitionNRandom partitions the input slice into two, with the first being
+// n random elements, and the second being the remaining elements.
+// - If n <= 0, (nil, nil) will be returned.
+// - If n <= len(src), (src, nil) will be returned.
+//
+// NOTE: Elements in src may be shuffled around when this function returns, so
+// this does not allocate extra memory. It is guaranteed that elements that are
+// chosen will be the last n items of src.
+var partitionNRandom = func(
+	src []*ServerAssignment, n int,
+) (chosen []*ServerAssignment, rest []*ServerAssignment) {
+	if n <= 0 {
+		return nil, nil
+	}
+	if n >= len(src) {
+		return src, nil
+	}
+	restLen := len(src)
+	for i := 0; i < n; i++ {
+		idx := rand.Intn(restLen)
+		src[idx], src[restLen-1] = src[restLen-1], src[idx]
+		restLen--
+	}
+	return src[restLen:], src[:restLen]
+}
+
+// rebalanceRequest corresponds to a rebalance request.
 type rebalanceRequest struct {
 	createdAt time.Time
 	conn      ConnectionHandle
-	dst       string
 }
 
 // balancerQueue represents the balancer's internal queue which is used for
 // rebalancing requests. All methods on the queue are thread-safe.
 type rebalancerQueue struct {
 	mu       syncutil.Mutex
+	metrics  *Metrics
 	sem      semaphore.Semaphore
 	queue    *list.List
 	elements map[ConnectionHandle]*list.Element
 }
 
 // newRebalancerQueue returns a new instance of rebalancerQueue.
-func newRebalancerQueue(ctx context.Context) (*rebalancerQueue, error) {
+func newRebalancerQueue(ctx context.Context, metrics *Metrics) (*rebalancerQueue, error) {
 	q := &rebalancerQueue{
+		metrics:  metrics,
 		sem:      semaphore.New(math.MaxInt32),
 		queue:    list.New(),
 		elements: make(map[ConnectionHandle]*list.Element),
@@ -398,13 +582,17 @@ func newRebalancerQueue(ctx context.Context) (*rebalancerQueue, error) {
 }
 
 // enqueue puts the rebalance request into the queue. If a request for the
-// connection already exists, the newer of the two will be used. This returns
-// nil if the operation succeeded.
+// connection already exists, the newer of the two will be used.
 //
 // NOTE: req should not be nil.
 func (q *rebalancerQueue) enqueue(req *rebalanceRequest) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+
+	// Test environments may create rebalanceRequests with nil owners.
+	if req.conn == nil {
+		return
+	}
 
 	e, ok := q.elements[req.conn]
 	if ok {
@@ -412,11 +600,13 @@ func (q *rebalancerQueue) enqueue(req *rebalanceRequest) {
 		if e.Value.(*rebalanceRequest).createdAt.Before(req.createdAt) {
 			e.Value = req
 		}
-	} else {
-		e = q.queue.PushBack(req)
-		q.elements[req.conn] = e
-		q.sem.Release(1)
+		return
 	}
+
+	e = q.queue.PushBack(req)
+	q.elements[req.conn] = e
+	q.metrics.rebalanceReqQueued.Inc(1)
+	q.sem.Release(1)
 }
 
 // dequeue removes a request at the front of the queue, and returns that. If the
@@ -445,5 +635,6 @@ func (q *rebalancerQueue) dequeue(ctx context.Context) (*rebalanceRequest, error
 
 	req := q.queue.Remove(e).(*rebalanceRequest)
 	delete(q.elements, req.conn)
+	q.metrics.rebalanceReqQueued.Dec(1)
 	return req, nil
 }

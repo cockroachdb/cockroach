@@ -16,6 +16,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,7 +36,9 @@ import (
 var defaultTransferTimeout = 15 * time.Second
 
 // Used in testing.
-var transferConnectionConnectorTestHook func(context.Context, string) (net.Conn, error) = nil
+var transferConnectionConnectorTestHook func(
+	context.Context, balancer.ConnectionHandle, string,
+) (net.Conn, error) = nil
 
 type transferContext struct {
 	context.Context
@@ -73,6 +76,11 @@ func (t *transferContext) isRecoverable() bool {
 func (f *forwarder) tryBeginTransfer() (started bool, cleanupFn func()) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	// Forwarder hasn't been initialized.
+	if !f.isInitializedLocked() {
+		return false, nil
+	}
 
 	// Transfer is already in progress. No concurrent transfers are allowed.
 	if f.mu.isTransferring {
@@ -117,11 +125,6 @@ var errTransferCannotStart = errors.New("transfer cannot be started")
 // runTransfer returns, it is guaranteed that processors will either be
 // re-resumed, or the forwarder will be closed (in the case of a non-recoverable
 // error).
-//
-// TODO(jaylim-crl): It would be nice to introduce transfer policies in the
-// future. That way, we could either transfer to another random SQL pod, or to
-// a specific SQL pod. If we do that, TransferConnection would take in some kind
-// of policy parameter(s).
 //
 // TransferConnection implements the balancer.ConnectionHandle interface.
 func (f *forwarder) TransferConnection() (retErr error) {
@@ -207,7 +210,7 @@ func (f *forwarder) TransferConnection() (retErr error) {
 
 	// Transfer the connection.
 	clientConn, serverConn := f.getConns()
-	newServerConn, err := transferConnection(ctx, f.connector, f.metrics, clientConn, serverConn)
+	newServerConn, err := transferConnection(ctx, f, f.connector, f.metrics, clientConn, serverConn)
 	if err != nil {
 		return errors.Wrap(err, "transferring connection")
 	}
@@ -222,6 +225,7 @@ func (f *forwarder) TransferConnection() (retErr error) {
 // connection got transferred to.
 func transferConnection(
 	ctx *transferContext,
+	requester balancer.ConnectionHandle,
 	connector *connector,
 	metrics *metrics,
 	clientConn, serverConn *interceptor.PGConn,
@@ -263,18 +267,11 @@ func transferConnection(
 	}
 
 	// Connect to a new SQL pod.
-	//
-	// TODO(jaylim-crl): There is a possibility where the same pod will get
-	// selected. Some ideas to solve this: pass in the remote address of
-	// serverConn to avoid choosing that pod, or maybe a filter callback?
-	// We can also consider adding a target pod as an argument to
-	// TransferConnection. That way a central component gets to choose where the
-	// connections go.
 	connectFn := connector.OpenTenantConnWithToken
 	if transferConnectionConnectorTestHook != nil {
 		connectFn = transferConnectionConnectorTestHook
 	}
-	netConn, err := connectFn(ctx, revivalToken)
+	netConn, err := connectFn(ctx, requester, revivalToken)
 	if err != nil {
 		return nil, errors.Wrap(err, "opening connection")
 	}

@@ -24,9 +24,6 @@ type ConnectionHandle interface {
 	// been completed.
 	TransferConnection() error
 
-	// ServerRemoteAddr returns the remote address of the connection between
-	// the proxy and the server, which is basically the SQL pod's address
-	// (e.g. 10.15.42.36:26257). This will be used to identify which pod the
-	// connection handle is attached to.
-	ServerRemoteAddr() string
+	// IsIdle returns true if the connection is idle, and false otherwise.
+	IsIdle() bool
 }

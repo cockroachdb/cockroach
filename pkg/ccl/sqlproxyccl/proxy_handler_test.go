@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
@@ -887,12 +886,17 @@ func TestConnectionMigration(t *testing.T) {
 			_ = db.PingContext(tCtx)
 		}()
 
-		var conns []balancer.ConnectionHandle
+		var f *forwarder
 		require.Eventually(t, func() bool {
-			conns = proxy.handler.connTracker.GetConns(tenantID)
-			return len(conns) != 0
+			connsMap := proxy.handler.balancer.GetTracker().GetConnsMap(tenantID)
+			for _, conns := range connsMap {
+				if len(conns) != 0 {
+					f = conns[0].(*forwarder)
+					return true
+				}
+			}
+			return false
 		}, 10*time.Second, 100*time.Millisecond)
-		f := conns[0].(*forwarder)
 
 		// Set up forwarder hooks.
 		prevTenant1 := true
@@ -1092,12 +1096,17 @@ func TestConnectionMigration(t *testing.T) {
 			_ = conn.PingContext(tCtx)
 		}()
 
-		var conns []balancer.ConnectionHandle
+		var f *forwarder
 		require.Eventually(t, func() bool {
-			conns = proxy.handler.connTracker.GetConns(tenantID)
-			return len(conns) != 0
+			connsMap := proxy.handler.balancer.GetTracker().GetConnsMap(tenantID)
+			for _, conns := range connsMap {
+				if len(conns) != 0 {
+					f = conns[0].(*forwarder)
+					return true
+				}
+			}
+			return false
 		}, 10*time.Second, 100*time.Millisecond)
-		f := conns[0].(*forwarder)
 
 		initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
 		initErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
@@ -1172,8 +1181,8 @@ func TestConnectionMigration(t *testing.T) {
 
 	// All connections should eventually be terminated.
 	require.Eventually(t, func() bool {
-		conns := proxy.handler.connTracker.GetConns(tenantID)
-		return len(conns) == 0
+		connsMap := proxy.handler.balancer.GetTracker().GetConnsMap(tenantID)
+		return len(connsMap) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 }
 

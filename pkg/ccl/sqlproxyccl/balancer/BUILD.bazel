@@ -3,9 +3,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "balancer",
     srcs = [
+        "assignment.go",
         "balancer.go",
         "conn.go",
         "conn_tracker.go",
+        "metrics.go",
         "pod.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer",
@@ -14,7 +16,7 @@ go_library(
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/roachpb",
         "//pkg/util/log",
-        "//pkg/util/randutil",
+        "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -27,7 +29,9 @@ go_library(
 go_test(
     name = "balancer_test",
     srcs = [
+        "assignment_test.go",
         "balancer_test.go",
+        "conn_test.go",
         "conn_tracker_test.go",
         "pod_test.go",
     ],
