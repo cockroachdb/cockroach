@@ -258,6 +258,42 @@ func (s *TestState) MayResolveType(
 	return prefix, typ
 }
 
+func (s *TestState) MayResolveIndex(
+	ctx context.Context, tableIndexName tree.TableIndexName,
+) (
+	found bool,
+	prefix catalog.ResolvedObjectPrefix,
+	tbl catalog.TableDescriptor,
+	idx catalog.Index,
+) {
+	if tableIndexName.Table.Object() != "" {
+		prefix, tbl := s.MayResolveTable(ctx, *tableIndexName.Table.ToUnresolvedObjectName())
+		if tbl == nil {
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil
+		}
+		idx, err := tbl.FindNonDropIndexWithName(string(tableIndexName.Index))
+		if err != nil {
+			return false, catalog.ResolvedObjectPrefix{}, nil, nil
+		}
+		return true, prefix, tbl, idx
+	}
+
+	db, schema := s.mayResolvePrefix(tableIndexName.Table.ObjectNamePrefix)
+	dsNames, _ := s.ReadObjectNamesAndIDs(ctx, db.(catalog.DatabaseDescriptor), schema.(catalog.SchemaDescriptor))
+	for _, dsName := range dsNames {
+		prefix, tbl := s.MayResolveTable(ctx, *dsName.ToUnresolvedObjectName())
+		if tbl == nil {
+			continue
+		}
+		idx, err := tbl.FindNonDropIndexWithName(string(tableIndexName.Index))
+		if err == nil {
+			return true, prefix, tbl, idx
+		}
+	}
+
+	return false, catalog.ResolvedObjectPrefix{}, nil, nil
+}
+
 func (s *TestState) mayResolveObject(
 	name tree.UnresolvedObjectName,
 ) (prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
