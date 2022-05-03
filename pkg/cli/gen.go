@@ -239,7 +239,18 @@ Output the list of cluster settings known to this binary.
 					defaultVal = override
 				}
 			}
-			row := []string{wrapCode(name), typ, wrapCode(defaultVal), setting.Description()}
+
+			settingDesc := setting.Description()
+			if strings.Contains(name, "sql.defaults") {
+				settingDesc = fmt.Sprintf(`%s
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default should now be configured using ALTER ROLE... SET: %s`,
+					setting.Description(),
+					"https://www.cockroachlabs.com/docs/stable/alter-role.html",
+				)
+			}
+
+			row := []string{wrapCode(name), typ, wrapCode(defaultVal), settingDesc}
 			rows = append(rows, row)
 		}
 
