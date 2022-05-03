@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -2754,7 +2753,7 @@ CREATE TABLE crdb_internal.table_indexes (
 		row := make(tree.Datums, 7)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
+				func(db catalog.DatabaseDescriptor, schemaName string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
 					// We report the primary index of non-physical tables here. These
@@ -2788,10 +2787,11 @@ CREATE TABLE crdb_internal.table_indexes (
 						); err != nil {
 							return err
 						}
+						fullTableName := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName()))
 						createIdxStmt, err := catformat.IndexForDisplay(
 							ctx,
 							table,
-							&descpb.AnonymousTable,
+							&fullTableName,
 							idx,
 							partitionBuf.String(),
 							tree.FmtSimple,
