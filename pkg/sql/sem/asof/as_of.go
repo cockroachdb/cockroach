@@ -220,7 +220,7 @@ func DatumToHLC(
 		}
 		// Attempt to parse as a decimal.
 		if dec, _, err := apd.NewFromString(s); err == nil {
-			ts, convErr = tree.DecimalToHLC(dec)
+			ts, convErr = hlc.DecimalToHLC(dec)
 			ts.Synthetic = syn
 			break
 		}
@@ -241,7 +241,7 @@ func DatumToHLC(
 	case *tree.DInt:
 		ts.WallTime = int64(*d)
 	case *tree.DDecimal:
-		ts, convErr = tree.DecimalToHLC(&d.Decimal)
+		ts, convErr = hlc.DecimalToHLC(&d.Decimal)
 	case *tree.DInterval:
 		ts.WallTime = duration.Add(stmtTimestamp, d.Duration).UnixNano()
 	default:

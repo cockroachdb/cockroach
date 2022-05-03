@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -242,7 +241,7 @@ FROM system.descriptor ORDER BY id`
 			if err != nil {
 				return err
 			}
-			ts, err := tree.DecimalToHLC(decimal)
+			ts, err := hlc.DecimalToHLC(decimal)
 			if err != nil {
 				return err
 			}

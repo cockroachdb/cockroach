@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -127,7 +126,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 	ts := make([]hlc.Timestamp, len(tsRaw))
 	for i := range tsRaw {
 		var err error
-		ts[i], err = tree.ParseHLC(tsRaw[i])
+		ts[i], err = hlc.ParseHLC(tsRaw[i])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -280,7 +279,7 @@ func TestFingerprintValidator(t *testing.T) {
 	ts := make([]hlc.Timestamp, len(tsRaw))
 	for i := range tsRaw {
 		var err error
-		ts[i], err = tree.ParseHLC(tsRaw[i])
+		ts[i], err = hlc.ParseHLC(tsRaw[i])
 		if err != nil {
 			t.Fatal(err)
 		}

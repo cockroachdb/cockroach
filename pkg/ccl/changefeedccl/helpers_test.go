@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -248,7 +247,7 @@ func parseTimeToHLC(t testing.TB, s string) hlc.Timestamp {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts, err := tree.DecimalToHLC(d)
+	ts, err := hlc.DecimalToHLC(d)
 	if err != nil {
 		t.Fatal(err)
 	}

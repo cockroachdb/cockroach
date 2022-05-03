@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -2553,7 +2554,7 @@ func TestHistoricalDescriptorAcquire(t *testing.T) {
 
 	var ts1Str string
 	tdb.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1Str)
-	ts1, err := tree.ParseHLC(ts1Str)
+	ts1, err := hlc.ParseHLC(ts1Str)
 	require.NoError(t, err)
 
 	tdb.Exec(t, "ALTER TABLE sc.foo ADD COLUMN id UUID NOT NULL DEFAULT gen_random_uuid()")
