@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -45,8 +46,7 @@ func profileLocal(
 				duration = time.Duration(req.Seconds) * time.Second
 			}
 			if err := pprof.StartCPUProfile(&buf); err != nil {
-				// Construct a gRPC error to return to the caller.
-				return serverError(ctx, err)
+				return err
 			}
 			defer pprof.StopCPUProfile()
 			select {
@@ -56,7 +56,7 @@ func profileLocal(
 				return nil
 			}
 		}); err != nil {
-			return nil, err
+			return nil, newAPIError(ctx, err)
 		}
 		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	default:
@@ -67,11 +67,11 @@ func profileLocal(
 		name = strings.ToLower(name)
 		p := pprof.Lookup(name)
 		if p == nil {
-			return nil, status.Errorf(codes.InvalidArgument, "unable to find profile: %s", name)
+			return nil, newAPIErrorf(ctx, codes.InvalidArgument, "unable to find profile: %s", name)
 		}
 		var buf bytes.Buffer
 		if err := p.WriteTo(&buf, 0); err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
+			return nil, newAPIError(ctx, err)
 		}
 		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	}
@@ -79,7 +79,7 @@ func profileLocal(
 
 // stacksLocal retrieves goroutine stack files on the local node. This method
 // returns a gRPC error to the caller.
-func stacksLocal(req *serverpb.StacksRequest) (*serverpb.JSONResponse, error) {
+func stacksLocal(ctx context.Context, req *serverpb.StacksRequest) (*serverpb.JSONResponse, error) {
 	var stackType int
 	switch req.Type {
 	case serverpb.StacksType_GOROUTINE_STACKS:
@@ -87,12 +87,12 @@ func stacksLocal(req *serverpb.StacksRequest) (*serverpb.JSONResponse, error) {
 	case serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1:
 		stackType = 1
 	default:
-		return nil, status.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
+		return nil, newAPIErrorf(ctx, codes.InvalidArgument, "unknown stacks type: %s", req.Type)
 	}
 
 	var buf bytes.Buffer
 	if err := pprof.Lookup("goroutine").WriteTo(&buf, stackType); err != nil {
-		return nil, status.Errorf(codes.Unknown, "failed to write goroutine stack: %s", err)
+		return nil, newAPIError(ctx, errors.Wrap(err, "failed to write goroutine stack"))
 	}
 	return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 }

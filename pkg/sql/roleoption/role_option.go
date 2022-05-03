@@ -24,6 +24,9 @@ import (
 // Option defines a role option. This is output by the parser
 type Option uint32
 
+// SafeValue implements the redact.SafeValue interface.
+func (Option) SafeValue() {}
+
 // RoleOption represents an Option with a value.
 type RoleOption struct {
 	Option

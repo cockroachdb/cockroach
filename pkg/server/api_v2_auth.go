@@ -78,7 +78,7 @@ func (a *authenticationV2Server) createSessionFor(
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := a.authServer.newAuthSession(ctx, username)
 	if err != nil {
-		return "", apiInternalError(ctx, err)
+		return "", newAPIError(ctx, err)
 	}
 
 	// Generate and set a session for the response. Because HTTP cookies
@@ -148,7 +148,7 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 	}
 	if err := r.ParseForm(); err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		httpSendError(r.Context(), err, w)
 		return
 	}
 	if r.Form.Get("username") == "" {
@@ -166,7 +166,7 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	// Verify the provided username/password pair.
 	verified, expired, err := a.authServer.verifyPasswordDBConsole(a.ctx, username, r.Form.Get("password"))
 	if err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		httpSendError(r.Context(), err, w)
 		return
 	}
 	if expired {
@@ -180,7 +180,7 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 
 	session, err := a.createSessionFor(a.ctx, username)
 	if err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		httpSendError(r.Context(), err, w)
 		return
 	}
 
@@ -226,11 +226,11 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 	var sessionCookie serverpb.SessionCookie
 	decoded, err := base64.StdEncoding.DecodeString(session)
 	if err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		httpSendError(r.Context(), err, w)
 		return
 	}
 	if err := protoutil.Unmarshal(decoded, &sessionCookie); err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		httpSendError(r.Context(), err, w)
 		return
 	}
 
@@ -243,7 +243,7 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionCookie.ID,
 	); err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		httpSendError(r.Context(), err, w)
 		return
 	} else if n == 0 {
 		err := status.Errorf(
@@ -305,7 +305,7 @@ func (a *authenticationV2Mux) getSession(
 
 	valid, username, err := a.s.authServer.verifySession(req.Context(), sessionCookie)
 	if err != nil {
-		apiV2InternalError(req.Context(), err, w)
+		httpSendError(req.Context(), err, w)
 		return "", nil, err
 	}
 	if !valid {
@@ -417,7 +417,7 @@ func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Reques
 		req.Context().Value(webSessionUserKey{}).(string))
 	if role, err := r.getRoleForUser(req.Context(), username); err != nil || role < r.role {
 		if err != nil {
-			apiV2InternalError(req.Context(), err, w)
+			httpSendError(req.Context(), err, w)
 		} else {
 			http.Error(w, "user not allowed to access this endpoint", http.StatusForbidden)
 		}
@@ -426,7 +426,7 @@ func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Reques
 	if r.option > 0 {
 		ok, err := r.hasRoleOption(req.Context(), username, r.option)
 		if err != nil {
-			apiV2InternalError(req.Context(), err, w)
+			httpSendError(req.Context(), err, w)
 			return
 		} else if !ok {
 			http.Error(w, "user not allowed to access this endpoint", http.StatusForbidden)

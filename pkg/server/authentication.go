@@ -135,7 +135,7 @@ func (s *authenticationServer) UserLogin(
 	ctx context.Context, req *serverpb.UserLoginRequest,
 ) (*serverpb.UserLoginResponse, error) {
 	if req.Username == "" {
-		return nil, status.Errorf(
+		return nil, newAPIErrorf(ctx,
 			codes.Unauthenticated,
 			"no username was provided",
 		)
@@ -151,10 +151,10 @@ func (s *authenticationServer) UserLogin(
 	// Verify the provided username/password pair.
 	verified, expired, err := s.verifyPasswordDBConsole(ctx, username, req.Password)
 	if err != nil {
-		return nil, apiInternalError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	if expired {
-		return nil, status.Errorf(
+		return nil, newAPIErrorf(ctx,
 			codes.Unauthenticated,
 			"the password for %s has expired",
 			username,
@@ -166,12 +166,12 @@ func (s *authenticationServer) UserLogin(
 
 	cookie, err := s.createSessionFor(ctx, username)
 	if err != nil {
-		return nil, apiInternalError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	// Set the cookie header on the outgoing response.
 	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
-		return nil, apiInternalError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	return &serverpb.UserLoginResponse{}, nil
@@ -285,7 +285,7 @@ func (s *authenticationServer) createSessionFor(
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := s.newAuthSession(ctx, username)
 	if err != nil {
-		return nil, apiInternalError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	// Generate and set a session cookie for the response. Because HTTP cookies
@@ -304,11 +304,11 @@ func (s *authenticationServer) UserLogout(
 ) (*serverpb.UserLogoutResponse, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return nil, apiInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
+		return nil, newAPIError(ctx, errors.AssertionFailedf("couldn't get incoming context"))
 	}
 	sessionIDs := md.Get(webSessionIDKeyStr)
 	if len(sessionIDs) != 1 {
-		return nil, apiInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
+		return nil, newAPIError(ctx, errors.AssertionFailedf("no session found in context metadata"))
 	}
 
 	sessionID, err := strconv.Atoi(sessionIDs[0])
@@ -327,7 +327,7 @@ func (s *authenticationServer) UserLogout(
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionID,
 	); err != nil {
-		return nil, apiInternalError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	} else if n == 0 {
 		err := status.Errorf(
 			codes.InvalidArgument,
@@ -343,7 +343,7 @@ func (s *authenticationServer) UserLogout(
 
 	// Set the cookie header on the outgoing response.
 	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
-		return nil, apiInternalError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	return &serverpb.UserLogoutResponse{}, nil
@@ -638,11 +638,11 @@ func (am *authenticationMux) getSession(
 
 	valid, username, err := am.server.verifySession(req.Context(), cookie)
 	if err != nil {
-		err := apiInternalError(req.Context(), err)
+		err := newAPIError(req.Context(), err)
 		return "", nil, err
 	}
 	if !valid {
-		err := errors.New("the provided authentication session could not be validated")
+		err := newAPIErrorf(ctx, codes.Unauthenticated, "the provided authentication session could not be validated")
 		return "", nil, err
 	}
 

@@ -87,7 +87,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		// Connect to the target node.
 		client, err := s.dialNode(ctx, nodeID)
 		if err != nil {
-			return serverError(ctx, err)
+			return newAPIError(ctx, err)
 		}
 		return delegateDrain(ctx, req, client, stream)
 	}

@@ -125,7 +125,7 @@ func (t *tenantAdminServer) Drain(
 	// Which node is this request for?
 	parsedInstanceID, local, err := t.status.parseInstanceID(req.NodeId)
 	if err != nil {
-		return status.Errorf(codes.InvalidArgument, err.Error())
+		return newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 	}
 	if !local {
 		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
@@ -141,7 +141,7 @@ func (t *tenantAdminServer) Drain(
 		// Connect to the target node.
 		client, err := t.dialPod(ctx, parsedInstanceID, instance.InstanceAddr)
 		if err != nil {
-			return serverError(ctx, err)
+			return newAPIError(ctx, err)
 		}
 		return delegateDrain(ctx, req, client, stream)
 	}

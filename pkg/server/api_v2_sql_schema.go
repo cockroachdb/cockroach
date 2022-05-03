@@ -80,7 +80,7 @@ func (a *apiV2Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		query, qargs...,
 	)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 
@@ -91,7 +91,7 @@ func (a *apiV2Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(tree.MustBeDString(row[0]))})
 	}
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 	if limit > 0 && len(resp.Users) >= limit {
@@ -169,7 +169,7 @@ func (a *apiV2Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	eventsResp, err := a.admin.eventsHelper(
 		ctx, req, username, limit, offset, true /* redactEvents */)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 	resp.EventsResponse = *eventsResp
@@ -225,7 +225,7 @@ func (a *apiV2Server) listDatabases(w http.ResponseWriter, r *http.Request) {
 	req := &serverpb.DatabasesRequest{}
 	dbsResp, err := a.admin.databasesHelper(ctx, req, username, limit, offset)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 	var databases interface{}
@@ -282,7 +282,7 @@ func (a *apiV2Server) databaseDetails(w http.ResponseWriter, r *http.Request) {
 		if status.Code(err) == codes.NotFound || isNotFoundError(err) {
 			http.Error(w, "database not found", http.StatusNotFound)
 		} else {
-			apiV2InternalError(ctx, err, w)
+			httpSendError(ctx, err, w)
 		}
 		return
 	}
@@ -351,7 +351,7 @@ func (a *apiV2Server) databaseGrants(w http.ResponseWriter, r *http.Request) {
 		if status.Code(err) == codes.NotFound || isNotFoundError(err) {
 			http.Error(w, "database not found", http.StatusNotFound)
 		} else {
-			apiV2InternalError(ctx, err, w)
+			httpSendError(ctx, err, w)
 		}
 		return
 	}
@@ -424,7 +424,7 @@ func (a *apiV2Server) databaseTables(w http.ResponseWriter, r *http.Request) {
 		if status.Code(err) == codes.NotFound || isNotFoundError(err) {
 			http.Error(w, "database not found", http.StatusNotFound)
 		} else {
-			apiV2InternalError(ctx, err, w)
+			httpSendError(ctx, err, w)
 		}
 		return
 	}
@@ -485,7 +485,7 @@ func (a *apiV2Server) tableDetails(w http.ResponseWriter, r *http.Request) {
 		if status.Code(err) == codes.NotFound || isNotFoundError(err) {
 			http.Error(w, "database or table not found", http.StatusNotFound)
 		} else {
-			apiV2InternalError(ctx, err, w)
+			httpSendError(ctx, err, w)
 		}
 		return
 	}

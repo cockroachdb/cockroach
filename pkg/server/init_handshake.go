@@ -259,11 +259,11 @@ func (t *tlsInitHandshaker) onTrustInit(
 	// Acknowledge validation to the client.
 	ack, err := createNodeHostnameAndCA(t.listenAddr, t.tempCerts.CACertificate, t.token)
 	if err != nil {
-		apiV2InternalError(req.Context(), err, res)
+		httpSendError(req.Context(), err, res)
 		return
 	}
 	if err := json.NewEncoder(res).Encode(ack); err != nil {
-		apiV2InternalError(req.Context(), err, res)
+		httpSendError(req.Context(), err, res)
 		return
 	}
 }

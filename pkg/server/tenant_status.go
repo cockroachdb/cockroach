@@ -47,7 +47,6 @@ import (
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // tenantStatusServer is an implementation of a SQLStatusServer that is
@@ -121,12 +120,12 @@ func (t *tenantStatusServer) ListSessions(
 	ctx = t.AnnotateCtx(ctx)
 
 	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
-		// NB: not using serverError() here since the priv checker already
+		// NB: not using newAPIError() here since the priv checker already
 		// returns a proper gRPC error status.
 		return nil, err
 	}
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	response := &serverpb.ListSessionsResponse{
@@ -141,7 +140,7 @@ func (t *tenantStatusServer) ListSessions(
 				err)
 		}
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		return localResponse, nil
 	}
@@ -163,7 +162,7 @@ func (t *tenantStatusServer) ListSessions(
 				})
 		},
 	); err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	return response, nil
 }
@@ -173,13 +172,13 @@ func (t *tenantStatusServer) ListLocalSessions(
 ) (*serverpb.ListSessionsResponse, error) {
 	sessions, err := t.getLocalSessions(ctx, request)
 	if err != nil {
-		// NB: not using serverError() here since the getLocalSessions
+		// NB: not using newAPIError() here since the getLocalSessions
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	return &serverpb.ListSessionsResponse{
@@ -213,18 +212,18 @@ func (t *tenantStatusServer) CancelQuery(
 					Error:    fmt.Sprintf("query ID %s not found", queryID),
 				}, nil
 			}
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		statusClient, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		return statusClient.CancelQuery(ctx, req)
 	}
 
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(req.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(req.QueryID)); err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
@@ -261,7 +260,7 @@ func (t *tenantStatusServer) CancelQueryByKey(
 	// requests per second.
 	alloc, err := pgwirecancel.CancelSemaphore.TryAcquire(ctx, 1)
 	if err != nil {
-		return nil, status.Errorf(codes.ResourceExhausted, "exceeded rate limit of pgwire cancellation requests")
+		return nil, newAPIErrorf(ctx, codes.ResourceExhausted, "exceeded rate limit of pgwire cancellation requests")
 	}
 	defer func() {
 		// If we acquired the semaphore but the cancellation request failed, then
@@ -314,18 +313,18 @@ func (t *tenantStatusServer) CancelSession(
 					Error:    fmt.Sprintf("session ID %s not found", sessionID),
 				}, nil
 			}
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		statusClient, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		return statusClient.CancelSession(ctx, req)
 	}
 
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(req.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(req.SessionID)); err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
@@ -340,13 +339,13 @@ func (t *tenantStatusServer) ListContentionEvents(
 
 	// Check permissions early to avoid fan-out to all nodes.
 	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	var response serverpb.ListContentionEventsResponse
@@ -394,7 +393,7 @@ func (t *tenantStatusServer) ListLocalContentionEvents(
 	ctx context.Context, req *serverpb.ListContentionEventsRequest,
 ) (*serverpb.ListContentionEventsResponse, error) {
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 	return t.baseStatusServer.ListLocalContentionEvents(ctx, req)
 }
@@ -410,7 +409,7 @@ func (t *tenantStatusServer) ResetSQLStats(
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	response := &serverpb.ResetSQLStatsResponse{}
@@ -435,7 +434,7 @@ func (t *tenantStatusServer) ResetSQLStats(
 	if len(req.NodeID) > 0 {
 		parsedInstanceID, local, err := t.parseInstanceID(req.NodeID)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 		}
 		if local {
 			controller.ResetLocalSQLStats(ctx)
@@ -493,7 +492,7 @@ func (t *tenantStatusServer) CombinedStatementStats(
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	return getCombinedStatementStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(),
@@ -511,7 +510,7 @@ func (t *tenantStatusServer) StatementDetails(
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	return getStatementDetails(ctx, req, t.sqlServer.internalExecutor, t.st, t.sqlServer.execCfg.SQLStatsTestingKnobs)
@@ -544,7 +543,7 @@ func (t *tenantStatusServer) Statements(
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	response := &serverpb.StatementsResponse{
@@ -562,7 +561,7 @@ func (t *tenantStatusServer) Statements(
 		// we are executing in the context of a tenant.
 		parsedInstanceID, local, err := t.parseInstanceID(req.NodeID)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 		}
 		if local {
 			return statementsLocal(
@@ -743,7 +742,7 @@ func (t *tenantStatusServer) ListDistSQLFlows(
 	ctx context.Context, request *serverpb.ListDistSQLFlowsRequest,
 ) (*serverpb.ListDistSQLFlowsResponse, error) {
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	return t.ListLocalDistSQLFlows(ctx, request)
@@ -753,7 +752,7 @@ func (t *tenantStatusServer) ListLocalDistSQLFlows(
 	ctx context.Context, request *serverpb.ListDistSQLFlowsRequest,
 ) (*serverpb.ListDistSQLFlowsResponse, error) {
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	return t.baseStatusServer.ListLocalDistSQLFlows(ctx, request)
@@ -773,12 +772,12 @@ func (t *tenantStatusServer) Profile(
 		return nil, err
 	}
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	instanceID, local, err := t.parseInstanceID(request.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 	}
 	if !local {
 		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
@@ -801,17 +800,17 @@ func (t *tenantStatusServer) Stacks(
 	ctx = t.AnnotateCtx(ctx)
 
 	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	instanceID, local, err := t.parseInstanceID(request.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 	}
 	if !local {
 		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
@@ -824,7 +823,7 @@ func (t *tenantStatusServer) Stacks(
 		}
 		return status.Stacks(ctx, request)
 	}
-	return stacksLocal(request)
+	return stacksLocal(ctx, request)
 }
 
 func (t *tenantStatusServer) IndexUsageStatistics(
@@ -838,7 +837,7 @@ func (t *tenantStatusServer) IndexUsageStatistics(
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	localReq := &serverpb.IndexUsageStatisticsRequest{
@@ -848,7 +847,7 @@ func (t *tenantStatusServer) IndexUsageStatistics(
 	if len(req.NodeID) > 0 {
 		parsedInstanceID, local, err := t.parseInstanceID(req.NodeID)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
+			return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 		}
 		if local {
 			statsReader := t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
@@ -914,7 +913,7 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	localReq := &serverpb.ResetIndexUsageStatsRequest{
@@ -925,7 +924,7 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 	if len(req.NodeID) > 0 {
 		parsedInstanceID, local, err := t.parseInstanceID(req.NodeID)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
+			return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 		}
 		if local {
 			t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset()
@@ -981,7 +980,7 @@ func (t *tenantStatusServer) TableIndexStats(
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	return getTableIndexUsageStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
@@ -1001,12 +1000,12 @@ func (t *tenantStatusServer) Details(
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	instanceID, local, err := t.parseInstanceID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 	}
 	if !local {
 		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
@@ -1021,7 +1020,7 @@ func (t *tenantStatusServer) Details(
 	}
 	localInstance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, t.sqlServer.SQLInstanceID())
 	if err != nil {
-		return nil, status.Errorf(codes.Unavailable, "local instance unavailable")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "local instance unavailable")
 	}
 	resp := &serverpb.DetailsResponse{
 		NodeID:     roachpb.NodeID(instanceID),
@@ -1070,7 +1069,7 @@ func (t *tenantStatusServer) TxnIDResolution(
 
 	instanceID, local, err := t.parseInstanceID(req.CoordinatorID)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 	}
 	if local {
 		return t.localTxnIDResolution(req), nil
@@ -1115,7 +1114,7 @@ func (t *tenantStatusServer) GetFiles(
 
 	instanceID, local, err := t.parseInstanceID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 	}
 	if !local {
 		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
@@ -1143,7 +1142,7 @@ func (t *tenantStatusServer) TransactionContentionEvents(
 
 	user, isAdmin, err := t.privilegeChecker.getUserAndRole(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	shouldRedactContendingKey := false
@@ -1151,12 +1150,12 @@ func (t *tenantStatusServer) TransactionContentionEvents(
 		shouldRedactContendingKey, err =
 			t.privilegeChecker.hasRoleOption(ctx, user, roleoption.VIEWACTIVITYREDACTED)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 	}
 
 	if t.sqlServer.SQLInstanceID() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "instanceID not set")
 	}
 
 	resp := &serverpb.TransactionContentionEventsResponse{}
@@ -1164,7 +1163,7 @@ func (t *tenantStatusServer) TransactionContentionEvents(
 	if len(req.NodeID) > 0 {
 		parsedInstanceID, local, err := t.parseInstanceID(req.NodeID)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
+			return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 		}
 		if local {
 			return t.localTransactionContentionEvents(shouldRedactContendingKey), nil

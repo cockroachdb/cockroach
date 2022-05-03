@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 func (s *statusServer) Statements(
@@ -40,7 +39,7 @@ func (s *statusServer) Statements(
 	}
 
 	if s.gossip.NodeID.Get() == 0 {
-		return nil, status.Errorf(codes.Unavailable, "nodeID not set")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "nodeID not set")
 	}
 
 	response := &serverpb.StatementsResponse{
@@ -57,7 +56,7 @@ func (s *statusServer) Statements(
 	if len(req.NodeID) > 0 {
 		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 		}
 		if local {
 			return statementsLocal(
