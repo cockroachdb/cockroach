@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -230,37 +230,37 @@ func NewSchemaChangerModeFromString(val string) (_ NewSchemaChangerMode, ok bool
 }
 
 // QoSLevel controls the level of admission control to use for new SQL requests.
-type QoSLevel admission.WorkPriority
+type QoSLevel admissionpb.Priority
 
 const (
 	// SystemLow denotes the minimum system QoS level, which is not settable as a
 	// session default_transaction_quality_of_service value.
-	SystemLow = QoSLevel(admission.LowPri)
+	SystemLow = QoSLevel(admissionpb.LowPri)
 
 	// TTLStatsLow denotes a QoS level used internally by the TTL feature, which
 	// is not settable as a session default_transaction_quality_of_service value.
-	TTLStatsLow = QoSLevel(admission.TTLLowPri)
+	TTLStatsLow = QoSLevel(admissionpb.TTLLowPri)
 
 	// TTLLow denotes a QoS level used internally by the TTL feature, which is not
 	// settable as a session default_transaction_quality_of_service value.
-	TTLLow = QoSLevel(admission.TTLLowPri)
+	TTLLow = QoSLevel(admissionpb.TTLLowPri)
 
 	// UserLow denotes an end user QoS level lower than the default.
-	UserLow = QoSLevel(admission.UserLowPri)
+	UserLow = QoSLevel(admissionpb.UserLowPri)
 
 	// Normal denotes an end user QoS level unchanged from the default.
-	Normal = QoSLevel(admission.NormalPri)
+	Normal = QoSLevel(admissionpb.NormalPri)
 
 	// UserHigh denotes an end user QoS level higher than the default.
-	UserHigh = QoSLevel(admission.UserHighPri)
+	UserHigh = QoSLevel(admissionpb.UserHighPri)
 
 	// Locking denotes an internal increased priority for transactions that are
 	// acquiring locks.
-	Locking = QoSLevel(admission.LockingPri)
+	Locking = QoSLevel(admissionpb.LockingPri)
 
 	// SystemHigh denotes the maximum system QoS level, which is not settable as a
 	// session default_transaction_quality_of_service value.
-	SystemHigh = QoSLevel(admission.HighPri)
+	SystemHigh = QoSLevel(admissionpb.HighPri)
 )
 
 const (

@@ -416,6 +416,7 @@ go_library(
         "//pkg/testutils/serverutils",
         "//pkg/util",
         "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/bitarray",
         "//pkg/util/buildutil",
         "//pkg/util/cache",
