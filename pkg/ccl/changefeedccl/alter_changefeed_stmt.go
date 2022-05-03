@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -216,7 +217,7 @@ func generateNewOpts(
 	for _, cmd := range alterCmds {
 		switch v := cmd.(type) {
 		case *tree.AlterChangefeedSetOptions:
-			optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedOptionExpectValues)
+			optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedvalidators.AlterOptionValidations)
 			if err != nil {
 				return nil, ``, err
 			}
@@ -368,7 +369,7 @@ func generateNewTargets(
 	for _, cmd := range alterCmds {
 		switch v := cmd.(type) {
 		case *tree.AlterChangefeedAddTarget:
-			targetOptsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedTargetOptions)
+			targetOptsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedvalidators.AlterTargetOptionValidations)
 			if err != nil {
 				return nil, nil, hlc.Timestamp{}, nil, err
 			}

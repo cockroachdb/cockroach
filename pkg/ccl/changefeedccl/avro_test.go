@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -167,7 +166,7 @@ func parseAvroSchema(t *testing.T, j string) (*avroDataRecord, error) {
 	return tableToAvroSchema(
 		cdcevent.TestingMakeEventRow(
 			tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), nil, false,
-		), "", string(changefeedbase.OptVirtualColumnsOmitted))
+		), "", "")
 }
 
 func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, error) {
@@ -662,16 +661,15 @@ func TestAvroSchema(t *testing.T) {
 			require.NoError(t, err)
 
 			row := cdcevent.TestingMakeEventRow(tableDesc, encDatums[0], false)
-			schema, err := tableToAvroSchema(
-				row, avroSchemaNoSuffix, "")
+			schema, err := tableToAvroSchema(row, avroSchemaNoSuffix, "")
 			require.NoError(t, err)
-			textual, err := schema.textualFromRow(row)
 			if test.numRawBytes > 0 {
 				overhead := 4
 				binary, err := schema.BinaryFromRow(make([]byte, 0, test.numRawBytes+20), row.ForEachColumn())
 				require.NoError(t, err)
 				require.Equal(t, test.numRawBytes, len(binary)-overhead)
 			}
+			textual, err := schema.textualFromRow(row)
 			require.NoError(t, err)
 			// Trim the outermost {}.
 			value := string(textual[1 : len(textual)-1])

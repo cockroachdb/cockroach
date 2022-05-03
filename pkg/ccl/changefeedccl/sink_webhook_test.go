@@ -29,7 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getGenericWebhookSinkOptions() map[string]string {
+func getGenericWebhookSinkOptions() changefeedbase.StatementOptions {
+
 	opts := make(map[string]string)
 	opts[changefeedbase.OptFormat] = string(changefeedbase.OptFormatJSON)
 	opts[changefeedbase.OptKeyInValue] = ``
@@ -37,7 +38,7 @@ func getGenericWebhookSinkOptions() map[string]string {
 	opts[changefeedbase.OptTopicInValue] = ``
 	// speed up test by using faster backoff times
 	opts[changefeedbase.OptWebhookSinkConfig] = `{"Retry":{"Backoff": "5ms"}}`
-	return opts
+	return changefeedbase.MakeStatementOptions(opts)
 }
 
 // repeatStatusCode returns an array of status codes that the mock
@@ -62,7 +63,17 @@ func setupWebhookSinkWithDetails(
 		return nil, err
 	}
 
-	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, details.Opts, parallelism, source, nilMetricsRecorderBuilder)
+	opts := changefeedbase.MakeStatementOptions(details.Opts)
+
+	encodingOpts, err := opts.GetEncodingOptions()
+	if err != nil {
+		return nil, err
+	}
+	sinkOpts, err := opts.GetWebhookSinkOptions()
+	if err != nil {
+		return nil, err
+	}
+	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, sinkOpts, parallelism, source, nilMetricsRecorderBuilder)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +110,9 @@ func testSendAndReceiveRows(t *testing.T, sinkSrc Sink, sinkDest *cdctest.MockWe
 		"sink %s expected to receive message %s", sinkDest.URL(),
 		"{\"payload\":[{\"after\":null,\"key\":[1002],\"topic:\":\"foo\"}],\"length\":1}")
 
-	enc, err := makeJSONEncoder(getGenericWebhookSinkOptions(), []jobspb.ChangefeedTargetSpecification{})
+	opts, err := getGenericWebhookSinkOptions().GetEncodingOptions()
+	require.NoError(t, err)
+	enc, err := makeJSONEncoder(opts, []jobspb.ChangefeedTargetSpecification{})
 	require.NoError(t, err)
 
 	// test a resolved timestamp entry

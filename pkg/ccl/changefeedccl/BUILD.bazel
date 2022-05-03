@@ -38,6 +38,7 @@ go_library(
         "//pkg/ccl/changefeedccl/cdcutils",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/changefeeddist",
+        "//pkg/ccl/changefeedccl/changefeedvalidators",
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/kvfeed",
         "//pkg/ccl/changefeedccl/schemafeed",

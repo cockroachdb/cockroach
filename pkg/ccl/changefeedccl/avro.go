@@ -774,15 +774,6 @@ func tableToAvroSchema(
 	return newSchemaForRow(row.ForEachColumn(), sqlName, namespace)
 }
 
-// textualFromRow encodes the given row data into avro's defined JSON format.
-func (r *avroDataRecord) textualFromRow(row cdcevent.Row) ([]byte, error) {
-	native, err := r.nativeFromRow(row.ForEachColumn())
-	if err != nil {
-		return nil, err
-	}
-	return r.codec.TextualFromNative(nil /* buf */, native)
-}
-
 // BinaryFromRow encodes the given row data into avro's defined binary format.
 func (r *avroDataRecord) BinaryFromRow(buf []byte, it cdcevent.Iterator) ([]byte, error) {
 	native, err := r.nativeFromRow(it)
@@ -802,6 +793,15 @@ func (r *avroDataRecord) rowFromTextual(buf []byte) (rowenc.EncDatumRow, error) 
 		return nil, errors.New(`only one row was expected`)
 	}
 	return r.rowFromNative(native)
+}
+
+// textualFromRow encodes the given row data into avro's defined JSON format.
+func (r *avroDataRecord) textualFromRow(row cdcevent.Row) ([]byte, error) {
+	native, err := r.nativeFromRow(row.ForEachColumn())
+	if err != nil {
+		return nil, err
+	}
+	return r.codec.TextualFromNative(nil /* buf */, native)
 }
 
 // RowFromBinary decodes the given row data from avro's defined binary format.

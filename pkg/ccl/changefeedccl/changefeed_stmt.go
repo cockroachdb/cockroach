@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/docs"
@@ -129,8 +130,7 @@ func changefeedPlanHook(
 		}
 	}
 
-	// TODO: We're passing around the full output of optsFn a lot, make it a type.
-	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
+	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedvalidators.CreateOptionValidations)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -155,10 +155,11 @@ func changefeedPlanHook(
 			return errors.New(`omit the SINK clause for inline results`)
 		}
 
-		opts, err := optsFn()
+		rawOpts, err := optsFn()
 		if err != nil {
 			return err
 		}
+		opts := changefeedbase.MakeStatementOptions(rawOpts)
 
 		jr, err := createChangefeedJobRecord(
 			ctx,
@@ -216,7 +217,7 @@ func changefeedPlanHook(
 			codec := p.ExecCfg().Codec
 
 			activeTimestampProtection := changefeedbase.ActiveProtectedTimestampsEnabled.Get(&p.ExecCfg().Settings.SV)
-			initialScanType, err := initialScanTypeFromOpts(details.Opts)
+			initialScanType, err := opts.GetInitialScanType()
 			if err != nil {
 				return err
 			}
@@ -277,33 +278,18 @@ func createChangefeedJobRecord(
 	p sql.PlanHookState,
 	changefeedStmt *annotatedChangefeedStatement,
 	sinkURI string,
-	opts map[string]string,
+	opts changefeedbase.StatementOptions,
 	jobID jobspb.JobID,
 	telemetryPath string,
 ) (*jobs.Record, error) {
 	unspecifiedSink := changefeedStmt.SinkURI == nil
 
-	for key, value := range opts {
-		if clusterVersion, ok := changefeedbase.VersionGateOptions[key]; ok {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterVersion) {
-				return nil, errors.Newf(
-					`option %s is not supported until upgrade to version %s or higher is finalized`,
-					key, clusterVersion.String(),
-				)
-			}
-		}
-		// if option is case insensitive then convert its value to lower case
-		if _, ok := changefeedbase.CaseInsensitiveOpts[key]; ok {
-			opts[key] = strings.ToLower(value)
-		}
+	if err := opts.CheckVersionGates(ctx, p.ExecCfg().Settings.Version); err != nil {
+		return nil, err
 	}
 
-	if newFormat, ok := changefeedbase.NoLongerExperimental[opts[changefeedbase.OptFormat]]; ok {
-		p.BufferClientNotice(ctx, pgnotice.Newf(
-			`%[1]s is no longer experimental, use %[2]s=%[1]s`,
-			newFormat, changefeedbase.OptFormat),
-		)
-		// Still serialize the experimental_ form for backwards compatibility
+	for _, warning := range opts.DeprecationWarnings() {
+		p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 	}
 
 	jobDescription, err := changefeedJobDescription(p, changefeedStmt.CreateChangefeed, sinkURI, opts)
@@ -315,20 +301,26 @@ func createChangefeedJobRecord(
 		WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
 	}
 	var initialHighWater hlc.Timestamp
-	if cursor, ok := opts[changefeedbase.OptCursor]; ok {
-		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
-		var err error
+	evalTimestamp := func(s string) (hlc.Timestamp, error) {
+		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(s)}
 		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
+		if err != nil {
+			return hlc.Timestamp{}, err
+		}
+		return asOf.Timestamp, nil
+	}
+	if opts.HasStartCursor() {
+		initialHighWater, err = evalTimestamp(opts.GetCursor())
 		if err != nil {
 			return nil, err
 		}
-		initialHighWater = asOf.Timestamp
 		statementTime = initialHighWater
 	}
 
 	endTime := hlc.Timestamp{}
-	if endTimeOpt, ok := opts[changefeedbase.OptEndTime]; ok {
-		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(endTimeOpt)}
+
+	if opts.HasEndTime() {
+		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(opts.GetEndTime())}
 		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context)
 		if err != nil {
 			return nil, err
@@ -337,10 +329,12 @@ func createChangefeedJobRecord(
 	}
 
 	{
-		initialScanType, err := initialScanTypeFromOpts(opts)
+		initialScanType, err := opts.GetInitialScanType()
 		if err != nil {
 			return nil, err
 		}
+		// TODO (zinger): Should we error or take the minimum
+		// if endTime is already set?
 		if initialScanType == changefeedbase.OnlyInitialScan {
 			endTime = statementTime
 		}
@@ -357,16 +351,17 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
-	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets, changefeedStmt.originalSpecs, opts)
+	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets, changefeedStmt.originalSpecs, opts.GetStatementTimeNameConfig())
 	if err != nil {
 		return nil, err
 	}
+	tolerances := opts.GetTableTolerances()
 	for _, desc := range targetDescs {
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
-			if err := changefeedbase.ValidateTable(targets, table, opts); err != nil {
+			if err := changefeedvalidators.ValidateTable(targets, table, tolerances); err != nil {
 				return nil, err
 			}
-			for _, warning := range changefeedbase.WarningsForTable(tables, table, opts) {
+			for _, warning := range changefeedvalidators.WarningsForTable(table, tolerances) {
 				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 			}
 		}
@@ -374,42 +369,12 @@ func createChangefeedJobRecord(
 
 	details := jobspb.ChangefeedDetails{
 		Tables:               tables,
-		Opts:                 opts,
 		SinkURI:              sinkURI,
 		StatementTime:        statementTime,
 		EndTime:              endTime,
 		TargetSpecifications: targets,
 	}
 
-	// TODO(dan): In an attempt to present the most helpful error message to the
-	// user, the ordering requirements between all these usage validations have
-	// become extremely fragile and non-obvious.
-	//
-	// - `validateDetails` has to run first to fill in defaults for `envelope`
-	//   and `format` if the user didn't specify them.
-	// - Then `getEncoder` is run to return any configuration errors.
-	// - Then the changefeed is opted in to `OptKeyInValue` for any cloud
-	//   storage sink or webhook sink. Kafka etc have a key and value field in
-	//   each message but cloud storage sinks and webhook sinks don't have
-	//   anywhere to put the key. So if the key is not in the value, then for
-	//   DELETEs there is no way to recover which key was deleted. We could make
-	//   the user explicitly pass this option for every cloud storage sink/
-	//   webhook sink and error if they don't, but that seems user-hostile for
-	//   insufficient reason. We can't do this any earlier, because we might
-	//   return errors about `key_in_value` being incompatible which is
-	//   confusing when the user didn't type that option.
-	//   This is the same for the topic and webhook sink, which uses
-	//   `topic_in_value` to embed the topic in the value by default, since it
-	//   has no other avenue to express the topic.
-	// - Finally, we create a "canary" sink to test sink configuration and
-	//   connectivity. This has to go last because it is strange to return sink
-	//   connectivity errors before we've finished validating all the other
-	//   options. We should probably split sink configuration checking and sink
-	//   connectivity checking into separate methods.
-	//
-	// The only upside in all this nonsense is the tests are decent. I've tuned
-	// this particular order simply by rearranging stuff until the changefeedccl
-	// tests all pass.
 	parsedSink, err := url.Parse(sinkURI)
 	if err != nil {
 		return nil, err
@@ -421,31 +386,59 @@ func createChangefeedJobRecord(
 		)
 	}
 
-	if details, err = validateDetails(details); err != nil {
+	if err = validateDetailsAndOptions(details, opts); err != nil {
 		return nil, err
 	}
 
-	if filterExpr, isSet := details.Opts[changefeedbase.OptPrimaryKeyFilter]; isSet {
-		policy := changefeedbase.SchemaChangePolicy(details.Opts[changefeedbase.OptSchemaChangePolicy])
-		if policy != changefeedbase.OptSchemaChangePolicyStop {
+	filters := opts.GetFilters()
+
+	if filters.WithPredicate {
+		policy, err := opts.GetSchemaChangeHandlingOptions()
+		if err != nil {
+			return nil, err
+		}
+		if policy.Policy != changefeedbase.OptSchemaChangePolicyStop {
 			return nil, errors.Newf("option %s can only be used with %s=%s",
 				changefeedbase.OptPrimaryKeyFilter, changefeedbase.OptSchemaChangePolicy,
 				changefeedbase.OptSchemaChangePolicyStop)
 		}
-		if err := validatePrimaryKeyFilterExpression(ctx, p, filterExpr, targetDescs); err != nil {
+		if err := validatePrimaryKeyFilterExpression(ctx, p, filters.PrimaryKeyFilter, targetDescs); err != nil {
 			return nil, err
 		}
 	}
 
-	if _, err := getEncoder(details.Opts, AllTargets(details)); err != nil {
+	encodingOpts, err := opts.GetEncodingOptions()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := getEncoder(encodingOpts, AllTargets(details)); err != nil {
 		return nil, err
 	}
 
+	//	 The changefeed is opted in to `OptKeyInValue` for any cloud
+	//   storage sink or webhook sink. Kafka etc have a key and value field in
+	//   each message but cloud storage sinks and webhook sinks don't have
+	//   anywhere to put the key. So if the key is not in the value, then for
+	//   DELETEs there is no way to recover which key was deleted. We could make
+	//   the user explicitly pass this option for every cloud storage sink/
+	//   webhook sink and error if they don't, but that seems user-hostile for
+	//   insufficient reason.
+	//   This is the same for the topic and webhook sink, which uses
+	//   `topic_in_value` to embed the topic in the value by default, since it
+	//   has no other avenue to express the topic.
+	//   If this results in an overall invalid encoding, we need to override
+	//   the default error to avoid claiming the user set an option they didn't
+	//   explicitly set. Fortunately we know the only way to cause this is to
+	//   set envelope.
 	if isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink) {
-		details.Opts[changefeedbase.OptKeyInValue] = ``
+		if err = opts.ForceKeyInValue(); err != nil {
+			return nil, errors.Errorf(`this sink is incompatible with envelope=%s`, encodingOpts.Envelope)
+		}
 	}
 	if isWebhookSink(parsedSink) {
-		details.Opts[changefeedbase.OptTopicInValue] = ``
+		if err = opts.ForceTopicInValue(); err != nil {
+			return nil, errors.Errorf(`this sink is incompatible with envelope=%s`, encodingOpts.Envelope)
+		}
 	}
 
 	if !unspecifiedSink && p.ExecCfg().ExternalIODirConfig.DisableOutbound {
@@ -459,7 +452,7 @@ func createChangefeedJobRecord(
 			telemetrySink = `sinkless`
 		}
 		telemetry.Count(telemetryPath + `.sink.` + telemetrySink)
-		telemetry.Count(telemetryPath + `.format.` + details.Opts[changefeedbase.OptFormat])
+		telemetry.Count(telemetryPath + `.format.` + string(encodingOpts.Format))
 		telemetry.CountBucketed(telemetryPath+`.num_tables`, int64(len(tables)))
 	}
 
@@ -481,6 +474,8 @@ func createChangefeedJobRecord(
 				changefeedbase.OptMetricsScope, defaultSLIScope)
 		}
 	}
+
+	details.Opts = opts.AsMap()
 
 	if details.SinkURI == `` {
 		// Jobs should not be created for sinkless changefeeds. However, note that
@@ -510,6 +505,10 @@ func createChangefeedJobRecord(
 	// that the user has not made any obvious errors when specifying the sink in
 	// the CREATE CHANGEFEED statement. To do this, we create a "canary" sink,
 	// which will be immediately closed, only to check for errors.
+	// We also check here for any options that have passed previous validations
+	// but are inappropriate for the provided sink.
+	// TODO: Ideally those option validations would happen in validateDetails()
+	// earlier, like the others.
 	err = validateSink(ctx, p, jobID, details, opts)
 
 	jr := &jobs.Record{
@@ -603,7 +602,7 @@ func getTargetsAndTables(
 	targetDescs map[tree.TablePattern]catalog.Descriptor,
 	rawTargets tree.ChangefeedTargets,
 	originalSpecs map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification,
-	opts map[string]string,
+	opts changefeedbase.StatementTimeNameConfig,
 ) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
 	tables := make(jobspb.ChangefeedTargets, len(targetDescs))
 	targets := make([]jobspb.ChangefeedTargetSpecification, len(rawTargets))
@@ -637,8 +636,9 @@ func getTargetsAndTables(
 				}
 			}
 		} else {
-			_, qualified := opts[changefeedbase.OptFullTableName]
-			name, err := getChangefeedTargetName(ctx, td, p.ExecCfg(), p.Txn(), qualified)
+
+			name, err := getChangefeedTargetName(ctx, td, p.ExecCfg(), p.Txn(), opts.Qualified)
+
 			if err != nil {
 				return nil, nil, err
 			}
@@ -712,7 +712,10 @@ func validateSink(
 }
 
 func changefeedJobDescription(
-	p sql.PlanHookState, changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
+	p sql.PlanHookState,
+	changefeed *tree.CreateChangefeed,
+	sinkURI string,
+	opts changefeedbase.StatementOptions,
 ) (string, error) {
 	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{
 		changefeedbase.SinkParamSASLPassword,
@@ -730,16 +733,13 @@ func changefeedJobDescription(
 		Targets: changefeed.Targets,
 		SinkURI: tree.NewDString(cleanedSinkURI),
 	}
-	for k, v := range opts {
-		if k == changefeedbase.OptWebhookAuthHeader {
-			v = redactWebhookAuthHeader(v)
-		}
+	opts.ForEachWithRedaction(func(k string, v string) {
 		opt := tree.KVOption{Key: tree.Name(k)}
 		if len(v) > 0 {
 			opt.Value = tree.NewDString(v)
 		}
 		c.Options = append(c.Options, opt)
-	}
+	})
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(c, ann), nil
@@ -753,149 +753,33 @@ func redactUser(uri string) string {
 	return u.String()
 }
 
-// validateNonNegativeDuration returns a nil error if optValue can be
-// parsed as a duration and is non-negative; otherwise, an error is
-// returned.
-func validateNonNegativeDuration(optName string, optValue string) error {
-	if d, err := time.ParseDuration(optValue); err != nil {
+func validateDetailsAndOptions(
+	details jobspb.ChangefeedDetails, opts changefeedbase.StatementOptions,
+) error {
+	if err := opts.ValidateForCreateChangefeed(); err != nil {
 		return err
-	} else if d < 0 {
-		return errors.Errorf("negative durations are not accepted: %s='%s'", optName, optValue)
 	}
-	return nil
-}
 
-func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails, error) {
-	if details.Opts == nil {
-		// The proto MarshalTo method omits the Opts field if the map is empty.
-		// So, if no options were specified by the user, Opts will be nil when
-		// the job gets restarted.
-		details.Opts = map[string]string{}
-	}
-	initialScanType, err := initialScanTypeFromOpts(details.Opts)
-	if err != nil {
-		return jobspb.ChangefeedDetails{}, err
-	}
-	{
-		const opt = changefeedbase.OptResolvedTimestamps
-		if o, ok := details.Opts[opt]; ok && o != `` {
-			if err := validateNonNegativeDuration(opt, o); err != nil {
-				return jobspb.ChangefeedDetails{}, err
-			}
+	if opts.HasEndTime() {
+		scanType, err := opts.GetInitialScanType()
+		if err != nil {
+			return err
 		}
-	}
-	{
-		const opt = changefeedbase.OptMinCheckpointFrequency
-		if o, ok := details.Opts[opt]; ok && o != `` {
-			if err := validateNonNegativeDuration(opt, o); err != nil {
-				return jobspb.ChangefeedDetails{}, err
-			}
-		}
-	}
-	{
-		const opt = changefeedbase.OptSchemaChangeEvents
-		switch v := changefeedbase.SchemaChangeEventClass(details.Opts[opt]); v {
-		case ``, changefeedbase.OptSchemaChangeEventClassDefault:
-			details.Opts[opt] = string(changefeedbase.OptSchemaChangeEventClassDefault)
-		case changefeedbase.OptSchemaChangeEventClassColumnChange:
-			// No-op
-		default:
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`unknown %s: %s`, opt, v)
-		}
-	}
-	{
-		const opt = changefeedbase.OptSchemaChangePolicy
-		switch v := changefeedbase.SchemaChangePolicy(details.Opts[opt]); v {
-		case ``, changefeedbase.OptSchemaChangePolicyBackfill:
-			details.Opts[opt] = string(changefeedbase.OptSchemaChangePolicyBackfill)
-		case changefeedbase.OptSchemaChangePolicyNoBackfill:
-			// No-op
-		case changefeedbase.OptSchemaChangePolicyStop:
-			// No-op
-		default:
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`unknown %s: %s`, opt, v)
-		}
-	}
-	{
-		const opt = changefeedbase.OptEnvelope
-		switch v := changefeedbase.EnvelopeType(details.Opts[opt]); v {
-		case changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeDeprecatedRow:
-			details.Opts[opt] = string(changefeedbase.OptEnvelopeRow)
-		case changefeedbase.OptEnvelopeKeyOnly:
-			details.Opts[opt] = string(changefeedbase.OptEnvelopeKeyOnly)
-		case ``, changefeedbase.OptEnvelopeWrapped:
-			details.Opts[opt] = string(changefeedbase.OptEnvelopeWrapped)
-		default:
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`unknown %s: %s`, opt, v)
-		}
-	}
-	{
-		const opt = changefeedbase.OptFormat
-		switch v := changefeedbase.FormatType(details.Opts[opt]); v {
-		case ``, changefeedbase.OptFormatJSON:
-			details.Opts[opt] = string(changefeedbase.OptFormatJSON)
-		case changefeedbase.OptFormatCSV:
-			if initialScanType != changefeedbase.OnlyInitialScan {
-				return jobspb.ChangefeedDetails{}, errors.Errorf(
-					`%s=%s is only usable with %s='only'`,
-					changefeedbase.OptFormat, changefeedbase.OptFormatCSV, changefeedbase.OptInitialScan)
-			}
-			details.Opts[opt] = string(changefeedbase.OptFormatCSV)
-		case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
-			// No-op.
-		default:
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`unknown %s: %s`, opt, v)
-		}
-	}
-	{
-		const opt = changefeedbase.OptOnError
-		switch v := changefeedbase.OnErrorType(details.Opts[opt]); v {
-		case ``, changefeedbase.OptOnErrorFail:
-			details.Opts[opt] = string(changefeedbase.OptOnErrorFail)
-		case changefeedbase.OptOnErrorPause:
-			// No-op.
-		default:
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`unknown %s: %s, valid values are '%s' and '%s'`, opt, v,
-				changefeedbase.OptOnErrorPause,
-				changefeedbase.OptOnErrorFail)
-		}
-	}
-	{
-		const opt = changefeedbase.OptVirtualColumns
-		switch v := changefeedbase.VirtualColumnVisibility(details.Opts[opt]); v {
-		case ``, changefeedbase.OptVirtualColumnsOmitted:
-			details.Opts[opt] = string(changefeedbase.OptVirtualColumnsOmitted)
-		case changefeedbase.OptVirtualColumnsNull:
-			details.Opts[opt] = string(changefeedbase.OptVirtualColumnsNull)
-		default:
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`unknown %s: %s`, opt, v)
-		}
-	}
-	{
-		if initialScanType == changefeedbase.OnlyInitialScan {
-			for opt := range changefeedbase.InitialScanOnlyUnsupportedOptions {
-				if _, ok := details.Opts[opt]; ok {
-					return jobspb.ChangefeedDetails{}, errors.Errorf(
-						`cannot specify both %s='only' and %s`, changefeedbase.OptInitialScan, opt)
-				}
-			}
+		if scanType == changefeedbase.OnlyInitialScan {
+			return errors.Errorf(
+				`cannot specify both %s and %s`, changefeedbase.OptInitialScanOnly,
+				changefeedbase.OptEndTime)
 		}
 
-		if !details.EndTime.IsEmpty() && details.EndTime.Less(details.StatementTime) {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
+		if details.EndTime.Less(details.StatementTime) {
+			return errors.Errorf(
 				`specified end time %s cannot be less than statement time %s`,
 				details.EndTime.AsOfSystemTime(),
 				details.StatementTime.AsOfSystemTime(),
 			)
 		}
 	}
-	return details, nil
+	return nil
 }
 
 func validatePrimaryKeyFilterExpression(
@@ -964,7 +848,12 @@ func (b *changefeedResumer) handleChangefeedError(
 	details jobspb.ChangefeedDetails,
 	jobExec sql.JobExecContext,
 ) error {
-	switch onError := changefeedbase.OnErrorType(details.Opts[changefeedbase.OptOnError]); onError {
+	opts := changefeedbase.MakeStatementOptions(details.Opts)
+	onError, errErr := opts.GetOnError()
+	if errErr != nil {
+		return errors.CombineErrors(changefeedErr, errErr)
+	}
+	switch onError {
 	// default behavior
 	case changefeedbase.OptOnErrorFail:
 		return changefeedErr
@@ -988,7 +877,7 @@ func (b *changefeedResumer) handleChangefeedError(
 			return nil
 		}, errorMessage)
 	default:
-		return errors.Errorf("unrecognized option value: %s=%s",
+		return errors.Wrapf(changefeedErr, "unrecognized option value: %s=%s for handling error",
 			changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
 	}
 }
