@@ -215,7 +215,9 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	// Get a map of statements to execute for role options and their values.
-	stmts, err := n.roleOptions.GetSQLStmts(sqltelemetry.AlterRole)
+	stmts, err := n.roleOptions.GetSQLStmts(func(o roleoption.Option) {
+		sqltelemetry.IncIAMOptionCounter(sqltelemetry.AlterRole, strings.ToLower(o.String()))
+	})
 	if err != nil {
 		return err
 	}
