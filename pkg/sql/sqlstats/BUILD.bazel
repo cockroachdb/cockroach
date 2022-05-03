@@ -12,9 +12,12 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/sql/clusterunique",
         "//pkg/sql/execstats",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessionphase",
+        "//pkg/sql/sqlstats/outliers",
         "//pkg/util/stop",
+        "//pkg/util/uuid",
     ],
 )

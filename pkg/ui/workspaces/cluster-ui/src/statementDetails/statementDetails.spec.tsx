@@ -29,6 +29,7 @@ describe("StatementDetails page", () => {
   });
 
   it("shows loading indicator when data is not ready yet", () => {
+    statementDetailsProps.isLoading = true;
     statementDetailsProps.statementDetails = null;
     statementDetailsProps.statementsError = null;
 

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Constraint is used to constrain a lookup join. There are two types of
@@ -135,7 +134,7 @@ func (b *ConstraintBuilder) Build(
 	firstIdxCol := b.table.IndexColumnID(index, 0)
 	if _, ok := b.rightEq.Find(firstIdxCol); !ok {
 		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, b.rightEqSet); !ok {
-			if _, _, ok := b.findJoinFilterConstants(allFilters, firstIdxCol); !ok {
+			if _, _, ok := FindJoinFilterConstants(allFilters, firstIdxCol, b.evalCtx); !ok {
 				return Constraint{}
 			}
 		}
@@ -192,7 +191,7 @@ func (b *ConstraintBuilder) Build(
 		// constant values. We cannot use a NULL value because the lookup
 		// join implements logic equivalent to simple equality between
 		// columns (where NULL never equals anything).
-		foundVals, allIdx, ok := b.findJoinFilterConstants(allFilters, idxCol)
+		foundVals, allIdx, ok := FindJoinFilterConstants(allFilters, idxCol, b.evalCtx)
 		if ok && len(foundVals) == 1 {
 			// If a single constant value was found, project it in the input
 			// and use it as an equality column.
@@ -380,7 +379,7 @@ func (b *ConstraintBuilder) findFiltersForIndexLookup(
 		// constant values. We cannot use a NULL value because the lookup
 		// join implements logic equivalent to simple equality between
 		// columns (where NULL never equals anything).
-		values, allIdx, foundConstFilter := b.findJoinFilterConstants(filters, idxCol)
+		values, allIdx, foundConstFilter := FindJoinFilterConstants(filters, idxCol, b.evalCtx)
 		if !foundConstFilter {
 			// If there's no const filters look for an inequality range.
 			allIdx, foundRange = b.findJoinFilterRange(filters, idxCol)
@@ -399,7 +398,7 @@ func (b *ConstraintBuilder) findFiltersForIndexLookup(
 		if foundConstFilter {
 			constFilter := filters[allIdx]
 			if !isCanonicalFilter(constFilter) {
-				constFilter = b.makeConstFilter(idxCol, values)
+				constFilter = b.f.ConstructConstFilter(idxCol, values)
 			}
 			constFilters = append(constFilters, constFilter)
 		}
@@ -418,66 +417,6 @@ func (b *ConstraintBuilder) findFiltersForIndexLookup(
 	}
 
 	return eqFilters, constFilters, rightSideCols
-}
-
-// makeConstFilter builds a filter that constrains the given column to the given
-// set of constant values. This is performed by either constructing an equality
-// expression or an IN expression.
-func (b *ConstraintBuilder) makeConstFilter(col opt.ColumnID, values tree.Datums) memo.FiltersItem {
-	if len(values) == 1 {
-		return b.f.ConstructFiltersItem(b.f.ConstructEq(
-			b.f.ConstructVariable(col),
-			b.f.ConstructConstVal(values[0], values[0].ResolvedType()),
-		))
-	}
-	elems := make(memo.ScalarListExpr, len(values))
-	elemTypes := make([]*types.T, len(values))
-	for i := range values {
-		typ := values[i].ResolvedType()
-		elems[i] = b.f.ConstructConstVal(values[i], typ)
-		elemTypes[i] = typ
-	}
-	return b.f.ConstructFiltersItem(b.f.ConstructIn(
-		b.f.ConstructVariable(col),
-		b.f.ConstructTuple(elems, types.MakeTuple(elemTypes)),
-	))
-}
-
-// findJoinFilterConstants tries to find a filter that is exactly equivalent to
-// constraining the given column to a constant value or a set of constant
-// values. If successful, the constant values and the index of the constraining
-// FiltersItem are returned. If multiple filters match, the one that minimizes
-// the number of returned values is chosen. Note that the returned constant
-// values do not contain NULL.
-func (b *ConstraintBuilder) findJoinFilterConstants(
-	filters memo.FiltersExpr, col opt.ColumnID,
-) (values tree.Datums, filterIdx int, ok bool) {
-	var bestValues tree.Datums
-	var bestFilterIdx int
-	for filterIdx := range filters {
-		props := filters[filterIdx].ScalarProps()
-		if props.TightConstraints {
-			constCol, constVals, ok := props.Constraints.HasSingleColumnConstValues(b.evalCtx)
-			if !ok || constCol != col {
-				continue
-			}
-			hasNull := false
-			for i := range constVals {
-				if constVals[i] == tree.DNull {
-					hasNull = true
-					break
-				}
-			}
-			if !hasNull && (bestValues == nil || len(bestValues) > len(constVals)) {
-				bestValues = constVals
-				bestFilterIdx = filterIdx
-			}
-		}
-	}
-	if bestValues == nil {
-		return nil, -1, false
-	}
-	return bestValues, bestFilterIdx, true
 }
 
 // findJoinFilterRange tries to find an inequality range for this column.
