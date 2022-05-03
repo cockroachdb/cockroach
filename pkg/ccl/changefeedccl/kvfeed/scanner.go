@@ -33,10 +33,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type scanConfig struct {
+	Spans     []roachpb.Span
+	Timestamp hlc.Timestamp
+	WithDiff  bool
+	Knobs     TestingKnobs
+}
+
 type kvScanner interface {
 	// Scan will scan all of the KVs in the spans specified by the physical config
 	// at the specified timestamp and write them to the buffer.
-	Scan(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error
+	Scan(ctx context.Context, sink kvevent.Writer, cfg scanConfig) error
 }
 
 type scanRequestScanner struct {
@@ -48,9 +55,7 @@ type scanRequestScanner struct {
 
 var _ kvScanner = (*scanRequestScanner)(nil)
 
-func (p *scanRequestScanner) Scan(
-	ctx context.Context, sink kvevent.Writer, cfg physicalConfig,
-) error {
+func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg scanConfig) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

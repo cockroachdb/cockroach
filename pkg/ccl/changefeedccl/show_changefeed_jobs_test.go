@@ -23,12 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,20 +47,6 @@ func (d *fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 func (d *fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
 	return nil
-}
-
-func waitForJobStatus(
-	runner *sqlutils.SQLRunner, t *testing.T, id jobspb.JobID, targetStatus string,
-) {
-	testutils.SucceedsSoon(t, func() error {
-		var jobStatus string
-		query := `SELECT status FROM [SHOW CHANGEFEED JOB $1]`
-		runner.QueryRow(t, query, id).Scan(&jobStatus)
-		if targetStatus != jobStatus {
-			return errors.Errorf("Expected status:%s but found status:%s", targetStatus, jobStatus)
-		}
-		return nil
-	})
 }
 
 func TestShowChangefeedJobsBasic(t *testing.T) {
