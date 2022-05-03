@@ -46,7 +46,7 @@ func Segmentize(geography geo.Geography, segmentMaxLength float64) (geo.Geograph
 		}
 		// Convert segmentMaxLength to Angle with respect to earth sphere as
 		// further calculation is done considering segmentMaxLength as Angle.
-		segmentMaxAngle := segmentMaxLength / spheroid.SphereRadius
+		segmentMaxAngle := segmentMaxLength / spheroid.SphereRadius()
 		ret, err := geosegmentize.Segmentize(geometry, segmentMaxAngle, segmentizeCoords)
 		if err != nil {
 			return geo.Geography{}, err

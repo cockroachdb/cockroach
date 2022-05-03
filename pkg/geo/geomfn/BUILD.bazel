@@ -45,6 +45,7 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geodist",
+        "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",
         "//pkg/geo/geos",
         "//pkg/geo/geosegmentize",
