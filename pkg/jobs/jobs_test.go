@@ -1913,7 +1913,7 @@ func TestShowJobs(t *testing.T) {
 
 			if decimalHighWater != nil {
 				var err error
-				out.highWater, err = tree.DecimalToHLC(decimalHighWater)
+				out.highWater, err = hlc.DecimalToHLC(decimalHighWater)
 				if err != nil {
 					t.Fatal(err)
 				}

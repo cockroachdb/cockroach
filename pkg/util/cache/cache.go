@@ -21,7 +21,6 @@ import (
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // EvictionPolicy is the cache eviction policy enum.
@@ -540,7 +539,8 @@ func (oc *OrderedCache) DoRange(f func(k, v interface{}) bool, from, to interfac
 // IntervalCache is not safe for concurrent access.
 type IntervalCache struct {
 	baseCache
-	tree interval.Tree
+	tree      interval.Tree
+	logErrorf IntervalCacheLogErrorf
 
 	// The fields below are used to avoid allocations during get, del and
 	// GetOverlaps.
@@ -549,6 +549,10 @@ type IntervalCache struct {
 	overlapKey IntervalKey
 	overlaps   []*Entry
 }
+
+// IntervalCacheLogErrorf is a hook that is called on certain errors in the IntervalCache.
+// This is used to prevent and import to util/log.
+type IntervalCacheLogErrorf func(ctx context.Context, format string, args ...interface{})
 
 // IntervalKey provides uniqueness as well as key interval.
 type IntervalKey struct {
@@ -564,9 +568,10 @@ func (ik IntervalKey) String() string {
 
 // NewIntervalCache creates a new Cache backed by an interval tree.
 // See NewCache() for details on parameters.
-func NewIntervalCache(config Config) *IntervalCache {
+func NewIntervalCache(config Config, logErrorf IntervalCacheLogErrorf) *IntervalCache {
 	ic := &IntervalCache{
 		baseCache: newBaseCache(config),
+		logErrorf: logErrorf,
 	}
 	ic.baseCache.init(ic)
 	return ic
@@ -617,13 +622,13 @@ func (ic *IntervalCache) doGet(i interval.Interface) bool {
 
 func (ic *IntervalCache) add(e *Entry) {
 	if err := ic.tree.Insert(e, false); err != nil {
-		log.Errorf(context.TODO(), "%v", err)
+		ic.logErrorf(context.TODO(), "%v", err)
 	}
 }
 
 func (ic *IntervalCache) del(e *Entry) {
 	if err := ic.tree.Delete(e, false); err != nil {
-		log.Errorf(context.TODO(), "%v", err)
+		ic.logErrorf(context.TODO(), "%v", err)
 	}
 }
 

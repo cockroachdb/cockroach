@@ -38,34 +38,39 @@ type testRequester struct {
 	buf        *strings.Builder
 
 	waitingRequests        bool
-	returnFalseFromGranted bool
+	returnValueFromGranted int64
 	grantChainID           grantChainID
 }
+
+var _ requester = &testRequester{}
+var _ storeRequester = &testRequester{}
 
 func (tr *testRequester) hasWaitingRequests() bool {
 	return tr.waitingRequests
 }
 
-func (tr *testRequester) granted(grantChainID grantChainID) bool {
-	fmt.Fprintf(tr.buf, "%s: granted in chain %d, and returning %t\n", workKindString(tr.workKind),
-		grantChainID, !tr.returnFalseFromGranted)
+func (tr *testRequester) granted(grantChainID grantChainID) int64 {
+	fmt.Fprintf(tr.buf, "%s: granted in chain %d, and returning %d\n", workKindString(tr.workKind),
+		grantChainID, tr.returnValueFromGranted)
 	tr.grantChainID = grantChainID
-	return !tr.returnFalseFromGranted
+	return tr.returnValueFromGranted
 }
 
-func (tr *testRequester) tryGet() {
-	rv := tr.granter.tryGet()
-	fmt.Fprintf(tr.buf, "%s: tryGet returned %t\n", workKindString(tr.workKind), rv)
+func (tr *testRequester) close() {}
+
+func (tr *testRequester) tryGet(count int64) {
+	rv := tr.granter.tryGet(count)
+	fmt.Fprintf(tr.buf, "%s: tryGet(%d) returned %t\n", workKindString(tr.workKind), count, rv)
 }
 
-func (tr *testRequester) returnGrant() {
-	fmt.Fprintf(tr.buf, "%s: returnGrant\n", workKindString(tr.workKind))
-	tr.granter.returnGrant()
+func (tr *testRequester) returnGrant(count int64) {
+	fmt.Fprintf(tr.buf, "%s: returnGrant(%d)\n", workKindString(tr.workKind), count)
+	tr.granter.returnGrant(count)
 }
 
-func (tr *testRequester) tookWithoutPermission() {
-	fmt.Fprintf(tr.buf, "%s: tookWithoutPermission\n", workKindString(tr.workKind))
-	tr.granter.tookWithoutPermission()
+func (tr *testRequester) tookWithoutPermission(count int64) {
+	fmt.Fprintf(tr.buf, "%s: tookWithoutPermission(%d)\n", workKindString(tr.workKind), count)
+	tr.granter.tookWithoutPermission(count)
 }
 
 func (tr *testRequester) continueGrantChain() {
@@ -73,9 +78,13 @@ func (tr *testRequester) continueGrantChain() {
 	tr.granter.continueGrantChain(tr.grantChainID)
 }
 
-func (tr *testRequester) getAdmittedCount() uint64 {
+func (tr *testRequester) getStoreAdmissionStats() storeAdmissionStats {
 	// Only used by ioLoadListener, so don't bother.
-	return 0
+	return storeAdmissionStats{}
+}
+
+func (tr *testRequester) setStoreRequestEstimates(estimates storeRequestEstimates) {
+	// Only used by ioLoadListener, so don't bother.
 }
 
 // TestGranterBasic is a datadriven test with the following commands:
@@ -83,12 +92,13 @@ func (tr *testRequester) getAdmittedCount() uint64 {
 // init-grant-coordinator min-cpu=<int> max-cpu=<int> sql-kv-tokens=<int>
 //   sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
 // set-has-waiting-requests work=<kind> v=<true|false>
-// set-return-value-from-granted work=<kind> v=<true|false>
-// try-get work=<kind>
-// return-grant work=<kind>
-// took-without-permission work=<kind>
+// set-return-value-from-granted work=<kind> v=<int>
+// try-get work=<kind> [v=<int>]
+// return-grant work=<kind> [v=<int>]
+// took-without-permission work=<kind> [v=<int>]
 // continue-grant-chain work=<kind>
 // cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
+// init-store-grant-coordinator
 // set-io-tokens tokens=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -97,6 +107,12 @@ func TestGranterBasic(t *testing.T) {
 	var ambientCtx log.AmbientContext
 	var requesters [numWorkKinds]*testRequester
 	var coord *GrantCoordinator
+	clearRequesterAndCoord := func() {
+		coord = nil
+		for i := range requesters {
+			requesters[i] = nil
+		}
+	}
 	var buf strings.Builder
 	flushAndReset := func() string {
 		fmt.Fprintf(&buf, "GrantCoordinator:\n%s\n", coord.String())
@@ -109,22 +125,27 @@ func TestGranterBasic(t *testing.T) {
 	datadriven.RunTest(t, testutils.TestDataPath(t, "granter"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init-grant-coordinator":
+			clearRequesterAndCoord()
 			var opts Options
 			opts.Settings = settings
 			d.ScanArgs(t, "min-cpu", &opts.MinCPUSlots)
 			d.ScanArgs(t, "max-cpu", &opts.MaxCPUSlots)
-			d.ScanArgs(t, "sql-kv-tokens", &opts.SQLKVResponseBurstTokens)
-			d.ScanArgs(t, "sql-sql-tokens", &opts.SQLSQLResponseBurstTokens)
+			var burstTokens int
+			d.ScanArgs(t, "sql-kv-tokens", &burstTokens)
+			opts.SQLKVResponseBurstTokens = int64(burstTokens)
+			d.ScanArgs(t, "sql-sql-tokens", &burstTokens)
+			opts.SQLSQLResponseBurstTokens = int64(burstTokens)
 			d.ScanArgs(t, "sql-leaf", &opts.SQLStatementLeafStartWorkSlots)
 			d.ScanArgs(t, "sql-root", &opts.SQLStatementRootStartWorkSlots)
 			opts.makeRequesterFunc = func(
 				_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
 				opts workQueueOptions) requester {
 				req := &testRequester{
-					workKind:   workKind,
-					granter:    granter,
-					usesTokens: opts.usesTokens,
-					buf:        &buf,
+					workKind:               workKind,
+					granter:                granter,
+					usesTokens:             opts.usesTokens,
+					buf:                    &buf,
+					returnValueFromGranted: 1,
 				}
 				requesters[workKind] = req
 				return req
@@ -134,6 +155,36 @@ func TestGranterBasic(t *testing.T) {
 			coord = coords.Regular
 			return flushAndReset()
 
+		case "init-store-grant-coordinator":
+			clearRequesterAndCoord()
+			metrics := makeGranterMetrics()
+			storeCoordinators := &StoreGrantCoordinators{
+				settings: settings,
+				makeStoreRequesterFunc: func(
+					ambientCtx log.AmbientContext, granter granter, settings *cluster.Settings,
+					opts workQueueOptions) storeRequester {
+					req := &testRequester{
+						workKind:               KVWork,
+						granter:                granter,
+						usesTokens:             true,
+						buf:                    &buf,
+						returnValueFromGranted: 0,
+					}
+					requesters[KVWork] = req
+					return req
+				},
+				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
+				workQueueMetrics:            makeWorkQueueMetrics(""),
+				disableTickerForTesting:     true,
+			}
+			var testMetricsProvider testMetricsProvider
+			testMetricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
+			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &testMetricsProvider)
+			unsafeGranter, ok := storeCoordinators.gcMap.Load(int64(1))
+			require.True(t, ok)
+			coord = (*GrantCoordinator)(unsafeGranter)
+			return flushAndReset()
+
 		case "set-has-waiting-requests":
 			var v bool
 			d.ScanArgs(t, "v", &v)
@@ -141,21 +192,33 @@ func TestGranterBasic(t *testing.T) {
 			return flushAndReset()
 
 		case "set-return-value-from-granted":
-			var v bool
+			var v int
 			d.ScanArgs(t, "v", &v)
-			requesters[scanWorkKind(t, d)].returnFalseFromGranted = !v
+			requesters[scanWorkKind(t, d)].returnValueFromGranted = int64(v)
 			return flushAndReset()
 
 		case "try-get":
-			requesters[scanWorkKind(t, d)].tryGet()
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkKind(t, d)].tryGet(int64(v))
 			return flushAndReset()
 
 		case "return-grant":
-			requesters[scanWorkKind(t, d)].returnGrant()
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkKind(t, d)].returnGrant(int64(v))
 			return flushAndReset()
 
 		case "took-without-permission":
-			requesters[scanWorkKind(t, d)].tookWithoutPermission()
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkKind(t, d)].tookWithoutPermission(int64(v))
 			return flushAndReset()
 
 		case "continue-grant-chain":
@@ -183,7 +246,7 @@ func TestGranterBasic(t *testing.T) {
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
 			coord.mu.Lock()
-			coord.granters[KVWork].(*kvGranter).setAvailableIOTokensLocked(int64(tokens))
+			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableIOTokensLocked(int64(tokens))
 			coord.mu.Unlock()
 			coord.testingTryGrant()
 			return flushAndReset()
@@ -242,21 +305,28 @@ func TestStoreCoordinators(t *testing.T) {
 	// All the KVWork requesters. The first one is for all KVWork and the
 	// remaining are the per-store ones.
 	var requesters []*testRequester
+	makeRequesterFunc := func(
+		_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
+		opts workQueueOptions) requester {
+		req := &testRequester{
+			workKind:   workKind,
+			granter:    granter,
+			usesTokens: opts.usesTokens,
+			buf:        &buf,
+		}
+		if workKind == KVWork {
+			requesters = append(requesters, req)
+		}
+		return req
+	}
 	opts := Options{
-		Settings: settings,
-		makeRequesterFunc: func(
-			_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
-			opts workQueueOptions) requester {
-			req := &testRequester{
-				workKind:   workKind,
-				granter:    granter,
-				usesTokens: opts.usesTokens,
-				buf:        &buf,
-			}
-			if workKind == KVWork {
-				requesters = append(requesters, req)
-			}
-			return req
+		Settings:          settings,
+		makeRequesterFunc: makeRequesterFunc,
+		makeStoreRequesterFunc: func(
+			ctx log.AmbientContext, granter granter, settings *cluster.Settings,
+			opts workQueueOptions) storeRequester {
+			req := makeRequesterFunc(ctx, KVWork, granter, settings, opts)
+			return req.(*testRequester)
 		},
 	}
 	coords, _ := NewGrantCoordinators(ambientCtx, opts)
@@ -290,28 +360,39 @@ func TestStoreCoordinators(t *testing.T) {
 	// interested in the other ones, which have unlimited slots at this point in
 	// time, so will return true.
 	for i := range requesters {
-		requesters[i].tryGet()
+		requesters[i].tryGet(1)
 	}
 	require.Equal(t,
-		"kv: tryGet returned false\nkv: tryGet returned true\nkv: tryGet returned true\n",
+		"kv: tryGet(1) returned false\nkv: tryGet(1) returned true\nkv: tryGet(1) returned true\n",
 		buf.String())
 	coords.Close()
 }
 
 type testRequesterForIOLL struct {
-	admittedCount uint64
+	stats storeAdmissionStats
+	buf   strings.Builder
 }
+
+var _ storeRequester = &testRequesterForIOLL{}
 
 func (r *testRequesterForIOLL) hasWaitingRequests() bool {
 	panic("unimplemented")
 }
 
-func (r *testRequesterForIOLL) granted(grantChainID grantChainID) bool {
+func (r *testRequesterForIOLL) granted(grantChainID grantChainID) int64 {
 	panic("unimplemented")
 }
 
-func (r *testRequesterForIOLL) getAdmittedCount() uint64 {
-	return r.admittedCount
+func (r *testRequesterForIOLL) close() {}
+
+func (r *testRequesterForIOLL) getStoreAdmissionStats() storeAdmissionStats {
+	return r.stats
+}
+
+func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEstimates) {
+	fmt.Fprintf(&r.buf,
+		"store-request-estimates: fractionOfIngestIntoL0: %.2f, workByteAddition: %d",
+		estimates.fractionOfIngestIntoL0, estimates.workByteAddition)
 }
 
 type testGranterWithIOTokens struct {
@@ -349,11 +430,41 @@ func TestIOLoadListener(t *testing.T) {
 	datadriven.RunTest(t, testutils.TestDataPath(t, "io_load_listener"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
+			case "init":
+				ioll = &ioLoadListener{
+					settings:    st,
+					kvRequester: req,
+				}
+				// The mutex is needed by ioLoadListener but is not useful in this
+				// test -- the channels provide synchronization and prevent this
+				// test code and the ioLoadListener from being concurrently
+				// active.
+				ioll.mu.Mutex = &syncutil.Mutex{}
+				ioll.mu.kvGranter = kvGranter
+				return ""
+
+			case "prep-admission-stats":
+				req.stats = storeAdmissionStats{
+					admittedCount:          0,
+					admittedWithBytesCount: 0,
+					admittedBytes:          0,
+					ingestedBytes:          0,
+					ingestedIntoL0Bytes:    0,
+				}
+				d.ScanArgs(t, "admitted", &req.stats.admittedCount)
+				if d.HasArg("admitted-bytes") {
+					d.ScanArgs(t, "admitted-bytes", &req.stats.admittedBytes)
+				}
+				if d.HasArg("ingested-bytes") {
+					d.ScanArgs(t, "ingested-bytes", &req.stats.ingestedBytes)
+				}
+				if d.HasArg("ingested-into-l0") {
+					d.ScanArgs(t, "ingested-into-l0", &req.stats.ingestedIntoL0Bytes)
+				}
+				return fmt.Sprintf("%+v", req.stats)
+
 			case "set-state":
 				// Setup state used as input for token adjustment.
-				var admitted uint64
-				d.ScanArgs(t, "admitted", &admitted)
-				req.admittedCount = admitted
 				var metrics pebble.Metrics
 				var l0Bytes uint64
 				d.ScanArgs(t, "l0-bytes", &l0Bytes)
@@ -368,33 +479,27 @@ func TestIOLoadListener(t *testing.T) {
 				var l0SubLevels int
 				d.ScanArgs(t, "l0-sublevels", &l0SubLevels)
 				metrics.Levels[0].Sublevels = int32(l0SubLevels)
-				if ioll == nil {
-					ioll = &ioLoadListener{
-						settings:    st,
-						kvRequester: req,
-					}
-					// The mutex is needed by ioLoadListener but is not useful in this
-					// test -- the channels provide synchronization and prevent this
-					// test code and the ioLoadListener from being concurrently
-					// active.
-					ioll.mu.Mutex = &syncutil.Mutex{}
-					ioll.mu.kvGranter = kvGranter
-				}
 				ioll.pebbleMetricsTick(ctx, &metrics)
 				// Do the ticks until just before next adjustment.
 				var buf strings.Builder
 				fmt.Fprintf(&buf, "admitted: %d, bytes: %d, added-bytes: %d,\nsmoothed-removed: %d, "+
-					"smoothed-admit: %d, smoothed-bytes-added-per-work: %d,\ntokens: %s, tokens-allocated: %s\n", ioll.admittedCount,
+					"smoothed-byte-tokens: %d, smoothed-bytes-unaccounted-per-work: %d,\ntokens: %s, tokens-allocated: %s\n",
+					ioll.admissionStats.admittedCount,
 					ioll.l0Bytes, ioll.l0AddedBytes, ioll.smoothedBytesRemoved,
-					int64(ioll.smoothedNumAdmit), int64(ioll.smoothedBytesAddedPerWork),
+					int64(ioll.smoothedNumByteTokens), int64(ioll.smoothedPerWorkUnaccountedBytesAdded),
 					tokensForIntervalToString(ioll.totalTokens),
 					tokensFor1sToString(ioll.tokensAllocated))
+				if req.buf.Len() > 0 {
+					fmt.Fprintf(&buf, "%s\n", req.buf.String())
+					req.buf.Reset()
+				}
 				for i := 0; i < adjustmentInterval; i++ {
 					ioll.allocateTokensTick()
 					fmt.Fprintf(&buf, "tick: %d, %s\n", i, kvGranter.buf.String())
 					kvGranter.buf.Reset()
 				}
 				return buf.String()
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
@@ -454,7 +559,11 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		m.Levels[0].Size = int64(rand.Uint64())
 		m.Levels[0].BytesFlushed = rand.Uint64()
 		m.Levels[0].BytesIngested = rand.Uint64()
-		req.admittedCount = rand.Uint64()
+		req.stats.admittedCount = rand.Uint64()
+		req.stats.admittedWithBytesCount = rand.Uint64()
+		req.stats.admittedBytes = rand.Uint64()
+		req.stats.ingestedBytes = rand.Uint64()
+		req.stats.ingestedIntoL0Bytes = rand.Uint64()
 	}
 	kvGranter := &testGranterNonNegativeTokens{t: t}
 	st := cluster.MakeTestingClusterSettings()
@@ -469,6 +578,10 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		ioll.pebbleMetricsTick(ctx, &m)
 		for j := 0; j < adjustmentInterval; j++ {
 			ioll.allocateTokensTick()
+			require.LessOrEqual(t, int64(0), ioll.smoothedBytesRemoved)
+			require.LessOrEqual(t, float64(0), ioll.smoothedPerWorkUnaccountedBytesAdded)
+			require.LessOrEqual(t, float64(0), ioll.smoothedFractionOfIngestIntoL0)
+			require.LessOrEqual(t, float64(0), ioll.smoothedNumByteTokens)
 			require.LessOrEqual(t, int64(0), ioll.totalTokens)
 			require.LessOrEqual(t, int64(0), ioll.tokensAllocated)
 		}

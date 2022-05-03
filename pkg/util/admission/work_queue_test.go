@@ -59,38 +59,42 @@ type testGranter struct {
 	returnValueFromTryGet bool
 }
 
+var _ granter = &testGranter{}
+
 func (tg *testGranter) grantKind() grantKind {
 	return slot
 }
-func (tg *testGranter) tryGet() bool {
+func (tg *testGranter) tryGet(count int64) bool {
 	tg.buf.printf("tryGet: returning %t", tg.returnValueFromTryGet)
 	return tg.returnValueFromTryGet
 }
-func (tg *testGranter) returnGrant() {
-	tg.buf.printf("returnGrant")
+func (tg *testGranter) returnGrant(count int64) {
+	tg.buf.printf("returnGrant %d", count)
 }
-func (tg *testGranter) tookWithoutPermission() {
-	tg.buf.printf("tookWithoutPermission")
+func (tg *testGranter) tookWithoutPermission(count int64) {
+	tg.buf.printf("tookWithoutPermission %d", count)
 }
 func (tg *testGranter) continueGrantChain(grantChainID grantChainID) {
 	tg.buf.printf("continueGrantChain %d", grantChainID)
 }
 func (tg *testGranter) grant(grantChainID grantChainID) {
 	rv := tg.r.granted(grantChainID)
-	if rv {
+	if rv > 0 {
 		// Need deterministic output, and this is racing with the goroutine that
 		// was admitted. Sleep to let it get scheduled. We could do something more
 		// sophisticated like monitoring goroutine states like in
 		// concurrency_manager_test.go.
 		time.Sleep(50 * time.Millisecond)
 	}
-	tg.buf.printf("granted: returned %t", rv)
+	tg.buf.printf("granted: returned %d", rv)
 }
 
 type testWork struct {
 	tenantID roachpb.TenantID
 	cancel   context.CancelFunc
 	admitted bool
+	// For StoreWorkQueue testing.
+	handle StoreWorkHandle
 }
 
 type workMap struct {
@@ -116,10 +120,12 @@ func (m *workMap) delete(id int) {
 	delete(m.workMap, id)
 }
 
-func (m *workMap) setAdmitted(id int) {
+// handle can be empty when not testing StoreWorkQueue.
+func (m *workMap) setAdmitted(id int, handle StoreWorkHandle) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.workMap[id].admitted = true
+	m.workMap[id].handle = handle
 }
 
 func (m *workMap) get(id int) (work testWork, ok bool) {
@@ -206,7 +212,7 @@ func TestWorkQueueBasic(t *testing.T) {
 						wrkMap.delete(id)
 					} else {
 						buf.printf("id %d: admit succeeded", id)
-						wrkMap.setAdmitted(id)
+						wrkMap.setAdmitted(id, StoreWorkHandle{})
 					}
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine
@@ -432,9 +438,169 @@ func TestPriorityStates(t *testing.T) {
 		})
 }
 
+/*
+TestStoreWorkQueueBasic is a datadriven test with the following commands:
+init
+admit id=<int> tenant=<int> priority=<int> create-time-millis=<int> bypass=<bool>
+  [write-bytes=<int>] [ingest-request=<bool>]
+set-try-get-return-value v=<bool>
+granted
+cancel-work id=<int>
+work-done id=<int> [ingested-into-l0=<int>]
+print
+*/
+func TestStoreWorkQueueBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var q *StoreWorkQueue
+	closeFn := func() {
+		if q != nil {
+			q.close()
+		}
+	}
+	defer closeFn()
+	var tg *testGranter
+	var wrkMap workMap
+	var buf builderWithMu
+	var st *cluster.Settings
+	printQueue := func() string {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		return fmt.Sprintf("%s\nstats:%+v\nestimates:%+v", q.q.String(), q.mu.stats,
+			q.mu.estimates)
+	}
+
+	datadriven.RunTest(t, testutils.TestDataPath(t, "store_work_queue"),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "init":
+				closeFn()
+				tg = &testGranter{buf: &buf}
+				opts := makeWorkQueueOptions(KVWork)
+				opts.usesTokens = true
+				opts.timeSource = timeutil.NewManualTime(timeutil.FromUnixMicros(0))
+				opts.disableEpochClosingGoroutine = true
+				st = cluster.MakeTestingClusterSettings()
+				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
+					tg, st, opts).(*StoreWorkQueue)
+				tg.r = q
+				wrkMap.resetMap()
+				return ""
+
+			case "admit":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				if _, ok := wrkMap.get(id); ok {
+					panic(fmt.Sprintf("id %d is already used", id))
+				}
+				tenant := scanTenantID(t, d)
+				var priority, createTime int
+				d.ScanArgs(t, "priority", &priority)
+				d.ScanArgs(t, "create-time-millis", &createTime)
+				var bypass bool
+				d.ScanArgs(t, "bypass", &bypass)
+				var writeBytes int
+				if d.HasArg("write-bytes") {
+					d.ScanArgs(t, "write-bytes", &writeBytes)
+				}
+				var ingestRequest bool
+				if d.HasArg("ingest-request") {
+					d.ScanArgs(t, "ingest-request", &ingestRequest)
+				}
+				ctx, cancel := context.WithCancel(context.Background())
+				wrkMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
+				workInfo := StoreWriteWorkInfo{
+					WorkInfo: WorkInfo{
+						TenantID:        tenant,
+						Priority:        WorkPriority(priority),
+						CreateTime:      int64(createTime) * int64(time.Millisecond),
+						BypassAdmission: bypass,
+					},
+					WriteBytes:    int64(writeBytes),
+					IngestRequest: ingestRequest,
+				}
+				go func(ctx context.Context, info StoreWriteWorkInfo, id int) {
+					handle, err := q.Admit(ctx, workInfo)
+					if err != nil {
+						buf.printf("id %d: admit failed", id)
+						wrkMap.delete(id)
+					} else {
+						buf.printf("id %d: admit succeeded with handle %+v", id, handle)
+						wrkMap.setAdmitted(id, handle)
+					}
+				}(ctx, workInfo, id)
+				// Need deterministic output, and this is racing with the goroutine
+				// which is trying to get admitted. Sleep to let it get scheduled.
+				time.Sleep(50 * time.Millisecond)
+				return buf.stringAndReset()
+
+			case "set-try-get-return-value":
+				var v bool
+				d.ScanArgs(t, "v", &v)
+				tg.returnValueFromTryGet = v
+				return ""
+
+			case "set-store-request-estimates":
+				var estimates storeRequestEstimates
+				var percentIngestedIntoL0 int
+				d.ScanArgs(t, "percent-ingested-into-l0", &percentIngestedIntoL0)
+				estimates.fractionOfIngestIntoL0 = float64(percentIngestedIntoL0) / 100
+				var workBytesAddition int
+				d.ScanArgs(t, "work-bytes-addition", &workBytesAddition)
+				estimates.workByteAddition = int64(workBytesAddition)
+				q.setStoreRequestEstimates(estimates)
+				return printQueue()
+
+			case "granted":
+				tg.grant(0)
+				return buf.stringAndReset()
+
+			case "cancel-work":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				work, ok := wrkMap.get(id)
+				if !ok {
+					return fmt.Sprintf("unknown id: %d", id)
+				}
+				if work.admitted {
+					return fmt.Sprintf("work already admitted id: %d", id)
+				}
+				work.cancel()
+				// Need deterministic output, and this is racing with the goroutine
+				// whose work is canceled. Sleep to let it get scheduled.
+				time.Sleep(50 * time.Millisecond)
+				return buf.stringAndReset()
+
+			case "work-done":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				var ingestedIntoL0Bytes int
+				if d.HasArg("ingested-into-l0") {
+					d.ScanArgs(t, "ingested-into-l0", &ingestedIntoL0Bytes)
+				}
+				work, ok := wrkMap.get(id)
+				if !ok {
+					return fmt.Sprintf("unknown id: %d\n", id)
+				}
+				if !work.admitted {
+					return fmt.Sprintf("id not admitted: %d\n", id)
+				}
+				require.NoError(t, q.AdmittedWorkDone(work.handle, int64(ingestedIntoL0Bytes)))
+				wrkMap.delete(id)
+				return buf.stringAndReset()
+
+			case "print":
+				return printQueue()
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
+
 // TODO(sumeer):
 // - Test metrics
 // - Test race between grant and cancellation
-// - Test WorkQueue for tokens
 // - Add microbenchmark with high concurrency and procs for full admission
 //   system

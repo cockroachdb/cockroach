@@ -1127,7 +1127,7 @@ WHERE
 	tdb.Exec(t, "INSERT INTO foo VALUES (1)")
 	var afterInsertStr string
 	tdb.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&afterInsertStr)
-	afterInsert, err := tree.ParseHLC(afterInsertStr)
+	afterInsert, err := hlc.ParseHLC(afterInsertStr)
 	require.NoError(t, err)
 
 	// Now set up a filter to detect when the DROP INDEX execution will begin and

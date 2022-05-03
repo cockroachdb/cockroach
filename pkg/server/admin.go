@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -2095,7 +2096,7 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 		return errors.Wrap(err, "scan")
 	}
 	if highwaterOrNil != nil {
-		highwaterTimestamp, err := tree.DecimalToHLC(highwaterOrNil)
+		highwaterTimestamp, err := hlc.DecimalToHLC(highwaterOrNil)
 		if err != nil {
 			return errors.Wrap(err, "highwater timestamp had unexpected format")
 		}

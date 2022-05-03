@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/interval",
-        "//pkg/util/log",
         "@com_github_biogo_store//llrb",
     ],
 )

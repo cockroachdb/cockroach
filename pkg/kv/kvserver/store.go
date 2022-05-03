@@ -3686,7 +3686,8 @@ var _ KVAdmissionController = KVAdmissionControllerImpl{}
 type admissionHandle struct {
 	tenantID                           roachpb.TenantID
 	callAdmittedWorkDoneOnKVAdmissionQ bool
-	storeAdmissionQ                    *admission.WorkQueue
+	storeAdmissionQ                    *admission.StoreWorkQueue
+	storeWorkHandle                    admission.StoreWorkHandle
 }
 
 // MakeKVAdmissionController returns a KVAdmissionController. Both parameters
@@ -3743,10 +3744,13 @@ func (n KVAdmissionControllerImpl) AdmitKVWork(
 		}
 		admissionEnabled := true
 		if ah.storeAdmissionQ != nil {
-			if admissionEnabled, err = ah.storeAdmissionQ.Admit(ctx, admissionInfo); err != nil {
+			// TODO(sumeer): Plumb WriteBytes for ingest requests.
+			ah.storeWorkHandle, err = ah.storeAdmissionQ.Admit(
+				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
+			if err != nil {
 				return admissionHandle{}, err
 			}
-			if !admissionEnabled {
+			if !ah.storeWorkHandle.AdmissionEnabled() {
 				// Set storeAdmissionQ to nil so that we don't call AdmittedWorkDone
 				// on it. Additionally, the code below will not call
 				// kvAdmissionQ.Admit, and so callAdmittedWorkDoneOnKVAdmissionQ will
@@ -3771,7 +3775,8 @@ func (n KVAdmissionControllerImpl) AdmittedKVWorkDone(handle interface{}) {
 		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
 	}
 	if ah.storeAdmissionQ != nil {
-		ah.storeAdmissionQ.AdmittedWorkDone(ah.tenantID)
+		// TODO(sumeer): Plumb ingestedIntoL0Bytes and handle error return value.
+		_ = ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, 0)
 	}
 }
 

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1138,7 +1137,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	// if it ever gets pushed.
 	var ts2Str string
 	require.NoError(t, tx1.QueryRowContext(ctx, "SELECT cluster_logical_timestamp()").Scan(&ts2Str))
-	ts2, err := tree.ParseHLC(ts2Str)
+	ts2, err := hlc.ParseHLC(ts2Str)
 	require.NoError(t, err)
 
 	// Wait for the RangeFeed checkpoint on each RangeFeed to exceed this timestamp.
