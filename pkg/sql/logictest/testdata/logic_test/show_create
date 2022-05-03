@@ -144,8 +144,8 @@ COMMENT ON COLUMN public.t.c IS 'first comment'
 query T rowsort
 SHOW CREATE SECONDARY INDEXES FROM public.c
 ----
-CREATE INDEX c_a_b_idx ON c (a ASC, b ASC)
-CREATE UNIQUE INDEX unique_a ON c (a ASC)
+CREATE INDEX c_a_b_idx ON test.public.c (a ASC, b ASC)
+CREATE UNIQUE INDEX unique_a ON test.public.c (a ASC)
 
 statement ok
 CREATE INDEX test_idx ON public.c (b DESC, a ASC);
@@ -153,6 +153,6 @@ CREATE INDEX test_idx ON public.c (b DESC, a ASC);
 query T rowsort
 SHOW CREATE SECONDARY INDEXES FROM public.c
 ----
-CREATE INDEX c_a_b_idx ON c (a ASC, b ASC)
-CREATE UNIQUE INDEX unique_a ON c (a ASC)
-CREATE INDEX test_idx ON c (b DESC, a ASC)
+CREATE INDEX c_a_b_idx ON test.public.c (a ASC, b ASC)
+CREATE UNIQUE INDEX unique_a ON test.public.c (a ASC)
+CREATE INDEX test_idx ON test.public.c (b DESC, a ASC)
