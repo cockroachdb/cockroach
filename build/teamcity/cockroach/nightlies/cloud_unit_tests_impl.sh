@@ -22,8 +22,9 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
     --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE \
-    --test_env=GOOGLE_CREDENTIALS_JSON="$GOOGLE_APPLICATION_CREDENTIALS" \
-    --test_env=GOOGLE_BUCKET="cockroachdb-backup-testing" \
+    --test_env=GOOGLE_CREDENTIALS_JSON="$GOOGLE_EPHEMERAL_CREDENTIALS" \
+    --test_env=GOOGLE_APPLICATION_CREDENTIALS="$GOOGLE_APPLICATION_CREDENTIALS" \
+    --test_env=GOOGLE_BUCKET="nightly_cloud_unit_tests" \
     --test_timeout=7200 \
     || exit_status=$?
 
