@@ -168,7 +168,9 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	// Get a map of statements to execute for role options and their values.
-	stmts, err := n.roleOptions.GetSQLStmts(sqltelemetry.CreateRole)
+	stmts, err := n.roleOptions.GetSQLStmts(func(o roleoption.Option) {
+		sqltelemetry.IncIAMOptionCounter(sqltelemetry.CreateRole, o.String())
+	})
 	if err != nil {
 		return err
 	}
