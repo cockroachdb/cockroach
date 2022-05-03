@@ -43,16 +43,16 @@ type Encoder interface {
 }
 
 func getEncoder(
-	opts map[string]string, targets []jobspb.ChangefeedTargetSpecification,
+	opts changefeedbase.EncodingOptions, targets []jobspb.ChangefeedTargetSpecification,
 ) (Encoder, error) {
-	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
-	case ``, changefeedbase.OptFormatJSON:
+	switch opts.Format {
+	case changefeedbase.OptFormatJSON:
 		return makeJSONEncoder(opts, targets)
 	case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
 		return newConfluentAvroEncoder(opts, targets)
 	case changefeedbase.OptFormatCSV:
 		return newCSVEncoder(opts), nil
 	default:
-		return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
+		return nil, errors.AssertionFailedf(`unknown format: %s`, opts.Format)
 	}
 }

@@ -236,16 +236,16 @@ type webhookSinkConfig struct {
 }
 
 func (s *webhookSink) getWebhookSinkConfig(
-	opts map[string]string,
+	jsonStr string,
 ) (batchCfg batchConfig, retryCfg retry.Options, err error) {
 	retryCfg = defaultRetryConfig()
 
 	var cfg webhookSinkConfig
 	cfg.Retry.Max = jsonMaxRetries(retryCfg.MaxRetries)
 	cfg.Retry.Backoff = jsonDuration(retryCfg.InitialBackoff)
-	if configStr, ok := opts[changefeedbase.OptWebhookSinkConfig]; ok {
+	if jsonStr != `` {
 		// set retry defaults to be overridden if included in JSON
-		if err = json.Unmarshal([]byte(configStr), &cfg); err != nil {
+		if err = json.Unmarshal([]byte(jsonStr), &cfg); err != nil {
 			return batchCfg, retryCfg, errors.Wrapf(err, "error unmarshalling json")
 		}
 	}
@@ -269,7 +269,8 @@ func (s *webhookSink) getWebhookSinkConfig(
 func makeWebhookSink(
 	ctx context.Context,
 	u sinkURL,
-	opts map[string]string,
+	encodingOpts changefeedbase.EncodingOptions,
+	opts changefeedbase.WebhookSinkOptions,
 	parallelism int,
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
@@ -279,66 +280,55 @@ func makeWebhookSink(
 	}
 	u.Scheme = strings.TrimPrefix(u.Scheme, `webhook-`)
 
-	var formatType changefeedbase.FormatType
-	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
-	// only JSON and CSV supported at this time for webhook sink
+	switch encodingOpts.Format {
 	case changefeedbase.OptFormatJSON:
-		formatType = changefeedbase.OptFormatJSON
 	case changefeedbase.OptFormatCSV:
-		formatType = changefeedbase.OptFormatCSV
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
+			changefeedbase.OptFormat, encodingOpts.Format)
 	}
 
-	switch changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) {
+	switch encodingOpts.Envelope {
 	case changefeedbase.OptEnvelopeWrapped:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptEnvelope, opts[changefeedbase.OptEnvelope])
+			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	if _, ok := opts[changefeedbase.OptKeyInValue]; !ok {
+	if !encodingOpts.KeyInValue {
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
-	if _, ok := opts[changefeedbase.OptTopicInValue]; !ok {
+	if !encodingOpts.TopicInValue {
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptTopicInValue)
 	}
 
-	var connTimeout time.Duration
-	if timeout, ok := opts[changefeedbase.OptWebhookClientTimeout]; ok {
-		var err error
-		connTimeout, err = time.ParseDuration(timeout)
-		if err != nil {
-			return nil, errors.Wrapf(err, "problem parsing option %s", changefeedbase.OptWebhookClientTimeout)
-		} else if connTimeout <= time.Duration(0) {
-			return nil, fmt.Errorf("option %s must be a positive duration", changefeedbase.OptWebhookClientTimeout)
-		}
-	} else {
-		connTimeout = defaultConnTimeout
+	connTimeout := opts.ClientTimeout
+	if connTimeout == nil {
+		t := defaultConnTimeout
+		connTimeout = &t
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 
 	sink := &webhookSink{
 		workerCtx:   ctx,
-		authHeader:  opts[changefeedbase.OptWebhookAuthHeader],
-		format:      formatType,
+		authHeader:  opts.AuthHeader,
 		exitWorkers: cancel,
 		parallelism: parallelism,
 		ts:          source,
 		metrics:     mb(requiresResourceAccounting),
+		format:      encodingOpts.Format,
 	}
 
 	var err error
-	sink.batchCfg, sink.retryCfg, err = sink.getWebhookSinkConfig(opts)
+	sink.batchCfg, sink.retryCfg, err = sink.getWebhookSinkConfig(opts.JSONConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error processing option %s", changefeedbase.OptWebhookSinkConfig)
 	}
 
 	// TODO(yevgeniy): Establish HTTP connection in Dial().
-	sink.client, err = makeWebhookClient(u, connTimeout)
+	sink.client, err = makeWebhookClient(u, *connTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -788,12 +778,4 @@ func (s *webhookSink) Close() error {
 	}
 	s.client.CloseIdleConnections()
 	return nil
-}
-
-// redactWebhookAuthHeader redacts sensitive information from `auth`, which
-// should be the value of the HTTP header `Authorization:`. The entire header
-// should be redacted here. Wrapped in a function so we can change the
-// redaction strategy if needed.
-func redactWebhookAuthHeader(_ string) string {
-	return "redacted"
 }
