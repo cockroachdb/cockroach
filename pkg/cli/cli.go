@@ -75,6 +75,10 @@ func Main() {
 		// by the sub-command.
 		errCode = getExitCode(err)
 	}
+	// Finally, signal to shutdown all logging facilities, and wait
+	// for any buffered log sinks to finish draining (or timeout) before
+	// we exit.
+	cliCtx.logConfig.Shutdown.SignalAndWaitForShutdown()
 
 	exit.WithCode(errCode)
 }

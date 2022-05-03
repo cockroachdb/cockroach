@@ -73,6 +73,7 @@ capture-stray-errors:
 	if err := yaml.UnmarshalStrict([]byte(defaultConfig), &c); err != nil {
 		panic(err)
 	}
+	c.Shutdown = NewLoggingShutdown()
 	return c
 }
 
@@ -93,6 +94,7 @@ capture-stray-errors:
 	if err := yaml.UnmarshalStrict([]byte(defaultConfig), &c); err != nil {
 		panic(err)
 	}
+	c.Shutdown = NewLoggingShutdown()
 	return c
 }
 
@@ -120,6 +122,10 @@ type Config struct {
 	// internal writes to file descriptor 2 (incl that done internally
 	// by the go runtime).
 	CaptureFd2 CaptureFd2Config `yaml:"capture-stray-errors,omitempty"`
+
+	// Shutdown is the logging shutdown system, used to teardown logging
+	// facilities gracefully before exiting the process.
+	Shutdown *LoggingShutdown `yaml:"-"`
 }
 
 // CaptureFd2Config represents the configuration for the fd2 capture sink.

@@ -79,13 +79,10 @@ func IsActive() (active bool, firstUse string) {
 // ApplyConfig applies the given configuration.
 //
 // The returned cleanup fn can be invoked by the caller to close
-// asynchronous processes.
-// NB: This is only useful in tests: for a long-running server process the
-// cleanup function should likely not be called, to ensure that the
-// file used to capture internal fd2 writes remains open up until the
-// process entirely terminates. This ensures that any Go runtime
-// assertion failures on the way to termination can be properly
-// captured.
+// asynchronous processes, but is only recommended for use in tests.
+//
+// See logconfig.LoggingShutdown for a more graceful approach to shutting
+// down logging facilities.
 func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
@@ -123,6 +120,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 			logging.allSinkInfos.del(l)
 		}
 	}
+	config.Shutdown.SetShutdownFn(cleanupFn)
 
 	// Call the final value of cleanupFn immediately if returning with error.
 	defer func() {
@@ -289,7 +287,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, fileSinkInfo, fc.CommonSinkConfig)
+		attachBufferWrapper(secLoggersCtx, fileSinkInfo, fc.CommonSinkConfig, config.Shutdown)
 		attachSinkInfo(fileSinkInfo, &fc.Channels)
 
 		// Start the GC process. This ensures that old capture files get
@@ -306,7 +304,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, fluentSinkInfo, fc.CommonSinkConfig)
+		attachBufferWrapper(secLoggersCtx, fluentSinkInfo, fc.CommonSinkConfig, config.Shutdown)
 		attachSinkInfo(fluentSinkInfo, &fc.Channels)
 	}
 
@@ -319,7 +317,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, httpSinkInfo, fc.CommonSinkConfig)
+		attachBufferWrapper(secLoggersCtx, httpSinkInfo, fc.CommonSinkConfig, config.Shutdown)
 		attachSinkInfo(httpSinkInfo, &fc.Channels)
 	}
 
@@ -401,7 +399,9 @@ func (l *sinkInfo) applyFilters(chs logconfig.ChannelFilters) {
 	}
 }
 
-func attachBufferWrapper(ctx context.Context, s *sinkInfo, c logconfig.CommonSinkConfig) {
+func attachBufferWrapper(
+	ctx context.Context, s *sinkInfo, c logconfig.CommonSinkConfig, ls *logconfig.LoggingShutdown,
+) {
 	b := c.Buffering
 	if b.IsNone() {
 		return
@@ -432,7 +432,7 @@ func attachBufferWrapper(ctx context.Context, s *sinkInfo, c logconfig.CommonSin
 			}
 		}
 	}
-	s.sink = newBufferSink(ctx, s.sink, *b.MaxStaleness, int(*b.FlushTriggerSize), int32(*b.MaxInFlight), errCallback)
+	s.sink = newBufferSink(ctx, s.sink, *b.MaxStaleness, int(*b.FlushTriggerSize), int32(*b.MaxInFlight), errCallback, ls)
 }
 
 // applyConfig applies a common sink configuration to a sinkInfo.

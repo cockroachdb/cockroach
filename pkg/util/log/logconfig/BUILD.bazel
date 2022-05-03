@@ -19,6 +19,7 @@ go_library(
         "config.go",
         "doc.go",
         "export.go",
+        "shutdown.go",
         "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logconfig",
