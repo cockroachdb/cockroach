@@ -28,7 +28,7 @@ func Area(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, er
 	if err != nil {
 		return 0, err
 	}
-	spheroid, err := g.Spheroid()
+	spheroid, err := spheroidFromGeography(g)
 	if err != nil {
 		return 0, err
 	}
@@ -74,7 +74,7 @@ func Perimeter(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float6
 	if err != nil {
 		return 0, err
 	}
-	spheroid, err := g.Spheroid()
+	spheroid, err := spheroidFromGeography(g)
 	if err != nil {
 		return 0, err
 	}
@@ -98,7 +98,7 @@ func Length(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, 
 	if err != nil {
 		return 0, err
 	}
-	spheroid, err := g.Spheroid()
+	spheroid, err := spheroidFromGeography(g)
 	if err != nil {
 		return 0, err
 	}
@@ -117,7 +117,7 @@ func Project(g geo.Geography, distance float64, azimuth s1.Angle) (geo.Geography
 		return geo.Geography{}, pgerror.Newf(pgcode.InvalidParameterValue, "ST_Project(geography) is only valid for point inputs")
 	}
 
-	spheroid, err := g.Spheroid()
+	spheroid, err := spheroidFromGeography(g)
 	if err != nil {
 		return geo.Geography{}, err
 	}
