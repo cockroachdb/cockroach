@@ -39,7 +39,7 @@ func DWithin(
 		return false, err
 	}
 
-	angleToExpand := s1.Angle(distance / spheroid.SphereRadius)
+	angleToExpand := s1.Angle(distance / spheroid.SphereRadius())
 	if useSphereOrSpheroid == UseSpheroid {
 		angleToExpand *= (1 + SpheroidErrorFraction)
 	}

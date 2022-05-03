@@ -11,7 +11,11 @@
 // Package geomfn contains functions that are used for geometry-based builtins.
 package geomfn
 
-import "github.com/twpayne/go-geom"
+import (
+	// Blank import so projections are initialized correctly.
+	_ "github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
+	"github.com/twpayne/go-geom"
+)
 
 // applyCoordFunc applies a function on src to copy onto dst.
 // Both slices represent a single Coord within the FlatCoord array.

@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
+	// Blank import so projections are initialized correctly.
+	_ "github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
@@ -686,7 +688,7 @@ func (p *PreFilterer) PreFilter(
 				if err != nil {
 					return false, err
 				}
-				angleToExpand := s1.Angle(distance / proj.Spheroid.SphereRadius)
+				angleToExpand := s1.Angle(distance / proj.Spheroid.SphereRadius())
 				if useSphereOrSpheroid == geogfn.UseSpheroid {
 					angleToExpand *= (1 + geogfn.SpheroidErrorFraction)
 				}

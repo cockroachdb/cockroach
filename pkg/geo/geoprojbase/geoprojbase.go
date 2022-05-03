@@ -17,11 +17,12 @@ import (
 	"bytes"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/s1"
+	"github.com/golang/geo/s2"
 )
 
 // Proj4Text is the text representation of a PROJ4 transformation.
@@ -79,7 +80,18 @@ type ProjInfo struct {
 	// IsLatLng stores whether the projection is a LatLng based projection (denormalized from above)
 	IsLatLng bool
 	// The spheroid represented by the SRID.
-	Spheroid *geographiclib.Spheroid
+	Spheroid Spheroid
+}
+
+// Spheroid represents a spheroid object.
+type Spheroid interface {
+	Inverse(a, b s2.LatLng) (s12, az1, az2 float64)
+	InverseBatch(points []s2.Point) float64
+	AreaAndPerimeter(points []s2.Point) (area float64, perimeter float64)
+	Project(point s2.LatLng, distance float64, azimuth s1.Angle) s2.LatLng
+	Radius() float64
+	Flattening() float64
+	SphereRadius() float64
 }
 
 // ErrProjectionNotFound indicates a project was not found.

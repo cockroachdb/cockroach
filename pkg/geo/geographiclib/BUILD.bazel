@@ -15,6 +15,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/geo/geographiclib",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/geo/geoprojbase",
         "@com_github_golang_geo//s1",
         "@com_github_golang_geo//s2",
     ],

@@ -53,6 +53,7 @@ go_test(
     ],
     embed = [":geo"],
     deps = [
+        "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_golang_geo//s2",
