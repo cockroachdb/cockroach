@@ -146,6 +146,7 @@ func TestDataDriven(t *testing.T) {
 			dummyTableID,
 			10<<20, /* 10 MB */
 			spanconfigtestutils.ParseConfig(t, "FALLBACK"),
+			tc.Server(0).ClusterSettings(),
 			&spanconfig.TestingKnobs{
 				KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
 					OnTimestampAdvance: func(ts hlc.Timestamp) {

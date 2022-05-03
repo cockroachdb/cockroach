@@ -223,6 +223,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		keys.SpanConfigurationsTableID,
 		1<<20, /* 1 MB */
 		cfg.DefaultSpanConfig,
+		cfg.Settings,
 		nil,
 	)
 	cfg.SystemConfigProvider = systemconfigwatcher.New(
