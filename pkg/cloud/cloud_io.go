@@ -49,6 +49,15 @@ var httpCustomCA = settings.RegisterStringSetting(
 	"",
 ).WithPublic()
 
+// WriteChunkSize is used to control the size of each chunk that is buffered and
+// uploaded by the cloud storage client.
+var WriteChunkSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"cloudstorage.write_chunk.size",
+	"controls the size of each file chunk uploaded by the cloud storage client",
+	8<<20,
+)
+
 // HTTPRetryOptions defines the tunable settings which control the retry of HTTP
 // operations.
 var HTTPRetryOptions = retry.Options{

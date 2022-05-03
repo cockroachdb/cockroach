@@ -17,7 +17,6 @@ import (
 	_ "embed" // required for go:embed
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase/embeddedproj"
 	"github.com/cockroachdb/errors"
@@ -29,6 +28,13 @@ var projData []byte
 var once sync.Once
 var projectionsInternal map[geopb.SRID]ProjInfo
 
+// MakeSpheroid is an injectable function which creates a spheroid.
+// If you hit the assertion here, you may want to blank import geographic lib, e.g.
+// _ "github.com/cockroachdb/cockroach/pkg/geo/geographiclib".
+var MakeSpheroid = func(radius, flattening float64) (Spheroid, error) {
+	return nil, errors.AssertionFailedf("MakeSpheroid not initialised")
+}
+
 // getProjections returns the mapping of SRID to projections.
 // Use the `Projection` function to obtain one.
 func getProjections() map[geopb.SRID]ProjInfo {
@@ -39,9 +45,12 @@ func getProjections() map[geopb.SRID]ProjInfo {
 		}
 
 		// Build a temporary map of spheroids so we can look them up by hash.
-		spheroids := make(map[int64]*geographiclib.Spheroid, len(d.Spheroids))
+		spheroids := make(map[int64]Spheroid, len(d.Spheroids))
 		for _, s := range d.Spheroids {
-			spheroids[s.Hash] = geographiclib.NewSpheroid(s.Radius, s.Flattening)
+			spheroids[s.Hash], err = MakeSpheroid(s.Radius, s.Flattening)
+			if err != nil {
+				panic(err)
+			}
 		}
 
 		projectionsInternal = make(map[geopb.SRID]ProjInfo, len(d.Projections))

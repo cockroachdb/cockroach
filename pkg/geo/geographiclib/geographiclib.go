@@ -21,9 +21,16 @@ import "C"
 import (
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 )
+
+func init() {
+	geoprojbase.MakeSpheroid = func(radius, flattening float64) (geoprojbase.Spheroid, error) {
+		return NewSpheroid(radius, flattening), nil
+	}
+}
 
 var (
 	// WGS84Spheroid represents the default WGS84 ellipsoid.
@@ -34,21 +41,36 @@ var (
 // on a given spheroid.
 type Spheroid struct {
 	cRepr        C.struct_geod_geodesic
-	Radius       float64
-	Flattening   float64
-	SphereRadius float64
+	radius       float64
+	flattening   float64
+	sphereRadius float64
 }
 
 // NewSpheroid creates a spheroid from a radius and flattening.
 func NewSpheroid(radius float64, flattening float64) *Spheroid {
 	minorAxis := radius - radius*flattening
 	s := &Spheroid{
-		Radius:       radius,
-		Flattening:   flattening,
-		SphereRadius: (radius*2 + minorAxis) / 3,
+		radius:       radius,
+		flattening:   flattening,
+		sphereRadius: (radius*2 + minorAxis) / 3,
 	}
 	C.geod_init(&s.cRepr, C.double(radius), C.double(flattening))
 	return s
+}
+
+// Radius returns the radius of the spheroid.
+func (s *Spheroid) Radius() float64 {
+	return s.radius
+}
+
+// Flattening returns the flattening factor of the spheroid.
+func (s *Spheroid) Flattening() float64 {
+	return s.flattening
+}
+
+// SphereRadius returns the radius of a sphere that fits inside the spheroid.
+func (s *Spheroid) SphereRadius() float64 {
+	return s.sphereRadius
 }
 
 // Inverse solves the geodetic inverse problem on the given spheroid

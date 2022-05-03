@@ -41,6 +41,7 @@ go_test(
     embed = [":encoding"],
     deps = [
         "//pkg/geo",
+        "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",
         "//pkg/roachpb",
         "//pkg/util/bitarray",

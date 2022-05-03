@@ -14,7 +14,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/s1"
@@ -28,7 +28,7 @@ func Area(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, er
 	if err != nil {
 		return 0, err
 	}
-	spheroid, err := g.Spheroid()
+	spheroid, err := spheroidFromGeography(g)
 	if err != nil {
 		return 0, err
 	}
@@ -52,7 +52,7 @@ func Area(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, er
 		}
 	}
 	if useSphereOrSpheroid == UseSphere {
-		totalArea *= spheroid.SphereRadius * spheroid.SphereRadius
+		totalArea *= spheroid.SphereRadius() * spheroid.SphereRadius()
 	}
 	return totalArea, nil
 }
@@ -74,7 +74,7 @@ func Perimeter(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float6
 	if err != nil {
 		return 0, err
 	}
-	spheroid, err := g.Spheroid()
+	spheroid, err := spheroidFromGeography(g)
 	if err != nil {
 		return 0, err
 	}
@@ -98,7 +98,7 @@ func Length(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, 
 	if err != nil {
 		return 0, err
 	}
-	spheroid, err := g.Spheroid()
+	spheroid, err := spheroidFromGeography(g)
 	if err != nil {
 		return 0, err
 	}
@@ -117,7 +117,7 @@ func Project(g geo.Geography, distance float64, azimuth s1.Angle) (geo.Geography
 		return geo.Geography{}, pgerror.Newf(pgcode.InvalidParameterValue, "ST_Project(geography) is only valid for point inputs")
 	}
 
-	spheroid, err := g.Spheroid()
+	spheroid, err := spheroidFromGeography(g)
 	if err != nil {
 		return geo.Geography{}, err
 	}
@@ -132,8 +132,8 @@ func Project(g geo.Geography, distance float64, azimuth s1.Angle) (geo.Geography
 	azimuth = azimuth.Normalized()
 
 	// Check the distance validity.
-	if distance > (math.Pi * spheroid.Radius) {
-		return geo.Geography{}, pgerror.Newf(pgcode.InvalidParameterValue, "distance must not be greater than %f", math.Pi*spheroid.Radius)
+	if distance > (math.Pi * spheroid.Radius()) {
+		return geo.Geography{}, pgerror.Newf(pgcode.InvalidParameterValue, "distance must not be greater than %f", math.Pi*spheroid.Radius())
 	}
 
 	if point.Empty() {
@@ -163,7 +163,7 @@ func Project(g geo.Geography, distance float64, azimuth s1.Angle) (geo.Geography
 // length returns the sum of the lengths and perimeters in the shapes of the Geography.
 // In OGC parlance, length returns both LineString lengths _and_ Polygon perimeters.
 func length(
-	regions []s2.Region, spheroid *geographiclib.Spheroid, useSphereOrSpheroid UseSphereOrSpheroid,
+	regions []s2.Region, spheroid geoprojbase.Spheroid, useSphereOrSpheroid UseSphereOrSpheroid,
 ) (float64, error) {
 	var totalLength float64
 	for _, region := range regions {
@@ -194,7 +194,7 @@ func length(
 		}
 	}
 	if useSphereOrSpheroid == UseSphere {
-		totalLength *= spheroid.SphereRadius
+		totalLength *= spheroid.SphereRadius()
 	}
 	return totalLength, nil
 }
