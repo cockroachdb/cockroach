@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -3727,7 +3728,7 @@ func (n KVAdmissionControllerImpl) AdmitKVWork(
 		}
 		admissionInfo := admission.WorkInfo{
 			TenantID:        tenantID,
-			Priority:        admission.WorkPriority(ba.AdmissionHeader.Priority),
+			Priority:        admissionpb.Priority(ba.AdmissionHeader.Priority),
 			CreateTime:      createTime,
 			BypassAdmission: bypassAdmission,
 		}

@@ -110,7 +110,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/util",
-        "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",

@@ -239,7 +239,7 @@ type WorkKind int8
 //   and therefore starve admission of the high priority work when it does
 //   appear. The typical solution to this is to put a max on the number of
 //   slots low priority can use. This would be viable if we did not allow
-//   arbitrary int8 values to be set for WorkPriority.
+//   arbitrary int8 values to be set for Priority.
 
 const (
 	// KVWork represents requests submitted to the KV layer, from the same node
