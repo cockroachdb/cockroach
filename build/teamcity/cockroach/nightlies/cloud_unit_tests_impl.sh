@@ -12,8 +12,9 @@ BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 ARTIFACTS_DIR=/artifacts
 GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 
-echo "$GOOGLE_EPHEMERAL_CREDENTIALS" > creds.json
-gcloud auth activate-service-account --key-file=creds.json
+google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
+log_into_gcloud
+export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 
 exit_status=0
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
@@ -21,8 +22,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
     --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE \
-    --test_env=GOOGLE_CREDENTIALS_JSON="$GOOGLE_EPHEMERAL_CREDENTIALS" \
-    --test_env=GOOGLE_APPLICATION_CREDENTIALS="creds.json" \
+    --test_env=GOOGLE_CREDENTIALS_JSON="$GOOGLE_APPLICATION_CREDENTIALS" \
     --test_env=GOOGLE_BUCKET="cockroachdb-backup-testing" \
     --test_timeout=7200 \
     || exit_status=$?
