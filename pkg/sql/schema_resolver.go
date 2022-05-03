@@ -335,3 +335,20 @@ func (sr *schemaResolver) runWithOptions(flags resolveFlags, fn func()) {
 	}
 	fn()
 }
+
+// NewSkippingCacheSchemaResolver constructs a schemaResolver which always skip
+// descriptor cache.
+func NewSkippingCacheSchemaResolver(
+	descCollection *descs.Collection,
+	sessionDataStack *sessiondata.Stack,
+	txn *kv.Txn,
+	authAccessor scbuild.AuthorizationAccessor,
+) resolver.SchemaResolver {
+	return &schemaResolver{
+		descCollection:      descCollection,
+		sessionDataStack:    sessionDataStack,
+		txn:                 txn,
+		authAccessor:        authAccessor,
+		skipDescriptorCache: true,
+	}
+}
