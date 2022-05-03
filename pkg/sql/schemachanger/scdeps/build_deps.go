@@ -43,7 +43,7 @@ func NewBuilderDependencies(
 	codec keys.SQLCodec,
 	txn *kv.Txn,
 	descsCollection *descs.Collection,
-	schemaResolver resolver.SchemaResolver,
+	schemaResolverFactory scbuild.SchemaResolverFactory,
 	authAccessor scbuild.AuthorizationAccessor,
 	astFormatter scbuild.AstFormatter,
 	featureChecker scbuild.FeatureChecker,
@@ -57,7 +57,6 @@ func NewBuilderDependencies(
 		codec:            codec,
 		txn:              txn,
 		descsCollection:  descsCollection,
-		schemaResolver:   schemaResolver,
 		authAccessor:     authAccessor,
 		sessionData:      sessionData,
 		settings:         settings,
@@ -65,6 +64,9 @@ func NewBuilderDependencies(
 		astFormatter:     astFormatter,
 		featureChecker:   featureChecker,
 		internalExecutor: internalExecutor,
+		schemaResolver: schemaResolverFactory(
+			descsCollection, sessiondata.NewStack(sessionData), txn, authAccessor,
+		),
 	}
 }
 
@@ -151,6 +153,24 @@ func (d *buildDeps) MayResolveType(
 		return prefix, nil
 	}
 	return prefix, desc.(catalog.TypeDescriptor)
+}
+
+// MayResolveIndex implements the scbuild.CatalogReader interface.
+func (d *buildDeps) MayResolveIndex(
+	ctx context.Context, tableIndexName tree.TableIndexName,
+) (
+	found bool,
+	prefix catalog.ResolvedObjectPrefix,
+	tbl catalog.TableDescriptor,
+	idx catalog.Index,
+) {
+	found, prefix, tbl, idx, err := resolver.ResolveIndex(
+		ctx, d.schemaResolver, &tableIndexName, d.txn, d.codec, false /* required */, false, /* requireActiveIndex */
+	)
+	if err != nil {
+		panic(err)
+	}
+	return found, prefix, tbl, idx
 }
 
 // ReadObjectNamesAndIDs implements the scbuild.CatalogReader interface.

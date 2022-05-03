@@ -14,16 +14,20 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 )
@@ -106,6 +110,20 @@ type CatalogReader interface {
 	// MayResolveType looks up a type by name.
 	MayResolveType(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TypeDescriptor)
 
+	// MayResolveIndex looks up a table containing index with provided index name.
+	// The resolving contract is that:
+	// (1) if table name is provided, table is resolved and index is searched within the table.
+	// (2) if table name is not given, but schema name (in CRDB, db name can be
+	// the schema name here) is present, schema is resolved first, then all tables
+	// are looped to searched for the index.
+	// (3) if only index name is present, all tables in all schemas on current
+	// search path are looped to look up the index.
+	// It's possible that index does not exist, in which case it won't panic but
+	// "found=false" is returned.
+	MayResolveIndex(ctx context.Context, tableIndexName tree.TableIndexName) (
+		found bool, prefix catalog.ResolvedObjectPrefix, tbl catalog.TableDescriptor, idx catalog.Index,
+	)
+
 	// ReadObjectNamesAndIDs looks up the namespace entries for a schema.
 	ReadObjectNamesAndIDs(ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor) (tree.TableNames, descpb.IDs)
 
@@ -157,3 +175,12 @@ type CommentCache interface {
 	// of object id of a descriptor type.
 	LoadCommentsForObjects(ctx context.Context, objIDs []descpb.ID) error
 }
+
+// SchemaResolverFactory is used to construct a new schema resolver with
+// injected dependencies.
+type SchemaResolverFactory func(
+	descCollection *descs.Collection,
+	sessionDataStack *sessiondata.Stack,
+	txn *kv.Txn,
+	authAccessor AuthorizationAccessor,
+) resolver.SchemaResolver
