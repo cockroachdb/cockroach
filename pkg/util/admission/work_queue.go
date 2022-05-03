@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -139,41 +140,6 @@ var epochLIFOQueueDelayThresholdToSwitchToLIFO = settings.RegisterDurationSettin
 		return nil
 	}).WithPublic()
 
-// WorkPriority represents the priority of work. In an WorkQueue, it is only
-// used for ordering within a tenant. High priority work can starve lower
-// priority work.
-type WorkPriority int8
-
-const (
-	// LowPri is low priority work.
-	LowPri WorkPriority = math.MinInt8
-	// TTLLowPri is low priority work from TTL internal submissions.
-	TTLLowPri WorkPriority = -100
-	// UserLowPri is low priority work from user submissions (SQL).
-	UserLowPri WorkPriority = -50
-	// BulkNormalPri is bulk priority work from bulk jobs, which could be run due
-	// to user submissions or be automatic.
-	BulkNormalPri WorkPriority = -30
-	// NormalPri is normal priority work.
-	NormalPri WorkPriority = 0
-	// UserHighPri is high priority work from user submissions (SQL).
-	UserHighPri WorkPriority = 50
-	// LockingPri is for transactions that are acquiring locks.
-	LockingPri WorkPriority = 100
-	// HighPri is high priority work.
-	HighPri         WorkPriority = math.MaxInt8
-	oneAboveHighPri int          = int(HighPri) + 1
-)
-
-// Prevent the linter from emitting unused warnings.
-var _ = LowPri
-var _ = TTLLowPri
-var _ = UserLowPri
-var _ = NormalPri
-var _ = UserHighPri
-var _ = LockingPri
-var _ = HighPri
-
 // WorkInfo provides information that is used to order work within an
 // WorkQueue. The WorkKind is not included as a field since an WorkQueue deals
 // with a single WorkKind.
@@ -182,7 +148,7 @@ type WorkInfo struct {
 	// always be the SystemTenantID.
 	TenantID roachpb.TenantID
 	// Priority is utilized within a tenant.
-	Priority WorkPriority
+	Priority admissionpb.WorkPriority
 	// CreateTime is equivalent to Time.UnixNano() at the creation time of this
 	// work or a parent work (e.g. could be the start time of the transaction,
 	// if this work was created as part of a transaction). It is used to order
@@ -477,7 +443,7 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 			tenant.priorityStates.getFIFOPriorityThresholdAndReset(
 				tenant.fifoPriorityThreshold, q.mu.epochLengthNanos, q.mu.maxQueueDelayToSwitchToLifo)
 		if !epochLIFOEnabled {
-			tenant.fifoPriorityThreshold = int(LowPri)
+			tenant.fifoPriorityThreshold = int(admissionpb.LowPri)
 		}
 		if tenant.fifoPriorityThreshold != prevThreshold || doLog {
 			logVerb := "is"
@@ -986,7 +952,7 @@ const (
 )
 
 type priorityState struct {
-	priority WorkPriority
+	priority admissionpb.WorkPriority
 	// maxQueueDelay includes the delay of both successfully admitted and
 	// canceled requests.
 	//
@@ -1022,12 +988,12 @@ type priorityStates struct {
 // makePriorityStates returns an empty priorityStates, that reuses the
 // ps slice.
 func makePriorityStates(ps []priorityState) priorityStates {
-	return priorityStates{ps: ps[:0], lowestPriorityWithRequests: oneAboveHighPri}
+	return priorityStates{ps: ps[:0], lowestPriorityWithRequests: admissionpb.OneAboveHighPri}
 }
 
 // requestAtPriority is called when a request is received at the given
 // priority.
-func (ps *priorityStates) requestAtPriority(priority WorkPriority) {
+func (ps *priorityStates) requestAtPriority(priority admissionpb.WorkPriority) {
 	if int(priority) < ps.lowestPriorityWithRequests {
 		ps.lowestPriorityWithRequests = int(priority)
 	}
@@ -1038,7 +1004,7 @@ func (ps *priorityStates) requestAtPriority(priority WorkPriority) {
 // indicates whether the request was canceled while waiting in the queue, or
 // successfully admitted.
 func (ps *priorityStates) updateDelayLocked(
-	priority WorkPriority, delay time.Duration, canceled bool,
+	priority admissionpb.WorkPriority, delay time.Duration, canceled bool,
 ) {
 	i := 0
 	n := len(ps.ps)
@@ -1074,7 +1040,7 @@ func (ps *priorityStates) getFIFOPriorityThresholdAndReset(
 	curPriorityThreshold int, epochLengthNanos int64, maxQueueDelayToSwitchToLifo time.Duration,
 ) int {
 	// priority is monotonically increasing in the calculation below.
-	priority := int(LowPri)
+	priority := int(admissionpb.LowPri)
 	foundLowestPriority := false
 	handlePriorityState := func(p priorityState) {
 		if p.maxQueueDelay > maxQueueDelayToSwitchToLifo {
@@ -1102,20 +1068,20 @@ func (ps *priorityStates) getFIFOPriorityThresholdAndReset(
 		}
 		handlePriorityState(p)
 	}
-	if !foundLowestPriority && ps.lowestPriorityWithRequests != oneAboveHighPri &&
+	if !foundLowestPriority && ps.lowestPriorityWithRequests != admissionpb.OneAboveHighPri &&
 		priority <= ps.lowestPriorityWithRequests {
 		// The new threshold will cause lowestPriorityWithRequests to be FIFO, and
 		// we know nothing exited admission control for this lowest priority.
 		// Since !foundLowestPriority, we know we haven't explicitly considered
 		// this priority in the above loop. So we consider it now.
 		handlePriorityState(priorityState{
-			priority:      WorkPriority(ps.lowestPriorityWithRequests),
+			priority:      admissionpb.WorkPriority(ps.lowestPriorityWithRequests),
 			maxQueueDelay: 0,
 			admittedCount: 0,
 		})
 	}
 	ps.ps = ps.ps[:0]
-	ps.lowestPriorityWithRequests = oneAboveHighPri
+	ps.lowestPriorityWithRequests = admissionpb.OneAboveHighPri
 	return priority
 }
 
@@ -1184,7 +1150,7 @@ func newTenantInfo(id uint64, weight uint32) *tenantInfo {
 		waitingWorkHeap:       ti.waitingWorkHeap,
 		openEpochsHeap:        ti.openEpochsHeap,
 		priorityStates:        makePriorityStates(ti.priorityStates.ps),
-		fifoPriorityThreshold: int(LowPri),
+		fifoPriorityThreshold: int(admissionpb.LowPri),
 		heapIndex:             -1,
 	}
 	return ti
@@ -1253,7 +1219,7 @@ func (th *tenantHeap) Pop() interface{} {
 
 // waitingWork is the per-work information in the waitingWorkHeap.
 type waitingWork struct {
-	priority WorkPriority
+	priority admissionpb.WorkPriority
 	// The workOrderingKind for this priority when this work was queued.
 	arrivalTimeWorkOrdering workOrderingKind
 	createTime              int64
@@ -1340,7 +1306,7 @@ func epochForTimeNanos(t int64, epochLengthNanos int64) int64 {
 }
 
 func newWaitingWork(
-	priority WorkPriority,
+	priority admissionpb.WorkPriority,
 	arrivalTimeWorkOrdering workOrderingKind,
 	createTime int64,
 	requestedCount int64,

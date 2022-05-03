@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -277,11 +278,11 @@ func NewFlowBase(
 	// use SystemTenantID since it is already defined.
 	admissionInfo := admission.WorkInfo{TenantID: roachpb.SystemTenantID}
 	if flowCtx.Txn == nil {
-		admissionInfo.Priority = admission.NormalPri
+		admissionInfo.Priority = admissionpb.NormalPri
 		admissionInfo.CreateTime = timeutil.Now().UnixNano()
 	} else {
 		h := flowCtx.Txn.AdmissionHeader()
-		admissionInfo.Priority = admission.WorkPriority(h.Priority)
+		admissionInfo.Priority = admissionpb.WorkPriority(h.Priority)
 		admissionInfo.CreateTime = h.CreateTime
 	}
 	return &FlowBase{

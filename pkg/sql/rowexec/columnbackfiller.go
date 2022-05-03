@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -107,7 +107,7 @@ func (cb *columnBackfiller) runChunk(
 	var key roachpb.Key
 	var commitWaitFn func(context.Context) error
 	err := cb.flowCtx.Cfg.DB.TxnWithAdmissionControl(
-		ctx, roachpb.AdmissionHeader_FROM_SQL, admission.BulkNormalPri,
+		ctx, roachpb.AdmissionHeader_FROM_SQL, admissionpb.BulkNormalPri,
 		func(ctx context.Context, txn *kv.Txn) error {
 			if cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk != nil {
 				if err := cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk(sp); err != nil {

@@ -63,6 +63,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",

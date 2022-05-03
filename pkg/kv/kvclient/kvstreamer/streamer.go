@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -1117,7 +1118,7 @@ func (w *workerCoordinator) performRequestAsync(
 			if br != nil && w.responseAdmissionQ != nil {
 				responseAdmission := admission.WorkInfo{
 					TenantID:   roachpb.SystemTenantID,
-					Priority:   admission.WorkPriority(w.requestAdmissionHeader.Priority),
+					Priority:   admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),
 					CreateTime: w.requestAdmissionHeader.CreateTime,
 				}
 				if _, err := w.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
