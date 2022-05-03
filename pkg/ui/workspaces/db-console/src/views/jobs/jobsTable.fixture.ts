@@ -74,6 +74,20 @@ const canceledJobFixture = {
   type: "UNSPECIFIED",
   description: "Unspecified",
   status: "canceled",
+  // highwater_timestamp is present, but it should not be shown
+  highwater_timestamp: new protos.google.protobuf.Timestamp({
+    seconds: new Long(1634648117),
+    nanos: 98294000,
+  }),
+  highwater_decimal: "1651674578050731000.0000000000",
+};
+
+const cancelRequestedJobFixture = {
+  ...defaultJobProperties,
+  id: new Long(4337653761, 70312826),
+  type: "CREATE STATS",
+  description: "SELECT job_id, job_type FROM [SHOW JOB 1]",
+  status: "cancel-requested",
 };
 
 const pausedJobFixture = {
@@ -83,6 +97,41 @@ const pausedJobFixture = {
   description:
     "BACKUP DATABASE bank TO 'gs://acme-co-backup/database-bank-2017-03-29-nightly' AS OF SYSTEM TIME '-10s' INCREMENTAL FROM 'gs://acme-co-backup/database-bank-2017-03-27-weekly', 'gs://acme-co-backup/database-bank-2017-03-28-nightly' WITH revision_history\n",
   status: "paused",
+};
+
+const pausedWithHighwaterJobFixture = {
+  ...defaultJobProperties,
+  id: new Long(6091954177, 70312826),
+  type: "BACKUP",
+  description:
+    "BACKUP DATABASE bank TO 'gs://acme-co-backup/database-bank-2017-03-29-nightly' AS OF SYSTEM TIME '-10s' INCREMENTAL FROM 'gs://acme-co-backup/database-bank-2017-03-27-weekly', 'gs://acme-co-backup/database-bank-2017-03-28-nightly' WITH revision_history\n",
+  status: "paused",
+  highwater_timestamp: new protos.google.protobuf.Timestamp({
+    seconds: new Long(1634648117),
+    nanos: 98294000,
+  }),
+  highwater_decimal: "1651674578050731000.0000000000",
+};
+
+const pauseRequestedJobFixture = {
+  ...defaultJobProperties,
+  id: new Long(4338669569, 70312826),
+  type: "AUTO CREATE STATS",
+  description: "SELECT job_id, job_type FROM [SHOW AUTOMATIC JOBS];",
+  status: "pause-requested",
+};
+
+const pauseRequestedWithHighwaterJobFixture = {
+  ...defaultJobProperties,
+  id: new Long(4338669569, 70312826),
+  type: "AUTO CREATE STATS",
+  description: "SELECT job_id, job_type FROM [SHOW AUTOMATIC JOBS];",
+  status: "pause-requested",
+  highwater_timestamp: new protos.google.protobuf.Timestamp({
+    seconds: new Long(1634648117),
+    nanos: 98294000,
+  }),
+  highwater_decimal: "1651674578050731000.0000000000",
 };
 
 const runningJobFixture = {
@@ -183,6 +232,49 @@ const retryRunningWithMessageRemainingJobFixture = {
   num_runs: new Long(2),
 };
 
+const runningWithHighwaterJobFixture = {
+  ...defaultJobProperties,
+  id: new Long(3390625793, 70312826),
+  type: "TYPEDESC SCHEMA CHANGE",
+  description: "ALTER TYPE status ADD VALUE 'pending';",
+  status: "running",
+  fraction_completed: 0.98,
+  highwater_timestamp: new protos.google.protobuf.Timestamp({
+    seconds: new Long(1634648117),
+    nanos: 98294000,
+  }),
+  highwater_decimal: "1651674578050731000.0000000000",
+};
+
+const runningChangefeedJobFixture = {
+  ...defaultJobProperties,
+  id: new Long(758919388643098625),
+  type: "CHANGEFEED",
+  description:
+    "CREATE CHANGEFEED FOR TABLE movr.vehicles INTO 'webhook-https://localhost:3000?insecure_tls_skip_verify=true' WITH updated",
+  username: "root",
+  descriptor_ids: [107],
+  status: "running",
+  running_status:
+    'retryable error: retryable changefeed error: Post "https://localhost:3000": http: server gave HTTP response to HTTPS client',
+  coordinator_id: "1",
+};
+
+const runningChangefeedWithHighwaterJobFixture = {
+  ...defaultJobProperties,
+  id: new Long(3390625793, 70312826),
+  type: "CHANGEFEED",
+  description:
+    "CREATE CHANGEFEED FOR TABLE movr.vehicles INTO 'webhook-https://localhost:3001?insecure_tls_skip_verify=true' WITH updated",
+  status: "running",
+  running_status: "running: resolved=1651674578.050731000,0",
+  highwater_timestamp: new protos.google.protobuf.Timestamp({
+    seconds: new Long(1634648117),
+    nanos: 98294000,
+  }),
+  highwater_decimal: "1651674578050731000.0000000000",
+};
+
 const pendingJobFixture = {
   ...defaultJobProperties,
   id: new Long(5247850497, 70312826),
@@ -195,8 +287,8 @@ const pendingJobFixture = {
 const revertingJobFixture = {
   ...defaultJobProperties,
   id: new Long(5246539777, 70312826),
-  type: "CHANGEFEED",
-  description: "CREATE CHANGEFEED FOR foo WITH updated, resolved, diff",
+  type: "NEW SCHEMA CHANGE",
+  description: "ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1",
   status: "reverting",
 };
 
@@ -213,35 +305,6 @@ const retryRevertingJobFixture = {
   num_runs: new Long(2),
 };
 
-const highwaterJobFixture = {
-  ...defaultJobProperties,
-  id: new Long(3390625793, 70312826),
-  type: "TYPEDESC SCHEMA CHANGE",
-  description: "ALTER TYPE status ADD VALUE 'pending';",
-  status: "running",
-  highwater_timestamp: new protos.google.protobuf.Timestamp({
-    seconds: new Long(1634648117),
-    nanos: 98294000,
-  }),
-  highwater_decimal: "test highwater decimal",
-};
-
-const cancelRequestedJobFixture = {
-  ...defaultJobProperties,
-  id: new Long(4337653761, 70312826),
-  type: "CREATE STATS",
-  description: "SELECT job_id, job_type FROM [SHOW JOB 1]",
-  status: "cancel-requested",
-};
-
-const pauseRequestedJobFixture = {
-  ...defaultJobProperties,
-  id: new Long(4338669569, 70312826),
-  type: "AUTO CREATE STATS",
-  description: "SELECT job_id, job_type FROM [SHOW AUTOMATIC JOBS];",
-  status: "pause-requested",
-};
-
 const revertFailedJobFixture = {
   ...defaultJobProperties,
   id: new Long(3391379457, 70312826),
@@ -254,11 +317,18 @@ export const allJobsFixture = [
   succeededJobFixture,
   failedJobFixture,
   canceledJobFixture,
+  cancelRequestedJobFixture,
   pausedJobFixture,
+  pausedWithHighwaterJobFixture,
+  pauseRequestedJobFixture,
+  pauseRequestedWithHighwaterJobFixture,
   runningJobFixture,
   runningWithMessageJobFixture,
   runningWithRemainingJobFixture,
   runningWithMessageRemainingJobFixture,
+  runningWithHighwaterJobFixture,
+  runningChangefeedJobFixture,
+  runningChangefeedWithHighwaterJobFixture,
   retryRunningJobFixture,
   retryRunningWithMessageJobFixture,
   retryRunningWithRemainingJobFixture,
@@ -266,9 +336,6 @@ export const allJobsFixture = [
   pendingJobFixture,
   revertingJobFixture,
   retryRevertingJobFixture,
-  highwaterJobFixture,
-  cancelRequestedJobFixture,
-  pauseRequestedJobFixture,
   revertFailedJobFixture,
 ];
 

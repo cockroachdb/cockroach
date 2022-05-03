@@ -56,7 +56,7 @@ export const JOB_STATUS_FAILED = "failed";
 export const JOB_STATUS_CANCELED = "canceled";
 export const JOB_STATUS_CANCEL_REQUESTED = "cancel-requested";
 export const JOB_STATUS_PAUSED = "paused";
-export const JOB_STATUS_PAUSE_REQUESTED = "paused-requested";
+export const JOB_STATUS_PAUSE_REQUESTED = "pause-requested";
 export const JOB_STATUS_RUNNING = "running";
 export const JOB_STATUS_RETRY_RUNNING = "retry-running";
 export const JOB_STATUS_PENDING = "pending";
@@ -71,6 +71,17 @@ export function isRetrying(status: string): boolean {
 }
 export function isRunning(status: string): boolean {
   return [JOB_STATUS_RUNNING, JOB_STATUS_RETRY_RUNNING].includes(status);
+}
+
+export function shouldShowHighwaterTimestamp(job: Job): boolean {
+  return (
+    job.highwater_timestamp &&
+    [
+      JOB_STATUS_RUNNING,
+      JOB_STATUS_PAUSED,
+      JOB_STATUS_PAUSE_REQUESTED,
+    ].includes(job.status)
+  );
 }
 
 export const statusOptions = [
