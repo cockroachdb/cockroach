@@ -45,7 +45,7 @@ func Distance(
 	if err != nil {
 		return 0, err
 	}
-	spheroid, err := a.Spheroid()
+	spheroid, err := spheroidFromGeography(a)
 	if err != nil {
 		return 0, err
 	}

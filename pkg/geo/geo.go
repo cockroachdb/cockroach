@@ -16,7 +16,6 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -618,15 +617,6 @@ func (g *Geography) ShapeType() geopb.ShapeType {
 // ShapeType2D returns the 2D shape type of the Geography.
 func (g *Geography) ShapeType2D() geopb.ShapeType {
 	return g.ShapeType().To2D()
-}
-
-// Spheroid returns the spheroid represented by the given Geography.
-func (g *Geography) Spheroid() (*geographiclib.Spheroid, error) {
-	proj, err := geoprojbase.Projection(g.SRID())
-	if err != nil {
-		return nil, err
-	}
-	return proj.Spheroid, nil
 }
 
 // AsS2 converts a given Geography into it's S2 form.

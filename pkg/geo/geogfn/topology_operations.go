@@ -54,7 +54,7 @@ func Centroid(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (geo.Geo
 	if err != nil {
 		return geo.Geography{}, err
 	}
-	spheroid, err := g.Spheroid()
+	spheroid, err := spheroidFromGeography(g)
 	if err != nil {
 		return geo.Geography{}, err
 	}

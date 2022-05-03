@@ -40,7 +40,7 @@ func Segmentize(geography geo.Geography, segmentMaxLength float64) (geo.Geograph
 		if segmentMaxLength <= 0 {
 			return geo.Geography{}, pgerror.Newf(pgcode.InvalidParameterValue, "maximum segment length must be positive")
 		}
-		spheroid, err := geography.Spheroid()
+		spheroid, err := spheroidFromGeography(geography)
 		if err != nil {
 			return geo.Geography{}, err
 		}
