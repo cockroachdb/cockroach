@@ -33,11 +33,11 @@ func Example_shout_before_log() {
 		panic(err)
 	}
 	cfg.Sinks.Stderr.Filter = severity.WARNING
-	cleanup, err := log.ApplyConfig(cfg)
+	logCloser, err := log.ApplyConfig(cfg)
 	if err != nil {
 		panic(err)
 	}
-	defer cleanup()
+	defer logCloser.Close()
 
 	// Redirect stderr to stdout so the reference output checking below
 	// has something to work with.

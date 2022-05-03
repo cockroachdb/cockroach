@@ -514,7 +514,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	// This test cares about the number of output files. Ensure
 	// there's just one.
-	defer s.SetupSingleFileLogging()()
+	defer s.SetupSingleFileLogging().Close()
 
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
@@ -690,7 +690,7 @@ func TestStatusLogRedaction(t *testing.T) {
 
 			// This test cares about the number of output files. Ensure
 			// there's just one.
-			defer s.SetupSingleFileLogging()()
+			defer s.SetupSingleFileLogging().Close()
 
 			// Apply the redactable log boolean for this test.
 			defer log.TestingSetRedactable(redactableLogs)()

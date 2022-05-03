@@ -74,6 +74,7 @@ func newBufferSink(
 	triggerSize int,
 	maxInFlight int32,
 	errCallback func(error),
+	loggingCloser *Closer,
 ) *bufferSink {
 	if maxInFlight <= 0 {
 		maxInFlight = bufferSinkDefaultMaxInFlight
@@ -89,7 +90,11 @@ func newBufferSink(
 		errCallback:  errCallback,
 	}
 	go sink.accumulator(ctx)
-	go sink.flusher(ctx)
+	go func() {
+		sink.flusher(ctx)
+		loggingCloser.BufferSinkDone(sink)
+	}()
+	loggingCloser.RegisterBufferSink(sink)
 	return sink
 }
 
@@ -173,18 +178,12 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 }
 
 // flusher concatenates bundled messages and sends them to the child sink.
+// Runs until the provided context is cancelled.
 //
 // TODO(knz): How does this interact with the flusher logic in log_flush.go?
 // See: https://github.com/cockroachdb/cockroach/issues/72458
-//
-// TODO(knz): this code should be extended to detect server shutdowns:
-// as currently implemented the flusher will only terminate after all
-// the writes in the channel are completed. If the writes are slow,
-// the goroutine may not terminate properly when server shutdown is
-// requested.
-// See: https://github.com/cockroachdb/cockroach/issues/72459
 func (bs *bufferSink) flusher(ctx context.Context) {
-	for b := range bs.flushCh {
+	processLogBundle := func(b bufferSinkBundle) (done bool) {
 		if len(b.messages) > 0 {
 			// Append all the messages in the first buffer.
 			buf := b.messages[0].b
@@ -219,8 +218,34 @@ func (bs *bufferSink) flusher(ctx context.Context) {
 		// so a long-running flush triggers a compaction
 		// instead of a blocked channel.
 		atomic.AddInt32(&bs.nInFlight, -1)
-		if b.done {
+		return b.done
+	}
+
+	drain := false
+	for {
+		select {
+		case <-ctx.Done():
+			drain = true
+		case b := <-bs.flushCh:
+			if done := processLogBundle(b); done {
+				return
+			}
+		}
+		if drain {
+			break
+		}
+	}
+	// If we reach this stage, the ctx has been cancelled. Attempt to drain
+	// any remaining bundles in the flushCh with a timeout.
+	timer := time.After(10 * time.Second)
+	for {
+		select {
+		case <-timer:
 			return
+		case b := <-bs.flushCh:
+			if done := processLogBundle(b); done {
+				return
+			}
 		}
 	}
 }

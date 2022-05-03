@@ -131,9 +131,9 @@ func testBase(
 
 	// Apply the configuration.
 	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg)
+	logCloser, err := ApplyConfig(cfg)
 	require.NoError(t, err)
-	defer cleanup()
+	defer logCloser.Close()
 
 	// Send a log event on the OPS channel.
 	logStart := timeutil.Now()

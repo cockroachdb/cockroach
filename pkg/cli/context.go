@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -189,6 +190,9 @@ type cliContext struct {
 	// logConfig is the resulting logging configuration after the input
 	// configuration has been parsed and validated.
 	logConfig logconfig.Config
+	// logCloser is a logging shutdown utility, used to close & teardown logging
+	// facilities gracefully before exiting the process.
+	logCloser *log.Closer
 	// deprecatedLogOverrides is the legacy pre-v21.1 discrete flag
 	// overrides for the logging configuration.
 	// TODO(knz): Deprecated in v21.1. Remove this.
@@ -229,6 +233,7 @@ func setCliContextDefaults() {
 	cliCtx.allowUnencryptedClientPassword = false
 	cliCtx.logConfigInput = settableString{s: ""}
 	cliCtx.logConfig = logconfig.Config{}
+	cliCtx.logCloser = log.NewCloser()
 	cliCtx.ambiguousLogDir = false
 	// TODO(knz): Deprecated in v21.1. Remove this.
 	cliCtx.deprecatedLogOverrides.reset()

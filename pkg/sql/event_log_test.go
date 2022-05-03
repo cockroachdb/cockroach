@@ -670,11 +670,11 @@ func TestPerfLogging(t *testing.T) {
 	if err := cfg.Validate(&dir); err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := log.ApplyConfig(cfg)
+	logCloser, err := log.ApplyConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer logCloser.Close()
 
 	// Start a SQL server.
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})

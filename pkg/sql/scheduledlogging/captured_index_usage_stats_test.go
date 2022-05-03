@@ -63,7 +63,7 @@ func (s *stubDurations) getOverlapDuration() time.Duration {
 	return s.overlapDuration
 }
 
-func installTelemetryLogFileSink(t *testing.T, sc *log.TestLogScope) func() {
+func installTelemetryLogFileSink(t *testing.T, sc *log.TestLogScope) *log.Closer {
 	// Enable logging channels.
 	log.TestingResetActive()
 	cfg := logconfig.DefaultConfig()
@@ -74,12 +74,12 @@ func installTelemetryLogFileSink(t *testing.T, sc *log.TestLogScope) func() {
 		}}
 	dir := sc.GetDirectory()
 	require.NoError(t, cfg.Validate(&dir), "expected no errors validating log config")
-	cleanup, err := log.ApplyConfig(cfg)
+	logCloser, err := log.ApplyConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return cleanup
+	return logCloser
 }
 
 func TestCaptureIndexUsageStats(t *testing.T) {
@@ -87,8 +87,8 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := installTelemetryLogFileSink(t, sc)
-	defer cleanup()
+	logCloser := installTelemetryLogFileSink(t, sc)
+	defer logCloser.Close()
 
 	sd := stubDurations{}
 	sd.setLoggingDuration(1 * time.Second)

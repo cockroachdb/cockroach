@@ -68,11 +68,11 @@ func TestAppliedConfig(t *testing.T) {
 			}
 
 			TestingResetActive()
-			cleanup, err := ApplyConfig(h.Config)
+			logCloser, err := ApplyConfig(h.Config)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer cleanup()
+			defer logCloser.Close()
 
 			actual := DescribeAppliedConfig()
 			// Make the test output deterministic.

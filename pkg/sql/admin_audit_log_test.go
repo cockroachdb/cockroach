@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func installSensitiveAccessLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
+func installSensitiveAccessLogFileSink(sc *log.TestLogScope, t *testing.T) *log.Closer {
 	// Enable logging channels.
 	log.TestingResetActive()
 	cfg := logconfig.DefaultConfig()
@@ -46,12 +46,12 @@ func installSensitiveAccessLogFileSink(sc *log.TestLogScope, t *testing.T) func(
 	if err := cfg.Validate(&dir); err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := log.ApplyConfig(cfg)
+	logCloser, err := log.ApplyConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return cleanup
+	return logCloser
 }
 
 // TestAdminAuditLogBasic verifies that after enabling the admin audit log,
@@ -61,8 +61,8 @@ func TestAdminAuditLogBasic(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := installSensitiveAccessLogFileSink(sc, t)
-	defer cleanup()
+	logCloser := installSensitiveAccessLogFileSink(sc, t)
+	defer logCloser.Close()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -94,8 +94,8 @@ func TestAdminAuditLogRegularUser(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := installSensitiveAccessLogFileSink(sc, t)
-	defer cleanup()
+	logCloser := installSensitiveAccessLogFileSink(sc, t)
+	defer logCloser.Close()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -145,8 +145,8 @@ func TestAdminAuditLogTransaction(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := installSensitiveAccessLogFileSink(sc, t)
-	defer cleanup()
+	logCloser := installSensitiveAccessLogFileSink(sc, t)
+	defer logCloser.Close()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -221,8 +221,8 @@ func TestAdminAuditLogMultipleTransactions(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := installSensitiveAccessLogFileSink(sc, t)
-	defer cleanup()
+	logCloser := installSensitiveAccessLogFileSink(sc, t)
+	defer logCloser.Close()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
