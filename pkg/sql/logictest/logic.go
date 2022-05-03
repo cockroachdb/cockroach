@@ -4448,9 +4448,7 @@ func RunSQLLiteLogicTest(t *testing.T, configOverride string) {
 		"/test/select2.test",
 		"/test/select3.test",
 		"/test/select4.test",
-
-		// TODO(andyk): No support for join ordering yet, so this takes too long.
-		// "/test/select5.test",
+		"/test/select5.test",
 
 		// TODO(pmattis): Incompatibilities in numeric types.
 		// For instance, we type SUM(int) as a decimal since all of our ints are
