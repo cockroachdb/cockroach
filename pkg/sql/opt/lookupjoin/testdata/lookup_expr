@@ -88,6 +88,21 @@ optional: z IN (3, 4)
 lookup expression:
   ((y = b) AND (x = 1)) AND (z IN (3, 4))
 
+# The most restrictive IN filter should be chosen.
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x IN (1, 2) AND y = b
+optional: x IN (1, 2, 3)
+----
+lookup expression:
+  (y = b) AND (x IN (1, 2))
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x IN (1, 2, 3) AND y = b
+optional: x IN (1, 2)
+----
+lookup expression:
+  (y = b) AND (x IN (1, 2))
+
 
 # Test for range filters.
 

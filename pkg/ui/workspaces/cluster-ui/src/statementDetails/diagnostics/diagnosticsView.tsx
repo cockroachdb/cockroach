@@ -223,7 +223,7 @@ export class DiagnosticsView extends React.Component<
       activateDiagnosticsRef,
     } = this.props;
 
-    const canRequestDiagnostics = diagnosticsReports.every(
+    const readyToRequestDiagnostics = diagnosticsReports.every(
       diagnostic => diagnostic.completed,
     );
 
@@ -244,14 +244,14 @@ export class DiagnosticsView extends React.Component<
       <SummaryCard>
         <div className={cx("crl-statements-diagnostics-view__title")}>
           <Text textType={TextTypes.Heading3}>Statement diagnostics</Text>
-          {canRequestDiagnostics && (
+          {readyToRequestDiagnostics && (
             <Button
               onClick={() =>
                 activateDiagnosticsRef?.current?.showModalFor(
                   statementFingerprint,
                 )
               }
-              disabled={!canRequestDiagnostics}
+              disabled={!readyToRequestDiagnostics}
               intent="secondary"
             >
               Activate diagnostics

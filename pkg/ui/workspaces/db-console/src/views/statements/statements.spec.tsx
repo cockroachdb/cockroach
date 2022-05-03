@@ -308,7 +308,8 @@ describe("selectStatement", () => {
   it("returns null if the statements data is invalid", () => {
     const state = makeInvalidState();
     const props = makeEmptyRouteProps();
-    const result = selectStatementDetails(state, props);
+    const { statementDetails } = selectStatementDetails(state, props);
+    const result = statementDetails;
 
     assert.isNull(result);
   });
@@ -328,7 +329,8 @@ describe("selectStatement", () => {
 
     const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatement(stmtAFingerprintID);
-    const result = selectStatementDetails(state, props).statement;
+    const { statementDetails } = selectStatementDetails(state, props);
+    const result = statementDetails.statement;
 
     assert.equal(result.metadata.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
@@ -361,7 +363,8 @@ describe("selectStatement", () => {
       appFilter,
     );
 
-    const result = selectStatementDetails(state, props).statement;
+    const { statementDetails } = selectStatementDetails(state, props);
+    const result = statementDetails.statement;
 
     assert.equal(result.metadata.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
@@ -392,7 +395,8 @@ describe("selectStatement", () => {
       "(unset)",
     );
 
-    const result = selectStatementDetails(state, props).statement;
+    const { statementDetails } = selectStatementDetails(state, props);
+    const result = statementDetails.statement;
 
     assert.equal(result.metadata.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
@@ -424,7 +428,8 @@ describe("selectStatement", () => {
       appFilter,
     );
 
-    const result = selectStatementDetails(state, props)?.statement;
+    const { statementDetails } = selectStatementDetails(state, props);
+    const result = statementDetails?.statement;
 
     assert.equal(result.metadata.query, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());

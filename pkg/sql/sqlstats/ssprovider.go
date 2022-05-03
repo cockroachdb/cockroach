@@ -18,10 +18,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Writer is the interface that provides methods to record statement and
@@ -163,6 +166,8 @@ type StatsCollector interface {
 type Storage interface {
 	Reader
 
+	outliers.Reader
+
 	// GetLastReset returns the last time when the sqlstats is being reset.
 	GetLastReset() time.Time
 
@@ -183,6 +188,8 @@ type Provider interface {
 
 // RecordedStmtStats stores the statistics of a statement to be recorded.
 type RecordedStmtStats struct {
+	SessionID       clusterunique.ID
+	StatementID     clusterunique.ID
 	AutoRetryCount  int
 	RowsAffected    int
 	ParseLatency    float64
@@ -202,6 +209,8 @@ type RecordedStmtStats struct {
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
 type RecordedTxnStats struct {
+	SessionID               clusterunique.ID
+	TransactionID           uuid.UUID
 	TransactionTimeSec      float64
 	Committed               bool
 	ImplicitTxn             bool

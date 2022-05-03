@@ -22,6 +22,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/outliers",
         "//pkg/sql/sqlstats/ssmemstorage",
         "//pkg/sql/sqlutil",
         "//pkg/util/log",
