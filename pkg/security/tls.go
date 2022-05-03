@@ -148,19 +148,17 @@ func newBaseTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
 
 		VerifyPeerCertificate: makeOCSPVerifier(settings),
 
+		// CipherSuites is a list of enabled TLS 1.0–1.2 cipher suites. The order of
+		// the list is ignored. Note that TLS 1.3 ciphersuites are not configurable.
+		//
 		// This is Go's default list of cipher suites (as of go 1.8.3),
-		// with the following differences:
-		// - 3DES-based cipher suites have been removed. This cipher is
-		//   vulnerable to the Sweet32 attack and is sometimes reported by
-		//   security scanners. (This is arguably a false positive since
-		//   it will never be selected: Any TLS1.2 implementation MUST
-		//   include at least one cipher higher in the priority list, but
-		//   there's also no reason to keep it around)
-		// - AES is always prioritized over ChaCha20. Go makes this decision
-		//   by default based on the presence or absence of hardware AES
-		//   acceleration.
-		//   TODO(bdarnell): do the same detection here. See
-		//   https://github.com/golang/go/issues/21167
+		// with the following difference:
+		// 3DES-based cipher suites have been removed. This cipher is
+		// vulnerable to the Sweet32 attack and is sometimes reported by
+		// security scanners. (This is arguably a false positive since
+		// it will never be selected: Any TLS1.2 implementation MUST
+		// include at least one cipher higher in the priority list, but
+		// there's also no reason to keep it around)
 		//
 		// Note that some TLS cipher suite guidance (such as Mozilla's[1])
 		// recommend replacing the CBC_SHA suites below with CBC_SHA384 or
@@ -176,8 +174,13 @@ func newBaseTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+			// Note: the codec names
+			// TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+			// and
+			// TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+			// are merely aliases for the two above.
 			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
 			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
@@ -186,6 +189,9 @@ func newBaseTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
 			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_RSA_WITH_AES_128_CBC_SHA,
 			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+			// NB: no need to add TLS 1.3 ciphers here. As per the
+			// documentation of CipherSuites, the TLS 1.3 ciphers are not
+			// configurable. Go's predefined list always applies.
 		},
 
 		MinVersion: tls.VersionTLS12,

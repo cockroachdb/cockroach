@@ -13,8 +13,8 @@ package tracing_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
-	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -70,15 +70,6 @@ func TestGRPCInterceptors(t *testing.T) {
 		return types.MarshalAny(&recs[0])
 	}
 
-	bgCtx := context.Background()
-	s := stop.NewStopper()
-	defer s.Stop(bgCtx)
-	tr := tracing.NewTracer()
-
-	srv := grpc.NewServer(
-		grpc.UnaryInterceptor(tracing.ServerInterceptor(tr)),
-		grpc.StreamInterceptor(tracing.StreamServerInterceptor(tr)),
-	)
 	impl := &grpcutils.TestServerImpl{
 		UU: func(ctx context.Context, any *types.Any) (*types.Any, error) {
 			return checkForSpanAndReturnRecording(ctx)
@@ -113,59 +104,73 @@ func TestGRPCInterceptors(t *testing.T) {
 			return server.Send(any)
 		},
 	}
-	grpcutils.RegisterGRPCTestServer(srv, impl)
-	defer srv.GracefulStop()
-	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
-	require.NoError(t, err)
-	require.NoError(t, s.RunAsyncTask(bgCtx, "serve", func(ctx context.Context) {
-		if err := srv.Serve(ln); err != nil {
-			t.Error(err)
-		}
-	}))
-	conn, err := grpc.DialContext(bgCtx, ln.Addr().String(),
-		//lint:ignore SA1019 grpc.WithInsecure is deprecated
-		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil, /* init */
-			func(_ context.Context) bool { return false }, /* compatibilityMode */
-		)),
-		grpc.WithStreamInterceptor(tracing.StreamClientInterceptor(tr, nil /* init */)),
-	)
-	require.NoError(t, err)
-	defer func() {
-		_ = conn.Close() // nolint:grpcconnclose
-	}()
 
-	c := grpcutils.NewGRPCTestClient(conn)
 	unusedAny, err := types.MarshalAny(&types.Empty{})
 	require.NoError(t, err)
-
 	for _, tc := range []struct {
 		name string
-		do   func(context.Context) (*types.Any, error)
+		// expSpanName is the expected name of the RPC spans (client-side and
+		// server-side). If not specified, the test's name is used.
+		expSpanName string
+		do          func(context.Context, grpcutils.GRPCTestClient) (*types.Any, error)
 	}{
 		{
 			name: "UnaryUnary",
-			do: func(ctx context.Context) (*types.Any, error) {
+			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
 				return c.UnaryUnary(ctx, unusedAny)
 			},
 		},
 		{
 			name: "UnaryStream",
-			do: func(ctx context.Context) (*types.Any, error) {
+			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
 				sc, err := c.UnaryStream(ctx, unusedAny)
 				if err != nil {
 					return nil, err
 				}
-				any, err := sc.Recv()
+				if err := sc.CloseSend(); err != nil {
+					return nil, err
+				}
+				var firstResponse *types.Any
+				// Consume the stream fully, as mandated by the gRPC API.
+				for {
+					any, err := sc.Recv()
+					if err == io.EOF {
+						break
+					}
+					if err != nil {
+						return nil, err
+					}
+					if firstResponse == nil {
+						firstResponse = any
+					}
+				}
+				return firstResponse, nil
+			},
+		},
+		{
+			// Test that cancelling the client's ctx finishes the client span. The
+			// client span is usually finished either when Recv() receives an error
+			// (e.g. when receiving an io.EOF after exhausting the stream). But the
+			// client is allowed to not read from the stream any more if it cancels
+			// the ctx.
+			name:        "UnaryStream_ContextCancel",
+			expSpanName: "UnaryStream",
+			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
+				ctx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				sc, err := c.UnaryStream(ctx, unusedAny)
 				if err != nil {
 					return nil, err
 				}
-				return any, sc.CloseSend()
+				if err := sc.CloseSend(); err != nil {
+					return nil, err
+				}
+				return sc.Recv()
 			},
 		},
 		{
 			name: "StreamUnary",
-			do: func(ctx context.Context) (*types.Any, error) {
+			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
 				sc, err := c.StreamUnary(ctx)
 				if err != nil {
 					return nil, err
@@ -178,7 +183,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		},
 		{
 			name: "StreamStream",
-			do: func(ctx context.Context) (*types.Any, error) {
+			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
 				sc, err := c.StreamStream(ctx)
 				if err != nil {
 					return nil, err
@@ -186,13 +191,63 @@ func TestGRPCInterceptors(t *testing.T) {
 				if err := sc.Send(unusedAny); err != nil {
 					return nil, err
 				}
-				return sc.Recv()
+				if err := sc.CloseSend(); err != nil {
+					return nil, err
+				}
+				var firstResponse *types.Any
+				// Consume the stream fully, as mandated by the gRPC API.
+				for {
+					any, err := sc.Recv()
+					if err == io.EOF {
+						break
+					}
+					if err != nil {
+						return nil, err
+					}
+					if firstResponse == nil {
+						firstResponse = any
+					}
+				}
+				return firstResponse, nil
 			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			bgCtx := context.Background()
+			s := stop.NewStopper()
+			defer s.Stop(bgCtx)
+			tr := tracing.NewTracer()
+			srv := grpc.NewServer(
+				grpc.UnaryInterceptor(tracing.ServerInterceptor(tr)),
+				grpc.StreamInterceptor(tracing.StreamServerInterceptor(tr)),
+			)
+			grpcutils.RegisterGRPCTestServer(srv, impl)
+			defer srv.GracefulStop()
+			ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+			require.NoError(t, err)
+			require.NoError(t, s.RunAsyncTask(bgCtx, "serve", func(ctx context.Context) {
+				if err := srv.Serve(ln); err != nil {
+					t.Error(err)
+				}
+			}))
+			conn, err := grpc.DialContext(bgCtx, ln.Addr().String(),
+				//lint:ignore SA1019 grpc.WithInsecure is deprecated
+				grpc.WithInsecure(),
+				grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil, /* init */
+					func(_ context.Context) bool { return false }, /* compatibilityMode */
+				)),
+				grpc.WithStreamInterceptor(tracing.StreamClientInterceptor(tr, nil /* init */)),
+			)
+			require.NoError(t, err)
+			defer func() {
+				_ = conn.Close() // nolint:grpcconnclose
+			}()
+
+			c := grpcutils.NewGRPCTestClient(conn)
+			require.NoError(t, err)
+
 			ctx, sp := tr.StartSpanCtx(bgCtx, "root", tracing.WithRecording(tracing.RecordingVerbose))
-			recAny, err := tc.do(ctx)
+			recAny, err := tc.do(ctx, c)
 			require.NoError(t, err)
 			var rec tracingpb.RecordedSpan
 			require.NoError(t, types.UnmarshalAny(recAny, &rec))
@@ -214,24 +269,27 @@ func TestGRPCInterceptors(t *testing.T) {
 			}
 			require.Equal(t, 1, n)
 
+			expSpanName := tc.expSpanName
+			if expSpanName == "" {
+				expSpanName = tc.name
+			}
 			exp := fmt.Sprintf(`
 				span: root
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
 						tags: span.kind=client
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
 						tags: span.kind=server
-						event: structured=magic-value`, tc.name)
+						event: structured=magic-value`, expSpanName)
 			require.NoError(t, tracing.CheckRecordedSpans(finalRecs, exp))
+			// Check that all the RPC spans (client-side and server-side) have been
+			// closed. SucceedsSoon because the closing of the span is async (although
+			// immediate) in the ctx cancellation subtest.
+			testutils.SucceedsSoon(t, func() error {
+				return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
+					rec := sp.GetFullRecording(tracing.RecordingVerbose)[0]
+					return errors.Newf("leaked span: %s %s", rec.Operation, rec.Tags)
+				})
+			})
 		})
 	}
-	// Force a GC so that the finalizer for the stream client span runs and closes
-	// the span. Nothing else closes that span in this test. See
-	// newTracingClientStream().
-	runtime.GC()
-	testutils.SucceedsSoon(t, func() error {
-		return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
-			rec := sp.GetFullRecording(tracing.RecordingVerbose)[0]
-			return errors.Newf("leaked span: %s %s", rec.Operation, rec.Tags)
-		})
-	})
 }
