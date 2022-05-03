@@ -12,7 +12,6 @@ package log
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -34,13 +33,13 @@ const noMaxBufferSize = 0
 func getMockBufferedSync(
 	t *testing.T, maxStaleness time.Duration, sizeTrigger uint64, maxBufferSize uint64,
 ) (sink *bufferedSink, mock *MockLogSink, cleanup func()) {
-	ctx, cancel := context.WithCancel(context.Background())
 	ctrl := gomock.NewController(t)
 	mock = NewMockLogSink(ctrl)
 	sink = newBufferedSink(mock, maxStaleness, sizeTrigger, maxBufferSize, false /* crashOnAsyncFlushErr */)
-	sink.Start(ctx)
+	closer := NewBufferedSinkCloser()
+	sink.Start(closer)
 	cleanup = func() {
-		cancel()
+		closer.Close()
 		ctrl.Finish()
 	}
 	return sink, mock, cleanup
@@ -167,8 +166,8 @@ func TestBufferSizeTriggerMultipleFlush(t *testing.T) {
 func TestBufferedSinkCrashOnAsyncFlushErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	closer := NewBufferedSinkCloser()
+	defer closer.Close()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mock := NewMockLogSink(ctrl)
@@ -176,7 +175,7 @@ func TestBufferedSinkCrashOnAsyncFlushErr(t *testing.T) {
 	triggerSize := uint64(10)
 	// Configure a sink to crash on flush errors.
 	sink := newBufferedSink(mock, noMaxStaleness, triggerSize, bufferMaxSize, true /* crashOnAsyncFlushErr */)
-	sink.Start(ctx)
+	sink.Start(closer)
 
 	crashC := make(chan struct{})
 	SetExitFunc(false /* hideStack */, func(code exit.Code) {
@@ -231,15 +230,15 @@ func TestBufferedSinkForceSync(t *testing.T) {
 // Test that messages are buffered while a flush is in-flight.
 func TestBufferedSinkBlockedFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	closer := NewBufferedSinkCloser()
+	defer closer.Close()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mock := NewMockLogSink(ctrl)
 	bufferMaxSize := uint64(20)
 	triggerSize := uint64(10)
 	sink := newBufferedSink(mock, noMaxStaleness, triggerSize, bufferMaxSize, false /* crashOnAsyncFlushErr */)
-	sink.Start(ctx)
+	sink.Start(closer)
 
 	// firstFlushSem will be signaled when the bufferedSink flushes for the first
 	// time. That flush will be blocked until the channel is written to again.
@@ -311,13 +310,13 @@ b9`), out)
 // Test that multiple messages with the forceSync option work.
 func TestBufferedSinkSyncFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	closer := NewBufferedSinkCloser()
+	defer closer.Close()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mock := NewMockLogSink(ctrl)
 	sink := newBufferedSink(mock, noMaxStaleness, noSizeTrigger, noMaxBufferSize, false /* crashOnAsyncFlushErr */)
-	sink.Start(ctx)
+	sink.Start(closer)
 
 	mock.EXPECT().output(gomock.Eq([]byte("a")), gomock.Any())
 	mock.EXPECT().output(gomock.Eq([]byte("b")), gomock.Any())
@@ -327,32 +326,26 @@ func TestBufferedSinkSyncFlush(t *testing.T) {
 
 func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx, cancel := context.WithCancel(context.Background())
+	closer := NewBufferedSinkCloser()
 	ctrl := gomock.NewController(t)
 	mock := NewMockLogSink(ctrl)
 	sink := newBufferedSink(mock, noMaxStaleness, noSizeTrigger, noMaxBufferSize, false /* crashOnAsyncFlushErr */)
-	sink.Start(ctx)
+	sink.Start(closer)
 	defer ctrl.Finish()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	defer wg.Wait()
 
 	// With no sizeTrigger, all 3 of the buffered calls to `sink.output()` after
 	// this will be concatenated and flushed as a single string to the underlying
-	// mock sink. This single call to `mock.output()` occurs when we signal on the
-	// `ctx.Done()` channel with the `cancel()` function.
+	// mock sink. This single call to `mock.output()` occurs when we call `closer.Close()`
 	//
 	// Expect this call, and signal the wait group once it happens. We use the
 	// wait group because flushing to the mock sink happens asynchronously.
 	mock.EXPECT().
-		output(gomock.Eq([]byte("test1\ntest2\ntest3")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
-		Do(addArgs(wg.Done))
+		output(gomock.Eq([]byte("test1\ntest2\ntest3")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)})
 
 	require.NoError(t, sink.output([]byte("test1"), sinkOutputOptions{}))
 	require.NoError(t, sink.output([]byte("test2"), sinkOutputOptions{}))
 	require.NoError(t, sink.output([]byte("test3"), sinkOutputOptions{}))
-	cancel()
+	closer.Close()
 }
 
 type sinkOutputOptionsMatcher struct {
