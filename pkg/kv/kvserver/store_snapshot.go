@@ -707,6 +707,12 @@ func (s *Store) receiveSnapshot(
 	}
 	defer cleanup()
 
+	// TODO: There is a bunch of scaffolding regarding deadlines and logging in
+	// throttleSnapshot (called by reserveSnapshot) that we probably want here
+	// too. Consider moving this code into reserveSnapshot.
+	snapshotGranter := s.cfg.KVAdmissionController.GetStoreSnapshotGranter(s.StoreID())
+	snapshotGranter.GetRangeSnapshotTokens(ctx, header.RangeSize)
+
 	// The comment on ReplicaPlaceholder motivates and documents
 	// ReplicaPlaceholder semantics. Please be familiar with them
 	// before making any changes.
@@ -780,6 +786,16 @@ func (s *Store) receiveSnapshot(
 	}
 	inSnap.placeholder = placeholder
 
+	// TODO: tell snapshot sender that reached this stage, so give us a larger
+	// deadline.
+	// This was option 1. We are going with the simpler alternative of waiting before
+	// streaming the data over. There is a time mismatch in that we will have grabbed the
+	// tokens tens of seconds before we are ready to ingest, but we are already
+	// tracking snapshot-tokens separately in admission control, and we still have the
+	// single slot semaphore in the kv code, and adding a single sublevel later is ok.
+	// snapshotGranter := s.cfg.KVAdmissionController.GetStoreSnapshotGranter(s.StoreID())
+	// snapshotGranter.GetRangeSnapshotTokens(ctx, inSnap.DataSize)
+
 	// Use a background context for applying the snapshot, as handleRaftReady is
 	// not prepared to deal with arbitrary context cancellation. Also, we've
 	// already received the entire snapshot here, so there's no point in
@@ -788,6 +804,9 @@ func (s *Store) receiveSnapshot(
 	if err := s.processRaftSnapshotRequest(applyCtx, header, inSnap); err != nil {
 		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
 	}
+	// TODO: plumbing for how many bytes were ingested into L0, from processRaftSnapshotRequest
+	var l0Bytes int64
+	snapshotGranter.ReturnRangeSnapshotTokens(inSnap.DataSize - l0Bytes)
 	return stream.Send(&kvserverpb.SnapshotResponse{Status: kvserverpb.SnapshotResponse_APPLIED})
 }
 

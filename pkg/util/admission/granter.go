@@ -13,6 +13,7 @@ package admission
 import (
 	"context"
 	"math"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -494,6 +495,100 @@ type kvStoreTokenGranter struct {
 	availableIOTokens               int64
 	ioTokensExhaustedDurationMetric *metric.Counter
 	exhaustedStart                  time.Time
+
+	// Range snapshots are special in a few ways.
+	// - They add a large number of bytes (up to the maximum size of the range,
+	//   which is currently 512MB) in a single atomic operation.
+	// - If all these bytes go into L0, they will at most increase the sublevel
+	//   count by 1. Also, they will add at most 5 files.
+	//
+	// We make some assumptions:
+	// - Most of the stores in a cluster are healthy, in the absence of
+	//   snapshots, and are not being subject to any store token limiting.
+	//   Adding 1 sublevel and 5 files once will not immediately push them over
+	//   the admission control thresholds.
+	// - A high rate of snapshot ingestion can push a store over the threshold,
+	//   and in the worst case we have 512MB*20=10GB in L0 when we reach 20
+	//   sublevels. However, since (a) our token calculation is graceful in its
+	//   throttling, based on smoothed compaction bandwidth out of L0, and (b)
+	//   we made the healthy store assumption, we can assume that the token
+	//   count, when the threshold is first exceeded is enough for normal
+	//   user-facing traffic.
+	//
+	// If we use a simple scheme of consuming tokens for the snapshot, the
+	// tokens can be fully consumed by a 512MB snapshot (and become negative),
+	// and this could prevent user-facing traffic from making progress for some
+	// time. Even though we can partially address this giving lower priority to
+	// snapshot work, one can still get unlucky if there is an instant where
+	// there is no waiting normal priority work.
+	//
+	// (Aside: because tokens will be unlimited until the threshold is exceeded
+	// is also partly why we don't do the more complicated thing of gradually
+	// acquiring tokens for the snapshot, before ingestion of the snapshot).
+	//
+	// Based on the above we adopt the following simple design:
+	// - Track a separate set of tokens for snapshots, such that
+	//   availableIOTokens >= availableRangeSnapshotTokens.
+	//
+	// - Regular work subtracts from both, but only blocks until
+	//   availableIOTokens are positive.
+	//
+	// - Snapshots subtract from availableRangeSnapshotIOTokens, and block until
+	//   both counts of available tokens are positive.
+	//
+	// - Since these are semi-mirrors of each other, the periodic token replenishment
+	//   adds to both.
+	//
+	// This scheme allows normal work to not lose tokens to snapshot work, but
+	// still see the second order side-effect of snapshots in terms of the
+	// quantity of token replenishment. This over-commitment is viable since a
+	// snapshot only adds 1 sublevel and 5 files, despite its large byte size,
+	// and those are the two quantities used in admission control thresholds.
+	//
+	// Example 1:
+	// Consider a store that gives out 25MB/s of tokens when it initially goes
+	// over the threshold. For convenience, we will illustrate the behaviour using the 15s intervals
+	// at which new token calculations are done (even though we actually give them out
+	// at 1s granularity). 25MB/s*15=375MB tokens. Intervals are numbered I0, I1, ...
+	// Say I0 is the interval at which we start with 375MB tokens for regular and
+	// snapshot work. Also, assume that regular work consumes 20MB/s, so 300MB of tokens
+	// over 15s.
+	// I0:
+	//  start: snapshot-tokens=375MB, regular-tokens=375MB
+	//  One 500MB snapshot ingestion into L0, and regular work 300MB
+	//  end:   snapshot-tokens=375MB-800MB=-425MB, regular-tokens=375MB-300MB=75MB
+	// I1: (token replenishment of 375MB)
+	//  start: snapshot-tokens=-50MB, regular-tokens=375MB
+	//  Regular work 300MB
+	//  end:   snapshot-tokens=-350MB, regular-tokens=75MB
+	// I2: (token replenishment of 375MB)
+	//  start: snapshot-tokens=25MB, regular-tokens=375MB
+	//  One 500MB snapshot ingestion into L0, and regular work 300MB
+	//  end:   snapshot-tokens=-775MB, regular-tokens=75MB
+	// I3: (token replenishment of 375MB)
+	//  start: snapshot-tokens=-400MB, regular-tokens=375MB
+	//  Regular work 300MB
+	//  end:   snapshot-tokens=-700MB, regular-tokens=75MB
+	// I3: (token replenishment of 375MB)
+	//  start: snapshot-tokens=-325MB, regular-tokens=375MB
+	//  Regular work 300MB
+	//  end:   snapshot-tokens=-625MB, regular-tokens=75MB
+	// ...
+	//
+	// Example 2:
+	// Normal work is consuming all the 375MB of tokens.
+	// I0:
+	//  start: snapshot-tokens=375MB, regular-tokens=375MB
+	//  One 500MB snapshot ingestion into L0, and regular work 375MB
+	//  end:   snapshot-tokens=375MB-870MB=-500MB, regular-tokens=375MB-375MB=0
+	// I1: (token replenishment of 375MB)
+	//  start: snapshot-tokens=-125MB, regular-tokens=375MB
+	//  Regular work 375MB
+	//  end:   snapshot-tokens=-500MB, regular-tokens=0
+	// The I1 behavior will repeat forever, so no more snapshot ingestion will
+	// occur.
+	availableRangeSnapshotIOTokens int64
+	availableCond                  *sync.Cond
 }
 
 var _ granterWithLockedCalls = &kvStoreTokenGranter{}
@@ -537,6 +632,7 @@ func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64) {
 func (sg *kvStoreTokenGranter) subtractTokens(count int64, forceTickMetric bool) {
 	avail := sg.availableIOTokens
 	sg.availableIOTokens -= count
+	sg.availableRangeSnapshotIOTokens -= count
 	if count > 0 && avail > 0 && sg.availableIOTokens <= 0 {
 		// Transition from > 0 to <= 0.
 		sg.exhaustedStart = timeutil.Now()
@@ -568,6 +664,38 @@ func (sg *kvStoreTokenGranter) setAvailableIOTokensLocked(tokens int64) {
 		// Clamp to tokens.
 		sg.availableIOTokens = tokens
 	}
+	if sg.availableRangeSnapshotIOTokens > tokens {
+		// Clamp to tokens.
+		sg.availableRangeSnapshotIOTokens = tokens
+	}
+	sg.availableCond.Signal()
+}
+
+func (sg *kvStoreTokenGranter) getRangeSnapshotTokens(ctx context.Context, tokens int64) error {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
+	for sg.availableRangeSnapshotIOTokens < 0 || sg.availableIOTokens < 0 {
+		// Technically, some other work could return tokens so they may become
+		// positive before the call to setAvailableIOTokensLocked. But we ignore
+		// that since the 1s granularity of this wait is sufficient.
+		sg.availableCond.Wait()
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
+	sg.availableRangeSnapshotIOTokens -= tokens
+	return nil
+}
+
+// TODO: the clamping logic is limited to setAvailableIOTokensLocked, which
+// was ok when the number of tokens being returned were small. But it is not
+// suitable for a 512MB return (if the ingest went into a lower level than
+// L0). Remember the clamp limit in setAvailableIOTokensLocked so we can apply
+// it whenever we increment tokens.
+func (sg *kvStoreTokenGranter) returnRangeSnapshotTokens(tokens int64) {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
+	sg.availableRangeSnapshotIOTokens += tokens
 }
 
 // GrantCoordinator is the top-level object that coordinates grants across
@@ -1354,6 +1482,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 	kvg := &kvStoreTokenGranter{
 		coord:                           coord,
 		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
+		availableCond:                   sync.NewCond(&coord.mu),
 	}
 	opts := makeWorkQueueOptions(KVWork)
 	// This is IO work, so override the usesTokens value.
@@ -1400,6 +1529,14 @@ func (sgc *StoreGrantCoordinators) close() {
 	})
 }
 
+func (sgc *StoreGrantCoordinators) GetStoreSnapshotGranter(storeID int32) StoreSnapshotGranter {
+	if unsafeGranter, ok := sgc.gcMap.Load(int64(storeID)); ok {
+		granter := (*GrantCoordinator)(unsafeGranter)
+		return StoreSnapshotGranter{granter.granters[KVWork].(*kvStoreTokenGranter)}
+	}
+	return StoreSnapshotGranter{}
+}
+
 // GrantCoordinators holds a regular GrantCoordinator for all work, and a
 // StoreGrantCoordinators that allows for per-store GrantCoordinators for
 // KVWork that involves writes.
@@ -1412,6 +1549,24 @@ type GrantCoordinators struct {
 func (gcs GrantCoordinators) Close() {
 	gcs.Stores.close()
 	gcs.Regular.Close()
+}
+
+type StoreSnapshotGranter struct {
+	*kvStoreTokenGranter
+}
+
+func (ssg StoreSnapshotGranter) GetRangeSnapshotTokens(ctx context.Context, tokens int64) error {
+	if ssg.kvStoreTokenGranter == nil {
+		return nil
+	}
+	return ssg.getRangeSnapshotTokens(ctx, tokens)
+}
+
+func (ssg StoreSnapshotGranter) ReturnRangeSnapshotTokens(tokens int64) {
+	if ssg.kvStoreTokenGranter == nil {
+		return
+	}
+	ssg.returnRangeSnapshotTokens(tokens)
 }
 
 // cpuOverloadIndicator is meant to be an instantaneous indicator of cpu
