@@ -41,6 +41,9 @@ type Table interface {
 	// information_schema tables.
 	IsVirtualTable() bool
 
+	// IsSystemTable returns true if this table is a special system table.
+	IsSystemTable() bool
+
 	// IsMaterializedView returns true if this table is actually a materialized
 	// view. Materialized views are the same as tables in all aspects, other than
 	// that they cannot be mutated.
