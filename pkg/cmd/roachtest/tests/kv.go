@@ -225,7 +225,7 @@ func registerKV(r registry.Registry) {
 		if opts.spanReads {
 			limitedSpanStr = "limited-spans"
 		}
-		nameParts = append(nameParts, fmt.Sprintf("kv%d%s", opts.readPercent, limitedSpanStr))
+		nameParts = append(nameParts, fmt.Sprintf("kvv%d%s", opts.readPercent, limitedSpanStr))
 		if len(opts.tags) > 0 {
 			nameParts = append(nameParts, strings.Join(opts.tags, "/"))
 		}

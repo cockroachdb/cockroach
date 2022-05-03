@@ -779,6 +779,18 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 	return metrics
 }
 
+func (n *Node) SetPebbleCPU(gc *admission.GrantCoordinator) error {
+	err := n.stores.VisitStores(func(s *kvserver.Store) error {
+		ssg, err := admission.MakeSoftSlotGranter(gc)
+		if err != nil {
+			return err
+		}
+		s.Engine().SetSoftSlotGranter(ssg)
+		return nil
+	})
+	return err
+}
+
 // GetTenantWeights implements kvserver.TenantWeightProvider.
 func (n *Node) GetTenantWeights() kvserver.TenantWeights {
 	weights := kvserver.TenantWeights{

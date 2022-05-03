@@ -13,6 +13,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"io"
 	"time"
 
@@ -780,6 +781,11 @@ type Engine interface {
 	// MinVersionIsAtLeastTargetVersion returns whether the engine's recorded
 	// storage min version is at least the target version.
 	MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error)
+
+	// SetSoftSlotGranter gives a unique soft slot granter to the Engine. The
+	// Engine can use the SoftSlotGranter to determine if it is allowed to
+	// do additional CPU bound work.
+	SetSoftSlotGranter(ssg *admission.SoftSlotGranter)
 }
 
 // Batch is the interface for batch specific operations.

@@ -12,6 +12,7 @@ package admission
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -613,6 +614,10 @@ func (sg *kvGranter) tryGetSoftSlots(count int) int {
 	sg.coord.mu.Lock()
 	defer sg.coord.mu.Unlock()
 	spareModerateLoadSlots := sg.totalModerateLoadSlots - sg.usedSoftSlots - sg.usedSlots
+	fmt.Println(
+		"tryGetSoftSlots", "count:", count, "spareModerateSlots:", spareModerateLoadSlots, "totalHighSlots:", sg.totalHighLoadSlots,
+		"totalModerateSlots:", sg.totalModerateLoadSlots, "usedSlots:", sg.usedSlots, "usedSoftSlots:", sg.usedSoftSlots,
+		)
 	if spareModerateLoadSlots <= 0 {
 		sg.failedSoftSlotsGet = true
 		return 0
@@ -1521,19 +1526,25 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, _ time.Duration) {
 		return total
 	}
 
+	fmt.Println("current runnable goroutines:", runnable, "threshold * procs:", threshold*procs, "mincpusots:", kvsa.minCPUSlots, "maxcpuslots:", kvsa.maxCPUSlots)
+
 	// TODO: the fractions below are arbitrary and subject to tuning.
 	if runnable >= threshold*procs {
+		fmt.Println("very overloaded, try decrease slots")
 		// Very overloaded.
 		kvsa.granter.totalHighLoadSlots = tryDecreaseSlots(kvsa.granter.totalHighLoadSlots)
 		kvsa.granter.totalModerateLoadSlots = tryDecreaseSlots(kvsa.granter.totalModerateLoadSlots)
 	} else if float64(runnable) <= float64((threshold*procs)/4) {
+		fmt.Println("very underloaded, try increase slots")
 		// Very underloaded.
 		kvsa.granter.totalHighLoadSlots = tryIncreaseSlots(kvsa.granter.totalHighLoadSlots)
 		kvsa.granter.totalModerateLoadSlots = tryIncreaseSlots(kvsa.granter.totalModerateLoadSlots)
 	} else if float64(runnable) <= float64((threshold*procs)/2) {
+		fmt.Println("moderately underloaded, try increase highload slots")
 		// Moderately underloaded -- can afford to increase regular slots.
 		kvsa.granter.totalHighLoadSlots = tryIncreaseSlots(kvsa.granter.totalHighLoadSlots)
 	} else if runnable >= 3*threshold*procs/4 {
+		fmt.Println("moderately overloaded, try decrease low load slots")
 		// Moderately overloaded -- should decrease moderate load slots.
 		//
 		// NB: decreasing moderate load slots may not halt the runnable growth
@@ -1589,6 +1600,10 @@ type sqlNodeCPUOverloadIndicator struct {
 // PebbleMetricsProvider provides the pebble.Metrics for all stores.
 type PebbleMetricsProvider interface {
 	GetPebbleMetrics() []StoreMetrics
+}
+
+type PebbleCpuSetter interface {
+	SetPebbleCPU(gc *GrantCoordinator) error
 }
 
 // StoreMetrics are the metrics for a store.
