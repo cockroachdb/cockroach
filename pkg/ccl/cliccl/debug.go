@@ -160,7 +160,10 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 
 	dir := args[0]
 
-	db, err := cli.OpenExistingStore(dir, stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
+	db, err := cli.OpenExistingStore(
+		dir, stopper, true /* readOnly */, false, /* disableAutomaticCompactions */
+		0, /* maxWriterConcurrency */
+	)
 	if err != nil {
 		return err
 	}

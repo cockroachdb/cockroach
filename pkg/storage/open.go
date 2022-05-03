@@ -94,6 +94,17 @@ func MaxSize(size int64) ConfigOption {
 	}
 }
 
+// MaxWriterConcurrency sets the concurrency of the sstable Writers. A concurrency
+// of 0 implies no parallelism in the Writer, and a concurrency of 1 or more implies
+// parallelism in the Writer. Currently, there's no difference between a concurrency
+// of 1 or more.
+func MaxWriterConcurrency(concurrency int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.Opts.Experimental.MaxWriterConcurrency = concurrency
+		return nil
+	}
+}
+
 // MaxOpenFiles sets the maximum number of files an engine should open.
 func MaxOpenFiles(count int) ConfigOption {
 	return func(cfg *engineConfig) error {

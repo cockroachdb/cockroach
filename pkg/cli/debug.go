@@ -168,6 +168,7 @@ type OpenEngineOptions struct {
 	ReadOnly                    bool
 	MustExist                   bool
 	DisableAutomaticCompactions bool
+	MaxWriterConcurrency        int
 }
 
 func (opts OpenEngineOptions) configOptions() []storage.ConfigOption {
@@ -189,10 +190,14 @@ func (opts OpenEngineOptions) configOptions() []storage.ConfigOption {
 // true, disables automatic/background compactions (only used for manual
 // compactions).
 func OpenExistingStore(
-	dir string, stopper *stop.Stopper, readOnly, disableAutomaticCompactions bool,
+	dir string,
+	stopper *stop.Stopper,
+	readOnly, disableAutomaticCompactions bool,
+	maxWriterConcurrency int,
 ) (storage.Engine, error) {
 	return OpenEngine(dir, stopper, OpenEngineOptions{
 		ReadOnly: readOnly, MustExist: true, DisableAutomaticCompactions: disableAutomaticCompactions,
+		MaxWriterConcurrency: maxWriterConcurrency,
 	})
 }
 
@@ -209,6 +214,7 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 		storage.CacheSize(server.DefaultCacheSize),
 		storage.Settings(serverCfg.Settings),
 		storage.Hook(PopulateStorageConfigHook),
+		storage.MaxWriterConcurrency(opts.MaxWriterConcurrency),
 		storage.CombineOptions(opts.configOptions()...))
 	if err != nil {
 		return nil, err
@@ -281,7 +287,10 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
+	db, err := OpenExistingStore(
+		args[0], stopper, true /* readOnly */, false, /* disableAutomaticCompactions */
+		0, /* maxWriterConcurrency */
+	)
 	if err != nil {
 		return err
 	}
@@ -454,7 +463,10 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
+	db, err := OpenExistingStore(
+		args[0], stopper, true /* readOnly */, false, /* disableAutomaticCompactions */
+		0, /* maxWriterConcurrency */
+	)
 	if err != nil {
 		return err
 	}
@@ -544,7 +556,10 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
+	db, err := OpenExistingStore(
+		args[0], stopper, true /* readOnly */, false, /* disableAutomaticCompactions */
+		0, /* maxWriterConcurrency */
+	)
 	if err != nil {
 		return err
 	}
@@ -687,7 +702,10 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
+	db, err := OpenExistingStore(
+		args[0], stopper, true /* readOnly */, false, /* disableAutomaticCompactions */
+		0, /* maxWriterConcurrency */
+	)
 	if err != nil {
 		return err
 	}
@@ -757,7 +775,10 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
+	db, err := OpenExistingStore(
+		args[0], stopper, true /* readOnly */, false, /* disableAutomaticCompactions */
+		0, /*maxWriterConcurrency */
+	)
 	if err != nil {
 		return err
 	}
@@ -855,7 +876,10 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, false /* readOnly */, true /* disableAutomaticCompactions */)
+	db, err := OpenExistingStore(
+		args[0], stopper, false /* readOnly */, true, /* disableAutomaticCompactions */
+		1, /* maxWriterConcurrency */
+	)
 	if err != nil {
 		return err
 	}
@@ -1123,7 +1147,10 @@ func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(args[0], stopper, false /* readOnly */, false /* disableAutomaticCompactions */)
+	db, err := OpenExistingStore(
+		args[0], stopper, false /* readOnly */, false, /* disableAutomaticCompactions */
+		0, /* maxWriterConcurrency */
+	)
 	if err != nil {
 		return err
 	}
@@ -1494,7 +1521,10 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
+	db, err := OpenExistingStore(
+		args[0], stopper, true /* readOnly */, false, /* disableAutomaticCompactions */
+		0, /* maxWriterConcurrency */
+	)
 	if err != nil {
 		return err
 	}
