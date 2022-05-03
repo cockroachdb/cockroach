@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geodist"
-	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/s1"
@@ -24,7 +24,7 @@ import (
 
 // SpheroidErrorFraction is an error fraction to compensate for using a sphere
 // to calculate the distance for what is actually a spheroid. The distance
-// calculation has an error that is bounded by (2 * spheroid.Flattening)%.
+// calculation has an error that is bounded by (2 * spheroid.flattening)%.
 // This 5% margin is pretty safe.
 const SpheroidErrorFraction = 0.05
 
@@ -45,7 +45,7 @@ func Distance(
 	if err != nil {
 		return 0, err
 	}
-	spheroid, err := a.Spheroid()
+	spheroid, err := spheroidFromGeography(a)
 	if err != nil {
 		return 0, err
 	}
@@ -196,7 +196,7 @@ func (c *s2GeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.Poi
 // See distance_test.go for examples of the "truer" distance values.
 // Since we aim to be compatible with PostGIS, we adopt the same approach.
 func distanceGeographyRegions(
-	spheroid *geographiclib.Spheroid,
+	spheroid geoprojbase.Spheroid,
 	useSphereOrSpheroid UseSphereOrSpheroid,
 	aRegions []s2.Region,
 	bRegions []s2.Region,
@@ -244,7 +244,7 @@ func distanceGeographyRegions(
 // geographyMinDistanceUpdater finds the minimum distance using a sphere.
 // Methods will return early if it finds a minimum distance <= stopAfterLE.
 type geographyMinDistanceUpdater struct {
-	spheroid            *geographiclib.Spheroid
+	spheroid            geoprojbase.Spheroid
 	useSphereOrSpheroid UseSphereOrSpheroid
 	minEdge             s2.Edge
 	minD                s1.ChordAngle
@@ -257,7 +257,7 @@ var _ geodist.DistanceUpdater = (*geographyMinDistanceUpdater)(nil)
 // newGeographyMinDistanceUpdater returns a new geographyMinDistanceUpdater with the
 // correct arguments set up.
 func newGeographyMinDistanceUpdater(
-	spheroid *geographiclib.Spheroid,
+	spheroid geoprojbase.Spheroid,
 	useSphereOrSpheroid UseSphereOrSpheroid,
 	stopAfter float64,
 	exclusivity geo.FnExclusivity,
@@ -269,7 +269,7 @@ func newGeographyMinDistanceUpdater(
 		// buffer for spheroid distances being slightly off.
 		multiplier -= SpheroidErrorFraction
 	}
-	stopAfterChordAngle := s1.ChordAngleFromAngle(s1.Angle(stopAfter * multiplier / spheroid.SphereRadius))
+	stopAfterChordAngle := s1.ChordAngleFromAngle(s1.Angle(stopAfter * multiplier / spheroid.SphereRadius()))
 	return &geographyMinDistanceUpdater{
 		spheroid:            spheroid,
 		minD:                math.MaxFloat64,
@@ -288,7 +288,7 @@ func (u *geographyMinDistanceUpdater) Distance() float64 {
 	if u.useSphereOrSpheroid == UseSpheroid {
 		return spheroidDistance(u.spheroid, u.minEdge.V0, u.minEdge.V1)
 	}
-	return u.minD.Angle().Radians() * u.spheroid.SphereRadius
+	return u.minD.Angle().Radians() * u.spheroid.SphereRadius()
 }
 
 // Update implements the geodist.DistanceUpdater interface.

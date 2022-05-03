@@ -101,12 +101,12 @@ func buildData() embeddedproj.Data {
 					continue
 				}
 
-				key := spheroidKey{s.Radius, s.Flattening}
+				key := spheroidKey{s.Radius(), s.Flattening()}
 				mu.Lock()
 				spheroidHash, ok := foundSpheroids[key]
 				if !ok {
 					shaBytes := sha256.Sum256([]byte(
-						strconv.FormatFloat(s.Radius, 'f', -1, 64) + "," + strconv.FormatFloat(s.Flattening, 'f', -1, 64),
+						strconv.FormatFloat(s.Radius(), 'f', -1, 64) + "," + strconv.FormatFloat(s.Flattening(), 'f', -1, 64),
 					))
 					spheroidHash = 0
 					for _, b := range shaBytes[:6] {
@@ -117,8 +117,8 @@ func buildData() embeddedproj.Data {
 						d.Spheroids,
 						embeddedproj.Spheroid{
 							Hash:       spheroidHash,
-							Radius:     s.Radius,
-							Flattening: s.Flattening,
+							Radius:     s.Radius(),
+							Flattening: s.Flattening(),
 						},
 					)
 				}

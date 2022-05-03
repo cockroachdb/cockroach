@@ -58,7 +58,7 @@ func Azimuth(a geo.Geography, b geo.Geography) (*float64, error) {
 		return nil, nil
 	}
 
-	s, err := a.Spheroid()
+	s, err := spheroidFromGeography(a)
 	if err != nil {
 		return nil, err
 	}

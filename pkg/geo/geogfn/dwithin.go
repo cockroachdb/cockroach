@@ -34,12 +34,12 @@ func DWithin(
 	if distance < 0 {
 		return false, pgerror.Newf(pgcode.InvalidParameterValue, "dwithin distance cannot be less than zero")
 	}
-	spheroid, err := a.Spheroid()
+	spheroid, err := spheroidFromGeography(a)
 	if err != nil {
 		return false, err
 	}
 
-	angleToExpand := s1.Angle(distance / spheroid.SphereRadius)
+	angleToExpand := s1.Angle(distance / spheroid.SphereRadius())
 	if useSphereOrSpheroid == UseSpheroid {
 		angleToExpand *= (1 + SpheroidErrorFraction)
 	}

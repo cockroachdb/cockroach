@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "geo",
@@ -17,7 +18,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/geo",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",
         "//pkg/geo/geoprojbase",
         "//pkg/sql/pgwire/pgcode",
@@ -54,6 +54,7 @@ go_test(
     ],
     embed = [":geo"],
     deps = [
+        "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_golang_geo//s2",
@@ -61,5 +62,13 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)
+
+disallowed_imports_test(
+    "geo",
+    [
+        "//pkg/geo/geographiclib",
+        "//pkg/geo/geoproj",
     ],
 )
