@@ -15,8 +15,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -205,76 +209,228 @@ SELECT array_agg(column_name)
 	return false, nil
 }
 
-// valuesViolateUniqueConstraints determines if any unique constraints (including primary constraints)
-// will be violated upon inserting the specified rows into the specified table.
-func (og *operationGenerator) violatesUniqueConstraints(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []string, rows [][]string,
-) (bool, error) {
+// exprColumnCollector collects all the columns observed inside
+// an expression.
+type exprColumnCollector struct {
+	colInfo         map[string]column
+	columnsObserved map[string]column
+}
 
-	if len(rows) == 0 {
-		return false, fmt.Errorf("violatesUniqueConstraints: no rows provided")
+var _ tree.Visitor = &exprColumnCollector{}
+
+// newExprColumnCollector constructs an expression collector, that
+// will search for a set of columns.
+func newExprColumnCollector(colInfo []column) *exprColumnCollector {
+	collect := exprColumnCollector{
+		colInfo:         make(map[string]column),
+		columnsObserved: make(map[string]column),
 	}
+	for _, col := range colInfo {
+		collect.colInfo[col.name] = col
+	}
+	return &collect
+}
 
-	// Fetch unique constraints from the database. The format returned is an array of string arrays.
-	// Each string array is a group of column names for which a unique constraint exists.
-	constraints, err := scanStringArrayRows(ctx, tx, `
-	 SELECT DISTINCT array_agg(cols.column_name ORDER BY cols.column_name)
-					    FROM (
-					          SELECT d.oid,
-					                 d.table_name,
-					                 d.schema_name,
-					                 conname,
-					                 contype,
-					                 unnest(conkey) AS position
-					            FROM (
-					                  SELECT c.oid AS oid,
-					                         c.relname AS table_name,
-					                         ns.nspname AS schema_name
-					                    FROM pg_catalog.pg_class AS c
-					                    JOIN pg_catalog.pg_namespace AS ns ON
-					                          ns.oid = c.relnamespace
-					                   WHERE ns.nspname = $1
-					                     AND c.relname = $2
-					                 ) AS d
-					            JOIN (
-					                  SELECT conname, conkey, conrelid, contype
-					                    FROM pg_catalog.pg_constraint
-					                   WHERE contype = 'p' OR contype = 'u'
-					                 ) ON conrelid = d.oid
-					         ) AS cons
-					    JOIN (
-					          SELECT table_name,
-					                 table_schema,
-					                 column_name,
-					                 ordinal_position
-					            FROM information_schema.columns
-					         ) AS cols ON cons.schema_name = cols.table_schema
-					                  AND cols.table_name = cons.table_name
-					                  AND cols.ordinal_position = cons.position
-					GROUP BY cons.conname;
-`, tableName.Schema(), tableName.Object())
+// VisitPost implements tree.Visitor
+func (e *exprColumnCollector) VisitPost(expr tree.Expr) (newNode tree.Expr) {
+	return expr
+}
+
+// VisitPre implements tree.Visitor
+func (e *exprColumnCollector) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	switch t := expr.(type) {
+	case *tree.ColumnItem:
+		e.columnsObserved[t.ColumnName.String()] = e.colInfo[t.ColumnName.String()]
+	case *tree.UnresolvedName:
+		e.columnsObserved[t.String()] = e.colInfo[t.String()]
+	}
+	return true, expr
+}
+
+// valuesViolateUniqueConstraints determines if any unique constraints (including primary
+// constraints and constraint expressions) that  will be violated upon inserting
+// the specified rows into the specified table.
+func (og *operationGenerator) valuesViolateUniqueConstraints(
+	ctx context.Context,
+	tx pgx.Tx,
+	tableName *tree.TableName,
+	columns []string,
+	colInfo []column,
+	rows [][]string,
+) (bool, codesWithConditions, error) {
+	var generatedCodes codesWithConditions
+	constraints, err := og.scanStringArrayRows(ctx, tx, `
+    WITH tab_json AS (
+                    SELECT crdb_internal.pb_to_json(
+                            'desc',
+                            descriptor
+                           )->'table' AS t
+                      FROM system.descriptor
+                     WHERE id = $1::REGCLASS
+                  ),
+         columns_json AS (
+                        SELECT json_array_elements(t->'columns') AS c FROM tab_json
+                      ),
+         columns AS (
+                    SELECT (c->>'id')::INT8 AS col_id,
+                           IF(
+                            (c->'inaccessible')::BOOL,
+                            c->>'computeExpr',
+                            c->>'name'
+                           ) AS expr
+                      FROM columns_json
+                 ),
+         indexes_json AS (
+                         SELECT json_array_elements(t->'indexes') AS idx
+                           FROM tab_json
+                         UNION ALL SELECT t->'primaryIndex' FROM tab_json
+                      ),
+         unique_indexes AS (
+                            SELECT idx->'name' AS name,
+                                   json_array_elements(
+                                    idx->'keyColumnIds'
+                                   )::STRING::INT8 AS col_id
+                              FROM indexes_json
+                             WHERE (idx->'unique')::BOOL
+                        ),
+         index_exprs AS (
+                        SELECT name, expr
+                          FROM unique_indexes AS idx
+                               INNER JOIN columns AS c ON idx.col_id = c.col_id
+                     )
+  SELECT ARRAY['(' || array_to_string(array_agg(expr), ', ') || ')'] AS final_expr
+    FROM index_exprs
+   WHERE expr != 'rowid'
+GROUP BY name;
+`, tableName.String())
 	if err != nil {
-		return false, err
+		return false, nil, err
+	}
+	// Determine if the tuples are unique for a given constraint, where the index
+	// will be the constraint.
+	constraintTuples := make([]map[string]struct{}, 0, len(constraints))
+	for range constraints {
+		constraintTuples = append(constraintTuples, make(map[string]struct{}))
 	}
 
-	for _, constraint := range constraints {
-		// previousRows is used to check unique constraints among the values which
-		// will be inserted into the database.
-		previousRows := map[string]bool{}
-		for _, row := range rows {
-			violation, err := og.violatesUniqueConstraintsHelper(
-				ctx, tx, tableName, columns, constraint, row, previousRows,
-			)
-			if err != nil {
-				return false, err
+	for _, row := range rows {
+		// Put values to be inserted into a column name to value map to simplify lookups.
+		columnsToValues := map[string]string{}
+		for i := 0; i < len(columns); i++ {
+			columnsToValues[columns[i]] = row[i]
+		}
+		newCols := make(map[string]string)
+		// Resolve any generated expressions, which have been validated earlier.
+		for _, colInfo := range colInfo {
+			if !colInfo.generated {
+				continue
 			}
-			if violation {
-				return true, nil
+			newCols[colInfo.name], err = og.generateColumn(ctx, tx, colInfo, columnsToValues)
+			if err != nil {
+				return false, nil, err
+			}
+		}
+		for k, v := range newCols {
+			columnsToValues[k] = v
+		}
+		// Next validate the uniqueness of both constraints and index expressions.
+		for constraintIdx, constraint := range constraints {
+			tupleSelectQuery := strings.Builder{}
+			tupleSelectQuery.WriteString("SELECT array[(")
+			tupleSelectQuery.WriteString(constraint[0])
+			tupleSelectQuery.WriteString(")::STRING] FROM (VALUES(")
+
+			query := strings.Builder{}
+			columns := strings.Builder{}
+			t, err := parser.ParseExpr(constraint[0])
+			if err != nil {
+				return false, nil, err
+			}
+			collector := newExprColumnCollector(colInfo)
+			t.Walk(collector)
+			query.WriteString("SELECT EXISTS ( SELECT * FROM ")
+			query.WriteString(tableName.String())
+			query.WriteString(" WHERE ")
+			query.WriteString(constraint[0])
+			query.WriteString("= ( SELECT ")
+			query.WriteString(" ")
+			query.WriteString(constraint[0])
+			query.WriteString(" FROM (VALUES( ")
+			colIdx := 0
+			nullValueEncountered := false
+			for col := range collector.columnsObserved {
+				value := columnsToValues[col]
+				if colIdx != 0 {
+					query.WriteString(",")
+					columns.WriteString(",")
+					tupleSelectQuery.WriteString(",")
+				}
+				if value == "NULL" {
+					nullValueEncountered = true
+					break
+				}
+				query.WriteString(value)
+				columns.WriteString(col)
+				tupleSelectQuery.WriteString(value)
+				colIdx++
+			}
+			// Row is not comparable to others for unique constraints, since it has a
+			// NULL value.
+			// TODO (fqazi): In the future for check constraints we should evaluate
+			// things for them.
+			if nullValueEncountered {
+				continue
+			}
+			tupleSelectQuery.WriteString(") ) AS T(")
+			tupleSelectQuery.WriteString(columns.String())
+			tupleSelectQuery.WriteString(")")
+			query.WriteString(") ) AS T(")
+			query.WriteString(columns.String())
+			query.WriteString(") ) )")
+			evalTxn, err := tx.Begin(ctx)
+			if err != nil {
+				return false, nil, err
+			}
+			exists, err := og.scanBool(ctx, evalTxn, query.String())
+			if err != nil {
+				var pgErr *pgconn.PgError
+				if !errors.As(err, &pgErr) {
+					return false, nil, err
+				}
+				// Only accept known error types for generated expressions.
+				if !isValidGenerationError(pgErr.Code) {
+					return false, nil, err
+				}
+				generatedCodes = append(generatedCodes,
+					codesWithConditions{
+						{code: pgcode.MakeCode(pgErr.Code), condition: true},
+					}...,
+				)
+				continue
+			}
+			err = evalTxn.Rollback(ctx)
+			if err != nil {
+				return false, nil, err
+			}
+			if exists {
+				return true, nil, nil
+			}
+			// Gather the tuples and check if it's unique.
+			values, err := og.scanStringArrayNullableRows(ctx, tx, tupleSelectQuery.String())
+			if err != nil {
+				return false, nil, err
+			}
+			var value string
+			if values[0][0] != nil {
+				value = *values[0][0]
+				if _, ok := constraintTuples[constraintIdx][value]; ok {
+					return true, nil, nil
+				}
+				constraintTuples[constraintIdx][value] = struct{}{}
 			}
 		}
 	}
-
-	return false, nil
+	return false, generatedCodes, nil
 }
 
 // ErrSchemaChangesDisallowedDueToPkSwap is generated when schema changes are
@@ -328,74 +484,279 @@ SELECT count(*) > 0
 	return nil
 }
 
-func (og *operationGenerator) violatesUniqueConstraintsHelper(
+// isValidGenerationError these codes can be observed when evaluating values
+// for generated expressions. These are errors are not ignored, but added into
+// the expected set of errors.
+func isValidGenerationError(code string) bool {
+	pgCode := pgcode.MakeCode(code)
+	return pgCode == pgcode.NumericValueOutOfRange ||
+		pgCode == pgcode.FloatingPointException ||
+		pgCode == pgcode.InvalidTextRepresentation
+}
+
+// validateGeneratedExpressionsForInsert goes through generated expressions and
+// detects if a valid value can be generated with a given insert row.
+func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 	ctx context.Context,
 	tx pgx.Tx,
 	tableName *tree.TableName,
 	columns []string,
-	constraint []string,
+	colInfos []column,
 	row []string,
-	previousRows map[string]bool,
-) (bool, error) {
-
+) (bool, codesWithConditions, error) {
+	var potentialErrors codesWithConditions
+	appendPotentialError := func(code pgcode.Code) {
+		potentialErrors = append(potentialErrors,
+			codesWithConditions{
+				{
+					code:      code,
+					condition: true,
+				},
+			}...)
+	}
 	// Put values to be inserted into a column name to value map to simplify lookups.
 	columnsToValues := map[string]string{}
 	for i := 0; i < len(columns); i++ {
 		columnsToValues[columns[i]] = row[i]
 	}
-
-	query := strings.Builder{}
-	query.WriteString(fmt.Sprintf(`SELECT EXISTS (
-			SELECT *
-				FROM %s
-       WHERE
-		`, tableName.String()))
-
-	atLeastOneNonNullValue := false
-	for _, column := range constraint {
-
-		// Null values are not checked because unique constraints do not apply to null values.
-		if columnsToValues[column] != "NULL" {
-			if atLeastOneNonNullValue {
-				query.WriteString(fmt.Sprintf(` AND %s = %s`, column, columnsToValues[column]))
-			} else {
-				query.WriteString(fmt.Sprintf(`%s = %s`, column, columnsToValues[column]))
+	nullViolationAdded := false
+	validateExpression := func(expr string, typ string, isNullable bool, addGenerated bool) error {
+		evalTx, err := tx.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		query := strings.Builder{}
+		query.WriteString("SELECT ((")
+		query.WriteString(expr)
+		query.WriteString(")::")
+		query.WriteString(typ)
+		query.WriteString(") IS NULL ")
+		query.WriteString("AS c FROM ( VALUES(")
+		cols := strings.Builder{}
+		colIdx := 0
+		for colName, value := range columnsToValues {
+			if colIdx != 0 {
+				query.WriteString(",")
+				cols.WriteString(",")
 			}
+			query.WriteString(value)
+			cols.WriteString(colName)
+			colIdx++
+		}
 
-			atLeastOneNonNullValue = true
+		if addGenerated {
+			for _, colInfo := range colInfos {
+				if !colInfo.generated {
+					continue
+				}
+				col, err := og.generateColumn(ctx, tx, colInfo, columnsToValues)
+				if err != nil {
+					return err
+				}
+				if colIdx != 0 {
+					query.WriteString(",")
+					cols.WriteString(",")
+				}
+				query.WriteString(col)
+				cols.WriteString(colInfo.name)
+				colIdx++
+			}
+		}
+		query.WriteString(")) AS t(")
+		query.WriteString(cols.String())
+		query.WriteString(");")
+		isNull, err := og.scanBool(ctx, evalTx, query.String())
+		// Evaluating the expression generated a value, which can be either arithmetic
+		// or overflow errors.
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) {
+				_ = evalTx.Rollback(ctx)
+				return err
+			}
+			if !isValidGenerationError(pgErr.Code) {
+				return err
+			}
+			appendPotentialError(pgcode.MakeCode(pgErr.Code))
+		}
+		if isNull && !isNullable && !nullViolationAdded {
+			nullViolationAdded = true
+			appendPotentialError(pgcode.NotNullViolation)
+		}
+		// Always rollback the context used to validate the expression, so the
+		// main transaction doesn't stall.
+		err = evalTx.Rollback(ctx)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Loop over all columns that are generated and validate we run into no errors
+	// evaluating them.
+	for _, colInfo := range colInfos {
+		if !colInfo.generated {
+			continue
+		}
+		err := validateExpression(colInfo.generatedExpression, colInfo.typ.SQLString(), colInfo.nullable, false)
+		if err != nil {
+			return false, nil, err
 		}
 	}
-	query.WriteString(")")
+	// Any bad generated expression means we don't have to bother with indexes next,
+	// since we expect the insert to fail earlier.
+	if potentialErrors == nil {
+		// Validate unique constraint expressions that are backed by indexes.
+		constraints, err := og.scanStringArrayRows(ctx, tx, `
+WITH tab_json AS (
+                    SELECT crdb_internal.pb_to_json(
+                            'desc',
+                            descriptor
+                           )->'table' AS t
+                      FROM system.descriptor
+                     WHERE id = $1::REGCLASS
+                  ),
+         columns_json AS (
+                        SELECT json_array_elements(t->'columns') AS c FROM tab_json
+                      ),
+         columns AS (
+                    SELECT (c->>'id')::INT8 AS col_id,
+                           IF(
+                            (c->'inaccessible')::BOOL,
+                            c->>'computeExpr',
+                            c->>'name'
+                           ) AS expr
+                      FROM columns_json
+                 ),
+         indexes_json AS (
+                         SELECT json_array_elements(t->'indexes') AS idx
+                           FROM tab_json
+                         UNION ALL SELECT t->'primaryIndex' FROM tab_json
+                      ),
+         unique_indexes AS (
+                            SELECT idx->'name' AS name,
+                                   json_array_elements(
+                                    idx->'keyColumnIds'
+                                   )::STRING::INT8 AS col_id
+                              FROM indexes_json
+                        ),
+         index_exprs AS (
+                        SELECT name, expr
+                          FROM unique_indexes AS idx
+                               INNER JOIN columns AS c ON idx.col_id = c.col_id
+                     )
+  SELECT ARRAY['(' || array_to_string(array_agg(expr), ', ') || ')'] AS final_expr
+    FROM index_exprs
+   WHERE expr != 'rowid'
+GROUP BY name;
+		`, tableName.String())
+		if err != nil {
+			return false, nil, err
+		}
 
-	// If there are only null values being inserted for each of the constrained columns,
-	// then checking for uniqueness against other rows is not necessary.
-	if !atLeastOneNonNullValue {
-		return false, nil
+		for _, constraint := range constraints {
+			err := validateExpression(constraint[0], "STRING", true, true)
+			if err != nil {
+				return false, nil, err
+			}
+		}
 	}
-
-	queryString := query.String()
-
-	// Check for uniqueness against other rows to be inserted. For simplicity, the `SELECT EXISTS`
-	// query used to check for uniqueness against rows in the database can also
-	// be used as a unique key to check for uniqueness among rows to be inserted.
-	if _, duplicateEntry := previousRows[queryString]; duplicateEntry {
-		return true, nil
-	}
-	previousRows[queryString] = true
-
-	// Check for uniqueness against rows in the database.
-	exists, err := og.scanBool(ctx, tx, queryString)
-	if err != nil {
-		return false, err
-	}
-	if exists {
-		return true, nil
-	}
-
-	return false, nil
+	return len(potentialErrors) > 0, potentialErrors, nil
 }
 
-func scanStringArrayRows(
+// generateColumn generates values for columns that are generated.
+func (og *operationGenerator) generateColumn(
+	ctx context.Context, tx pgx.Tx, colInfo column, columnsToValues map[string]string,
+) (string, error) {
+	if !colInfo.generated {
+		return "", errors.AssertionFailedf("column is not generated: %v", colInfo.name)
+	}
+	// Adjust floating point precision, so that precision matches the one used
+	// by cockroach internally.
+	_, err := tx.Exec(ctx, " set extra_float_digits=3;")
+	if err != nil {
+		return "", err
+	}
+	query := strings.Builder{}
+	query.WriteString("SELECT array[(")
+	query.WriteString(colInfo.generatedExpression)
+	query.WriteString(")::")
+	query.WriteString(colInfo.typ.SQLString())
+	query.WriteString("::STRING] AS c FROM ( VALUES(")
+	cols := strings.Builder{}
+	colIdx := 0
+	for colName, value := range columnsToValues {
+		if colIdx != 0 {
+			query.WriteString(",")
+			cols.WriteString(",")
+		}
+		query.WriteString(value)
+		cols.WriteString(colName)
+		colIdx++
+	}
+	query.WriteString(")) AS t(")
+	query.WriteString(cols.String())
+	query.WriteString(");")
+	val, err := og.scanStringArrayNullableRows(ctx, tx, query.String())
+	if err != nil {
+		return "", err
+	}
+	if len(val) > 0 && val[0][0] != nil {
+		if colInfo.typ.Family() == types.StringFamily {
+			str := tree.AsStringWithFlags(tree.NewDString(*val[0][0]), tree.FmtParsable)
+			return str, nil
+		}
+		return fmt.Sprintf("'" + *val[0][0] + "'::" + colInfo.typ.SQLString()), nil
+	}
+	return "NULL", nil
+}
+
+func (og *operationGenerator) scanStringArrayNullableRows(
+	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
+) ([][]*string, error) {
+	rows, err := tx.Query(ctx, query, args...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "scanStringArrayNullableRows: %q %q", query, args)
+	}
+	defer rows.Close()
+
+	var results [][]*string
+	for rows.Next() {
+		var columnNames []*string
+		err := rows.Scan(&columnNames)
+		if err != nil {
+			return nil, errors.Wrapf(err, "scan: %q, args %v, scanArgs %q", query, columnNames, args)
+		}
+		results = append(results, columnNames)
+	}
+
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	{
+		// Instead of having pointers within the log file, we are going to
+		// dereference everything and convert NULLs properly.
+		humanReadableResults := make([][]string, 0, len(results))
+		for _, res := range results {
+			humanReadableRes := make([]string, 0, len(res))
+			for _, col := range res {
+				colWithNullStr := "NULL"
+				if col != nil {
+					colWithNullStr = *col
+				}
+				humanReadableRes = append(humanReadableRes, colWithNullStr)
+			}
+			humanReadableResults = append(humanReadableResults, humanReadableRes)
+		}
+		og.LogQueryResults(
+			fmt.Sprintf("%q %q", query, args),
+			fmt.Sprintf("%q", humanReadableResults))
+	}
+	return results, nil
+}
+
+func (og *operationGenerator) scanStringArrayRows(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) ([][]string, error) {
 	rows, err := tx.Query(ctx, query, args...)
@@ -404,7 +765,7 @@ func scanStringArrayRows(
 	}
 	defer rows.Close()
 
-	results := [][]string{}
+	var results [][]string
 	for rows.Next() {
 		var columnNames []string
 		err := rows.Scan(&columnNames)
@@ -414,6 +775,13 @@ func scanStringArrayRows(
 		results = append(results, columnNames)
 	}
 
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	og.LogQueryResults(
+		fmt.Sprintf("%q %q", query, args),
+		fmt.Sprintf("%q", results))
 	return results, nil
 }
 
@@ -617,7 +985,7 @@ func (og *operationGenerator) rowsSatisfyFkConstraint(
 func (og *operationGenerator) violatesFkConstraints(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []string, rows [][]string,
 ) (bool, error) {
-	fkConstraints, err := scanStringArrayRows(ctx, tx, fmt.Sprintf(`
+	fkConstraints, err := og.scanStringArrayRows(ctx, tx, fmt.Sprintf(`
 		SELECT array[parent.table_schema, parent.table_name, parent.column_name, child.column_name]
 		  FROM (
 		        SELECT conkey, confkey, conrelid, confrelid
@@ -1153,5 +1521,17 @@ SELECT (
 	)
 );
 		`,
+	)
+}
+
+// databaseHasTablesWithPartitioning detects if any of the tables have partitioning
+// on them already.
+func (og *operationGenerator) databaseHasTablesWithPartitioning(
+	ctx context.Context, tx pgx.Tx, database string,
+) (bool, error) {
+	return og.scanBool(ctx,
+		tx,
+		fmt.Sprintf(`SELECT count(*)> 0 FROM %s.crdb_internal.partitions`,
+			database),
 	)
 }

@@ -158,7 +158,6 @@ func (s *schemaChange) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-
 	seqNum, err := s.initSeqNum(ctx, pool)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -400,7 +399,6 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 					errRunInTxnFatalSentinel,
 				)
 			}
-
 			w.recordInHist(timeutil.Since(start), operationOk)
 		}
 	}
