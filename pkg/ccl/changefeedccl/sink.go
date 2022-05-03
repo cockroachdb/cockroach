@@ -78,6 +78,8 @@ func getSink(
 		u.Scheme = scheme
 	}
 
+	opts := changefeedbase.MakeStatementOptions(feedCfg.Opts)
+
 	// check that options are compatible with the given sink
 	validateOptionsAndMakeSink := func(sinkSpecificOpts map[string]struct{}, makeSink func() (Sink, error)) (Sink, error) {
 		err := validateSinkOptions(feedCfg.Opts, sinkSpecificOpts)
@@ -99,6 +101,11 @@ func getSink(
 			return &bufferSink{metrics: m}, nil
 		}
 
+		encodingOpts, err := opts.GetEncodingOptions()
+		if err != nil {
+			return nil, err
+		}
+
 		switch {
 		case u.Scheme == changefeedbase.SinkSchemeNull:
 			nullIsAccounted := false
@@ -108,23 +115,25 @@ func getSink(
 			return makeNullSink(sinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), feedCfg.Opts, metricsBuilder)
+				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), metricsBuilder)
 			})
 		case isWebhookSink(u):
+			webhookOpts, err := opts.GetWebhookSinkOptions()
+			if err != nil {
+				return nil, err
+			}
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-				return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts,
+				return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
 					defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
 			})
 		case isPubsubSink(u):
 			// TODO: add metrics to pubsubsink
-			return validateOptionsAndMakeSink(changefeedbase.PubsubValidOptions, func() (Sink, error) {
-				return MakePubsubSink(ctx, u, feedCfg.Opts, AllTargets(feedCfg))
-			})
+			return MakePubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg))
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				return makeCloudStorageSink(
-					ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,
-					feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder,
+					ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings, encodingOpts,
+					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder,
 				)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
