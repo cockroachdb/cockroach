@@ -551,7 +551,7 @@ type IntervalCache struct {
 }
 
 // IntervalCacheLogErrorf is a hook that is called on certain errors in the IntervalCache.
-// This is used to prevent and import to util/log.
+// This is used to prevent an import to util/log.
 type IntervalCacheLogErrorf func(ctx context.Context, format string, args ...interface{})
 
 // IntervalKey provides uniqueness as well as key interval.
