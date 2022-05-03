@@ -184,7 +184,10 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 // requested.
 // See: https://github.com/cockroachdb/cockroach/issues/72459
 func (bs *bufferSink) flusher(ctx context.Context) {
-	for b := range bs.flushCh {
+	select {
+	case <-ctx.Done():
+		return
+	case b := <-bs.flushCh:
 		if len(b.messages) > 0 {
 			// Append all the messages in the first buffer.
 			buf := b.messages[0].b

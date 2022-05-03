@@ -41,11 +41,12 @@ determined by the arguments used.
 
 func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 	// Initialize logging, stopper and context that can be canceled
-	ctx, stopper, err := initLogging(cmd)
+	ctx, stopper, shutdownLogging, err := initLogging(cmd)
 	if err != nil {
 		return err
 	}
 	defer stopper.Stop(ctx)
+	defer shutdownLogging()
 
 	log.Infof(ctx, "New proxy with opts: %+v", proxyContext)
 
@@ -88,7 +89,9 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 	return waitForSignals(ctx, stopper, errChan)
 }
 
-func initLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper, err error) {
+func initLogging(
+	cmd *cobra.Command,
+) (ctx context.Context, stopper *stop.Stopper, shutdownLogging func(), err error) {
 	// Remove the default store, which avoids using it to set up logging.
 	// Instead, we'll default to logging to stderr unless --log-dir is
 	// specified. This makes sense since the standalone SQL server is
@@ -98,12 +101,12 @@ func initLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper
 	serverCfg.ClusterName = ""
 
 	ctx = context.Background()
-	stopper, err = setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
+	stopper, shutdown, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return
 	}
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
-	return ctx, stopper, err
+	return ctx, stopper, shutdown, err
 }
 
 func waitForSignals(

@@ -50,11 +50,12 @@ func runDirectorySvr(cmd *cobra.Command, args []string) (returnErr error) {
 	ctx := context.Background()
 	serverCfg.Stores.Specs = nil
 
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
+	stopper, shutdownLogging, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return err
 	}
 	defer stopper.Stop(ctx)
+	defer shutdownLogging()
 
 	tds, err := tenantdirsvr.New(stopper, args...)
 	if err != nil {

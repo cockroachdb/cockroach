@@ -29,7 +29,7 @@ var debugCheckLogConfigCmd = &cobra.Command{
 var debugLogChanSel logconfig.ChannelList
 
 func runDebugCheckLogConfig(cmd *cobra.Command, args []string) error {
-	if err := setupLogging(context.Background(), cmd,
+	if _, err := setupLogging(context.Background(), cmd,
 		true /* isServerCmd */, false /* applyconfig */); err != nil {
 		return err
 	}

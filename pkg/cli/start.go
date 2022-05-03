@@ -423,10 +423,11 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// additional server configuration tweaks for the startup process
 	// must be necessarily non-logging-related, as logging parameters
 	// cannot be picked up beyond this point.
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, true /* isServerCmd */)
+	stopper, shutdownLogging, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, true /* isServerCmd */)
 	if err != nil {
 		return err
 	}
+	defer shutdownLogging()
 
 	// If any store has something to say against a server start-up
 	// (e.g. previously detected corruption), listen to them now.
@@ -1166,9 +1167,10 @@ disk space exhaustion may result in node loss.`, ballastPathsStr)
 // occurs here and not in an OnInitialize function.
 func setupAndInitializeLoggingAndProfiling(
 	ctx context.Context, cmd *cobra.Command, isServerCmd bool,
-) (stopper *stop.Stopper, err error) {
-	if err := setupLogging(ctx, cmd, isServerCmd, true /* applyConfig */); err != nil {
-		return nil, err
+) (stopper *stop.Stopper, shutdownLogging func(), err error) {
+	shutdown, err := setupLogging(ctx, cmd, isServerCmd, true /* applyConfig */)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	if startCtx.serverInsecure {
@@ -1230,7 +1232,7 @@ func setupAndInitializeLoggingAndProfiling(
 	stopper = stop.NewStopper()
 	log.Event(ctx, "initialized profiles")
 
-	return stopper, nil
+	return stopper, shutdown, nil
 }
 
 func addrWithDefaultHost(addr string) (string, error) {

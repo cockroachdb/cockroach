@@ -38,11 +38,14 @@ import (
 //
 // The command then further distinguishes between server (e.g. start)
 // and non-server commands (e.g. 'node ls').
-func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyConfig bool) error {
+func setupLogging(
+	ctx context.Context, cmd *cobra.Command, isServerCmd, applyConfig bool,
+) (shutdownLogging func(), err error) {
+
 	// Compatibility check for command-line usage.
 	if cliCtx.deprecatedLogOverrides.anySet() &&
 		cliCtx.logConfigInput.isSet {
-		return errors.Newf("--%s is incompatible with legacy discrete logging flags", cliflags.Log.Name)
+		return nil, errors.Newf("--%s is incompatible with legacy discrete logging flags", cliflags.Log.Name)
 	}
 
 	// Sanity check to prevent misuse of API.
@@ -119,7 +122,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	// If a configuration was specified via --log, load it.
 	if cliCtx.logConfigInput.isSet {
 		if err := h.Set(cliCtx.logConfigInput.s); err != nil {
-			return err
+			return nil, err
 		}
 		if h.Config.FileDefaults.Dir != nil {
 			ambiguousLogDirs = false
@@ -137,7 +140,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	// This ensures that all optional fields are populated and
 	// non-specified flags are inherited from defaults.
 	if err := h.Config.Validate(defaultLogDir); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Store the result configuration so that the start code and debug
@@ -162,7 +165,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	// Configuration is complete and valid. If we are not applying
 	// (debug check-log-config), stop here.
 	if !applyConfig {
-		return nil
+		return func() {}, nil
 	}
 
 	// Configuration is ready to be applied. Ensure that the output log
@@ -170,12 +173,13 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	if err := h.Config.IterateDirectories(func(logDir string) error {
 		return os.MkdirAll(logDir, 0755)
 	}); err != nil {
-		return errors.Wrap(err, "unable to create log directory")
+		return nil, errors.Wrap(err, "unable to create log directory")
 	}
 
 	// Configuration ready and directories exist; apply it.
-	if _, err := log.ApplyConfig(h.Config); err != nil {
-		return err
+	shutdownLogging, err = log.ApplyConfig(h.Config)
+	if err != nil {
+		return nil, err
 	}
 
 	// If using a custom config, report the configuration at the start of the logging stream.
@@ -213,7 +217,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	serverCfg.CPUProfileDirName = filepath.Join(outputDirectory, base.CPUProfileDir)
 	serverCfg.InflightTraceDirName = filepath.Join(outputDirectory, base.InflightTraceDir)
 
-	return nil
+	return shutdownLogging, nil
 }
 
 // getDefaultLogDirFromStores derives a log directory path from the

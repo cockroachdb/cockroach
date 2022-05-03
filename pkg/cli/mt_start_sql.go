@@ -89,11 +89,12 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	const clusterName = ""
 
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
+	stopper, shutdownLogging, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return err
 	}
 	defer stopper.Stop(ctx)
+	defer shutdownLogging()
 	stopper.SetTracer(serverCfg.BaseConfig.AmbientCtx.Tracer)
 
 	st := serverCfg.BaseConfig.Settings

@@ -114,7 +114,7 @@ func doMain(cmd *cobra.Command, cmdName string) error {
 			cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 				// We call setupLogging before the PreRunE function since
 				// that function may perform logging.
-				err := setupLogging(context.Background(), cmd,
+				_, err := setupLogging(context.Background(), cmd,
 					false /* isServerCmd */, true /* applyConfig */)
 
 				if wrapped != nil {

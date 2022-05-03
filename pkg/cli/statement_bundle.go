@@ -139,7 +139,8 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 			// This is needed because the logging setup code peeks into this to
 			// decide how to enable logging.
 			serverCfg.Stores.Specs = nil
-			return setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
+			stopper, _, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
+			return stopper, err
 		},
 		getAdminClient,
 		func(ctx context.Context, ac serverpb.AdminClient) error {
