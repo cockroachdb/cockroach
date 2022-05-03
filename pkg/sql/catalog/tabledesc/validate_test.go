@@ -131,10 +131,8 @@ var validationMap = []struct {
 			"ExcludeDataFromBackup":         {status: thisFieldReferencesNoObjects},
 			"NextConstraintID":              {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: iSolemnlySwearThisFieldIsValidated},
-			"AutoStatsSettings": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(msirek): add validation"},
-			"ForecastStats": {status: thisFieldReferencesNoObjects},
+			"AutoStatsSettings":             {status: iSolemnlySwearThisFieldIsValidated},
+			"ForecastStats":                 {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -294,13 +292,11 @@ var validationMap = []struct {
 		},
 	},
 	{
-		// TODO(msirek): These fields can't be set until #78110 merges. That PR
-		//               will add validation.
 		obj: catpb.AutoStatsSettings{},
 		fieldMap: map[string]validationStatusInfo{
-			"Enabled":           {status: thisFieldReferencesNoObjects},
-			"MinStaleRows":      {status: thisFieldReferencesNoObjects},
-			"FractionStaleRows": {status: thisFieldReferencesNoObjects},
+			"Enabled":           {status: iSolemnlySwearThisFieldIsValidated},
+			"MinStaleRows":      {status: iSolemnlySwearThisFieldIsValidated},
+			"FractionStaleRows": {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 }
@@ -346,6 +342,9 @@ func TestValidateTableDesc(t *testing.T) {
 
 	computedExpr := "1 + 1"
 	generatedAsIdentitySequenceOptionExpr := " START 2 INCREMENT 3 CACHE 10"
+	boolTrue := true
+	negativeOne := int64(-1)
+	negativeOneFloat := float64(-1)
 
 	testData := []struct {
 		err  string
@@ -1886,6 +1885,95 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 			},
 		},
+		{`Setting sql_stats_automatic_collection_enabled may not be set on virtual table`,
+			descpb.TableDescriptor{
+				ID:            catconstants.MinVirtualID,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID:      2,
+				AutoStatsSettings: &catpb.AutoStatsSettings{Enabled: &boolTrue},
+			}},
+		{`Setting sql_stats_automatic_collection_enabled may not be set on a view or sequence`,
+			descpb.TableDescriptor{
+				Name:                    "bar",
+				ID:                      52,
+				ParentID:                1,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				ViewQuery:               "SELECT * FROM foo",
+				DependsOn:               []descpb.ID{51},
+				NextColumnID:            2,
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+				Privileges:        catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
+				AutoStatsSettings: &catpb.AutoStatsSettings{Enabled: &boolTrue},
+			}},
+		{`Setting sql_stats_automatic_collection_enabled may not be set on a view or sequence`,
+			descpb.TableDescriptor{
+				ID:            51,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "a", Type: types.Int},
+				},
+				SequenceOpts: &descpb.TableDescriptor_SequenceOpts{
+					Increment: 1,
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"a"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1},
+						ColumnNames: []string{"a"},
+					},
+				},
+				NextColumnID:      2,
+				NextFamilyID:      1,
+				NextIndexID:       5,
+				NextConstraintID:  2,
+				Privileges:        catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
+				AutoStatsSettings: &catpb.AutoStatsSettings{Enabled: &boolTrue},
+			},
+		},
+		{`invalid integer value for sql_stats_automatic_collection_min_stale_rows: cannot be set to a negative value: -1`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID:      2,
+				AutoStatsSettings: &catpb.AutoStatsSettings{MinStaleRows: &negativeOne},
+			}},
+		{`invalid float value for sql_stats_automatic_collection_fraction_stale_rows: cannot set to a negative value: -1.000000`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID:      2,
+				AutoStatsSettings: &catpb.AutoStatsSettings{FractionStaleRows: &negativeOneFloat},
+			}},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
@@ -2280,6 +2368,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		},
 		// Views.
 		{ // 10
+			err: ``,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
