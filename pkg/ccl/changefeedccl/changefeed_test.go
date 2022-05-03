@@ -2916,7 +2916,7 @@ func TestChangefeedVirtualComputedColumn(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for name, test := range tests {
 		testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -2939,12 +2939,12 @@ func TestChangefeedVirtualComputedColumn(t *testing.T) {
 		}
 
 		if test.formatOpt != changefeedbase.OptFormatAvro {
-			t.Run(`sinkless`, sinklessTest(testFn))
-			t.Run(`enterprise`, enterpriseTest(testFn))
-			t.Run(`webhook`, webhookTest(testFn))
+			t.Run(`sinkless`+"-"+name, sinklessTest(testFn))
+			t.Run(`enterprise`+"-"+name, enterpriseTest(testFn))
+			t.Run(`webhook`+"-"+name, webhookTest(testFn))
 		}
 
-		t.Run(`kafka`, kafkaTest(testFn))
+		t.Run(`kafka`+"-"+name, kafkaTest(testFn))
 	}
 }
 
@@ -3584,6 +3584,7 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `time: invalid duration "bar"`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH resolved='bar'`,
 	)
+
 	sqlDB.ExpectErr(
 		t, `negative durations are not accepted: resolved='-1s'`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH resolved='-1s'`,
@@ -3802,7 +3803,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 	sqlDB.ExpectErr(
 		t, `this sink is incompatible with option webhook_client_timeout`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout=''`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='1s'`,
 		`kafka://nope/`,
 	)
 	// The avro format doesn't support key_in_value or topic_in_value yet.
@@ -3899,40 +3900,40 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// WITH only_initial_scan and end_time disallowed
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan='only' and end_time`,
+		t, `cannot specify both initial_scan_only and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan_only, end_time = '1'`, `kafka://nope`,
 	)
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan='only' and end_time`,
+		t, `cannot specify both initial_scan_only and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', initial_scan_only`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan='only' and end_time`,
+		t, `cannot specify both initial_scan_only and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', initial_scan = 'only'`, `kafka://nope`,
 	)
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan='only' and end_time`,
+		t, `cannot specify both initial_scan_only and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'only', end_time = '1'`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan='only' and resolved`,
+		t, `cannot specify both initial_scan_only and resolved`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH resolved, initial_scan = 'only'`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan='only' and diff`,
+		t, `cannot specify both initial_scan_only and diff`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH diff, initial_scan = 'only'`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan='only' and mvcc_timestamp`,
+		t, `cannot specify both initial_scan_only and mvcc_timestamp`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH mvcc_timestamp, initial_scan = 'only'`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan='only' and updated`,
+		t, `cannot specify both initial_scan_only and updated`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, initial_scan = 'only'`, `kafka://nope`,
 	)
 
@@ -3950,7 +3951,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	sqlDB.ExpectErr(
-		t, `format=csv is only usable with initial_scan='only'`,
+		t, `format=csv is only usable with initial_scan_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format = csv`, `kafka://nope`,
 	)
 
@@ -4002,11 +4003,11 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='not_an_integer'`, `webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErr(
-		t, `option webhook_client_timeout must be a positive duration`,
+		t, `option webhook_client_timeout must be a duration greater than 0`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='0s'`, `webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErr(
-		t, `option webhook_client_timeout must be a positive duration`,
+		t, `negative durations are not accepted: webhook_client_timeout='-500s'`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='-500s'`, `webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErr(
@@ -6138,7 +6139,7 @@ func TestChangefeedPrimaryKeyFilter(t *testing.T) {
 		sqlDB.Exec(t, "INSERT INTO foo SELECT * FROM generate_series(1, 20)")
 
 		sqlDB.ExpectErr(t, "can only be used with schema_change_policy=stop",
-			`CREATE CHANGEFEED FOR foo, bar WITH primary_key_filter='a < 5 OR a > 18'`)
+			`CREATE CHANGEFEED FOR foo WITH primary_key_filter='a < 5 OR a > 18'`)
 
 		sqlDB.ExpectErr(t, `option primary_key_filter can only be used with 1 changefeed target`,
 			`CREATE CHANGEFEED FOR foo, bar WITH schema_change_policy='stop', primary_key_filter='a < 5 OR a > 18'`)

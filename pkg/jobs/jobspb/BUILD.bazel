@@ -46,6 +46,7 @@ go_proto_library(
     proto = ":jobspb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",  # keep
         "//pkg/clusterversion",
         "//pkg/roachpb",
         "//pkg/security/username",  # keep

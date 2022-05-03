@@ -13,7 +13,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -109,14 +108,14 @@ func IsRetryableError(err error) bool {
 	// by avoiding string comparisons.
 
 	errStr := err.Error()
-	if strings.Contains(errStr, retryableErrorString) {
+	if strings.Contains(errStr, retryableErrorString) || strings.Contains(errStr, `rpc error`) {
 		// If a RetryableError occurs on a remote node, DistSQL serializes it such
 		// that we can't recover the structure and we have to rely on this
 		// unfortunate string comparison.
 		return true
 	}
 
-	return joberror.IsDistSQLRetryableError(err)
+	return false
 }
 
 // MaybeStripRetryableErrorMarker performs some minimal attempt to clean the

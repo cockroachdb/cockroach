@@ -329,7 +329,7 @@ func makeCloudStorageSink(
 	u sinkURL,
 	srcID base.SQLInstanceID,
 	settings *cluster.Settings,
-	opts map[string]string,
+	encodingOpts changefeedbase.EncodingOptions,
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user username.SQLUsername,
@@ -386,7 +386,7 @@ func makeCloudStorageSink(
 		s.dataFilePartition = s.timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
 	}
 
-	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
+	switch encodingOpts.Format {
 	case changefeedbase.OptFormatJSON:
 		// TODO(dan): It seems like these should be on the encoder, but that
 		// would require a bit of refactoring.
@@ -399,21 +399,21 @@ func makeCloudStorageSink(
 		s.rowDelimiter = []byte{'\n'}
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
+			changefeedbase.OptFormat, encodingOpts.Format)
 	}
 
-	switch changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) {
+	switch encodingOpts.Envelope {
 	case changefeedbase.OptEnvelopeWrapped:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptEnvelope, opts[changefeedbase.OptEnvelope])
+			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	if _, ok := opts[changefeedbase.OptKeyInValue]; !ok {
+	if !encodingOpts.KeyInValue {
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
-	if codec, ok := opts[changefeedbase.OptCompression]; ok && codec != "" {
+	if codec := encodingOpts.Compression; codec != "" {
 		if strings.EqualFold(codec, "gzip") {
 			s.compression = sinkCompressionGzip
 			s.ext = s.ext + ".gz"

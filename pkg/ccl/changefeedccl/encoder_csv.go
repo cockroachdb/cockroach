@@ -33,7 +33,7 @@ type tableEntry struct {
 
 type csvEncoder struct {
 	alloc                   tree.DatumAlloc
-	virtualColumnVisibility string
+	virtualColumnVisibility changefeedbase.VirtualColumnVisibility
 
 	buf    *bytes.Buffer
 	writer *csv.Writer
@@ -43,10 +43,10 @@ type csvEncoder struct {
 
 var _ Encoder = &csvEncoder{}
 
-func newCSVEncoder(opts map[string]string) *csvEncoder {
+func newCSVEncoder(opts changefeedbase.EncodingOptions) *csvEncoder {
 	newBuf := bytes.NewBuffer([]byte{})
 	newEncoder := &csvEncoder{
-		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
+		virtualColumnVisibility: opts.VirtualColumns,
 		buf:                     newBuf,
 		writer:                  csv.NewWriter(newBuf),
 	}
@@ -71,7 +71,7 @@ func (e *csvEncoder) buildTableCacheEntry(row encodeRow) (tableEntry, error) {
 
 	for i, col := range row.tableDesc.PublicColumns() {
 		_, inFamily := include[col.GetID()]
-		virtual := col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+		virtual := col.IsVirtual() && e.virtualColumnVisibility == changefeedbase.OptVirtualColumnsNull
 		if inFamily || virtual {
 			columnCache = append(columnCache, columnEntry{
 				column: col,
