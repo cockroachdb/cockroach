@@ -21,6 +21,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/mon",
         "//pkg/util/quotapool",

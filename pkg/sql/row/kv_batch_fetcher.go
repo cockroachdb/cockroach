@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -447,7 +448,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	if br != nil && f.responseAdmissionQ != nil {
 		responseAdmission := admission.WorkInfo{
 			TenantID:   roachpb.SystemTenantID,
-			Priority:   admission.WorkPriority(f.requestAdmissionHeader.Priority),
+			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
 			CreateTime: f.requestAdmissionHeader.CreateTime,
 		}
 		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {

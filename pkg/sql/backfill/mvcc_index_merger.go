@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -264,7 +264,7 @@ func (ibm *IndexBackfillMerger) scan(
 
 	var nextStart roachpb.Key
 	var br *roachpb.BatchResponse
-	if err := ibm.flowCtx.Cfg.DB.TxnWithAdmissionControl(ctx, roachpb.AdmissionHeader_FROM_SQL, admission.BulkNormalPri,
+	if err := ibm.flowCtx.Cfg.DB.TxnWithAdmissionControl(ctx, roachpb.AdmissionHeader_FROM_SQL, admissionpb.BulkNormalPri,
 		func(ctx context.Context, txn *kv.Txn) error {
 			if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
 				return err
@@ -336,7 +336,7 @@ func (ibm *IndexBackfillMerger) merge(
 	sourcePrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), sourceID)
 	destPrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), destinationID)
 
-	err := ibm.flowCtx.Cfg.DB.TxnWithAdmissionControl(ctx, roachpb.AdmissionHeader_FROM_SQL, admission.BulkNormalPri,
+	err := ibm.flowCtx.Cfg.DB.TxnWithAdmissionControl(ctx, roachpb.AdmissionHeader_FROM_SQL, admissionpb.BulkNormalPri,
 		func(ctx context.Context, txn *kv.Txn) error {
 			var deletedCount int
 			txn.AddCommitTrigger(func(ctx context.Context) {

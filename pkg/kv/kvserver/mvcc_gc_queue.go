@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -453,7 +453,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 			// increase write amplification of the store since there is more live
 			// data. Ideally, we should adjust this priority based on how far behind
 			// we are wrt GCing in this range.
-			Priority:                 int32(admission.NormalPri),
+			Priority:                 int32(admissionpb.NormalPri),
 			CreateTime:               timeutil.Now().UnixNano(),
 			Source:                   roachpb.AdmissionHeader_ROOT_KV,
 			NoMemoryReservedAtSource: true,

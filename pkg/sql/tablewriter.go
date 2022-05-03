@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -237,7 +238,7 @@ func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
 		requestAdmissionHeader := tb.txn.AdmissionHeader()
 		responseAdmission := admission.WorkInfo{
 			TenantID:   roachpb.SystemTenantID,
-			Priority:   admission.WorkPriority(requestAdmissionHeader.Priority),
+			Priority:   admissionpb.WorkPriority(requestAdmissionHeader.Priority),
 			CreateTime: requestAdmissionHeader.CreateTime,
 		}
 		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {

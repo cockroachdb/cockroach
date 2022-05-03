@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -410,7 +410,7 @@ func runBackupProcessor(
 						// Export requests are currently assigned NormalPri.
 						//
 						// TODO(dt): Consider linking this to/from the UserPriority field.
-						Priority:                 int32(admission.BulkNormalPri),
+						Priority:                 int32(admissionpb.BulkNormalPri),
 						CreateTime:               timeutil.Now().UnixNano(),
 						Source:                   roachpb.AdmissionHeader_FROM_SQL,
 						NoMemoryReservedAtSource: true,

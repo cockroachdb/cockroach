@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "admissionwork",
+    srcs = [
+        "admissionwork.go",
+        "doc.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionwork",
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "admissionpb",
+    srcs = [
+        "admissionpb.go",
+        "doc.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb",
+    visibility = ["//visibility:public"],
+)
