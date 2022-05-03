@@ -118,6 +118,7 @@ ALL_TESTS = [
     "//pkg/geo/geos:geos_test",
     "//pkg/geo/geotransform:geotransform_test",
     "//pkg/geo/twkb:twkb_test",
+    "//pkg/geo:geo_disallowed_imports_test",
     "//pkg/geo:geo_test",
     "//pkg/gossip:gossip_test",
     "//pkg/internal/client/requestbatcher:requestbatcher_test",
