@@ -151,7 +151,7 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (*google.Credentials, err
 func MakePubsubSink(
 	ctx context.Context,
 	u *url.URL,
-	opts map[string]string,
+	encodingOpts changefeedbase.EncodingOptions,
 	targets []jobspb.ChangefeedTargetSpecification,
 ) (Sink, error) {
 
@@ -159,21 +159,21 @@ func MakePubsubSink(
 	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
 
 	var formatType changefeedbase.FormatType
-	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
+	switch encodingOpts.Format {
 	case changefeedbase.OptFormatJSON:
 		formatType = changefeedbase.OptFormatJSON
 	case changefeedbase.OptFormatCSV:
 		formatType = changefeedbase.OptFormatCSV
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
+			changefeedbase.OptFormat, encodingOpts.Format)
 	}
 
-	switch changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) {
+	switch encodingOpts.Envelope {
 	case changefeedbase.OptEnvelopeWrapped:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptEnvelope, opts[changefeedbase.OptEnvelope])
+			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

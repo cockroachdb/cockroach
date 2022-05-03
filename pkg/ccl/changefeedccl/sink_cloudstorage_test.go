@@ -155,11 +155,11 @@ func TestCloudStorageSink(t *testing.T) {
 	var noKey []byte
 	settings := cluster.MakeTestingClusterSettings()
 	settings.ExternalIODir = dir
-	opts := map[string]string{
-		changefeedbase.OptFormat:      string(changefeedbase.OptFormatJSON),
-		changefeedbase.OptEnvelope:    string(changefeedbase.OptEnvelopeWrapped),
-		changefeedbase.OptKeyInValue:  ``,
-		changefeedbase.OptCompression: ``, // NB: overridden in single-node subtest.
+	opts := changefeedbase.EncodingOptions{
+		Format:     changefeedbase.OptFormatJSON,
+		Envelope:   changefeedbase.OptEnvelopeWrapped,
+		KeyInValue: true,
+		// NB: compression added in single-node subtest.
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
 	e, err := makeJSONEncoder(opts, []jobspb.ChangefeedTargetSpecification{})
@@ -220,14 +220,14 @@ func TestCloudStorageSink(t *testing.T) {
 	}
 
 	t.Run(`single-node`, func(t *testing.T) {
-		before := opts[changefeedbase.OptCompression]
+		before := opts.Compression
 		// Compression codecs include buffering that interferes with other tests,
 		// e.g. the bucketing test that configures very small flush sizes.
 		defer func() {
-			opts[changefeedbase.OptCompression] = before
+			opts.Compression = before
 		}()
 		for _, compression := range []string{"", "gzip"} {
-			opts[changefeedbase.OptCompression] = compression
+			opts.Compression = compression
 			t.Run("compress="+compression, func(t *testing.T) {
 				t1 := makeTopic(`t1`)
 				t2 := makeTopic(`t2`)

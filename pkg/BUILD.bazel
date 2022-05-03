@@ -17,6 +17,7 @@ ALL_TESTS = [
     "//pkg/ccl/changefeedccl/cdcevent:cdcevent_test",
     "//pkg/ccl/changefeedccl/cdctest:cdctest_test",
     "//pkg/ccl/changefeedccl/cdcutils:cdcutils_test",
+    "//pkg/ccl/changefeedccl/changefeedbase:changefeedbase_test",
     "//pkg/ccl/changefeedccl/kvevent:kvevent_test",
     "//pkg/ccl/changefeedccl/kvfeed:kvfeed_test",
     "//pkg/ccl/changefeedccl/schemafeed:schemafeed_test",
