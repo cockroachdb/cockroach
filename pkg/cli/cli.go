@@ -75,6 +75,8 @@ func Main() {
 		// by the sub-command.
 		errCode = getExitCode(err)
 	}
+	// Finally, gracefully shutdown logging facilities.
+	cliCtx.logShutdownFn()
 
 	exit.WithCode(errCode)
 }
