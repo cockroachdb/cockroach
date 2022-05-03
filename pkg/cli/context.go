@@ -182,6 +182,10 @@ type cliContext struct {
 	// logConfig is the resulting logging configuration after the input
 	// configuration has been parsed and validated.
 	logConfig logconfig.Config
+	// logShutdownFn is used to close & teardown logging facilities gracefully
+	// before exiting the process. This may block until all buffered log sinks
+	// are shutdown if any buffered log sinks are enabled.
+	logShutdownFn func()
 	// deprecatedLogOverrides is the legacy pre-v21.1 discrete flag
 	// overrides for the logging configuration.
 	// TODO(knz): Deprecated in v21.1. Remove this.
@@ -222,6 +226,7 @@ func setCliContextDefaults() {
 	cliCtx.allowUnencryptedClientPassword = false
 	cliCtx.logConfigInput = settableString{s: ""}
 	cliCtx.logConfig = logconfig.Config{}
+	cliCtx.logShutdownFn = func() {}
 	cliCtx.ambiguousLogDir = false
 	// TODO(knz): Deprecated in v21.1. Remove this.
 	cliCtx.deprecatedLogOverrides.reset()

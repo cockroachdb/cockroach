@@ -123,9 +123,14 @@ func newBufferedSink(
 }
 
 // Start starts an internal goroutine that will run until ctx is canceled.
-func (bs *bufferedSink) Start(ctx context.Context) {
-	// Start the runFlusher goroutine.
-	go bs.runFlusher(ctx)
+func (bs *bufferedSink) Start(closer *BufferedSinkCloser) {
+	ctx := closer.RegisterBufferSink(bs)
+	// Start the runFlusher goroutine & mark as doneg on the
+	// closer once it exits.
+	go func() {
+		bs.runFlusher(ctx)
+		closer.BufferSinkDone(bs)
+	}()
 }
 
 // active returns true if this sink is currently active.
