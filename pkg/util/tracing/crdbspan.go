@@ -478,20 +478,32 @@ func (s *crdbSpan) recordFinishedChildrenLocked(children []tracingpb.RecordedSpa
 
 	// Depending on the type of recording, we either keep all the information
 	// received, or only the structured events.
-	if s.recordingType() == RecordingVerbose {
+	switch s.recordingType() {
+	case RecordingVerbose:
 		// Change the root of the remote recording to be a child of this Span. This is
 		// usually already the case, except with DistSQL traces where remote
 		// processors run in spans that FollowFrom an RPC Span that we don't collect.
 		children[0].ParentSpanID = s.spanID
 
-		s.mu.recording.finishedChildren = append(s.mu.recording.finishedChildren, children...)
-	} else {
+		if len(s.mu.recording.finishedChildren)+len(children) <= maxRecordedSpansPerTrace {
+			s.mu.recording.finishedChildren = append(s.mu.recording.finishedChildren, children...)
+			break
+		}
+
+		// We don't have space for this recording. Let's collect just the structured
+		// records by falling through.
+		fallthrough
+	case RecordingStructured:
 		for ci := range children {
 			child := &children[ci]
 			for i := range child.StructuredRecords {
 				s.recordInternalLocked(&child.StructuredRecords[i], &s.mu.recording.structured)
 			}
 		}
+	case RecordingOff:
+		break
+	default:
+		panic(fmt.Sprintf("unrecognized recording mode: %v", s.recordingType()))
 	}
 }
 
@@ -859,36 +871,8 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 		return
 	}
 
-	var rec Recording
-	var events []*tracingpb.StructuredRecord
-	var verbose bool
-	switch s.recordingType() {
-	case RecordingOff:
-		panic("should have been handled above")
-	case RecordingVerbose:
-		rec = child.GetRecording(RecordingVerbose, false /* finishing - the child is already finished */)
-		if len(s.mu.recording.finishedChildren)+len(rec) <= maxRecordedSpansPerTrace {
-			verbose = true
-			break
-		}
-		// We don't have space for this recording. Let's collect just the structured
-		// records by falling through.
-		rec = nil
-		fallthrough
-	case RecordingStructured:
-		events = make([]*tracingpb.StructuredRecord, 0, 3)
-		events = child.getStructuredEventsRecursively(events, false /* includeDetachedChildren */)
-	default:
-		panic(fmt.Sprintf("unrecognized recording mode: %v", s.recordingType()))
-	}
-
-	if verbose {
-		s.recordFinishedChildrenLocked(rec)
-	} else {
-		for i := range events {
-			s.recordInternalLocked(events[i], &s.mu.recording.structured)
-		}
-	}
+	s.recordFinishedChildrenLocked(child.GetRecording(s.recordingType(),
+		false /* finishing - the child is already finished */))
 }
 
 // parentFinished makes s a root.
