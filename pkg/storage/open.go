@@ -55,6 +55,13 @@ var DisableAutomaticCompactions ConfigOption = func(cfg *engineConfig) error {
 	return nil
 }
 
+// ForceWriterParallelism configures an engine to be opened with disabled
+// automatic compactions. Used primarily for debugCompactCmd.
+var ForceWriterParallelism ConfigOption = func(cfg *engineConfig) error {
+	cfg.Opts.Experimental.ForceWriterParallelism = true
+	return nil
+}
+
 // DisableFilesystemMiddlewareTODO configures an engine to not include
 // filesystem middleware like disk-health checking and ENOSPC-detection. This is
 // a temporary option while some units leak file descriptors, and by extension,
@@ -99,6 +106,17 @@ func Attributes(attrs roachpb.Attributes) ConfigOption {
 func MaxSize(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
 		cfg.MaxSize = size
+		return nil
+	}
+}
+
+// MaxWriterConcurrency sets the concurrency of the sstable Writers. A concurrency
+// of 0 implies no parallelism in the Writer, and a concurrency of 1 or more implies
+// parallelism in the Writer. Currently, there's no difference between a concurrency
+// of 1 or more.
+func MaxWriterConcurrency(concurrency int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.Opts.Experimental.MaxWriterConcurrency = concurrency
 		return nil
 	}
 }
