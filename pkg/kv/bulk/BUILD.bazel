@@ -23,7 +23,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",

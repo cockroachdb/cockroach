@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -200,7 +201,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				wrkMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
 				workInfo := WorkInfo{
 					TenantID:        tenant,
-					Priority:        WorkPriority(priority),
+					Priority:        admissionpb.WorkPriority(priority),
 					CreateTime:      int64(createTime) * int64(time.Millisecond),
 					BypassAdmission: bypass,
 				}
@@ -390,7 +391,7 @@ func TestPriorityStates(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var ps priorityStates
-	curThreshold := int(LowPri)
+	curThreshold := int(admissionpb.LowPri)
 	printFunc := func() string {
 		var b strings.Builder
 		fmt.Fprintf(&b, "lowest-priority: %d", ps.lowestPriorityWithRequests)
@@ -405,14 +406,14 @@ func TestPriorityStates(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				ps = priorityStates{
-					lowestPriorityWithRequests: oneAboveHighPri,
+					lowestPriorityWithRequests: admissionpb.OneAboveHighPri,
 				}
 				return ""
 
 			case "request-received":
 				var priority int
 				d.ScanArgs(t, "priority", &priority)
-				ps.requestAtPriority(WorkPriority(priority))
+				ps.requestAtPriority(admissionpb.WorkPriority(priority))
 				return printFunc()
 
 			case "update":
@@ -423,7 +424,7 @@ func TestPriorityStates(t *testing.T) {
 				if d.HasArg("canceled") {
 					d.ScanArgs(t, "canceled", &canceled)
 				}
-				ps.updateDelayLocked(WorkPriority(priority), time.Duration(delayMillis)*time.Millisecond,
+				ps.updateDelayLocked(admissionpb.WorkPriority(priority), time.Duration(delayMillis)*time.Millisecond,
 					canceled)
 				return printFunc()
 
@@ -513,7 +514,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				workInfo := StoreWriteWorkInfo{
 					WorkInfo: WorkInfo{
 						TenantID:        tenant,
-						Priority:        WorkPriority(priority),
+						Priority:        admissionpb.WorkPriority(priority),
 						CreateTime:      int64(createTime) * int64(time.Millisecond),
 						BypassAdmission: bypass,
 					},
