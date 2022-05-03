@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -95,7 +96,7 @@ func alterChangefeedPlanHook(
 		newTargets, newProgress, newStatementTime, originalSpecs, err := generateNewTargets(ctx,
 			p,
 			alterChangefeedStmt.Cmds,
-			newOptions,
+			newOptions.AsMap(), // TODO: Remove .AsMap()
 			prevDetails,
 			job.Progress(),
 		)
@@ -104,7 +105,7 @@ func alterChangefeedPlanHook(
 		}
 		newChangefeedStmt.Targets = newTargets
 
-		for key, value := range newOptions {
+		for key, value := range newOptions.AsMap() {
 			opt := tree.KVOption{Key: tree.Name(key)}
 			if len(value) > 0 {
 				opt.Value = tree.NewDString(value)
@@ -209,40 +210,41 @@ func generateNewOpts(
 	alterCmds tree.AlterChangefeedCmds,
 	prevOpts map[string]string,
 	prevSinkURI string,
-) (map[string]string, string, error) {
+) (changefeedbase.StatementOptions, string, error) {
 	sinkURI := prevSinkURI
 	newOptions := prevOpts
+	null := changefeedbase.StatementOptions{}
 
 	for _, cmd := range alterCmds {
 		switch v := cmd.(type) {
 		case *tree.AlterChangefeedSetOptions:
-			optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedOptionExpectValues)
+			optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedvalidators.AlterOptionValidations)
 			if err != nil {
-				return nil, ``, err
+				return null, ``, err
 			}
 
 			opts, err := optsFn()
 			if err != nil {
-				return nil, ``, err
+				return null, ``, err
 			}
 
 			for key, value := range opts {
 				if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
-					return nil, ``, pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
+					return null, ``, pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
 				}
 				if key == changefeedbase.OptSink {
 					newSinkURI, err := url.Parse(value)
 					if err != nil {
-						return nil, ``, err
+						return null, ``, err
 					}
 
 					prevSinkURI, err := url.Parse(sinkURI)
 					if err != nil {
-						return nil, ``, err
+						return null, ``, err
 					}
 
 					if newSinkURI.Scheme != prevSinkURI.Scheme {
-						return nil, ``, pgerror.Newf(
+						return null, ``, pgerror.Newf(
 							pgcode.InvalidParameterValue,
 							`New sink type %q does not match original sink type %q. `+
 								`Altering the sink type of a changefeed is disallowed, consider creating a new changefeed instead.`,
@@ -261,13 +263,13 @@ func generateNewOpts(
 			optKeys := v.Options.ToStrings()
 			for _, key := range optKeys {
 				if key == changefeedbase.OptSink {
-					return nil, ``, pgerror.Newf(pgcode.InvalidParameterValue, `cannot unset option %q`, key)
+					return null, ``, pgerror.Newf(pgcode.InvalidParameterValue, `cannot unset option %q`, key)
 				}
 				if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
-					return nil, ``, pgerror.Newf(pgcode.InvalidParameterValue, `invalid option %q`, key)
+					return null, ``, pgerror.Newf(pgcode.InvalidParameterValue, `invalid option %q`, key)
 				}
 				if _, ok := changefeedbase.AlterChangefeedUnsupportedOptions[key]; ok {
-					return nil, ``, pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
+					return null, ``, pgerror.Newf(pgcode.InvalidParameterValue, `cannot alter option %q`, key)
 				}
 				delete(newOptions, key)
 			}
@@ -275,7 +277,7 @@ func generateNewOpts(
 		}
 	}
 
-	return newOptions, sinkURI, nil
+	return changefeedbase.MakeStatementOptions(newOptions), sinkURI, nil
 }
 
 func generateNewTargets(
@@ -368,7 +370,7 @@ func generateNewTargets(
 	for _, cmd := range alterCmds {
 		switch v := cmd.(type) {
 		case *tree.AlterChangefeedAddTarget:
-			targetOptsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedTargetOptions)
+			targetOptsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedvalidators.AlterTargetOptionValidations)
 			if err != nil {
 				return nil, nil, hlc.Timestamp{}, nil, err
 			}

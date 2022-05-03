@@ -6,9 +6,10 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package changefeedbase
+package changefeedvalidators
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/errors"
@@ -18,7 +19,7 @@ import (
 func ValidateTable(
 	targets []jobspb.ChangefeedTargetSpecification,
 	tableDesc catalog.TableDescriptor,
-	opts map[string]string,
+	canHandle changefeedbase.CanHandle,
 ) error {
 	var found bool
 	for _, cts := range targets {
@@ -55,11 +56,10 @@ func ValidateTable(
 					tableDesc.GetName(), len(tableDesc.GetFamilies()), targets, tableDesc)
 			}
 		case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
-			_, columnFamiliesOpt := opts[OptSplitColumnFamilies]
-			if !columnFamiliesOpt && len(tableDesc.GetFamilies()) != 1 {
+			if !canHandle.MultipleColumnFamilies && len(tableDesc.GetFamilies()) != 1 {
 				return errors.Errorf(
 					`CHANGEFEED targeting a table (%s) with multiple column families requires WITH %s and will emit multiple events per row.`,
-					tableDesc.GetName(), OptSplitColumnFamilies)
+					tableDesc.GetName(), changefeedbase.OptSplitColumnFamilies)
 			}
 		case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
 			cols := 0
@@ -91,10 +91,10 @@ func ValidateTable(
 
 // WarningsForTable returns any known nonfatal issues with running a changefeed on this kind of table.
 func WarningsForTable(
-	targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor, opts map[string]string,
+	tableDesc catalog.TableDescriptor, canHandle changefeedbase.CanHandle,
 ) []error {
 	warnings := []error{}
-	if _, ok := opts[OptVirtualColumns]; !ok {
+	if !canHandle.VirtualColumns {
 		for _, col := range tableDesc.AccessibleColumns() {
 			if col.IsVirtual() {
 				warnings = append(warnings,

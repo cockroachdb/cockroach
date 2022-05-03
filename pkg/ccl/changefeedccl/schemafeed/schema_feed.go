@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -83,7 +84,7 @@ func New(
 	targets []jobspb.ChangefeedTargetSpecification,
 	initialHighwater hlc.Timestamp,
 	metrics *Metrics,
-	changefeedOpts map[string]string,
+	tolerances changefeedbase.CanHandle,
 ) SchemaFeed {
 	m := &schemaFeed{
 		filter:            schemaChangeEventFilters[events],
@@ -95,7 +96,7 @@ func New(
 		ie:                cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
 		collectionFactory: cfg.CollectionFactory,
 		metrics:           metrics,
-		changefeedOpts:    changefeedOpts,
+		tolerances:        tolerances,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
@@ -114,14 +115,14 @@ func New(
 // invariant (via `validateFn`). An error timestamp is also kept, which is the
 // lowest timestamp where at least one table doesn't meet the invariant.
 type schemaFeed struct {
-	filter         tableEventFilter
-	db             *kv.DB
-	clock          *hlc.Clock
-	settings       *cluster.Settings
-	targets        []jobspb.ChangefeedTargetSpecification
-	ie             sqlutil.InternalExecutor
-	metrics        *Metrics
-	changefeedOpts map[string]string
+	filter     tableEventFilter
+	db         *kv.DB
+	clock      *hlc.Clock
+	settings   *cluster.Settings
+	targets    []jobspb.ChangefeedTargetSpecification
+	ie         sqlutil.InternalExecutor
+	metrics    *Metrics
+	tolerances changefeedbase.CanHandle
 
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
@@ -535,7 +536,7 @@ func (tf *schemaFeed) validateDescriptor(
 		// manager to acquire the freshest version of the type.
 		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID())
 	case catalog.TableDescriptor:
-		if err := changefeedbase.ValidateTable(tf.targets, desc, tf.changefeedOpts); err != nil {
+		if err := changefeedvalidators.ValidateTable(tf.targets, desc, tf.tolerances); err != nil {
 			return err
 		}
 		log.VEventf(ctx, 1, "validate %v", formatDesc(desc))

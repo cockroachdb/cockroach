@@ -10,9 +10,7 @@ package changefeedccl
 
 import (
 	"context"
-	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -22,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -97,63 +94,4 @@ func makeSpansToProtect(
 	}
 	addTablePrefix(keys.DescriptorTableID)
 	return spansToProtect
-}
-
-// initialScanTypeFromOpts determines the type of initial scan the changefeed
-// should perform on the first run given the options provided from the user
-func initialScanTypeFromOpts(opts map[string]string) (changefeedbase.InitialScanType, error) {
-	_, cursor := opts[changefeedbase.OptCursor]
-	initialScanType, initialScanSet := opts[changefeedbase.OptInitialScan]
-	_, initialScanOnlySet := opts[changefeedbase.OptInitialScanOnly]
-	_, noInitialScanSet := opts[changefeedbase.OptNoInitialScan]
-
-	if initialScanSet && noInitialScanSet {
-		return changefeedbase.InitialScan, errors.Errorf(
-			`cannot specify both %s and %s`, changefeedbase.OptInitialScan,
-			changefeedbase.OptNoInitialScan)
-	}
-
-	if initialScanSet && initialScanOnlySet {
-		return changefeedbase.InitialScan, errors.Errorf(
-			`cannot specify both %s and %s`, changefeedbase.OptInitialScan,
-			changefeedbase.OptInitialScanOnly)
-	}
-
-	if noInitialScanSet && initialScanOnlySet {
-		return changefeedbase.InitialScan, errors.Errorf(
-			`cannot specify both %s and %s`, changefeedbase.OptInitialScanOnly,
-			changefeedbase.OptNoInitialScan)
-	}
-
-	if initialScanSet {
-		const opt = changefeedbase.OptInitialScan
-		switch strings.ToLower(initialScanType) {
-		case ``, `yes`:
-			return changefeedbase.InitialScan, nil
-		case `no`:
-			return changefeedbase.NoInitialScan, nil
-		case `only`:
-			return changefeedbase.OnlyInitialScan, nil
-		default:
-			return changefeedbase.InitialScan, errors.Errorf(
-				`unknown %s: %s`, opt, initialScanType)
-		}
-	}
-
-	if initialScanOnlySet {
-		return changefeedbase.OnlyInitialScan, nil
-	}
-
-	if noInitialScanSet {
-		return changefeedbase.NoInitialScan, nil
-	}
-
-	// If we reach this point, this implies that the user did not specify any initial scan
-	// options. In this case the default behaviour is to perform an initial scan if the
-	// cursor is not specified.
-	if !cursor {
-		return changefeedbase.InitialScan, nil
-	}
-
-	return changefeedbase.NoInitialScan, nil
 }
