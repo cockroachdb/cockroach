@@ -122,10 +122,16 @@ func newBufferedSink(
 	return sink
 }
 
-// Start starts an internal goroutine that will run until ctx is canceled.
-func (bs *bufferedSink) Start(ctx context.Context) {
-	// Start the runFlusher goroutine.
-	go bs.runFlusher(ctx)
+// Start starts an internal goroutine that will run until the provided closer is
+// closed.
+func (bs *bufferedSink) Start(closer *BufferedSinkCloser) {
+	ctx := closer.RegisterBufferedSink(bs)
+	// Start the runFlusher goroutine & mark as done on the
+	// closer once it exits.
+	go func() {
+		bs.runFlusher(ctx)
+		closer.BufferedSinkDone(bs)
+	}()
 }
 
 // active returns true if this sink is currently active.
@@ -230,13 +236,6 @@ func (bs *bufferedSink) exitCode() exit.Code {
 //
 // TODO(knz): How does this interact with the runFlusher logic in log_flush.go?
 // See: https://github.com/cockroachdb/cockroach/issues/72458
-//
-// TODO(knz): this code should be extended to detect server shutdowns:
-// as currently implemented the runFlusher will only terminate after all
-// the writes in the channel are completed. If the writes are slow,
-// the goroutine may not terminate properly when server shutdown is
-// requested.
-// See: https://github.com/cockroachdb/cockroach/issues/72459
 func (bs *bufferedSink) runFlusher(ctx context.Context) {
 	buf := &bs.mu.buf
 	for {
