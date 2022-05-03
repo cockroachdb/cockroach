@@ -167,12 +167,18 @@ func newChangeAggregatorProcessor(
 		return nil, err
 	}
 
+	opts := changefeedbase.MakeStatementOptions(ca.spec.Feed.Opts)
+
 	var err error
-	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts, AllTargets(ca.spec.Feed)); err != nil {
+	encodingOpts, err := opts.GetEncodingOptions()
+	if err != nil {
+		return nil, err
+	}
+	if ca.encoder, err = getEncoder(encodingOpts, AllTargets(ca.spec.Feed)); err != nil {
 		return nil, err
 	}
 
-	if _, needTopics := ca.spec.Feed.Opts[changefeedbase.OptTopicInValue]; needTopics {
+	if encodingOpts.TopicInValue {
 		ca.topicNamer, err = MakeTopicNamer(ca.spec.Feed.TargetSpecifications)
 		if err != nil {
 			return nil, err
@@ -194,11 +200,12 @@ func newChangeAggregatorProcessor(
 	// not changing), then this is sufficient and we don't have to do anything
 	// fancy with timers.
 	// // TODO(casper): add test for OptMinCheckpointFrequency.
-	if r, ok := ca.spec.Feed.Opts[changefeedbase.OptMinCheckpointFrequency]; ok && r != `` {
-		ca.flushFrequency, err = time.ParseDuration(r)
-		if err != nil {
-			return nil, err
-		}
+	checkpointFreq, err := opts.GetMinCheckpointFrequency()
+	if err != nil {
+		return nil, err
+	}
+	if checkpointFreq != nil {
+		ca.flushFrequency = *checkpointFreq
 	} else {
 		ca.flushFrequency = changefeedbase.DefaultMinCheckpointFrequency
 	}
@@ -227,6 +234,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	spans, err := ca.setupSpansAndFrontier()
 
 	endTime := ca.spec.Feed.EndTime
+	opts := changefeedbase.MakeStatementOptions(ca.spec.Feed.Opts)
 
 	if err != nil {
 		ca.MoveToDraining(err)
@@ -257,7 +265,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.
 	ca.metrics = ca.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-	ca.sliMetrics, err = ca.metrics.getSLIMetrics(ca.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	ca.sliMetrics, err = ca.metrics.getSLIMetrics(opts[changefeedbase.OptMetricsScope])
 	if err != nil {
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -302,7 +310,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	if ca.spec.Feed.Opts[changefeedbase.OptFormat] == string(changefeedbase.OptFormatNative) {
+	if opts[changefeedbase.OptFormat] == string(changefeedbase.OptFormatNative) {
 		ca.eventConsumer = newNativeKVConsumer(ca.sink)
 	} else {
 		ca.eventConsumer = newKVEventToRowConsumer(
@@ -326,7 +334,10 @@ func (ca *changeAggregator) startKVFeed(
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
 	// we return the kvevent.Reader part to the caller.
-	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan, endTime, sm)
+	kvfeedCfg, err := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan, endTime, sm)
+	if err != nil {
+		return nil, err
+	}
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -359,23 +370,24 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	needsInitialScan bool,
 	endTime hlc.Timestamp,
 	sm *sliMetrics,
-) kvfeed.Config {
-	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
-		ca.spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
-	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
-		ca.spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
-	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
+) (kvfeed.Config, error) {
+	opts := changefeedbase.MakeStatementOptions(ca.spec.Feed.Opts)
+	schemaChange, err := opts.GetSchemaChangeHandlingOptions()
+	if err != nil {
+		return kvfeed.Config{}, err
+	}
+	filters := opts.GetFilters()
 	cfg := ca.flowCtx.Cfg
 
 	var sf schemafeed.SchemaFeed
 
 	initialScanOnly := endTime.EqOrdering(initialHighWater)
 
-	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore || initialScanOnly {
+	if schemaChange.Policy == changefeedbase.OptSchemaChangePolicyIgnore || initialScanOnly {
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
-		sf = schemafeed.New(ctx, cfg, schemaChangeEvents, AllTargets(ca.spec.Feed),
-			initialHighWater, &ca.metrics.SchemaFeedMetrics, ca.spec.Feed.Opts)
+		sf = schemafeed.New(ctx, cfg, schemaChange.EventClass, AllTargets(ca.spec.Feed),
+			initialHighWater, &ca.metrics.SchemaFeedMetrics, opts.GetTableTolerances())
 	}
 
 	return kvfeed.Config{
@@ -395,13 +407,13 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		MM:                      ca.kvFeedMemMon,
 		InitialHighWater:        initialHighWater,
 		EndTime:                 endTime,
-		WithDiff:                withDiff,
+		WithDiff:                filters.WithDiff,
 		NeedsInitialScan:        needsInitialScan,
-		SchemaChangeEvents:      schemaChangeEvents,
-		SchemaChangePolicy:      schemaChangePolicy,
+		SchemaChangeEvents:      schemaChange.EventClass,
+		SchemaChangePolicy:      schemaChange.Policy,
 		SchemaFeed:              sf,
 		Knobs:                   ca.knobs.FeedKnobs,
-	}
+	}, nil
 }
 
 // setupSpans is called on start to extract the spans for this changefeed as a
@@ -1262,20 +1274,28 @@ func newChangeFrontierProcessor(
 	); err != nil {
 		return nil, err
 	}
+	opts := changefeedbase.MakeStatementOptions(cf.spec.Feed.Opts)
 
-	if r, ok := cf.spec.Feed.Opts[changefeedbase.OptResolvedTimestamps]; ok {
-		var err error
-		if r == `` {
+	freq, emitResolved, err := opts.GetResolvedTimestampInterval()
+	if err != nil {
+		return nil, err
+	}
+	if emitResolved {
+		if freq == nil {
 			// Empty means emit them as often as we have them.
 			cf.freqEmitResolved = emitAllResolved
-		} else if cf.freqEmitResolved, err = time.ParseDuration(r); err != nil {
-			return nil, err
+		} else {
+			cf.freqEmitResolved = *freq
 		}
 	} else {
 		cf.freqEmitResolved = emitNoResolved
 	}
 
-	if cf.encoder, err = getEncoder(spec.Feed.Opts, AllTargets(spec.Feed)); err != nil {
+	encodingOpts, err := opts.GetEncodingOptions()
+	if err != nil {
+		return nil, err
+	}
+	if cf.encoder, err = getEncoder(encodingOpts, AllTargets(spec.Feed)); err != nil {
 		return nil, err
 	}
 

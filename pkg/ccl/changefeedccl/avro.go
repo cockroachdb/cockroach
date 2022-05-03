@@ -760,7 +760,7 @@ func tableToAvroSchema(
 	familyID descpb.FamilyID,
 	nameSuffix string,
 	namespace string,
-	virtualColumnVisibility string,
+	virtualColumnVisibility changefeedbase.VirtualColumnVisibility,
 ) (*avroDataRecord, error) {
 	family, err := tableDesc.FindFamilyByID(familyID)
 	if err != nil {
@@ -797,7 +797,7 @@ func tableToAvroSchema(
 
 	for _, col := range tableDesc.PublicColumns() {
 		_, inFamily := include[col.GetID()]
-		virtual := col.IsVirtual() && virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+		virtual := col.IsVirtual() && virtualColumnVisibility == changefeedbase.OptVirtualColumnsNull
 		if inFamily || virtual {
 			field, err := columnToAvroSchema(col)
 			if err != nil {

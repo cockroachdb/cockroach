@@ -196,15 +196,11 @@ func createBenchmarkChangefeed(
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, database, table)
 	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}
 	details := jobspb.ChangefeedDetails{
-		Tables: jobspb.ChangefeedTargets{tableDesc.GetID(): jobspb.ChangefeedTargetTable{
-			StatementTimeName: tableDesc.GetName(),
-		}},
-		Opts: map[string]string{
-			changefeedbase.OptEnvelope: string(changefeedbase.OptEnvelopeRow),
-		},
+		Tables: jobspb.ChangefeedTargets{tableDesc.GetID(): jobspb.ChangefeedTargetTable{StatementTimeName: tableDesc.GetName()}},
 	}
 	initialHighWater := hlc.Timestamp{}
-	encoder, err := makeJSONEncoder(details.Opts, AllTargets(details))
+	encodingOpts := changefeedbase.EncodingOptions{Format: changefeedbase.OptFormatJSON, Envelope: changefeedbase.OptEnvelopeRow}
+	encoder, err := makeJSONEncoder(encodingOpts, AllTargets(details))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -221,7 +217,6 @@ func createBenchmarkChangefeed(
 	if needsInitialScan {
 		initialHighWater = details.StatementTime
 	}
-	_, withDiff := details.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := kvfeed.Config{
 		Settings:         settings,
 		DB:               s.DB(),
@@ -233,7 +228,7 @@ func createBenchmarkChangefeed(
 		Metrics:          &metrics.KVFeedMetrics,
 		MM:               mm,
 		InitialHighWater: initialHighWater,
-		WithDiff:         withDiff,
+		WithDiff:         false,
 		NeedsInitialScan: needsInitialScan,
 		SchemaFeed:       schemafeed.DoNothingSchemaFeed,
 	}

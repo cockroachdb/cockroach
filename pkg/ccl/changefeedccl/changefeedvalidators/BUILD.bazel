@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "changefeedvalidators",
+    srcs = [
+        "options_sql_validator.go",
+        "table_validator.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/jobs/jobspb",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

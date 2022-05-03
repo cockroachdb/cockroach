@@ -7,17 +7,12 @@ go_library(
         "errors.go",
         "options.go",
         "settings.go",
-        "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/jobs/joberror",
-        "//pkg/jobs/jobspb",
         "//pkg/settings",
-        "//pkg/sql",
-        "//pkg/sql/catalog",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

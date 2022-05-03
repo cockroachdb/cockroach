@@ -162,7 +162,7 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 	tableDesc.Families = []descpb.ColumnFamilyDescriptor{
 		{ID: primary, Name: "primary", ColumnIDs: columnIDs, ColumnNames: columnNames},
 	}
-	return tableToAvroSchema(tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+	return tableToAvroSchema(tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), primary, avroSchemaNoSuffix, "", changefeedbase.OptVirtualColumnsOmitted)
 }
 
 func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, error) {
@@ -385,7 +385,7 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.schema))
 			require.NoError(t, err)
-			origSchema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+			origSchema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", changefeedbase.OptVirtualColumnsOmitted)
 			require.NoError(t, err)
 			jsonSchema := origSchema.codec.Schema()
 			roundtrippedSchema, err := parseAvroSchema(jsonSchema)
@@ -421,7 +421,7 @@ func TestAvroSchema(t *testing.T) {
 	t.Run("escaping", func(t *testing.T) {
 		tableDesc, err := parseTableDesc(`CREATE TABLE "☃" (🍦 INT PRIMARY KEY)`)
 		require.NoError(t, err)
-		tableSchema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+		tableSchema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", changefeedbase.OptVirtualColumnsOmitted)
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+
@@ -628,7 +628,7 @@ func TestAvroSchema(t *testing.T) {
 			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
-			schema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+			schema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", changefeedbase.OptVirtualColumnsOmitted)
 			require.NoError(t, err)
 			textual, err := schema.textualFromRow(rows[0])
 			require.NoError(t, err)
@@ -678,7 +678,7 @@ func TestAvroSchema(t *testing.T) {
 			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
-			schema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+			schema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", changefeedbase.OptVirtualColumnsOmitted)
 			require.NoError(t, err)
 			textual, err := schema.textualFromRow(rows[0])
 			require.NoError(t, err)
@@ -781,12 +781,12 @@ func TestAvroMigration(t *testing.T) {
 			writerDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.writerSchema))
 			require.NoError(t, err)
-			writerSchema, err := tableToAvroSchema(writerDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+			writerSchema, err := tableToAvroSchema(writerDesc, primary, avroSchemaNoSuffix, "", changefeedbase.OptVirtualColumnsOmitted)
 			require.NoError(t, err)
 			readerDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.readerSchema))
 			require.NoError(t, err)
-			readerSchema, err := tableToAvroSchema(readerDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+			readerSchema, err := tableToAvroSchema(readerDesc, primary, avroSchemaNoSuffix, "", changefeedbase.OptVirtualColumnsOmitted)
 			require.NoError(t, err)
 
 			writerRows, err := parseValues(writerDesc, `VALUES `+test.writerValues)
@@ -863,7 +863,7 @@ func benchmarkEncodeType(b *testing.B, typ *types.T, encRow rowenc.EncDatumRow) 
 	tableDesc, err := parseTableDesc(
 		fmt.Sprintf(`CREATE TABLE bench_table (bench_field %s)`, typ.SQLString()))
 	require.NoError(b, err)
-	schema, err := tableToAvroSchema(tableDesc, primary, "suffix", "namespace", string(changefeedbase.OptVirtualColumnsOmitted))
+	schema, err := tableToAvroSchema(tableDesc, primary, "suffix", "namespace", changefeedbase.OptVirtualColumnsOmitted)
 	require.NoError(b, err)
 
 	b.ReportAllocs()

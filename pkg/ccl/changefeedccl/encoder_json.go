@@ -36,7 +36,7 @@ type jsonEncoder struct {
 	targets                 []jobspb.ChangefeedTargetSpecification
 	alloc                   tree.DatumAlloc
 	buf                     bytes.Buffer
-	virtualColumnVisibility string
+	virtualColumnVisibility changefeedbase.VirtualColumnVisibility
 
 	// columnMapCache caches the TableColMap for the latest version of the
 	// table descriptor thus far seen. It avoids the need to recompute the
@@ -54,28 +54,28 @@ type tableColumnMapCacheEntry struct {
 var _ Encoder = &jsonEncoder{}
 
 func makeJSONEncoder(
-	opts map[string]string, targets []jobspb.ChangefeedTargetSpecification,
+	opts changefeedbase.EncodingOptions, targets []jobspb.ChangefeedTargetSpecification,
 ) (*jsonEncoder, error) {
 	e := &jsonEncoder{
 		targets:                 targets,
-		keyOnly:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeKeyOnly,
-		wrapped:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
-		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
+		keyOnly:                 opts.Envelope == changefeedbase.OptEnvelopeKeyOnly,
+		wrapped:                 opts.Envelope == changefeedbase.OptEnvelopeWrapped,
+		virtualColumnVisibility: opts.VirtualColumns,
 		columnMapCache:          map[descpb.ID]*tableColumnMapCacheEntry{},
 	}
-	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
-	_, e.mvccTimestampField = opts[changefeedbase.OptMVCCTimestamps]
-	_, e.beforeField = opts[changefeedbase.OptDiff]
+	e.updatedField = opts.UpdatedTimestamps
+	e.mvccTimestampField = opts.MVCCTimestamps
+	e.beforeField = opts.Diff
 	if e.beforeField && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
 			changefeedbase.OptDiff, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
-	_, e.keyInValue = opts[changefeedbase.OptKeyInValue]
+	e.keyInValue = opts.KeyInValue
 	if e.keyInValue && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
 			changefeedbase.OptKeyInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
-	_, e.topicInValue = opts[changefeedbase.OptTopicInValue]
+	e.topicInValue = opts.TopicInValue
 	if e.topicInValue && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
 			changefeedbase.OptTopicInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
@@ -145,7 +145,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 		after = make(map[string]interface{})
 		for i, col := range row.tableDesc.PublicColumns() {
 			_, inFamily := include[col.GetID()]
-			virtual := col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+			virtual := col.IsVirtual() && e.virtualColumnVisibility == changefeedbase.OptVirtualColumnsNull
 			if inFamily || virtual {
 				datum := row.datums[i]
 				if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
@@ -177,7 +177,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 		before = make(map[string]interface{})
 		for i, col := range row.prevTableDesc.PublicColumns() {
 			_, inFamily := include[col.GetID()]
-			virtual := col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+			virtual := col.IsVirtual() && e.virtualColumnVisibility == changefeedbase.OptVirtualColumnsNull
 			if inFamily || virtual {
 				datum := row.prevDatums[i]
 				if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
