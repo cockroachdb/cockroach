@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -888,7 +889,7 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 // resetting the transaction and retrying the callback.
 func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
 	return db.TxnWithAdmissionControl(
-		ctx, roachpb.AdmissionHeader_OTHER, admission.NormalPri, retryable)
+		ctx, roachpb.AdmissionHeader_OTHER, admissionpb.NormalPri, retryable)
 }
 
 // TxnWithAdmissionControl is like Txn, but uses a configurable admission
@@ -896,7 +897,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 func (db *DB) TxnWithAdmissionControl(
 	ctx context.Context,
 	source roachpb.AdmissionHeader_Source,
-	priority admission.WorkPriority,
+	priority admissionpb.Priority,
 	retryable func(context.Context, *Txn) error,
 ) error {
 	// TODO(radu): we should open a tracing Span here (we need to figure out how

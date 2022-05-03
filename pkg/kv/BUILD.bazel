@@ -26,6 +26,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/contextutil",
         "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",

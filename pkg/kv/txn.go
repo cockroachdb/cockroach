@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -119,7 +119,7 @@ type Txn struct {
 // See also db.NewTxn().
 func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	return NewTxnWithAdmissionControl(
-		ctx, db, gatewayNodeID, roachpb.AdmissionHeader_OTHER, admission.NormalPri)
+		ctx, db, gatewayNodeID, roachpb.AdmissionHeader_OTHER, admissionpb.NormalPri)
 }
 
 // NewTxnWithAdmissionControl creates a new transaction with the specified
@@ -129,7 +129,7 @@ func NewTxnWithAdmissionControl(
 	db *DB,
 	gatewayNodeID roachpb.NodeID,
 	source roachpb.AdmissionHeader_Source,
-	priority admission.WorkPriority,
+	priority admissionpb.Priority,
 ) *Txn {
 	if db == nil {
 		panic(errors.WithContextTags(
@@ -158,7 +158,7 @@ func NewTxnWithAdmissionControl(
 // that this initializes Txn.admissionHeader to specify that the source is
 // FROM_SQL.
 // qualityOfService is the QoSLevel level to use in admission control, whose
-// value also corresponds exactly with the admission.WorkPriority to use.
+// value also corresponds exactly with the admission.Priority to use.
 func NewTxnWithSteppingEnabled(
 	ctx context.Context,
 	db *DB,
@@ -166,7 +166,7 @@ func NewTxnWithSteppingEnabled(
 	qualityOfService sessiondatapb.QoSLevel,
 ) *Txn {
 	txn := NewTxnWithAdmissionControl(ctx, db, gatewayNodeID,
-		roachpb.AdmissionHeader_FROM_SQL, admission.WorkPriority(qualityOfService))
+		roachpb.AdmissionHeader_FROM_SQL, admissionpb.Priority(qualityOfService))
 	_ = txn.ConfigureStepping(ctx, SteppingEnabled)
 	return txn
 }
@@ -179,7 +179,7 @@ func NewTxnWithSteppingEnabled(
 // details.
 func NewTxnRootKV(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	return NewTxnWithAdmissionControl(
-		ctx, db, gatewayNodeID, roachpb.AdmissionHeader_ROOT_KV, admission.NormalPri)
+		ctx, db, gatewayNodeID, roachpb.AdmissionHeader_ROOT_KV, admissionpb.NormalPri)
 }
 
 // NewTxnFromProto is like NewTxn but assumes the Transaction object is already initialized.
@@ -1683,7 +1683,7 @@ func (txn *Txn) AdmissionHeader() roachpb.AdmissionHeader {
 		// the transaction throughput by 10+%. In that experiment 40% of the
 		// BatchRequests evaluated by KV had been assigned high priority due to
 		// locking.
-		h.Priority = int32(admission.LockingPri)
+		h.Priority = int32(admissionpb.LockingPri)
 	}
 	return h
 }
