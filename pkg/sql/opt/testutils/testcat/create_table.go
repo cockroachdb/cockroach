@@ -296,6 +296,7 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 		TabName:   stmt.Table,
 		Catalog:   tc,
 		IsVirtual: true,
+		IsSystem:  true,
 	}
 
 	// Add the dummy PK column.
