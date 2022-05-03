@@ -63,7 +63,7 @@ SELECT
       table_id = ANY (descriptor_ids)
   ) AS full_table_names, 
   changefeed_details->'opts'->>'topics' AS topics,
-  changefeed_details->'opts'->>'format' AS format 
+  COALESCE(changefeed_details->'opts'->>'format','json') AS format 
 FROM 
   crdb_internal.jobs 
   INNER JOIN payload ON id = job_id`
