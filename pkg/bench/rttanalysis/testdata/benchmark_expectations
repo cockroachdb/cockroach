@@ -44,9 +44,9 @@ exp,benchmark
 14,DropTable/drop_1_table
 16,DropTable/drop_2_tables
 18,DropTable/drop_3_tables
-14,DropView/drop_1_view
-16,DropView/drop_2_views
-18,DropView/drop_3_views
+16,DropView/drop_1_view
+18,DropView/drop_2_views
+20,DropView/drop_3_views
 14,Grant/grant_all_on_1_table
 14,Grant/grant_all_on_2_tables
 14,Grant/grant_all_on_3_tables
