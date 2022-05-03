@@ -3651,6 +3651,7 @@ type KVAdmissionController interface {
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
 	SetTenantWeightProvider(provider TenantWeightProvider, stopper *stop.Stopper)
+	GetStoreSnapshotGranter(storeID roachpb.StoreID) admission.StoreSnapshotGranter
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -3821,4 +3822,10 @@ func (n KVAdmissionControllerImpl) SetTenantWeightProvider(
 			}
 		}
 	}()
+}
+
+func (n KVAdmissionControllerImpl) GetStoreSnapshotGranter(
+	storeID roachpb.StoreID,
+) admission.StoreSnapshotGranter {
+	return n.storeGrantCoords.GetStoreSnapshotGranter(int32(storeID))
 }

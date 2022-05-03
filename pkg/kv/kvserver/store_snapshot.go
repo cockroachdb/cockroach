@@ -779,7 +779,10 @@ func (s *Store) receiveSnapshot(
 		return err
 	}
 	inSnap.placeholder = placeholder
-
+	// TODO: tell snapshot sender that reached this stage, so give us a larger
+	// deadline.
+	snapshotGranter := s.cfg.KVAdmissionController.GetStoreSnapshotGranter(s.StoreID())
+	snapshotGranter.GetRangeSnapshotTokens(ctx, inSnap.DataSize)
 	// Use a background context for applying the snapshot, as handleRaftReady is
 	// not prepared to deal with arbitrary context cancellation. Also, we've
 	// already received the entire snapshot here, so there's no point in
@@ -788,6 +791,9 @@ func (s *Store) receiveSnapshot(
 	if err := s.processRaftSnapshotRequest(applyCtx, header, inSnap); err != nil {
 		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
 	}
+	// TODO: plumbing for how many bytes were ingested into L0, from processRaftSnapshotRequest
+	var l0Bytes int64
+	snapshotGranter.ReturnRangeSnapshotTokens(inSnap.DataSize - l0Bytes)
 	return stream.Send(&kvserverpb.SnapshotResponse{Status: kvserverpb.SnapshotResponse_APPLIED})
 }
 
