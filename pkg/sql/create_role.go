@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
@@ -168,7 +169,9 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	// Get a map of statements to execute for role options and their values.
-	stmts, err := n.roleOptions.GetSQLStmts(sqltelemetry.CreateRole)
+	stmts, err := n.roleOptions.GetSQLStmts(func(o roleoption.Option) {
+		sqltelemetry.IncIAMOptionCounter(sqltelemetry.CreateRole, strings.ToLower(o.String()))
+	})
 	if err != nil {
 		return err
 	}
