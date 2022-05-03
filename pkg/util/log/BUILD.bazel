@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "ambient_context.go",
         "buffered_sink.go",
+        "buffered_sink_closer.go",
         "channels.go",
         "clog.go",
         "doc.go",
@@ -131,6 +132,7 @@ go_test(
     size = "small",
     srcs = [
         "ambient_context_test.go",
+        "buffered_sink_closer_test.go",
         "buffered_sink_test.go",
         "channels_test.go",
         "clog_test.go",
