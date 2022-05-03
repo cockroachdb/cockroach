@@ -237,7 +237,6 @@ func (n *createViewNode) startExec(params runParams) error {
 			// * use AllocateIDs to give the view descriptor a primary key
 			desc.IsMaterializedView = true
 			desc.State = descpb.DescriptorState_ADD
-			desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
 			version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
 			if err := desc.AllocateIDs(params.ctx, version); err != nil {
 				return err
