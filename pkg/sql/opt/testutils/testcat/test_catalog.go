@@ -594,6 +594,7 @@ type Table struct {
 	Checks     []cat.CheckConstraint
 	Families   []*Family
 	IsVirtual  bool
+	IsSystem   bool
 	Catalog    *Catalog
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
@@ -652,6 +653,11 @@ func (tt *Table) fqName() cat.DataSourceName {
 // IsVirtualTable is part of the cat.Table interface.
 func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
+}
+
+// IsSystemTable is part of the cat.Table interface.
+func (tt *Table) IsSystemTable() bool {
+	return tt.IsSystem
 }
 
 // IsMaterializedView is part of the cat.Table interface.

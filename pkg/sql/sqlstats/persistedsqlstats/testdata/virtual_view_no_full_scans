@@ -34,9 +34,5 @@ vectorized: true
               missing stats
               table: transaction_statistics@primary
               spans: [/0/'2022-01-18 00:00:00+00:00' - /0/'2022-01-20 00:00:00+00:00'] [/1/'2022-01-18 00:00:00+00:00' - /1/'2022-01-20 00:00:00+00:00'] [/2/'2022-01-18 00:00:00+00:00' - /2/'2022-01-20 00:00:00+00:00'] [/3/'2022-01-18 00:00:00+00:00' - /3/'2022-01-20 00:00:00+00:00'] … (4 more)
-
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON transaction_statistics (aggregated_ts) STORING (agg_interval, metadata, statistics);
 ----
 ----
