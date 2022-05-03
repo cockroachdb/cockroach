@@ -192,11 +192,11 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		if err := cfg.Validate(&dir); err != nil {
 			t.Fatal(err)
 		}
-		cleanup, err := log.ApplyConfig(cfg)
+		logCloser, err := log.ApplyConfig(cfg)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer cleanup()
+		defer logCloser.Close()
 
 		s, conn, _ := serverutils.StartServer(t,
 			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})

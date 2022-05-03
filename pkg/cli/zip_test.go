@@ -159,7 +159,7 @@ func TestConcurrentZip(t *testing.T) {
 	defer sc.Close(t)
 
 	// Reduce the number of output log files to just what's expected.
-	defer sc.SetupSingleFileLogging()()
+	defer sc.SetupSingleFileLogging().Close()
 
 	ctx := context.Background()
 
@@ -255,7 +255,7 @@ func TestUnavailableZip(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 	// Reduce the number of output log files to just what's expected.
-	defer sc.SetupSingleFileLogging()()
+	defer sc.SetupSingleFileLogging().Close()
 
 	// unavailableCh is used by the replica command filter
 	// to conditionally block requests and simulate unavailability.
@@ -367,7 +367,7 @@ func TestPartialZip(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 	// Reduce the number of output log files to just what's expected.
-	defer sc.SetupSingleFileLogging()()
+	defer sc.SetupSingleFileLogging().Close()
 
 	ctx := context.Background()
 

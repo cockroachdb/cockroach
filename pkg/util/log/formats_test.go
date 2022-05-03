@@ -75,9 +75,9 @@ func TestFormatRedaction(t *testing.T) {
 							// Validate and apply the config.
 							require.NoError(t, config.Validate(&sc.logDir))
 							TestingResetActive()
-							cleanupFn, err := ApplyConfig(config)
+							logCloser, err := ApplyConfig(config)
 							require.NoError(t, err)
-							defer cleanupFn()
+							defer logCloser.Close()
 
 							Infof(ctx, "safe2 %s", "secret3")
 							Flush()

@@ -26,7 +26,7 @@ import (
 )
 
 // installSessionsFileSink configures the SESSIONS channel to have a file sink.
-func installSessionsFileSink(sc *TestLogScope, t *testing.T) func() {
+func installSessionsFileSink(sc *TestLogScope, t *testing.T) *Closer {
 	t.Helper()
 
 	// Make a configuration with a file sink for SESSIONS, which numbers the
@@ -49,11 +49,11 @@ func installSessionsFileSink(sc *TestLogScope, t *testing.T) func() {
 
 	// Apply the configuration.
 	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg)
+	logCloser, err := ApplyConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cleanup
+	return logCloser
 }
 
 func TestSecondaryLog(t *testing.T) {
@@ -61,7 +61,7 @@ func TestSecondaryLog(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
-	defer installSessionsFileSink(s, t)()
+	defer installSessionsFileSink(s, t).Close()
 
 	ctx := context.Background()
 
@@ -110,7 +110,7 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
-	defer installSessionsFileSink(s, t)()
+	defer installSessionsFileSink(s, t).Close()
 
 	// Log something on the secondary logger.
 	ctx := context.Background()
@@ -147,7 +147,7 @@ func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
 	s := ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
-	defer installSessionsFileSink(s, t)()
+	defer installSessionsFileSink(s, t).Close()
 
 	// Emit some logging and ensure the files gets created.
 	ctx := context.Background()

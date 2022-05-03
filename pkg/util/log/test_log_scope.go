@@ -33,9 +33,9 @@ import (
 // test, and enforces that logging output is not written to this
 // directory beyond the lifetime of the scope.
 type TestLogScope struct {
-	logDir    string
-	cleanupFn func()
-	previous  struct {
+	logDir   string
+	closer   *Closer
+	previous struct {
 		appliedConfig           string
 		stderrSinkInfoTemplate  sinkInfo
 		stderrSinkInfo          *sinkInfo
@@ -162,7 +162,7 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 
 	// Switch to the new configuration.
 	TestingResetActive()
-	sc.cleanupFn, err = ApplyConfig(cfg)
+	sc.closer, err = ApplyConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,10 +317,10 @@ func selectAllChannelsExceptStorageAndHealth() []logpb.Channel {
 // -show-logs.
 // To ensure that output always goes to one file, use
 // log.ScopeWithoutShowLogs().
-func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
+func (l *TestLogScope) SetupSingleFileLogging() *Closer {
 	if l.logDir == "" {
-		// No log directory: no-op.
-		return func() {}
+		// No log directory: closer will amount to a no-op.
+		return NewCloser()
 	}
 
 	// Set up a logging configuration with just one file sink.
@@ -340,11 +340,11 @@ func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
 
 	// Apply the configuration.
 	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg)
+	closer, err := ApplyConfig(cfg)
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error in predefined log config"))
 	}
-	return cleanup
+	return closer
 }
 
 // GetDirectory retrieves the log directory for this scope.
@@ -409,8 +409,8 @@ func (l *TestLogScope) Close(t tShim) {
 		}()
 	}
 
-	if l.cleanupFn != nil {
-		l.cleanupFn()
+	if l.closer != nil {
+		l.closer.Close()
 	}
 	logging.stderrSinkInfoTemplate = l.previous.stderrSinkInfoTemplate
 	logging.setChannelLoggers(l.previous.channels, l.previous.stderrSinkInfo)

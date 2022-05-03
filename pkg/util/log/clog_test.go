@@ -394,9 +394,9 @@ func TestGetLogReader(t *testing.T) {
 	// Validate and apply the config.
 	require.NoError(t, config.Validate(&sc.logDir))
 	TestingResetActive()
-	cleanupFn, err := ApplyConfig(config)
+	logCloser, err := ApplyConfig(config)
 	require.NoError(t, err)
-	defer cleanupFn()
+	defer logCloser.Close()
 
 	t.Logf("applied logging configuration:\n  %s\n",
 		strings.TrimSpace(strings.ReplaceAll(DescribeAppliedConfig(), "\n", "\n  ")))
@@ -600,11 +600,11 @@ func TestFd2Capture(t *testing.T) {
 		t.Fatal(err)
 	}
 	TestingResetActive()
-	cleanupFn, err := ApplyConfig(cfg)
+	logCloser, err := ApplyConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanupFn()
+	defer logCloser.Close()
 
 	Infof(context.Background(), "test")
 

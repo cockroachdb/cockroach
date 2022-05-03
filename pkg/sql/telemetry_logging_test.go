@@ -49,7 +49,7 @@ func (s *stubTime) TimeNow() time.Time {
 	return s.t
 }
 
-func installTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
+func installTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) *log.Closer {
 	// Enable logging channels.
 	log.TestingResetActive()
 	cfg := logconfig.DefaultConfig()
@@ -62,12 +62,12 @@ func installTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
 	if err := cfg.Validate(&dir); err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := log.ApplyConfig(cfg)
+	logCloser, err := log.ApplyConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return cleanup
+	return logCloser
 }
 
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
@@ -77,8 +77,8 @@ func TestTelemetryLogging(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := installTelemetryLogFileSink(sc, t)
-	defer cleanup()
+	logCloser := installTelemetryLogFileSink(sc, t)
+	defer logCloser.Close()
 
 	st := stubTime{}
 
