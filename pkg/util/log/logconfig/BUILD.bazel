@@ -19,6 +19,7 @@ go_library(
         "config.go",
         "doc.go",
         "export.go",
+        "shutdown.go",
         "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logconfig",
@@ -26,6 +27,7 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/util/log/logpb",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@in_gopkg_yaml_v2//:yaml_v2",
@@ -38,6 +40,7 @@ go_test(
     srcs = [
         "config_test.go",
         "export_test.go",
+        "shutdown_test.go",
         "validate_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -45,6 +48,7 @@ go_test(
     deps = [
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//assert",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

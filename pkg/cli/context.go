@@ -229,6 +229,7 @@ func setCliContextDefaults() {
 	cliCtx.allowUnencryptedClientPassword = false
 	cliCtx.logConfigInput = settableString{s: ""}
 	cliCtx.logConfig = logconfig.Config{}
+	cliCtx.logConfig.Shutdown = logconfig.NewLoggingShutdown()
 	cliCtx.ambiguousLogDir = false
 	// TODO(knz): Deprecated in v21.1. Remove this.
 	cliCtx.deprecatedLogOverrides.reset()

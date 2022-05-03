@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
@@ -29,8 +30,9 @@ func getMockBufferSync(
 ) (sink *bufferSink, mock *MockLogSink, cleanup func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctrl := gomock.NewController(t)
+	ls := logconfig.NewLoggingShutdown()
 	mock = NewMockLogSink(ctrl)
-	sink = newBufferSink(ctx, mock, maxStaleness, sizeTrigger, 2 /* maxInFlight */, errCallback)
+	sink = newBufferSink(ctx, mock, maxStaleness, sizeTrigger, 2 /* maxInFlight */, errCallback, ls)
 	cleanup = func() {
 		cancel()
 		ctrl.Finish()
@@ -197,28 +199,25 @@ func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctrl := gomock.NewController(t)
 	mock := NewMockLogSink(ctrl)
-	sink := newBufferSink(ctx, mock, 0 /*maxStaleness*/, 0 /*sizeTrigger*/, 2 /* maxInFlight */, nil /*errCallback*/)
+	ls := logconfig.NewLoggingShutdown()
+	ls.SetShutdownFn(func() {
+		cancel()
+	})
+	sink := newBufferSink(ctx, mock, 0 /*maxStaleness*/, 0 /*sizeTrigger*/, 2 /* maxInFlight */, nil /*errCallback*/, ls)
 	defer ctrl.Finish()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	defer wg.Wait()
 
 	// With no sizeTrigger, all 3 of the buffered calls to `sink.output()` after
 	// this will be concatenated and flushed as a single string to the underlying
 	// mock sink. This single call to `mock.output()` occurs when we signal on the
-	// `ctx.Done()` channel with the `cancel()` function.
-	//
-	// Expect this call, and signal the wait group once it happens. We use the
-	// wait group because flushing to the mock sink happens asynchronously.
+	// `ctx.Done()` channel within the shutdown function set on the `logconfig.LoggingShutdown`
+	// provided to the bufferSink.
 	mock.EXPECT().
-		output(gomock.Eq([]byte("test1\ntest2\ntest3")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
-		Do(addArgs(wg.Done))
+		output(gomock.Eq([]byte("test1\ntest2\ntest3")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)})
 
 	require.NoError(t, sink.output([]byte("test1"), sinkOutputOptions{}))
 	require.NoError(t, sink.output([]byte("test2"), sinkOutputOptions{}))
 	require.NoError(t, sink.output([]byte("test3"), sinkOutputOptions{}))
-	cancel()
+	ls.SignalAndWaitForShutdown()
 }
 
 type sinkOutputOptionsMatcher struct {
