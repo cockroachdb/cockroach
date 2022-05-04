@@ -16,7 +16,7 @@ import { JobsTable, JobsTableProps } from "src/views/jobs/index";
 import {
   allJobsFixture,
   retryRunningJobFixture,
-} from "src/views/jobs/jobTable.fixture";
+} from "src/views/jobs/jobsTable.fixture";
 import { refreshJobs } from "src/redux/apiReducers";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
