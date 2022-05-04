@@ -105,6 +105,14 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		showLogs      = mustGetFlagBool(cmd, showLogsFlag)
 		count         = mustGetFlagInt(cmd, countFlag)
 		vModule       = mustGetFlagString(cmd, vModuleFlag)
+
+		// These are tests that require access to another directory for
+		// --rewrite.
+		extraRewritablePaths = []struct{ pkg, path string }{
+			{"pkg/ccl/logictestccl", "pkg/sql/logictest"},
+			{"pkg/sql/opt/memo", "pkg/sql/opt/testutils/opttester/testfixtures"},
+			{"pkg/sql/opt/xform", "pkg/sql/opt/testutils/opttester/testfixtures"},
+		}
 	)
 
 	var disableTestSharding bool
@@ -175,11 +183,13 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		for _, testTarget := range testTargets {
 			dir := getDirectoryFromTarget(testTarget)
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
-			if strings.Contains(testTarget, "pkg/ccl/logictestccl") {
-				// The ccl logictest target shares the testdata directory with the base
-				// logictest target -- make an allowance explicitly for that.
-				args = append(args, fmt.Sprintf("--sandbox_writable_path=%s",
-					filepath.Join(workspace, "pkg/sql/logictest")))
+			for _, extraRewritablePath := range extraRewritablePaths {
+				if strings.Contains(testTarget, extraRewritablePath.pkg) {
+					// Some targets need special handling if they rewrite outside of
+					// their own testdata directory.
+					args = append(args, fmt.Sprintf("--sandbox_writable_path=%s",
+						filepath.Join(workspace, extraRewritablePath.path)))
+				}
 			}
 		}
 	}
