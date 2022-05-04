@@ -665,10 +665,7 @@ func (s *Server) SetupConn(
 		return ConnectionHandler{}, err
 	}
 
-	ex := s.newConnExecutor(
-		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
-		s.sqlStats.GetApplicationStats(sd.ApplicationName),
-	)
+	ex := s.newConnExecutor(ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics, s.sqlStats.GetApplicationStats(sd.ApplicationName), nil)
 	return ConnectionHandler{ex}, nil
 }
 
@@ -821,6 +818,7 @@ func (s *Server) newConnExecutor(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
+	descsCollection *descs.Collection,
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -922,7 +920,11 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	if descsCollection != nil {
+		ex.extraTxnState.descCollection = *descsCollection
+	} else {
+		ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	}
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
@@ -964,16 +966,9 @@ func (s *Server) newConnExecutorWithTxn(
 	txn *kv.Txn,
 	syntheticDescs []catalog.Descriptor,
 	applicationStats sqlstats.ApplicationStats,
+	descCollection *descs.Collection,
 ) *connExecutor {
-	ex := s.newConnExecutor(
-		ctx,
-		sdMutIterator,
-		stmtBuf,
-		clientComm,
-		memMetrics,
-		srvMetrics,
-		applicationStats,
-	)
+	ex := s.newConnExecutor(ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, srvMetrics, applicationStats, descCollection)
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -232,8 +233,12 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			applicationStats,
-		)
+			nil)
 	} else {
+		var descCollection *descs.Collection
+		if ie.extraTxnState != nil {
+			descCollection = ie.extraTxnState.descCollection
+		}
 		ex = ie.s.newConnExecutorWithTxn(
 			ctx,
 			sdMutIterator,
@@ -245,6 +250,7 @@ func (ie *InternalExecutor) initConnEx(
 			txn,
 			ie.syntheticDescriptors,
 			applicationStats,
+			descCollection,
 		)
 	}
 
