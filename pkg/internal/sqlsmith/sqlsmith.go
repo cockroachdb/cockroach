@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/lib/pq/oid"
 )
 
 // sqlsmith-go
@@ -68,6 +69,7 @@ type Smither struct {
 	nameCounts       map[string]int
 	activeSavepoints []string
 	types            *typeInfo
+	functions        map[tree.FunctionClass]map[oid.Oid][]function
 
 	stmtWeights, alterWeights          []statementWeight
 	stmtSampler, alterSampler          *statementSampler
@@ -82,6 +84,7 @@ type Smither struct {
 	disableImpureFns   bool
 	disableLimits      bool
 	disableWindowFuncs bool
+	disableImpureFuncs bool
 	simpleDatums       bool
 	avoidConsts        bool
 	outputSort         bool
@@ -122,6 +125,7 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	for _, opt := range opts {
 		opt.Apply(s)
 	}
+	s.functions = functions(s)
 	s.stmtSampler = newWeightedStatementSampler(s.stmtWeights, rnd.Int63())
 	s.alterSampler = newWeightedStatementSampler(s.alterWeights, rnd.Int63())
 	s.tableExprSampler = newWeightedTableExprSampler(s.tableExprWeights, rnd.Int63())
@@ -238,6 +242,24 @@ var DisableMutations = simpleOption("disable mutations", func(s *Smither) {
 	s.stmtWeights = nonMutatingStatements
 	s.tableExprWeights = nonMutatingTableExprs
 })
+
+// DisableImpureFuncs causes the Smither to not emit statements that contain
+// impure builtins (aka builtins that don't always return the same result).
+var DisableImpureFuncs = simpleOption("disable impure funcs", func(s *Smither) {
+	s.disableImpureFuncs = true
+})
+
+// SetComplexity configures the Smither's complexity, in other words the
+// likelihood that at any given node the Smither will recurse and create a
+// deeper query true. The default is .2.
+func SetComplexity(complexity float64) SmitherOption {
+	return option{
+		name: "set complexity (likelihood of making a deeper random tree)",
+		apply: func(s *Smither) {
+			s.complexity = complexity
+		},
+	}
+}
 
 // DisableDDLs causes the Smither to not emit statements that change table
 // schema (CREATE, DROP, ALTER, etc.)
