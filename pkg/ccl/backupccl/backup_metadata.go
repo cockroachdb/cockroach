@@ -33,15 +33,16 @@ import (
 )
 
 const (
-	metadataSSTName  = "metadata.sst"
-	fileInfoPath     = "fileinfo.sst"
-	sstBackupKey     = "backup"
-	sstDescsPrefix   = "desc/"
-	sstFilesPrefix   = "file/"
-	sstNamesPrefix   = "name/"
-	sstSpansPrefix   = "span/"
-	sstStatsPrefix   = "stats/"
-	sstTenantsPrefix = "tenant/"
+	cabinetDirectory  = "data/cabinets"
+	fileInfoPath      = "fileinfo.sst"
+	metadataSSTName   = "metadata.sst"
+	sstBackupKey      = "backup"
+	sstCabinetsPrefix = "cabinet/"
+	sstDescsPrefix    = "desc/"
+	sstNamesPrefix    = "name/"
+	sstSpansPrefix    = "span/"
+	sstStatsPrefix    = "stats/"
+	sstTenantsPrefix  = "tenant/"
 )
 
 func writeBackupMetadataSST(
@@ -119,11 +120,11 @@ func constructMetadataSST(
 		return err
 	}
 
-	if err := writeDescsToMetadata(ctx, sst, m); err != nil {
+	if err := writeCabinetsToMetadata(ctx, sst, m); err != nil {
 		return err
 	}
 
-	if err := writeFilesToMetadata(ctx, sst, m, dest, enc, fileInfoPath); err != nil {
+	if err := writeDescsToMetadata(ctx, sst, m); err != nil {
 		return err
 	}
 
@@ -223,49 +224,18 @@ func writeDescsToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupM
 	return nil
 }
 
-func writeFilesToMetadata(
-	ctx context.Context,
-	sst storage.SSTWriter,
-	m *BackupManifest,
-	dest cloud.ExternalStorage,
-	enc *jobspb.BackupEncryptionOptions,
-	fileInfoPath string,
-) error {
-	w, err := makeWriter(ctx, dest, fileInfoPath, enc)
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-	fileSST := storage.MakeBackupSSTWriter(ctx, dest.Settings(), w)
-	defer fileSST.Close()
-
-	// Sort and write all of the files into a single file info SST.
-	sort.Slice(m.Files, func(i, j int) bool {
-		cmp := m.Files[i].Span.Key.Compare(m.Files[j].Span.Key)
-		return cmp < 0 || (cmp == 0 && strings.Compare(m.Files[i].Path, m.Files[j].Path) < 0)
+func writeCabinetsToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupManifest) error {
+	sort.Slice(m.CabinetIDs, func(i, j int) bool {
+		return m.CabinetIDs[i] < m.CabinetIDs[j]
 	})
 
-	for _, i := range m.Files {
-		b, err := protoutil.Marshal(&i)
-		if err != nil {
-			return err
-		}
-		if err := fileSST.PutUnversioned(encodeFileSSTKey(i.Span.Key, i.Path), b); err != nil {
-			return err
-		}
-	}
-
-	err = fileSST.Finish()
-	if err != nil {
-		return err
-	}
-	err = w.Close()
-	if err != nil {
-		return err
-	}
-
 	// Write the file info into the main metadata SST.
-	return sst.PutUnversioned(encodeFilenameSSTKey(fileInfoPath), nil)
+	for _, i := range m.CabinetIDs {
+		if err := sst.PutUnversioned(encodeCabinetSSTKey(cabinetPathFromID(i)), nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type name struct {
@@ -460,30 +430,12 @@ func decodeDescSSTKey(key roachpb.Key) (descpb.ID, error) {
 	return descpb.ID(id), err
 }
 
-func encodeFileSSTKey(spanStart roachpb.Key, filename string) roachpb.Key {
-	buf := make([]byte, 0)
-	buf = encoding.EncodeBytesAscending(buf, spanStart)
-	return roachpb.Key(encoding.EncodeStringAscending(buf, filename))
+func encodeCabinetSSTKey(filename string) roachpb.Key {
+	return encoding.EncodeStringAscending([]byte(sstCabinetsPrefix), filename)
 }
 
-func encodeFilenameSSTKey(filename string) roachpb.Key {
-	return encoding.EncodeStringAscending([]byte(sstFilesPrefix), filename)
-}
-
-func decodeUnsafeFileSSTKey(key roachpb.Key) (roachpb.Key, string, error) {
-	key, spanStart, err := encoding.DecodeBytesAscending(key, nil)
-	if err != nil {
-		return nil, "", err
-	}
-	_, filename, err := encoding.DecodeUnsafeStringAscending(key, nil)
-	if err != nil {
-		return nil, "", err
-	}
-	return roachpb.Key(spanStart), filename, err
-}
-
-func decodeUnsafeFileInfoSSTKey(key roachpb.Key) (string, error) {
-	key, err := deprefix(key, sstFilesPrefix)
+func decodeUnsafeCabinetSSTKey(key roachpb.Key) (string, error) {
+	key, err := deprefix(key, sstCabinetsPrefix)
 	if err != nil {
 		return "", err
 	}
@@ -585,51 +537,6 @@ func pbBytesToJSON(in []byte, msg protoutil.Message) (json.JSON, error) {
 	return j, nil
 }
 
-func debugDumpFileSST(
-	ctx context.Context,
-	store cloud.ExternalStorage,
-	fileInfoPath string,
-	enc *jobspb.BackupEncryptionOptions,
-	out func(rawKey, readableKey string, value json.JSON) error,
-) error {
-	var encOpts *roachpb.FileEncryptionOptions
-	if enc != nil {
-		key, err := getEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
-		if err != nil {
-			return err
-		}
-		encOpts = &roachpb.FileEncryptionOptions{Key: key}
-	}
-	iter, err := storageccl.ExternalSSTReader(ctx, store, fileInfoPath, encOpts)
-	if err != nil {
-		return err
-	}
-	defer iter.Close()
-	for iter.SeekGE(storage.MVCCKey{}); ; iter.Next() {
-		ok, err := iter.Valid()
-		if err != nil {
-			return err
-		}
-		if !ok {
-			break
-		}
-		k := iter.UnsafeKey()
-		spanStart, path, err := decodeUnsafeFileSSTKey(k.Key)
-		if err != nil {
-			return err
-		}
-		f, err := pbBytesToJSON(iter.UnsafeValue(), &BackupManifest_File{})
-		if err != nil {
-			return err
-		}
-		if err := out(k.String(), fmt.Sprintf("file %s (%s)", path, spanStart.String()), f); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // DebugDumpMetadataSST is for debugging a metadata SST.
 func DebugDumpMetadataSST(
 	ctx context.Context,
@@ -688,15 +595,12 @@ func DebugDumpMetadataSST(
 				return err
 			}
 
-		case bytes.HasPrefix(k.Key, []byte(sstFilesPrefix)):
-			p, err := decodeUnsafeFileInfoSSTKey(k.Key)
+		case bytes.HasPrefix(k.Key, []byte(sstCabinetsPrefix)):
+			p, err := decodeUnsafeCabinetSSTKey(k.Key)
 			if err != nil {
 				return err
 			}
-			if err := out(k.String(), fmt.Sprintf("file info @ %s", p), nil); err != nil {
-				return err
-			}
-			if err := debugDumpFileSST(ctx, store, p, enc, out); err != nil {
+			if err := out(k.String(), fmt.Sprintf("cabinet @ %s", p), nil); err != nil {
 				return err
 			}
 		case bytes.HasPrefix(k.Key, []byte(sstNamesPrefix)):
@@ -874,88 +778,53 @@ func (si *SpanIterator) Next(span *roachpb.Span) bool {
 	return false
 }
 
-// FileIterator is a simple iterator to iterate over stats.TableStatisticProtos.
-type FileIterator struct {
-	mergedIterator   storage.SimpleMVCCIterator
-	backingIterators []storage.SimpleMVCCIterator
-	err              error
+// CabinetIterator is a simple iterator to iterate over cabinet file paths.
+type CabinetIterator struct {
+	backing bytesIter
+	err     error
 }
 
-// FileIter creates a new FileIterator for the backup metadata.
-func (b *BackupMetadata) FileIter(ctx context.Context) FileIterator {
-	fileInfoIter := makeBytesIter(ctx, b.store, b.filename, []byte(sstFilesPrefix), b.enc, false)
-	defer fileInfoIter.close()
-
-	var iters []storage.SimpleMVCCIterator
-	var encOpts *roachpb.FileEncryptionOptions
-	if b.enc != nil {
-		key, err := getEncryptionKey(ctx, b.enc, b.store.Settings(), b.store.ExternalIOConf())
-		if err != nil {
-			return FileIterator{err: err}
-		}
-		encOpts = &roachpb.FileEncryptionOptions{Key: key}
+// CabinetIter creates a new CabinetIterator for the backup metadata.
+func (b *BackupMetadata) CabinetIter(ctx context.Context) CabinetIterator {
+	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstCabinetsPrefix), b.enc, false)
+	return CabinetIterator{
+		backing: backing,
 	}
-
-	result := resultWrapper{}
-	for fileInfoIter.next(&result) {
-		path, err := decodeUnsafeFileInfoSSTKey(result.key.Key)
-		if err != nil {
-			break
-		}
-
-		iter, err := storageccl.ExternalSSTReader(ctx, b.store, path, encOpts)
-		if err != nil {
-			return FileIterator{err: err}
-		}
-		iters = append(iters, iter)
-	}
-
-	if fileInfoIter.err() != nil {
-		return FileIterator{err: fileInfoIter.err()}
-	}
-
-	mergedIter := storage.MakeMultiIterator(iters)
-	mergedIter.SeekGE(storage.MVCCKey{})
-	return FileIterator{mergedIterator: mergedIter, backingIterators: iters}
 }
 
 // Close closes the iterator.
-func (fi *FileIterator) Close() {
-	for _, it := range fi.backingIterators {
-		it.Close()
-	}
-	fi.mergedIterator = nil
-	fi.backingIterators = fi.backingIterators[:0]
+func (ci *CabinetIterator) Close() {
+	ci.backing.close()
 }
 
 // Err returns the iterator's error.
-func (fi *FileIterator) Err() error {
-	return fi.err
+func (ci *CabinetIterator) Err() error {
+	if ci.err != nil {
+		return ci.err
+	}
+	return ci.backing.err()
 }
 
-// Next retrieves the next file in the iterator.
+// Next retrieves the next descriptor in the iterator.
 //
-// Next returns true if next element was successfully unmarshalled into file,
+// Next returns true if next element was successfully unmarshalled into desc ,
 // and false if there are no more elements or if an error was encountered. When
 // Next returns false, the user should call the Err method to verify the
 // existence of an error.
-func (fi *FileIterator) Next(file *BackupManifest_File) bool {
-	if fi.err != nil {
-		return false
-	}
+func (ci *CabinetIterator) Next(cabinetPath *string) bool {
+	wrapper := resultWrapper{}
 
-	valid, err := fi.mergedIterator.Valid()
-	if err != nil || !valid {
-		fi.err = err
+	ok := ci.backing.next(&wrapper)
+	if !ok {
 		return false
 	}
-	err = protoutil.Unmarshal(fi.mergedIterator.UnsafeValue(), file)
+	var err error
+	*cabinetPath, err = decodeUnsafeCabinetSSTKey(wrapper.key.Key)
 	if err != nil {
-		fi.err = err
+		ci.err = err
 		return false
 	}
 
-	fi.mergedIterator.Next()
 	return true
 }
 

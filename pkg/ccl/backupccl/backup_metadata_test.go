@@ -103,7 +103,7 @@ func checkMetadata(
 	if m.StartTime != (hlc.Timestamp{}) {
 		checkIntroducedSpans(ctx, t, m, bm)
 	}
-	checkFiles(ctx, t, m, bm)
+	checkCabinets(ctx, t, m, bm)
 	checkTenants(ctx, t, m, bm)
 	checkStats(ctx, t, store, m, bm)
 }
@@ -161,20 +161,25 @@ func checkDescriptorChanges(
 	require.Equal(t, m.DescriptorChanges, metaRevs)
 }
 
-func checkFiles(ctx context.Context, t *testing.T, m *BackupManifest, bm *BackupMetadata) {
-	var metaFiles []BackupManifest_File
-	var file BackupManifest_File
-	it := bm.FileIter(ctx)
+func checkCabinets(ctx context.Context, t *testing.T, m *BackupManifest, bm *BackupMetadata) {
+	var metaCabinets []string
+	var cabinetPath string
+	it := bm.CabinetIter(ctx)
 	defer it.Close()
 
-	for it.Next(&file) {
-		metaFiles = append(metaFiles, file)
+	for it.Next(&cabinetPath) {
+		metaCabinets = append(metaCabinets, cabinetPath)
 	}
 	if it.Err() != nil {
 		t.Fatal(it.Err())
 	}
 
-	require.Equal(t, m.Files, metaFiles)
+	var expectedCabinets []string
+	for _, ID := range m.CabinetIDs {
+		expectedCabinets = append(expectedCabinets, cabinetPathFromID(ID))
+	}
+	require.Greater(t, len(metaCabinets), 0)
+	require.Equal(t, expectedCabinets, metaCabinets)
 }
 
 func checkSpans(ctx context.Context, t *testing.T, m *BackupManifest, bm *BackupMetadata) {

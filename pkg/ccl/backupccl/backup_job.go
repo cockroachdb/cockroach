@@ -122,6 +122,7 @@ func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 func backup(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
+	mem *mon.BoundAccount,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
 	db *kv.DB,
@@ -211,6 +212,18 @@ func backup(
 		}
 	}
 
+	sinkConf := cabinetSSTSinkConf{
+		id:       execCtx.ExecCfg().NodeID.SQLInstanceID(),
+		enc:      encryption,
+		settings: &settings.SV,
+	}
+
+	cabinetSink, err := makeCabinetSSTSink(ctx, sinkConf, defaultStore, mem)
+	if err != nil {
+		return roachpb.RowCount{}, err
+	}
+	defer cabinetSink.close()
+
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	checkpointLoop := func(ctx context.Context) error {
 		// When a processor is done exporting a span, it will send a progress update
@@ -226,8 +239,17 @@ func backup(
 				backupManifest.RevisionStartTime = progDetails.RevStartTime
 			}
 			for _, file := range progDetails.Files {
+				// TODO(benbardin): Stop writing these once Restore no longer needs them.
 				backupManifest.Files = append(backupManifest.Files, file)
+
 				backupManifest.EntryCounts.Add(file.EntryCounts)
+				cabinetID, err := cabinetSink.push(file)
+				if err != nil {
+					return err
+				}
+				if cabinetID != nil {
+					backupManifest.CabinetIDs = append(backupManifest.CabinetIDs, *cabinetID)
+				}
 				numBackedUpFiles++
 			}
 
@@ -242,9 +264,15 @@ func backup(
 					RevisionStartTime: backupManifest.RevisionStartTime,
 				})
 
+				cabinetID, err := cabinetSink.writeQueue()
+				if err != nil {
+					return err
+				}
+				backupManifest.CabinetIDs = append(backupManifest.CabinetIDs, cabinetID)
+
 				lastCheckpoint = timeutil.Now()
 
-				err := writeBackupManifestCheckpoint(
+				err = writeBackupManifestCheckpoint(
 					ctx, defaultURI, encryption, backupManifest, execCtx.ExecCfg(), execCtx.User(),
 				)
 				if err != nil {
@@ -256,6 +284,11 @@ func backup(
 				}
 			}
 		}
+		cabinetID, err := cabinetSink.writeQueue()
+		if err != nil {
+			return err
+		}
+		backupManifest.CabinetIDs = append(backupManifest.CabinetIDs, cabinetID)
 		return nil
 	}
 
@@ -358,7 +391,6 @@ func backup(
 			log.Warningf(ctx, "%+v", err)
 		}
 	}
-
 	return backupManifest.EntryCounts, nil
 }
 
@@ -568,6 +600,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		res, err = backup(
 			ctx,
 			p,
+			&mem,
 			details.URI,
 			details.URIsByLocalityKV,
 			p.ExecCfg().DB,

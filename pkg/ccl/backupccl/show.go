@@ -503,10 +503,9 @@ func checkBackupFiles(
 			}
 		}()
 		// Check metadata files. Note: we do not check locality aware backup
-		// metadata files ( prefixed with `backupPartitionDescriptorPrefix`) , as
+		// metadata files ( prefixed with `backupPartitionDescriptorPrefix`), as
 		// they're validated in resolveBackupManifests.
 		for _, metaFile := range []string{
-			fileInfoPath,
 			metadataSSTName,
 			backupManifestName + backupManifestChecksumSuffix} {
 			if _, err := defaultStore.Size(ctx, metaFile); err != nil {
@@ -514,6 +513,21 @@ func checkBackupFiles(
 					info.defaultURIs[layer], metaFile)
 			}
 		}
+		// Check for cabinet files (v22.2+) OR fileinfo.sst (v22.1).
+		// This will fail for backups from v21.2 and earlier, but these versions
+		// are no longer supported anyway.
+		var cabinetFiles []string
+		err = defaultStore.List(ctx, cabinetDirectory, "", func(f string) error {
+			cabinetFiles = append(cabinetFiles, f)
+			return nil
+		})
+		if err != nil || len(cabinetFiles) == 0 {
+			if _, err := defaultStore.Size(ctx, fileInfoPath); err != nil {
+				return nil, errors.Wrapf(err, "Expected one of %s* or %s in %s, found neither.",
+					sstCabinetsPrefix, fileInfoPath, info.defaultURIs[layer])
+			}
+		}
+
 		// Check stat files.
 		for _, statFile := range info.manifests[layer].StatisticsFilenames {
 			if _, err := defaultStore.Size(ctx, statFile); err != nil {

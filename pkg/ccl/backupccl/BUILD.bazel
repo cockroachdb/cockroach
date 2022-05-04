@@ -15,6 +15,7 @@ go_library(
         "backup_processor.go",
         "backup_processor_planning.go",
         "backup_span_coverage.go",
+        "cabinet_sst_sink.go",
         "create_scheduled_backup.go",
         "encryption.go",
         "file_sst_sink.go",

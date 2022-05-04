@@ -85,7 +85,18 @@ message BackupManifest {
 
   repeated DescriptorRevision descriptor_changes = 16  [(gogoproto.nullable) = false];
 
+  // TODO(benbardin): Deprecate when Backup and Restore no longer use this.
   repeated File files = 4 [(gogoproto.nullable) = false];
+
+  // A "cabinet" is an SST containing File objects.
+  // A cabinet ID can be interpolated to determine the path to that cabinet,
+  // using cabinetPathFromID() in cabinet_sst_sink.go
+  // At the end of a backup job, these paths are written to the backup
+  // metadata table.
+  // In the near future, we will store this information in a jobs state table
+  // and remove it from the manifest entirely.
+  repeated int64 cabinet_ids = 27 [(gogoproto.customname) = "CabinetIDs"];
+
   repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
   repeated sql.sqlbase.TenantInfoWithUsage tenants = 26 [(gogoproto.nullable) = false];
   // This field is deprecated; it is only retained to allow restoring older
@@ -125,7 +136,7 @@ message BackupManifest {
   int32 descriptor_coverage = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];
 
-  // NEXT ID: 27
+  // NEXT ID: 28
 }
 
 message BackupPartitionDescriptor{

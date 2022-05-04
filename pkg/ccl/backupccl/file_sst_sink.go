@@ -31,7 +31,7 @@ import (
 	"github.com/kr/pretty"
 )
 
-type sstSinkConf struct {
+type fileSSTSinkConf struct {
 	progCh   chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 	enc      *roachpb.FileEncryptionOptions
 	id       base.SQLInstanceID
@@ -40,9 +40,10 @@ type sstSinkConf struct {
 
 type fileSSTSink struct {
 	dest cloud.ExternalStorage
-	conf sstSinkConf
+	conf fileSSTSinkConf
 
 	queue []exportedSpan
+
 	// queueCap is the maximum byte size that the queue can grow to.
 	queueCap int64
 	// queueSize is the current byte size of the queue.
@@ -74,7 +75,10 @@ type fileSSTSink struct {
 }
 
 func makeFileSSTSink(
-	ctx context.Context, conf sstSinkConf, dest cloud.ExternalStorage, backupMem *mon.BoundAccount,
+	ctx context.Context,
+	conf fileSSTSinkConf,
+	dest cloud.ExternalStorage,
+	backupMem *mon.BoundAccount,
 ) (*fileSSTSink, error) {
 	s := &fileSSTSink{conf: conf, dest: dest}
 	s.memAcc.ba = backupMem

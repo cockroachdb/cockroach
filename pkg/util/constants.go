@@ -77,6 +77,18 @@ func ConstantWithMetamorphicTestValue(name string, defaultValue, metamorphicValu
 	return defaultValue
 }
 
+// ConstantWithTestValue will always return a specific different value in test builds.
+func ConstantWithTestValue(name string, defaultValue, testValue int) int {
+	var value int
+	if buildutil.CrdbTestBuild && !disableMetamorphicTesting {
+		value = testValue
+		fmt.Fprintf(os.Stderr, "initialized constant %q with value %v\n", name, value)
+	} else {
+		value = defaultValue
+	}
+	return value
+}
+
 // rng is initialized to a rand.Rand if crdbTestBuild is enabled.
 var rng struct {
 	r *rand.Rand

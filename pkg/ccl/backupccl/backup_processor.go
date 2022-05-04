@@ -78,11 +78,10 @@ var (
 		128<<20,
 	).WithPublic()
 
-	defaultSmallFileBuffer = util.ConstantWithMetamorphicTestRange(
+	defaultSmallFileBuffer = util.ConstantWithTestValue(
 		"backup-merge-file-buffer-size",
 		128<<20, /* defaultValue */
-		1<<20,   /* metamorphic min */
-		16<<20,  /* metamorphic max */
+		16<<20,  /* testValue */
 	)
 	smallFileBuffer = settings.RegisterByteSizeSetting(
 		settings.TenantWritable,
@@ -559,7 +558,7 @@ func runBackupProcessor(
 	// ssts from it into an fileSSTSink responsible for actually writing their
 	// contents to cloud storage.
 	grp.GoCtx(func(ctx context.Context) error {
-		sinkConf := sstSinkConf{
+		sinkConf := fileSSTSinkConf{
 			id:       flowCtx.NodeID.SQLInstanceID(),
 			enc:      spec.Encryption,
 			progCh:   progCh,
@@ -571,26 +570,26 @@ func runBackupProcessor(
 			return err
 		}
 
-		sink, err := makeFileSSTSink(ctx, sinkConf, storage, memAcc)
+		fileSink, err := makeFileSSTSink(ctx, sinkConf, storage, memAcc)
 		if err != nil {
 			return err
 		}
 
 		defer func() {
-			err := sink.Close()
+			err := fileSink.Close()
 			err = errors.CombineErrors(storage.Close(), err)
 			if err != nil {
-				log.Warningf(ctx, "failed to close backup sink(s): % #v", pretty.Formatter(err))
+				log.Warningf(ctx, "failed to close backup fileSink(s): % #v", pretty.Formatter(err))
 			}
 		}()
 
 		for returnedSpans := range returnedSpansChan {
 			returnedSpans.metadata.LocalityKV = destLocalityKV
-			if err := sink.push(ctx, returnedSpans); err != nil {
+			if err := fileSink.push(ctx, returnedSpans); err != nil {
 				return err
 			}
 		}
-		return sink.flush(ctx)
+		return fileSink.flush(ctx)
 	})
 
 	return grp.Wait()
