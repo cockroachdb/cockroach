@@ -62,6 +62,9 @@ func IsExpectedRelocateError(err error) bool {
 		"cannot add placeholder",
 		"removing leaseholder not allowed since it isn't the Raft leader",
 		"could not find a better lease transfer target for",
+		// NB: Importing kvserver to use `errCannotRemoveLearnerWhileSnapshotInFlight`
+		// creates a dependency cycle.
+		"cannot remove learner while snapshot is in flight", // https://github.com/cockroachdb/cockroach/issues/79887
 	}
 	pattern := "(" + strings.Join(allowlist, "|") + ")"
 	return testutils.IsError(err, pattern)
