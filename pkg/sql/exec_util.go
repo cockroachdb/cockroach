@@ -1314,6 +1314,11 @@ type ExecutorConfig struct {
 	// This is currently only for builtin functions where we need to execute sql.
 	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
 
+	// TODO(janexing): This comment is messy!!!
+	// An incomplete internal executor, it cannot be used to execute queries without
+	// binded to session data / txn state etc.
+	InternalExecutorProto InternalExecutorProto
+
 	// ConsistencyChecker is to generate the results in calls to
 	// crdb_internal.check_consistency.
 	ConsistencyChecker eval.ConsistencyCheckRunner

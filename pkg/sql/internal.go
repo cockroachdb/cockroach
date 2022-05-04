@@ -41,6 +41,47 @@ import (
 
 var _ sqlutil.InternalExecutor = &InternalExecutor{}
 
+// InternalExecutorProto is an internalExecutor that should not work!!!
+type InternalExecutorProto struct {
+	ctx        context.Context
+	memMetrics MemoryMetrics
+	settings   *cluster.Settings
+	server     *Server
+}
+
+func MakeInternalExecutorProto(
+	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
+) InternalExecutorProto {
+	return InternalExecutorProto{
+		ctx:        ctx,
+		memMetrics: memMetrics,
+		settings:   settings,
+		server:     s,
+	}
+}
+
+// It's bad to place here. We should advocate using
+// MakeSessionBoundInternalExecutorFromProtoUnderPlanner whenever there's a
+// planner involved.
+func MakeSessionBoundedInternalExecutorFromProto(
+	ieProto InternalExecutorProto, sessionData *sessiondata.SessionData,
+) sqlutil.InternalExecutor {
+	ie := MakeInternalExecutor(ieProto.ctx, ieProto.server, ieProto.memMetrics, ieProto.settings)
+	ie.SetSessionData(sessionData)
+	return &ie
+}
+
+func makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+	ieProto InternalExecutorProto,
+	sessionData *sessiondata.SessionData,
+	extraTxnState extraTxnStateUnderPlanner,
+) sqlutil.InternalExecutor {
+	ie := MakeInternalExecutor(ieProto.ctx, ieProto.server, ieProto.memMetrics, ieProto.settings)
+	ie.SetSessionData(sessionData)
+	ie.SetExtraTxnState(extraTxnState)
+	return &ie
+}
+
 // InternalExecutor can be used internally by code modules to execute SQL
 // statements without needing to open a SQL connection.
 //
@@ -72,6 +113,8 @@ type InternalExecutor struct {
 	//
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
+
+	extraTxnState *extraTxnStateUnderPlanner
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -124,6 +167,12 @@ func MakeInternalExecutor(
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
 	ie.s.populateMinimalSessionData(sessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
+}
+
+// SetExtraTxnState is to store the information from the parent transactions
+// in an internal executor. Currently, it only passes the descriptor collection.
+func (ie *InternalExecutor) SetExtraTxnState(ts extraTxnStateUnderPlanner) {
+	ie.extraTxnState.descCollection = ts.descCollection
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It

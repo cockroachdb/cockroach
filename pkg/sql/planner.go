@@ -902,3 +902,8 @@ func (p *planner) QueryIteratorEx(
 	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 	return rows.(eval.InternalRows), err
 }
+
+// note: partly referring to conn_executor.go -> HasAdminRoleCache.
+type extraTxnStateUnderPlanner struct {
+	descCollection *descs.Collection
+}
