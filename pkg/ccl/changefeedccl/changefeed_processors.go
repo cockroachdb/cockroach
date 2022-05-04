@@ -28,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -695,129 +693,6 @@ func newKVEventToRowConsumer(
 		knobs:                knobs,
 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 		topicNamer:           topicNamer,
-	}
-}
-
-type tableDescriptorTopic struct {
-	tableDesc           catalog.TableDescriptor
-	spec                jobspb.ChangefeedTargetSpecification
-	nameComponentsCache []string
-	identifierCache     TopicIdentifier
-}
-
-// GetNameComponents implements the TopicDescriptor interface
-func (tdt *tableDescriptorTopic) GetNameComponents() []string {
-	if len(tdt.nameComponentsCache) == 0 {
-		tdt.nameComponentsCache = []string{tdt.spec.StatementTimeName}
-	}
-	return tdt.nameComponentsCache
-}
-
-// GetTopicIdentifier implements the TopicDescriptor interface
-func (tdt *tableDescriptorTopic) GetTopicIdentifier() TopicIdentifier {
-	if tdt.identifierCache.TableID == 0 {
-		tdt.identifierCache = TopicIdentifier{
-			TableID: tdt.tableDesc.GetID(),
-		}
-	}
-	return tdt.identifierCache
-}
-
-// GetVersion implements the TopicDescriptor interface
-func (tdt *tableDescriptorTopic) GetVersion() descpb.DescriptorVersion {
-	return tdt.tableDesc.GetVersion()
-}
-
-// GetTargetSpecification implements the TopicDescriptor interface
-func (tdt *tableDescriptorTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
-	return tdt.spec
-}
-
-var _ TopicDescriptor = &tableDescriptorTopic{}
-
-type columnFamilyTopic struct {
-	tableDesc           catalog.TableDescriptor
-	familyDesc          descpb.ColumnFamilyDescriptor
-	spec                jobspb.ChangefeedTargetSpecification
-	nameComponentsCache []string
-	identifierCache     TopicIdentifier
-}
-
-// GetNameComponents implements the TopicDescriptor interface
-func (cft *columnFamilyTopic) GetNameComponents() []string {
-	if len(cft.nameComponentsCache) == 0 {
-		cft.nameComponentsCache = []string{
-			cft.spec.StatementTimeName,
-			cft.familyDesc.Name,
-		}
-	}
-	return cft.nameComponentsCache
-}
-
-// GetTopicIdentifier implements the TopicDescriptor interface
-func (cft *columnFamilyTopic) GetTopicIdentifier() TopicIdentifier {
-	if cft.identifierCache.TableID == 0 {
-		cft.identifierCache = TopicIdentifier{
-			TableID:  cft.tableDesc.GetID(),
-			FamilyID: cft.familyDesc.ID,
-		}
-	}
-	return cft.identifierCache
-}
-
-// GetVersion implements the TopicDescriptor interface
-func (cft *columnFamilyTopic) GetVersion() descpb.DescriptorVersion {
-	return cft.tableDesc.GetVersion()
-}
-
-// GetTargetSpecification implements the TopicDescriptor interface
-func (cft *columnFamilyTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
-	return cft.spec
-}
-
-var _ TopicDescriptor = &columnFamilyTopic{}
-
-type noTopic struct{}
-
-func (n noTopic) GetNameComponents() []string {
-	return []string{}
-}
-
-func (n noTopic) GetTopicIdentifier() TopicIdentifier {
-	return TopicIdentifier{}
-}
-
-func (n noTopic) GetVersion() descpb.DescriptorVersion {
-	return 0
-}
-
-func (n noTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
-	return jobspb.ChangefeedTargetSpecification{}
-}
-
-var _ TopicDescriptor = &noTopic{}
-
-func makeTopicDescriptorFromSpecForRow(
-	s jobspb.ChangefeedTargetSpecification, r encodeRow,
-) (TopicDescriptor, error) {
-	switch s.Type {
-	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
-		return &tableDescriptorTopic{
-			tableDesc: r.tableDesc,
-			spec:      s,
-		}, nil
-	case jobspb.ChangefeedTargetSpecification_EACH_FAMILY, jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
-		familyDesc, err := r.tableDesc.FindFamilyByID(r.familyID)
-		if err != nil {
-			return noTopic{}, err
-		}
-		return &columnFamilyTopic{
-			tableDesc:  r.tableDesc,
-			spec:       s,
-			familyDesc: *familyDesc,
-		}, nil
-	default:
-		return noTopic{}, errors.AssertionFailedf("Unsupported target type %s", s.Type)
 	}
 }
 
