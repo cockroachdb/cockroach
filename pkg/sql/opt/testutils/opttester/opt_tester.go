@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -59,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -67,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -1806,8 +1809,8 @@ func (ot *OptTester) Import(tb testing.TB) {
 // testFixturePath returns the path of a fixture inside opttester/testfixtures.
 func (ot *OptTester) testFixturePath(tb testing.TB, file string) string {
 	if bazel.BuiltWithBazel() {
-		runfile, err := bazel.Runfile("pkg/sql/opt/testutils/opttester/testfixtures/" + file)
-		if err != nil {
+		runfile := testutils.RewritableDataPath(tb, "pkg", "sql", "opt", "testutils", "opttester", "testfixtures", file)
+		if _, err := os.Stat(runfile); oserror.IsNotExist(err) {
 			tb.Fatalf("%s; is your package missing a dependency on \"//pkg/sql/opt/testutils/opttester:testfixtures\"?", err)
 		}
 		return runfile

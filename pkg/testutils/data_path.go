@@ -13,6 +13,7 @@ package testutils
 import (
 	"path"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
@@ -30,14 +31,8 @@ func TestDataPath(t testing.TB, relative ...string) string {
 	// dev notifies the library that the test is running in a subdirectory of the
 	// workspace with the environment variable below.
 	if bazel.BuiltWithBazel() {
-		//lint:ignore SA4006 apparently a linter bug.
-		cockroachWorkspace, set := envutil.EnvString("COCKROACH_WORKSPACE", 0)
-		if set {
-			return path.Join(cockroachWorkspace, bazel.RelativeTestTargetPath(), path.Join(relative...))
-		}
-		runfiles, err := bazel.RunfilesPath()
-		require.NoError(t, err)
-		return path.Join(runfiles, bazel.RelativeTestTargetPath(), path.Join(relative...))
+		relative = append([]string{bazel.RelativeTestTargetPath()}, relative...)
+		return RewritableDataPath(t, relative...)
 	}
 
 	// Otherwise we're in the package directory and can just return a relative path.
@@ -45,4 +40,32 @@ func TestDataPath(t testing.TB, relative ...string) string {
 	ret, err := filepath.Abs(ret)
 	require.NoError(t, err)
 	return ret
+}
+
+// RewritableDataPath returns a path to an asset relative to the top of the
+// workspace. Generally you should use TestDataPath if you're trying to access
+// a file in your test's `testdata` directory, or bazel.Runfile if a read-only
+// link to the file is OK. This function is only necessary if you need the path
+// to a file that you can --rewrite.
+func RewritableDataPath(t testing.TB, relative ...string) string {
+	if bazel.BuiltWithBazel() {
+		//lint:ignore SA4006 the linter gets confused due to the bazel functions being guarded by a build tag.
+		cockroachWorkspace, set := envutil.EnvString("COCKROACH_WORKSPACE", 0)
+		if set {
+			return path.Join(cockroachWorkspace, path.Join(relative...))
+		}
+		runfiles, err := bazel.RunfilesPath()
+		require.NoError(t, err)
+		relative = append([]string{runfiles}, relative...)
+		return filepath.Join(relative...)
+	}
+
+	// Get the path to this file from the runtime.
+	_, thisFilePath, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("unable to get caller information")
+	}
+	cockroachWorkspace := filepath.Dir(filepath.Dir(filepath.Dir(thisFilePath)))
+	relative = append([]string{cockroachWorkspace}, relative...)
+	return filepath.Join(relative...)
 }
