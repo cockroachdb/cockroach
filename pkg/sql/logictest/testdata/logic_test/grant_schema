@@ -31,6 +31,15 @@ test           public       public   CREATE          false
 test           public       public   USAGE           false
 test           public       root     ALL             true
 
+query TTTTB colnames
+SHOW GRANTS ON SCHEMA test.*
+----
+database_name  schema_name  grantee  privilege_type  is_grantable
+test           public       admin    ALL             true
+test           public       public   CREATE          false
+test           public       public   USAGE           false
+test           public       root     ALL             true
+
 statement ok
 SET experimental_enable_temp_tables = true;
 CREATE TEMP TABLE t(a INT)
