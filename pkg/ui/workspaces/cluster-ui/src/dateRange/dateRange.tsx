@@ -52,13 +52,16 @@ export function DateRangeMenu({
   );
   const [endMoment, setEndMoment] = useState<Moment>(endInit || moment.utc());
 
+  const startUnix = startInit.unix();
+  const endUnix = endInit.unix();
+
   useEffect(() => {
     setStartMoment(startInit);
-  }, [startInit]);
+  }, [startUnix]);
 
   useEffect(() => {
     setEndMoment(endInit);
-  }, [endInit]);
+  }, [endUnix]);
 
   const onChangeStart = (m?: Moment) => {
     m && setStartMoment(m);
