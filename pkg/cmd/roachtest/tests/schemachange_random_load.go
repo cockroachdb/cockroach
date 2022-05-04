@@ -136,6 +136,9 @@ func runSchemaChangeRandomLoad(
 	t.Status("copying binaries")
 	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
+	if err := c.PutLibraries(ctx, "./lib"); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Status("starting cockroach nodes")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
