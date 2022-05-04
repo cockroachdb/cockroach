@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Constraint is used to constrain a lookup join. There are two types of
@@ -82,12 +83,6 @@ type ConstraintBuilder struct {
 	table opt.TableID
 	// The columns on the left and right side of the join.
 	leftCols, rightCols opt.ColSet
-	// The columns on the left and right side of the join with equality
-	// conditions, i.e., the column at leftEq[i] is held equal to the column at
-	// rightEq[i].
-	leftEq, rightEq opt.ColList
-	// The set of columns in rightEq.
-	rightEqSet opt.ColSet
 	// A map of columns in rightEq to their corresponding columns in leftEq.
 	// This is used to remap computed column expressions, and is only
 	// initialized if needed.
@@ -107,25 +102,22 @@ func (b *ConstraintBuilder) Init(
 	leftCols, rightCols opt.ColSet,
 	onFilters memo.FiltersExpr,
 ) (ok bool) {
-	leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(leftCols, rightCols, onFilters)
+	leftEq, _, _ := memo.ExtractJoinEqualityColumns(leftCols, rightCols, onFilters)
 	if len(leftEq) == 0 {
 		// Exploring a lookup join is only beneficial if there is at least one
-		// pair of equality columns.
+		// pair of equality columns in the join filters.
 		return false
 	}
 
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*b = ConstraintBuilder{
-		f:          f,
-		md:         md,
-		evalCtx:    evalCtx,
-		table:      table,
-		leftCols:   leftCols,
-		rightCols:  rightCols,
-		leftEq:     leftEq,
-		rightEq:    rightEq,
-		rightEqSet: rightEq.ToSet(),
+		f:         f,
+		md:        md,
+		evalCtx:   evalCtx,
+		table:     table,
+		leftCols:  leftCols,
+		rightCols: rightCols,
 	}
 	return true
 }
@@ -135,6 +127,15 @@ func (b *ConstraintBuilder) Init(
 func (b *ConstraintBuilder) Build(
 	index cat.Index, onFilters, optionalFilters memo.FiltersExpr,
 ) Constraint {
+	// Extract the equality columns from onFilters. We cannot use the results of
+	// the extraction in Init because onFilters may be reduced by the caller
+	// after Init due to partial index implication. If the filters are reduced,
+	// eqFilterOrds calculated during Init would no longer be valid because the
+	// ordinals of the filters will have changed.
+	leftEq, rightEq, eqFilterOrds :=
+		memo.ExtractJoinEqualityColumns(b.leftCols, b.rightCols, onFilters)
+	rightEqSet := rightEq.ToSet()
+
 	allFilters := append(onFilters, optionalFilters...)
 
 	// Check if the first column in the index either:
@@ -147,8 +148,8 @@ func (b *ConstraintBuilder) Build(
 	// This check doesn't guarantee that we will find lookup join key
 	// columns, but it avoids unnecessary work in most cases.
 	firstIdxCol := b.table.IndexColumnID(index, 0)
-	if _, ok := b.rightEq.Find(firstIdxCol); !ok {
-		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, b.rightEqSet); !ok {
+	if _, ok := rightEq.Find(firstIdxCol); !ok {
+		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEqSet); !ok {
 			if _, _, ok := FindJoinFilterConstants(allFilters, firstIdxCol, b.evalCtx); !ok {
 				return Constraint{}
 			}
@@ -164,15 +165,17 @@ func (b *ConstraintBuilder) Build(
 	var inputProjections memo.ProjectionsExpr
 	var lookupExpr memo.FiltersExpr
 	var constFilters memo.FiltersExpr
+	var filterOrdsToExclude util.FastIntSet
 	shouldBuildMultiSpanLookupJoin := false
 
 	// All the lookup conditions must apply to the prefix of the index and so
 	// the projected columns created must be created in order.
 	for j := 0; j < numIndexKeyCols; j++ {
 		idxCol := b.table.IndexColumnID(index, j)
-		if eqIdx, ok := b.rightEq.Find(idxCol); ok {
-			keyCols = append(keyCols, b.leftEq[eqIdx])
+		if eqIdx, ok := rightEq.Find(idxCol); ok {
+			keyCols = append(keyCols, leftEq[eqIdx])
 			rightSideCols = append(rightSideCols, idxCol)
+			filterOrdsToExclude.Add(eqFilterOrds[eqIdx])
 			continue
 		}
 
@@ -182,14 +185,14 @@ func (b *ConstraintBuilder) Build(
 		// and construct a Project expression that wraps the join's input
 		// below. See findComputedColJoinEquality for the requirements to
 		// synthesize a computed column equality constraint.
-		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, b.rightEqSet); ok {
+		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, rightEqSet); ok {
 			colMeta := b.md.ColumnMeta(idxCol)
 			compEqCol := b.md.AddColumn(fmt.Sprintf("%s_eq", colMeta.Alias), colMeta.Type)
 
 			// Lazily initialize eqColMap.
 			if b.eqColMap.Empty() {
-				for i := range b.rightEq {
-					b.eqColMap.Set(int(b.rightEq[i]), int(b.leftEq[i]))
+				for i := range rightEq {
+					b.eqColMap.Set(int(rightEq[i]), int(leftEq[i]))
 				}
 			}
 
@@ -222,6 +225,7 @@ func (b *ConstraintBuilder) Build(
 			constFilters = append(constFilters, allFilters[allIdx])
 			keyCols = append(keyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
+			filterOrdsToExclude.Add(allIdx)
 			continue
 		}
 
@@ -269,10 +273,13 @@ func (b *ConstraintBuilder) Build(
 				leftCol, rightCol, b.leftCols, b.rightCols, onFilters,
 			)
 		}
-		eqFilters, constFilters, rightSideCols = b.findFiltersForIndexLookup(
-			allFilters, b.table, index, b.leftEq, b.rightEq, extractEqualityFilter,
-		)
+		var multiSpanFilterOrdsToExclude util.FastIntSet
+		eqFilters, constFilters, rightSideCols, multiSpanFilterOrdsToExclude =
+			b.findFiltersForIndexLookup(
+				allFilters, b.table, index, leftEq, rightEq, eqFilterOrds, extractEqualityFilter,
+			)
 		lookupExpr = append(eqFilters, constFilters...)
+		filterOrdsToExclude.UnionWith(multiSpanFilterOrdsToExclude)
 
 		// A multi-span lookup join with a lookup expression has no key columns
 		// and requires no projections on the input.
@@ -299,12 +306,12 @@ func (b *ConstraintBuilder) Build(
 	}
 
 	// Reduce the remaining filters.
-	c.RemainingFilters = onFilters
-	if len(c.KeyCols) > 0 {
-		c.RemainingFilters = memo.ExtractRemainingJoinFilters(c.RemainingFilters, keyCols, rightSideCols)
+	c.RemainingFilters = make(memo.FiltersExpr, 0, len(onFilters))
+	for i := range onFilters {
+		if !filterOrdsToExclude.Contains(i) {
+			c.RemainingFilters = append(c.RemainingFilters, onFilters[i])
+		}
 	}
-	c.RemainingFilters = c.RemainingFilters.Difference(lookupExpr)
-	c.RemainingFilters = c.RemainingFilters.Difference(constFilters)
 
 	return c
 }
@@ -389,8 +396,13 @@ func (b *ConstraintBuilder) findFiltersForIndexLookup(
 	tabID opt.TableID,
 	index cat.Index,
 	leftEq, rightEq opt.ColList,
+	eqFiltersOrds []int,
 	extractEqualityFilter func(opt.ColumnID, opt.ColumnID) memo.FiltersItem,
-) (eqFilters, constFilters memo.FiltersExpr, rightSideCols opt.ColList) {
+) (
+	eqFilters, constFilters memo.FiltersExpr,
+	rightSideCols opt.ColList,
+	filterOrdsToExclude util.FastIntSet,
+) {
 	numIndexKeyCols := index.LaxKeyColumnCount()
 
 	eqFilters = make(memo.FiltersExpr, 0, len(filters))
@@ -403,6 +415,7 @@ func (b *ConstraintBuilder) findFiltersForIndexLookup(
 			eqFilter := extractEqualityFilter(leftEq[eqIdx], rightEq[eqIdx])
 			eqFilters = append(eqFilters, eqFilter)
 			rightSideCols = append(rightSideCols, idxCol)
+			filterOrdsToExclude.Add(eqFiltersOrds[eqIdx])
 			continue
 		}
 
@@ -420,6 +433,9 @@ func (b *ConstraintBuilder) findFiltersForIndexLookup(
 			}
 		}
 
+		// At this point, we've found either a set of values or a range that
+		// constrain the index column.
+		filterOrdsToExclude.Add(allIdx)
 		if constFilters == nil {
 			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
 		}
@@ -445,10 +461,10 @@ func (b *ConstraintBuilder) findFiltersForIndexLookup(
 
 	if len(eqFilters) == 0 {
 		// We couldn't find equality columns which we can lookup.
-		return nil, nil, nil
+		return nil, nil, nil, util.FastIntSet{}
 	}
 
-	return eqFilters, constFilters, rightSideCols
+	return eqFilters, constFilters, rightSideCols, filterOrdsToExclude
 }
 
 // findJoinFilterRange tries to find an inequality range for this column.
