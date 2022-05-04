@@ -17,6 +17,7 @@ import { Button } from "src/button";
 import { Text, TextTypes } from "src/text";
 
 import styles from "./dateRange.module.scss";
+import { usePrevious } from "../util/hooks";
 
 const cx = classNames.bind(styles);
 
@@ -51,14 +52,26 @@ export function DateRangeMenu({
     startInit || moment.utc(),
   );
   const [endMoment, setEndMoment] = useState<Moment>(endInit || moment.utc());
+  const prevStartInit = usePrevious(startInit);
+  const prevEndInit = usePrevious(endInit);
 
   useEffect(() => {
-    setStartMoment(startInit);
-  }, [startInit]);
+    // .unix() is needed compare the actual time value instead of referential equality of the Moment object.
+    // Otherwise, triggering `setStartMoment` unnecessarily can cause a bug where the selection jumps back to the
+    // currently selected time while the user is in the middle of making a different selection.
+    if (startInit?.unix() != prevStartInit?.unix()) {
+      setStartMoment(startInit);
+    }
+  }, [startInit, prevStartInit]);
 
   useEffect(() => {
-    setEndMoment(endInit);
-  }, [endInit]);
+    // .unix() is needed compare the actual time value instead of referential equality of the Moment object.
+    // Otherwise, triggering `setEndMoment` unnecessarily can cause a bug where the selection jumps back to the
+    // currently selected time while the user is in the middle of making a different selection.
+    if (endInit?.unix() != prevEndInit?.unix()) {
+      setEndMoment(endInit);
+    }
+  }, [endInit, prevEndInit]);
 
   const onChangeStart = (m?: Moment) => {
     m && setStartMoment(m);
