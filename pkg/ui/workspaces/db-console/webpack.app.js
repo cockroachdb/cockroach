@@ -53,14 +53,6 @@ module.exports = (env, argv) => {
     new RemoveBrokenDependenciesPlugin(),
     new CopyWebpackPlugin([
       { from: path.resolve(__dirname, "favicon.ico"), to: "favicon.ico" },
-      {
-        from: path.resolve(
-          !isBazelBuild ? __dirname : "",
-          !isBazelBuild ? "../.." : "",
-          "node_modules/list.js/dist/list.min.js",
-        ),
-        to: path.resolve(__dirname, "../../dist_vendor/list.min.js"),
-      },
     ]),
     // use WebpackBar instead of webpack dashboard to fit multiple webpack dev server outputs (db-console and cluster-ui)
     new WebpackBar({
