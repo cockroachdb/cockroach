@@ -9077,9 +9077,9 @@ func TestBackupMemMonitorSSTSinkQueueSize(t *testing.T) {
 		InitManualReplication, params)
 	defer cleanup()
 
-	// Run a backup and expect the Grow() for the sstSink to return a memory error
+	// Run a backup and expect the Grow() for the fileSSTSink to return a memory error
 	// since the default queue byte size is 16MiB.
-	sqlDB.ExpectErr(t, "failed to reserve memory for sstSink queue", `BACKUP INTO 'nodelocal://0/foo'`)
+	sqlDB.ExpectErr(t, "failed to reserve memory for fileSSTSink queue", `BACKUP INTO 'nodelocal://0/foo'`)
 
 	// Reduce the queue byte size cluster setting.
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '13MiB'`)

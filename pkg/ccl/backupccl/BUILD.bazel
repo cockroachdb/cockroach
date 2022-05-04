@@ -17,6 +17,7 @@ go_library(
         "backup_span_coverage.go",
         "create_scheduled_backup.go",
         "encryption.go",
+        "file_sst_sink.go",
         "incrementals.go",
         "key_rewriter.go",
         "manifest_handling.go",
