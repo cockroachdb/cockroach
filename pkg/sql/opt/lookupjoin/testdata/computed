@@ -45,6 +45,12 @@ input projections:
 remaining filters:
   x = a
 
+lookup-constraints left=(a int, b int) right=(x int, y INT, v int not null as (x + 10) virtual) index=(v, y)
+y = 10
+optional: x = 1
+----
+lookup join not possible
+
 lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, y INT, z INT) index=(v, x, y)
 x = a AND y = 0 AND z = 3
 ----
