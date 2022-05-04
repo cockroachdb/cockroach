@@ -193,7 +193,7 @@ func TestUnexpectedError(t *testing.T) {
 		conn net.Conn, incomingTLSConfig *tls.Config,
 	) *FrontendAdmitInfo {
 		log.Infof(context.Background(), "frontend admitter returning unexpected error")
-		return &FrontendAdmitInfo{conn: conn, err: errors.New("unexpected error")}
+		return &FrontendAdmitInfo{Conn: conn, Err: errors.New("unexpected error")}
 	})()
 
 	stopper := stop.NewStopper()
@@ -515,7 +515,7 @@ func TestErroneousFrontend(t *testing.T) {
 	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
 	) *FrontendAdmitInfo {
-		return &FrontendAdmitInfo{conn: conn, err: errors.New(frontendError)}
+		return &FrontendAdmitInfo{Conn: conn, Err: errors.New(frontendError)}
 	})()
 
 	stopper := stop.NewStopper()
@@ -1406,7 +1406,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				originalParams[k] = v
 			}
 
-			fe := &FrontendAdmitInfo{msg: msg}
+			fe := &FrontendAdmitInfo{Msg: msg}
 			outMsg, clusterName, tenantID, err := clusterNameAndTenantFromParams(ctx, fe)
 			if tc.expectedError == "" {
 				require.NoErrorf(t, err, "failed test case\n%+v", tc)
