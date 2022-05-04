@@ -331,9 +331,12 @@ func (ih *instrumentationHelper) Finish(
 
 	var bundle diagnosticsBundle
 	if ih.collectBundle {
-		ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(
-			p.EvalContext().Context,
+		ie = makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+			p.extendedEvalCtx.ExecCfg.InternalExecutorProto,
 			p.SessionData(),
+			extraTxnStateUnderPlanner{
+				descCollection: p.Descriptors(),
+			},
 		)
 		phaseTimes := statsCollector.PhaseTimes()
 		if ih.stmtDiagnosticsRecorder.IsExecLatencyConditionMet(

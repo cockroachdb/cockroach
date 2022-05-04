@@ -534,7 +534,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				params.SessionData(),
 				extraTxnStateUnderPlanner{descCollection: params.extendedEvalCtx.Descs},
 			)
-			_ = ie
 
 			switch constraint.Kind {
 			case descpb.ConstraintTypeCheck:
@@ -554,7 +553,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				if err := validateCheckInTxn(
-					params.ctx, &params.p.semaCtx, params.ExecCfg().InternalExecutorFactory,
+					params.ctx, &params.p.semaCtx, ie,
 					params.SessionData(), n.tableDesc, params.p.Txn(), ck.Expr,
 				); err != nil {
 					return err
@@ -578,8 +577,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				if err := validateFkInTxn(
 					params.ctx,
-					params.ExecCfg().InternalExecutorFactory,
-					params.p.SessionData(),
+					ie,
 					n.tableDesc,
 					params.p.Txn(),
 					params.p.Descriptors(),
@@ -606,9 +604,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 							"constraint %q in the middle of being added, try again later", t.Constraint)
 					}
 					if err := validateUniqueWithoutIndexConstraintInTxn(
-						params.ctx, params.ExecCfg().InternalExecutorFactory(
-							params.ctx, params.SessionData(),
-						), n.tableDesc, params.p.Txn(), name,
+						params.ctx, ie, n.tableDesc, params.p.Txn(), name,
 					); err != nil {
 						return err
 					}
