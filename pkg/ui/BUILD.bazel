@@ -5,16 +5,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "ui",
     srcs = ["ui.go"],
-    # keep
-    embedsrcs = select({
-        "//pkg/ui:with_ui": [
-            "dist_vendor/list.min.js",
-            "dist_vendor/.gitkeep",
-        ],
-        "//conditions:default": [
-            "dist_vendor/.gitkeep",
-        ],
-    }),
     importpath = "github.com/cockroachdb/cockroach/pkg/ui",
     visibility = ["//visibility:public"],
     deps = [
@@ -53,14 +43,6 @@ Binary built without web UI.
 EOF
 """,
     visibility = ["//pkg/ui:__subpackages__"],
-)
-
-genrule(
-    name = "listjs",
-    srcs = ["@npm//:node_modules/list.js/dist/list.min.js"],
-    outs = ["dist_vendor/list.min.js"],
-    cmd = "cp ./$(location @npm//:node_modules/list.js/dist/list.min.js) $@",
-    tools = ["@npm//list.js"],
 )
 
 test_suite(
