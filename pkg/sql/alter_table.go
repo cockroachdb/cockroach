@@ -528,6 +528,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if !constraint.Unvalidated {
 				continue
 			}
+
+			ie := makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+				params.ExecCfg().InternalExecutorProto,
+				params.SessionData(),
+				extraTxnStateUnderPlanner{descCollection: params.extendedEvalCtx.Descs},
+			)
+			_ = ie
+
 			switch constraint.Kind {
 			case descpb.ConstraintTypeCheck:
 				found := false

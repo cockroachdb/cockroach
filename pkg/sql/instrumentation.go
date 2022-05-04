@@ -321,6 +321,14 @@ func (ih *instrumentationHelper) Finish(
 		}
 	}
 
+	ie := makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+		p.ExecCfg().InternalExecutorProto,
+		p.SessionData(),
+		extraTxnStateUnderPlanner{descCollection: p.extendedEvalCtx.Descs},
+	)
+
+	_ = ie
+
 	var bundle diagnosticsBundle
 	if ih.collectBundle {
 		ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(

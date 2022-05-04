@@ -2317,6 +2317,14 @@ func runSchemaChangesInTxn(
 		}
 	}
 
+	ie := makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+		planner.ExecCfg().InternalExecutorProto,
+		planner.SessionData(),
+		extraTxnStateUnderPlanner{descCollection: planner.Descriptors()},
+	)
+
+	_ = ie
+
 	// Now that the table descriptor is in a valid state with all column and index
 	// mutations applied, it can be used for validating check/FK constraints.
 	for _, c := range constraintAdditionMutations {

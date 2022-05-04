@@ -1165,10 +1165,12 @@ func (e *urlOutputter) finish() (url.URL, error) {
 func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.Node, error) {
 	var out urlOutputter
 
-	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalExecutorFactory(
-		ef.planner.EvalContext().Context,
+	ie := makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+		ef.planner.ExecCfg().InternalExecutorProto,
 		ef.planner.SessionData(),
+		extraTxnStateUnderPlanner{descCollection: ef.planner.Descriptors()},
 	)
+
 	c := makeStmtEnvCollector(ef.planner.EvalContext().Context, ie.(*InternalExecutor))
 
 	// Show the version of Cockroach running.
