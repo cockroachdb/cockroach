@@ -600,8 +600,15 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
 		}
 	}
+
+	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
+	// it is possible that this is a transient error that is taking longer than
+	// our configured retry to go away.
+	//
+	// Let's pause the job instead of failing it so that the user can decide
+	// whether to resume it or cancel it.
 	if err != nil {
-		return errors.Wrap(err, "exhausted retries")
+		return jobs.MarkPauseRequestError(errors.Wrap(err, "exhausted retries"))
 	}
 
 	var backupDetails jobspb.BackupDetails
