@@ -368,8 +368,8 @@ func addIndexToCandidates(
 	currTable cat.Table,
 	indexCandidates map[cat.Table][][]cat.IndexColumn,
 ) {
-	// Do not add candidates from virtual tables.
-	if currTable.IsVirtualTable() {
+	// Do not add candidates from system or virtual tables.
+	if currTable.IsVirtualTable() || currTable.IsSystemTable() {
 		return
 	}
 

@@ -11,6 +11,7 @@
 package testcat
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
@@ -19,6 +20,7 @@ import (
 
 var informationSchemaMap = map[string]*tree.CreateTable{}
 var pgCatalogMap = map[string]*tree.CreateTable{}
+var systemMap = map[string]*tree.CreateTable{}
 
 var informationSchemaTables = []string{
 	vtable.InformationSchemaColumns,
@@ -83,10 +85,51 @@ var pgCatalogTables = []string{
 	vtable.PGCatalogAggregate,
 }
 
+var systemTables = []string{
+	systemschema.NamespaceTableSchema,
+	systemschema.DescriptorTableSchema,
+	systemschema.UsersTableSchema,
+	systemschema.RoleOptionsTableSchema,
+	systemschema.ZonesTableSchema,
+	systemschema.SettingsTableSchema,
+	systemschema.TenantsTableSchema,
+	systemschema.LeaseTableSchema,
+	systemschema.EventLogTableSchema,
+	systemschema.RangeEventTableSchema,
+	systemschema.UITableSchema,
+	systemschema.JobsTableSchema,
+	systemschema.WebSessionsTableSchema,
+	systemschema.TableStatisticsTableSchema,
+	systemschema.LocationsTableSchema,
+	systemschema.RoleMembersTableSchema,
+	systemschema.CommentsTableSchema,
+	systemschema.ReportsMetaTableSchema,
+	systemschema.ReplicationConstraintStatsTableSchema,
+	systemschema.ReplicationCriticalLocalitiesTableSchema,
+	systemschema.ReplicationStatsTableSchema,
+	systemschema.ProtectedTimestampsMetaTableSchema,
+	systemschema.ProtectedTimestampsRecordsTableSchema,
+	systemschema.StatementBundleChunksTableSchema,
+	systemschema.StatementDiagnosticsRequestsTableSchema,
+	systemschema.StatementDiagnosticsTableSchema,
+	systemschema.ScheduledJobsTableSchema,
+	systemschema.SqllivenessTableSchema,
+	systemschema.MigrationsTableSchema,
+	systemschema.JoinTokensTableSchema,
+	systemschema.StatementStatisticsTableSchema,
+	systemschema.TransactionStatisticsTableSchema,
+	systemschema.DatabaseRoleSettingsTableSchema,
+	systemschema.TenantUsageTableSchema,
+	systemschema.SQLInstancesTableSchema,
+	systemschema.SpanConfigurationsTableSchema,
+	systemschema.TenantSettingsTableSchema,
+	systemschema.SpanCountTableSchema,
+}
+
 func init() {
 	// Build a map that maps the names of the various virtual tables
 	// to their CREATE TABLE AST.
-	buildMap := func(schemaName string, tableList []string, tableMap map[string]*tree.CreateTable) {
+	buildMap := func(catalogName, schemaName string, tableList []string, tableMap map[string]*tree.CreateTable) {
 		for _, table := range tableList {
 			parsed, err := parser.ParseOne(table)
 			if err != nil {
@@ -101,7 +144,7 @@ func init() {
 			ct.Table.SchemaName = tree.Name(schemaName)
 			ct.Table.ExplicitSchema = true
 
-			ct.Table.CatalogName = testDB
+			ct.Table.CatalogName = tree.Name(catalogName)
 			ct.Table.ExplicitCatalog = true
 
 			name := ct.Table
@@ -109,8 +152,9 @@ func init() {
 		}
 	}
 
-	buildMap("information_schema", informationSchemaTables, informationSchemaMap)
-	buildMap("pg_catalog", pgCatalogTables, pgCatalogMap)
+	buildMap(testDB, "information_schema", informationSchemaTables, informationSchemaMap)
+	buildMap(testDB, "pg_catalog", pgCatalogTables, pgCatalogMap)
+	buildMap("system", "public", systemTables, systemMap)
 }
 
 // Resolve returns true and the AST node describing the virtual table referenced.
@@ -123,6 +167,10 @@ func resolveVTable(name *tree.TableName) (*tree.CreateTable, bool) {
 
 	case "pg_catalog":
 		schema, ok := pgCatalogMap[name.ObjectName.String()]
+		return schema, ok
+
+	case "system":
+		schema, ok := systemMap[name.ObjectName.String()]
 		return schema, ok
 	}
 
