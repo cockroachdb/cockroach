@@ -987,7 +987,7 @@ func isBenign(err error) bool {
 	return errors.HasType(err, (*benignError)(nil))
 }
 
-func isPurgatoryError(err error) (purgatoryError, bool) {
+func IsPurgatoryError(err error) (purgatoryError, bool) {
 	var purgErr purgatoryError
 	return purgErr, errors.As(err, &purgErr)
 }
@@ -1084,7 +1084,7 @@ func (bq *baseQueue) finishProcessingReplica(
 		// the failing replica to purgatory. Note that even if the item was
 		// scheduled to be requeued, we ignore this if we add the replica to
 		// purgatory.
-		if purgErr, ok := isPurgatoryError(err); ok {
+		if purgErr, ok := IsPurgatoryError(err); ok {
 			bq.mu.Lock()
 			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
 			bq.mu.Unlock()
