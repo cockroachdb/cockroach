@@ -14,7 +14,6 @@ import (
 	"database/sql/driver"
 	"io"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
@@ -44,12 +43,7 @@ func (r *sqlRows) Result() driver.Result {
 }
 
 func (r *sqlRows) Tag() string {
-	tag := r.rows.CommandTag().String()
-	parts := strings.Split(tag, " ")
-	if _, err := strconv.Atoi(parts[len(parts)-1]); err == nil {
-		parts = parts[:len(parts)-1]
-	}
-	return strings.Join(parts, " ")
+	return r.rows.CommandTag().String()
 }
 
 func (r *sqlRows) Close() error {
