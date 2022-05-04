@@ -96,15 +96,24 @@ type ConstraintBuilder struct {
 
 // Init initializes a ConstraintBuilder. Once initialized, a ConstraintBuilder
 // can be reused to build lookup join constraints for all indexes in the given
-// table, as long as the join input and ON condition do not change.
+// table, as long as the join input and ON condition do not change. If no lookup
+// join can be built from the given filters and left/right columns, then
+// ok=false is returned.
 func (b *ConstraintBuilder) Init(
 	f *norm.Factory,
 	md *opt.Metadata,
 	evalCtx *eval.Context,
 	table opt.TableID,
 	leftCols, rightCols opt.ColSet,
-	leftEq, rightEq opt.ColList,
-) {
+	onFilters memo.FiltersExpr,
+) (ok bool) {
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(leftCols, rightCols, onFilters)
+	if len(leftEq) == 0 {
+		// Exploring a lookup join is only beneficial if there is at least one
+		// pair of equality columns.
+		return false
+	}
+
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*b = ConstraintBuilder{
@@ -118,6 +127,7 @@ func (b *ConstraintBuilder) Init(
 		rightEq:    rightEq,
 		rightEqSet: rightEq.ToSet(),
 	}
+	return true
 }
 
 // Build returns a Constraint that constrains a lookup join on the given index.

@@ -14,6 +14,11 @@ remaining filters:
   (y > 10) OR (y IN (1, 5))
 
 lookup-constraints left=(a int) right=(x int, y int) index=(x)
+x = 1
+----
+lookup join not possible
+
+lookup-constraints left=(a int) right=(x int, y int) index=(x)
 y = a
 ----
 lookup join not possible
