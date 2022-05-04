@@ -25,7 +25,9 @@ import (
 // BackendDial uses a dial timeout of 5 seconds to mitigate network black
 // holes.
 //
-// TODO(jaylim-crl): Move dialer into connector in the future.
+// TODO(jaylim-crl): Move dialer into connector in the future. When moving this
+// into the connector, we should be careful as this is also used by CC's
+// codebase.
 var BackendDial = func(
 	msg *pgproto3.StartupMessage, serverAddress string, tlsConfig *tls.Config,
 ) (_ net.Conn, retErr error) {
