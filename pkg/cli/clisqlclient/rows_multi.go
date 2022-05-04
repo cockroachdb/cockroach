@@ -14,7 +14,6 @@ import (
 	"database/sql/driver"
 	"io"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
@@ -51,11 +50,7 @@ func (r *sqlRowsMultiResultSet) Result() driver.Result {
 func (r *sqlRowsMultiResultSet) Tag() string {
 	rd := r.rows.ResultReader()
 	tag, _ := rd.Close()
-	parts := strings.Split(tag.String(), " ")
-	if _, err := strconv.Atoi(parts[len(parts)-1]); err == nil {
-		parts = parts[:len(parts)-1]
-	}
-	return strings.Join(parts, " ")
+	return tag.String()
 }
 
 func (r *sqlRowsMultiResultSet) Close() error {
@@ -92,29 +87,39 @@ func (r *sqlRowsMultiResultSet) Next(values []driver.Value) error {
 		)
 	}
 	for i := range values {
-		if dt, ok := r.connInfo.DataTypeForOID(rd.FieldDescriptions()[i].DataTypeOID); !ok || strings.HasPrefix(dt.Name, "_") {
+		rowVal := rd.Values()[i]
+		if rowVal == nil {
+			values[i] = nil
+			continue
+		}
+		fieldOID := rd.FieldDescriptions()[i].DataTypeOID
+		fieldFormat := rd.FieldDescriptions()[i].Format
+		if dt, ok := r.connInfo.DataTypeForOID(fieldOID); !ok || strings.HasPrefix(dt.Name, "_") {
 			// User-defined types and array types are all decoded as raw bytes.
 			var b []byte
-			err := r.connInfo.Scan(
-				rd.FieldDescriptions()[i].DataTypeOID,
-				rd.FieldDescriptions()[i].Format,
-				rd.Values()[i],
-				&b,
-			)
+			err := r.connInfo.Scan(fieldOID, fieldFormat, rowVal, &b)
 			if err != nil {
 				return pgx.ScanArgError{ColumnIndex: i, Err: err}
 			}
 			// Copy byte slices as per the comment on Rows.Next.
 			values[i] = append([]byte{}, b...)
+		} else if fieldOID == pgtype.ByteaOID ||
+			fieldOID == pgtype.QCharOID ||
+			fieldOID == pgtype.NumericOID ||
+			fieldOID == pgtype.RecordOID {
+			// BYTEA values are already sent according to the bytea_output setting.
+			// QChar and Record values can't be decoded using the default decoder.
+			// Numeric values are already sent in the correct format.
+			var s string
+			err := r.connInfo.Scan(fieldOID, fieldFormat, rowVal, &s)
+			if err != nil {
+				return pgx.ScanArgError{ColumnIndex: i, Err: err}
+			}
+			values[i] = s
 		} else {
 			// For all other SQL types, let pgconn figure out the go type.
 			var v interface{}
-			err := r.connInfo.Scan(
-				rd.FieldDescriptions()[i].DataTypeOID,
-				rd.FieldDescriptions()[i].Format,
-				rd.Values()[i],
-				&v,
-			)
+			err := r.connInfo.Scan(fieldOID, fieldFormat, rowVal, &v)
 			if err != nil {
 				return pgx.ScanArgError{ColumnIndex: i, Err: err}
 			}

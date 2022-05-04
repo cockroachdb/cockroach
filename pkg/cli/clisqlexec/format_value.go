@@ -86,19 +86,13 @@ func FormatVal(
 		return s[1 : len(s)-1]
 
 	case []byte:
-		// Format the bytes as per bytea_output = escape.
+		// For other []byte types that weren't handled above, we use the "escape"
+		// format because it enables printing readable strings as-is -- the default
+		// hex format would always render as hexadecimal digits. The escape format
+		// is also more compact.
 		//
-		// We use the "escape" format here because it enables printing
-		// readable strings as-is -- the default hex format would always
-		// render as hexadecimal digits. The escape format is also more
-		// compact.
-		//
-		// TODO(knz): this formatting is unfortunate/incorrect, and exists
-		// only because lib/pq incorrectly interprets the bytes received
-		// from the server. The proper behavior would be for the driver to
-		// not interpret the bytes and for us here to print that as-is, so
-		// that we can let the user see and control the result using
-		// `bytea_output`.
+		// Note that the BYTEA type is already a string at this point, so is not
+		// handled here.
 		var buf bytes.Buffer
 		lexbase.EncodeSQLBytesInner(&buf, string(t))
 		return buf.String()
