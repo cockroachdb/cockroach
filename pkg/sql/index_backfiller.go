@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -30,15 +29,12 @@ import (
 // IndexBackfillPlanner holds dependencies for an index backfiller
 // for use in the declarative schema changer.
 type IndexBackfillPlanner struct {
-	execCfg   *ExecutorConfig
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory
+	execCfg *ExecutorConfig
 }
 
 // NewIndexBackfiller creates a new IndexBackfillPlanner.
-func NewIndexBackfiller(
-	execCfg *ExecutorConfig, ieFactory sqlutil.SessionBoundInternalExecutorFactory,
-) *IndexBackfillPlanner {
-	return &IndexBackfillPlanner{execCfg: execCfg, ieFactory: ieFactory}
+func NewIndexBackfiller(execCfg *ExecutorConfig) *IndexBackfillPlanner {
+	return &IndexBackfillPlanner{execCfg: execCfg}
 }
 
 // MaybePrepareDestIndexesForBackfill is part of the scexec.Backfiller interface.

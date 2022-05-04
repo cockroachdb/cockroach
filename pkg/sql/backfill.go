@@ -2694,7 +2694,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	}
 
 	// TODO(rui): these can be initialized along with other new schema changer dependencies.
-	planner := NewIndexBackfillerMergePlanner(sc.execCfg, sc.execCfg.InternalExecutorFactory)
+	planner := NewIndexBackfillerMergePlanner(sc.execCfg)
 	rc := func(ctx context.Context, spans []roachpb.Span) (int, error) {
 		return numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, spans)
 	}
