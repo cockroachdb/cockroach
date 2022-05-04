@@ -7,6 +7,12 @@ lookup expression:
   (y = b) AND (x IN (1, 2, 3))
 
 lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y)
+(x = 1 OR x = 2) AND y = b
+----
+lookup expression:
+  (y = b) AND (x IN (1, 2))
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y)
 x IN (1, 2, 3)
 ----
 lookup join not possible
@@ -245,3 +251,9 @@ optional: x IN (1, 2) AND z > 0
 ----
 lookup expression:
   (y = b) AND (x IN (1, 2))
+
+lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
+x IN (10, 20, 30, 40) AND y = b AND x > 10
+----
+lookup expression:
+  (y = b) AND (x IN (20, 30, 40))

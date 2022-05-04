@@ -1109,8 +1109,7 @@ top-k
       │    │    │    ├── cardinality: [2 - 2]
       │    │    │    ├── (42948, 3)
       │    │    │    └── (24924, 4)
-      │    │    └── filters
-      │    │         └── ((((dealerid:8 = 1) OR (dealerid:8 = 2)) OR (dealerid:8 = 3)) OR (dealerid:8 = 4)) OR (dealerid:8 = 5) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]; tight)]
+      │    │    └── filters (true)
       │    └── projections
       │         └── CASE WHEN quantity:7 < inventorydetails.quantity:11 THEN quantity:7 ELSE inventorydetails.quantity:11 END [as=quantity:15, outer=(7,11)]
       └── aggregations
