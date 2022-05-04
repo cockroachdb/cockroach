@@ -4,7 +4,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "outliers",
-    srcs = ["outliers.go"],
+    srcs = [
+        "detector.go",
+        "outliers.go",
+    ],
     embed = [":outliers_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers",
     visibility = ["//visibility:public"],
@@ -21,9 +24,12 @@ go_library(
 
 go_test(
     name = "outliers_test",
-    srcs = ["outliers_test.go"],
+    srcs = [
+        "detector_test.go",
+        "outliers_test.go",
+    ],
+    embed = [":outliers"],
     deps = [
-        ":outliers",
         "//pkg/settings/cluster",
         "//pkg/sql/clusterunique",
         "//pkg/util/uuid",
