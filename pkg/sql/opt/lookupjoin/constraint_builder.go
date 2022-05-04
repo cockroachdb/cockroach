@@ -107,7 +107,7 @@ func (b *ConstraintBuilder) Init(
 	leftCols, rightCols opt.ColSet,
 	onFilters memo.FiltersExpr,
 ) (ok bool) {
-	leftEq, rightEq := memo.ExtractJoinEqualityColumns(leftCols, rightCols, onFilters)
+	leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(leftCols, rightCols, onFilters)
 	if len(leftEq) == 0 {
 		// Exploring a lookup join is only beneficial if there is at least one
 		// pair of equality columns.
