@@ -14,8 +14,10 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,6 +127,9 @@ func TestSQLStatsCompactor(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					AOSTClause: "AS OF SYSTEM TIME '-1us'",
+					StubTimeNow: func() time.Time {
+						return timeutil.Now().Add(-2 * time.Hour)
+					},
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: kvInterceptor.intercept,
@@ -182,13 +188,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 				sqlConn.Exec(t, "RESET CLUSTER SETTING sql.stats.cleanup.rows_to_delete_per_txn")
 			}
 
-			stmt := "SELECT 1"
-			for i := 0; i < tc.stmtCount; i++ {
-				sqlConn.Exec(t, stmt)
-				// Mutate the stmt to create different fingerprint.
-				stmt = fmt.Sprintf("%s, 1", stmt)
-			}
-
+			generateFingerprints(t, sqlConn, tc.stmtCount)
 			serverSQLStats.Flush(ctx)
 
 			statsCompactor := persistedsqlstats.NewStatsCompactor(
@@ -199,6 +199,9 @@ func TestSQLStatsCompactor(t *testing.T) {
 				&sqlstats.TestingKnobs{
 					AOSTClause:             "AS OF SYSTEM TIME '-1us'",
 					OnCleanupStartForShard: cleanupInterceptor.intercept,
+					StubTimeNow: func() time.Time {
+						return timeutil.Now()
+					},
 				},
 			)
 
@@ -263,6 +266,70 @@ func TestSQLStatsCompactor(t *testing.T) {
 			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, txnStatsCnt)
 		})
 	}
+}
+
+func TestSQLStatsForegroundInterference(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var tm atomic.Value
+	// Initialize the time to 2 aggregation interval in the past.
+	tm.Store(timeutil.Now().Add(-2 * persistedsqlstats.SQLStatsAggregationInterval.Default()))
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).StubTimeNow = func() time.Time {
+		return tm.Load().(time.Time)
+	}
+	s, conn, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	serverSQLStats :=
+		s.SQLServer().(*sql.Server).
+			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 1")
+
+	// Generate some data that are older than the current aggregation window,
+	// and then generate some that are within the current aggregation window.
+	generateFingerprints(t, sqlConn, 10 /* distinctFingerprints */)
+	serverSQLStats.Flush(ctx)
+
+	tm.Store(timeutil.Now())
+	generateFingerprints(t, sqlConn, 10 /* distinctFingerprints */)
+	serverSQLStats.Flush(ctx)
+
+	statsCompactor := persistedsqlstats.NewStatsCompactor(
+		s.ClusterSettings(),
+		s.InternalExecutor().(sqlutil.InternalExecutor),
+		s.DB(),
+		metric.NewCounter(metric.Metadata{}),
+		params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs),
+	)
+
+	// Run the compactor.
+	require.NoError(t, statsCompactor.DeleteOldestEntries(ctx))
+
+	result := sqlConn.QueryStr(t, `
+	SELECT count(*)
+	FROM system.statement_statistics`)[0][0]
+
+	stmtStatsCount, err := strconv.Atoi(result)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, stmtStatsCount, 10,
+		"expected at least 10 fingerprints in statement statistics table, "+
+			"but only %d is present", stmtStatsCount)
+
+	result = sqlConn.QueryStr(t, `
+	SELECT count(*)
+	FROM system.transaction_statistics`)[0][0]
+
+	txnStatsCount, err := strconv.Atoi(result)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, txnStatsCount, 10,
+		"expected at least 10 fingerprints in transaction statistics table, "+
+			"but only %d is present", txnStatsCount)
 }
 
 func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
@@ -360,12 +427,21 @@ ORDER BY aggregated_ts`
 	return stmtFingerprints, txnFingerprints
 }
 
+func generateFingerprints(t *testing.T, sqlConn *sqlutils.SQLRunner, distinctFingerprints int) {
+	stmt := "SELECT 1"
+	for i := 0; i < distinctFingerprints; i++ {
+		sqlConn.Exec(t, stmt)
+		// Mutate the stmt to create different fingerprint.
+		stmt = fmt.Sprintf("%s, 1", stmt)
+	}
+}
+
 const (
 	stmtStatsTableID = 42
 	txnStatsTableID  = 43
 )
 
-var kvReqWideScanPattern = regexp.MustCompile("/Table/(42|43)/[0-9]{1,2}/[0-9]$")
+var kvReqWideScanStartKeyPattern = regexp.MustCompile("/Table/(42|43)/[0-9]{1,2}/[0-9]$")
 
 type kvScanInterceptor struct {
 	totalWideScan int64
@@ -396,12 +472,10 @@ func (k *kvScanInterceptor) intercept(_ context.Context, ba roachpb.BatchRequest
 		_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
 		if tableID == stmtStatsTableID || tableID == txnStatsTableID {
 			prettyKey := roachpb.PrettyPrintKey([]encoding.Direction{}, req.(*roachpb.ScanRequest).Key)
-			prettyEndKey := roachpb.PrettyPrintKey([]encoding.Direction{}, req.(*roachpb.ScanRequest).EndKey)
 
-			keyMatchedWideScan := kvReqWideScanPattern.MatchString(prettyKey)
-			endKeyMatchedWideScan := kvReqWideScanPattern.MatchString(prettyEndKey)
+			keyMatchedWideScan := kvReqWideScanStartKeyPattern.MatchString(prettyKey)
 
-			if keyMatchedWideScan && endKeyMatchedWideScan {
+			if keyMatchedWideScan {
 				atomic.AddInt64(&k.totalWideScan, 1)
 			}
 		}

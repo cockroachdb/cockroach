@@ -1,0 +1,287 @@
+# LogicTest: local
+
+# Ensure we can run DELETE statement on system.statement_statistics and
+# system.transaction_statistics table.
+statement ok
+INSERT INTO system.users VALUES ('node', NULL, true);
+
+statement ok
+GRANT node TO root;
+
+# Constructing TIMESTAMPTZ expression that can be used later in the queries.
+let $last_agg_ts
+SELECT concat('''', date_trunc('hour', '2022-05-04 16:10'::TIMESTAMPTZ - '2h'::INTERVAL)::STRING, '''::TIMESTAMPTZ')
+
+let $current_agg_ts
+SELECT concat('''', date_trunc('hour', '2022-05-04 16:10'::TIMESTAMPTZ)::STRING, '''::TIMESTAMPTZ')
+
+query T
+EXPLAIN (VERBOSE)
+DELETE FROM system.statement_statistics
+WHERE (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) IN (
+  SELECT aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
+  FROM system.statement_statistics
+  WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = 0
+    AND aggregated_ts < $current_agg_ts
+  ORDER BY aggregated_ts ASC
+  LIMIT 1024
+) RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
+│ estimated row count: 0 (missing stats)
+│
+└── • delete
+    │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+    │ estimated row count: 0 (missing stats)
+    │ from: statement_statistics
+    │ auto commit
+    │
+    └── • project
+        │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+        │ estimated row count: 0 (missing stats)
+        │
+        └── • project
+            │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
+            │ estimated row count: 0 (missing stats)
+            │
+            └── • project
+                │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+                │ estimated row count: 0 (missing stats)
+                │
+                └── • lookup join (inner)
+                    │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+                    │ table: statement_statistics@fingerprint_stats_idx
+                    │ equality: (fingerprint_id, transaction_fingerprint_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq, aggregated_ts, plan_hash, app_name, node_id) = (fingerprint_id,transaction_fingerprint_id,crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,aggregated_ts,plan_hash,app_name,node_id)
+                    │ equality cols are key
+                    │
+                    └── • render
+                        │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+                        │ estimated row count: 9 (missing stats)
+                        │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8)
+                        │ render aggregated_ts: aggregated_ts
+                        │ render fingerprint_id: fingerprint_id
+                        │ render transaction_fingerprint_id: transaction_fingerprint_id
+                        │ render plan_hash: plan_hash
+                        │ render app_name: app_name
+                        │ render node_id: node_id
+                        │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8
+                        │
+                        └── • scan
+                              columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+                              estimated row count: 9 (missing stats)
+                              table: statement_statistics@primary
+                              spans: /0-/0/2022-05-04T15:59:59.999999001Z
+                              limit: 1024
+
+query T
+EXPLAIN (VERBOSE)
+DELETE FROM system.transaction_statistics
+WHERE (aggregated_ts, fingerprint_id, app_name, node_id) IN (
+  SELECT aggregated_ts, fingerprint_id, app_name, node_id
+  FROM system.transaction_statistics
+  WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = 0
+    AND aggregated_ts < $current_agg_ts
+  ORDER BY aggregated_ts ASC
+  LIMIT 1024
+) RETURNING aggregated_ts, fingerprint_id, app_name, node_id
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (aggregated_ts, fingerprint_id, app_name, node_id)
+│ estimated row count: 0 (missing stats)
+│
+└── • delete
+    │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+    │ estimated row count: 0 (missing stats)
+    │ from: transaction_statistics
+    │ auto commit
+    │
+    └── • project
+        │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+        │ estimated row count: 0 (missing stats)
+        │
+        └── • project
+            │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id)
+            │ estimated row count: 0 (missing stats)
+            │
+            └── • project
+                │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+                │ estimated row count: 0 (missing stats)
+                │
+                └── • lookup join (inner)
+                    │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+                    │ table: transaction_statistics@fingerprint_stats_idx
+                    │ equality: (fingerprint_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq, aggregated_ts, app_name, node_id) = (fingerprint_id,crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,aggregated_ts,app_name,node_id)
+                    │ equality cols are key
+                    │
+                    └── • render
+                        │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+                        │ estimated row count: 9 (missing stats)
+                        │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8)
+                        │ render aggregated_ts: aggregated_ts
+                        │ render fingerprint_id: fingerprint_id
+                        │ render app_name: app_name
+                        │ render node_id: node_id
+                        │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8
+                        │
+                        └── • scan
+                              columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+                              estimated row count: 9 (missing stats)
+                              table: transaction_statistics@primary
+                              spans: /0-/0/2022-05-04T15:59:59.999999001Z
+                              limit: 1024
+
+query T
+EXPLAIN (VERBOSE)
+DELETE FROM system.statement_statistics
+WHERE (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) IN (
+SELECT aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
+FROM system.statement_statistics
+WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = 0
+AND (
+  (
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    node_id
+    ) >= ($last_agg_ts, b'123', b'234', b'345', 'test', 1)
+  )
+    AND aggregated_ts < $current_agg_ts
+  ORDER BY aggregated_ts ASC
+  LIMIT 1024
+) RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
+│ estimated row count: 0 (missing stats)
+│
+└── • delete
+    │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+    │ estimated row count: 0 (missing stats)
+    │ from: statement_statistics
+    │ auto commit
+    │
+    └── • project
+        │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+        │ estimated row count: 0 (missing stats)
+        │
+        └── • project
+            │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
+            │ estimated row count: 0 (missing stats)
+            │
+            └── • project
+                │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+                │ estimated row count: 0 (missing stats)
+                │
+                └── • lookup join (inner)
+                    │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+                    │ table: statement_statistics@fingerprint_stats_idx
+                    │ equality: (fingerprint_id, transaction_fingerprint_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq, aggregated_ts, plan_hash, app_name, node_id) = (fingerprint_id,transaction_fingerprint_id,crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,aggregated_ts,plan_hash,app_name,node_id)
+                    │ equality cols are key
+                    │
+                    └── • render
+                        │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+                        │ estimated row count: 9 (missing stats)
+                        │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8)
+                        │ render aggregated_ts: aggregated_ts
+                        │ render fingerprint_id: fingerprint_id
+                        │ render transaction_fingerprint_id: transaction_fingerprint_id
+                        │ render plan_hash: plan_hash
+                        │ render app_name: app_name
+                        │ render node_id: node_id
+                        │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8
+                        │
+                        └── • scan
+                              columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+                              estimated row count: 9 (missing stats)
+                              table: statement_statistics@primary
+                              spans: /0/2022-05-04T14:00:00Z/"123"/"234"/"345"/"test"/1-/0/2022-05-04T15:59:59.999999001Z
+                              limit: 1024
+
+query T
+EXPLAIN (VERBOSE)
+DELETE FROM system.transaction_statistics
+      WHERE (aggregated_ts, fingerprint_id, app_name, node_id) IN (
+      SELECT aggregated_ts, fingerprint_id, app_name, node_id
+      FROM system.transaction_statistics
+      WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = 0
+      AND (
+        (
+        aggregated_ts,
+        fingerprint_id,
+        app_name,
+        node_id
+        ) >= ($last_agg_ts, b'123', 'test', 2)
+      )
+        AND aggregated_ts < $current_agg_ts
+      ORDER BY aggregated_ts ASC
+      LIMIT 1024
+    ) RETURNING aggregated_ts, fingerprint_id, app_name, node_id
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (aggregated_ts, fingerprint_id, app_name, node_id)
+│ estimated row count: 0 (missing stats)
+│
+└── • delete
+    │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+    │ estimated row count: 0 (missing stats)
+    │ from: transaction_statistics
+    │ auto commit
+    │
+    └── • project
+        │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+        │ estimated row count: 0 (missing stats)
+        │
+        └── • project
+            │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id)
+            │ estimated row count: 0 (missing stats)
+            │
+            └── • project
+                │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+                │ estimated row count: 0 (missing stats)
+                │
+                └── • lookup join (inner)
+                    │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+                    │ table: transaction_statistics@fingerprint_stats_idx
+                    │ equality: (fingerprint_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq, aggregated_ts, app_name, node_id) = (fingerprint_id,crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,aggregated_ts,app_name,node_id)
+                    │ equality cols are key
+                    │
+                    └── • render
+                        │ columns: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+                        │ estimated row count: 9 (missing stats)
+                        │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8)
+                        │ render aggregated_ts: aggregated_ts
+                        │ render fingerprint_id: fingerprint_id
+                        │ render app_name: app_name
+                        │ render node_id: node_id
+                        │ render crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8: crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8
+                        │
+                        └── • scan
+                              columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
+                              estimated row count: 9 (missing stats)
+                              table: transaction_statistics@primary
+                              spans: /0/2022-05-04T14:00:00Z/"123"/"test"/2-/0/2022-05-04T15:59:59.999999001Z
+                              limit: 1024
+
+statement ok
+RESET CLUSTER SETTING sql.stats.flush.interval
+
+statement ok
+REVOKE node FROM root;
+
+statement ok
+DELETE FROM system.users WHERE username = 'node';
