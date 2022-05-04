@@ -139,11 +139,18 @@ func runOneTLP(
 	// statements with the MutationsOnly option. Smither.GenerateTLP always
 	// returns SELECT queries, so the MutationsOnly option is used only for
 	// randomly mutating the database.
-	smither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.MutationsOnly())
+	mutSmither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.MutationsOnly())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer smither.Close()
+	defer mutSmither.Close()
+
+	// Initialize a smither that will never generate mutations.
+	tlpSmither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.DisableMutations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tlpSmither.Close()
 
 	t.Status("running TLP")
 	until := time.After(timeout)
@@ -162,14 +169,14 @@ func runOneTLP(
 		}
 
 		// Run 1000 mutations first so that the tables have rows. Run a mutation
-		// for a tenth of the iterations after that to continually change the
+		// for a fraction of iterations after that to continually change the
 		// state of the database.
 		if i < 1000 || i%10 == 0 {
-			runMutationStatement(conn, smither, logStmt)
+			runMutationStatement(conn, mutSmither, logStmt)
 			continue
 		}
 
-		if err := runTLPQuery(conn, smither, logStmt); err != nil {
+		if err := runTLPQuery(conn, tlpSmither, logStmt); err != nil {
 			t.Fatal(err)
 		}
 	}
