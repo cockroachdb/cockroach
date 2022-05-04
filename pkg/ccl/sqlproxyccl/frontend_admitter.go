@@ -15,12 +15,19 @@ import (
 	"github.com/jackc/pgproto3/v2"
 )
 
-// FrontendAdmitInfo contains the result of FrontendAdmit call.
+// FrontendAdmitInfo contains the result of FrontendAdmit call. Fields are
+// exported because FrontendAdmit is used by CockroachCloud.
 type FrontendAdmitInfo struct {
-	conn          net.Conn
-	msg           *pgproto3.StartupMessage
-	err           error
-	sniServerName string
+	// Conn represents a handle to the incoming connection. This will never be
+	// nil even in the case of an error.
+	Conn net.Conn
+	// Msg corresponds to the startup message received from the client.
+	Msg *pgproto3.StartupMessage
+	// Err represents errors from the FrontendAdmit call.
+	Err error
+	// SniServerName, if present, would be the SNI server name received from the
+	// client.
+	SniServerName string
 }
 
 // FrontendAdmit is the default implementation of a frontend admitter. It can
@@ -40,7 +47,7 @@ var FrontendAdmit = func(
 	m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
 	if err != nil {
 		return &FrontendAdmitInfo{
-			conn: conn, err: newErrorf(codeClientReadFailed, "while receiving startup message"),
+			Conn: conn, Err: newErrorf(codeClientReadFailed, "while receiving startup message"),
 		}
 	}
 
@@ -49,7 +56,7 @@ var FrontendAdmit = func(
 	// and send back a nil StartupMessage, which will cause the proxy to just
 	// close the connection in response.
 	if _, ok := m.(*pgproto3.CancelRequest); ok {
-		return &FrontendAdmitInfo{conn: conn}
+		return &FrontendAdmitInfo{Conn: conn}
 	}
 
 	var sniServerName string
@@ -59,12 +66,12 @@ var FrontendAdmit = func(
 	if incomingTLSConfig != nil {
 		if _, ok := m.(*pgproto3.SSLRequest); !ok {
 			code := codeUnexpectedInsecureStartupMessage
-			return &FrontendAdmitInfo{conn: conn, err: newErrorf(code, "unsupported startup message: %T", m)}
+			return &FrontendAdmitInfo{Conn: conn, Err: newErrorf(code, "unsupported startup message: %T", m)}
 		}
 
 		_, err = conn.Write([]byte{pgAcceptSSLRequest})
 		if err != nil {
-			return &FrontendAdmitInfo{conn: conn, err: newErrorf(codeClientWriteFailed, "acking SSLRequest: %v", err)}
+			return &FrontendAdmitInfo{Conn: conn, Err: newErrorf(codeClientWriteFailed, "acking SSLRequest: %v", err)}
 		}
 
 		cfg := incomingTLSConfig.Clone()
@@ -79,8 +86,8 @@ var FrontendAdmit = func(
 		m, err = pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
 		if err != nil {
 			return &FrontendAdmitInfo{
-				conn: conn,
-				err:  newErrorf(codeClientReadFailed, "receiving post-TLS startup message: %v", err),
+				Conn: conn,
+				Err:  newErrorf(codeClientReadFailed, "receiving post-TLS startup message: %v", err),
 			}
 		}
 	}
@@ -92,20 +99,20 @@ var FrontendAdmit = func(
 		// itself can.
 		if _, ok := startup.Parameters[sessionRevivalTokenStartupParam]; ok {
 			return &FrontendAdmitInfo{
-				conn: conn,
-				err: newErrorf(
+				Conn: conn,
+				Err: newErrorf(
 					codeUnexpectedStartupMessage,
 					"parameter %s is not allowed",
 					sessionRevivalTokenStartupParam,
 				),
 			}
 		}
-		return &FrontendAdmitInfo{conn: conn, msg: startup, sniServerName: sniServerName}
+		return &FrontendAdmitInfo{Conn: conn, Msg: startup, SniServerName: sniServerName}
 	}
 
 	code := codeUnexpectedStartupMessage
 	return &FrontendAdmitInfo{
-		conn: conn,
-		err:  newErrorf(code, "unsupported post-TLS startup message: %T", m),
+		Conn: conn,
+		Err:  newErrorf(code, "unsupported post-TLS startup message: %T", m),
 	}
 }

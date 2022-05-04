@@ -140,13 +140,12 @@ func TestLookupConstraints(t *testing.T) {
 					d.Fatalf(t, "%v", err)
 				}
 
-				leftEq, rightEq := memo.ExtractJoinEqualityColumns(leftCols, rightCols, filters)
-				if len(leftEq) == 0 {
-					return "lookup join requires equality columns"
+				var cb lookupjoin.ConstraintBuilder
+				ok := cb.Init(&f, md, f.EvalContext(), rightTable, leftCols, rightCols, filters)
+				if !ok {
+					return "lookup join not possible"
 				}
 
-				var cb lookupjoin.ConstraintBuilder
-				cb.Init(&f, md, f.EvalContext(), rightTable, leftCols, rightCols, leftEq, rightEq)
 				lookupConstraint := cb.Build(index, filters, optionalFilters)
 				var b strings.Builder
 				if lookupConstraint.IsUnconstrained() {
@@ -176,6 +175,11 @@ func TestLookupConstraints(t *testing.T) {
 				if len(lookupConstraint.LookupExpr) > 0 {
 					b.WriteString("lookup expression:\n  ")
 					b.WriteString(formatScalar(&lookupConstraint.LookupExpr, &f, &evalCtx))
+					b.WriteString("\n")
+				}
+				if len(lookupConstraint.RemainingFilters) > 0 {
+					b.WriteString("remaining filters:\n  ")
+					b.WriteString(formatScalar(&lookupConstraint.RemainingFilters, &f, &evalCtx))
 					b.WriteString("\n")
 				}
 				return b.String()

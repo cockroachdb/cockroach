@@ -58,6 +58,11 @@ type Constraint struct {
 	// LookupExpr that are used to aid selectivity estimation. See
 	// memo.LookupJoinPrivate.ConstFilters.
 	ConstFilters memo.FiltersExpr
+
+	// RemainingFilters contains explicit ON filters that are not represented by
+	// KeyCols or LookupExpr. These filters must be included as ON filters in
+	// the lookup join.
+	RemainingFilters memo.FiltersExpr
 }
 
 // IsUnconstrained returns true if the constraint does not constrain a lookup
@@ -91,15 +96,24 @@ type ConstraintBuilder struct {
 
 // Init initializes a ConstraintBuilder. Once initialized, a ConstraintBuilder
 // can be reused to build lookup join constraints for all indexes in the given
-// table, as long as the join input and ON condition do not change.
+// table, as long as the join input and ON condition do not change. If no lookup
+// join can be built from the given filters and left/right columns, then
+// ok=false is returned.
 func (b *ConstraintBuilder) Init(
 	f *norm.Factory,
 	md *opt.Metadata,
 	evalCtx *eval.Context,
 	table opt.TableID,
 	leftCols, rightCols opt.ColSet,
-	leftEq, rightEq opt.ColList,
-) {
+	onFilters memo.FiltersExpr,
+) (ok bool) {
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(leftCols, rightCols, onFilters)
+	if len(leftEq) == 0 {
+		// Exploring a lookup join is only beneficial if there is at least one
+		// pair of equality columns.
+		return false
+	}
+
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*b = ConstraintBuilder{
@@ -113,6 +127,7 @@ func (b *ConstraintBuilder) Init(
 		rightEq:    rightEq,
 		rightEqSet: rightEq.ToSet(),
 	}
+	return true
 }
 
 // Build returns a Constraint that constrains a lookup join on the given index.
@@ -230,6 +245,7 @@ func (b *ConstraintBuilder) Build(
 		break
 	}
 
+	var c Constraint
 	if shouldBuildMultiSpanLookupJoin {
 		// Some of the index columns were constrained to multiple constant
 		// values or a range expression, so we cannot build a lookup join
@@ -260,21 +276,37 @@ func (b *ConstraintBuilder) Build(
 
 		// A multi-span lookup join with a lookup expression has no key columns
 		// and requires no projections on the input.
-		return Constraint{
+		c = Constraint{
 			RightSideCols: rightSideCols,
 			LookupExpr:    lookupExpr,
 			ConstFilters:  constFilters,
 		}
+	} else {
+		// If we did not build a lookup expression, use the key columns we
+		// found, if any.
+		c = Constraint{
+			KeyCols:          keyCols,
+			RightSideCols:    rightSideCols,
+			InputProjections: inputProjections,
+			ConstFilters:     constFilters,
+		}
 	}
 
-	// If we did not build a lookup expression, return the key columns we found,
-	// if any.
-	return Constraint{
-		KeyCols:          keyCols,
-		RightSideCols:    rightSideCols,
-		InputProjections: inputProjections,
-		ConstFilters:     constFilters,
+	// We have not found a valid constraint, so there is no need to calculate
+	// the remaining filters.
+	if c.IsUnconstrained() {
+		return c
 	}
+
+	// Reduce the remaining filters.
+	c.RemainingFilters = onFilters
+	if len(c.KeyCols) > 0 {
+		c.RemainingFilters = memo.ExtractRemainingJoinFilters(c.RemainingFilters, keyCols, rightSideCols)
+	}
+	c.RemainingFilters = c.RemainingFilters.Difference(lookupExpr)
+	c.RemainingFilters = c.RemainingFilters.Difference(constFilters)
+
+	return c
 }
 
 // findComputedColJoinEquality returns the computed column expression of col and
