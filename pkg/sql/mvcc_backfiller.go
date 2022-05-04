@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -36,15 +35,12 @@ import (
 // IndexBackfillerMergePlanner holds dependencies for the merge step of the
 // index backfiller.
 type IndexBackfillerMergePlanner struct {
-	execCfg   *ExecutorConfig
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory
+	execCfg *ExecutorConfig
 }
 
 // NewIndexBackfillerMergePlanner creates a new IndexBackfillerMergePlanner.
-func NewIndexBackfillerMergePlanner(
-	execCfg *ExecutorConfig, ieFactory sqlutil.SessionBoundInternalExecutorFactory,
-) *IndexBackfillerMergePlanner {
-	return &IndexBackfillerMergePlanner{execCfg: execCfg, ieFactory: ieFactory}
+func NewIndexBackfillerMergePlanner(execCfg *ExecutorConfig) *IndexBackfillerMergePlanner {
+	return &IndexBackfillerMergePlanner{execCfg: execCfg}
 }
 
 func (im *IndexBackfillerMergePlanner) plan(
