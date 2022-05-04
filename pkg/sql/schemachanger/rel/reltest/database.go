@@ -13,9 +13,12 @@ package reltest
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -28,7 +31,7 @@ type DatabaseTest struct {
 	// into the database for the purpose of querying.
 	Data []string
 	// Each of the QueryCases will be run with the set of indexes.
-	Indexes [][][]rel.Attr
+	Indexes [][]rel.Index
 
 	QueryCases []QueryTest
 }
@@ -54,12 +57,15 @@ type QueryTest struct {
 	// ErrorRE is used to indicate that the query is invalid and will
 	// result in an error that must match this pattern.
 	ErrorRE string
+
+	// UnsatisfiableIndexes are the indexes which cannot satisfy the query.
+	UnsatisfiableIndexes []int
 }
 
 func (tc DatabaseTest) run(t *testing.T, s Suite) {
-	for _, databaseIndexes := range tc.databaseIndexes() {
-		t.Run(fmt.Sprintf("%s", databaseIndexes), func(t *testing.T) {
-			db, err := rel.NewDatabase(s.Schema, databaseIndexes)
+	for i, databaseIndexes := range tc.databaseIndexes() {
+		t.Run(fmt.Sprintf("%v", databaseIndexes), func(t *testing.T) {
+			db, err := rel.NewDatabase(s.Schema, databaseIndexes...)
 			require.NoError(t, err)
 			for _, k := range tc.Data {
 				v := s.Registry.MustGetByName(t, k)
@@ -67,14 +73,14 @@ func (tc DatabaseTest) run(t *testing.T, s Suite) {
 			}
 			for _, qc := range tc.QueryCases {
 				t.Run(qc.Name, func(t *testing.T) {
-					qc.run(t, db)
+					qc.run(t, i, db)
 				})
 			}
 		})
 	}
 }
 
-func (qc QueryTest) run(t *testing.T, db *rel.Database) {
+func (qc QueryTest) run(t *testing.T, indexes int, db *rel.Database) {
 	var results [][]interface{}
 	q, err := rel.NewQuery(db.Schema(), qc.Query...)
 	if qc.ErrorRE != "" {
@@ -84,14 +90,23 @@ func (qc QueryTest) run(t *testing.T, db *rel.Database) {
 
 	require.NoError(t, err)
 	require.Equal(t, qc.Entities, q.Entities())
-	require.NoError(t, q.Iterate(db, func(r rel.Result) error {
+	if err := q.Iterate(db, func(r rel.Result) error {
 		var cur []interface{}
 		for _, v := range qc.ResVars {
 			cur = append(cur, r.Var(v))
 		}
 		results = append(results, cur)
 		return nil
-	}))
+	}); testutils.IsError(err, `failed to find index to satisfy query`) {
+		if util.MakeFastIntSet(qc.UnsatisfiableIndexes...).Contains(indexes) {
+			return
+		}
+		t.Fatalf("expected to succeed with indexes %d: %v", indexes, err)
+	} else if err != nil {
+		t.Fatal(err)
+	} else if util.MakeFastIntSet(qc.UnsatisfiableIndexes...).Contains(indexes) {
+		t.Fatalf("expected to fail with indexes %d", indexes)
+	}
 	expResults := append(qc.Results[:0:0], qc.Results...)
 	findResultInExp := func(res []interface{}) (found bool) {
 		for i, exp := range expResults {
@@ -116,7 +131,7 @@ func (tc DatabaseTest) encode(t *testing.T, r *Registry) *yaml.Node {
 		Kind: yaml.MappingNode,
 		Content: []*yaml.Node{
 			scalarYAML("indexes"),
-			tc.encodeIndexes(),
+			tc.encodeIndexes(r),
 			scalarYAML("data"),
 			tc.encodeData(),
 			scalarYAML("queries"),
@@ -125,16 +140,51 @@ func (tc DatabaseTest) encode(t *testing.T, r *Registry) *yaml.Node {
 	}
 }
 
-func (tc DatabaseTest) encodeIndexes() *yaml.Node {
-	databaseIndexesNode := yaml.Node{Kind: yaml.SequenceNode}
-	for _, indexes := range tc.databaseIndexes() {
-		indexesNode := yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
+func (tc DatabaseTest) encodeIndexes(r *Registry) *yaml.Node {
+	databaseIndexesNode := yaml.Node{Kind: yaml.MappingNode}
+	for i, indexes := range tc.databaseIndexes() {
+		indexesNode := yaml.Node{Kind: yaml.SequenceNode}
 		for _, idx := range indexes {
-			indexesNode.Content = append(indexesNode.Content, encodeAttrs(idx))
+			// TODO(ajwerner): Implement encoding of the other index features.
+			indexesNode.Content = append(indexesNode.Content, encodeIdx(idx))
 		}
-		databaseIndexesNode.Content = append(databaseIndexesNode.Content, &indexesNode)
+		databaseIndexesNode.Content = append(databaseIndexesNode.Content,
+			scalarYAML(strconv.Itoa(i)),
+			&indexesNode)
 	}
 	return &databaseIndexesNode
+}
+
+func encodeIdx(idx rel.Index) *yaml.Node {
+	indexNode := yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle}
+	indexNode.Content = []*yaml.Node{
+		scalarYAML("attrs"),
+		encodeAttrs(idx.Attrs),
+	}
+	if len(idx.Exists) > 0 {
+		indexNode.Content = append(indexNode.Content,
+			scalarYAML("exists"),
+			encodeAttrs(idx.Exists),
+		)
+	}
+	if len(idx.Where) > 0 {
+		clause := yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle}
+		for _, w := range idx.Where {
+			var n yaml.Node
+			if w.Attr == rel.Type {
+				n = *scalarYAML(fmt.Sprintf("%v", w.Eq))
+			} else if err := n.Encode(w.Eq); err != nil {
+				n = *scalarYAML("ERROR: " + err.Error())
+			}
+			clause.Content = append(clause.Content,
+				scalarYAML(w.Attr.String()), &n)
+		}
+		indexNode.Content = append(indexNode.Content,
+			scalarYAML("where"),
+			&clause,
+		)
+	}
+	return &indexNode
 }
 
 func encodeAttrs(idx []rel.Attr) *yaml.Node {
@@ -218,7 +268,15 @@ func (tc DatabaseTest) encodeQueries(t *testing.T, r *Registry) *yaml.Node {
 					encodeResults(t, qt.Results),
 				},
 			}
+			if len(qt.UnsatisfiableIndexes) > 0 {
+				var n yaml.Node
+				_ = n.Encode(qt.UnsatisfiableIndexes)
+				n.Style = yaml.FlowStyle
+				qtNode.Content = append(qtNode.Content,
+					scalarYAML("unsatisfiableIndexes"), &n)
+			}
 		}
+
 		queriesNode.Content = append(queriesNode.Content,
 			scalarYAML(qt.Name), qtNode,
 		)
@@ -229,9 +287,9 @@ func (tc DatabaseTest) encodeQueries(t *testing.T, r *Registry) *yaml.Node {
 	return &queriesNode
 }
 
-func (tc DatabaseTest) databaseIndexes() [][][]rel.Attr {
+func (tc DatabaseTest) databaseIndexes() [][]rel.Index {
 	if len(tc.Indexes) == 0 {
-		return [][][]rel.Attr{{}}
+		return [][]rel.Index{{}}
 	}
 	return tc.Indexes
 }

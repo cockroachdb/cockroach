@@ -231,7 +231,7 @@ func (mq *mergeQueue) process(
 	}
 	if rhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: RHS meets minimum size threshold %d with %d bytes",
-			minBytes, lhsStats.Total())
+			minBytes, rhsStats.Total())
 		return false, nil
 	}
 
