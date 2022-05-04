@@ -17,6 +17,7 @@ import { Button } from "src/button";
 import { Text, TextTypes } from "src/text";
 
 import styles from "./dateRange.module.scss";
+import { usePrevious } from "../util/hooks";
 
 const cx = classNames.bind(styles);
 
@@ -51,14 +52,20 @@ export function DateRangeMenu({
     startInit || moment.utc(),
   );
   const [endMoment, setEndMoment] = useState<Moment>(endInit || moment.utc());
+  const prevStartInit = usePrevious(startInit);
+  const prevEndInit = usePrevious(endInit);
 
   useEffect(() => {
-    setStartMoment(startInit);
-  }, [startInit]);
+    if (startInit?.unix() != prevStartInit?.unix()) {
+      setStartMoment(startInit);
+    }
+  }, [startInit, prevStartInit]);
 
   useEffect(() => {
-    setEndMoment(endInit);
-  }, [endInit]);
+    if (endInit?.unix() != prevEndInit?.unix()) {
+      setEndMoment(endInit);
+    }
+  }, [endInit, prevEndInit]);
 
   const onChangeStart = (m?: Moment) => {
     m && setStartMoment(m);
