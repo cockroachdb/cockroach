@@ -178,6 +178,11 @@ func TestLookupConstraints(t *testing.T) {
 					b.WriteString(formatScalar(&lookupConstraint.LookupExpr, &f, &evalCtx))
 					b.WriteString("\n")
 				}
+				if len(lookupConstraint.RemainingFilters) > 0 {
+					b.WriteString("remaining filters:\n  ")
+					b.WriteString(formatScalar(&lookupConstraint.RemainingFilters, &f, &evalCtx))
+					b.WriteString("\n")
+				}
 				return b.String()
 
 			default:

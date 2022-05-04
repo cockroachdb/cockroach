@@ -12,11 +12,21 @@ x IN (1, 2, 3) AND y = b AND z = c
 lookup expression:
   ((y = b) AND (z = c)) AND (x IN (1, 2, 3))
 
+lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
+x IN (1, 2, 3) AND y = b AND (z > 10 OR z IN (1, 2, 3))
+----
+lookup expression:
+  (y = b) AND (x IN (1, 2, 3))
+remaining filters:
+  (z > 10) OR (z IN (1, 2, 3))
+
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y)
 x IN (1, 2, 3) AND y = b AND z = c
 ----
 lookup expression:
   (y = b) AND (x IN (1, 2, 3))
+remaining filters:
+  z = c
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 x IN (1, 2, 3) AND y = 4 AND z = c
@@ -52,6 +62,22 @@ lookup expression:
 lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
 x = a
 optional: y IN (1, 2, 3)
+----
+lookup expression:
+  (x = a) AND (y IN (1, 2, 3))
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y)
+x = a AND z = 1
+optional: y IN (1, 2, 3)
+----
+lookup expression:
+  (x = a) AND (y IN (1, 2, 3))
+remaining filters:
+  z = 1
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y)
+x = a
+optional: y IN (1, 2, 3) AND z = 1
 ----
 lookup expression:
   (x = a) AND (y IN (1, 2, 3))
@@ -102,6 +128,8 @@ optional: x IN (1, 2)
 ----
 lookup expression:
   (y = b) AND (x IN (1, 2))
+remaining filters:
+  x IN (1, 2, 3)
 
 
 # Test for range filters.
@@ -155,6 +183,22 @@ optional: z > 0
 lookup expression:
   ((y = b) AND (x = 1)) AND (z > 0)
 
+lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y)
+x = a AND z = 1
+optional: y > 0
+----
+lookup expression:
+  (x = a) AND (y > 0)
+remaining filters:
+  z = 1
+
+lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y)
+x = a
+optional: y > 0 AND z = 1
+----
+lookup expression:
+  (x = a) AND (y > 0)
+
 
 # Test for range filters and IN filters.
 
@@ -175,3 +219,19 @@ optional: x IN (1, 2)
 ----
 lookup expression:
   ((y = b) AND (x IN (1, 2))) AND (z > 0)
+
+lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y)
+y = b AND z > 0
+optional: x IN (1, 2)
+----
+lookup expression:
+  (y = b) AND (x IN (1, 2))
+remaining filters:
+  z > 0
+
+lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y)
+y = b
+optional: x IN (1, 2) AND z > 0
+----
+lookup expression:
+  (y = b) AND (x IN (1, 2))

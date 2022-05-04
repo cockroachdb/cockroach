@@ -18,6 +18,58 @@ key cols:
 input projections:
   v_eq = a + 10
 
+# TODO(mgartner): The x=a remaining filter is not necessary.
+lookup-constraints left=(a int, b int) right=(x int, y INT, v int not null as (x + 10) virtual) index=(v, y)
+x = a AND y = 10
+----
+key cols:
+  v = v_eq
+  y = lookup_join_const_col_@7
+input projections:
+  v_eq = a + 10
+  lookup_join_const_col_@7 = 10
+remaining filters:
+  x = a
+
+# TODO(mgartner): The x=a remaining filter is not necessary.
+lookup-constraints left=(a int, b int) right=(x int, y INT, v int not null as (x + 10) virtual) index=(v, y)
+x = a
+optional: y = 10
+----
+key cols:
+  v = v_eq
+  y = lookup_join_const_col_@7
+input projections:
+  v_eq = a + 10
+  lookup_join_const_col_@7 = 10
+remaining filters:
+  x = a
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, y INT, z INT) index=(v, x, y)
+x = a AND y = 0 AND z = 3
+----
+key cols:
+  v = v_eq
+  x = a
+  y = lookup_join_const_col_@8
+input projections:
+  v_eq = a + 10
+  lookup_join_const_col_@8 = 0
+remaining filters:
+  z = 3
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int, v int not null as (x + 10) virtual) index=(v, x, y)
+x = a
+optional: y = 0 AND z = 3
+----
+key cols:
+  v = v_eq
+  x = a
+  y = lookup_join_const_col_@7
+input projections:
+  v_eq = a + 10
+  lookup_join_const_col_@7 = 0
+
 # TODO(mgartner): We should be able to generate a lookup join by determining
 # that v is not null because the filter demands that x is not null, and v is
 # calculated from x.
