@@ -974,6 +974,22 @@ vectorized: true
 statement ok
 SET index_recommendations_enabled = 'true'
 
+# Regression test for #80910. There should be no index recommendations for
+# system tables.
+query T
+EXPLAIN SELECT * FROM system.table_statistics WHERE name = 'foo'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: name = 'foo'
+│
+└── • scan
+      missing stats
+      table: table_statistics@primary
+      spans: FULL SCAN
+
 query T
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
