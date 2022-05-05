@@ -29,6 +29,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//:pq",
         "@com_github_lib_pq_auth_kerberos//:kerberos",
+        "@com_github_otan_gopgkrb5//:gopgkrb5",
     ],
 )
 

@@ -736,13 +736,13 @@ CREATE VIEW privsview AS SELECT a,b,c FROM privs
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview ADD d INT
 
-statement error pgcode 42809 "privsview" is not a table
+statement error pgcode 42809 "privsview" is not a table or materialized view
 ALTER TABLE privsview SPLIT AT VALUES (42)
 
-statement error pgcode 42809 "privsview" is not a table
+statement error pgcode 42809 "privsview" is not a table or materialized view
 ALTER TABLE privsview UNSPLIT AT VALUES (42)
 
-statement error pgcode 42809 "privsview" is not a table
+statement error pgcode 42809 "privsview" is not a table or materialized view
 ALTER TABLE privsview UNSPLIT ALL
 
 # Verify that impure defaults are evaluated separately on each row

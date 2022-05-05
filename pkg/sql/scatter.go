@@ -38,7 +38,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 		return nil, errorutil.UnsupportedWithMultiTenancy(54255)
 	}
 
-	tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT)
+	_, tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT, true /* skipCache */)
 	if err != nil {
 		return nil, err
 	}
