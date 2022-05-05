@@ -96,9 +96,9 @@ class StatementDiagnosticsHistoryView extends React.Component<
       title: "Activated on",
       name: "activated_on",
       cell: record =>
-        moment(record.requested_at.seconds.toNumber() * 1000).format(
-          "LL[ at ]h:mm a",
-        ),
+        moment
+          .utc(record.requested_at.seconds.toNumber() * 1000)
+          .format("LL[ at ]H:mm"),
       sort: record => moment(record.requested_at.seconds.toNumber() * 1000),
     },
     {

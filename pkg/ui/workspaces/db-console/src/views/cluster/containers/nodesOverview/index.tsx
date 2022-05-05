@@ -442,7 +442,7 @@ class DecommissionedNodeList extends React.Component<
       key: "decommissionedSince",
       title: "decommissioned on",
       render: (_text: string, record: DecommissionedNodeStatusRow) =>
-        record.decommissionedDate.format("LL[ at ]h:mm a UTC"),
+        record.decommissionedDate.format("LL[ at ]H:mm UTC"),
     },
     {
       key: "status",
