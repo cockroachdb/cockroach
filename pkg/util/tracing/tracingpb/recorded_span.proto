@@ -43,6 +43,19 @@ message StructuredRecord {
   google.protobuf.Any payload = 2;
 }
 
+// OperationMetadata captures information corresponding to the operation that
+// a span is started with.
+message OperationMetadata {
+  // Duration represents the total time spent by spans tracing the operation.
+  int64 duration = 1 [(gogoproto.casttype) = "time.Duration"];
+  // Count represents the number of spans tracing the operation.
+  int64 count = 2;
+  // ContainsUnfinished is true if the OperationMetadata contains information
+  // about unfinished spans tracing the operation.
+  bool contains_unfinished = 3;
+}
+
+
 // RecordedSpan is the data recorded by a trace span. It
 // needs to be able to cross RPC boundaries so that the
 // complete recording of the trace can be constructed.
@@ -102,6 +115,15 @@ message RecordedSpan {
   // information about when this event occurred.
   // DeprecatedInternalStructured only stores the Payloads.
   repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
+
+
+  // ChildrenMetadata is a mapping from operation to the aggregated metadata of
+  // that operation.
+  //
+  // When a child of this span is Finish()ed, it updates the map with all the
+  // children in its Recording. ChildrenMetadata therefore provides a bucketed
+  // view of the various operations that are being traced as part of a span.
+  map<string, OperationMetadata> children_metadata = 18 [(gogoproto.nullable) = false];
 
   reserved 5,10,11;
 }

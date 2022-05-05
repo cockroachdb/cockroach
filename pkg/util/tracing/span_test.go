@@ -368,6 +368,7 @@ func TestChildSpanRegisteredWithRecordingParent(t *testing.T) {
 	rec := sp.GetRecording(tracingpb.RecordingStructured)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].StructuredRecords, 1)
+	require.Len(t, rec[0].ChildrenMetadata, 1)
 }
 
 // TestRecordingMaxSpans verifies that recordings don't grow over the limit.
@@ -657,6 +658,148 @@ func TestStructureRecording(t *testing.T) {
 	}
 }
 
+// TestVerboseRecordingFinishedChildrenDurations tests that the VerboseRecording
+// of a span includes the `operation : duration` mapping of all children
+// (finished and open) in that recording.
+func TestVerboseRecordingFinishedChildrenDurations(t *testing.T) {
+	checkChildrenMetadata := func(
+		actualOperations map[string]tracingpb.OperationMetadata,
+		expectedOperations map[string]tracingpb.OperationMetadata) {
+		t.Helper()
+		require.Len(t, actualOperations, len(expectedOperations))
+		for opName, actualMetadata := range actualOperations {
+			expectedMetadata, ok := expectedOperations[opName]
+			require.True(t, ok)
+			require.Greater(t, actualMetadata.Duration, time.Duration(0))
+			require.Equal(t, expectedMetadata.Count, actualMetadata.Count)
+			require.Equal(t, expectedMetadata.ContainsUnfinished, actualMetadata.ContainsUnfinished)
+		}
+	}
+	tr := NewTracer()
+	root := tr.StartSpan("root", WithRecording(tracingpb.RecordingVerbose))
+	child := tr.StartSpan("child", WithParent(root))
+	gc := tr.StartSpan("grandchild", WithParent(child))
+	child2 := tr.StartSpan("child2", WithParent(root))
+
+	// grandchild has no children, and so the recording should contain no
+	// metadata.
+	rec := gc.FinishAndGetConfiguredRecording()
+	require.Len(t, rec, 1)
+	checkChildrenMetadata(rec[0].ChildrenMetadata, map[string]tracingpb.OperationMetadata{})
+
+	rec = child.GetConfiguredRecording()
+	require.Len(t, rec, 2)
+	checkChildrenMetadata(rec[0].ChildrenMetadata, map[string]tracingpb.OperationMetadata{
+		"grandchild": {Count: 1},
+	})
+
+	// Now, let's Finish() child2, but leave child as an open child of root.
+	child2.Finish()
+
+	// Root should have entries for Finish()ed `child2`, open child `child`, and
+	// its Finish()ed `grandchild`.
+	rec = root.GetConfiguredRecording()
+	require.Len(t, rec, 4)
+	checkChildrenMetadata(rec[0].ChildrenMetadata, map[string]tracingpb.OperationMetadata{
+		"child2":     {Count: 1},
+		"child":      {Count: 1, ContainsUnfinished: true},
+		"grandchild": {Count: 1},
+	})
+
+	// Create another span with the same opName.
+	childWithSameOpName := tr.StartSpan("child", WithParent(root))
+	childWithSameOpName.Finish()
+	rec = root.GetConfiguredRecording()
+	require.Len(t, rec, 5)
+	checkChildrenMetadata(rec[0].ChildrenMetadata, map[string]tracingpb.OperationMetadata{
+		"child2":     {Count: 1},
+		"child":      {Count: 2, ContainsUnfinished: true},
+		"grandchild": {Count: 1},
+	})
+
+	// Finish child, and re-check root's recording.
+	child.Finish()
+	rec = root.FinishAndGetConfiguredRecording()
+	require.Len(t, rec, 5)
+	checkChildrenMetadata(rec[0].ChildrenMetadata, map[string]tracingpb.OperationMetadata{
+		"child2":     {Count: 1},
+		"child":      {Count: 2},
+		"grandchild": {Count: 1},
+	})
+}
+
+// TestStructuredRecordingFinishedChildrenDurations tests that the
+// StructuredRecording of a span includes the `operation : duration` mapping of
+// all children (finished and open) in that recording.
+func TestStructuredRecordingFinishedChildrenDurations(t *testing.T) {
+	checkChildrenMetadata := func(
+		actualOperations map[string]tracingpb.OperationMetadata,
+		expectedOperations map[string]tracingpb.OperationMetadata) {
+		t.Helper()
+		require.Len(t, actualOperations, len(expectedOperations))
+		for opName, actualMetadata := range actualOperations {
+			expectedMetadata, ok := expectedOperations[opName]
+			require.True(t, ok)
+			require.Greater(t, actualMetadata.Duration, time.Duration(0))
+			require.Equal(t, expectedMetadata.Count, actualMetadata.Count)
+			require.Equal(t, expectedMetadata.ContainsUnfinished, actualMetadata.ContainsUnfinished)
+		}
+	}
+	tr := NewTracer()
+	root := tr.StartSpan("root", WithRecording(tracingpb.RecordingStructured))
+	child := tr.StartSpan("child", WithParent(root))
+	gc := tr.StartSpan("grandchild", WithParent(child))
+	child2 := tr.StartSpan("child2", WithParent(root))
+
+	// grandchild has no children, and so the recording should contain no
+	// metadata.
+	rec := gc.FinishAndGetConfiguredRecording()
+	require.Len(t, rec, 1)
+	checkChildrenMetadata(rec[0].ChildrenMetadata, map[string]tracingpb.OperationMetadata{})
+
+	// child has no StructuredEvents, but it should return information about its
+	// children.
+	rec = child.GetConfiguredRecording()
+	require.Len(t, rec, 1)
+	checkChildrenMetadata(rec[0].ChildrenMetadata, map[string]tracingpb.OperationMetadata{
+		"grandchild": {Count: 1},
+	})
+
+	// Now, let's Finish() child2, but leave child as an open child of root.
+	child2.Finish()
+
+	// Root should have entries for Finish()ed `child2`, open child `child`, and
+	// its Finish()ed `grandchild`.
+	rec = root.GetConfiguredRecording()
+	require.Len(t, rec, 1)
+	checkChildrenMetadata(rec[0].ChildrenMetadata, map[string]tracingpb.OperationMetadata{
+		"child2":     {Count: 1},
+		"child":      {Count: 1, ContainsUnfinished: true},
+		"grandchild": {Count: 1},
+	})
+
+	// Create another span with the same opName.
+	childWithSameOpName := tr.StartSpan("child", WithParent(root))
+	childWithSameOpName.Finish()
+	rec = root.GetConfiguredRecording()
+	require.Len(t, rec, 1)
+	checkChildrenMetadata(rec[0].ChildrenMetadata, map[string]tracingpb.OperationMetadata{
+		"child2":     {Count: 1},
+		"child":      {Count: 2, ContainsUnfinished: true},
+		"grandchild": {Count: 1},
+	})
+
+	// Finish child, and re-check root's recording.
+	child.Finish()
+	rec = root.FinishAndGetConfiguredRecording()
+	require.Len(t, rec, 1)
+	checkChildrenMetadata(rec[0].ChildrenMetadata, map[string]tracingpb.OperationMetadata{
+		"child2":     {Count: 1},
+		"child":      {Count: 2},
+		"grandchild": {Count: 1},
+	})
+}
+
 // Test that a child span that's still open at the time when
 // parent.FinishAndGetRecording() is called is included in the parent's
 // recording.
@@ -788,4 +931,89 @@ func TestEventListenerNotifiedWithoutHoldingSpanMutex(t *testing.T) {
 	// this would deadlock.
 	sp.RecordStructured(&types.Int32Value{Value: 5})
 	require.Equal(t, 1, rootEventListener.eventsSeen)
+}
+
+// TestFinishedChildrenMetadata tests that on Finish() the parent span's
+// `childrenMetadata` map captures all the children in the recording rooted at
+// the finished span.
+func TestFinishedChildrenMetadata(t *testing.T) {
+	checkChildrenMetadata := func(
+		sp *Span, expectedOperations map[string]tracingpb.OperationMetadata) {
+		t.Helper()
+		c := sp.i.crdb
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		require.Len(t, c.mu.recording.childrenMetadata, len(expectedOperations))
+		for opName, actualMetadata := range c.mu.recording.childrenMetadata {
+			expectedMetadata, ok := expectedOperations[opName]
+			require.True(t, ok)
+			require.Greater(t, actualMetadata.Duration, time.Duration(0))
+			require.Equal(t, expectedMetadata.Count, actualMetadata.Count)
+			require.Equal(t, expectedMetadata.ContainsUnfinished, actualMetadata.ContainsUnfinished)
+		}
+	}
+
+	fn := func(recordingMode tracingpb.RecordingType) {
+		tr := NewTracer()
+		root := tr.StartSpan("root", WithRecording(recordingMode))
+		child := tr.StartSpan("child", WithParent(root))
+
+		gc1 := tr.StartSpan("grandchild1", WithParent(child))
+		ggc1 := tr.StartSpan("greatgrandchild1", WithParent(gc1))
+
+		gc2 := tr.StartSpan("grandchild2", WithParent(child))
+		ggc2 := tr.StartSpan("greatgrandchild2", WithParent(gc2))
+
+		// First let's Finish() the lowest children. This should mean that their
+		// parents have entries for their duration.
+		ggc1.Finish()
+		checkChildrenMetadata(gc1, map[string]tracingpb.OperationMetadata{
+			"greatgrandchild1": {Count: 1},
+		})
+
+		ggc2.Finish()
+		checkChildrenMetadata(gc2, map[string]tracingpb.OperationMetadata{
+			"greatgrandchild2": {Count: 1},
+		})
+
+		// Finish() one of the grand children.
+		gc1.Finish()
+		checkChildrenMetadata(child, map[string]tracingpb.OperationMetadata{
+			"grandchild1":      {Count: 1},
+			"greatgrandchild1": {Count: 1},
+		})
+
+		// Now Finish() `child` since it has both finished and open children at this
+		// point. We expect to see metadata of all children (finished + open) rooted
+		// in childs' recording to be copied into root.
+		child.Finish()
+		checkChildrenMetadata(root, map[string]tracingpb.OperationMetadata{
+			"child":            {Count: 1},
+			"grandchild1":      {Count: 1},
+			"greatgrandchild1": {Count: 1},
+			"grandchild2":      {Count: 1, ContainsUnfinished: true},
+			"greatgrandchild2": {Count: 1},
+		})
+
+		// gc2 should now be a root span in the registry since it was open when
+		// `child` was finished. Finishing it should have no effect on roots'
+		// recorded metadata.
+		gc2.Finish()
+		checkChildrenMetadata(root, map[string]tracingpb.OperationMetadata{
+			"child":            {Count: 1},
+			"grandchild1":      {Count: 1},
+			"greatgrandchild1": {Count: 1},
+			"grandchild2":      {Count: 1, ContainsUnfinished: true},
+			"greatgrandchild2": {Count: 1},
+		})
+		root.Finish()
+	}
+
+	t.Run("verbose-recording", func(t *testing.T) {
+		fn(tracingpb.RecordingVerbose)
+	})
+
+	t.Run("structured-recording", func(t *testing.T) {
+		fn(tracingpb.RecordingStructured)
+	})
 }
