@@ -398,13 +398,13 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 func BenchmarkCheckSSTConflicts(b *testing.B) {
 	for _, numKeys := range []int{1000, 10000, 100000} {
 		b.Run(fmt.Sprintf("keys=%d", numKeys), func(b *testing.B) {
-			for _, numVersions := range []int{8, 64} {
-				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
-					for _, numSstKeys := range []int{1000, 10000} {
-						b.Run(fmt.Sprintf("sstKeys=%d", numSstKeys), func(b *testing.B) {
-							for _, overlap := range []bool{false, true} {
-								b.Run(fmt.Sprintf("overlap=%t", overlap), func(b *testing.B) {
-									runCheckSSTConflicts(b, numKeys, numVersions, numSstKeys, overlap)
+			for _, numSstKeys := range []int{10, 100, 1000, 10000, 100000} {
+				b.Run(fmt.Sprintf("sstKeys=%d", numSstKeys), func(b *testing.B) {
+					for _, overlap := range []bool{false, true} {
+						b.Run(fmt.Sprintf("overlap=%t", overlap), func(b *testing.B) {
+							for _, usePrefixSeek := range []bool{false, true} {
+								b.Run(fmt.Sprintf("prefixSeek=%t", usePrefixSeek), func(b *testing.B) {
+									runCheckSSTConflicts(b, numKeys, 1 /* numVersions */, numSstKeys, overlap, usePrefixSeek)
 								})
 							}
 						})

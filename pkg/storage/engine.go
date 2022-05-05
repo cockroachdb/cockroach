@@ -278,6 +278,14 @@ type IterOptions struct {
 	// use such an iterator is to use it in concert with an iterator without
 	// timestamp hints, as done by MVCCIncrementalIterator.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
+	// useL6Filters allows the caller to opt into reading filter blocks for
+	// L6 sstables. Only for use with Prefix = true. Helpful if a lot of prefix
+	// Seeks are expected in quick succession, that are also likely to not
+	// yield a single key. Filter blocks in L6 can be relatively large, often
+	// larger than data blocks, so the benefit of loading them in the cache
+	// is minimized if the probability of the key existing is not low or if
+	// this is a one-time Seek (where loading the data block directly is better).
+	useL6Filters bool
 }
 
 // MVCCIterKind is used to inform Reader about the kind of iteration desired
