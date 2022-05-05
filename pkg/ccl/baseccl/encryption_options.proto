@@ -10,8 +10,6 @@ syntax = "proto3";
 package cockroach.ccl.baseccl;
 option go_package = "baseccl";
 
-import "gogoproto/gogo.proto";
-
 enum EncryptionKeySource {
   // Plain key files.
   KeyFiles = 0;

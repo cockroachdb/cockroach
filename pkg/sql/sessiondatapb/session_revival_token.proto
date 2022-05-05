@@ -12,7 +12,6 @@ syntax = "proto3";
 package cockroach.sql.sessiondatapb;
 option go_package = "sessiondatapb";
 
-import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
 // SessionRevivalToken is an opaque piece of data that can be used to

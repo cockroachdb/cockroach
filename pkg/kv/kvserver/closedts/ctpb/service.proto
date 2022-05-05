@@ -16,7 +16,6 @@ import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
-import "google/api/annotations.proto";
 
 // Update contains information about (the advancement of) closed timestamps for
 // ranges with leases on the sender node. Updates are of two types: snapshots
