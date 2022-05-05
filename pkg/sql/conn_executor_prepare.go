@@ -316,7 +316,7 @@ func (ex *connExecutor) execBind(
 			return retErr(pgerror.Newf(
 				pgcode.DuplicateCursor, "portal %q already exists", portalName))
 		}
-		if _, err := ex.getCursorAccessor().getCursor(portalName); err == nil {
+		if cursor := ex.getCursorAccessor().getCursor(portalName); cursor != nil {
 			return retErr(pgerror.Newf(
 				pgcode.DuplicateCursor, "portal %q already exists as cursor", portalName))
 		}
@@ -472,7 +472,7 @@ func (ex *connExecutor) addPortal(
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
 		panic(errors.AssertionFailedf("portal already exists: %q", portalName))
 	}
-	if _, err := ex.getCursorAccessor().getCursor(portalName); err == nil {
+	if cursor := ex.getCursorAccessor().getCursor(portalName); cursor != nil {
 		panic(errors.AssertionFailedf("portal already exists as cursor: %q", portalName))
 	}
 
