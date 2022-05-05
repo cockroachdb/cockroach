@@ -21,7 +21,13 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.DatabaseComment) scop.Op {
-					return notImplemented(this)
+					return &scop.UpsertDatabaseComment{
+						DatabaseID: this.DatabaseID,
+						Comment:    this.Comment,
+					}
+				}),
+				emit(func(this *scpb.DatabaseComment, md *targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 			),
 		),
@@ -35,6 +41,9 @@ func init() {
 					return &scop.RemoveDatabaseComment{
 						DatabaseID: this.DatabaseID,
 					}
+				}),
+				emit(func(this *scpb.DatabaseComment, md *targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 			),
 		),

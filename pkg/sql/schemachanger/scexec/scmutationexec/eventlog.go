@@ -57,6 +57,8 @@ func asEventPayload(
 			return &eventpb.DropSchema{SchemaName: fullName}, nil
 		case *scpb.AliasType, *scpb.EnumType:
 			return &eventpb.DropType{TypeName: fullName}, nil
+		case *scpb.TableComment, *scpb.ColumnComment, *scpb.IndexComment, *scpb.ConstraintComment, *scpb.DatabaseComment:
+			return asCommentEventPayload(ctx, fullName, e, targetStatus, m, true /* isNullComment */)
 		}
 	}
 	switch e := e.(type) {
@@ -97,6 +99,79 @@ func asEventPayload(
 		default:
 			return nil, errors.AssertionFailedf("unknown target status %s", targetStatus)
 		}
+	case *scpb.TableComment, *scpb.ColumnComment, *scpb.IndexComment, *scpb.ConstraintComment, *scpb.DatabaseComment:
+		return asCommentEventPayload(ctx, fullName, e, targetStatus, m, false /* isNullComment */)
+	}
+	return nil, errors.AssertionFailedf("unknown %s element type %T", targetStatus.String(), e)
+}
+
+// TODO (Chengxiong): add event log support for schema comment
+func asCommentEventPayload(
+	ctx context.Context,
+	fullName string,
+	e scpb.Element,
+	targetStatus scpb.Status,
+	m *visitor,
+	isNullComment bool,
+) (eventpb.EventPayload, error) {
+	switch e := e.(type) {
+	case *scpb.TableComment:
+		return &eventpb.CommentOnTable{
+			TableName:   fullName,
+			Comment:     e.Comment,
+			NullComment: isNullComment,
+		}, nil
+	case *scpb.ColumnComment:
+		tbl, err := m.checkOutTable(ctx, e.TableID)
+		if err != nil {
+			return nil, err
+		}
+		col, err := tbl.FindColumnWithID(e.ColumnID)
+		if err != nil {
+			return nil, err
+		}
+		return &eventpb.CommentOnColumn{
+			TableName:   fullName,
+			ColumnName:  col.GetName(),
+			Comment:     e.Comment,
+			NullComment: isNullComment,
+		}, nil
+	case *scpb.IndexComment:
+		tbl, err := m.checkOutTable(ctx, e.TableID)
+		if err != nil {
+			return nil, err
+		}
+		idx, err := tbl.FindIndexWithID(e.IndexID)
+		if err != nil {
+			return nil, err
+		}
+		return &eventpb.CommentOnIndex{
+			TableName:   fullName,
+			IndexName:   idx.GetName(),
+			Comment:     e.Comment,
+			NullComment: isNullComment,
+		}, nil
+	case *scpb.ConstraintComment:
+		tbl, err := m.checkOutTable(ctx, e.TableID)
+		if err != nil {
+			return nil, err
+		}
+		constraint, err := tbl.FindConstraintWithID(e.ConstraintID)
+		if err != nil {
+			return nil, err
+		}
+		return &eventpb.CommentOnConstraint{
+			TableName:      fullName,
+			ConstraintName: constraint.GetConstraintName(),
+			Comment:        e.Comment,
+			NullComment:    isNullComment,
+		}, nil
+	case *scpb.DatabaseComment:
+		return &eventpb.CommentOnDatabase{
+			DatabaseName: fullName,
+			Comment:      e.Comment,
+			NullComment:  isNullComment,
+		}, nil
 	}
 	return nil, errors.AssertionFailedf("unknown %s element type %T", targetStatus.String(), e)
 }

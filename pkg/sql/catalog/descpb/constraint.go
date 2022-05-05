@@ -106,3 +106,22 @@ type ConstraintDetail struct {
 	// Only populated for Check Constraints.
 	CheckConstraint *TableDescriptor_CheckConstraint
 }
+
+// GetConstraintName retrieves correct constraint name base on the constraint
+// type.
+func (c *ConstraintDetail) GetConstraintName() string {
+	switch c.Kind {
+	case ConstraintTypePK:
+		return c.Index.Name
+	case ConstraintTypeUnique:
+		if c.Index != nil {
+			return c.Index.Name
+		}
+		return c.UniqueWithoutIndexConstraint.Name
+	case ConstraintTypeFK:
+		return c.FK.Name
+	case ConstraintTypeCheck:
+		return c.CheckConstraint.Name
+	}
+	return ""
+}

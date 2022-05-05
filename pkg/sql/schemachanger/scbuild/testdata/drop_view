@@ -9,7 +9,7 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 build
 DROP VIEW defaultdb.v1
 ----
-- [[Column:{DescID: 105, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
@@ -84,52 +84,52 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 build
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- [[Column:{DescID: 105, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 105
-- [[Column:{DescID: 106, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 106
-- [[Column:{DescID: 106, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 106
-- [[Column:{DescID: 107, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 107
-- [[Column:{DescID: 107, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 107
-- [[Column:{DescID: 108, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 108
-- [[Column:{DescID: 108, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 108
-- [[Column:{DescID: 111, ColumnID: 1, PgAttributeNum: 1}, ABSENT], PUBLIC]
+- [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     pgAttributeNum: 1
     tableId: 111
-- [[Column:{DescID: 111, ColumnID: 2, PgAttributeNum: 2}, ABSENT], PUBLIC]
+- [[Column:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 111
-- [[Column:{DescID: 111, ColumnID: 3, PgAttributeNum: 3}, ABSENT], PUBLIC]
+- [[Column:{DescID: 111, ColumnID: 3}, ABSENT], PUBLIC]
   details:
     columnId: 3
     pgAttributeNum: 3
