@@ -141,6 +141,10 @@ type EvalContext interface {
 	// GetEngineCapacity returns the store's underlying engine capacity; other
 	// StoreCapacity fields not related to engine capacity are not populated.
 	GetEngineCapacity() (roachpb.StoreCapacity, error)
+
+	// GetApproximateDiskBytes returns an approximate measure of bytes in the store
+	// in the specified key range.
+	GetApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -161,6 +165,7 @@ type MockEvalCtx struct {
 	ClosedTimestamp    hlc.Timestamp
 	RevokedLeaseSeq    roachpb.LeaseSequence
 	MaxBytes           int64
+	ApproxDiskBytes    uint64
 }
 
 // EvalContext returns the MockEvalCtx as an EvalContext. It will reflect future
@@ -286,4 +291,7 @@ func (m *mockEvalCtxImpl) GetMaxBytes() int64 {
 }
 func (m *mockEvalCtxImpl) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 	return roachpb.StoreCapacity{Available: 1, Capacity: 1}, nil
+}
+func (m *mockEvalCtxImpl) GetApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
+	return m.ApproxDiskBytes, nil
 }
