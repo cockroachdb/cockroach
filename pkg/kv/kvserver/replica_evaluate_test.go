@@ -623,6 +623,22 @@ func TestEvaluateBatch(t *testing.T) {
 			},
 		},
 		{
+			// A batch limited to resolve only up to 2 keys should respect that
+			// limit. The limit is saturated by the first request in the batch.
+			name: "ranged intent resolution with MaxSpanRequestKeys=2",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFIntents(t, d, &txn)
+				d.ba.Add(resolveIntentRangeArgsString("a", "d", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.Add(resolveIntentRangeArgsString("e", "f", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.Add(resolveIntentRangeArgsString("h", "j", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.MaxSpanRequestKeys = 2
+			},
+			check: func(t *testing.T, r resp) {
+				verifyNumKeys(t, r, 2, 0, 0)
+				verifyResumeSpans(t, r, "b\x00-d", "e-f", "h-j")
+			},
+		},
+		{
 			// A batch limited to resolve only up to 3 keys should respect that
 			// limit. The limit is saturated by the first request in the batch.
 			name: "ranged intent resolution with MaxSpanRequestKeys=3",
@@ -635,7 +651,7 @@ func TestEvaluateBatch(t *testing.T) {
 			},
 			check: func(t *testing.T, r resp) {
 				verifyNumKeys(t, r, 3, 0, 0)
-				verifyResumeSpans(t, r, "c\x00-d", "e-f", "h-j")
+				verifyResumeSpans(t, r, "", "e-f", "h-j")
 			},
 		},
 	}
