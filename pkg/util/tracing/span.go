@@ -352,12 +352,14 @@ func (sp *Span) GetConfiguredRecording() Recording {
 	return sp.i.GetRecording(recType, false /* finishing */)
 }
 
-// ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
-// these spans will be part of the result of GetRecording. Used to import
-// recorded traces from other nodes.
-func (sp *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
+// ImportRemoteRecording adds the spans in remoteRecording as children of the
+// receiver. As a result of this, the imported recording will be a part of the
+// GetRecording() output for the receiver.
+//
+// This function is used to import a recording from another node.
+func (sp *Span) ImportRemoteRecording(remoteRecording Recording) {
 	if !sp.detectUseAfterFinish() {
-		sp.i.ImportRemoteSpans(remoteSpans)
+		sp.i.ImportRemoteRecording(remoteRecording)
 	}
 }
 
