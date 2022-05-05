@@ -27,7 +27,7 @@ import styles from "./timeScale.module.scss";
 const cx = classNames.bind(styles);
 
 export const dateFormat = "MMM DD,";
-export const timeFormat = "h:mmA";
+export const timeFormat = "H:mm";
 
 export interface TimeScaleDropdownProps {
   currentScale: TimeScale;

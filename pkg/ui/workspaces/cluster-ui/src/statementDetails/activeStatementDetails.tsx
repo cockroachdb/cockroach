@@ -95,9 +95,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Start Time (UTC)</Text>
                       <Text>
-                        {statement.start.format(
-                          "MMM D, YYYY [at] h:mm a (UTC)",
-                        )}
+                        {statement.start.format("MMM D, YYYY [at] H:mm (UTC)")}
                       </Text>
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
