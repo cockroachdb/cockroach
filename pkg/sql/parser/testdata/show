@@ -1468,6 +1468,14 @@ SHOW GRANTS ON SCHEMA foo.bar -- literals removed
 SHOW GRANTS ON SCHEMA _._ -- identifiers removed
 
 parse
+SHOW GRANTS ON SCHEMA foo.*
+----
+SHOW GRANTS ON SCHEMA foo."*" -- normalized!
+SHOW GRANTS ON SCHEMA foo."*" -- fully parenthesized
+SHOW GRANTS ON SCHEMA foo."*" -- literals removed
+SHOW GRANTS ON SCHEMA _._ -- identifiers removed
+
+parse
 SHOW GRANTS ON SCHEMA foo, bar
 ----
 SHOW GRANTS ON SCHEMA foo, bar
