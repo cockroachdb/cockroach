@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -158,13 +159,22 @@ func MakeColumnDefDescs(
 	col.Type = resType
 
 	if d.HasDefaultExpr() {
+		var innerErr error
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
 		ret.DefaultExpr, err = schemaexpr.SanitizeVarFreeExpr(
 			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, volatility.Volatile,
 		)
 		if err != nil {
-			return nil, err
+			// Check if the default expression type can be assignment-cast into the
+			// column type. If it can allow the default and column type to differ.
+			ret.DefaultExpr, innerErr = d.DefaultExpr.Expr.TypeCheck(ctx, semaCtx, types.Any)
+			if innerErr != nil {
+				return nil, err
+			}
+			if ok := cast.ValidCast(ret.DefaultExpr.ResolvedType(), resType, cast.ContextAssignment); !ok {
+				return nil, err
+			}
 		}
 
 		// Keep the type checked expression so that the type annotation gets
@@ -180,10 +190,20 @@ func MakeColumnDefDescs(
 	if d.HasOnUpdateExpr() {
 		// Verify the on update expression type is compatible with the column type
 		// and does not contain invalid functions.
+		var innerErr error
 		ret.OnUpdateExpr, err = schemaexpr.SanitizeVarFreeExpr(
 			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, volatility.Volatile,
 		)
 		if err != nil {
+			// Check if the on update expression type can be assignment-cast into the
+			// column type. If it can allow the on update expr and column type to differ.
+			ret.OnUpdateExpr, innerErr = d.OnUpdateExpr.Expr.TypeCheck(ctx, semaCtx, types.Any)
+			if innerErr != nil {
+				return nil, err
+			}
+			if ok := cast.ValidCast(ret.OnUpdateExpr.ResolvedType(), resType, cast.ContextAssignment); !ok {
+				return nil, err
+			}
 			return nil, err
 		}
 
