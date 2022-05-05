@@ -190,15 +190,16 @@ func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		// projects needs space for one project, which is set by the flags for
 		// commands that accept a single project.
-		MachineType:    "n1-standard-4",
-		MinCPUPlatform: "",
-		Zones:          nil,
-		Image:          "ubuntu-2004-focal-v20210603",
-		SSDCount:       1,
-		PDVolumeType:   "pd-ssd",
-		PDVolumeSize:   500,
-		useSharedUser:  true,
-		preemptible:    false,
+		MachineType:          "n1-standard-4",
+		MinCPUPlatform:       "",
+		Zones:                nil,
+		Image:                "ubuntu-2004-focal-v20210603",
+		SSDCount:             1,
+		PDVolumeType:         "pd-ssd",
+		PDVolumeSize:         500,
+		TerminateOnMigration: false,
+		useSharedUser:        true,
+		preemptible:          false,
 	}
 }
 
@@ -220,6 +221,9 @@ type ProviderOpts struct {
 	PDVolumeType     string
 	PDVolumeSize     int
 	UseMultipleDisks bool
+	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
+	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
+	TerminateOnMigration bool
 
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
@@ -324,6 +328,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"regardless of geo (default [%s])",
 			strings.Join(defaultZones, ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false, "use preemptible GCE instances")
+	flags.BoolVar(&o.TerminateOnMigration, ProviderName+"-terminateOnMigration", false,
+		"use 'TERMINATE' maintenance policy (for GCE live migrations)")
 }
 
 // ConfigureClusterFlags implements vm.ProviderFlags.
@@ -411,7 +417,6 @@ func (p *Provider) Create(
 	args := []string{
 		"compute", "instances", "create",
 		"--subnet", "default",
-		"--maintenance-policy", "MIGRATE",
 		"--scopes", "default,storage-rw",
 		"--image", providerOpts.Image,
 		"--image-project", "ubuntu-os-cloud",
@@ -431,10 +436,19 @@ func (p *Provider) Create(
 		if opts.Lifetime > time.Hour*24 {
 			return errors.New("lifetime cannot be longer than 24 hours for preemptible instances")
 		}
+		if !providerOpts.TerminateOnMigration {
+			return errors.New("preemptible instances require 'TERMINATE' maintenance policy; use --gce-terminateOnMigration")
+		}
 		args = append(args, "--preemptible")
 		// Preemptible instances require the following arguments set explicitly
-		args = append(args, "--maintenance-policy=terminate")
+		args = append(args, "--maintenance-policy", "TERMINATE")
 		args = append(args, "--no-restart-on-failure")
+	} else {
+		if providerOpts.TerminateOnMigration {
+			args = append(args, "--maintenance-policy", "TERMINATE")
+		} else {
+			args = append(args, "--maintenance-policy", "MIGRATE")
+		}
 	}
 
 	extraMountOpts := ""

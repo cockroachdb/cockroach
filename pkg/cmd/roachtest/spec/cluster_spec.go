@@ -43,15 +43,16 @@ type ClusterSpec struct {
 	InstanceType string // auto-chosen if left empty
 	NodeCount    int
 	// CPUs is the number of CPUs per node.
-	CPUs           int
-	SSDs           int
-	RAID0          bool
-	VolumeSize     int
-	PreferLocalSSD bool
-	Zones          string
-	Geo            bool
-	Lifetime       time.Duration
-	ReusePolicy    clusterReusePolicy
+	CPUs                 int
+	SSDs                 int
+	RAID0                bool
+	VolumeSize           int
+	PreferLocalSSD       bool
+	Zones                string
+	Geo                  bool
+	Lifetime             time.Duration
+	ReusePolicy          clusterReusePolicy
+	TerminateOnMigration bool
 
 	// FileSystem determines the underlying FileSystem
 	// to be used. The default is ext4.
@@ -111,7 +112,12 @@ func getAWSOpts(machineType string, zones []string, localSSD bool) vm.ProviderOp
 }
 
 func getGCEOpts(
-	machineType string, zones []string, volumeSize, localSSDCount int, localSSD bool, RAID0 bool,
+	machineType string,
+	zones []string,
+	volumeSize, localSSDCount int,
+	localSSD bool,
+	RAID0 bool,
+	terminateOnMigration bool,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
@@ -129,6 +135,8 @@ func getGCEOpts(
 		// test has explicitly asked for RAID0.
 		opts.UseMultipleDisks = !RAID0
 	}
+	opts.TerminateOnMigration = terminateOnMigration
+
 	return opts
 }
 
@@ -233,7 +241,8 @@ func (s *ClusterSpec) RoachprodOpts(
 	case AWS:
 		providerOpts = getAWSOpts(machineType, zones, createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
-		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount, createVMOpts.SSDOpts.UseLocalSSD, s.RAID0)
+		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
+			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)
 	}
