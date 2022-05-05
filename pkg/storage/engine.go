@@ -285,6 +285,14 @@ type IterOptions struct {
 	// If WithStats is true, the iterator accumulates performance
 	// counters over its lifetime which can be queried via `Stats()`.
 	WithStats bool
+	// UseL6Filters allows the caller to opt into reading filter blocks for
+	// L6 sstables. Only for use with Prefix = true. Helpful if a lot of prefix
+	// Seeks are expected in quick succession, that are also likely to not
+	// yield a single key. Filter blocks in L6 can be relatively large, often
+	// larger than data blocks, so the benefit of loading them in the cache
+	// is minimized if the probability of the key existing is not low or if
+	// this is a one-time Seek (where loading the data block directly is better).
+	UseL6Filters bool
 	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
 	// of the time range formed by [MinTimestampHint, MaxTimestampHint] do not
 	// need to be presented by the iterator. The underlying iterator may be able

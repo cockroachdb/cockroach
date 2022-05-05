@@ -160,8 +160,22 @@ func EvalAddSSTable(
 		// Additionally, if DisallowShadowing or DisallowShadowingBelow is set, it
 		// will not write above existing/visible values (but will write above
 		// tombstones).
+		//
+		// If the overlap between the ingested SST and the engine is large (i.e.
+		// the SST is wide in keyspace), or if the ingested SST is very small,
+		// use prefix seeks in CheckSSTConflicts. This ends up being more performant
+		// as it avoids expensive seeks with index/data block loading in the common
+		// case of no conflicts.
+		usePrefixSeek := false
+		bytes, err := cArgs.EvalCtx.GetApproximateDiskBytes(start.Key, end.Key)
+		if err == nil {
+			usePrefixSeek = bytes > 100*uint64(len(sst))
+		}
+		if args.MVCCStats != nil {
+			usePrefixSeek = usePrefixSeek || args.MVCCStats.KeyCount < 100
+		}
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end,
-			args.DisallowShadowing, args.DisallowShadowingBelow, maxIntents)
+			args.DisallowShadowing, args.DisallowShadowingBelow, maxIntents, usePrefixSeek)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
