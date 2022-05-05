@@ -85,7 +85,12 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	// Initial recording of this fresh (real) span.
-	require.Nil(t, s1.GetRecording(RecordingStructured))
+	rec := s1.GetRecording(RecordingStructured)
+	require.Len(t, rec, 1)
+	require.Nil(t, rec[0].ChildrenMetadata)
+	require.Nil(t, rec[0].StructuredRecords)
+	require.Nil(t, rec[0].Logs)
+	require.Nil(t, rec[0].Tags)
 
 	s1.RecordStructured(&types.Int32Value{Value: 5})
 	if err := CheckRecording(s1.GetRecording(RecordingStructured), `

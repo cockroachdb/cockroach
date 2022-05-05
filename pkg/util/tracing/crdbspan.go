@@ -119,6 +119,14 @@ type crdbSpanMu struct {
 	// The spans are not maintained in a particular order.
 	openChildren []childRef
 
+	// childrenMetadata is a mapping from operation to the aggregated metadata of
+	// that operation.
+	//
+	// When a child of this span is Finish()ed, it updates the map with all the
+	// children in its Recording. childrenMetadata therefore provides a bucketed
+	// view of the various operations that are being traced as part of a span.
+	childrenMetadata map[string]tracingpb.RecordedSpan_OperationMetadata
+
 	recording recordingState
 
 	// tags are a list of key/value pairs associated with the span through
@@ -409,12 +417,11 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 	return result
 }
 
-// getStructuredRecording returns the structured events in this span and
-// in all the children. The results are returned as a Recording for the caller's
-// convenience (and for optimizing memory allocations). The Recording will be
-// nil if there are no structured events. If not nil, the Recording will have
-// exactly one span corresponding to the receiver, will all events handing from
-// this span (even if the events had been recorded on different spans).
+// getStructuredRecording returns a Recording with exactly one span (for
+// optimizing memory allocations) corresponding to the receiver. This span will
+// contain all the structured events in this span and in all its children.
+// This span will also have a `childrenMetadata` map that will contain an entry
+// for all children in s' Recording.
 //
 // The caller does not take ownership of the events.
 func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recording {
@@ -426,42 +433,61 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recordin
 			buffer = append(buffer, &c.StructuredRecords[i])
 		}
 	}
+
+	openChildrenMetadata := make(map[string]tracingpb.RecordedSpan_OperationMetadata)
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
 			sp := c.Span.i.crdb
 			buffer = sp.getStructuredEventsRecursively(buffer, includeDetachedChildren)
-		}
-	}
 
-	if len(buffer) == 0 && s.mu.recording.structured.Len() == 0 {
-		// Optimize out the allocations below.
-		return nil
+			// finishedChildren have already copied their metadata entries into s on
+			// Finish(). These will be picked up in `getRecordingNoChildrenLocked`
+			// below.
+			//
+			// For open children, we need to recurse and fetch the metadata from their
+			// children.
+			sp.getChildrenMetadataRecursively(openChildrenMetadata, includeDetachedChildren)
+		}
 	}
 
 	res := s.getRecordingNoChildrenLocked(
 		RecordingStructured,
 		false, // finishing - since we're only asking for the structured recording, the argument doesn't matter
 	)
-	// If necessary, grow res.StructuredRecords to have space for buffer.
-	var reservedSpace []tracingpb.StructuredRecord
-	if cap(res.StructuredRecords)-len(res.StructuredRecords) < len(buffer) {
-		// res.StructuredRecords does not have enough capacity to accommodate the
-		// elements of buffer. We allocate a new, larger array and copy over the old
-		// entries.
-		old := res.StructuredRecords
-		res.StructuredRecords = make([]tracingpb.StructuredRecord, len(old)+len(buffer))
-		copy(res.StructuredRecords, old)
-		reservedSpace = res.StructuredRecords[len(old):]
-	} else {
-		// res.StructuredRecords has enough capacity for buffer. We extend it in
-		// place.
-		oldLen := len(res.StructuredRecords)
-		res.StructuredRecords = res.StructuredRecords[:oldLen+len(buffer)]
-		reservedSpace = res.StructuredRecords[oldLen:]
+
+	if len(buffer) != 0 || s.mu.recording.structured.Len() != 0 {
+		// If necessary, grow res.StructuredRecords to have space for buffer.
+		var reservedSpace []tracingpb.StructuredRecord
+		if cap(res.StructuredRecords)-len(res.StructuredRecords) < len(buffer) {
+			// res.StructuredRecords does not have enough capacity to accommodate the
+			// elements of buffer. We allocate a new, larger array and copy over the old
+			// entries.
+			old := res.StructuredRecords
+			res.StructuredRecords = make([]tracingpb.StructuredRecord, len(old)+len(buffer))
+			copy(res.StructuredRecords, old)
+			reservedSpace = res.StructuredRecords[len(old):]
+		} else {
+			// res.StructuredRecords has enough capacity for buffer. We extend it in
+			// place.
+			oldLen := len(res.StructuredRecords)
+			res.StructuredRecords = res.StructuredRecords[:oldLen+len(buffer)]
+			reservedSpace = res.StructuredRecords[oldLen:]
+		}
+		for i, e := range buffer {
+			reservedSpace[i] = *e
+		}
 	}
-	for i, e := range buffer {
-		reservedSpace[i] = *e
+
+	// If s had any open children we must capture their metadata in res as well.
+	if len(openChildrenMetadata) != 0 {
+		if res.ChildrenMetadata == nil {
+			res.ChildrenMetadata = make(map[string]tracingpb.RecordedSpan_OperationMetadata)
+		}
+		for opName, metadata := range openChildrenMetadata {
+			res.ChildrenMetadata[opName] = res.ChildrenMetadata[opName].Combine(metadata)
+		}
 	}
+
 	return Recording{res}
 }
 
@@ -503,6 +529,57 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRecording Recording) {
 		// collect.
 		childRecording[0].ParentSpanID = s.spanID
 
+		// Update s' childrenMetadata to capture all the spans in `childRecording`.
+		//
+		// As an example where we are done finishing `child`:
+		//
+		// parent
+		//   child (finished_C: 4s, finished_D: 3s)
+		//     open_A (finished_B: 1s)
+		//       finished_B
+		//     finished_C (finished_D: 3s)
+		//       finished_D
+		//
+		// We'd expect `parent` to have:
+		// {child: 10s, finished_C: 4s, finished_D: 3s, open_A: 3s, finished_B: 1s}
+		rootChild := childRecording[0]
+		// Record the finished rootChilds' metadata.
+		s.mu.childrenMetadata[rootChild.Operation] = s.mu.childrenMetadata[rootChild.Operation].Combine(
+			tracingpb.RecordedSpan_OperationMetadata{
+				Count:              1,
+				Duration:           rootChild.Duration,
+				ContainsUnfinished: false,
+			})
+		// Record the metadata of rootChilds' finished children.
+		//
+		// ChildrenMetadata was populated in GetRecording(...) with rootChilds'
+		// finished children.
+		for childOpName, metadata := range rootChild.ChildrenMetadata {
+			s.mu.childrenMetadata[childOpName] = s.mu.childrenMetadata[childOpName].Combine(metadata)
+		}
+		// For each of rootChilds' open children, we record the metadata of the open
+		// child as well as the metadata of its finished children. Note, the open
+		// child may recursively have open children, but these spans have already
+		// been flattened into `childRecording` by `GetRecording(...)`
+		for _, rec := range childRecording[1:] {
+			if !rec.Finished {
+				s.mu.childrenMetadata[rec.Operation] = s.mu.childrenMetadata[rec.Operation].Combine(
+					tracingpb.RecordedSpan_OperationMetadata{
+						Count: 1,
+						// Note, since the span has not Finish()ed, we need to compute its
+						// duration on the fly. While this duration does not represent the total
+						// time taken by this operation, it is still useful information to
+						// record.
+						Duration:           timeutil.Since(rec.StartTime),
+						ContainsUnfinished: true,
+					})
+				// Record metadata of the open childs' finished children.
+				for grandChildOp, metadata := range rec.ChildrenMetadata {
+					s.mu.childrenMetadata[grandChildOp] = s.mu.childrenMetadata[grandChildOp].Combine(metadata)
+				}
+			}
+		}
+
 		if len(s.mu.recording.finishedChildren)+len(childRecording) <= maxRecordedSpansPerTrace {
 			s.mu.recording.finishedChildren = append(s.mu.recording.finishedChildren, childRecording...)
 			break
@@ -512,14 +589,45 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRecording Recording) {
 		// records by falling through.
 		fallthrough
 	case RecordingStructured:
-		for ci := range childRecording {
-			child := &childRecording[ci]
-			for i := range child.StructuredRecords {
-				s.recordInternalLocked(&child.StructuredRecords[i], &s.mu.recording.structured)
-			}
+		if len(childRecording) != 1 {
+			panic(fmt.Sprintf("RecordingStructured has %d recordings; expected 1", len(childRecording)))
+		}
+		rootChild := &childRecording[0]
+
+		// Update s' FinishedChildrenMetadata to capture all the spans in `childRecording`.
+		//
+		// As an example where we are done finishing `child`:
+		//
+		// parent
+		//   child (finished_C: 4s, finished_D: 3s)
+		//     open_A (finished_B: 1s)
+		//       finished_B
+		//     finished_C (finished_D: 3s)
+		//       finished_D
+		//
+		// We'd expect `parent` to have:
+		// {child: 10s, finished_C: 4s, finished_D: 3s, open_A: 3s, finished_B: 1s}
+		//
+		// Record finished rootChilds' metadata.
+		s.mu.childrenMetadata[rootChild.Operation] = s.mu.childrenMetadata[rootChild.Operation].Combine(
+			tracingpb.RecordedSpan_OperationMetadata{
+				Count:              1,
+				Duration:           rootChild.Duration,
+				ContainsUnfinished: false,
+			})
+		// Record the metadata of rootChilds' children (finished and open).
+		//
+		// GetRecording(...) only returns a single recording for
+		// `RecordingStructured`, in which we have already recursively captured the
+		// metadata for rootChilds' open and finished children.
+		for childOp, metadata := range rootChild.ChildrenMetadata {
+			s.mu.childrenMetadata[childOp] = s.mu.childrenMetadata[childOp].Combine(metadata)
+		}
+		for i := range rootChild.StructuredRecords {
+			s.recordInternalLocked(&rootChild.StructuredRecords[i], &s.mu.recording.structured)
 		}
 	case RecordingOff:
-		break
+		return
 	default:
 		panic(fmt.Sprintf("unrecognized recording mode: %v", s.recordingType()))
 	}
@@ -716,6 +824,43 @@ func (s *crdbSpan) getStructuredEventsRecursively(
 	return buffer
 }
 
+func (s *crdbSpan) getChildrenMetadataRecursively(
+	childrenMetadata map[string]tracingpb.RecordedSpan_OperationMetadata,
+	includeDetachedChildren bool,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Record an entry for s' metadata.
+	prevMetadata := childrenMetadata[s.operation]
+	prevMetadata.Count++
+	if s.mu.duration == -1 {
+		prevMetadata.Duration += timeutil.Since(s.startTime)
+		prevMetadata.ContainsUnfinished = true
+	} else {
+		prevMetadata.Duration += s.mu.duration
+	}
+	childrenMetadata[s.operation] = prevMetadata
+
+	// Copy over s' Finish()ed children metadata.
+	for opName, metadata := range s.mu.childrenMetadata {
+		childrenMetadata[opName] = childrenMetadata[opName].Combine(
+			tracingpb.RecordedSpan_OperationMetadata{
+				Count:              metadata.Count,
+				Duration:           metadata.Duration,
+				ContainsUnfinished: metadata.ContainsUnfinished,
+			})
+	}
+
+	// For each of s' open children, recurse to collect their metadata.
+	for _, c := range s.mu.openChildren {
+		if c.collectRecording || includeDetachedChildren {
+			sp := c.Span.i.crdb
+			sp.getChildrenMetadataRecursively(childrenMetadata, includeDetachedChildren)
+		}
+	}
+}
+
 func (s *crdbSpan) getStructuredEventsLocked(
 	buffer []*tracingpb.StructuredRecord,
 ) []*tracingpb.StructuredRecord {
@@ -794,6 +939,13 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		for i := 0; i < numEvents; i++ {
 			event := s.mu.recording.structured.Get(i).(*tracingpb.StructuredRecord)
 			rs.StructuredRecords[i] = *event
+		}
+	}
+
+	if numFinishedChildrenMetadata := len(s.mu.childrenMetadata); numFinishedChildrenMetadata != 0 {
+		rs.ChildrenMetadata = make(map[string]tracingpb.RecordedSpan_OperationMetadata)
+		for childOp, metadata := range s.mu.childrenMetadata {
+			rs.ChildrenMetadata[childOp] = metadata
 		}
 	}
 
