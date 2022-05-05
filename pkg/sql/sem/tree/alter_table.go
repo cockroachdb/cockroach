@@ -617,7 +617,7 @@ type AlterTableSetStorageParams struct {
 // TelemetryCounter returns the telemetry counter to increment
 // when this command is used.
 func (node *AlterTableSetStorageParams) TelemetryCounter() telemetry.Counter {
-	return sqltelemetry.SchemaChangeAlterCounter("set_storage_param")
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "set_storage_param")
 }
 
 // Format implements the NodeFormatter interface.
@@ -635,7 +635,7 @@ type AlterTableResetStorageParams struct {
 // TelemetryCounter returns the telemetry counter to increment
 // when this command is used.
 func (node *AlterTableResetStorageParams) TelemetryCounter() telemetry.Counter {
-	return sqltelemetry.SchemaChangeAlterCounter("set_storage_param")
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "set_storage_param")
 }
 
 // Format implements the NodeFormatter interface.
