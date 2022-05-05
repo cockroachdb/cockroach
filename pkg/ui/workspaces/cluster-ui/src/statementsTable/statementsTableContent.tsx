@@ -127,8 +127,8 @@ export const StatementTableCell = {
                           dr.statement_diagnostics_id
                         }`}
                       >
-                        {`Download Z${TimestampToMoment(dr.requested_at).format(
-                          "ll [at] LT [diagnostic]",
+                        {`Download ${TimestampToMoment(dr.requested_at).format(
+                          "MMM DD, YYYY [at] H:mm [(UTC)] [diagnostic]",
                         )}`}
                       </a>
                     ),
