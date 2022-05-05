@@ -1401,3 +1401,28 @@ select CASE WHEN false THEN 1::REGTYPE ELSE 2::REGNAMESPACE END;
 select CASE WHEN false THEN 1::REGTYPE ELSE 2::REGPROC END;
 select CASE WHEN false THEN 1::REGTYPE ELSE 2::REGPROCEDURE END;
 select CASE WHEN false THEN 1::REGTYPE ELSE 2::REGROLE END;
+
+
+# Test that default/on update expression differing from column type
+statement ok
+CREATE TABLE def_assn_cast (
+a INT4 DEFAULT 1.0::FLOAT4,
+b VARCHAR DEFAULT 'true'::BOOL,
+c NAME DEFAULT 'foo'::BPCHAR,
+d JSONB DEFAULT 'null'::CHAR,
+)
+
+statement error pq: could not parse . as type .: invalid . value
+CREATE TABLE fail_assn_cast (
+a BOOL DEFAULT 'foo'
+)
+
+statement error pq: could not parse . as type .: invalid . value
+CREATE TABLE fail_assn_cast (
+b JSONB DEFAULT 'null'::CHAR
+)
+
+statement error pq: expected DEFAULT expression to have type ., but . has type .
+CREATE TABLE def_assn_cast (
+a INT4 DEFAULT 1.0::BOOL
+)
