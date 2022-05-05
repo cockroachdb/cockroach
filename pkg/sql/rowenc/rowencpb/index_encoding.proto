@@ -12,8 +12,6 @@ syntax = "proto3";
 package cockroach.rowenc;
 option go_package = "rowencpb";
 
-import "gogoproto/gogo.proto";
-
 // Wrapper for the bytes of the value of an index that also contains bit for
 // whether or not the value was deleted. A wrapper of arbitrary index values
 // with the additional delete bit was chosen over a separate index encoding type

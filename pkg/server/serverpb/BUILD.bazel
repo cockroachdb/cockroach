@@ -28,11 +28,9 @@ proto_library(
         "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",
         "//pkg/server/status/statuspb:statuspb_proto",
         "//pkg/sql/contentionpb:contentionpb_proto",
-        "//pkg/sql/execinfrapb:execinfrapb_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/ts/catalog:catalog_proto",
         "//pkg/util:util_proto",
-        "//pkg/util/hlc:hlc_proto",
         "//pkg/util/log/logpb:logpb_proto",
         "//pkg/util/metric:metric_proto",
         "//pkg/util/tracing/tracingpb:tracingpb_proto",
@@ -67,12 +65,11 @@ go_proto_library(
         "//pkg/server/status/statuspb",
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/contentionpb",
-        "//pkg/sql/execinfrapb",
+        "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/pgwire/pgwirecancel",  # keep
         "//pkg/storage/enginepb",
         "//pkg/ts/catalog",
         "//pkg/util",
-        "//pkg/util/hlc",
         "//pkg/util/log/logpb",
         "//pkg/util/metric",
         "//pkg/util/tracing/tracingpb",

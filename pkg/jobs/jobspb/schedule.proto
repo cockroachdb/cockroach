@@ -12,7 +12,6 @@ syntax = "proto3";
 package cockroach.jobs.jobspb;
 option go_package = "jobspb";
 
-import "gogoproto/gogo.proto";
 import "google/protobuf/any.proto";
 
 // ScheduleDetails describes how to schedule and execute the job.

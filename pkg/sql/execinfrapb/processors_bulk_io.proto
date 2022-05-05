@@ -21,9 +21,7 @@ option go_package = "execinfrapb";
 
 import "jobs/jobspb/jobs.proto";
 import "roachpb/io-formats.proto";
-import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/descpb/structured.proto";
-import "sql/execinfrapb/processors_base.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/data.proto";

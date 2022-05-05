@@ -30,7 +30,6 @@ proto_library(
     srcs = ["encryption_options.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )
 
 go_proto_library(
@@ -39,5 +38,4 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/baseccl",
     proto = ":baseccl_proto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
