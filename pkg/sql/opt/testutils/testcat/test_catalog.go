@@ -108,6 +108,21 @@ func (tc *Catalog) ResolveSchema(
 	return tc.resolveSchema(&toResolve)
 }
 
+// GetAllSchemaNamesForDB is part of the cat.Catalog interface.
+func (tc *Catalog) GetAllSchemaNamesForDB(
+	ctx context.Context, dbName string,
+) ([]cat.SchemaName, error) {
+	var schemaNames []cat.SchemaName
+	var scName cat.SchemaName
+	scName.SchemaName = tree.PublicSchemaName
+	scName.ExplicitSchema = true
+	scName.CatalogName = tree.Name(dbName)
+	scName.ExplicitCatalog = true
+	schemaNames = append(schemaNames, scName)
+
+	return schemaNames, nil
+}
+
 // ResolveDataSource is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSource(
 	_ context.Context, _ cat.Flags, name *cat.DataSourceName,
