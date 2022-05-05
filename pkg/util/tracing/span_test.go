@@ -657,6 +657,49 @@ func TestStructureRecording(t *testing.T) {
 	}
 }
 
+// TestStructuredRecordingFinishedChildrenDurations tests that the
+// StructuredRecording of a span includes the `operation : duration` mapping of
+// all finished children in that recording.
+func TestStructuredRecordingFinishedChildrenDurations(t *testing.T) {
+	checkFinishedChildrenDurations := func(durations map[string]time.Duration,
+		expectedOperations []string) {
+		t.Helper()
+		require.Len(t, durations, len(expectedOperations))
+		for _, operation := range expectedOperations {
+			dur, ok := durations[operation]
+			require.True(t, ok)
+			require.Greater(t, dur, time.Duration(0))
+		}
+	}
+	tr := NewTracer()
+	root := tr.StartSpan("root", WithRecording(RecordingStructured))
+	child := tr.StartSpan("child", WithParent(root))
+	gc := tr.StartSpan("grandchild", WithParent(child))
+	child2 := tr.StartSpan("child2", WithParent(root))
+
+	gc.Finish()
+
+	// child has no StructuredEvents, but it should return information about its
+	// Finish()ed children.
+	rec := child.GetConfiguredRecording()
+	require.Len(t, rec, 1)
+	checkFinishedChildrenDurations(rec[0].FinishedChildrenDurations, []string{"grandchild"})
+
+	// Now, let's Finish() child2, but leave child as an open child of root.
+	child2.Finish()
+
+	// Root should only have entries for Finish()ed spans in the recording.
+	rec = root.GetConfiguredRecording()
+	require.Len(t, rec, 1)
+	checkFinishedChildrenDurations(rec[0].FinishedChildrenDurations, []string{"child2", "grandchild"})
+
+	// Finish child, and re-check root's recording.
+	child.Finish()
+	rec = root.FinishAndGetConfiguredRecording()
+	require.Len(t, rec, 1)
+	checkFinishedChildrenDurations(rec[0].FinishedChildrenDurations, []string{"child", "child2", "grandchild"})
+}
+
 // Test that a child span that's still open at the time when
 // parent.FinishAndGetRecording() is called is included in the parent's
 // recording.
@@ -699,4 +742,56 @@ func TestWithRemoteParentFromTraceInfo(t *testing.T) {
 	require.NotNil(t, sp.i.otelSpan)
 	otelCtx := sp.i.otelSpan.SpanContext()
 	require.Equal(t, oteltrace.TraceID(otelTraceID), otelCtx.TraceID())
+}
+
+// TestChildrenDurationsOnFinish tests that on Finish() the parent span's
+// `finishedChildrenDurations` map is populated with all finished children in
+// the recording.
+func TestChildrenDurationsOnFinish(t *testing.T) {
+	checkFinishedChildrenDurations := func(sp *Span, expectedOperations []string) {
+		t.Helper()
+		sp.i.crdb.mu.Lock()
+		defer sp.i.crdb.mu.Unlock()
+
+		durations := sp.i.crdb.mu.finishedChildrenDurations
+		require.Len(t, durations, len(expectedOperations))
+		for _, operation := range expectedOperations {
+			dur, ok := durations[operation]
+			require.True(t, ok)
+			require.Greater(t, dur, time.Duration(0))
+		}
+	}
+
+	tr := NewTracer()
+	root := tr.StartSpan("root", WithRecording(RecordingVerbose))
+	child := tr.StartSpan("child", WithParent(root))
+
+	gc1 := tr.StartSpan("grandchild1", WithParent(child))
+	ggc1 := tr.StartSpan("greatgrandchild1", WithParent(gc1))
+
+	gc2 := tr.StartSpan("grandchild2", WithParent(child))
+	ggc2 := tr.StartSpan("greatgrandchild2", WithParent(gc2))
+
+	// First let's Finish() the lowest children. This should mean that their
+	// parents have entries for their duration.
+	ggc1.Finish()
+	checkFinishedChildrenDurations(gc1, []string{"greatgrandchild1"})
+
+	ggc2.Finish()
+	checkFinishedChildrenDurations(gc2, []string{"greatgrandchild2"})
+
+	// Finish() one of the grand children.
+	gc1.Finish()
+	checkFinishedChildrenDurations(child, []string{"grandchild1", "greatgrandchild1"})
+
+	// Now Finish() `child` since it has both finished and open children at this
+	// point. We expect to see entries for all finished spans in the recording,
+	// but not the open child gc2.
+	child.Finish()
+	checkFinishedChildrenDurations(root, []string{"child", "grandchild1", "greatgrandchild1", "greatgrandchild2"})
+
+	// gc2 should now be a root span in the registry since it is orphaned.
+	gc2.Finish()
+	checkFinishedChildrenDurations(root, []string{"child", "grandchild1", "greatgrandchild1", "greatgrandchild2"})
+	root.Finish()
 }
