@@ -192,6 +192,28 @@ func (oc *optCatalog) ResolveSchema(
 	}, oc.tn.ObjectNamePrefix, nil
 }
 
+// GetAllSchemaNamesForDB is part of the cat.Catalog interface.
+func (oc *optCatalog) GetAllSchemaNamesForDB(
+	ctx context.Context, dbName string,
+) ([]cat.SchemaName, error) {
+	schemas, err := oc.planner.GetSchemasForDB(ctx, dbName)
+	if err != nil {
+		return nil, err
+	}
+
+	var schemaNames []cat.SchemaName
+	for _, name := range schemas {
+		var scName cat.SchemaName
+		scName.SchemaName = tree.Name(name)
+		scName.ExplicitSchema = true
+		scName.CatalogName = tree.Name(dbName)
+		scName.ExplicitCatalog = true
+		schemaNames = append(schemaNames, scName)
+	}
+
+	return schemaNames, nil
+}
+
 // ResolveDataSource is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveDataSource(
 	ctx context.Context, flags cat.Flags, name *cat.DataSourceName,
