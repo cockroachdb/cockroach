@@ -169,11 +169,14 @@ func (p *planner) incrementSequenceUsingCache(
 			return 0, 0, 0, err
 		}
 
+		incrementAmount = seqOpts.Increment
+		lastEndValue := endValue - incrementAmount*cacheSize
+		beginValue := endValue - incrementAmount*(cacheSize-1)
 		// This sequence has exceeded its bounds after performing this increment.
 		if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
-			// If the sequence exceeded its bounds prior to the increment, then return an error.
-			if (seqOpts.Increment > 0 && endValue-seqOpts.Increment*cacheSize >= seqOpts.MaxValue) ||
-				(seqOpts.Increment < 0 && endValue-seqOpts.Increment*cacheSize <= seqOpts.MinValue) {
+			// If the first sequence value in this cache exceeded its bounds, then return an error.
+			if (seqOpts.Increment > 0 && beginValue > seqOpts.MaxValue) ||
+				(seqOpts.Increment < 0 && beginValue < seqOpts.MinValue) {
 				return 0, 0, 0, boundsExceededError(descriptor)
 			}
 			// Otherwise, values between the limit and the value prior to incrementing can be cached.
@@ -187,13 +190,12 @@ func (p *planner) incrementSequenceUsingCache(
 				}
 				return i
 			}
-			currentValue = endValue - seqOpts.Increment*(cacheSize-1)
-			incrementAmount = seqOpts.Increment
-			sizeOfCache = abs(limit-(endValue-seqOpts.Increment*cacheSize)) / abs(seqOpts.Increment)
-			return currentValue, incrementAmount, sizeOfCache, nil
+			sizeOfCache = abs(limit-lastEndValue) / abs(seqOpts.Increment)
+		} else {
+			sizeOfCache = cacheSize
 		}
 
-		return endValue - seqOpts.Increment*(cacheSize-1), seqOpts.Increment, cacheSize, nil
+		return beginValue, incrementAmount, sizeOfCache, nil
 	}
 
 	var val int64

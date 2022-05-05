@@ -231,3 +231,207 @@ query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE reverse_direction_seqas]
 ----
 CREATE SEQUENCE public.reverse_direction_seqas AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+
+
+################################## the case where the sequence is altered before it has ever been used
+#### case 1 : Modify successfully, without START
+statement ok
+CREATE SEQUENCE seq_testx_1 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12
+
+query I
+select last_value from seq_testx_1
+----
+-2
+
+statement error pq:  START option unsupported in ALTER SEQUENCE
+ALTER SEQUENCE seq_testx_4 INCREMENT BY 8 MINVALUE 1 MAXVALUE 30 start 10
+
+statement error pq:  START option unsupported in ALTER SEQUENCE
+ALTER SEQUENCE seq_testx_4 INCREMENT BY 8 MINVALUE 1 MAXVALUE 30 start with 10
+
+statement ok
+ALTER SEQUENCE seq_testx_1 INCREMENT BY 8 MINVALUE 1 MAXVALUE 12
+
+query I
+select last_value from seq_testx_1
+----
+-7
+
+query I
+SELECT nextval('seq_testx_1')
+----
+1
+
+query  I
+select last_value from seq_testx_1
+----
+1
+
+query  I
+SELECT nextval('seq_testx_1')
+----
+9
+
+query error pq: nextval\(\): reached maximum value of sequence "seq_testx_1" \(12\)
+SELECT nextval('seq_testx_1')
+
+#### case 2 : Fail to modify, and set START when create sequence
+statement ok
+CREATE SEQUENCE seq_testx_2 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12 START 2
+
+query  I
+select last_value from seq_testx_2
+----
+-1
+
+statement error pq: MINVALUE cannot be made to be exceed than the current value
+ALTER SEQUENCE seq_testx_2 INCREMENT BY 1 MINVALUE 4 MAXVALUE 12
+
+query  I
+select last_value from seq_testx_2
+----
+-1
+
+query  I
+SELECT nextval('seq_testx_2')
+----
+2
+
+#### case 3 : Modify successfully, and set START when create sequence
+statement ok
+CREATE SEQUENCE seq_testx_3 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12 start 5
+
+query I
+select last_value from seq_testx_3
+----
+2
+
+statement ok
+ALTER SEQUENCE seq_testx_3 INCREMENT BY 8 MINVALUE 1 MAXVALUE 12
+
+query I
+select last_value from seq_testx_3
+----
+-3
+
+query I
+select nextval('seq_testx_3')
+----
+5
+
+query error pq: nextval\(\): reached maximum value of sequence "seq_testx_3" \(12\)
+select nextval('seq_testx_3')
+
+#### case 4 : Modify successfully, and the START set when create sequence not in [newMinValue, newMaxValue]
+statement ok
+CREATE SEQUENCE seq_testx_4 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12 start 5
+
+statement error pq: START value \(5\) cannot be greater than MAXVALUE \(4\)
+ALTER SEQUENCE seq_testx_4 INCREMENT BY 1 MINVALUE 1 MAXVALUE 4
+
+################################## the case where the sequence is altered after it has ever been used
+statement ok
+CREATE SEQUENCE customer_seq_alter_1 MINVALUE -2 MAXVALUE 2 START WITH 1 CACHE 5 INCREMENT BY -2
+
+statement error pq: MINVALUE cannot be made to be exceed than the current value
+ALTER SEQUENCE customer_seq INCREMENT  BY -1   MINVALUE 6 MAXVALUE 10
+
+query error pq: nextval\(\): reached maximum value of sequence "customer_seq" \(5\)
+SELECT customer_seq.nextval from dual
+
+query I
+select test.public.customer_seq.currval
+----
+5
+
+statement ok
+ALTER SEQUENCE customer_seq INCREMENT  BY 1   MINVALUE 5 MAXVALUE 10
+
+query I
+select test.public.customer_seq.currval
+----
+5
+
+query I
+select test.public.customer_seq.nextval
+----
+6
+
+## sequenceVal in [Minimum, Maximum], increment = -1, Minimum < oldMinimum, Maximum > oldMaximum
+statement ok
+ALTER SEQUENCE customer_seq INCREMENT  BY -1   MINVALUE -5 MAXVALUE 15
+
+query I
+select test.public.customer_seq.currval
+----
+6
+
+query I
+select test.public.customer_seq.nextval
+----
+5
+
+## sequenceVal not in [Minimum, Maximum], increment > 0, minimum = oldMinimum, maximum < oldMaximum
+statement error pq: MAXVALUE cannot be made to be less than the current value
+ALTER SEQUENCE customer_seq INCREMENT  BY 1   MINVALUE -5 MAXVALUE 0
+
+query I
+select test.public.customer_seq.currval
+----
+5
+
+query I
+select test.public.customer_seq.nextval
+----
+4
+
+## check if the latest sequence is from cache
+query I
+select setval('customer_seq', 10)
+----
+10
+
+## sequenceVal not in [Minimum, Maximum], increment < 0 and minimum > oldMinimum
+statement error pq: MAXVALUE cannot be made to be less than the current value
+ALTER SEQUENCE customer_seq INCREMENT  BY 1  MINVALUE 0 MAXVALUE 5
+
+query I
+select test.public.customer_seq.nextval
+----
+9
+
+query I
+select test.public.customer_seq.nextval
+----
+8
+
+## sequenceVal in [Minimum, Maximum], increment > 0 and maximum > oldMaximum
+statement ok
+ALTER SEQUENCE customer_seq INCREMENT  BY 3  MINVALUE 0 MAXVALUE 10
+
+query I
+select test.public.customer_seq.currval
+----
+8
+
+query error pq: nextval\(\): reached maximum value of sequence "customer_seq" \(10\)
+select test.public.customer_seq.nextval
+
+query I
+select test.public.customer_seq.currval
+----
+8
+
+statement error pq: MINVALUE cannot be made to be exceed than the current value
+ALTER SEQUENCE customer_seq INCREMENT  BY 1  MINVALUE 10 MAXVALUE 15
+
+statement ok
+ALTER SEQUENCE customer_seq INCREMENT  BY 1  MINVALUE 0 MAXVALUE 9
+
+query I
+select test.public.customer_seq.nextval
+----
+9
+
+query error pq: nextval\(\): reached maximum value of sequence "customer_seq" \(9\)
+select test.public.customer_seq.nextval
