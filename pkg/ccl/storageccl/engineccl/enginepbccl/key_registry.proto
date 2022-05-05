@@ -10,8 +10,6 @@ syntax = "proto3";
 package cockroach.ccl.storageccl.engineccl.enginepbccl;
 option go_package = "enginepbccl";
 
-import "gogoproto/gogo.proto";
-
 enum EncryptionType {
   // No encryption.
   Plaintext = 0;
