@@ -14,7 +14,6 @@ option go_package = "kvserver";
 
 import "kv/kvserver/kvserverpb/raft.proto";
 import "kv/kvserver/api.proto";
-import "gogoproto/gogo.proto";
 
 service MultiRaft {
     rpc RaftMessageBatch (stream cockroach.kv.kvserver.kvserverpb.RaftMessageRequestBatch) returns (stream cockroach.kv.kvserver.kvserverpb.RaftMessageResponse) {}

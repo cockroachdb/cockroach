@@ -13,7 +13,6 @@ package cockroach.protectedts;
 option go_package = "ptstorage";
 
 import "gogoproto/gogo.proto";
-import "google/api/annotations.proto";
 import "roachpb/data.proto";
 
 // Spans is the format of the message encoded in the spans column of a the

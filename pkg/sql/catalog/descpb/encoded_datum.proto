@@ -15,8 +15,6 @@ syntax = "proto2";
 package cockroach.sql.sqlbase;
 option go_package = "descpb";
 
-import "gogoproto/gogo.proto";
-
 // DatumEncoding identifies the encoding used for an EncDatum.
 enum DatumEncoding {
     // Indicates that the datum is encoded using the order-preserving encoding

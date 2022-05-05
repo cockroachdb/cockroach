@@ -12,8 +12,6 @@ syntax = "proto3";
 package cockroach.kv.kvserver.concurrency.poison;
 option go_package = "poison";
 
-import "gogoproto/gogo.proto";
-
 // Policy determines how a request will react to encountering a poisoned
 // latch. A poisoned latch is a latch for which the holder is unable to make
 // progress. That is, waiters of this latch should not expect to be able to
