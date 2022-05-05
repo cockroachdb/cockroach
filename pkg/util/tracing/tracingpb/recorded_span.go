@@ -120,3 +120,11 @@ func (tg *TagGroup) FindTag(key string) (string, bool) {
 	}
 	return "", false
 }
+
+// Combine returns the sum of m and other.
+func (m OperationMetadata) Combine(other OperationMetadata) OperationMetadata {
+	m.Count += other.Count
+	m.ContainsUnfinished = m.ContainsUnfinished || other.ContainsUnfinished
+	m.Duration += other.Duration
+	return m
+}
