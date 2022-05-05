@@ -103,7 +103,13 @@ message RecordedSpan {
   // DeprecatedInternalStructured only stores the Payloads.
   repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
 
+  // FinishedChildrenDurations is a mapping from the operation to the duration
+  // of all finished children of this span.
+  map<string, int64> finished_children_durations = 18 [(gogoproto.castvalue) = "time.Duration"];
+
   reserved 5,10,11;
+
+  // Next ID: 19
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all

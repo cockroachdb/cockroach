@@ -652,8 +652,9 @@ func (sp *Span) reset(
 				logs:       makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */),
 				structured: makeSizeLimitedBuffer(maxStructuredBytesPerSpan, h.structuredEventsAlloc[:]),
 			},
-			tags:           h.tagsAlloc[:0],
-			eventListeners: eventListeners,
+			tags:                      h.tagsAlloc[:0],
+			eventListeners:            eventListeners,
+			finishedChildrenDurations: make(map[string]time.Duration),
 		}
 
 		if kind != oteltrace.SpanKindUnspecified {

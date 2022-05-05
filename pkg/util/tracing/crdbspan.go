@@ -115,6 +115,13 @@ type crdbSpanMu struct {
 	// The spans are not maintained in a particular order.
 	openChildren []childRef
 
+	// finishedChildrenDurations maintains a mapping from operation to duration of
+	// all the Finish()ed children in the Recording rooted at this span.
+	//
+	// This map will also contain entries for all Finish()ed children in a remote
+	// recording imported into this span.
+	finishedChildrenDurations map[string]time.Duration
+
 	recording recordingState
 
 	// tags are a list of key/value pairs associated with the span through
@@ -410,12 +417,11 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 	return result
 }
 
-// getStructuredRecording returns the structured events in this span and
-// in all the children. The results are returned as a Recording for the caller's
-// convenience (and for optimizing memory allocations). The Recording will be
-// nil if there are no structured events. If not nil, the Recording will have
-// exactly one span corresponding to the receiver, will all events handing from
-// this span (even if the events had been recorded on different spans).
+// getStructuredRecording returns a Recording with exactly one span (for
+// optimizing memory allocations) corresponding to the receiver. This span will
+// contain all the structured events in this span and in all its children.
+// This span will notably also have a `finishedChildrenDurations` map that will
+// contain an entry for all Finish()ed children in s' Recording.
 //
 // The caller does not take ownership of the events.
 func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recording {
@@ -427,42 +433,60 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recordin
 			buffer = append(buffer, &c.StructuredRecords[i])
 		}
 	}
+
+	// finishedChildren have already copied their `finishedChildrenDurations`
+	// entries into s' on Finish().
+	//
+	// For open children, we need to recurse and copy all the entries that
+	// correspond to *their* Finish()ed children.
+	finishedChildrenDurations := make(map[string]time.Duration)
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
 			sp := c.Span.i.crdb
 			buffer = sp.getStructuredEventsRecursively(buffer, includeDetachedChildren)
+			sp.getFinishedChildrenDurationsRecursively(finishedChildrenDurations, includeDetachedChildren)
 		}
-	}
-
-	if len(buffer) == 0 && s.mu.recording.structured.Len() == 0 {
-		// Optimize out the allocations below.
-		return nil
 	}
 
 	res := s.getRecordingNoChildrenLocked(
 		RecordingStructured,
 		false, // finishing - since we're only asking for the structured recording, the argument doesn't matter
 	)
-	// If necessary, grow res.StructuredRecords to have space for buffer.
-	var reservedSpace []tracingpb.StructuredRecord
-	if cap(res.StructuredRecords)-len(res.StructuredRecords) < len(buffer) {
-		// res.StructuredRecords does not have enough capacity to accommodate the
-		// elements of buffer. We allocate a new, larger array and copy over the old
-		// entries.
-		old := res.StructuredRecords
-		res.StructuredRecords = make([]tracingpb.StructuredRecord, len(old)+len(buffer))
-		copy(res.StructuredRecords, old)
-		reservedSpace = res.StructuredRecords[len(old):]
-	} else {
-		// res.StructuredRecords has enough capacity for buffer. We extend it in
-		// place.
-		oldLen := len(res.StructuredRecords)
-		res.StructuredRecords = res.StructuredRecords[:oldLen+len(buffer)]
-		reservedSpace = res.StructuredRecords[oldLen:]
+
+	if len(buffer) != 0 || s.mu.recording.structured.Len() != 0 {
+		// If necessary, grow res.StructuredRecords to have space for buffer.
+		var reservedSpace []tracingpb.StructuredRecord
+		if cap(res.StructuredRecords)-len(res.StructuredRecords) < len(buffer) {
+			// res.StructuredRecords does not have enough capacity to accommodate the
+			// elements of buffer. We allocate a new, larger array and copy over the old
+			// entries.
+			old := res.StructuredRecords
+			res.StructuredRecords = make([]tracingpb.StructuredRecord, len(old)+len(buffer))
+			copy(res.StructuredRecords, old)
+			reservedSpace = res.StructuredRecords[len(old):]
+		} else {
+			// res.StructuredRecords has enough capacity for buffer. We extend it in
+			// place.
+			oldLen := len(res.StructuredRecords)
+			res.StructuredRecords = res.StructuredRecords[:oldLen+len(buffer)]
+			reservedSpace = res.StructuredRecords[oldLen:]
+		}
+		for i, e := range buffer {
+			reservedSpace[i] = *e
+		}
 	}
-	for i, e := range buffer {
-		reservedSpace[i] = *e
+
+	// If any of the open children had `finishedChildrenDurations` to report, we
+	// need to copy those entries into res.
+	if len(finishedChildrenDurations) != 0 {
+		if res.FinishedChildrenDurations == nil {
+			res.FinishedChildrenDurations = make(map[string]time.Duration)
+		}
+		for operation, duration := range finishedChildrenDurations {
+			res.FinishedChildrenDurations[operation] += duration
+		}
 	}
+
 	return Recording{res}
 }
 
@@ -520,9 +544,52 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRecording Recording) {
 			}
 		}
 	case RecordingOff:
-		break
+		return
 	default:
 		panic(fmt.Sprintf("unrecognized recording mode: %v", s.recordingType()))
+	}
+
+	// We need to update s' finishedChildrenDurations to capture all the
+	// Finish()ed spans in this Recording.
+	//
+	// 1) Updating the map with an entry for the root of the recording.
+	//
+	// 2) Copying all the entries from the root of the recording into s' map. These
+	//   entries capture the Finish()ed children of the root of the recording.
+	//
+	// 3) Copying over the maps of all unfinished (open) children in the recording.
+	//   These maps capture the Finish()ed children of the open children in the
+	//   recording. These open children are considered "orphaned" and will be
+	//   promoted to root spans in the registry but their Finish()ed children
+	//   should be captured since they contributed to the recording's overall
+	//   duration.
+	//
+	// Note, recordFinishedChildrenLocked is called with either a Verbose or a
+	// Structured recording. In the case of a StructuredRecording we have already
+	// completed step 3) when fetching the Recording in GetRecording(...).
+	//
+	//As an exanple where we are done finishing `child`:
+	//
+	//parent
+	//child (finished_C: 4s, finished_D: 3s)
+	//open_A (finished_B: 1s)
+	//finished_B
+	//finished_C (finished_D: 3s)
+	//finished_D
+	//
+	//We'd expect `parent` to have:
+	//{child: 10s, finished_C: 4s, finished_D: 3s, finished_B: 1s}
+	root := childRecording[0]
+	s.mu.finishedChildrenDurations[root.Operation] += root.Duration
+	for operation, duration := range root.FinishedChildrenDurations {
+		s.mu.finishedChildrenDurations[operation] += duration
+	}
+	for _, rec := range childRecording[1:] {
+		if !rec.Finished {
+			for operation, duration := range rec.FinishedChildrenDurations {
+				s.mu.finishedChildrenDurations[operation] += duration
+			}
+		}
 	}
 }
 
@@ -693,6 +760,28 @@ func (s *crdbSpan) getStructuredEventsRecursively(
 	return buffer
 }
 
+func (s *crdbSpan) getFinishedChildrenDurationsRecursively(
+	finishedChildrenDurations map[string]time.Duration, includeDetachedChildren bool,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.getFinishedChildrenDurationsLocked(finishedChildrenDurations)
+	for _, c := range s.mu.openChildren {
+		if c.collectRecording || includeDetachedChildren {
+			sp := c.Span.i.crdb
+			sp.getFinishedChildrenDurationsRecursively(finishedChildrenDurations, includeDetachedChildren)
+		}
+	}
+}
+
+func (s *crdbSpan) getFinishedChildrenDurationsLocked(
+	finishedChildrenDurations map[string]time.Duration,
+) {
+	for operation, duration := range s.mu.finishedChildrenDurations {
+		finishedChildrenDurations[operation] += duration
+	}
+}
+
 func (s *crdbSpan) getStructuredEventsLocked(
 	buffer []*tracingpb.StructuredRecord,
 ) []*tracingpb.StructuredRecord {
@@ -771,6 +860,13 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		for i := 0; i < numEvents; i++ {
 			event := s.mu.recording.structured.Get(i).(*tracingpb.StructuredRecord)
 			rs.StructuredRecords[i] = *event
+		}
+	}
+
+	if numFinishedChildrenDuration := len(s.mu.finishedChildrenDurations); numFinishedChildrenDuration != 0 {
+		rs.FinishedChildrenDurations = make(map[string]time.Duration)
+		for operation, duration := range s.mu.finishedChildrenDurations {
+			rs.FinishedChildrenDurations[operation] = duration
 		}
 	}
 
