@@ -2681,8 +2681,26 @@ var charts = []sectionDescription{
 				Metrics: []string{"storage.l0-sublevels"},
 			},
 			{
-				Title:   "L0 Files",
-				Metrics: []string{"storage.l0-num-files"},
+				Title: "L0 Files",
+				Metrics: []string{
+					"storage.l0-num-files",
+				},
+			},
+			{
+				Title:   "Bytes flushed to Level 0",
+				Metrics: []string{"storage.l0-bytes-flushed"},
+			},
+			{
+				Title: "Bytes Ingested per Level",
+				Metrics: []string{
+					"storage.l0-bytes-ingested",
+					"storage.l1-bytes-ingested",
+					"storage.l2-bytes-ingested",
+					"storage.l3-bytes-ingested",
+					"storage.l4-bytes-ingested",
+					"storage.l5-bytes-ingested",
+					"storage.l6-bytes-ingested",
+				},
 			},
 			{
 				Title:   "Ingestion",
