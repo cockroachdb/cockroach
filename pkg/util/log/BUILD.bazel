@@ -132,6 +132,7 @@ go_test(
     srcs = [
         "ambient_context_test.go",
         "buffered_sink_test.go",
+        "channels_test.go",
         "clog_test.go",
         "file_log_gc_test.go",
         "file_names_test.go",
