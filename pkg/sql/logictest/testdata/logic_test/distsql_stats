@@ -1367,3 +1367,11 @@ ANALYZE system.lease
 # Collecting stats on system.table_statistics is disallowed.
 statement error pq: cannot create statistics on system.table_statistics
 ANALYZE system.table_statistics
+
+# Collecting stats on system.jobs is disallowed.
+statement error pq: cannot create statistics on system.jobs
+ANALYZE system.jobs
+
+# Collecting stats on system.scheduled_jobs is disallowed.
+statement error pq: cannot create statistics on system.scheduled_jobs
+ANALYZE system.scheduled_jobs
