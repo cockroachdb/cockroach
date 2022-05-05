@@ -262,6 +262,14 @@ type NameResolver interface {
 	// ResolveIndex retrieves an index by name and returns its elements.
 	ResolveIndex(relationID catid.DescID, indexName tree.Name, p ResolveParams) ElementResultSet
 
+	// ResolveTableIndexBestEffort retrieves a table which contains the target
+	// index and returns its elements. Name of database, schema or table may be
+	// missing. It panics if require=true but index is not found.
+	ResolveTableIndexBestEffort(tableIndexName *tree.TableIndexName, p ResolveParams, required bool) ElementResultSet
+
 	// ResolveColumn retrieves a column by name and returns its elements.
 	ResolveColumn(relationID catid.DescID, columnName tree.Name, p ResolveParams) ElementResultSet
+
+	// ResolveConstraint retrieves a constraint by name and returns its elements.
+	ResolveConstraint(relationID catid.DescID, constraintName tree.Name, p ResolveParams) ElementResultSet
 }

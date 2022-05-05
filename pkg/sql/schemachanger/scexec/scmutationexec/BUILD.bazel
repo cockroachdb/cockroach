@@ -4,6 +4,7 @@ go_library(
     name = "scmutationexec",
     srcs = [
         "column.go",
+        "comment.go",
         "dependencies.go",
         "drop.go",
         "eventlog.go",

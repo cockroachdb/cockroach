@@ -1370,7 +1370,7 @@ func insertJSONStatistic(
 }
 
 func (p *planner) removeColumnComment(
-	ctx context.Context, tableID descpb.ID, columnID descpb.ColumnID,
+	ctx context.Context, tableID descpb.ID, pgAttributeNum descpb.PGAttributeNum,
 ) error {
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
@@ -1380,7 +1380,7 @@ func (p *planner) removeColumnComment(
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 		keys.ColumnCommentType,
 		tableID,
-		columnID)
+		pgAttributeNum)
 
 	return err
 }
@@ -1783,7 +1783,7 @@ func dropColumnImpl(
 		}
 	}
 
-	if err := params.p.removeColumnComment(params.ctx, tableDesc.ID, colToDrop.GetID()); err != nil {
+	if err := params.p.removeColumnComment(params.ctx, tableDesc.ID, colToDrop.GetPGAttributeNum()); err != nil {
 		return nil, err
 	}
 

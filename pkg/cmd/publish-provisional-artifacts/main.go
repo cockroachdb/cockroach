@@ -164,8 +164,12 @@ func run(svc s3I, flags runFlags, execFn release.ExecFn) {
 	}
 	log.Printf("Using S3 bucket: %s", bucketName)
 
+	platforms := []release.Platform{release.PlatformLinux, release.PlatformMacOS, release.PlatformWindows}
+	if !flags.isRelease {
+		platforms = append(platforms, release.PlatformLinuxArm)
+	}
 	var cockroachBuildOpts []opts
-	for _, platform := range []release.Platform{release.PlatformLinux, release.PlatformMacOS, release.PlatformWindows} {
+	for _, platform := range platforms {
 		var o opts
 		o.Platform = platform
 		o.PkgDir = flags.pkgDir

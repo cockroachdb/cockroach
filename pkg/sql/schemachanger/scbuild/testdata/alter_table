@@ -5,7 +5,7 @@ CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
-- [[Column:{DescID: 104, ColumnID: 2, PgAttributeNum: 2}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     pgAttributeNum: 2
@@ -64,7 +64,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
-- [[Column:{DescID: 104, ColumnID: 2, PgAttributeNum: 2}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     pgAttributeNum: 2
@@ -130,12 +130,12 @@ build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
-- [[Column:{DescID: 104, ColumnID: 2, PgAttributeNum: 2}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 104
-- [[Column:{DescID: 104, ColumnID: 3, PgAttributeNum: 3}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
   details:
     columnId: 3
     pgAttributeNum: 3
@@ -222,7 +222,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-- [[Column:{DescID: 104, ColumnID: 2, PgAttributeNum: 2}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     pgAttributeNum: 2
@@ -288,12 +288,12 @@ build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
-- [[Column:{DescID: 104, ColumnID: 2, PgAttributeNum: 2}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     pgAttributeNum: 2
     tableId: 104
-- [[Column:{DescID: 105, ColumnID: 3, PgAttributeNum: 3}, PUBLIC], ABSENT]
+- [[Column:{DescID: 105, ColumnID: 3}, PUBLIC], ABSENT]
   details:
     columnId: 3
     pgAttributeNum: 3

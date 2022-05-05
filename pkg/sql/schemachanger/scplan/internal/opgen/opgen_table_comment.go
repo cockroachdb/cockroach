@@ -21,7 +21,13 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.TableComment) scop.Op {
-					return notImplemented(this)
+					return &scop.UpsertTableComment{
+						TableID: this.TableID,
+						Comment: this.Comment,
+					}
+				}),
+				emit(func(this *scpb.TableComment, md *targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 			),
 		),
@@ -35,6 +41,9 @@ func init() {
 					return &scop.RemoveTableComment{
 						TableID: this.TableID,
 					}
+				}),
+				emit(func(this *scpb.TableComment, md *targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
 				}),
 			),
 		),
