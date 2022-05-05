@@ -457,22 +457,23 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recordin
 	return Recording{res}
 }
 
-// recordFinishedChildren adds children to s' recording.
+// recordFinishedChildren adds the spans in childRecording to s' recording.
 //
-// s takes ownership of children; the caller is not allowed to use them anymore.
-func (s *crdbSpan) recordFinishedChildren(children []tracingpb.RecordedSpan) {
-	if len(children) == 0 {
+// s takes ownership of childRecording; the caller is not allowed to use them anymore.
+func (s *crdbSpan) recordFinishedChildren(childRecording Recording) {
+	if len(childRecording) == 0 {
 		return
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.recordFinishedChildrenLocked(children)
+	s.recordFinishedChildrenLocked(childRecording)
 }
 
-// s takes ownership of children; the caller is not allowed to use them anymore.
-func (s *crdbSpan) recordFinishedChildrenLocked(children []tracingpb.RecordedSpan) {
-	if len(children) == 0 {
+// s takes ownership of childRecording; the caller is not allowed to use them
+// anymore.
+func (s *crdbSpan) recordFinishedChildrenLocked(childRecording Recording) {
+	if len(childRecording) == 0 {
 		return
 	}
 
@@ -480,13 +481,14 @@ func (s *crdbSpan) recordFinishedChildrenLocked(children []tracingpb.RecordedSpa
 	// received, or only the structured events.
 	switch s.recordingType() {
 	case RecordingVerbose:
-		// Change the root of the remote recording to be a child of this Span. This is
+		// Change the root of the recording to be a child of this Span. This is
 		// usually already the case, except with DistSQL traces where remote
-		// processors run in spans that FollowFrom an RPC Span that we don't collect.
-		children[0].ParentSpanID = s.spanID
+		// processors run in spans that FollowFrom an RPC Span that we don't
+		// collect.
+		childRecording[0].ParentSpanID = s.spanID
 
-		if len(s.mu.recording.finishedChildren)+len(children) <= maxRecordedSpansPerTrace {
-			s.mu.recording.finishedChildren = append(s.mu.recording.finishedChildren, children...)
+		if len(s.mu.recording.finishedChildren)+len(childRecording) <= maxRecordedSpansPerTrace {
+			s.mu.recording.finishedChildren = append(s.mu.recording.finishedChildren, childRecording...)
 			break
 		}
 
@@ -494,8 +496,8 @@ func (s *crdbSpan) recordFinishedChildrenLocked(children []tracingpb.RecordedSpa
 		// records by falling through.
 		fallthrough
 	case RecordingStructured:
-		for ci := range children {
-			child := &children[ci]
+		for ci := range childRecording {
+			child := &childRecording[ci]
 			for i := range child.StructuredRecords {
 				s.recordInternalLocked(&child.StructuredRecords[i], &s.mu.recording.structured)
 			}

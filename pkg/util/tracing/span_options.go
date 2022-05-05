@@ -231,18 +231,17 @@ type remoteParent SpanMeta
 // For the purposes of trace recordings, there's no mechanism ensuring that the
 // child's recording will be passed to the parent span. When that's desired, it
 // has to be done manually by calling Span.GetRecording() and propagating the
-// result to the parent by calling Span.ImportRemoteSpans().
+// result to the parent by calling Span.ImportRemoteRecording().
 //
 // The canonical use case for this is around RPC boundaries, where a server
 // handling a request wants to create a child span descending from a parent on a
 // remote machine.
 //
-// node 1                     (network)          node 2
+// node 1                         (network)          node 2
 // --------------------------------------------------------------------------
-// Span.Meta()               ----------> sp2 := Tracer.StartSpan(
-//                                       		WithRemoteParentFromSpanMeta(.))
-//                                       doSomething(sp2)
-// Span.ImportRemoteSpans(.) <---------- sp2.FinishAndGetRecording()
+// Span.Meta()                   ----------> sp2 := Tracer.StartSpan(WithRemoteParentFromSpanMeta(.))
+//                                           doSomething(sp2)
+// Span.ImportRemoteRecording(.) <---------- sp2.FinishAndGetRecording()
 //
 // By default, the child span is derived using a ChildOf relationship, which
 // corresponds to the expectation that the parent span will usually wait for the

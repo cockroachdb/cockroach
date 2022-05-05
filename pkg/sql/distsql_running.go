@@ -981,7 +981,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 	}
 	if len(meta.TraceData) > 0 {
 		if span := tracing.SpanFromContext(r.ctx); span != nil {
-			span.ImportRemoteSpans(meta.TraceData)
+			span.ImportRemoteRecording(meta.TraceData)
 		}
 		var ev roachpb.ContentionEvent
 		for i := range meta.TraceData {

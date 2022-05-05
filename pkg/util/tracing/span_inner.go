@@ -87,8 +87,8 @@ func (s *spanInner) GetRecording(recType RecordingType, finishing bool) Recordin
 	return s.crdb.GetRecording(recType, finishing)
 }
 
-func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
-	s.crdb.recordFinishedChildren(remoteSpans)
+func (s *spanInner) ImportRemoteRecording(remoteRecording []tracingpb.RecordedSpan) {
+	s.crdb.recordFinishedChildren(remoteRecording)
 }
 
 func (s *spanInner) Finish() {
