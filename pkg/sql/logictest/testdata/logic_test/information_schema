@@ -1944,6 +1944,7 @@ constraint_db       public             t1_pkey                    constraint_db 
 constraint_db       public             t1_a_key                   constraint_db  public        t1          UNIQUE           NO             NO
 constraint_db       public             3864823197_119_2_not_null  constraint_db  public        t2          CHECK            NO             NO
 constraint_db       public             fk                         constraint_db  public        t2          FOREIGN KEY      NO             NO
+constraint_db       public             t2_pkey                    constraint_db  public        t2          PRIMARY KEY      NO             NO
 
 query TTTT colnames
 SELECT *
@@ -1967,6 +1968,7 @@ constraint_db  public        t1          a            constraint_db       public
 constraint_db  public        t1          a            constraint_db       public             fk
 constraint_db  public        t1          a            constraint_db       public             t1_a_key
 constraint_db  public        t1          p            constraint_db       public             t1_pkey
+constraint_db  public        t2          rowid        constraint_db       public             t2_pkey
 
 # Query issued by jOOQ in PostgresDatabase.loadCheckConstraints.
 query TTTT colnames
@@ -2590,12 +2592,15 @@ constraint_column   public             fk               constraint_column  publi
 constraint_column   public             t2_pkey          constraint_column  public        t2          t1_id        1                 NULL
 constraint_column   public             fk2              constraint_column  public        t3          a            1                 1
 constraint_column   public             fk2              constraint_column  public        t3          b            2                 2
+constraint_column   public             t3_pkey          constraint_column  public        t3          rowid        1                 NULL
+constraint_column   public             t4_pkey          constraint_column  public        t4          rowid        1                 NULL
 constraint_column   public             unique_a         constraint_column  public        t4          a            1                 NULL
 constraint_column   public             unique_b_c       constraint_column  public        t4          b            1                 NULL
 constraint_column   public             unique_b_c       constraint_column  public        t4          c            2                 NULL
 constraint_column   public             fk3              constraint_column  public        t5          b            1                 1
 constraint_column   public             fk3              constraint_column  public        t5          c            2                 2
 constraint_column   public             t5_a_fkey        constraint_column  public        t5          a            1                 1
+constraint_column   public             t5_pkey          constraint_column  public        t5          rowid        1                 NULL
 
 query TTTTTTTTTTT colnames
 SELECT * FROM information_schema.referential_constraints WHERE constraint_schema = 'public' ORDER BY TABLE_NAME, CONSTRAINT_NAME
@@ -4781,6 +4786,7 @@ server_version                                        13.0.0
 server_version_num                                    130000
 session_authorization                                 root
 session_user                                          root
+show_primary_key_constraint_on_not_visible_columns    on
 sql_safe_updates                                      off
 ssl_renegotiation_limit                               0
 standard_conforming_strings                           on

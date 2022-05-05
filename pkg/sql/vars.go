@@ -2049,6 +2049,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`show_primary_key_constraint_on_not_visible_columns`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`show_primary_key_constraint_on_not_visible_columns`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("show_primary_key_constraint_on_not_visible_columns", s)
+			if err != nil {
+				return err
+			}
+			m.SetShowPrimaryKeyConstraintOnNotVisibleColumns(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().ShowPrimaryKeyConstraintOnNotVisibleColumns), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
