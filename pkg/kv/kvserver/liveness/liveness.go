@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -179,6 +181,7 @@ type NodeLiveness struct {
 	heartbeatToken       chan struct{}
 	metrics              Metrics
 	onNodeDecommissioned func(livenesspb.Liveness) // noop if nil
+	engineSyncs          singleflight.Group
 
 	mu struct {
 		syncutil.RWMutex
@@ -1230,18 +1233,37 @@ func (nl *NodeLiveness) updateLiveness(
 			return Record{}, err
 		}
 
+		// We do a sync write to all disks before updating liveness, so that a
+		// faulty or stalled disk will cause us to fail liveness and lose our leases.
+		// All disks are written concurrently.
+		//
+		// We do this asynchronously in order to respect the caller's context, and
+		// coalesce concurrent writes onto an in-flight one. This is particularly
+		// relevant for a stalled disk during a lease acquisition heartbeat, where
+		// we need to return a timely NLHE to the caller such that it will try a
+		// different replica and nudge it into acquiring the lease. This can leak a
+		// goroutine in the case of a stalled disk.
 		nl.mu.RLock()
 		engines := nl.mu.engines
 		nl.mu.RUnlock()
-		for _, eng := range engines {
-			// We synchronously write to all disks before updating liveness because we
-			// don't want any excessively slow disks to prevent leases from being
-			// shifted to other nodes. A slow/stalled disk would block here and cause
-			// the node to lose its leases.
-			if err := storage.WriteSyncNoop(ctx, eng); err != nil {
-				return Record{}, errors.Wrapf(err, "couldn't update node liveness because disk write failed")
+		resultCs := make([]<-chan singleflight.Result, len(engines))
+		for i, eng := range engines {
+			eng := eng // pin the loop variable
+			resultCs[i], _ = nl.engineSyncs.DoChan(strconv.Itoa(i), func() (interface{}, error) {
+				return nil, storage.WriteSyncNoop(eng)
+			})
+		}
+		for _, resultC := range resultCs {
+			select {
+			case r := <-resultC:
+				if r.Err != nil {
+					return Record{}, errors.Wrapf(r.Err, "disk write failed while updating node liveness")
+				}
+			case <-ctx.Done():
+				return Record{}, ctx.Err()
 			}
 		}
+
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {
