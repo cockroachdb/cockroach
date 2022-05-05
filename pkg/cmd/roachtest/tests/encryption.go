@@ -87,6 +87,7 @@ func registerEncryption(r registry.Registry) {
 	for _, n := range []int{1} {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("encryption/nodes=%d", n),
+			Skip:    "Blocked on #79265.",
 			Owner:   registry.OwnerStorage,
 			Cluster: r.MakeClusterSpec(n),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
