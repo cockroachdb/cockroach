@@ -101,7 +101,7 @@ export const ActiveTransactionDetails: React.FC<ActiveTransactionDetailsProps> =
                       <Text>Start Time (UTC)</Text>
                       <Text>
                         {transaction.start.format(
-                          "MMM D, YYYY [at] h:mm a (UTC)",
+                          "MMM D, YYYY [at] H:mm (UTC)",
                         )}
                       </Text>
                     </div>

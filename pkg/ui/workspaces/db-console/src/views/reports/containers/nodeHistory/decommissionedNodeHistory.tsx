@@ -90,7 +90,7 @@ export class DecommissionedNodeHistory extends React.Component<
       title: "Decommissioned On",
       sorter: sortByDecommissioningDate,
       render: (_text, record) => {
-        return record.decommissionedDate.format("LL[ at ]h:mm a UTC");
+        return record.decommissionedDate.format("LL[ at ]H:mm UTC");
       },
     },
   ];

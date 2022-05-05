@@ -22,8 +22,8 @@ import { usePrevious } from "../util/hooks";
 const cx = classNames.bind(styles);
 
 function rangeToString(start: Moment, end: Moment): string {
-  const formatStr = "MMM D, h:mm A";
-  const formatStrSameDay = "h:mm A";
+  const formatStr = "MMM D, H:mm";
+  const formatStrSameDay = "H:mm";
 
   const isSameDay = start.isSame(end, "day");
   return `${start.utc().format(formatStr)} - ${end
@@ -47,7 +47,7 @@ export function DateRangeMenu({
   onCancel,
 }: DateRangeMenuProps): React.ReactElement {
   const dateFormat = "MMMM D, YYYY";
-  const timeFormat = "h:mm A [(UTC)]";
+  const timeFormat = "H:mm [(UTC)]";
   const [startMoment, setStartMoment] = useState<Moment>(
     startInit || moment.utc(),
   );
@@ -124,7 +124,6 @@ export function DateRangeMenu({
         onChange={onChangeStart}
         suffixIcon={<span />}
         value={startMoment}
-        use12Hours
       />
       <div className={cx("divider")} />
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
@@ -144,7 +143,6 @@ export function DateRangeMenu({
         onChange={onChangeEnd}
         suffixIcon={<span />}
         value={endMoment}
-        use12Hours
       />
       {!isValid && (
         <Alert

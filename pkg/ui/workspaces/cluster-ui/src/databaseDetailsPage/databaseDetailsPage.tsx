@@ -380,7 +380,7 @@ export class DatabaseDetailsPage extends React.Component<
         cell: table =>
           !table.details.statsLastUpdated
             ? "No table statistics found"
-            : table.details.statsLastUpdated.format("MMM DD, YYYY [at] h:mm A"),
+            : table.details.statsLastUpdated.format("MMM DD, YYYY [at] H:mm"),
         sort: table => table.details.statsLastUpdated,
         className: cx("database-table__col--table-stats"),
         name: "tableStatsUpdated",
