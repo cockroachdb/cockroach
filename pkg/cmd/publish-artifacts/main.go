@@ -109,7 +109,7 @@ type runFlags struct {
 }
 
 func run(svc s3putter, flags runFlags, execFn release.ExecFn) {
-	for _, platform := range []release.Platform{release.PlatformLinux, release.PlatformMacOS, release.PlatformWindows} {
+	for _, platform := range []release.Platform{release.PlatformLinux, release.PlatformLinuxArm, release.PlatformMacOS, release.PlatformWindows} {
 		var o opts
 		o.Platform = platform
 		o.ReleaseVersionStrs = []string{flags.sha}
