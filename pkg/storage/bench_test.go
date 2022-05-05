@@ -494,8 +494,8 @@ func BenchmarkIntentResolution(b *testing.B) {
 	}
 }
 
-// BenchmarkIntentRangeResolution compares separated and interleaved intents,
-// when doing ranged intent resolution.
+// BenchmarkIntentRangeResolution benchmarks ranged intent resolution with
+// various counts of mvcc versions and sparseness of intents.
 func BenchmarkIntentRangeResolution(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
 	defer log.Scope(b).Close(b)
