@@ -52,60 +52,57 @@ func CheckSSTConflicts(
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	maxIntents int64,
+	usePrefixSeek bool,
 ) (enginepb.MVCCStats, error) {
 	var statsDiff enginepb.MVCCStats
 	var intents []roachpb.Intent
 
-	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: end.Key})
+	if usePrefixSeek {
+		// If we're going to be using a prefix iterator, check for the fast path
+		// first, where there are no keys in the reader between the sstable's start
+		// and end keys. We use a non-prefix iterator for this search, and reopen a
+		// prefix one if there are engine keys in the span.
+		nonPrefixIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: end.Key})
+		nonPrefixIter.SeekGE(start)
+		valid, err := nonPrefixIter.Valid()
+		nonPrefixIter.Close()
+		if !valid {
+			return statsDiff, err
+		}
+	}
+
+	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		UpperBound:   end.Key,
+		Prefix:       usePrefixSeek,
+		useL6Filters: true,
+	})
 	defer extIter.Close()
-	extIter.SeekGE(start)
 
 	sstIter, err := NewMemSSTIterator(sst, false)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	defer sstIter.Close()
-	sstIter.SeekGE(start)
 
-	extOK, extErr := extIter.Valid()
-	sstOK, sstErr := sstIter.Valid()
-	for extErr == nil && sstErr == nil && extOK && sstOK {
-		if err := ctx.Err(); err != nil {
-			return enginepb.MVCCStats{}, err
-		}
-
-		extKey, extValue := extIter.UnsafeKey(), extIter.UnsafeValue()
-		sstKey, sstValue := sstIter.UnsafeKey(), sstIter.UnsafeValue()
-
-		// Keep seeking the iterators until both keys are equal.
-		if cmp := bytes.Compare(extKey.Key, sstKey.Key); cmp < 0 {
-			extIter.SeekGE(MVCCKey{Key: sstKey.Key})
-			extOK, extErr = extIter.Valid()
-			continue
-		} else if cmp > 0 {
-			sstIter.SeekGE(MVCCKey{Key: extKey.Key})
-			sstOK, sstErr = sstIter.Valid()
-			continue
-		}
-
+	compareForCollision := func(sstKey, extKey MVCCKey, sstValueRaw, extValueRaw []byte) error {
 		// Make sure both keys are proper committed MVCC keys. Note that this is
 		// only checked when the key exists both in the SST and existing data, it is
 		// not an exhaustive check of the SST.
 		if !sstKey.IsValue() {
-			return enginepb.MVCCStats{}, errors.New("SST keys must have timestamps")
+			return errors.New("SST keys must have timestamps")
 		}
-		if len(sstValue) == 0 {
-			return enginepb.MVCCStats{}, errors.New("SST values cannot be tombstones")
+		if len(sstValueRaw) == 0 {
+			return errors.New("SST values cannot be tombstones")
 		}
 		if !extKey.IsValue() {
 			var mvccMeta enginepb.MVCCMetadata
 			if err = extIter.ValueProto(&mvccMeta); err != nil {
-				return enginepb.MVCCStats{}, err
+				return err
 			}
 			if len(mvccMeta.RawBytes) > 0 {
-				return enginepb.MVCCStats{}, errors.New("inline values are unsupported")
+				return errors.New("inline values are unsupported")
 			} else if mvccMeta.Txn == nil {
-				return enginepb.MVCCStats{}, errors.New("found intent without transaction")
+				return errors.New("found intent without transaction")
 			} else {
 				// If we encounter a write intent, keep looking for additional intents
 				// in order to return a large batch for intent resolution. The caller
@@ -114,18 +111,11 @@ func CheckSSTConflicts(
 				// of scans.
 				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.Key().Key))
 				if int64(len(intents)) >= maxIntents {
-					return enginepb.MVCCStats{}, &roachpb.WriteIntentError{Intents: intents}
+					return &roachpb.WriteIntentError{Intents: intents}
 				}
-				sstIter.NextKey()
-				sstOK, sstErr = sstIter.Valid()
-				if sstOK {
-					extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
-				}
-				extOK, extErr = extIter.Valid()
-				continue
+				return nil
 			}
 		}
-
 		// Allow certain idempotent writes where key/timestamp/value all match:
 		//
 		// * disallowShadowing: any matching key.
@@ -133,7 +123,7 @@ func CheckSSTConflicts(
 		allowIdempotent := (!disallowShadowingBelow.IsEmpty() && disallowShadowingBelow.LessEq(extKey.Timestamp)) ||
 			(disallowShadowingBelow.IsEmpty() && disallowShadowing)
 		if allowIdempotent && sstKey.Timestamp.Equal(extKey.Timestamp) &&
-			bytes.Equal(extValue, sstValue) {
+			bytes.Equal(extValueRaw, sstValueRaw) {
 			// This SST entry will effectively be a noop, but its stats have already
 			// been accounted for resulting in double-counting. To address this we
 			// send back a stats diff for these existing KVs so that we can subtract
@@ -151,19 +141,13 @@ func CheckSSTConflicts(
 			statsDiff.KeyCount--
 
 			// Update the stats to account for the skipped versioned key/value.
-			totalBytes = int64(len(sstValue)) + MVCCVersionTimestampSize
+			totalBytes = int64(len(sstValueRaw)) + MVCCVersionTimestampSize
 			statsDiff.LiveBytes -= totalBytes
 			statsDiff.KeyBytes -= MVCCVersionTimestampSize
-			statsDiff.ValBytes -= int64(len(sstValue))
+			statsDiff.ValBytes -= int64(len(sstValueRaw))
 			statsDiff.ValCount--
 
-			sstIter.NextKey()
-			sstOK, sstErr = sstIter.Valid()
-			if sstOK {
-				extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
-			}
-			extOK, extErr = extIter.Valid()
-			continue
+			return nil
 		}
 
 		// If requested, check that we're not shadowing a live key. Note that
@@ -171,11 +155,11 @@ func CheckSSTConflicts(
 		// a WriteTooOldError -- that error implies that the client should
 		// retry at a higher timestamp, but we already know that such a retry
 		// would fail (because it will shadow an existing key).
-		if len(extValue) > 0 && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
+		if len(extValueRaw) > 0 && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
 			allowShadow := !disallowShadowingBelow.IsEmpty() &&
-				disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValue, sstValue)
+				disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValueRaw, sstValueRaw)
 			if !allowShadow {
-				return enginepb.MVCCStats{}, errors.Errorf(
+				return errors.Errorf(
 					"ingested key collides with an existing one: %s", sstKey.Key)
 			}
 		}
@@ -186,7 +170,7 @@ func CheckSSTConflicts(
 		// do if AddSSTable had SSTTimestampToRequestTimestamp set, but AddSSTable
 		// cannot be used in transactions so we don't need to check.
 		if sstKey.Timestamp.LessEq(extKey.Timestamp) {
-			return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
+			return roachpb.NewWriteTooOldError(
 				sstKey.Timestamp, extKey.Timestamp.Next(), sstKey.Key)
 		}
 
@@ -194,10 +178,89 @@ func CheckSSTConflicts(
 		// to take into account the existing KV pair.
 		statsDiff.KeyCount--
 		statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
-		if len(extValue) > 0 {
+		if len(extValueRaw) > 0 {
 			statsDiff.LiveCount--
 			statsDiff.LiveBytes -= int64(len(extKey.Key) + 1)
-			statsDiff.LiveBytes -= int64(len(extValue)) + MVCCVersionTimestampSize
+			statsDiff.LiveBytes -= int64(len(extValueRaw)) + MVCCVersionTimestampSize
+		}
+		return nil
+	}
+
+	sstIter.SeekGE(start)
+	sstOK, sstErr := sstIter.Valid()
+	var extOK bool
+	var extErr error
+
+	if usePrefixSeek {
+		// In the case of prefix seeks, do not look at engine iter exhaustion. This
+		// is because the engine prefix iterator could be exhausted when it has
+		// iterated past its prefix, even if there are other keys after the prefix
+		// that should be checked.
+		for sstErr == nil && sstOK {
+			if err := ctx.Err(); err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+			// extIter is a prefix iterator; it is expected to skip keys that belong
+			// to different prefixes. Only iterate along the sst iterator, and re-seek
+			// extIter each time.
+			extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+			extOK, extErr = extIter.Valid()
+			if extErr != nil {
+				break
+			}
+			if !extOK {
+				// There is no key in extIter matching this prefix. Check the next key in
+				// sstIter. Note that we can't just use an exhausted extIter as a sign that
+				// we are done with the loop; extIter is a prefix iterator and could
+				// have keys after the current prefix that it will not return unless
+				// re-seeked.
+				sstIter.NextKey()
+				sstOK, sstErr = sstIter.Valid()
+				continue
+			}
+
+			extKey, extValueRaw := extIter.UnsafeKey(), extIter.UnsafeValue()
+			sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
+
+			// We just seeked the engine iter. If it has a mismatching prefix, the
+			// iterator is not obeying its contract.
+			if !bytes.Equal(extKey.Key, sstKey.Key) {
+				return enginepb.MVCCStats{}, errors.Errorf("prefix iterator returned mismatching prefix: %s != %s", extKey.Key, sstKey.Key)
+			}
+
+			if err := compareForCollision(sstKey, extKey, sstValueRaw, extValueRaw); err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+
+			sstIter.NextKey()
+			sstOK, sstErr = sstIter.Valid()
+		}
+	} else {
+		extIter.SeekGE(start)
+		extOK, extErr = extIter.Valid()
+	}
+
+	for !usePrefixSeek && sstErr == nil && sstOK && extOK && extErr == nil {
+		if err := ctx.Err(); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		extKey, extValueRaw := extIter.UnsafeKey(), extIter.UnsafeValue()
+		sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
+
+		// Keep seeking the iterators until both keys are equal.
+		if cmp := bytes.Compare(extKey.Key, sstKey.Key); cmp < 0 {
+			// sstIter is further ahead. Seek extIter.
+			extIter.SeekGE(MVCCKey{Key: sstKey.Key})
+			extOK, extErr = extIter.Valid()
+			continue
+		} else if cmp > 0 {
+			sstIter.SeekGE(MVCCKey{Key: extKey.Key})
+			sstOK, sstErr = sstIter.Valid()
+			continue
+		}
+
+		if err := compareForCollision(sstKey, extKey, sstValueRaw, extValueRaw); err != nil {
+			return enginepb.MVCCStats{}, err
 		}
 
 		sstIter.NextKey()

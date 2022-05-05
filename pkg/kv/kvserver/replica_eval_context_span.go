@@ -267,3 +267,10 @@ func (rec *SpanSetReplicaEvalContext) GetMaxBytes() int64 {
 func (rec *SpanSetReplicaEvalContext) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 	return rec.i.GetEngineCapacity()
 }
+
+// GetApproximateDiskBytes implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetApproximateDiskBytes(
+	from, to roachpb.Key,
+) (uint64, error) {
+	return rec.i.GetApproximateDiskBytes(from, to)
+}

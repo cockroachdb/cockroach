@@ -121,9 +121,10 @@ func (p *pebbleIterator) init(
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
 
-	p.options.OnlyReadGuaranteedDurable = false
-	if durability == GuaranteedDurability {
-		p.options.OnlyReadGuaranteedDurable = true
+	// Generate new Pebble iterator options.
+	p.options = pebble.IterOptions{
+		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
+		UseL6Filters:              opts.useL6Filters,
 	}
 	if opts.LowerBound != nil {
 		// This is the same as
