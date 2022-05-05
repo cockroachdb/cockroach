@@ -274,11 +274,11 @@ func getRowPrefix(key roachpb.Key) []byte {
 // KV representation, otherwise this may panic.
 func extractResultKey(repr []byte) roachpb.Key {
 	keyLen := binary.LittleEndian.Uint32(repr[4:8])
-	key, _, ok := enginepb.SplitMVCCKey(repr[8 : 8+keyLen])
+	key, ok := DecodeEngineKey(repr[8 : 8+keyLen])
 	if !ok {
 		return nil
 	}
-	return key
+	return key.Key
 }
 
 // Go port of mvccScanner in libroach/mvcc.h. Stores all variables relating to
