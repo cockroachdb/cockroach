@@ -268,7 +268,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 		params.p.txn,
 		v.dbName,
 		tree.DatabaseLookupFlags{
-			Required: true, AvoidLeased: params.p.avoidLeasedDescriptors,
+			Required: true, AvoidLeased: params.p.skipDescriptorCache,
 		},
 	)
 	if err != nil {
