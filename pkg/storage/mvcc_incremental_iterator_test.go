@@ -1443,7 +1443,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Create a DB containing 2 keys, a and b, where b has an intent. We use the
+	// Create a DB containing 2 keys, a and b, where a has an intent. We use the
 	// regular MVCCPut operation to generate these keys, which we'll later be
 	// copying into manually created sstables.
 	ctx := context.Background()
@@ -1460,8 +1460,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		}
 	}
 
-	put("a", "a value", 1, nil)
-	put("b", "b value", 2, &roachpb.Transaction{
+	put("a", "a value", 2, &roachpb.Transaction{
 		TxnMeta: enginepb.TxnMeta{
 			Key:            roachpb.Key("b"),
 			ID:             uuid.MakeV4(),
@@ -1470,45 +1469,40 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		},
 		ReadTimestamp: hlc.Timestamp{WallTime: 2},
 	})
+	put("b", "b value", 1, nil)
 
-	// Create a second DB in which we'll create a specific SSTable structure: the
-	// first SSTable contains 2 KVs where the first is a regular versioned key
-	// and the second is the MVCC metadata entry (i.e. an intent). The next
-	// SSTable contains the provisional value for the intent. The effect is that
-	// the metadata entry is separated from the entry it is metadata for.
+	// Create a second DB in which we'll create a specific SSTable structure:
+	// the first SSTable contains the intent, and the second contains the two
+	// versioned keys. The effect is that the intent is in a separate sstable
+	// from the entry it is the intent for.
 	//
 	//   SSTable 1:
-	//     a@1
-	//     b@<meta>
+	//     a@<meta> (in the lock table)
 	//
 	//   SSTable 2:
-	//     b@2
+	//     a@2
+	//     b@1
 	db2, err := Open(ctx, InMemory(), ForTesting)
 	require.NoError(t, err)
 	defer db2.Close()
 
-	// NB: If the original intent was separated, iterating using an interleaving
-	// iterator, as done below, and writing to an sst, transforms the separated
-	// intent to an interleaved intent. This is ok for now since both kinds of
-	// intents are supported.
-	// TODO(sumeer): change this test before interleaved intents are disallowed.
-	ingest := func(it MVCCIterator, count int) {
+	ingest := func(it EngineIterator, valid bool, err error, count int) {
 		memFile := &MemFile{}
 		sst := MakeIngestionSSTWriter(ctx, db2.settings, memFile)
 		defer sst.Close()
 
 		for i := 0; i < count; i++ {
-			ok, err := it.Valid()
-			if err != nil {
+			require.NoError(t, err)
+			require.True(t, valid)
+			ek, err := it.EngineKey()
+			require.NoError(t, err)
+			require.NoError(t, err)
+			if err := sst.PutEngineKey(ek, it.Value()); err != nil {
 				t.Fatal(err)
 			}
-			if !ok {
-				t.Fatal("expected key")
-			}
-			if err := sst.Put(it.Key(), it.Value()); err != nil {
-				t.Fatal(err)
-			}
-			it.Next()
+			valid, err = it.NextEngineKey()
+			// Make linter happy.
+			require.NoError(t, err)
 		}
 		if err := sst.Finish(); err != nil {
 			t.Fatal(err)
@@ -1524,13 +1518,12 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	{
 		// Iterate over the entries in the first DB, ingesting them into SSTables
 		// in the second DB.
-		it := db1.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-			UpperBound: keys.MaxKey,
-		})
+		it := db1.NewEngineIterator(IterOptions{UpperBound: keys.MaxKey})
 		defer it.Close()
-		it.SeekGE(MVCCKey{Key: keys.LocalMax})
-		ingest(it, 2)
-		ingest(it, 1)
+		valid, err := it.SeekEngineKeyGE(EngineKey{Key: keys.LocalRangeLockTablePrefix})
+		ingest(it, valid, err, 1)
+		valid, err = it.SeekEngineKeyGE(EngineKey{Key: keys.LocalMax})
+		ingest(it, valid, err, 2)
 	}
 
 	{
