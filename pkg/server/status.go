@@ -2426,12 +2426,14 @@ func (s *statusServer) HotRangesV2(
 						NodeID:            nodeID,
 						QPS:               r.QueriesPerSecond,
 						TableName:         tableName,
-						SchemaName:        schemaName,
 						DatabaseName:      dbName,
 						IndexName:         indexName,
 						ReplicaNodeIds:    replicaNodeIDs,
 						LeaseholderNodeID: r.LeaseholderNodeID,
+						SchemaName:        schemaName,
 						StoreID:           store.StoreID,
+						StartKey:          r.Desc.StartKey,
+						EndKey:            r.Desc.EndKey,
 					})
 				}
 			}
@@ -2462,6 +2464,12 @@ func (s *statusServer) HotRangesV2(
 	}
 	response.NextPageToken = string(nextBytes)
 	return response, nil
+}
+
+func (s *statusServer) HistoricalHotRanges(
+	ctx context.Context, req *serverpb.HistoricalHotRangesRequest,
+) (*serverpb.HistoricalHotRangesResponse, error) {
+	return GetHistoricalHotRangesCached()
 }
 
 func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesResponse_NodeResponse {

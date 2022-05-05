@@ -3541,6 +3541,8 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | leaseholder_node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | leaseholder_node_id indicates the Node ID that is the current leaseholder for the given range. | [reserved](#support-status) |
 | schema_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | schema_name provides the name of schema (if exists) for table in current range. | [reserved](#support-status) |
 | store_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | store_id indicates the Store ID where range is stored. | [reserved](#support-status) |
+| start_key | [bytes](#cockroach.server.serverpb.HotRangesResponseV2-bytes) |  | start_key is the first key which may be contained by this range. | [reserved](#support-status) |
+| end_key | [bytes](#cockroach.server.serverpb.HotRangesResponseV2-bytes) |  | end_key marks the end of the range's possible keys. | [reserved](#support-status) |
 
 
 
@@ -3555,6 +3557,96 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | ----- | ---- | ----- | ----------- | -------------- |
 | key | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  |  |  |
 | value | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  |  |  |
+
+
+
+
+
+
+## HistoricalHotRanges
+
+`GET /_status/histhotranges`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| samples | [HistoricalHotRangesResponse.HHRSample](#cockroach.server.serverpb.HistoricalHotRangesResponse-cockroach.server.serverpb.HistoricalHotRangesResponse.HHRSample) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.HistoricalHotRangesResponse-cockroach.server.serverpb.HistoricalHotRangesResponse.HHRSample"></a>
+#### HistoricalHotRangesResponse.HHRSample
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| hotranges | [HistoricalHotRangesResponse.HHRSample.HotRange](#cockroach.server.serverpb.HistoricalHotRangesResponse-cockroach.server.serverpb.HistoricalHotRangesResponse.HHRSample.HotRange) | repeated |  | [reserved](#support-status) |
+| timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.HistoricalHotRangesResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.HistoricalHotRangesResponse-cockroach.server.serverpb.HistoricalHotRangesResponse.HHRSample.HotRange"></a>
+#### HistoricalHotRangesResponse.HHRSample.HotRange
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| range_id | [int32](#cockroach.server.serverpb.HistoricalHotRangesResponse-int32) |  |  | [reserved](#support-status) |
+| replica_id | [int32](#cockroach.server.serverpb.HistoricalHotRangesResponse-int32) |  |  | [reserved](#support-status) |
+| qps | [double](#cockroach.server.serverpb.HistoricalHotRangesResponse-double) |  |  | [reserved](#support-status) |
+| start_key | [string](#cockroach.server.serverpb.HistoricalHotRangesResponse-string) |  |  | [reserved](#support-status) |
+| end_key | [string](#cockroach.server.serverpb.HistoricalHotRangesResponse-string) |  |  | [reserved](#support-status) |
+| node_ids | [int32](#cockroach.server.serverpb.HistoricalHotRangesResponse-int32) | repeated |  | [reserved](#support-status) |
+| store_ids | [int32](#cockroach.server.serverpb.HistoricalHotRangesResponse-int32) | repeated |  | [reserved](#support-status) |
+| schema | [HistoricalHotRangesResponse.HHRSample.HotRange.Schema](#cockroach.server.serverpb.HistoricalHotRangesResponse-cockroach.server.serverpb.HistoricalHotRangesResponse.HHRSample.HotRange.Schema) | repeated |  | [reserved](#support-status) |
+| locality | [string](#cockroach.server.serverpb.HistoricalHotRangesResponse-string) |  |  | [reserved](#support-status) |
+| key_bytes | [sfixed64](#cockroach.server.serverpb.HistoricalHotRangesResponse-sfixed64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.HistoricalHotRangesResponse-cockroach.server.serverpb.HistoricalHotRangesResponse.HHRSample.HotRange.Schema"></a>
+#### HistoricalHotRangesResponse.HHRSample.HotRange.Schema
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| database | [string](#cockroach.server.serverpb.HistoricalHotRangesResponse-string) |  |  | [reserved](#support-status) |
+| tables | [string](#cockroach.server.serverpb.HistoricalHotRangesResponse-string) | repeated |  | [reserved](#support-status) |
 
 
 

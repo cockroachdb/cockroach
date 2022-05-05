@@ -1376,6 +1376,16 @@ message HotRangesResponseV2 {
       (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
     ];
+    // start_key is the first key which may be contained by this range.
+    bytes start_key = 11 [
+      (gogoproto.customname) = "StartKey",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"
+    ];
+    // end_key marks the end of the range's possible keys.
+    bytes end_key = 12 [
+      (gogoproto.customname) = "EndKey",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"
+    ];
   }
   // Ranges contain list of hot ranges info that has highest number of QPS.
   repeated HotRange ranges = 1;
@@ -1387,6 +1397,48 @@ message HotRangesResponseV2 {
   ];
   // NextPageToken represents next pagination token to request next slice of data.
   string next_page_token = 3 [(gogoproto.nullable) = true];
+}
+
+message HistoricalHotRangesRequest {}
+
+message HistoricalHotRangesResponse {
+  message HHRSample {
+    message HotRange {
+      message Schema {
+        string database = 1;
+        repeated string tables = 2;
+      }
+      int32 range_id = 1[
+        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+        (gogoproto.customname) = "RangeID"
+      ];
+      int32 replica_id = 2[
+        (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+      ];
+      double qps = 3;
+      string start_key = 4;
+      string end_key = 5;
+      repeated int32 node_ids = 6[
+        (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+      ];
+      repeated int32 store_ids = 7[
+        (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+      ];
+      repeated Schema schema = 8;
+      string locality = 9;
+      sfixed64 key_bytes = 10;
+    }
+    repeated HotRange hotranges = 1;
+    google.protobuf.Timestamp timestamp = 2 [
+      (gogoproto.nullable) = false,
+      (gogoproto.stdtime) = true
+    ];
+  }
+
+  repeated HHRSample samples = 1;
 }
 
 message RangeRequest {
@@ -2086,6 +2138,12 @@ service Status {
     option (google.api.http) = {
       post : "/_status/v2/hotranges"
       body : "*"
+    };
+  }
+
+  rpc HistoricalHotRanges(HistoricalHotRangesRequest) returns (HistoricalHotRangesResponse) {
+    option (google.api.http) = {
+      get : "/_status/histhotranges"
     };
   }
 

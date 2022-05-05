@@ -28,6 +28,7 @@ go_library(
         "grpc_gateway.go",
         "grpc_server.go",
         "gzip_response_writer.go",
+        "histhotrangesworker.go",
         "import_ts.go",
         "index_usage_stats.go",
         "init.go",

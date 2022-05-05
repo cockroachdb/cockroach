@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1212,6 +1213,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 		ctx, keys.SystemSQLCodec, s.st.MakeUpdater(), state.initialSettingsKVs,
 	); err != nil {
 		return errors.Wrap(err, "during initializing settings updater")
+	}
+
+	if envutil.EnvOrDefaultBool("COCKROACH_FAKE_HISTORICAL_HOT_RANGES", false) {
+		if err := s.collectHistoricalHotRanges(); err != nil {
+			return errors.Wrap(err, "during initializing historical hot ranges collector")
+		}
 	}
 
 	// TODO(irfansharif): Let's make this unconditional. We could avoid
