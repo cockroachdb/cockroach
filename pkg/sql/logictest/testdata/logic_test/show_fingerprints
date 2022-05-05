@@ -138,3 +138,16 @@ t_pkey  1205834892498753533
 
 statement ok
 COMMIT
+
+statement ok
+CREATE TABLE t_w_expr_index (a INT PRIMARY KEY, b INT, c INT AS (b + 42) STORED, INDEX (c), INDEX ((b+42)))
+
+statement ok
+INSERT INTO t_w_expr_index VALUES (1, 1), (2, 2), (3, 3)
+
+query TT
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t_w_expr_index
+----
+t_w_expr_index_pkey     -3347212893095932527
+t_w_expr_index_c_idx    -2777058403611971387
+t_w_expr_index_expr_idx -2777058403611971387
