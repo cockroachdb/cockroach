@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,6 +37,8 @@ const (
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
 	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
 	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
+	// AzureEnvironmentKeyParam is the query parameter for the environment name in an azure URI.
+	AzureEnvironmentKeyParam = "AZURE_ENVIRONMENT"
 )
 
 func parseAzureURL(
@@ -48,12 +51,17 @@ func parseAzureURL(
 		Prefix:      uri.Path,
 		AccountName: uri.Query().Get(AzureAccountNameParam),
 		AccountKey:  uri.Query().Get(AzureAccountKeyParam),
+		Environment: uri.Query().Get(AzureEnvironmentKeyParam),
 	}
 	if conf.AzureConfig.AccountName == "" {
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
 	}
 	if conf.AzureConfig.AccountKey == "" {
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
+	}
+	if conf.AzureConfig.Environment == "" {
+		// Default to AzurePublicCloud if not specified for backwards compatibility
+		conf.AzureConfig.Environment = azure.PublicCloud.Name
 	}
 	conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
 	return conf, nil
@@ -81,8 +89,12 @@ func makeAzureStorage(
 	if err != nil {
 		return nil, errors.Wrap(err, "azure credential")
 	}
+	env, err := azure.EnvironmentFromName(conf.Environment)
+	if err != nil {
+		return nil, errors.Wrap(err, "azure environment")
+	}
 	p := azblob.NewPipeline(credential, azblob.PipelineOptions{})
-	u, err := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net", conf.AccountName))
+	u, err := url.Parse(fmt.Sprintf("https://%s.blob.%s", conf.AccountName, env.StorageEndpointSuffix))
 	if err != nil {
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
