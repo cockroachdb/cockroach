@@ -123,6 +123,10 @@ func (p *pebbleIterator) init(
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
 
+	// TODO(bilal): Uncomment the line below when useL6Filters has been threaded
+	// through in pebble.
+	//
+	// p.options.useL6Filters = opts.useL6Filters
 	p.options.OnlyReadGuaranteedDurable = false
 	if durability == GuaranteedDurability {
 		p.options.OnlyReadGuaranteedDurable = true
