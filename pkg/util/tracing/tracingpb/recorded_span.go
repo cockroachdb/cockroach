@@ -97,3 +97,13 @@ func (r *StructuredRecord) MemorySize() int {
 		1*8 + // 1 words for *Any
 		r.Payload.Size() // TODO(andrei): this is the encoded size, not the mem size
 }
+
+// Combine combines the `other` OperationMetadata into the receiver.
+func (m RecordedSpan_OperationMetadata) Combine(
+	other RecordedSpan_OperationMetadata,
+) RecordedSpan_OperationMetadata {
+	m.Count += other.Count
+	m.ContainsUnfinished = m.ContainsUnfinished || other.ContainsUnfinished
+	m.Duration += other.Duration
+	return m
+}
