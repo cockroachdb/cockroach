@@ -251,12 +251,16 @@ var derKey = map[DescribeDerivative]tspb.TimeSeriesQueryDerivative{
 
 // GenerateCatalog creates an array of ChartSections, which is served at
 // /_admin/v1/chartcatalog.
-func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error) {
+//
+// In strict mode, any metric that is present in the chart catalog but for
+// which no metadata is found triggers an error. In non-strict mode, such
+// metrics are simply ignored.
+func GenerateCatalog(metadata map[string]metric.Metadata, strict bool) ([]ChartSection, error) {
 
-	if !catalogGenerated {
+	if strict || !catalogGenerated {
 		for _, sd := range charts {
 
-			if err := createIndividualCharts(metadata, sd); err != nil {
+			if err := createIndividualCharts(metadata, sd, strict); err != nil {
 				return nil, err
 			}
 		}
@@ -269,7 +273,9 @@ func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error
 // createIndividualChart creates IndividualCharts, and ultimately places them
 // in the appropriate place in chartCatalog based on the hierarchy described
 // in sd.Organization.
-func createIndividualCharts(metadata map[string]metric.Metadata, sd sectionDescription) error {
+func createIndividualCharts(
+	metadata map[string]metric.Metadata, sd sectionDescription, strict bool,
+) error {
 
 	var ics []*IndividualChart
 
@@ -277,7 +283,7 @@ func createIndividualCharts(metadata map[string]metric.Metadata, sd sectionDescr
 
 		ic := new(IndividualChart)
 
-		if err := ic.addMetrics(cd, metadata); err != nil {
+		if err := ic.addMetrics(cd, metadata, strict); err != nil {
 			return err
 		}
 
@@ -328,7 +334,7 @@ func createIndividualCharts(metadata map[string]metric.Metadata, sd sectionDescr
 // addMetrics sets the IndividualChart's Metric values by looking up the
 // chartDescription metrics in the metadata map.
 func (ic *IndividualChart) addMetrics(
-	cd chartDescription, metadata map[string]metric.Metadata,
+	cd chartDescription, metadata map[string]metric.Metadata, strict bool,
 ) error {
 	for _, x := range cd.Metrics {
 
@@ -338,6 +344,9 @@ func (ic *IndividualChart) addMetrics(
 		// insecure nodes do not metadata related to SSL certificates, so those metrics
 		// should not be added to any charts.
 		if !ok {
+			if strict {
+				return errors.Errorf("metadata missing for metric %s", x)
+			}
 			continue
 		}
 

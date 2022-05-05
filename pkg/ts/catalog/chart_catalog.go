@@ -327,7 +327,6 @@ var charts = []sectionDescription{
 					"rpc.method.gc.recv",
 					"rpc.method.get.recv",
 					"rpc.method.heartbeattxn.recv",
-					"rpc.method.import.recv",
 					"rpc.method.increment.recv",
 					"rpc.method.initput.recv",
 					"rpc.method.leaseinfo.recv",
@@ -382,7 +381,6 @@ var charts = []sectionDescription{
 					"distsender.rpc.gc.sent",
 					"distsender.rpc.get.sent",
 					"distsender.rpc.heartbeattxn.sent",
-					"distsender.rpc.import.sent",
 					"distsender.rpc.increment.sent",
 					"distsender.rpc.initput.sent",
 					"distsender.rpc.leaseinfo.sent",
@@ -792,10 +790,6 @@ var charts = []sectionDescription{
 				Title:   "Count",
 				Metrics: []string{"follower_reads.success_count"},
 			},
-			{
-				Title:   "Failed Attempts To Close",
-				Metrics: []string{"kv.closed_timestamp.failures_to_close"},
-			},
 		},
 	},
 	{
@@ -1198,10 +1192,6 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title:   "Failed Commits",
-				Metrics: []string{"txn.commits.failed"},
-			},
-			{
 				Title:   "Durations",
 				Metrics: []string{"txn.durations"},
 			},
@@ -1275,70 +1265,6 @@ var charts = []sectionDescription{
 				Title: "Failures",
 				Metrics: []string{
 					"txnrecovery.failures",
-				},
-			},
-		},
-	},
-	{
-		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
-		Charts: []chartDescription{
-			{
-				Title: "Emitted Bytes",
-				Metrics: []string{
-					"changefeed.emitted_bytes",
-				},
-			},
-			{
-				Title: "Emitted Messages",
-				Metrics: []string{
-					"changefeed.emitted_messages",
-				},
-			},
-			{
-				Title: "Entries",
-				Metrics: []string{
-					"changefeed.buffer_entries.in",
-					"changefeed.buffer_entries.out",
-				},
-			},
-			{
-				Title: "Errors",
-				Metrics: []string{
-					"changefeed.error_retries",
-					"changefeed.failures",
-				},
-			},
-			{
-				Title: "Flushes",
-				Metrics: []string{
-					"changefeed.flushes",
-				},
-			},
-			{
-				Title: "Max Behind Nanos",
-				Metrics: []string{
-					"changefeed.max_behind_nanos",
-				},
-			},
-			{
-				Title: "Min High Water",
-				Metrics: []string{
-					"changefeed.min_high_water",
-				},
-			},
-			{
-				Title: "Currently Running",
-				Metrics: []string{
-					"changefeed.running",
-				},
-			},
-			{
-				Title: "Total Time Spent",
-				Metrics: []string{
-					"changefeed.emit_nanos",
-					"changefeed.flush_nanos",
-					"changefeed.processing_nanos",
-					"changefeed.table_metadata_nanos",
 				},
 			},
 		},
@@ -2048,14 +1974,6 @@ var charts = []sectionDescription{
 		Organization: [][]string{{SQLLayer, "Optimizer"}},
 		Charts: []chartDescription{
 			{
-				Title: "Count",
-				Metrics: []string{
-					"sql.optimizer.count",
-					"sql.optimizer.count.internal",
-				},
-				AxisLabel: "SQL Statements",
-			},
-			{
 				Title: "Fallback",
 				Metrics: []string{
 					"sql.optimizer.fallback.count",
@@ -2107,82 +2025,8 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{SQLLayer, "SQL Memory", "Admin"}},
-		Charts: []chartDescription{
-			{
-				Title:   "All",
-				Metrics: []string{"sql.mem.admin.max"},
-			},
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.admin.current"},
-			},
-			{
-				Title:   "Session All",
-				Metrics: []string{"sql.mem.admin.session.max"},
-			},
-			{
-				Title:   "Session Current",
-				Metrics: []string{"sql.mem.admin.session.current"},
-			},
-			{
-				Title:   "Txn All",
-				Metrics: []string{"sql.mem.admin.txn.max"},
-			},
-			{
-				Title:   "Txn Current",
-				Metrics: []string{"sql.mem.admin.txn.current"},
-			},
-		},
-	},
-	{
-		Organization: [][]string{{SQLLayer, "SQL Memory", "Connections"}},
-		Charts: []chartDescription{
-			{
-				Title:   "All",
-				Metrics: []string{"sql.mem.conns.max"},
-			},
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.conns.current"},
-			},
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.conns.current"},
-			},
-			{
-				Title:   "Session All",
-				Metrics: []string{"sql.mem.conns.session.max"},
-			},
-			{
-				Title:   "Session Current",
-				Metrics: []string{"sql.mem.conns.session.current"},
-			},
-			{
-				Title:   "Txn All",
-				Metrics: []string{"sql.mem.conns.txn.max"},
-			},
-			{
-				Title:   "Txn Current",
-				Metrics: []string{"sql.mem.conns.txn.current"},
-			},
-		},
-	},
-	{
 		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
 		Charts: []chartDescription{
-			{
-				Title:   "All",
-				Metrics: []string{"sql.mem.internal.max"},
-			},
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.internal.current"},
-			},
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.internal.current"},
-			},
 			{
 				Title:   "Session All",
 				Metrics: []string{"sql.mem.internal.session.max"},
@@ -2237,19 +2081,6 @@ var charts = []sectionDescription{
 			{
 				Title:   "Max",
 				Metrics: []string{"sql.mem.root.max"},
-			},
-		},
-	},
-	{
-		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL"}},
-		Charts: []chartDescription{
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.sql.current"},
-			},
-			{
-				Title:   "Max",
-				Metrics: []string{"sql.mem.sql.max"},
 			},
 		},
 	},
@@ -2414,7 +2245,6 @@ var charts = []sectionDescription{
 					"sql.query.started.count",
 					"sql.select.started.count",
 					"sql.update.started.count",
-					"sql.failure.started.count",
 				},
 			},
 			{
@@ -2440,7 +2270,6 @@ var charts = []sectionDescription{
 					"sql.query.started.count.internal",
 					"sql.select.started.count.internal",
 					"sql.update.started.count.internal",
-					"sql.failure.started.count.internal",
 				},
 			},
 		},
@@ -2839,11 +2668,9 @@ var charts = []sectionDescription{
 			{
 				Title: "Round",
 				Metrics: []string{
-					"schedules.round.schedules-ready-to-run",
 					"schedules.round.reschedule-skip",
 					"schedules.round.reschedule-wait",
 					"schedules.round.jobs-started",
-					"schedules.round.num-jobs-running",
 				},
 				AxisLabel: "Count",
 			},
@@ -2852,24 +2679,8 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"schedules.malformed",
 					"schedules.error",
-					"schedules.total.started",
-					"schedules.total.succeeded",
-					"schedules.total.failed",
 				},
 				AxisLabel: "Count",
-			},
-		},
-	},
-	{
-		Organization: [][]string{{Jobs, "Schedules", "Backup"}},
-		Charts: []chartDescription{
-			{
-				Title: "Counts",
-				Metrics: []string{
-					"schedules.BACKUP.started",
-					"schedules.BACKUP.succeeded",
-					"schedules.BACKUP.failed",
-				},
 			},
 		},
 	},

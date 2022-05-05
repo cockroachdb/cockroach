@@ -913,7 +913,9 @@ func TestChartCatalogGen(t *testing.T) {
 
 	metricsMetadata := s.recorder.GetMetricsMetadata()
 
-	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
+	// NB: strict mode verifies that all metrics mentioned in the catalog
+	// exist.
+	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata, true /* strict */)
 
 	if err != nil {
 		t.Fatal(err)
@@ -941,26 +943,6 @@ func walkAllSections(chartCatalog []catalog.ChartSection, visit func(c *catalog.
 			visit(ic)
 		}
 	}
-}
-
-// findUndefinedMetrics finds metrics listed in pkg/ts/catalog/chart_catalog.go
-// that are not defined. This is most likely caused by a metric being removed.
-func findUndefinedMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata) []string {
-	var undefinedMetrics []string
-	for _, ic := range c.Charts {
-		for _, metric := range ic.Metrics {
-			_, ok := metadata[metric.Name]
-			if !ok {
-				undefinedMetrics = append(undefinedMetrics, metric.Name)
-			}
-		}
-	}
-
-	for _, x := range c.Subsections {
-		undefinedMetrics = append(undefinedMetrics, findUndefinedMetrics(x, metadata)...)
-	}
-
-	return undefinedMetrics
 }
 
 // deleteSeenMetrics removes all metrics in a section from the metricMetadata map.
@@ -1000,21 +982,10 @@ func TestChartCatalogMetrics(t *testing.T) {
 
 	metricsMetadata := s.recorder.GetMetricsMetadata()
 
-	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
+	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata, true /* strict */)
 
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	// Each metric referenced in the chartCatalog must have a definition in metricsMetadata
-	var undefinedMetrics []string
-	for _, cs := range chartCatalog {
-		undefinedMetrics = append(undefinedMetrics, findUndefinedMetrics(&cs, metricsMetadata)...)
-	}
-
-	if len(undefinedMetrics) > 0 {
-		t.Fatalf(`The following metrics need are no longer present and need to be removed
-			from the chart catalog (pkg/ts/catalog/chart_catalog.go):%v`, undefinedMetrics)
 	}
 
 	// Each metric in metricsMetadata should have at least one entry in
