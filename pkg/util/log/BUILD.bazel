@@ -135,6 +135,7 @@ go_test(
         "clog_test.go",
         "file_log_gc_test.go",
         "file_names_test.go",
+        "file_rotation_test.go",
         "file_test.go",
         "flags_test.go",
         "fluent_client_test.go",
