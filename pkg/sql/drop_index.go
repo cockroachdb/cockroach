@@ -167,11 +167,30 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		}
 
 		if shardColName != "" {
-			ok, err := n.maybeQueueDropShardColumn(tableDesc, shardColName)
+			// Retrieve the sharded column descriptor by name.
+			shardColDesc, err := tableDesc.FindColumnWithName(tree.Name(shardColName))
 			if err != nil {
 				return err
 			}
-			columnsDropped = columnsDropped || ok
+			if !shardColDesc.Dropped() {
+				// Only drop this shard column if it's not a physical column (as is the case for all hash-sharded index in 22.1
+				// and after), or, CASCADE is set.
+				if shardColDesc.IsVirtual() || n.n.DropBehavior == tree.DropCascade {
+					ok, err := n.maybeQueueDropShardColumn(tableDesc, shardColDesc)
+					if err != nil {
+						return err
+					}
+					columnsDropped = columnsDropped || ok
+				} else {
+					params.p.BufferClientNotice(
+						ctx,
+						pgnotice.Newf("The accompanying shard column %q is a physical column and dropping it can be "+
+							"expensive, so, we dropped the index %q but skipped dropping %q. Issue another "+
+							"'ALTER TABLE %v DROP COLUMN %v' query if you want to drop column %q.",
+							shardColName, idx.GetName(), shardColName, tableDesc.GetName(), shardColName, shardColName),
+					)
+				}
+			}
 		}
 
 		if columnsDropped {
@@ -205,15 +224,8 @@ func (n *dropIndexNode) queueDropColumn(tableDesc *tabledesc.Mutable, col catalo
 //
 // Assumes that the given index is sharded.
 func (n *dropIndexNode) maybeQueueDropShardColumn(
-	tableDesc *tabledesc.Mutable, shardColName string,
+	tableDesc *tabledesc.Mutable, shardColDesc catalog.Column,
 ) (bool, error) {
-	shardColDesc, err := tableDesc.FindColumnWithName(tree.Name(shardColName))
-	if err != nil {
-		return false, err
-	}
-	if shardColDesc.Dropped() {
-		return false, nil
-	}
 	if catalog.FindNonDropIndex(tableDesc, func(otherIdx catalog.Index) bool {
 		colIDs := otherIdx.CollectKeyColumnIDs()
 		if !otherIdx.Primary() {
