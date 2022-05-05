@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -40,6 +41,51 @@ import (
 )
 
 var _ sqlutil.InternalExecutor = &InternalExecutor{}
+
+// InternalExecutorProto is an internalExecutor that should not work!!!
+type InternalExecutorProto struct {
+	ctx        context.Context
+	memMetrics MemoryMetrics
+	settings   *cluster.Settings
+	server     *Server
+}
+
+// MakeInternalExecutorProto returns a proto of internal executor.
+func MakeInternalExecutorProto(
+	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
+) InternalExecutorProto {
+	return InternalExecutorProto{
+		ctx:        ctx,
+		memMetrics: memMetrics,
+		settings:   settings,
+		server:     s,
+	}
+}
+
+// MakeSessionBoundedInternalExecutorFromProto is to initialize an internal
+// executor with the proto. It should not be used inside under a planner
+// context.
+func MakeSessionBoundedInternalExecutorFromProto(
+	ieProto InternalExecutorProto, sessionData *sessiondata.SessionData,
+) sqlutil.InternalExecutor {
+	ie := MakeInternalExecutor(ieProto.ctx, ieProto.server, ieProto.memMetrics, ieProto.settings)
+	ie.SetSessionData(sessionData)
+	return &ie
+}
+
+// makeSessionBoundInternalExecutorFromProtoUnderPlanner is to initialize an
+// internal executor with the proto, and should always be used under a planner
+// context.
+func makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+	ieProto InternalExecutorProto,
+	sessionData *sessiondata.SessionData,
+	extraTxnState extraTxnStateUnderPlanner,
+) sqlutil.InternalExecutor {
+	ie := MakeInternalExecutor(ieProto.ctx, ieProto.server, ieProto.memMetrics, ieProto.settings)
+	ie.SetSessionData(sessionData)
+	ie.SetExtraTxnState(extraTxnState)
+	return &ie
+}
 
 // InternalExecutor can be used internally by code modules to execute SQL
 // statements without needing to open a SQL connection.
@@ -72,6 +118,11 @@ type InternalExecutor struct {
 	//
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
+
+	// extraTxnStateUnderPlanner is to store extra transaction state info that
+	// will be passed to an internal executor. It should only be set when the
+	// internal executor is used under a planner context.
+	extraTxnState *extraTxnStateUnderPlanner
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -124,6 +175,12 @@ func MakeInternalExecutor(
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
 	ie.s.populateMinimalSessionData(sessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
+}
+
+// SetExtraTxnState is to store the information from the parent transactions
+// in an internal executor. Currently, it only passes the descriptor collection.
+func (ie *InternalExecutor) SetExtraTxnState(ts extraTxnStateUnderPlanner) {
+	ie.extraTxnState = &extraTxnStateUnderPlanner{descCollection: ts.descCollection}
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -183,8 +240,12 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			applicationStats,
-		)
+			nil)
 	} else {
+		var descCollection *descs.Collection
+		if ie.extraTxnState != nil {
+			descCollection = ie.extraTxnState.descCollection
+		}
 		ex = ie.s.newConnExecutorWithTxn(
 			ctx,
 			sdMutIterator,
@@ -196,6 +257,7 @@ func (ie *InternalExecutor) initConnEx(
 			txn,
 			ie.syntheticDescriptors,
 			applicationStats,
+			descCollection,
 		)
 	}
 

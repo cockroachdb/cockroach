@@ -105,7 +105,13 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 	if n.index.GetID() != n.tableDesc.GetPrimaryIndexID() {
 		indexName = n.index.GetName()
 	}
-	ie := params.p.ExecCfg().InternalExecutorFactory(params.ctx, params.SessionData())
+
+	ie := makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+		params.p.ExecCfg().InternalExecutorProto,
+		params.p.SessionData(),
+		extraTxnStateUnderPlanner{descCollection: params.p.Descriptors()},
+	)
+
 	it, err := ie.QueryIteratorEx(
 		params.ctx, "split points query", params.p.txn, sessiondata.NoSessionDataOverride,
 		statement,

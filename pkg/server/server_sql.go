@@ -916,7 +916,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		collectionFactory,
 		&execCfg.Settings.SV,
 	)
-	execCfg.InternalExecutorFactory = ieFactory
+
+	execCfg.InternalExecutorProto = sql.MakeInternalExecutorProto(
+		ctx,
+		pgServer.SQLServer,
+		internalMemMetrics,
+		cfg.Settings,
+	)
 
 	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
 

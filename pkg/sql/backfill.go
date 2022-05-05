@@ -727,14 +727,21 @@ func (sc *SchemaChanger) validateConstraints(
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
+
+				ie := makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+					sc.execCfg.InternalExecutorProto,
+					evalCtx.SessionData(),
+					extraTxnStateUnderPlanner{descCollection: evalCtx.Descs},
+				)
+
 				if c.IsCheck() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), desc, txn, c.Check().Expr,
+						ctx, &semaCtx, ie, evalCtx.SessionData(), desc, txn, c.Check().Expr,
 					); err != nil {
 						return err
 					}
 				} else if c.IsForeignKey() {
-					if err := validateFkInTxn(ctx, sc.ieFactory, evalCtx.SessionData(), desc, txn, collection, c.GetName()); err != nil {
+					if err := validateFkInTxn(ctx, ie, desc, txn, collection, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
@@ -743,7 +750,7 @@ func (sc *SchemaChanger) validateConstraints(
 					}
 				} else if c.IsNotNull() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), desc, txn, c.Check().Expr,
+						ctx, &semaCtx, ie, evalCtx.SessionData(), desc, txn, c.Check().Expr,
 					); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
@@ -2317,6 +2324,12 @@ func runSchemaChangesInTxn(
 		}
 	}
 
+	ie := makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+		planner.ExecCfg().InternalExecutorProto,
+		planner.SessionData(),
+		extraTxnStateUnderPlanner{descCollection: planner.Descriptors()},
+	)
+
 	// Now that the table descriptor is in a valid state with all column and index
 	// mutations applied, it can be used for validating check/FK constraints.
 	for _, c := range constraintAdditionMutations {
@@ -2324,7 +2337,7 @@ func runSchemaChangesInTxn(
 			check := &c.ConstraintToUpdateDesc().Check
 			if check.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
-					ctx, &planner.semaCtx, planner.ExecCfg().InternalExecutorFactory,
+					ctx, &planner.semaCtx, ie,
 					planner.SessionData(), tableDesc, planner.txn, check.Expr,
 				); err != nil {
 					return err
@@ -2422,7 +2435,7 @@ func runSchemaChangesInTxn(
 func validateCheckInTxn(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	ief sqlutil.SessionBoundInternalExecutorFactory,
+	ie sqlutil.InternalExecutor,
 	sessionData *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
@@ -2432,7 +2445,7 @@ func validateCheckInTxn(
 	if tableDesc.Version > tableDesc.ClusterVersion().Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
-	ie := ief(ctx, sessionData)
+
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
 		return validateCheckExpr(ctx, semaCtx, sessionData, checkExpr, tableDesc, ie, txn)
 	})
@@ -2452,8 +2465,7 @@ func validateCheckInTxn(
 // reuse an existing kv.Txn safely.
 func validateFkInTxn(
 	ctx context.Context,
-	ief sqlutil.SessionBoundInternalExecutorFactory,
-	sd *sessiondata.SessionData,
+	ie sqlutil.InternalExecutor,
 	srcTable *tabledesc.Mutable,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
@@ -2485,7 +2497,6 @@ func validateFkInTxn(
 			targetTable = syntheticTable
 		}
 	}
-	ie := ief(ctx, sd)
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
 		return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
 	})

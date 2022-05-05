@@ -859,7 +859,11 @@ func (p *planner) QueryRowEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie := makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+		p.ExecCfg().InternalExecutorProto,
+		p.SessionData(),
+		extraTxnStateUnderPlanner{descCollection: p.Descriptors()},
+	)
 	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
@@ -876,7 +880,20 @@ func (p *planner) QueryIteratorEx(
 	stmt string,
 	qargs ...interface{},
 ) (eval.InternalRows, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+
+	ie := makeSessionBoundInternalExecutorFromProtoUnderPlanner(
+		p.ExecCfg().InternalExecutorProto,
+		p.SessionData(),
+		extraTxnStateUnderPlanner{descCollection: p.Descriptors()},
+	)
+
 	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 	return rows.(eval.InternalRows), err
+}
+
+// extraTxnStateUnderPlanner is to store extra transaction state info that
+// will be passed to an internal executor when it's used under a planner
+// context. It should not be exported from the sql package.
+type extraTxnStateUnderPlanner struct {
+	descCollection *descs.Collection
 }
