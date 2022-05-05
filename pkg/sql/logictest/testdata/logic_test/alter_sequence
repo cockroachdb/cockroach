@@ -231,3 +231,119 @@ query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE reverse_direction_seqas]
 ----
 CREATE SEQUENCE public.reverse_direction_seqas AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+
+
+# The flowing four cases are for sequence which is altered before it has ever been used
+# case 1 : Modify successfully, without START
+statement ok
+CREATE SEQUENCE seq_testx_1 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12
+
+statement ok
+ALTER SEQUENCE seq_testx_1 INCREMENT BY 8 MINVALUE 1 MAXVALUE 12
+
+query I
+SELECT nextval('seq_testx_1')
+----
+1
+
+query  I
+SELECT nextval('seq_testx_1')
+----
+9
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "seq_testx_1" \(12\)
+SELECT nextval('seq_testx_1')
+
+# case 2 : Fail to modify, and set START when create sequence
+statement ok
+CREATE SEQUENCE seq_testx_2 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12 START 2
+
+statement error pq: START value \(2\) cannot be less than MINVALUE \(4\)
+ALTER SEQUENCE seq_testx_2 INCREMENT BY 1 MINVALUE 4 MAXVALUE 12
+
+query  I
+SELECT nextval('seq_testx_2')
+----
+2
+
+# case 3 : Modify successfully, and set START when create sequence
+statement ok
+CREATE SEQUENCE seq_testx_3 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12 start 5
+
+statement ok
+ALTER SEQUENCE seq_testx_3 INCREMENT BY 8 MINVALUE 1 MAXVALUE 12
+
+query I
+select nextval('seq_testx_3')
+----
+5
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "seq_testx_3" \(12\)
+select nextval('seq_testx_3')
+
+# case 4 : Modify successfully, and the START set when create sequence not in [newMinValue, newMaxValue]
+statement ok
+CREATE SEQUENCE seq_testx_4 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12 start 5
+
+statement error pq: START value \(5\) cannot be greater than MAXVALUE \(4\)
+ALTER SEQUENCE seq_testx_4 INCREMENT BY 1 MINVALUE 1 MAXVALUE 4
+
+# customer_seq_alter_1 is for the sequence which is altered after it has ever been used
+statement ok
+CREATE SEQUENCE customer_seq_alter_1 MINVALUE -2 MAXVALUE 2 START WITH 1 CACHE 5 INCREMENT BY -2
+
+statement error pq: START value \(1\) cannot be less than MINVALUE \(6\)
+ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY -1   MINVALUE 6 MAXVALUE 10
+
+query I
+SELECT nextval('customer_seq_alter_1')
+----
+1
+
+query I
+select currval('customer_seq_alter_1')
+----
+1
+
+statement ok
+ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY 1 MINVALUE -5 MAXVALUE 10
+
+query I
+select currval('customer_seq_alter_1')
+----
+1
+
+query I
+select nextval('customer_seq_alter_1')
+----
+2
+
+# sequenceVal in [Minimum, Maximum], increment = -1, Minimum < oldMinimum, Maximum > oldMaximum
+statement ok
+ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY -1   MINVALUE -5 MAXVALUE 15
+
+query I
+select currval('customer_seq_alter_1')
+----
+2
+
+query I
+select nextval('customer_seq_alter_1')
+----
+1
+
+statement error pq: START value \(15\) cannot be greater than MAXVALUE \(0\)
+ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY 1 MINVALUE -5 MAXVALUE 0
+
+query I
+select currval('customer_seq_alter_1')
+----
+1
+
+query I
+select nextval('customer_seq_alter_1')
+----
+0
+
+statement error pq: START value \(15\) cannot be greater than MAXVALUE \(10\)
+ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY 3  MINVALUE 0 MAXVALUE 10
