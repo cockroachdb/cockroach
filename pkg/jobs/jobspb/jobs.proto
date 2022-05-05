@@ -175,7 +175,7 @@ message BackupDetails {
   Destination destination = 11 [(gogoproto.nullable) = false];
 
   // URIsByLocalityKV is a map of locality KVs to store URIs, used for
-  // partitioned backups.
+  // partitioned backups. The map does not include the default locality.
   map<string, string> uris_by_locality_kv = 5 [(gogoproto.customname) = "URIsByLocalityKV"];
   bytes deprecated_backup_manifest = 4;
   BackupEncryptionOptions encryption_options = 6;
