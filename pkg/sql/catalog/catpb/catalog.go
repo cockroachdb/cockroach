@@ -38,6 +38,10 @@ const (
 	// cluster setting.
 	UseStatsOnSystemTables = "sql.stats.system_tables.enabled"
 
+	// AutoStatsOnSystemTables is the name of the autostats on system tables
+	// cluster setting.
+	AutoStatsOnSystemTables = "sql.stats.system_tables_autostats.enabled"
+
 	// AutoStatsMinStaleTableSettingName is the name of the automatic stats collection
 	// min stale rows table setting.
 	AutoStatsMinStaleTableSettingName = "sql_stats_automatic_collection_min_stale_rows"

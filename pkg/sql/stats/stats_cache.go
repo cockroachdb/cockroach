@@ -220,15 +220,24 @@ func (sc *TableStatisticsCache) GetTableStats(
 	return sc.getTableStatsFromCache(ctx, table.GetID())
 }
 
+func statsDisallowedSystemTable(tableID descpb.ID) bool {
+	switch tableID {
+	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID:
+		return true
+	}
+	return false
+}
+
 // statsUsageAllowed returns true if statistics on `table` are allowed to be
 // used by the query optimizer.
 func statsUsageAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Settings) bool {
 	if catalog.IsSystemDescriptor(table) {
 		// Disable stats usage on system.table_statistics and system.lease. Looking
 		// up stats on system.lease is known to cause hangs, and the same could
-		// happen with system.table_statistics.
-		if table.GetID() == keys.TableStatisticsTableID ||
-			table.GetID() == keys.LeaseTableID {
+		// happen with system.table_statistics. Stats on system.jobs and
+		// system.scheduled_jobs are also disallowed because autostats are disabled
+		// on them.
+		if statsDisallowedSystemTable(table.GetID()) {
 			return false
 		}
 		// Return whether the optimizer is allowed to use stats on system tables.
@@ -239,11 +248,23 @@ func statsUsageAllowed(table catalog.TableDescriptor, clusterSettings *cluster.S
 
 // autostatsCollectionAllowed returns true if statistics are allowed to be
 // automatically collected on the table.
-func autostatsCollectionAllowed(table catalog.TableDescriptor) bool {
+func autostatsCollectionAllowed(
+	table catalog.TableDescriptor, clusterSettings *cluster.Settings,
+) bool {
 	if catalog.IsSystemDescriptor(table) {
-		// Don't try to get statistics for system tables (most importantly,
-		// for table_statistics itself).
-		return false
+		// Disable autostats on system.table_statistics and system.lease. Looking
+		// up stats on system.lease is known to cause hangs, and the same could
+		// happen with system.table_statistics. No need to collect stats if we
+		// cannot use them. Stats on system.jobs and system.scheduled_jobs
+		// are also disallowed because they are mutated too frequently and would
+		// trigger too many stats collections. The potential benefit is not worth
+		// the potential performance hit.
+		if statsDisallowedSystemTable(table.GetID()) {
+			return false
+		}
+		// Return whether autostats collection is allowed on system tables,
+		// according to the cluster settings.
+		return AutomaticStatisticsOnSystemTables.Get(&clusterSettings.SV)
 	}
 	return tableTypeCanHaveStats(table)
 }
