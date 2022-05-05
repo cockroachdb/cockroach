@@ -146,6 +146,7 @@ func (ie *InternalExecutor) initConnEx(
 	wg *sync.WaitGroup,
 	syncCallback func([]resWithPos),
 	errCallback func(error),
+	explicitTxn *bool,
 ) {
 	clientComm := &internalClientComm{
 		w: w,
@@ -200,6 +201,8 @@ func (ie *InternalExecutor) initConnEx(
 	}
 
 	ex.executorType = executorTypeInternal
+
+	*explicitTxn = !ex.implicitTxn()
 
 	wg.Add(1)
 	go func() {
@@ -730,7 +733,17 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+
+	var explicitTxn bool
+	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback, &explicitTxn)
+
+	if explicitTxn && tree.CanModifySchema(parsed.AST) {
+		return nil, errors.AssertionFailedf(
+			"schema changing statement \"%s\" is not allowed to be executed"+
+				" with internal executor under explicit transaction",
+			parsed.SQL,
+		)
+	}
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
