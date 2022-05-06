@@ -158,10 +158,11 @@ func ExtractAggFirstVar(e opt.ScalarExpr) *VariableExpr {
 
 // ExtractJoinEqualityColumns returns pairs of columns (one from the left side,
 // one from the right side) which are constrained to be equal in a join (and
-// have equivalent types).
+// have equivalent types). The returned filterOrds contains ordinals of the on
+// filters where each column pair was found.
 func ExtractJoinEqualityColumns(
 	leftCols, rightCols opt.ColSet, on FiltersExpr,
-) (leftEq opt.ColList, rightEq opt.ColList) {
+) (leftEq opt.ColList, rightEq opt.ColList, filterOrds []int) {
 	for i := range on {
 		condition := on[i].Condition
 		ok, left, right := ExtractJoinEquality(leftCols, rightCols, condition)
@@ -181,9 +182,10 @@ func ExtractJoinEqualityColumns(
 		if !duplicate {
 			leftEq = append(leftEq, left)
 			rightEq = append(rightEq, right)
+			filterOrds = append(filterOrds, i)
 		}
 	}
-	return leftEq, rightEq
+	return leftEq, rightEq, filterOrds
 }
 
 // ExtractJoinEqualityFilters returns the filters containing pairs of columns

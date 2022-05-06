@@ -251,7 +251,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		if opt.IsJoinNonApplyOp(t) {
 			// All join ops that weren't handled above execute as a hash join.
-			if leftEqCols, _ := ExtractJoinEqualityColumns(
+			if leftEqCols, _, _ := ExtractJoinEqualityColumns(
 				e.Child(0).(RelExpr).Relational().OutputCols,
 				e.Child(1).(RelExpr).Relational().OutputCols,
 				*e.Child(2).(*FiltersExpr),

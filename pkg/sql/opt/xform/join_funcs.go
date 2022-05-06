@@ -43,7 +43,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	leftProps := left.Relational()
 	rightProps := right.Relational()
 
-	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
+	leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(
 		leftProps.OutputCols, rightProps.OutputCols, on,
 	)
 	n := len(leftEq)
@@ -652,7 +652,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			// filters if there is a multi-column inverted index.
 			if !eqColsAndOptionalFiltersCalculated {
 				inputProps := input.Relational()
-				leftEqCols, rightEqCols = memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, onFilters)
+				leftEqCols, rightEqCols, _ = memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, onFilters)
 
 				// Generate implicit filters from CHECK constraints and computed
 				// columns as optional filters. We build the computed column

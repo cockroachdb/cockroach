@@ -26,7 +26,9 @@ message Outlier {
 
   message Statement {
     bytes id = 1 [(gogoproto.customname) = "ID"];
-    double latency_in_seconds = 2;
+    uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
+    double latency_in_seconds = 3;
   }
 
   Session session = 1;
