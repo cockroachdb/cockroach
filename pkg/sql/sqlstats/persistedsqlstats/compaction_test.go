@@ -268,6 +268,17 @@ func TestSQLStatsCompactor(t *testing.T) {
 	}
 }
 
+// TestSQLStatsForegroundInterference ensures that the background SQL Stats
+// cleanup job does not delete any rows in the current aggregation window. Doing
+// so would cause contentions, which can potentially lead to long runtime of the
+// SQL Stats cleanup job. We test this behavior by generating some rows in the
+// stats system table that are in the current aggregation window and previous
+// aggregation window. Before running the SQL Stats compaction, we lower the
+// row limit in the stats table so that all thw rows will be deleted by the
+// StatsCompactor, if all the generated rows live outside the current
+// aggregation window. This test asserts that, since some of generated rows live
+// in the current aggregation interval, those rows will not be deleted by the
+// StatsCompactor.
 func TestSQLStatsForegroundInterference(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
