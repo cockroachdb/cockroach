@@ -108,6 +108,15 @@ func (r *sqlRowsMultiResultSet) Next(values []driver.Value) error {
 				return pgx.ScanArgError{ColumnIndex: i, Err: err}
 			}
 			values[i] = s
+		} else if fieldOID == pgtype.TimeOID {
+			// Use time.Time explicitly, since pgconn defaults to using int64
+			// (for microseconds), which complicates formatting logic.
+			var t time.Time
+			err := r.connInfo.Scan(fieldOID, fieldFormat, rowVal, &t)
+			if err != nil {
+				return pgx.ScanArgError{ColumnIndex: i, Err: err}
+			}
+			values[i] = t
 		} else {
 			// For all other SQL types, let pgconn figure out the go type.
 			var v interface{}
@@ -162,9 +171,22 @@ func (r *sqlRowsMultiResultSet) ColumnTypeScanType(index int) reflect.Type {
 
 func (r *sqlRowsMultiResultSet) ColumnTypeDatabaseTypeName(index int) string {
 	rd := r.rows.ResultReader()
-	dataType, ok := r.connInfo.DataTypeForOID(rd.FieldDescriptions()[index].DataTypeOID)
+	fieldOID := rd.FieldDescriptions()[index].DataTypeOID
+	dataType, ok := r.connInfo.DataTypeForOID(fieldOID)
 	if !ok {
-		return "UNKNOWN"
+		// TODO(rafi): remove special logic once jackc/pgtype supports these types.
+		switch fieldOID {
+		case 1002:
+			return "_CHAR"
+		case 1003:
+			return "_NAME"
+		case 1266:
+			return "TIMETZ"
+		case 1270:
+			return "_TIMETZ"
+		default:
+			return ""
+		}
 	}
 	return strings.ToUpper(dataType.Name)
 }

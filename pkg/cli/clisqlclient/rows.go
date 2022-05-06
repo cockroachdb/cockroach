@@ -110,9 +110,22 @@ func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
 }
 
 func (r *sqlRows) ColumnTypeDatabaseTypeName(index int) string {
-	dataType, ok := r.connInfo.DataTypeForOID(r.rows.FieldDescriptions()[index].DataTypeOID)
+	fieldOID := r.rows.FieldDescriptions()[index].DataTypeOID
+	dataType, ok := r.connInfo.DataTypeForOID(fieldOID)
 	if !ok {
-		return "UNKNOWN"
+		// TODO(rafi): remove special logic once jackc/pgtype includes these types.
+		switch fieldOID {
+		case 1002:
+			return "_CHAR"
+		case 1003:
+			return "_NAME"
+		case 1266:
+			return "TIMETZ"
+		case 1270:
+			return "_TIMETZ"
+		default:
+			return ""
+		}
 	}
 	return strings.ToUpper(dataType.Name)
 }
