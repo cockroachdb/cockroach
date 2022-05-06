@@ -390,3 +390,16 @@ CREATE TABLE public.t_hash (
    UNIQUE INDEX idx_t_hash_b (b ASC) USING HASH WITH (bucket_count=5),
    FAMILY fam_0_pk_a_b (pk, a, b)
 )
+
+statement ok
+CREATE TABLE opclasses (a INT PRIMARY KEY, b TEXT, c JSON)
+
+# Make sure that we don't permit creating indexes with opclasses that aren't
+# inverted.
+statement error operator class "blah_ops" does not exist
+CREATE INDEX ON opclasses(b blah_ops)
+
+# Make sure that we don't permit creating indexes with opclasses that aren't
+# inverted, even if the type is invertible.
+statement error operator class "blah_ops" does not exist
+CREATE INDEX ON opclasses(c blah_ops)
