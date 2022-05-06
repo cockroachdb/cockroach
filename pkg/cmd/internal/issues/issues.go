@@ -144,6 +144,7 @@ type Options struct {
 	Org          string
 	Repo         string
 	SHA          string
+	BuildTypeID  string
 	BuildID      string
 	ServerURL    string
 	Branch       string
@@ -163,6 +164,7 @@ func DefaultOptionsFromEnv() *Options {
 		githubRepoEnv          = "GITHUB_REPO"
 		githubAPITokenEnv      = "GITHUB_API_TOKEN"
 		teamcityVCSNumberEnv   = "BUILD_VCS_NUMBER"
+		teamcityBuildTypeIDEnv = "TC_BUILDTYPE_ID"
 		teamcityBuildIDEnv     = "TC_BUILD_ID"
 		teamcityServerURLEnv   = "TC_SERVER_URL"
 		teamcityBuildBranchEnv = "TC_BUILD_BRANCH"
@@ -179,6 +181,7 @@ func DefaultOptionsFromEnv() *Options {
 		// at least it'll be obvious that something went wrong (as an
 		// issue will be posted pointing at that SHA).
 		SHA:          maybeEnv(teamcityVCSNumberEnv, "8548987813ff9e1b8a9878023d3abfc6911c16db"),
+		BuildTypeID:  maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
 		BuildID:      maybeEnv(teamcityBuildIDEnv, "NOTFOUNDINENV"),
 		ServerURL:    maybeEnv(teamcityServerURLEnv, "https://server-url-not-found-in-env.com"),
 		Branch:       maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"),
@@ -370,22 +373,21 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 
 func (p *poster) teamcityURL(tab, fragment string) *url.URL {
 	options := url.Values{}
-	options.Add("buildId", p.BuildID)
-	options.Add("tab", tab)
+	options.Add("buildTab", tab)
 
 	u, err := url.Parse(p.ServerURL)
 	if err != nil {
 		log.Fatal(err)
 	}
 	u.Scheme = "https"
-	u.Path = "viewLog.html"
+	u.Path = fmt.Sprintf("buildConfiguration/%s/%s", p.BuildTypeID, p.BuildID)
 	u.RawQuery = options.Encode()
 	u.Fragment = fragment
 	return u
 }
 
 func (p *poster) teamcityBuildLogURL() *url.URL {
-	return p.teamcityURL("buildLog", "")
+	return p.teamcityURL("log", "")
 }
 
 func (p *poster) teamcityArtifactsURL(artifacts string) *url.URL {
