@@ -3,9 +3,11 @@ roachprod extend --lifetime 240h tobias-lsm
 
 deploy master with #80702 and #80648
 
+# NB: setting this too high causes snaps to fail since we won't be going much
+# faster than 100mb/s ever due to IO limitations.
 roachprod sql tobias-lsm:5 -- -e "
-set cluster setting kv.snapshot_recovery.max_rate = '500mb';
-set cluster setting kv.snapshot_rebalance.max_rate = '500mb';
+set cluster setting kv.snapshot_recovery.max_rate = '120mb';
+set cluster setting kv.snapshot_rebalance.max_rate = '120mb';
 ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 600;
 "
 
@@ -26,7 +28,7 @@ roachprod ssh tobias-lsm -- sudo systemd-run -p LimitNOFILE=65535 --unit kv-seq 
 # Spray entire keyspace with writes too, so that "all" memtables on ranges overlap
 # as a workload alone, this runs into admission control already.
 # at 1000 block bytes, admission control didn't kick in but LSM was still fairly bad. Hundreds of files on some nodes, 10 sublevels. However, it felt a lot less choppy and we got "straight lines" in the grapsh for throughout, latency, etc.
-# At 100 block bytes, the LSMs gradually recovered into normal territory.
+# At 100 block bytes, get a lot more qps and it's somehow.. choppy, workload goes through waves. The LSMs are pretty idle. So here we're probably getting more CPU bound (CPU is higher, up to 50+%) due to the fixed cost per request. Going back to 1000.
 roachprod ssh tobias-lsm -- sudo systemd-run -p LimitNOFILE=65535 --unit kv-rand -- ./cockroach workload run kv --read-percent 0 --concurrency 10 --min-block-bytes 10000 --max-block-bytes 10000 --tolerate-errors
 
 # periodically clean up to not run out of disk, also it might trigger
@@ -51,3 +53,8 @@ roachprod ssh tobias-lsm:1 -- ./cockroach workload fixtures import bank --payloa
 dashboard:
 
 http://tobias-lsm-0001.roachprod.crdb.io:26258/#/debug/chart?charts=%5B%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A3%2C%22aggregator%22%3A3%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.storage.l0-num-files%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.storage.l0-sublevels%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A2%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.range.snapshots.rcvd-bytes%22%7D%2C%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A2%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.range.snapshots.sent-bytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A1%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.dropped_bytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.queued_bytes%22%7D%2C%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A2%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.raft.rcvd.stepped_bytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.replicas%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A3%2C%22aggregator%22%3A3%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.exec.latency-p50%22%7D%2C%7B%22downsampler%22%3A3%2C%22aggregator%22%3A3%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.exec.latency-p90%22%7D%2C%7B%22downsampler%22%3A3%2C%22aggregator%22%3A3%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.exec.latency-p99.9%22%7D%2C%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.admission.wait_durations.kv-p99%22%7D%5D%2C%22axisUnits%22%3A2%7D%5D&start=1651610479&end=1651611079
+
+
+snapshot repro at:
+
+http://tobias-lsm-0001.roachprod.crdb.io:26258/#/debug/chart?charts=%5B%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.replicas%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.storage.l0-sublevels%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Atrue%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.storage.l0-num-files%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.exec.latency-p50%22%7D%2C%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.exec.latency-p99%22%7D%5D%2C%22axisUnits%22%3A2%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.node.sys.runnable.goroutines.per.cpu%22%7D%5D%2C%22axisUnits%22%3A0%7D%2C%7B%22metrics%22%3A%5B%7B%22downsampler%22%3A1%2C%22aggregator%22%3A2%2C%22derivative%22%3A0%2C%22perNode%22%3Afalse%2C%22source%22%3A%22%22%2C%22metric%22%3A%22cr.store.livebytes%22%7D%5D%2C%22axisUnits%22%3A1%7D%5D&start=1651753975&end=1651775575
