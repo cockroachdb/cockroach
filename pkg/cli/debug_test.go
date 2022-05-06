@@ -53,41 +53,6 @@ func createStore(t *testing.T, path string) {
 	db.Close()
 }
 
-func TestOpenExistingStore(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-
-	baseDir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
-
-	dirExists := filepath.Join(baseDir, "exists")
-	dirMissing := filepath.Join(baseDir, "missing")
-	createStore(t, dirExists)
-
-	for _, test := range []struct {
-		dir    string
-		expErr string
-	}{
-		{
-			dir:    dirExists,
-			expErr: "",
-		},
-		{
-			dir:    dirMissing,
-			expErr: `does not exist|no such file or directory`,
-		},
-	} {
-		t.Run(fmt.Sprintf("dir=%s", test.dir), func(t *testing.T) {
-			_, err := OpenExistingStore(test.dir, stopper, false /* readOnly */, false /* disableAutomaticCompactions */)
-			if !testutils.IsError(err, test.expErr) {
-				t.Errorf("wanted %s but got %v", test.expErr, err)
-			}
-		})
-	}
-}
-
 func TestOpenReadOnlyStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -114,7 +79,11 @@ func TestOpenReadOnlyStore(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("readOnly=%t", test.readOnly), func(t *testing.T) {
-			db, err := OpenExistingStore(storePath, stopper, test.readOnly, false /* disableAutomaticCompactions */)
+			var opts []storage.ConfigOption
+			if test.readOnly {
+				opts = append(opts, storage.ReadOnly)
+			}
+			db, err := OpenEngine(storePath, stopper, opts...)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -255,7 +224,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 					stopper := stop.NewStopper()
 					defer stopper.Stop(ctx)
 
-					db, err := OpenExistingStore(storePaths[idx], stopper, false /* readOnly */, false /* disableAutomaticCompactions */)
+					db, err := OpenEngine(storePaths[idx], stopper, storage.MustExist)
 					if err != nil {
 						return err
 					}
