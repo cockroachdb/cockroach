@@ -149,11 +149,22 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 			}
 			var buf strings.Builder
 			fmt.Fprintf(&buf, "unexpectedly found %d active spans:\n", len(sps))
+			var ids []uint64
 			for _, sp := range sps {
-				fmt.Fprintln(&buf, sp.GetFullRecording(tracing.RecordingVerbose))
+				rec := sp.GetFullRecording(tracing.RecordingVerbose)
+				for _, rs := range rec {
+					// NB: it would be a sight easier to just include these in the output of
+					// the string formatted recording, but making a change there presumably requires
+					// lots of changes across various testdata in the codebase and the author is
+					// trying to be nimble.
+					ids = append(ids, rs.GoroutineID)
+				}
+				fmt.Fprintln(&buf, rec)
 				fmt.Fprintln(&buf)
 			}
-			return errors.Newf("%s", buf.String())
+			sl := make([]byte, 5<<20 /* 5mb */)
+			sl = sl[:runtime.Stack(sl, true /* all */)]
+			return errors.Newf("%s\n\ngoroutines of interest: %v\nstacks:\n\n%s", buf.String(), ids, sl)
 		})
 	}
 	// Force a GC in an attempt to run finalizers. Some finalizers run sanity
