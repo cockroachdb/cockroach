@@ -185,6 +185,10 @@ type Index interface {
 	// Panics if the index is not inverted.
 	InvertedColumnKeyType() *types.T
 
+	// InvertedColumnKind returns the kind of the inverted column of the inverted
+	// index.
+	InvertedColumnKind() descpb.IndexDescriptor_InvertedIndexColumnKind
+
 	NumPrimaryStoredColumns() int
 	NumSecondaryStoredColumns() int
 	GetStoredColumnID(storedColumnOrdinal int) descpb.ColumnID

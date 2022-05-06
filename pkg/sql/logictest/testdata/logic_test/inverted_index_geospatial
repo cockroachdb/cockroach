@@ -8,6 +8,14 @@ CREATE TABLE geo_table(
   INVERTED INDEX geom_index(geom)
 )
 
+# Test that only the permitted opclasses are usable to make an inverted index.
+statement error operator class \"blah_ops\" does not exist
+CREATE INVERTED INDEX ON geo_table(geom blah_ops)
+
+# Test that only the permitted opclasses are usable to make an inverted index.
+statement error operator class \"blah_ops\" does not exist
+CREATE INDEX ON geo_table USING GIST(geom blah_ops)
+
 # Shapes with SRID 26918. We've taken small X, Y values and added 400,000 to the X coordinate
 # and 4,000,000 to the Y coordinate to place them inside the bounds of SRID 26918.
 statement ok

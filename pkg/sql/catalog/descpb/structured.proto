@@ -336,6 +336,26 @@ message IndexDescriptor {
     INVERTED = 1;
   }
 
+  // InvertedIndexColumnKind is the kind of the inverted index that we're
+  // building on a particular column. The reason this needs to be stored is that
+  // we need to be able to check that the "opclass" passed into an inverted
+  // index declaration (for example, gin_trgm_ops) is compatible with the
+  // datatype of a particular column (gin_tgrm_ops is only valid on text). A
+  // future reason is that it's possible to desire having more than one type of
+  // inverted index on a particular datatype - for example, you might want to
+  // create a "stemming" inverted index on text. And without this extra kind, it
+  // wouldn't be possible to distinguish a text inverted index that uses
+  // trigrams, vs a text inverted index that uses stemming.
+  enum InvertedIndexColumnKind {
+    // DEFAULT is the default kind of inverted index column. JSON, Array, and
+    // geo inverted indexes all are DEFAULT, though prior to 22.2 they had no
+    // kind at all.
+    DEFAULT = 0;
+    // TRIGRAM is the trigram kind of inverted index column. It's only valid on
+    // text columns.
+    TRIGRAM = 1;
+  }
+
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "IndexID"];
@@ -361,6 +381,11 @@ message IndexDescriptor {
   // An ordered list of column names which the index stores in addition to the
   // columns which are explicitly part of the index (STORING clause).
   repeated string store_column_names = 5;
+
+  // An ordered list of opclasses that parallels each of the inverted columns
+  // in the index. n.b.: currently, there can only be a single inverted column
+  // in an index, so this list will always be of size 0 or 1.
+  repeated InvertedIndexColumnKind inverted_column_kinds = 27;
 
   // An ordered list of column IDs of which the index key is comprised. This
   // list parallels the key_column_names list and does not include any
@@ -490,7 +515,7 @@ message IndexDescriptor {
   optional uint32 constraint_id = 26 [(gogoproto.customname) = "ConstraintID",
     (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 
-  // Next ID: 27
+  // Next ID: 28
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
