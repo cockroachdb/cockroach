@@ -11,6 +11,7 @@ go_library(
         "init_conn_error.go",
         "make_query.go",
         "parse_bool.go",
+        "row_type_helpers.go",
         "rows.go",
         "rows_multi.go",
         "statement_diag.go",

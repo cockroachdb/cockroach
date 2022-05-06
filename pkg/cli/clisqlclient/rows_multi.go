@@ -166,48 +166,14 @@ func (r *sqlRowsMultiResultSet) NextResultSet() (bool, error) {
 func (r *sqlRowsMultiResultSet) ColumnTypeScanType(index int) reflect.Type {
 	rd := r.rows.ResultReader()
 	o := rd.FieldDescriptions()[index].DataTypeOID
-	switch o {
-	case pgtype.Int8OID:
-		return reflect.TypeOf(int64(0))
-	case pgtype.Int4OID:
-		return reflect.TypeOf(int32(0))
-	case pgtype.Int2OID:
-		return reflect.TypeOf(int16(0))
-	case pgtype.VarcharOID, pgtype.TextOID:
-		return reflect.TypeOf("")
-	case pgtype.BoolOID:
-		return reflect.TypeOf(false)
-	case pgtype.DateOID, pgtype.TimeOID, 1266, pgtype.TimestampOID, pgtype.TimestamptzOID:
-		// 1266 is the OID for TimeTZ.
-		// TODO(rafi): Add TimetzOID to pgtype.
-		return reflect.TypeOf(time.Time{})
-	case pgtype.ByteaOID:
-		return reflect.TypeOf([]byte(nil))
-	default:
-		return reflect.TypeOf(new(interface{})).Elem()
-	}
+	n := r.ColumnTypeDatabaseTypeName(index)
+	return scanType(o, n)
 }
 
 func (r *sqlRowsMultiResultSet) ColumnTypeDatabaseTypeName(index int) string {
 	rd := r.rows.ResultReader()
 	fieldOID := rd.FieldDescriptions()[index].DataTypeOID
-	dataType, ok := r.connInfo.DataTypeForOID(fieldOID)
-	if !ok {
-		// TODO(rafi): remove special logic once jackc/pgtype supports these types.
-		switch fieldOID {
-		case 1002:
-			return "_CHAR"
-		case 1003:
-			return "_NAME"
-		case 1266:
-			return "TIMETZ"
-		case 1270:
-			return "_TIMETZ"
-		default:
-			return ""
-		}
-	}
-	return strings.ToUpper(dataType.Name)
+	return databaseTypeName(r.connInfo, fieldOID)
 }
 
 func (r *sqlRowsMultiResultSet) ColumnTypeNames() []string {
