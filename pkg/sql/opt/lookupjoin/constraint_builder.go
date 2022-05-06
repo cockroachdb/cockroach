@@ -446,7 +446,9 @@ func (b *ConstraintBuilder) findFiltersForIndexLookup(
 		if foundConstFilter {
 			constFilter := filters[allIdx]
 			if !isCanonicalFilter(constFilter) {
-				constFilter = b.f.ConstructConstFilter(idxCol, values)
+				b.f.DisableOptimizationsTemporarily(func() {
+					constFilter = b.f.ConstructConstFilter(idxCol, values)
+				})
 			}
 			constFilters = append(constFilters, constFilter)
 		}
