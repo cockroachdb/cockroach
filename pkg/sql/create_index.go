@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -211,19 +212,13 @@ func makeIndexDescriptor(
 		}
 
 		indexDesc.Type = descpb.IndexDescriptor_INVERTED
-		column, err := tableDesc.FindColumnWithName(columns[len(columns)-1].Column)
+		invCol := columns[len(columns)-1]
+		column, err := tableDesc.FindColumnWithName(invCol.Column)
 		if err != nil {
 			return nil, err
 		}
-		switch column.GetType().Family() {
-		case types.GeometryFamily:
-			config, err := geoindex.GeometryIndexConfigForSRID(column.GetType().GeoSRIDOrZero())
-			if err != nil {
-				return nil, err
-			}
-			indexDesc.GeoConfig = *config
-		case types.GeographyFamily:
-			indexDesc.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+		if err := populateInvertedIndexDescriptor(column, &indexDesc, invCol); err != nil {
+			return nil, err
 		}
 	}
 
@@ -301,6 +296,60 @@ func makeIndexDescriptor(
 	}
 
 	return &indexDesc, nil
+}
+
+// populateInvertedIndexDescriptor adds information to the input index descriptor
+// for the inverted index given by the input column and invCol, which should
+// match (column is the catalog column, and invCol is the grammar node of
+// the column in the index creation statement).
+func populateInvertedIndexDescriptor(
+	column catalog.Column, indexDesc *descpb.IndexDescriptor, invCol tree.IndexElem,
+) error {
+	indexDesc.InvertedColumnKinds = []descpb.IndexDescriptor_InvertedIndexColumnKind{descpb.IndexDescriptor_DEFAULT}
+	switch column.GetType().Family() {
+	case types.ArrayFamily:
+		switch invCol.OpClass {
+		case "array_ops", "":
+		default:
+			return pgerror.Newf(pgcode.UndefinedObject, "operator class %q does not exist", invCol.OpClass)
+		}
+	case types.JsonFamily:
+		switch invCol.OpClass {
+		case "jsonb_ops", "":
+		case "jsonb_path_ops":
+			return unimplemented.NewWithIssue(81115, "operator class \"jsonb_path_ops\" is not supported")
+		default:
+			return pgerror.Newf(pgcode.UndefinedObject, "operator class %q does not exist", invCol.OpClass)
+		}
+	case types.GeometryFamily:
+		if invCol.OpClass != "" {
+			return pgerror.Newf(pgcode.UndefinedObject, "operator class %q does not exist", invCol.OpClass)
+		}
+		config, err := geoindex.GeometryIndexConfigForSRID(column.GetType().GeoSRIDOrZero())
+		if err != nil {
+			return err
+		}
+		indexDesc.GeoConfig = *config
+	case types.GeographyFamily:
+		if invCol.OpClass != "" {
+			return pgerror.Newf(pgcode.UndefinedObject, "operator class %q does not exist", invCol.OpClass)
+		}
+		indexDesc.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+	case types.StringFamily:
+		// Check the opclass of the last column in the list, which is the column
+		// we're going to inverted index.
+		switch invCol.OpClass {
+		case "gin_trgm_ops":
+		case "":
+			return errors.WithHint(
+				pgerror.New(pgcode.UndefinedObject, "data type text has no default operator class for access method \"gin\""),
+				"You must specify an operator class for the index (did you mean gin_trgm_ops?)")
+		default:
+			return pgerror.Newf(pgcode.UndefinedObject, "operator class %q does not exist", invCol.OpClass)
+		}
+		indexDesc.InvertedColumnKinds[0] = descpb.IndexDescriptor_TRIGRAM
+	}
+	return nil
 }
 
 // validateColumnsAreAccessible validates that the columns for an index are
