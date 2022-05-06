@@ -5,7 +5,7 @@ CREATE TABLE a (
   a INT PRIMARY KEY,
   b TEXT,
   FAMILY (a,b),
-  INVERTED INDEX(b)
+  INVERTED INDEX(b gin_trgm_ops)
 )
 
 query T

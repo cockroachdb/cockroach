@@ -5660,28 +5660,29 @@ value if you rely on the HLC for accuracy.`,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
-				{"val", types.String},
-				{"version", types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// TODO(jordan): need to re-evaluate when we support more than just
-				// trigram inverted indexes.
-				// The version argument is currently ignored for string inverted indexes.
-				s := string(tree.MustBeDString(args[0]))
-				return tree.NewDInt(tree.DInt(len(trigram.MakeTrigrams(s, true /* pad */)))), nil
-			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Stable,
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
 				{"val", types.AnyArray},
 				{"version", types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return arrayNumInvertedIndexEntries(ctx, args[0], args[1])
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.String},
+				{"version", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// TODO(jordan): if we support inverted indexes on more than just trigram
+				// indexes, we will need to thread the inverted index kind through
+				// the backfiller into this function.
+				// The version argument is currently ignored for string inverted indexes.
+				s := string(tree.MustBeDString(args[0]))
+				return tree.NewDInt(tree.DInt(len(trigram.MakeTrigrams(s, true /* pad */)))), nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,
