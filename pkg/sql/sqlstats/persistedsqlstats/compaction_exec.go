@@ -13,6 +13,7 @@ package persistedsqlstats
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -163,6 +165,7 @@ func (c *StatsCompactor) removeStaleRowsForShard(
 ) error {
 	var err error
 	var lastDeletedRow tree.Datums
+	var qargs []interface{}
 	maxDeleteRowsPerTxn := CompactionJobRowsToDeletePerTxn.Get(&c.st.SV)
 
 	if rowsToRemove := existingRowCountPerShard - maxRowLimitPerShard; rowsToRemove > 0 {
@@ -173,7 +176,11 @@ func (c *StatsCompactor) removeStaleRowsForShard(
 			}
 
 			stmt := ops.getDeleteStmt(lastDeletedRow)
-			qargs := c.getQargs(shardIdx, rowsToRemovePerTxn, lastDeletedRow)
+			qargs, err = c.getQargs(shardIdx, rowsToRemovePerTxn, lastDeletedRow)
+			if err != nil {
+				return err
+			}
+
 			var rowsRemoved int64
 
 			lastDeletedRow, rowsRemoved, err = c.executeDeleteStmt(
@@ -228,7 +235,9 @@ func (c *StatsCompactor) executeDeleteStmt(
 	return lastRow, rowsDeleted, err
 }
 
-func (c *StatsCompactor) getQargs(shardIdx, limit int64, lastDeletedRow tree.Datums) []interface{} {
+func (c *StatsCompactor) getQargs(
+	shardIdx, limit int64, lastDeletedRow tree.Datums,
+) ([]interface{}, error) {
 	size := len(lastDeletedRow) + 2
 	if cap(c.scratch.qargs) < size {
 		c.scratch.qargs = make([]interface{}, 0, size)
@@ -238,11 +247,23 @@ func (c *StatsCompactor) getQargs(shardIdx, limit int64, lastDeletedRow tree.Dat
 	c.scratch.qargs = append(c.scratch.qargs, tree.NewDInt(tree.DInt(shardIdx)))
 	c.scratch.qargs = append(c.scratch.qargs, tree.NewDInt(tree.DInt(limit)))
 
+	now := timeutil.Now()
+	if c.knobs != nil && c.knobs.StubTimeNow != nil {
+		now = c.knobs.StubTimeNow()
+	}
+	aggInterval := SQLStatsAggregationInterval.Get(&c.st.SV)
+	aggTs := now.Truncate(aggInterval)
+	datum, err := tree.MakeDTimestampTZ(aggTs, time.Microsecond)
+	if err != nil {
+		return nil, err
+	}
+	c.scratch.qargs = append(c.scratch.qargs, datum)
+
 	for _, value := range lastDeletedRow {
 		c.scratch.qargs = append(c.scratch.qargs, value)
 	}
 
-	return c.scratch.qargs
+	return c.scratch.qargs, nil
 }
 
 type cleanupOperations struct {
@@ -251,6 +272,8 @@ type cleanupOperations struct {
 	constrainedDeleteStmt   string
 }
 
+// N.B. when changing the constraint queries below, make sure also change
+//      the test file in pkg/sql/opt/exec/execbuilder/testdata/sql_activity_stats_compaction.
 var (
 	stmtStatsCleanupOps = &cleanupOperations{
 		initialScanStmtTemplate: `
@@ -264,6 +287,7 @@ var (
         SELECT aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
         FROM system.statement_statistics
         WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1
+          AND aggregated_ts < $3
         ORDER BY aggregated_ts ASC
         LIMIT $2
       ) RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id`,
@@ -281,8 +305,9 @@ var (
         plan_hash,
         app_name,
         node_id
-        ) >= ($3, $4, $5, $6, $7, $8)
+        ) >= ($4, $5, $6, $7, $8, $9)
       )
+        AND aggregated_ts < $3
       ORDER BY aggregated_ts ASC
       LIMIT $2
     ) RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id`,
@@ -299,6 +324,7 @@ var (
       SELECT aggregated_ts, fingerprint_id, app_name, node_id
       FROM system.transaction_statistics
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = $1
+        AND aggregated_ts < $3
       ORDER BY aggregated_ts ASC
       LIMIT $2
     ) RETURNING aggregated_ts, fingerprint_id, app_name, node_id`,
@@ -314,8 +340,9 @@ var (
         fingerprint_id,
         app_name,
         node_id
-        ) >= ($3, $4, $5, $6)
+        ) >= ($4, $5, $6, $7)
       )
+        AND aggregated_ts < $3
       ORDER BY aggregated_ts ASC
       LIMIT $2
     ) RETURNING aggregated_ts, fingerprint_id, app_name, node_id`,
