@@ -136,6 +136,15 @@ lookup expression:
 remaining filters:
   x IN (1, 2, 3)
 
+# Do not normalize y = false to NOT x.
+lookup-constraints left=(a int) right=(x int, y bool, z int) index=(x, y, z)
+x = a AND y = false AND z > 0
+----
+lookup expression:
+  ((x = a) AND (y = false)) AND (z > 0)
+remaining filters:
+  NOT y
+
 
 # Test for range filters.
 

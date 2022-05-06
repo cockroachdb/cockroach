@@ -835,7 +835,7 @@ project
  │         │    │    │    └── filters
  │         │    │    │         ├── transactiondetails.cardid:23 = id:1 [outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ]), fd=(1)==(23), (23)==(1)]
  │         │    │    │         ├── transactiondetails.dealerid:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
- │         │    │    │         ├── NOT isbuy:21 [outer=(21), constraints=(/21: [/false - /false]; tight), fd=()-->(21)]
+ │         │    │    │         ├── isbuy:21 = false [outer=(21), constraints=(/21: [/false - /false]; tight), fd=()-->(21)]
  │         │    │    │         └── (transactiondate:22 >= '2020-02-28 00:00:00+00:00') AND (transactiondate:22 <= '2020-03-01 00:00:00+00:00') [outer=(22), constraints=(/22: [/'2020-02-28 00:00:00+00:00' - /'2020-03-01 00:00:00+00:00']; tight)]
  │         │    │    ├── immutable
  │         │    │    ├── stats: [rows=423333.3, distinct(1)=19000, null(1)=0, avgsize(1)=4, distinct(2)=13000, null(2)=0, avgsize(2)=4, distinct(5)=829, null(5)=0, avgsize(5)=4, distinct(6)=5601.15, null(6)=0, avgsize(6)=4, distinct(23)=19000, null(23)=0, avgsize(23)=4]
@@ -857,7 +857,8 @@ project
  │         │    │    │    │    └── ordering: +1
  │         │    │    │    └── filters
  │         │    │    │         └── (name:2, setname:4, number:5) > ('Shock', '7E', 248) [outer=(2,4,5), immutable, constraints=(/2/4/5: [/'Shock'/'7E'/249 - ]; tight)]
- │         │    │    └── filters (true)
+ │         │    │    └── filters
+ │         │    │         └── NOT isbuy:21 [outer=(21), constraints=(/21: [/false - /false]; tight), fd=()-->(21)]
  │         │    ├── scan cardsinfo
  │         │    │    ├── columns: cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
  │         │    │    ├── constraint: /9/10: [/1 - /1]

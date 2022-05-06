@@ -3928,6 +3928,34 @@ project
       │    └── columns: m:1
       └── filters (true)
 
+# Regression test for #80525. Do not normalize c = false to NOT c in lookup
+# expression.
+exec-ddl
+CREATE TABLE t80525_a (a INT, INDEX (a))
+----
+
+exec-ddl
+CREATE TABLE t80525_bcd (b INT, c BOOL, d INT, INDEX (b, c, d))
+----
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT * FROM t80525_a INNER LOOKUP JOIN t80525_bcd ON b = a AND c = false AND d > 0
+----
+inner-join (lookup t80525_bcd@t80525_bcd_b_c_d_idx)
+ ├── columns: a:1!null b:5!null c:6!null d:7!null
+ ├── flags: force lookup join (into right side)
+ ├── lookup expression
+ │    └── filters
+ │         ├── b:5 = a:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │         ├── c:6 = false [outer=(6), constraints=(/6: [/false - /false]; tight), fd=()-->(6)]
+ │         └── d:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+ ├── fd: ()-->(6), (1)==(5), (5)==(1)
+ ├── scan t80525_a
+ │    └── columns: a:1
+ └── filters
+      └── NOT c:6 [outer=(6), constraints=(/6: [/false - /false]; tight), fd=()-->(6)]
+
+
 # --------------------------------------------------
 # GenerateLookupJoinsWithFilter + Partial Indexes
 # --------------------------------------------------
