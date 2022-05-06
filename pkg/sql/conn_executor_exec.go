@@ -470,7 +470,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				ex.server.cfg,
 				ex.statsCollector,
 				&ex.extraTxnState.accumulatedStats,
-				ex.extraTxnState.shouldCollectTxnExecutionStats,
+				ih.collectExecStats,
 				p,
 				ast,
 				sql,
@@ -2214,6 +2214,10 @@ func (ex *connExecutor) recordTransactionFinish(
 	}
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
+	if contentionDuration := ex.extraTxnState.accumulatedStats.ContentionTime.Nanoseconds(); contentionDuration > 0 {
+		ex.metrics.EngineMetrics.SQLContendedTxns.Inc(1)
+	}
+
 	ex.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{
 		TxnID:            ev.txnID,
 		TxnFingerprintID: transactionFingerprintID,
@@ -2241,7 +2245,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RetryLatency:            txnRetryLat,
 		CommitLatency:           commitLat,
 		RowsAffected:            ex.extraTxnState.numRows,
-		CollectedExecStats:      ex.extraTxnState.shouldCollectTxnExecutionStats,
+		CollectedExecStats:      ex.planner.instrumentation.collectExecStats,
 		ExecStats:               ex.extraTxnState.accumulatedStats,
 		RowsRead:                ex.extraTxnState.rowsRead,
 		RowsWritten:             ex.extraTxnState.rowsWritten,

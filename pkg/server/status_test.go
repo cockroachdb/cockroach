@@ -3105,6 +3105,9 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	server1Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 	server2Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(1))
 
+	contentionCountBefore := testCluster.Server(1).SQLServer().(*sql.Server).
+		Metrics.EngineMetrics.SQLContendedTxns.Count()
+
 	sqlutils.CreateTable(
 		t,
 		testCluster.ServerConn(0),
@@ -3120,6 +3123,7 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 
 	server1Conn.Exec(t, "USE test")
 	server2Conn.Exec(t, "USE test")
+	server2Conn.Exec(t, "SET application_name = 'contentionTest'")
 
 	server1Conn.Exec(t, `
 SET TRACING=on;
@@ -3164,6 +3168,29 @@ SET TRACING=off;
 
 	require.True(t, found,
 		"expect to find contention event for table %d, but found %+v", testTableID, resp)
+
+	server1Conn.CheckQueryResults(t, `
+  SELECT count(*)
+  FROM crdb_internal.statement_statistics
+  WHERE
+    (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT > 0
+    AND app_name = 'contentionTest'
+`, [][]string{{"1"}})
+
+	server1Conn.CheckQueryResults(t, `
+  SELECT count(*)
+  FROM crdb_internal.transaction_statistics
+  WHERE
+    (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT > 0
+    AND app_name = 'contentionTest'
+`, [][]string{{"1"}})
+
+	contentionCountNow := testCluster.Server(1).SQLServer().(*sql.Server).
+		Metrics.EngineMetrics.SQLContendedTxns.Count()
+
+	require.Greaterf(t, contentionCountNow, contentionCountBefore,
+		"expected txn contention count to be more than %d, but it is %d",
+		contentionCountBefore, contentionCountNow)
 }
 
 func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
