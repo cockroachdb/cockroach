@@ -225,10 +225,10 @@ message RowLevelTTL {
 // only list values which have been set. Protobuf type double is float64 in Go.
 message AutoStatsSettings {
   option (gogoproto.equal) = true;
-  // sql.stats.automatic_collection.enabled
+  // Enabled is table setting sql_stats_automatic_collection_enabled.
   optional bool enabled = 1;
-  // sql.stats.automatic_collection.min_stale_rows
+  // MinStaleRows is table setting sql_stats_automatic_collection_min_stale_rows.
   optional int64 min_stale_rows = 2;
-  // sql.stats.automatic_collection.fraction_stale_rows
+  // FractionStaleRows is table setting sql_stats_automatic_collection_fraction_stale_rows.
   optional double fraction_stale_rows = 3;
 }
