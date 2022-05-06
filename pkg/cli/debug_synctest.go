@@ -116,7 +116,7 @@ func runSyncer(
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	db, err := OpenEngine(dir, stopper, OpenEngineOptions{})
+	db, err := OpenEngine(dir, stopper)
 	if err != nil {
 		if expSeq == 0 {
 			// Failed on first open, before we tried to corrupt anything. Hard stop.
