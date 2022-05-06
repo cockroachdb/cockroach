@@ -5665,8 +5665,9 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// TODO(jordan): need to re-evaluate when we support more than just
-				// trigram inverted indexes.
+				// TODO(jordan): if we support inverted indexes on more than just trigram
+				// indexes, we will need to thread the inverted index kind through
+				// the backfiller into this function.
 				// The version argument is currently ignored for string inverted indexes.
 				if args[0] == tree.DNull {
 					return tree.DZero, nil
@@ -5688,7 +5689,8 @@ value if you rely on the HLC for accuracy.`,
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,
-		}),
+		},
+	),
 
 	// Returns true iff the current user has admin role.
 	// Note: it would be a privacy leak to extend this to check arbitrary usernames.

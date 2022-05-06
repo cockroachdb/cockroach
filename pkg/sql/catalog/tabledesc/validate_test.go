@@ -147,7 +147,8 @@ var validationMap = []struct {
 			"StoreColumnNames": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
-			"KeyColumnIDs": {status: iSolemnlySwearThisFieldIsValidated},
+			"InvertedColumnKinds": {status: thisFieldReferencesNoObjects},
+			"KeyColumnIDs":        {status: iSolemnlySwearThisFieldIsValidated},
 			"KeySuffixColumnIDs": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
