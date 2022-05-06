@@ -2790,11 +2790,24 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
+	ctx := context.Background()
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+
 	if err := getStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &serverpb.CreateStatementDiagnosticsReportRequest{}, false); err != nil {
 		if !testutils.IsError(err, "status: 403") {
 			t.Fatalf("expected privilege error, got %v", err)
 		}
 	}
+	_, err := ie.ExecEx(
+		ctx,
+		"inserting-stmt-bundle-req",
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: authenticatedUserNameNoAdmin(),
+		},
+		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::INTERVAL, 0::INTERVAL)",
+	)
+	require.Contains(t, err.Error(), "requesting statement bundle requires VIEWACTIVITY or ADMIN role option")
 
 	// Grant VIEWACTIVITY and all test should work.
 	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
@@ -2812,6 +2825,22 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 	if respGet.Reports[0].StatementFingerprint != req.StatementFingerprint {
 		t.Fatal("statement diagnostics request was not persisted")
 	}
+	_, err = ie.ExecEx(
+		ctx,
+		"inserting-stmt-bundle-req",
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: authenticatedUserNameNoAdmin(),
+		},
+		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::INTERVAL, 0::INTERVAL)",
+	)
+	require.NoError(t, err)
+
+	db.CheckQueryResults(t, `
+      SELECT count(*)
+      FROM system.statement_diagnostics_requests
+      WHERE statement_fingerprint = 'SELECT _'
+`, [][]string{{"1"}})
 
 	// Grant VIEWACTIVITYREDACTED and all test should get permission errors.
 	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
@@ -2826,6 +2855,17 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 			t.Fatalf("expected privilege error, got %v", err)
 		}
 	}
+
+	_, err = ie.ExecEx(
+		ctx,
+		"inserting-stmt-bundle-req",
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: authenticatedUserNameNoAdmin(),
+		},
+		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::INTERVAL, 0::INTERVAL)",
+	)
+	require.Contains(t, err.Error(), "VIEWACTIVITYREDACTED role option cannot request statement bundle")
 }
 
 func TestStatementDiagnosticsCompleted(t *testing.T) {
