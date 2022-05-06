@@ -624,18 +624,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		l.EnsureDefaults()
 	}
 
-	// Do not create bloom filters for the last level (i.e. the largest level
-	// which contains data in the LSM store). This configuration reduces the size
-	// of the bloom filters by 10x. This is significant given that bloom filters
-	// require 1.25 bytes (10 bits) per key which can translate into gigabytes of
-	// memory given typical key and value sizes. The downside is that bloom
-	// filters will only be usable on the higher levels, but that seems
-	// acceptable. We typically see read amplification of 5-6x on clusters
-	// (i.e. there are 5-6 levels of sstables) which means we'll achieve 80-90%
-	// of the benefit of having bloom filters on every level for only 10% of the
-	// memory cost.
-	opts.Levels[6].FilterPolicy = nil
-
 	// Set disk health check interval to min(5s, maxSyncDurationDefault). This
 	// is mostly to ease testing; the default of 5s is too infrequent to test
 	// conveniently. See the disk-stalled roachtest for an example of how this
