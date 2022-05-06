@@ -130,6 +130,17 @@ type IndexElem struct {
 	Expr       Expr
 	Direction  Direction
 	NullsOrder NullsOrder
+
+	// OpClass is set if an index element was created using a named opclass.
+
+	//	if opClass != "" {
+	//	if opClass == "gin_trgm_ops" || opClass == "gist_trgm_ops" {
+	//	return unimplementedWithIssueDetail(sqllex, 41285, "index using " + opClass)
+	//}
+	//	return unimplementedWithIssue(sqllex, 47420)
+	//}
+
+	OpClass Name
 }
 
 // Format implements the NodeFormatter interface.
@@ -147,6 +158,10 @@ func (node *IndexElem) Format(ctx *FmtCtx) {
 		if !isFunc {
 			ctx.WriteByte(')')
 		}
+	}
+	if node.OpClass != "" {
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.OpClass.String())
 	}
 	if node.Direction != DefaultDirection {
 		ctx.WriteByte(' ')
@@ -169,6 +184,9 @@ func (node *IndexElem) doc(p *PrettyCfg) pretty.Doc {
 		if _, isFunc := node.Expr.(*FuncExpr); !isFunc {
 			d = p.bracket("(", d, ")")
 		}
+	}
+	if node.OpClass != "" {
+		d = pretty.ConcatSpace(d, pretty.Text(node.OpClass.String()))
 	}
 	if node.Direction != DefaultDirection {
 		d = pretty.ConcatSpace(d, pretty.Keyword(node.Direction.String()))

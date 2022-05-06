@@ -525,9 +525,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`, ``},
 		{`CREATE INDEX a ON b USING BRIN (c)`, 0, `index using brin`, ``},
 
-		{`CREATE INDEX a ON b(c gin_trgm_ops)`, 41285, `index using gin_trgm_ops`, ``},
-		{`CREATE INDEX a ON b(c gist_trgm_ops)`, 41285, `index using gist_trgm_ops`, ``},
-		{`CREATE INDEX a ON b(c bobby)`, 47420, ``, ``},
 		{`CREATE INDEX a ON b(a NULLS LAST)`, 6224, ``, ``},
 		{`CREATE INDEX a ON b(a ASC NULLS LAST)`, 6224, ``, ``},
 		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``, ``},
