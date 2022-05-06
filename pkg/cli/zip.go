@@ -326,8 +326,14 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	zr *zipReporter, conn clisqlclient.Conn, base, table, query string,
 ) error {
 	// TODO(knz): This can use context cancellation now that query
-	// cancellation is supported.
-	fullQuery := fmt.Sprintf(`SET statement_timeout = '%s'; %s`, zc.timeout, query)
+	// cancellation is supported in v22.1 and later.
+	ctx := context.Background()
+	// SET must be run separately from the query so that the command tag output
+	// doesn't get added to the debug file.
+	err := conn.Exec(ctx, fmt.Sprintf(`SET statement_timeout = '%s'`, zc.timeout))
+	if err != nil {
+		return err
+	}
 	baseName := base + "/" + sanitizeFilename(table)
 
 	s := zr.start("retrieving SQL data for %s", table)
@@ -348,7 +354,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			// in-RAM buffering.
 			return sqlExecCtx.RunQueryAndFormatResults(
 				context.Background(),
-				conn, w, stderr, clisqlclient.MakeQuery(fullQuery))
+				conn, w, stderr, clisqlclient.MakeQuery(query))
 		}()
 		if sqlErr != nil {
 			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {
