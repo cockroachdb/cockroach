@@ -55,10 +55,16 @@ func (t *TimeoutError) Format(s fmt.State, verb rune) { errors.FormatError(t, s,
 
 // FormatError implements errors.Formatter.
 func (t *TimeoutError) FormatError(p errors.Printer) error {
-	p.Printf("operation %q timed out after %s", t.operation, t.timeout)
+	// NB: With RunWithTimeout(), it is possible for both the caller and the
+	// callee to have set their own context timeout that is smaller than the
+	// timeout set by RunWithTimeout. It is also possible for the operation to run
+	// for much longer than the timeout, e.g. if the callee does not check the
+	// context in a timely manner. The error message must make this clear.
+	p.Printf("operation %q timed out", t.operation)
 	if t.took != 0 {
-		p.Printf(" (took %s)", t.took.Round(time.Millisecond))
+		p.Printf(" after %s", t.took.Round(time.Millisecond))
 	}
+	p.Printf(" (given timeout %s)", t.timeout)
 	return t.cause
 }
 

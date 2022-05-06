@@ -36,7 +36,7 @@ func TestRunWithTimeout(t *testing.T) {
 		return ctx.Err()
 	})
 	require.Error(t, err)
-	baseExpectedMsg := "operation \"foo\" timed out after 1ns \\(took ..ms\\)"
+	baseExpectedMsg := "operation \"foo\" timed out after ..ms \\(given timeout 1ns\\)"
 	expectedMsg := baseExpectedMsg + ": context deadline exceeded"
 	require.Regexp(t, expectedMsg, err.Error())
 	var netError net.Error
@@ -91,6 +91,19 @@ func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
 		t.Fatalf("RunWithTimeout should return an error caused by the underlying " +
 			"returned error")
 	}
+}
+
+func TestRunWithTimeoutAfterDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	err := RunWithTimeout(ctx, "test", time.Second, func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	require.Error(t, err)
+	require.Regexp(t,
+		`operation "test" timed out after \d+m?s \(given timeout 1s\): context deadline exceeded`,
+		err.Error())
 }
 
 func TestCancelWithReason(t *testing.T) {

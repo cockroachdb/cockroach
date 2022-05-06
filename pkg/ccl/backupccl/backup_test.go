@@ -7954,8 +7954,9 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// export request but since the intent was laid by a high priority txn it
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/timeout'")
-	require.True(t, testutils.IsError(err,
-		`timeout: operation "ExportRequest for span /Table/\d+/.*\" timed out after 3s`))
+	require.Regexp(t,
+		`timeout: operation "ExportRequest for span /Table/\d+/.*\" timed out after \S+ \(given timeout 3s\)`,
+		err.Error())
 }
 
 func TestBackupDoesNotHangOnIntent(t *testing.T) {
