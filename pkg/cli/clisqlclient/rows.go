@@ -87,6 +87,11 @@ func (r *sqlRows) NextResultSet() (bool, error) {
 
 func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
 	o := r.rows.FieldDescriptions()[index].DataTypeOID
+	n := r.ColumnTypeDatabaseTypeName(index)
+	if n == "" || strings.HasPrefix(n, "_") {
+		// User-defined types and array types are scanned into []byte.
+		return reflect.TypeOf([]byte(nil))
+	}
 	switch o {
 	case pgtype.Int8OID:
 		return reflect.TypeOf(int64(0))
@@ -94,7 +99,9 @@ func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
 		return reflect.TypeOf(int32(0))
 	case pgtype.Int2OID:
 		return reflect.TypeOf(int16(0))
-	case pgtype.VarcharOID, pgtype.TextOID:
+	case pgtype.VarcharOID, pgtype.TextOID, pgtype.NameOID,
+		pgtype.ByteaOID, pgtype.NumericOID, pgtype.RecordOID,
+		pgtype.QCharOID, pgtype.BPCharOID:
 		return reflect.TypeOf("")
 	case pgtype.BoolOID:
 		return reflect.TypeOf(false)
@@ -102,8 +109,6 @@ func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
 		// 1266 is the OID for TimeTZ.
 		// TODO(rafi): Add TimetzOID to pgtype.
 		return reflect.TypeOf(time.Time{})
-	case pgtype.ByteaOID:
-		return reflect.TypeOf([]byte(nil))
 	default:
 		return reflect.TypeOf(new(interface{})).Elem()
 	}
