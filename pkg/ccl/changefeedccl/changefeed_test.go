@@ -5831,39 +5831,35 @@ func TestChangefeedEndTime(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		knobs := f.Server().TestingKnobs().
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		endTimeReached := make(chan struct{})
+		knobs.FeedKnobs.EndTimeReached = func() bool {
+			select {
+			case <-endTimeReached:
+				return true
+			default:
+				return false
+			}
+		}
+
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
 		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
 
-		var tsAfterInitialInsert string
-		sqlDB.QueryRow(t, "SELECT (cluster_logical_timestamp() + 10000000000)").Scan(&tsAfterInitialInsert)
-		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH end_time = $1", tsAfterInitialInsert)
+		fakeEndTime := f.Server().Clock().Now().Add(int64(time.Hour), 0).AsOfSystemTime()
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH end_time = $1", fakeEndTime)
+		defer closeFeed(t, feed)
 
-		time.Sleep(10 * time.Second)
-		sqlDB.Exec(t, "INSERT INTO foo VALUES (4), (5), (6)")
-
-		seenMoreMessages := false
-		g := ctxgroup.WithContext(context.Background())
-		g.Go(func() error {
-			assertPayloads(t, feed, []string{
-				`foo: [1]->{"after": {"a": 1}}`,
-				`foo: [2]->{"after": {"a": 2}}`,
-				`foo: [3]->{"after": {"a": 3}}`,
-			})
-			for {
-				_, err := feed.Next()
-				if err != nil {
-					return err
-				}
-				seenMoreMessages = true
-			}
+		assertPayloads(t, feed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
 		})
-		defer func() {
-			closeFeed(t, feed)
-			_ = g.Wait()
-			require.False(t, seenMoreMessages)
-		}()
+
+		close(endTimeReached)
 
 		testFeed := feed.(cdctest.EnterpriseTestFeed)
 		require.NoError(t, testFeed.WaitForStatus(func(s jobs.Status) bool {
@@ -5880,6 +5876,19 @@ func TestChangefeedEndTimeWithCursor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		knobs := f.Server().TestingKnobs().
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		endTimeReached := make(chan struct{})
+		knobs.FeedKnobs.EndTimeReached = func() bool {
+			select {
+			case <-endTimeReached:
+				return true
+			default:
+				return false
+			}
+		}
+
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
 		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
@@ -5889,34 +5898,16 @@ func TestChangefeedEndTimeWithCursor(t *testing.T) {
 		sqlDB.QueryRow(t, "SELECT (cluster_logical_timestamp())").Scan(&tsCursor)
 		sqlDB.Exec(t, "INSERT INTO foo VALUES (4), (5), (6)")
 
-		var tsEndTime string
-		sqlDB.QueryRow(t, "SELECT (cluster_logical_timestamp() + 10000000000)").Scan(&tsEndTime)
-		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH cursor = $1, end_time = $2, no_initial_scan", tsCursor, tsEndTime)
+		fakeEndTime := f.Server().Clock().Now().Add(int64(time.Hour), 0).AsOfSystemTime()
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH cursor = $1, end_time = $2, no_initial_scan", tsCursor, fakeEndTime)
+		defer closeFeed(t, feed)
 
-		time.Sleep(10 * time.Second)
-		sqlDB.Exec(t, "INSERT INTO foo VALUES (7), (8), (9)")
-
-		seenMoreMessages := false
-		g := ctxgroup.WithContext(context.Background())
-		g.Go(func() error {
-			assertPayloads(t, feed, []string{
-				`foo: [4]->{"after": {"a": 4}}`,
-				`foo: [5]->{"after": {"a": 5}}`,
-				`foo: [6]->{"after": {"a": 6}}`,
-			})
-			for {
-				_, err := feed.Next()
-				if err != nil {
-					return err
-				}
-				seenMoreMessages = true
-			}
+		assertPayloads(t, feed, []string{
+			`foo: [4]->{"after": {"a": 4}}`,
+			`foo: [5]->{"after": {"a": 5}}`,
+			`foo: [6]->{"after": {"a": 6}}`,
 		})
-		defer func() {
-			closeFeed(t, feed)
-			_ = g.Wait()
-			require.False(t, seenMoreMessages)
-		}()
+		close(endTimeReached)
 
 		testFeed := feed.(cdctest.EnterpriseTestFeed)
 		require.NoError(t, testFeed.WaitForStatus(func(s jobs.Status) bool {

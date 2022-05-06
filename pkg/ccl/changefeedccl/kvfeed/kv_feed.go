@@ -445,7 +445,7 @@ func (f *kvFeed) runUntilTableEvent(
 	}
 
 	g.GoCtx(func(ctx context.Context) error {
-		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, resumeFrontier, f.tableFeed, f.endTime)
+		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, resumeFrontier, f.tableFeed, f.endTime, f.knobs)
 	})
 	g.GoCtx(func(ctx context.Context) error {
 		return f.physicalFeed.Run(ctx, memBuf, physicalCfg)
@@ -524,6 +524,7 @@ func copyFromSourceToDestUntilTableEvent(
 	frontier *span.Frontier,
 	tables schemafeed.SchemaFeed,
 	endTime hlc.Timestamp,
+	knobs TestingKnobs,
 ) error {
 	var (
 		scanBoundary         errBoundaryReached
@@ -556,6 +557,9 @@ func copyFromSourceToDestUntilTableEvent(
 		applyScanBoundary = func(e kvevent.Event) (skipEvent, reachedBoundary bool, err error) {
 			if scanBoundary == nil {
 				return false, false, nil
+			}
+			if knobs.EndTimeReached != nil && knobs.EndTimeReached() {
+				return true, true, nil
 			}
 			if e.Timestamp().Less(scanBoundary.Timestamp()) {
 				return false, false, nil
