@@ -12,7 +12,6 @@ package testutils
 
 import (
 	"context"
-	"runtime/debug"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -56,8 +55,7 @@ func SucceedsSoonError(fn func() error) error {
 func SucceedsWithin(t TB, fn func() error, duration time.Duration) {
 	t.Helper()
 	if err := SucceedsWithinError(fn, duration); err != nil {
-		t.Fatalf("condition failed to evaluate within %s: %s\n%s",
-			duration, err, string(debug.Stack()))
+		t.Fatalf("condition failed to evaluate within %s: %s", duration, err)
 	}
 }
 
