@@ -134,15 +134,26 @@ func makeProbeRangeGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGen
 			"only users with the admin role are allowed to use crdb_internal.probe_range",
 		)
 	}
+	// Trace the query to meta2. Return it as part of the error string if the query fails.
+	// This improves observability into a meta2 outage. We expect crdb_internal.probe_range
+	// to be available, unless meta2 is down.
+	meta2Ctx, sp := tracing.EnsureChildSpan(
+		ctx.Context, ctx.Tracer, "meta2scan",
+		tracing.WithForceRealSpan(),
+	)
+	sp.SetRecordingType(tracing.RecordingVerbose)
+	defer func() {
+		sp.Finish()
+	}()
 	// Handle args passed in.
 	timeout := time.Duration(tree.MustBeDInterval(args[0]).Duration.Nanos())
 	isWrite := args[1].(*tree.DEnum).LogicalRep
-	ranges, err := kvclient.ScanMetaKVs(ctx.Context, ctx.Txn, roachpb.Span{
+	ranges, err := kvclient.ScanMetaKVs(meta2Ctx, ctx.Txn, roachpb.Span{
 		Key:    keys.MinKey,
 		EndKey: keys.MaxKey,
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.WithMessage(err, sp.FinishAndGetConfiguredRecording().String())
 	}
 	return &probeRangeGenerator{
 		rangeProber: ctx.RangeProber,
