@@ -8733,12 +8733,6 @@ index_elem_options:
     opClass := $1
     dir := $2.dir()
     nullsOrder := $3.nullsOrder()
-    if opClass != "" {
-      if opClass == "gin_trgm_ops" || opClass == "gist_trgm_ops" {
-        return unimplementedWithIssueDetail(sqllex, 41285, "index using " + opClass)
-      }
-      return unimplementedWithIssue(sqllex, 47420)
-    }
     // We currently only support the opposite of Postgres defaults.
     if nullsOrder != tree.DefaultNullsOrder {
       if dir == tree.Descending && nullsOrder == tree.NullsFirst {
@@ -8748,7 +8742,7 @@ index_elem_options:
         return unimplementedWithIssue(sqllex, 6224)
       }
     }
-    $$.val = tree.IndexElem{Direction: dir, NullsOrder: nullsOrder}
+    $$.val = tree.IndexElem{Direction: dir, NullsOrder: nullsOrder, OpClass: tree.Name(opClass)}
   }
 
 opt_class:

@@ -1,8 +1,24 @@
 statement ok
 CREATE TABLE a (a INT PRIMARY KEY, t TEXT)
 
-statement ok
+statement error data type text has no default operator class for access method \"gin\"
 CREATE INVERTED INDEX ON a(t)
+
+statement error data type text has no default operator class for access method \"gin\"
+CREATE INDEX ON a USING GIN(t)
+
+statement error operator class \"blah_ops\" does not exist
+CREATE INVERTED INDEX ON a(t blah_ops)
+
+statement ok
+CREATE INVERTED INDEX ON a(t gin_trgm_ops)
+
+statement ok
+CREATE INDEX ON a USING GIN(t gin_trgm_ops)
+
+# Both gin_trgm_ops and gist_trgm_ops work.
+statement ok
+CREATE INDEX ON a USING GIST(t gist_trgm_ops)
 
 statement ok
 INSERT INTO a VALUES (1, 'foozoopa'),

@@ -580,9 +580,9 @@ func EncodeInvertedIndexTableKeys(
 	case types.ArrayFamily:
 		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey, version, false /* excludeNulls */)
 	case types.StringFamily:
-		// TODO(jordan): Right now, this is just trigram inverted indexes. What if
-		// we want to support different types of inverted indexes on strings? We'll
-		// need to pass in the index type to this function.
+		// TODO(jordan): Right now, this is just trigram inverted indexes. If we
+		// want to support different types of inverted indexes on strings, we'll
+		// need to pass in the inverted index column kind to this function.
 		// We pad the keys when writing them to the index.
 		// TODO(jordan): why are we doing this padding at all? Postgres does it.
 		return encodeTrigramInvertedIndexTableKeys(string(*val.(*tree.DString)), inKey, version, true /* pad */)
