@@ -920,7 +920,6 @@ vectorized: true
     │ estimated row count: 196 (missing stats)
     │ table: order_line@ol_io
     │ lookup condition: (s_i_id = ol_i_id) AND (ol_o_id IN (20, 21))
-    │ pred: (ol_o_id IN (19, 20, 21)) AND (ol_o_id >= 20)
     │
     └── • scan
           columns: (s_i_id)

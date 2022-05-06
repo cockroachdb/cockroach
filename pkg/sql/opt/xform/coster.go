@@ -825,7 +825,7 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	// Compute filter cost. Fetch the equality columns so they can be
 	// ignored later.
 	on := join.Child(2).(*memo.FiltersExpr)
-	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
+	leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(
 		join.Child(0).(memo.RelExpr).Relational().OutputCols,
 		join.Child(1).(memo.RelExpr).Relational().OutputCols,
 		*on,

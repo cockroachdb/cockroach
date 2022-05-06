@@ -3142,8 +3142,7 @@ left-join (lookup lookup_expr [as=t])
  │    │    ├── (1, 10)
  │    │    ├── (2, 20)
  │    │    └── (3, NULL)
- │    └── filters
- │         └── (u:5 = 1) OR (u:5 = 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
+ │    └── filters (true)
  └── filters (true)
 
 # We can't build a lookup join with any of the indexes.
@@ -11658,8 +11657,7 @@ inner-join (lookup metric_values)
  │    ├── constraint: /7/6: [/'cpu' - /'cpu']
  │    ├── key: (6)
  │    └── fd: ()-->(7)
- └── filters
-      └── (time:2 IN ('2022-04-07 00:00:00+00:00', '2022-04-08 00:00:00+00:00', '2022-04-09 00:00:00+00:00')) AND (time:2 > '2022-04-07 00:00:00+00:00') [outer=(2), constraints=(/2: [/'2022-04-08 00:00:00+00:00' - /'2022-04-08 00:00:00+00:00'] [/'2022-04-09 00:00:00+00:00' - /'2022-04-09 00:00:00+00:00']; tight)]
+ └── filters (true)
 
 # We don't support turning LIKE into scans yet, test that we fall back to a
 # filter.
