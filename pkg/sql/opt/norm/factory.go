@@ -159,6 +159,17 @@ func (f *Factory) DisableOptimizations() {
 	f.NotifyOnMatchedRule(func(opt.RuleName) bool { return false })
 }
 
+// DisableOptimizationsTemporarily disables all transformation rules during the
+// execution of the given function fn. A MatchedRuleFunc previously set by
+// NotifyOnMatchedRule is not invoked during execution of fn, but will be
+// invoked for future rule matches after fn returns.
+func (f *Factory) DisableOptimizationsTemporarily(fn func()) {
+	originalMatchedRule := f.matchedRule
+	f.DisableOptimizations()
+	fn()
+	f.matchedRule = originalMatchedRule
+}
+
 // NotifyOnMatchedRule sets a callback function which is invoked each time a
 // normalize rule has been matched by the factory. If matchedRule is nil, then
 // no further notifications are sent, and all rules are applied by default. In

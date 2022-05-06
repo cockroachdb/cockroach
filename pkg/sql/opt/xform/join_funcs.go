@@ -717,9 +717,13 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 		constFilter := filters[allIdx]
 		if !c.isCanonicalLookupJoinFilter(constFilter) {
 			if len(values) > 0 {
-				constFilter = c.makeConstFilter(idxCol, values)
+				c.e.f.DisableOptimizationsTemporarily(func() {
+					constFilter = c.makeConstFilter(idxCol, values)
+				})
 			} else if foundRange {
-				constFilter = c.makeRangeFilter(idxCol, constFilter)
+				c.e.f.DisableOptimizationsTemporarily(func() {
+					constFilter = c.makeRangeFilter(idxCol, constFilter)
+				})
 			}
 		}
 		constFilters = append(constFilters, constFilter)
