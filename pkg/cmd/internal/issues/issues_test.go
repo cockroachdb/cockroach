@@ -37,15 +37,16 @@ func TestPost(t *testing.T) {
 	)
 
 	opts := Options{
-		Token:     "intentionally-unset",
-		Org:       "cockroachdb",
-		Repo:      "cockroach",
-		SHA:       "abcd123",
-		BuildID:   "8008135",
-		ServerURL: "https://teamcity.example.com",
-		Branch:    "release-0.1",
-		Tags:      "deadlock",
-		Goflags:   "race",
+		Token:       "intentionally-unset",
+		Org:         "cockroachdb",
+		Repo:        "cockroach",
+		SHA:         "abcd123",
+		BuildTypeID: "nightly123",
+		BuildID:     "8008135",
+		ServerURL:   "https://teamcity.example.com",
+		Branch:      "release-0.1",
+		Tags:        "deadlock",
+		Goflags:     "race",
 	}
 
 	type testCase struct {
