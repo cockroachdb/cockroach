@@ -42,7 +42,7 @@ func BeginCopyFrom(ctx context.Context, conn Conn, query string) (*CopyFromState
 
 // copyFromRows is a mock Rows interface for COPY results.
 type copyFromRows struct {
-	r driver.Result
+	t pgconn.CommandTag
 }
 
 func (c copyFromRows) Close() error {
@@ -65,12 +65,8 @@ func (c copyFromRows) ColumnTypeNames() []string {
 	return nil
 }
 
-func (c copyFromRows) Result() driver.Result {
-	return c.r
-}
-
-func (c copyFromRows) Tag() string {
-	return "COPY"
+func (c copyFromRows) Tag() (pgconn.CommandTag, error) {
+	return c.t, nil
 }
 
 func (c copyFromRows) Next(values []driver.Value) error {
@@ -96,7 +92,7 @@ func (c *CopyFromState) Commit(ctx context.Context, cleanupFunc func(), lines st
 			if err != nil {
 				return nil, false, err
 			}
-			return copyFromRows{driver.RowsAffected(tag.RowsAffected())}, false, nil
+			return copyFromRows{tag}, false, nil
 		}()
 		return rows, isMulti, err
 	}

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
 )
@@ -38,12 +39,8 @@ func (r *sqlRows) Columns() []string {
 	return columnNames
 }
 
-func (r *sqlRows) Result() driver.Result {
-	return driver.RowsAffected(r.rows.CommandTag().RowsAffected())
-}
-
-func (r *sqlRows) Tag() string {
-	return r.rows.CommandTag().String()
+func (r *sqlRows) Tag() (pgconn.CommandTag, error) {
+	return r.rows.CommandTag(), r.rows.Err()
 }
 
 func (r *sqlRows) Close() error {

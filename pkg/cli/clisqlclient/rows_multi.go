@@ -41,16 +41,8 @@ func (r *sqlRowsMultiResultSet) Columns() []string {
 	return columnNames
 }
 
-func (r *sqlRowsMultiResultSet) Result() driver.Result {
-	rd := r.rows.ResultReader()
-	tag, _ := rd.Close()
-	return driver.RowsAffected(tag.RowsAffected())
-}
-
-func (r *sqlRowsMultiResultSet) Tag() string {
-	rd := r.rows.ResultReader()
-	tag, _ := rd.Close()
-	return tag.String()
+func (r *sqlRowsMultiResultSet) Tag() (pgconn.CommandTag, error) {
+	return r.rows.ResultReader().Close()
 }
 
 func (r *sqlRowsMultiResultSet) Close() error {

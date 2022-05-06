@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -113,11 +114,8 @@ type Rows interface {
 	// columns.
 	ColumnTypeNames() []string
 
-	// Result retrieves the underlying driver result object.
-	Result() driver.Result
-
 	// Tag retrieves the statement tag for the current result set.
-	Tag() string
+	Tag() (pgconn.CommandTag, error)
 
 	// Next populates values with the next row of results. []byte values are copied
 	// so that subsequent calls to Next and Close do not mutate values. This

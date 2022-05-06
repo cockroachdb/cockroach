@@ -12,7 +12,6 @@ package clisqlexec
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"io"
 	"strings"
@@ -65,37 +64,30 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 		// when Next() has completed its work and no rows where observed, to decide
 		// what to do.
 		noRowsHook := func() (bool, error) {
-			res := rows.Result()
-			if ra, ok := res.(driver.RowsAffected); ok {
-				nRows, err := ra.RowsAffected()
-				if err != nil {
-					return false, err
-				}
-
-				// This may be either something like INSERT with a valid
-				// RowsAffected value, or a statement like SET.
-				tag := rows.Tag()
-				if strings.HasPrefix(tag, "SELECT") && nRows == 0 {
-					// As explained above, the pgx driver unhelpfully does not
-					// distinguish between a statement returning zero rows and a
-					// statement returning an affected row count of zero.
-					// noRowsHook is called non-discriminatingly for both
-					// situations.
-					return false, nil
-				} else {
-					// SET, etc.: just print the tag, or OK if there's no tag.
-					// INSERT, DELETE, etc. all contain the row count in the tag itself.
-					if tag == "" {
-						tag = "OK"
-					}
-					fmt.Fprintln(w, tag)
-				}
-				return true, nil
+			tag, err := rows.Tag()
+			if err != nil {
+				return false, err
 			}
-			// Other cases: this is a statement with a rows result set, but
-			// zero rows (e.g. SELECT on empty table). Let the reporter
-			// handle it.
-			return false, nil
+			nRows := tag.RowsAffected()
+			tagString := tag.String()
+
+			// This may be either something like INSERT with a valid
+			// RowsAffected value, or a statement like SET.
+			if strings.HasPrefix(tagString, "SELECT") && nRows == 0 {
+				// As explained above, the pgx driver unhelpfully does not
+				// distinguish between a statement returning zero rows and a
+				// statement returning an affected row count of zero.
+				// noRowsHook is called non-discriminatingly for both
+				// situations.
+				return false, nil
+			}
+			// SET, etc.: just print the tag, or OK if there's no tag.
+			// INSERT, DELETE, etc. all contain the row count in the tag itself.
+			if tagString == "" {
+				tagString = "OK"
+			}
+			fmt.Fprintln(w, tagString)
+			return true, nil
 		}
 
 		cols := getColumnStrings(rows, true)
