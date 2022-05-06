@@ -223,6 +223,7 @@ func runCostFuzzQuery(
 	// Then, rerun the statement with cost perturbation.
 	rows2, err := conn.Query(stmt)
 	if err != nil {
+		logStmt(stmt)
 		logStmt(seedStmt)
 		logStmt(stmt)
 		return errors.Wrap(err, "error while running perturbed statement")
