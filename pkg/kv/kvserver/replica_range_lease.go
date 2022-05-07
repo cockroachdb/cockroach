@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -313,10 +314,10 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	status kvserverpb.LeaseStatus,
 	leaseReq roachpb.Request,
 ) error {
-	// Create a new context *without* a timeout. Instead, we multiplex the
-	// cancellation of all contexts onto this new one, only canceling it if all
-	// coalesced requests timeout/cancel. p.cancelLocked (defined below) is the
-	// cancel function that must be called; calling just cancel is insufficient.
+	// Create a new context. We multiplex the cancellation of all contexts onto
+	// this new one, canceling it if all coalesced requests timeout/cancel.
+	// p.cancelLocked (defined below) is the cancel function that must be called;
+	// calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
 
 	const opName = "request range lease"
@@ -338,7 +339,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		ctx, sp = tr.StartSpanCtx(ctx, opName, tagsOpt)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	cancelCtx, cancel := context.WithCancel(ctx)
 
 	// Make sure we clean up the context and request state. This will be called
 	// either when the request completes cleanly or when it is terminated early.
@@ -348,10 +349,17 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		p.nextLease = roachpb.Lease{}
 	}
 
+	_, nlRenewal := p.repl.store.cfg.NodeLivenessDurations()
+
 	err := p.repl.store.Stopper().RunAsyncTaskEx(
-		ctx,
+		cancelCtx,
 		stop.TaskOpts{
 			TaskName: "pendingLeaseRequest: requesting lease",
+			// An expired lease will often retry the previous leaseholder first, who
+			// then does a synchronous heartbeat, so we give it the same timeout as a
+			// regular heartbeat. We must eventually return a NotLeaseHolderError,
+			// otherwise we could prevent anyone else from acquiring the lease.
+			Timeout: nlRenewal,
 			// Trace the lease acquisition as a child even though it might outlive the
 			// parent in case the parent's ctx is canceled. Other requests might
 			// later block on this lease acquisition too, and we can't include the
@@ -472,10 +480,11 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 
 			p.repl.mu.Lock()
 			defer p.repl.mu.Unlock()
-			if ctx.Err() != nil {
-				// We were canceled and this request was already cleaned up
-				// under lock. At this point, another async request could be
-				// active so we don't want to do anything else.
+			if cancelCtx.Err() != nil {
+				// If p.cancelLocked()'s ctx was canceled (as opposed to the task ctx
+				// hitting a timeout) then this request was already cleaned up under
+				// lock. At this point, another async request could be active so we
+				// don't want to do anything else.
 				return
 			}
 
@@ -1137,6 +1146,25 @@ func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStat
 // but it accepts a specific request timestamp instead of assuming that
 // the request is operating at the current time.
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
+	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
+) (status kvserverpb.LeaseStatus, pErr *roachpb.Error) {
+	// Lease reacquisition will do a synchronous node liveness heartbeat, so we
+	// use the heartbeat timeout for the lease acquisition too.
+	_, nlRenewal := r.store.cfg.NodeLivenessDurations()
+	if err := contextutil.RunWithTimeout(ctx, "acquire-lease", nlRenewal,
+		func(ctx context.Context) error {
+			status, pErr = r.redirectOnOrAcquireLeaseForRequestWithoutTimeout(ctx, reqTS, brSig)
+			return nil
+		},
+	); err != nil {
+		return kvserverpb.LeaseStatus{}, roachpb.NewError(err)
+	}
+	return status, pErr
+}
+
+// redirectOnOrAcquireLeaseForRequestWithoutTimeout is like
+// redirectOnOrAcquireLeaseForRequest, but runs without a timeout.
+func (r *Replica) redirectOnOrAcquireLeaseForRequestWithoutTimeout(
 	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
 	// Try fast-path.
