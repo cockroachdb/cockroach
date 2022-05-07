@@ -317,6 +317,7 @@ ALL_TESTS = [
     "//pkg/sql/opt/bench:bench_test",
     "//pkg/sql/opt/cat:cat_test",
     "//pkg/sql/opt/constraint:constraint_test",
+    "//pkg/sql/opt/cycle:cycle_test",
     "//pkg/sql/opt/distribution:distribution_test",
     "//pkg/sql/opt/exec/execbuilder:execbuilder_test",
     "//pkg/sql/opt/exec/explain:explain_test",

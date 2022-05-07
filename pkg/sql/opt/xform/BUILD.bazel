@@ -4,6 +4,7 @@ go_library(
     name = "xform",
     srcs = [
         "coster.go",
+        "cycle_funcs.go",
         "explorer.go",
         "general_funcs.go",
         "groupby_funcs.go",
@@ -30,6 +31,7 @@ go_library(
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/cycle",
         "//pkg/sql/opt/distribution",
         "//pkg/sql/opt/idxconstraint",
         "//pkg/sql/opt/invertedexpr",

@@ -470,7 +470,7 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 		// times, there is likely a cycle in the memo. To avoid a stack
 		// overflow, throw an internal error. The formatted memo is included as
 		// an error detail to aid in debugging the cycle.
-		mf := makeMemoFormatter(o, FmtPretty)
+		mf := makeMemoFormatter(o, FmtCycle)
 		panic(errors.WithDetail(
 			errors.AssertionFailedf(
 				"memo group optimization passes surpassed limit of %v; "+
