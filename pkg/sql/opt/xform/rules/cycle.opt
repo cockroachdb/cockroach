@@ -10,3 +10,20 @@
 (MemoCycleTestRel $input:* $filters:*)
 =>
 (MemoCycleTestRel (MemoCycleTestRel $input $filters) $filters)
+
+# MemoCycleTestRelRuleFilter is similar to MemoCycleTestRelRule, but creates
+# a cycle in the memo through a filter expression.
+[MemoCycleTestRelRuleFilter, Explore]
+(MemoCycleTestRel $input:* $filters:*)
+=>
+(Select
+    $input
+    [
+        (FiltersItem
+            (Exists
+                (MemoCycleTestRel $input $filters)
+                (EmptySubqueryPrivate)
+            )
+        )
+    ]
+)
