@@ -4,6 +4,9 @@ statement ok
 GRANT CREATE ON DATABASE test TO testuser;
 CREATE USER testuser2
 
+statement ok
+CREATE SCHEMA IF NOT EXISTS derp
+
 # Don't run these tests as an admin.
 user testuser
 
@@ -26,6 +29,17 @@ query TTTTB colnames
 SHOW GRANTS ON SCHEMA public
 ----
 database_name  schema_name  grantee  privilege_type  is_grantable
+test           public       admin    ALL             true
+test           public       public   CREATE          false
+test           public       public   USAGE           false
+test           public       root     ALL             true
+
+query TTTTB colnames
+SHOW GRANTS ON SCHEMA test.*
+----
+database_name  schema_name  grantee  privilege_type  is_grantable
+test           derp         admin    ALL             true
+test           derp         root     ALL             true
 test           public       admin    ALL             true
 test           public       public   CREATE          false
 test           public       public   USAGE           false
@@ -75,6 +89,8 @@ FROM information_schema.schema_privileges
 ----
 grantee    table_catalog  table_schema        privilege_type  is_grantable
 public     test           crdb_internal       USAGE           NO
+admin      test           derp                ALL             YES
+root       test           derp                ALL             YES
 public     test           information_schema  USAGE           NO
 public     test           pg_catalog          USAGE           NO
 public     test           pg_extension        USAGE           NO
@@ -103,6 +119,7 @@ FROM schema_names
 ----
 schema_name         has_create  has_usage
 crdb_internal       false       true
+derp                false       false
 information_schema  false       true
 pg_catalog          false       true
 pg_extension        false       true
