@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -313,10 +314,10 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	status kvserverpb.LeaseStatus,
 	leaseReq roachpb.Request,
 ) error {
-	// Create a new context *without* a timeout. Instead, we multiplex the
-	// cancellation of all contexts onto this new one, only canceling it if all
-	// coalesced requests timeout/cancel. p.cancelLocked (defined below) is the
-	// cancel function that must be called; calling just cancel is insufficient.
+	// Create a new context. We multiplex the cancellation of all contexts onto
+	// this new one, canceling it if all coalesced requests timeout/cancel.
+	// p.cancelLocked (defined below) is the cancel function that must be called;
+	// calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
 
 	const opName = "request range lease"
@@ -338,7 +339,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		ctx, sp = tr.StartSpanCtx(ctx, opName, tagsOpt)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	cancelCtx, cancel := context.WithCancel(ctx)
 
 	// Make sure we clean up the context and request state. This will be called
 	// either when the request completes cleanly or when it is terminated early.
@@ -348,10 +349,13 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		p.nextLease = roachpb.Lease{}
 	}
 
+	_, nlRenewal := p.repl.store.cfg.NodeLivenessDurations()
+
+	const taskName = "pendingLeaseRequest: requesting lease"
 	err := p.repl.store.Stopper().RunAsyncTaskEx(
-		ctx,
+		cancelCtx,
 		stop.TaskOpts{
-			TaskName: "pendingLeaseRequest: requesting lease",
+			TaskName: taskName,
 			// Trace the lease acquisition as a child even though it might outlive the
 			// parent in case the parent's ctx is canceled. Other requests might
 			// later block on this lease acquisition too, and we can't include the
@@ -362,106 +366,15 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		func(ctx context.Context) {
 			defer sp.Finish()
 
-			// If requesting an epoch-based lease & current state is expired,
-			// potentially heartbeat our own liveness or increment epoch of
-			// prior owner. Note we only do this if the previous lease was
-			// epoch-based.
-			var pErr *roachpb.Error
-			if reqLease.Type() == roachpb.LeaseEpoch && status.State == kvserverpb.LeaseState_EXPIRED &&
-				status.Lease.Type() == roachpb.LeaseEpoch {
-				var err error
-				// If this replica is previous & next lease holder, manually heartbeat to become live.
-				if status.OwnedBy(nextLeaseHolder.StoreID) &&
-					p.repl.store.StoreID() == nextLeaseHolder.StoreID {
-					if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil {
-						log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
-					}
-				} else if status.Liveness.Epoch == status.Lease.Epoch {
-					// If not owner, increment epoch if necessary to invalidate lease.
-					// However, we only do so in the event that the next leaseholder is
-					// considered live at this time. If not, there's no sense in
-					// incrementing the expired leaseholder's epoch.
-					if live, liveErr := p.repl.store.cfg.NodeLiveness.IsLive(nextLeaseHolder.NodeID); !live || liveErr != nil {
-						if liveErr != nil {
-							err = errors.Wrapf(liveErr, "not incrementing epoch on n%d because next leaseholder (n%d) not live",
-								status.Liveness.NodeID, nextLeaseHolder.NodeID)
-						} else {
-							err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live (err = nil)",
-								status.Liveness.NodeID, nextLeaseHolder.NodeID)
-						}
-						log.VEventf(ctx, 1, "%v", err)
-					} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
-						// If we get ErrEpochAlreadyIncremented, someone else beat
-						// us to it. This proves that the target node is truly
-						// dead *now*, but it doesn't prove that it was dead at
-						// status.Timestamp (which we've encoded into our lease
-						// request). It's possible that the node was temporarily
-						// considered dead but revived without having its epoch
-						// incremented, i.e. that it was in fact live at
-						// status.Timestamp.
-						//
-						// It would be incorrect to simply proceed to sending our
-						// lease request since our lease.Start may precede the
-						// effective end timestamp of the predecessor lease (the
-						// expiration of the last successful heartbeat before the
-						// epoch increment), and so under this lease this node's
-						// timestamp cache would not necessarily reflect all reads
-						// served by the prior leaseholder.
-						//
-						// It would be correct to bump the timestamp in the lease
-						// request and proceed, but that just sets up another race
-						// between this node and the one that already incremented
-						// the epoch. They're probably going to beat us this time
-						// too, so just return the NotLeaseHolderError here
-						// instead of trying to fix up the timestamps and submit
-						// the lease request.
-						//
-						// ErrEpochAlreadyIncremented is not an unusual situation,
-						// so we don't log it as an error.
-						//
-						// https://github.com/cockroachdb/cockroach/issues/35986
-						if !errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
-							log.Errorf(ctx, "failed to increment leaseholder's epoch: %s", err)
-						}
-					}
-				}
-				// Set error for propagation to all waiters below.
-				if err != nil {
-					// TODO(bdarnell): is status.Lease really what we want to put in the NotLeaseHolderError here?
-					pErr = roachpb.NewError(newNotLeaseHolderError(
-						status.Lease, p.repl.store.StoreID(), p.repl.Desc(),
-						fmt.Sprintf("failed to manipulate liveness record: %s", err)))
-				}
-			}
+			// An expired lease will often retry the previous leaseholder first, who
+			// then does a synchronous heartbeat, so we give it the same timeout as a
+			// regular heartbeat. We must eventually return a NotLeaseHolderError,
+			// otherwise we could prevent anyone else from acquiring the lease.
+			err := contextutil.RunWithTimeout(ctx, taskName, nlRenewal, func(ctx context.Context) error {
+				return p.requestLease(ctx, nextLeaseHolder, reqLease, status, leaseReq)
+			})
+			// Error handled below.
 
-			// Send the RequestLeaseRequest or TransferLeaseRequest and wait for the new
-			// lease to be applied.
-			if pErr == nil {
-				// The Replica circuit breakers together with round-tripping a ProbeRequest
-				// here before asking for the lease could provide an alternative, simpler
-				// solution to the below issue:
-				//
-				// https://github.com/cockroachdb/cockroach/issues/37906
-				ba := roachpb.BatchRequest{}
-				ba.Timestamp = p.repl.store.Clock().Now()
-				ba.RangeID = p.repl.RangeID
-				// NB:
-				// RequestLease always bypasses the circuit breaker (i.e. will prefer to
-				// get stuck on an unavailable range rather than failing fast; see
-				// `(*RequestLeaseRequest).flags()`). This enables the caller to chose
-				// between either behavior for themselves: if they too want to bypass
-				// the circuit breaker, they simply don't check for the circuit breaker
-				// while waiting for their lease handle. If they want to fail-fast, they
-				// do. If the lease instead adopted the caller's preference, we'd have
-				// to handle the case of multiple preferences joining onto one lease
-				// request, which is more difficult.
-				//
-				// TransferLease will observe the circuit breaker, as transferring a
-				// lease when the range is unavailable results in, essentially, giving
-				// up on the lease and thus worsening the situation.
-				ba.Add(leaseReq)
-				_, pErr = p.repl.Send(ctx, ba)
-			}
 			// We reset our state below regardless of whether we've gotten an error or
 			// not, but note that an error is ambiguous - there's no guarantee that the
 			// transfer will not still apply. That's OK, however, as the "in transfer"
@@ -469,24 +382,23 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// correctness (see repl.mu.minLeaseProposedTS), and resetting the state
 			// is beneficial as it'll allow the replica to attempt to transfer again or
 			// extend the existing lease in the future.
-
 			p.repl.mu.Lock()
 			defer p.repl.mu.Unlock()
-			if ctx.Err() != nil {
-				// We were canceled and this request was already cleaned up
-				// under lock. At this point, another async request could be
-				// active so we don't want to do anything else.
+			if cancelCtx.Err() != nil {
+				// If p.cancelLocked()'s ctx was canceled (as opposed to the task ctx
+				// hitting a timeout) then this request was already cleaned up under
+				// lock. At this point, another async request could be active so we
+				// don't want to do anything else.
 				return
 			}
-
 			// Send result of lease to all waiter channels and cleanup request.
 			for llHandle := range p.llHandles {
 				// Don't send the same transaction object twice; this can lead to races.
-				if pErr != nil {
-					pErrClone := *pErr
+				if err != nil {
+					pErr := roachpb.NewError(err)
 					// TODO(tbg): why?
-					pErrClone.SetTxn(pErr.GetTxn())
-					llHandle.resolve(&pErrClone)
+					pErr.SetTxn(pErr.GetTxn())
+					llHandle.resolve(pErr)
 				} else {
 					llHandle.resolve(nil)
 				}
@@ -500,6 +412,115 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		return err
 	}
 	return nil
+}
+
+// requestLease sends a synchronous transfer lease or lease request to the
+// specified replica. It is only meant to be called from requestLeaseAsync,
+// since it does not coordinate with other in-flight lease requests.
+func (p *pendingLeaseRequest) requestLease(
+	ctx context.Context,
+	nextLeaseHolder roachpb.ReplicaDescriptor,
+	reqLease roachpb.Lease,
+	status kvserverpb.LeaseStatus,
+	leaseReq roachpb.Request,
+) error {
+	// If requesting an epoch-based lease & current state is expired,
+	// potentially heartbeat our own liveness or increment epoch of
+	// prior owner. Note we only do this if the previous lease was
+	// epoch-based.
+	if reqLease.Type() == roachpb.LeaseEpoch && status.State == kvserverpb.LeaseState_EXPIRED &&
+		status.Lease.Type() == roachpb.LeaseEpoch {
+		var err error
+		// If this replica is previous & next lease holder, manually heartbeat to become live.
+		if status.OwnedBy(nextLeaseHolder.StoreID) &&
+			p.repl.store.StoreID() == nextLeaseHolder.StoreID {
+			if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil {
+				log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
+			}
+		} else if status.Liveness.Epoch == status.Lease.Epoch {
+			// If not owner, increment epoch if necessary to invalidate lease.
+			// However, we only do so in the event that the next leaseholder is
+			// considered live at this time. If not, there's no sense in
+			// incrementing the expired leaseholder's epoch.
+			if live, liveErr := p.repl.store.cfg.NodeLiveness.IsLive(nextLeaseHolder.NodeID); !live || liveErr != nil {
+				if liveErr != nil {
+					err = errors.Wrapf(liveErr, "not incrementing epoch on n%d because next leaseholder (n%d) not live",
+						status.Liveness.NodeID, nextLeaseHolder.NodeID)
+				} else {
+					err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live (err = nil)",
+						status.Liveness.NodeID, nextLeaseHolder.NodeID)
+				}
+				log.VEventf(ctx, 1, "%v", err)
+			} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
+				// If we get ErrEpochAlreadyIncremented, someone else beat
+				// us to it. This proves that the target node is truly
+				// dead *now*, but it doesn't prove that it was dead at
+				// status.Timestamp (which we've encoded into our lease
+				// request). It's possible that the node was temporarily
+				// considered dead but revived without having its epoch
+				// incremented, i.e. that it was in fact live at
+				// status.Timestamp.
+				//
+				// It would be incorrect to simply proceed to sending our
+				// lease request since our lease.Start may precede the
+				// effective end timestamp of the predecessor lease (the
+				// expiration of the last successful heartbeat before the
+				// epoch increment), and so under this lease this node's
+				// timestamp cache would not necessarily reflect all reads
+				// served by the prior leaseholder.
+				//
+				// It would be correct to bump the timestamp in the lease
+				// request and proceed, but that just sets up another race
+				// between this node and the one that already incremented
+				// the epoch. They're probably going to beat us this time
+				// too, so just return the NotLeaseHolderError here
+				// instead of trying to fix up the timestamps and submit
+				// the lease request.
+				//
+				// ErrEpochAlreadyIncremented is not an unusual situation,
+				// so we don't log it as an error.
+				//
+				// https://github.com/cockroachdb/cockroach/issues/35986
+				if !errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
+					log.Errorf(ctx, "failed to increment leaseholder's epoch: %s", err)
+				}
+			}
+		}
+		if err != nil {
+			// TODO(bdarnell): is status.Lease really what we want to put in the NotLeaseHolderError here?
+			return newNotLeaseHolderError(status.Lease, p.repl.store.StoreID(), p.repl.Desc(),
+				fmt.Sprintf("failed to manipulate liveness record: %s", err))
+		}
+	}
+
+	// Send the RequestLeaseRequest or TransferLeaseRequest and wait for the new
+	// lease to be applied.
+	//
+	// The Replica circuit breakers together with round-tripping a ProbeRequest
+	// here before asking for the lease could provide an alternative, simpler
+	// solution to the below issue:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/37906
+	ba := roachpb.BatchRequest{}
+	ba.Timestamp = p.repl.store.Clock().Now()
+	ba.RangeID = p.repl.RangeID
+	// NB:
+	// RequestLease always bypasses the circuit breaker (i.e. will prefer to
+	// get stuck on an unavailable range rather than failing fast; see
+	// `(*RequestLeaseRequest).flags()`). This enables the caller to chose
+	// between either behavior for themselves: if they too want to bypass
+	// the circuit breaker, they simply don't check for the circuit breaker
+	// while waiting for their lease handle. If they want to fail-fast, they
+	// do. If the lease instead adopted the caller's preference, we'd have
+	// to handle the case of multiple preferences joining onto one lease
+	// request, which is more difficult.
+	//
+	// TransferLease will observe the circuit breaker, as transferring a
+	// lease when the range is unavailable results in, essentially, giving
+	// up on the lease and thus worsening the situation.
+	ba.Add(leaseReq)
+	_, pErr := p.repl.Send(ctx, ba)
+	return pErr.GoError()
 }
 
 // JoinRequest adds one more waiter to the currently pending request.
@@ -1137,6 +1158,25 @@ func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStat
 // but it accepts a specific request timestamp instead of assuming that
 // the request is operating at the current time.
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
+	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
+) (status kvserverpb.LeaseStatus, pErr *roachpb.Error) {
+	// Lease reacquisition will do a synchronous node liveness heartbeat, so we
+	// use the heartbeat timeout for the lease acquisition too.
+	_, nlRenewal := r.store.cfg.NodeLivenessDurations()
+	if err := contextutil.RunWithTimeout(ctx, "acquire-lease", nlRenewal,
+		func(ctx context.Context) error {
+			status, pErr = r.redirectOnOrAcquireLeaseForRequestWithoutTimeout(ctx, reqTS, brSig)
+			return nil
+		},
+	); err != nil {
+		return kvserverpb.LeaseStatus{}, roachpb.NewError(err)
+	}
+	return status, pErr
+}
+
+// redirectOnOrAcquireLeaseForRequestWithoutTimeout is like
+// redirectOnOrAcquireLeaseForRequest, but runs without a timeout.
+func (r *Replica) redirectOnOrAcquireLeaseForRequestWithoutTimeout(
 	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
 	// Try fast-path.
