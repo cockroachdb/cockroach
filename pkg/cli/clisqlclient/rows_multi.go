@@ -33,7 +33,12 @@ type sqlRowsMultiResultSet struct {
 var _ Rows = (*sqlRowsMultiResultSet)(nil)
 
 func (r *sqlRowsMultiResultSet) Columns() []string {
-	fields := r.rows.ResultReader().FieldDescriptions()
+	rr := r.rows.ResultReader()
+	if rr == nil {
+		// ResultReader may be nil if an empty query was executed.
+		return nil
+	}
+	fields := rr.FieldDescriptions()
 	columnNames := make([]string, len(fields))
 	for i, fd := range fields {
 		columnNames[i] = string(fd.Name)
@@ -42,12 +47,20 @@ func (r *sqlRowsMultiResultSet) Columns() []string {
 }
 
 func (r *sqlRowsMultiResultSet) Tag() (pgconn.CommandTag, error) {
-	return r.rows.ResultReader().Close()
+	if rr := r.rows.ResultReader(); rr != nil {
+		// ResultReader may be nil if an empty query was executed.
+		return r.rows.ResultReader().Close()
+	}
+	return pgconn.CommandTag(""), nil
 }
 
 func (r *sqlRowsMultiResultSet) Close() error {
 	r.conn.flushNotices()
-	_, retErr := r.rows.ResultReader().Close()
+	var retErr error
+	if rr := r.rows.ResultReader(); rr != nil {
+		// ResultReader may be nil if an empty query was executed.
+		_, retErr = r.rows.ResultReader().Close()
+	}
 	if closeErr := r.rows.Close(); closeErr != nil && retErr == nil {
 		retErr = closeErr
 	}
@@ -67,6 +80,10 @@ func (r *sqlRowsMultiResultSet) Next(values []driver.Value) error {
 		return ErrConnectionClosed
 	}
 	rd := r.rows.ResultReader()
+	if rd == nil {
+		// ResultReader may be nil if an empty query was executed.
+		return io.EOF
+	}
 	if !rd.NextRow() {
 		if _, err := rd.Close(); err != nil {
 			return err
