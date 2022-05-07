@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -163,7 +164,11 @@ func (c *sqlConn) EnsureConn(ctx context.Context) error {
 		// Connection failed: if the failure is due to a missing
 		// password, we're going to fill the password here.
 		pgErr := (*pgconn.PgError)(nil)
-		if errors.As(err, &pgErr) && pgErr.Code == pgcode.InvalidPassword.String() && c.passwordMissing {
+		// TODO(rafi): remove error message checking once https://github.com/jackc/pgconn/pull/115
+		// is merged and released.
+		if c.passwordMissing &&
+			((errors.As(err, &pgErr) && pgErr.Code == pgcode.InvalidPassword.String()) ||
+				strings.Contains(err.Error(), "failed SASL auth")) {
 			if pErr := c.fillPassword(); pErr != nil {
 				return errors.CombineErrors(err, pErr)
 			}
