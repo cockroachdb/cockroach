@@ -2578,6 +2578,11 @@ func (b *logicalPropsBuilder) buildMemoCycleTestRelProps(
 	// from transforming mc into an empty Values expression.
 	inputProps := mc.Input.Relational()
 	rel.Cardinality = inputProps.Cardinality
+	// Make the output cols the same as the input cols to avoid assertion
+	// failures.
+	rel.OutputCols = inputProps.OutputCols
+	// Make the row count non-zero to avoid assertion failures.
+	rel.Stats.RowCount = 1
 }
 
 // WithUses returns the WithUsesMap for the given expression.
