@@ -201,6 +201,15 @@ type TestClusterInterface interface {
 	// WaitForFullReplication waits until all stores in the cluster
 	// have no ranges with replication pending.
 	WaitForFullReplication() error
+
+	// StartedDefaultSQLServer returns whether this cluster started a
+	// default test SQL server.
+	StartedDefaultSQLServer() bool
+
+	// HostClusterConn returns a gosql.DB connection to the first server in a
+	// host cluster. This is useful in environments where it's not clear whether
+	// ServerConn is returning a connection to the host cluster or a SQL server.
+	HostClusterConn() *gosql.DB
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim

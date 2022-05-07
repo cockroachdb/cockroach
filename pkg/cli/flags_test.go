@@ -1279,6 +1279,7 @@ Flags:
                                   File name to read the logging configuration from. This has the same effect as
                                   passing the content of the file via the --log flag.
                                   (default <unset>)
+      --tenantMode string        tenantMode in which to run tests. Options are forceTenant, forceNoTenant, and default which alternates between tenant and no-tenant mode probabilistically. Note that the two force modes are ignored if the test is not already forced to run in one of the two modes. (default "default")
       --version                  version for cockroach
 
 Use "cockroach [command] --help" for more information about a command.

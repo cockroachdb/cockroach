@@ -20,7 +20,10 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
+	"flag"
+	"math/rand"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -39,6 +43,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+var tenantModeFlag = flag.String(
+	"tenantMode", "default",
+	"tenantMode in which to run tests. Options are forceTenant, forceNoTenant, and default "+
+		"which alternates between tenant and no-tenant mode probabilistically. Note that the two force "+
+		"modes are ignored if the test is not already forced to run in one of the two modes.")
+
+const (
+	tenantModeForceTenant   = "forceTenant"
+	tenantModeForceNoTenant = "forceNoTenant"
+	tenantModeForceDefault  = "default"
+)
+
+func ProbabilityOfStartingTestTenant(t testing.TB) float64 {
+	probabilityOfStartingTestTenant := 0.0
+
+	switch *tenantModeFlag {
+	case tenantModeForceTenant:
+		probabilityOfStartingTestTenant = 1.0
+	case tenantModeForceNoTenant:
+		probabilityOfStartingTestTenant = 0.0
+	case tenantModeForceDefault:
+		probabilityOfStartingTestTenant = 0.5
+	default:
+		t.Fatal("invalid setting of tenantMode flag")
+	}
+
+	return probabilityOfStartingTestTenant
+}
 
 // TestServerInterface defines test server functionality that tests need; it is
 // implemented by server.TestServer.
@@ -224,11 +257,27 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
+	// Determine if we should probabilistically start tenants for the cluster.
+	if !params.DisableDefaultSQLServer {
+		probabilityOfStartingTestTenant := ProbabilityOfStartingTestTenant(t)
+		if rand.Float64() > probabilityOfStartingTestTenant {
+			// If we haven't been asked to explicitly disable the test tenant,
+			// but we determine that we shouldn't be probabilistically starting
+			// the test tenant, then disable it explicitly here.
+			params.DisableDefaultSQLServer = true
+		}
+	}
+
 	server, err := NewServer(params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
+
 	if err := server.Start(context.Background()); err != nil {
+		if strings.Contains(err.Error(), "requires a CCL binary") {
+			server.Stopper().Stop(context.Background())
+			skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+		}
 		t.Fatalf("%+v", err)
 	}
 	goDB := OpenDBConn(
@@ -297,6 +346,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 		return nil, err
 	}
 	if err := server.Start(context.Background()); err != nil {
+		server.Stopper().Stop(context.Background())
 		return nil, err
 	}
 	return server, nil

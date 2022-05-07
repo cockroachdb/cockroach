@@ -556,6 +556,8 @@ type testClusterConfig struct {
 	// If true, a sql tenant server will be started and pointed at a node in the
 	// cluster. Connections on behalf of the logic test will go to that tenant.
 	useTenant bool
+	// Disable the default SQL server in the test server
+	disableDefaultSQLServer bool
 	// isCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	isCCLConfig bool
@@ -732,6 +734,9 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "local",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
+		// local is the configuration where we run all tests which have bad
+		// interactions with the default SQL server.
+		disableDefaultSQLServer: true,
 	},
 	{
 		name:                "local-vec-off",
@@ -793,6 +798,11 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "5node",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
+		// Have to disable the default SQL server here as there are test run in
+		// this mode which try to modify zone configurations and we're more
+		// restrictive in the way we allow zone configs to be modified by
+		// secondary tenants. See #75569 for more info.
+		disableDefaultSQLServer: true,
 	},
 	{
 		name:                       "5node-metadata",
@@ -877,6 +887,9 @@ var logicTestConfigs = []testClusterConfig{
 		name:       "multiregion-9node-3region-3azs",
 		numNodes:   9,
 		localities: multiregion9node3region3azsLocalities,
+		// Need to disable the default SQL server here until we have the
+		// locality optimized search working in multi-tenant configurations.
+		disableDefaultSQLServer: true,
 	},
 	{
 		name:       "multiregion-9node-3region-3azs-tenant",
@@ -899,9 +912,12 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "local-mixed-21.2-22.1",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		bootstrapVersion:    roachpb.Version{Major: 21, Minor: 2},
-		binaryVersion:       roachpb.Version{Major: 22, Minor: 1},
-		disableUpgrade:      true,
+		// Test fails when run under the default SQL server. Tracked with
+		// #76378.
+		disableDefaultSQLServer: true,
+		bootstrapVersion:        roachpb.Version{Major: 21, Minor: 2},
+		binaryVersion:           roachpb.Version{Major: 22, Minor: 1},
+		disableUpgrade:          true,
 	},
 	{
 		// 3node-backup is a config that periodically performs a cluster backup,
@@ -1661,6 +1677,7 @@ func (t *logicTest) newCluster(
 			TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(
 				cluster.MakeTestingClusterSettings(), tempStorageDiskLimit,
 			),
+			DisableDefaultSQLServer: t.cfg.useTenant || t.cfg.disableDefaultSQLServer,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
@@ -1780,7 +1797,6 @@ func (t *logicTest) newCluster(
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
-	clusterSettingOverrideArgs := &tenantClusterSettingOverrideArgs{}
 	if cfg.useTenant {
 		t.tenantAddrs = make([]string, cfg.numNodes)
 		for i := 0; i < cfg.numNodes; i++ {
@@ -1798,7 +1814,6 @@ func (t *logicTest) newCluster(
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
 				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
 				Locality:          paramsPerNode[i].Locality,
-				Existing:          i > 0,
 				TracingDefault:    params.ServerArgs.TracingDefault,
 			}
 
@@ -1829,13 +1844,19 @@ func (t *logicTest) newCluster(
 			t.Fatal(err)
 		}
 
+	}
+
+	// If we've created a tenant (either explicitly, or probabilistically and
+	// implicitly) set any necessary cluster settings to override blocked
+	// behavior.
+	clusterSettingOverrideArgs := &tenantClusterSettingOverrideArgs{}
+	if cfg.useTenant || t.cluster.StartedDefaultSQLServer() {
 		for _, opt := range tenantClusterSettingOverrideOpts {
 			opt.apply(clusterSettingOverrideArgs)
 		}
 
+		conn := t.cluster.HostClusterConn()
 		if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
-			conn := t.cluster.ServerConn(0)
-
 			// We reduce the closed timestamp duration on the host tenant so that the
 			// setting override can propagate to the tenant faster.
 			if _, err := conn.Exec(
@@ -1861,7 +1882,6 @@ func (t *logicTest) newCluster(
 		}
 
 		if clusterSettingOverrideArgs.overrideMultiTenantMultiRegionAbstractionsAllowed {
-			conn := t.cluster.ServerConn(0)
 			// Allow secondary tenants to make use of multi-region abstractions if the
 			// configuration indicates as such. As this is a tenant read-only cluster
 			// setting, only the operator is allowed to set it.

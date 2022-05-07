@@ -46,7 +46,15 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// Need to disable the SQL server because this test fails
+				// when run through a tenant (with internal server error).
+				// More investigation is required.
+				DisableDefaultSQLServer: true,
+			},
+		})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)

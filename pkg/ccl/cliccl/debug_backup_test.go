@@ -539,7 +539,13 @@ func TestExportDataAOST(t *testing.T) {
 	ctx := context.Background()
 	dir, cleanFn := testutils.TempDir(t)
 	defer cleanFn()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir, Insecure: true})
+	srv, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			ExternalIODir: dir,
+			Insecure:      true,
+			// Have to disable testing in MT mode until backups with revision
+			// history are supported for SQL servers.
+			DisableDefaultSQLServer: true})
 	defer srv.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -767,7 +773,13 @@ func TestExportDataWithRevisions(t *testing.T) {
 	ctx := context.Background()
 	dir, cleanFn := testutils.TempDir(t)
 	defer cleanFn()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir, Insecure: true})
+	srv, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			ExternalIODir: dir,
+			Insecure:      true,
+			// Have to disable testing in MT mode until backups with revision
+			// history are supported for SQL servers.
+			DisableDefaultSQLServer: true})
 	defer srv.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)

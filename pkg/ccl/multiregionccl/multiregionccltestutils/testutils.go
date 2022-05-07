@@ -78,6 +78,12 @@ func TestingCreateMultiRegionCluster(
 			Knobs:         knobs,
 			ExternalIODir: params.baseDir,
 			UseDatabase:   params.useDatabase,
+			// Disabling this due to failures in the rtt_analysis tests. Ideally
+			// we could disable multi-tenancy just for those tests, but this is
+			// common code to create the MR cluster for all test cases. For
+			// bonus points, the code to re-enable this should also provide more
+			// flexibility in disabling this setting by callers.
+			DisableDefaultSQLServer: true,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
 			},

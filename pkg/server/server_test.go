@@ -139,10 +139,10 @@ func TestHealthCheck(t *testing.T) {
 		},
 	})
 
+	defer s.Stopper().Stop(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Stopper().Stop(context.Background())
 
 	ctx := context.Background()
 

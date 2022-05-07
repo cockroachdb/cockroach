@@ -461,6 +461,9 @@ EXECUTE set_setting('some string')
 #
 # The result differs in 3node-tenant because the
 # kv.range_merge.queue_enabled cluster setting is not set.
+# In all other configurations, and with probabilistic SQL server creation,
+# we need to filter out kv.range_merge.queue_enabled, since it will only
+# be set if a SQL server is not created.
 skipif config 3node-tenant
 query IIT
 SELECT "targetID", "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
@@ -472,10 +475,10 @@ AND info NOT LIKE '%sql.defaults%'
 AND info NOT LIKE '%sql.distsql%'
 AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
+AND info NOT LIKE '%kv.range_merge.queue_enabled%'
 ORDER BY "timestamp", info
 ----
 0  1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
-0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.range_merge.queue_enabled", "Statement": "SET CLUSTER SETTING \"kv.range_merge.queue_enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
 0  1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
 0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
 0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}

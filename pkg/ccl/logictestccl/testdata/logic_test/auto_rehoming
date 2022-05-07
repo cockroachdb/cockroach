@@ -1,4 +1,6 @@
+# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
 # LogicTest: local
+
 
 statement ok
 SET CLUSTER SETTING sql.defaults.experimental_auto_rehoming.enabled = true;
