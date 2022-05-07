@@ -27,13 +27,13 @@ import (
 // It runs the sql query and returns a list of columns names and a list of rows.
 func (sqlExecCtx *Context) RunQuery(
 	ctx context.Context, conn clisqlclient.Conn, fn clisqlclient.QueryFn, showMoreChars bool,
-) ([]string, [][]string, error) {
+) (retCols []string, retRows [][]string, retErr error) {
 	rows, _, err := fn(ctx, conn)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	defer func() { _ = rows.Close() }()
+	defer func() { retErr = errors.CombineErrors(retErr, rows.Close()) }()
 	return sqlRowsToStrings(rows, showMoreChars)
 }
 
