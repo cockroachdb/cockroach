@@ -54,6 +54,7 @@ func (r *sqlRowsMultiResultSet) Close() error {
 	if r.conn.conn.IsClosed() {
 		r.conn.reconnecting = true
 		r.conn.silentClose()
+		return errors.CombineErrors(ErrConnectionClosed, retErr)
 	}
 	return retErr
 }
@@ -63,6 +64,7 @@ func (r *sqlRowsMultiResultSet) Next(values []driver.Value) error {
 	if r.conn.conn.IsClosed() {
 		r.conn.reconnecting = true
 		r.conn.silentClose()
+		return ErrConnectionClosed
 	}
 	rd := r.rows.ResultReader()
 	if !rd.NextRow() {
@@ -140,6 +142,11 @@ func (r *sqlRowsMultiResultSet) NextResultSet() (bool, error) {
 		if err := r.rows.Close(); err != nil {
 			return false, err
 		}
+	}
+	if r.conn.conn.IsClosed() {
+		r.conn.reconnecting = true
+		r.conn.silentClose()
+		return false, ErrConnectionClosed
 	}
 	return next, nil
 }

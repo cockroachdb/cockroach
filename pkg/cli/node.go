@@ -228,6 +228,9 @@ FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (n
 	}
 
 	ctx := context.Background()
+	if err = conn.EnsureConn(ctx); err != nil {
+		return nil, nil, err
+	}
 
 	// TODO(knz): This can use a context deadline instead, now that
 	// query cancellation is supported.

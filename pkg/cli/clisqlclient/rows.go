@@ -49,6 +49,7 @@ func (r *sqlRows) Close() error {
 	if r.conn.conn.IsClosed() {
 		r.conn.reconnecting = true
 		r.conn.silentClose()
+		return ErrConnectionClosed
 	}
 	return nil
 }
@@ -58,6 +59,7 @@ func (r *sqlRows) Next(values []driver.Value) error {
 	if r.conn.conn.IsClosed() {
 		r.conn.reconnecting = true
 		r.conn.silentClose()
+		return ErrConnectionClosed
 	}
 	if !r.rows.Next() {
 		return io.EOF
