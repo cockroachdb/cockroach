@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -405,6 +406,11 @@ type TaskOpts struct {
 	// SpanOpt controls the kind of span that the task will run in.
 	SpanOpt SpanOption
 
+	// Timeout sets a timeout for the task via its context. The timer begins when
+	// the goroutine is spawned, and does not include e.g. time spent waiting for
+	// the semaphore in Sem.
+	Timeout time.Duration
+
 	// If set, Sem is used as a semaphore limiting the concurrency (each task has
 	// weight 1).
 	//
@@ -491,7 +497,14 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 			defer alloc.Release()
 		}
 
-		f(ctx)
+		// Run f with a timeout if requested. We ignore the error since f is
+		// infallible.
+		if opt.Timeout > 0 {
+			_ = contextutil.RunWithTimeout(ctx, opt.TaskName, opt.Timeout,
+				func(ctx context.Context) error { f(ctx); return nil })
+		} else {
+			f(ctx)
+		}
 	}()
 	return nil
 }
