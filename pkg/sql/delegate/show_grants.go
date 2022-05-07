@@ -98,15 +98,30 @@ FROM "".information_schema.type_privileges`
 		currDB := d.evalCtx.SessionData().Database
 
 		for _, schema := range n.Targets.Schemas {
-			_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &schema)
-			if err != nil {
-				return nil, err
+			if schema.SchemaName == tree.Name('*') {
+				allSchemas, err := d.catalog.GetAllSchemaNamesForDB(d.ctx, schema.CatalogName.String())
+				if err != nil {
+					return nil, err
+				}
+
+				for _, sc := range allSchemas {
+					_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &sc)
+					if err != nil {
+						return nil, err
+					}
+					params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(sc.Catalog()), lexbase.EscapeSQLString(sc.Schema())))
+				}
+			} else {
+				_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &schema)
+				if err != nil {
+					return nil, err
+				}
+				dbName := currDB
+				if schema.ExplicitCatalog {
+					dbName = schema.Catalog()
+				}
+				params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(dbName), lexbase.EscapeSQLString(schema.Schema())))
 			}
-			dbName := currDB
-			if schema.ExplicitCatalog {
-				dbName = schema.Catalog()
-			}
-			params = append(params, fmt.Sprintf("(%s,%s)", lexbase.EscapeSQLString(dbName), lexbase.EscapeSQLString(schema.Schema())))
 		}
 
 		fmt.Fprint(&source, schemaPrivQuery)

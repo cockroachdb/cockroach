@@ -112,6 +112,24 @@ func (p *planner) ResolveTargetObject(
 	return prefix.Database, prefix.Schema, namePrefix, err
 }
 
+// GetSchemasForDB gets all the schemas for a database.
+func (p *planner) GetSchemasForDB(
+	ctx context.Context, dbName string,
+) (map[descpb.ID]string, error) {
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
+		tree.DatabaseLookupFlags{AvoidLeased: true})
+	if err != nil {
+		return nil, err
+	}
+
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.Txn(), dbDesc)
+	if err != nil {
+		return nil, err
+	}
+
+	return schemas, nil
+}
+
 // SchemaExists implements the eval.DatabaseCatalog interface.
 func (p *planner) SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error) {
 	found, _, err = p.LookupSchema(ctx, dbName, scName)
