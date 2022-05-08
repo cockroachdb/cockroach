@@ -342,18 +342,24 @@ func (p *PrivilegeDescriptor) Revoke(
 // TODO(jackcwu): delete this function once the GRANT privilege is finally removed
 func (p *PrivilegeDescriptor) GrantPrivilegeToGrantOptions(
 	user username.SQLUsername, isGrant bool,
-) {
+) bool {
+	var before, after uint32
 	if isGrant {
 		userPriv := p.FindOrCreateUser(user)
+		before = userPriv.WithGrantOption
 		userPriv.WithGrantOption = userPriv.Privileges
+		after = userPriv.WithGrantOption
 	} else {
 		userPriv, ok := p.FindUser(user)
 		if !ok || userPriv.Privileges == 0 {
 			// Removing privileges from a user without privileges is a no-op.
-			return
+			return false
 		}
+		before = userPriv.WithGrantOption
 		userPriv.WithGrantOption = 0
+		after = userPriv.WithGrantOption
 	}
+	return before != after
 }
 
 // ValidateSuperuserPrivileges ensures that superusers have exactly the maximum
