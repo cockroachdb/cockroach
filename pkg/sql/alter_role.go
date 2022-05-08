@@ -195,7 +195,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	if hasPasswordOpt {
 		// Updating PASSWORD is a special case since PASSWORD lives in system.users
 		// while the rest of the role options lives in system.role_options.
-		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		rowAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
 			opName,
 			params.p.txn,
@@ -206,7 +206,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) && rowAffected > 0 {
 			// Bump user table versions to force a refresh of AuthInfo cache.
 			if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
 				return err
@@ -222,6 +222,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return err
 	}
 
+	rowsAffected := 0
 	for stmt, value := range stmts {
 		qargs := []interface{}{n.roleName}
 
@@ -240,7 +241,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			}
 		}
 
-		_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
@@ -251,6 +252,8 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
+
+		rowsAffected += affected
 	}
 
 	optStrs := make([]string, len(n.roleOptions))
@@ -258,7 +261,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		optStrs[i] = n.roleOptions[i].String()
 	}
 
-	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) && rowsAffected > 0 {
 		// Bump role_options table versions to force a refresh of AuthInfo cache.
 		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 			return err
@@ -483,13 +486,15 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		return upsertOrDeleteFunc(nil)
 	}
 
-	hasOldSettings, newSettings, err := n.makeNewSettings(params, opName, roleName)
+	oldSettings, newSettings, err := n.makeNewSettings(params, opName, roleName)
 	if err != nil {
 		return err
 	}
 
 	if n.setVarKind == resetSingleVar {
-		if !hasOldSettings {
+		if oldSettings == nil || deepEqualIgnoringOrders(oldSettings, newSettings) {
+			// If there is no old settings at all, or reset a setting that's not previously set (i.e. old setting is new
+			// setting), then we can exist early.
 			return nil
 		}
 		return upsertOrDeleteFunc(newSettings)
@@ -503,7 +508,33 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 
 	newSetting := fmt.Sprintf("%s=%s", n.varName, strVal)
 	newSettings = append(newSettings, newSetting)
+	if deepEqualIgnoringOrders(oldSettings, newSettings) {
+		// If the resulting new setting for this role is equal to the old settings, then we can exist early.
+		return nil
+	}
 	return upsertOrDeleteFunc(newSettings)
+}
+
+// deepEqualIgnoringOrders returns true if slice1 and slice2 contain exactly the same strings ignoring their ordering.
+// E.g. slice1 = ["a", "b", "b"], slice2 = ["b", "a", "b"], return = true
+func deepEqualIgnoringOrders(s1, s2 []string) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+
+	ss := make(map[string]int)
+	add := func(str string, cnt int) {
+		if ss[str] += cnt; ss[str] == 0 {
+			delete(ss, str)
+		}
+	}
+	for _, s := range s1 {
+		add(s, 1)
+	}
+	for _, s := range s2 {
+		add(s, -1)
+	}
+	return len(ss) == 0
 }
 
 // getRoleName resolves the roleName and performs additional validation
@@ -558,9 +589,18 @@ func (n *alterRoleSetNode) getRoleName(
 
 // makeNewSettings first loads the existing settings for the (role, db), then
 // returns a newSettings list with any occurrence of varName removed.
+//
+// E.g. Suppose there is an existing row in `system.database_role_settings`:
+//   (24, max, {timezone=America/New_York, use_declarative_schema_changer=off, statement_timeout=10s})
+// and
+//   n.varName = 'use_declarative_schema_changer',
+// then the return of this function will be
+//   1. oldSettings = {timezone=America/New_York, use_declarative_schema_changer=off, statement_timeout=10s}
+//   2. newSettings = {timezone=America/New_York, statement_timeout=10s}
+//   3. err = nil
 func (n *alterRoleSetNode) makeNewSettings(
 	params runParams, opName string, roleName username.SQLUsername,
-) (hasOldSettings bool, newSettings []string, err error) {
+) (oldSettings []string, newSettings []string, err error) {
 	var selectQuery = fmt.Sprintf(
 		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,
 		sessioninit.DatabaseRoleSettingsTableName,
@@ -575,20 +615,19 @@ func (n *alterRoleSetNode) makeNewSettings(
 		roleName,
 	)
 	if err != nil {
-		return false, nil, err
+		return nil, nil, err
 	}
-	var oldSettings *tree.DArray
 	if datums != nil {
-		oldSettings = tree.MustBeDArray(datums[0])
-		for _, s := range oldSettings.Array {
+		for _, s := range tree.MustBeDArray(datums[0]).Array {
 			oldSetting := string(tree.MustBeDString(s))
+			oldSettings = append(oldSettings, oldSetting)
 			keyVal := strings.SplitN(oldSetting, "=", 2)
 			if !strings.EqualFold(n.varName, keyVal[0]) {
 				newSettings = append(newSettings, oldSetting)
 			}
 		}
 	}
-	return oldSettings != nil, newSettings, nil
+	return oldSettings, newSettings, nil
 }
 
 // getSessionVarVal evaluates typedValues to get a string value that can

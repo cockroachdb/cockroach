@@ -214,3 +214,42 @@ database_id  role_name  settings
 # Regression test for the special "tracing" variable.
 query error parameter \"tracing\" cannot be changed
 ALTER ROLE ALL SET tracing = 'off'
+
+# Test that no-op alter role set command is actually no-op (i.e. does not perform schema change)
+subtest no_op_alter_role_set
+
+statement ok
+CREATE user roach
+
+statement ok
+ALTER ROLE roach SET timezone = 'America/New_York'
+
+statement ok
+ALTER ROLE roach SET use_declarative_schema_changer = 'off'
+
+statement ok
+ALTER ROLE roach SET statement_timeout = '10s'
+
+# Remember the current table version for `system.database_role_settings`.
+let $database_role_setttings_version
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' FROM system.descriptor WHERE id = 'system.public.database_role_settings'::REGCLASS
+
+# Issue a bunch no-op alter role set commands
+statement ok
+ALTER ROLE roach SET timezone = 'America/New_York'
+
+statement ok
+ALTER ROLE roach SET use_declarative_schema_changer = 'off'
+
+statement ok
+ALTER ROLE roach SET statement_timeout = '10s'
+
+statement ok
+ALTER ROLE roach RESET search_path
+
+# Check that the above no-op 'ALTER ROLE ... SET/RESET ...' commands did not incur schema change on
+# the 'database_role_settings' table by asserting its version remains unchanged.
+query B
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' = $database_role_setttings_version::STRING FROM system.descriptor WHERE id = 'system.public.database_role_settings'::REGCLASS
+----
+true
