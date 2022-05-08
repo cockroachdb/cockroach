@@ -248,7 +248,7 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			}
 			// Randomize the input order, as it's not supposed to matter.
 			shuffle.Shuffle(test.slice)
-			test.slice.OptimizeReplicaOrder(test.node, latencyFn)
+			test.slice.OptimizeReplicaOrder(test.node, latencyFn, nil)
 			var sortedNodes []roachpb.NodeID
 			sortedNodes = append(sortedNodes, test.slice[0].NodeID)
 			for i := 1; i < len(test.slice); i++ {

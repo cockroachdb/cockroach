@@ -313,6 +313,11 @@ type DistSender struct {
 	nodeDialer      *nodedialer.Dialer
 	rpcRetryOptions retry.Options
 	asyncSenderSem  *quotapool.IntPool
+	// IsAvailable returns true if a node is available.
+	//
+	// TODO(erikgrinaker): Should be given via DistSenderOptions, but has
+	// dependency cycle with NodeLiveness which is constructed later.
+	IsAvailable func(roachpb.NodeID) bool
 	// clusterID is the logical cluster ID used to verify access to enterprise features.
 	// It is copied out of the rpcContext at construction time and used in
 	// testing.
@@ -1950,14 +1955,15 @@ func (ds *DistSender) sendToReplicas(
 	var leaseholderFirst bool
 	switch ba.RoutingPolicy {
 	case roachpb.RoutingPolicy_LEASEHOLDER:
-		// First order by latency, then move the leaseholder to the front of the
-		// list, if it is known.
+		// First, order by latency.
 		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
+			replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc, ds.IsAvailable)
 		}
 
+		// If the leaseholder is known and available, then move the leaseholder to
+		// the front of the list.
 		idx := -1
-		if leaseholder != nil {
+		if leaseholder != nil && ds.IsAvailable(leaseholder.NodeID) {
 			idx = replicas.Find(leaseholder.ReplicaID)
 		}
 		if idx != -1 {
@@ -1972,7 +1978,7 @@ func (ds *DistSender) sendToReplicas(
 	case roachpb.RoutingPolicy_NEAREST:
 		// Order by latency.
 		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
+		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc, ds.IsAvailable)
 
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)

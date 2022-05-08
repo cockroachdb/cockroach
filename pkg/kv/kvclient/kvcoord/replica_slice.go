@@ -199,7 +199,7 @@ type LatencyFunc func(string) (time.Duration, bool)
 // leaseholder is known by the caller, the caller will move it to the
 // front if appropriate.
 func (rs ReplicaSlice) OptimizeReplicaOrder(
-	nodeDesc *roachpb.NodeDescriptor, latencyFn LatencyFunc,
+	nodeDesc *roachpb.NodeDescriptor, latencyFn LatencyFunc, isAvailable func(roachpb.NodeID) bool,
 ) {
 	// If we don't know which node we're on, send the RPCs randomly.
 	if nodeDesc == nil {
@@ -207,12 +207,24 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		return
 	}
 
-	// Sort replicas by latency and then attribute affinity.
+	// Sort replicas by availability, latency, and then attribute affinity.
 	sort.Slice(rs, func(i, j int) bool {
 		// Replicas on the same node have the same latency.
 		if rs[i].NodeID == rs[j].NodeID {
 			return false // i == j
 		}
+
+		// Available nodes sort before unavailable ones. This is checked even
+		// for the local node, because its heartbeats may be failing e.g. due
+		// to a stalled disk.
+		if isAvailable != nil {
+			avI := isAvailable(rs[i].NodeID)
+			avJ := isAvailable(rs[j].NodeID)
+			if avI != avJ {
+				return avI
+			}
+		}
+
 		// Replicas on the local node sort first.
 		if rs[i].NodeID == nodeDesc.NodeID {
 			return true // i < j

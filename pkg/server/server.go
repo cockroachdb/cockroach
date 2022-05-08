@@ -419,6 +419,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
+	distSender.IsAvailable = nodeLiveness.IsAvailable
 
 	nodeLivenessFn := storepool.MakeStorePoolNodeLivenessFunc(nodeLiveness)
 	if nodeLivenessKnobs, ok := cfg.TestingKnobs.NodeLiveness.(kvserver.NodeLivenessTestingKnobs); ok &&
