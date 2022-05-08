@@ -739,7 +739,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// numbers) that we should read. If there exists a value in the intent
 		// history that has a sequence number equal to or less than the read
 		// sequence, read that value.
-		if value, found := p.getFromIntentHistory(); found {
+		if intentValueRaw, found := p.getFromIntentHistory(); found {
 			// If we're adding a value due to a previous intent, we want to populate
 			// the timestamp as of current metaTimestamp. Note that this may be
 			// controversial as this maybe be neither the write timestamp when this
@@ -751,7 +751,11 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// addAndAdvance to take an MVCCKey explicitly.
 			p.curUnsafeKey.Timestamp = metaTS
 			p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], p.curUnsafeKey)
-			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.keyBuf, value)
+			p.curUnsafeValue, p.err = DecodeMVCCValue(intentValueRaw)
+			if p.err != nil {
+				return false
+			}
+			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.keyBuf, p.curUnsafeValue.Value.RawBytes)
 		}
 		// 13. If no value in the intent history has a sequence number equal to
 		// or less than the read, we must ignore the intents laid down by the
