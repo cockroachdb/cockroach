@@ -1171,24 +1171,27 @@ func replayTransactionalWrite(
 	txn *roachpb.Transaction,
 	valueFn func(optionalValue) (roachpb.Value, error),
 ) error {
-	var found bool
-	var writtenValue []byte
+	var writtenValue optionalValue
 	var err error
 	if txn.Sequence == meta.Txn.Sequence {
 		// This is a special case. This is when the intent hasn't made it
 		// to the intent history yet. We must now assert the value written
 		// in the intent to the value we're trying to write.
-		exVal, _, err := mvccGet(ctx, iter, key, timestamp, MVCCGetOptions{Txn: txn, Tombstones: true})
+		writtenValue, _, err = mvccGet(ctx, iter, key, timestamp, MVCCGetOptions{Txn: txn, Tombstones: true})
 		if err != nil {
 			return err
 		}
-		writtenValue = exVal.RawBytes
-		found = true
 	} else {
 		// Get the value from the intent history.
-		writtenValue, found = meta.GetIntentValue(txn.Sequence)
+		if intentValRaw, ok := meta.GetIntentValue(txn.Sequence); ok {
+			intentVal, err := DecodeMVCCValue(intentValRaw)
+			if err != nil {
+				return err
+			}
+			writtenValue = makeOptionalValue(intentVal.Value)
+		}
 	}
-	if !found {
+	if !writtenValue.exists {
 		// NB: This error may be due to a batched `DelRange` operation that, upon being replayed, finds a new key to delete.
 		// See issue #71236 for more explanation.
 		err := errors.AssertionFailedf("transaction %s with sequence %d missing an intent with lower sequence %d",
@@ -1215,9 +1218,11 @@ func replayTransactionalWrite(
 			// If the previous value was found in the IntentHistory,
 			// simply apply the value function to the historic value
 			// to get the would-be value.
-			prevVal := prevIntent.Value
-
-			exVal = makeOptionalValue(roachpb.Value{RawBytes: prevVal})
+			prevIntentVal, err := DecodeMVCCValue(prevIntent.Value)
+			if err != nil {
+				return err
+			}
+			exVal = makeOptionalValue(prevIntentVal.Value)
 		} else {
 			// If the previous value at the key wasn't written by this
 			// transaction, or it was hidden by a rolled back seqnum, we look at
@@ -1239,9 +1244,9 @@ func replayTransactionalWrite(
 	// To ensure the transaction is idempotent, we must assert that the
 	// calculated value on this replay is the same as the one we've previously
 	// written.
-	if !bytes.Equal(value.RawBytes, writtenValue) {
+	if !bytes.Equal(value.RawBytes, writtenValue.RawBytes) {
 		return errors.AssertionFailedf("transaction %s with sequence %d has a different value %+v after recomputing from what was written: %+v",
-			txn.ID, txn.Sequence, value.RawBytes, writtenValue)
+			txn.ID, txn.Sequence, value.RawBytes, writtenValue.RawBytes)
 	}
 	return nil
 }
@@ -1402,6 +1407,8 @@ func mvccPutInternal(
 
 			// We're overwriting the intent that was present at this key, before we do
 			// that though - we must record the older value in the IntentHistory.
+			oldVersionKey := metaKey
+			oldVersionKey.Timestamp = metaTimestamp
 
 			// But where to find the older value? There are 4 cases:
 			// - last write inside txn, same epoch, seqnum of last write is not
@@ -1422,23 +1429,36 @@ func mvccPutInternal(
 			// rolled back, either due to transaction retries or transaction savepoint
 			// rollbacks.)
 			var exVal optionalValue
-			// Set to true when the current provisional value is not ignored due to
-			// a txn restart or a savepoint rollback.
-			var curProvNotIgnored bool
+			// Set when the current provisional value is not ignored due to a txn
+			// restart or a savepoint rollback. Represents an encoded MVCCValue.
+			var curIntentValRaw []byte
 			if txn.Epoch == meta.Txn.Epoch /* last write inside txn */ {
 				if !enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, txn.IgnoredSeqNums) {
-					// Seqnum of last write is not ignored. Retrieve the value
-					// using a consistent read.
-					exVal, _, err = mvccGet(ctx, iter, key, readTimestamp, MVCCGetOptions{Txn: txn, Tombstones: true})
+					// Seqnum of last write is not ignored. Retrieve the value.
+					iter.SeekGE(oldVersionKey)
+					if valid, err := iter.Valid(); err != nil {
+						return err
+					} else if !valid && !iter.UnsafeKey().Equal(oldVersionKey) {
+						return errors.Errorf("existing intent value missing: %s", oldVersionKey)
+					}
+
+					// NOTE: we use Value instead of UnsafeValue so that we can move the
+					// iterator below without invalidating this byte slice.
+					curIntentValRaw = iter.Value()
+					curIntentVal, err := DecodeMVCCValue(curIntentValRaw)
 					if err != nil {
 						return err
 					}
-					curProvNotIgnored = true
+					exVal = makeOptionalValue(curIntentVal.Value)
 				} else {
 					// Seqnum of last write was ignored. Try retrieving the value from the history.
-					prevIntent, prevValueWritten := meta.GetPrevIntentSeq(txn.Sequence, txn.IgnoredSeqNums)
-					if prevValueWritten {
-						exVal = makeOptionalValue(roachpb.Value{RawBytes: prevIntent.Value})
+					prevIntent, prevIntentOk := meta.GetPrevIntentSeq(txn.Sequence, txn.IgnoredSeqNums)
+					if prevIntentOk {
+						prevIntentVal, err := DecodeMVCCValue(prevIntent.Value)
+						if err != nil {
+							return err
+						}
+						exVal = makeOptionalValue(prevIntentVal.Value)
 					}
 				}
 			}
@@ -1472,33 +1492,33 @@ func mvccPutInternal(
 			// delete the old intent, taking care with MVCC stats.
 			logicalOp = MVCCUpdateIntentOpType
 			if metaTimestamp.Less(writeTimestamp) {
-				versionKey := metaKey
-				versionKey.Timestamp = metaTimestamp
-
 				{
 					// If the older write intent has a version underneath it, we need to
 					// read its size because its GCBytesAge contribution may change as we
 					// move the intent above it. A similar phenomenon occurs in
 					// MVCCResolveWriteIntent.
-					_, prevUnsafeVal, haveNextVersion, err := unsafeNextVersion(iter, versionKey)
-					if err != nil {
+					prevKey := oldVersionKey.Next()
+					iter.SeekGE(prevKey)
+					if valid, err := iter.Valid(); err != nil {
 						return err
-					}
-					if haveNextVersion {
-						prevVal, ok, err := tryDecodeSimpleMVCCValue(prevUnsafeVal)
-						if !ok && err == nil {
-							prevVal, err = decodeExtendedMVCCValue(prevUnsafeVal)
+					} else if valid && iter.UnsafeKey().Key.Equal(prevKey.Key) {
+						prevUnsafeKey := iter.UnsafeKey()
+						if !prevUnsafeKey.IsValue() {
+							return errors.Errorf("expected an MVCC value key: %s", prevUnsafeKey)
 						}
+
+						prevValRaw := iter.UnsafeValue()
+						prevVal, err := DecodeMVCCValue(prevValRaw)
 						if err != nil {
 							return err
 						}
 						prevIsValue = prevVal.Value.IsPresent()
-						prevValSize = int64(len(prevUnsafeVal))
+						prevValSize = int64(len(prevValRaw))
 					}
 					iter = nil // prevent accidental use below
 				}
 
-				if err := writer.ClearMVCC(versionKey); err != nil {
+				if err := writer.ClearMVCC(oldVersionKey); err != nil {
 					return err
 				}
 			} else if writeTimestamp.Less(metaTimestamp) {
@@ -1529,10 +1549,10 @@ func mvccPutInternal(
 				// history if the current sequence number is not ignored. There's no
 				// reason to add past committed values or a value already in the intent
 				// history back into it.
-				if curProvNotIgnored {
-					prevIntentValBytes := exVal.RawBytes
+				if curIntentValRaw != nil {
+					prevIntentValRaw := curIntentValRaw
 					prevIntentSequence := meta.Txn.Sequence
-					buf.newMeta.AddToIntentHistory(prevIntentSequence, prevIntentValBytes)
+					buf.newMeta.AddToIntentHistory(prevIntentSequence, prevIntentValRaw)
 				}
 			} else {
 				buf.newMeta.IntentHistory = nil
@@ -2674,24 +2694,6 @@ func MVCCResolveWriteIntent(
 	// Using defer would be more convenient, but it is measurably slower.
 	iterAndBuf.Cleanup()
 	return ok, err
-}
-
-// unsafeNextVersion positions the iterator at the successor to latestKey. If this value
-// exists and is a version of the same key, returns the UnsafeKey() and UnsafeValue() of that
-// key-value pair along with `true`.
-func unsafeNextVersion(iter MVCCIterator, latestKey MVCCKey) (MVCCKey, []byte, bool, error) {
-	// Compute the next possible mvcc value for this key.
-	nextKey := latestKey.Next()
-	iter.SeekGE(nextKey)
-
-	if ok, err := iter.Valid(); err != nil || !ok || !iter.UnsafeKey().Key.Equal(latestKey.Key) {
-		return MVCCKey{}, nil, false /* never ok */, err
-	}
-	unsafeKey := iter.UnsafeKey()
-	if !unsafeKey.IsValue() {
-		return MVCCKey{}, nil, false, errors.Errorf("expected an MVCC value key: %s", unsafeKey)
-	}
-	return unsafeKey, iter.UnsafeValue(), true, nil
 }
 
 // iterForKeyVersions provides a subset of the functionality of MVCCIterator.
