@@ -30,22 +30,6 @@ func TestInterval_IsUncertain(t *testing.T) {
 		localLim, globalLim, valueTs, localTs hlc.Timestamp
 		exp                                   bool
 	}{
-		// Without local timestamp. localLim is ignored.
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(5), localTs: emptyTs, exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(10), localTs: emptyTs, exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(15), localTs: emptyTs, exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(20), localTs: emptyTs, exp: true},
-		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(25), localTs: emptyTs, exp: false},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(5), localTs: emptyTs, exp: true},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(10), localTs: emptyTs, exp: true},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(15), localTs: emptyTs, exp: true},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(20), localTs: emptyTs, exp: true},
-		{localLim: makeTs(10), globalLim: makeTs(20), valueTs: makeTs(25), localTs: emptyTs, exp: false},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(5), localTs: emptyTs, exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(10), localTs: emptyTs, exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(15), localTs: emptyTs, exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(20), localTs: emptyTs, exp: true},
-		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(25), localTs: emptyTs, exp: false},
 		// With local timestamp equal to value timestamp.
 		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(5), localTs: makeTs(5), exp: true},
 		{localLim: emptyTs, globalLim: makeTs(20), valueTs: makeTs(10), localTs: makeTs(10), exp: true},
@@ -94,7 +78,6 @@ func TestInterval_IsUncertain(t *testing.T) {
 		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(15), exp: false},
 		{localLim: makeTs(20), globalLim: makeTs(20), valueTs: makeTs(25), localTs: makeTs(20), exp: false},
 		// Empty uncertainty intervals.
-		{localLim: emptyTs, globalLim: emptyTs, valueTs: makeTs(10), localTs: emptyTs, exp: false},
 		{localLim: emptyTs, globalLim: emptyTs, valueTs: makeTs(10), localTs: makeTs(10), exp: false},
 		{localLim: emptyTs, globalLim: emptyTs, valueTs: makeTs(10), localTs: makeTs(5), exp: false},
 	}
