@@ -5279,10 +5279,10 @@ def go_deps():
         name = "com_github_maruel_panicparse_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/maruel/panicparse/v2",
-        sha256 = "973a277ad8d81ac3b1381947c268768f17d6b10eac04bff7e60b2116d02b7208",
-        strip_prefix = "github.com/maruel/panicparse/v2@v2.2.1",
+        sha256 = "a51ff19f83c9a1e468b5d722d0857eb468d0f9baa29365e700c2e6ec24bd47a7",
+        strip_prefix = "github.com/cockroachdb/panicparse/v2@v2.0.0-20211103220158-604c82a44f1e",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/maruel/panicparse/v2/com_github_maruel_panicparse_v2-v2.2.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/panicparse/v2/com_github_cockroachdb_panicparse_v2-v2.0.0-20211103220158-604c82a44f1e.zip",
         ],
     )
     go_repository(
@@ -5369,10 +5369,10 @@ def go_deps():
         name = "com_github_mattn_go_colorable",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mattn/go-colorable",
-        sha256 = "c4637499409a4081fbbd7ea0640aa0af30c0e06a70aa1b207780b0251650d8cd",
-        strip_prefix = "github.com/mattn/go-colorable@v0.1.12",
+        sha256 = "2a78bab4fa8a66b3ae48fcd50fc5970db4011a8cee0a3ad7c13da0fb624c95e5",
+        strip_prefix = "github.com/mattn/go-colorable@v0.1.11",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-colorable/com_github_mattn_go_colorable-v0.1.12.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-colorable/com_github_mattn_go_colorable-v0.1.11.zip",
         ],
     )
     go_repository(
