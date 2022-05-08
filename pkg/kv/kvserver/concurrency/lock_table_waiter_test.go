@@ -930,7 +930,8 @@ func TestContentionEventTracer(t *testing.T) {
 	tr := tracing.NewTracer()
 	ctx, sp := tr.StartSpanCtx(context.Background(), "foo", tracing.WithRecording(tracing.RecordingVerbose))
 	defer sp.Finish()
-	clock := hlc.NewClock(hlc.UnixNano, 0 /* maxOffset */)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, 0 /* maxOffset */)
 
 	var events []*roachpb.ContentionEvent
 
@@ -947,6 +948,8 @@ func TestContentionEventTracer(t *testing.T) {
 	require.Zero(t, h.tag.mu.lockWait)
 	require.NotZero(t, h.tag.mu.waitStart)
 	require.Empty(t, events)
+
+	manual.Increment(100)
 	rec := sp.GetRecording(tracing.RecordingVerbose)
 	require.Contains(t, rec[0].Tags, tagNumLocks)
 	require.Equal(t, "1", rec[0].Tags[tagNumLocks])
@@ -958,6 +961,7 @@ func TestContentionEventTracer(t *testing.T) {
 	// Another event for the same txn/key should not mutate
 	// or emitLocked an event.
 	prevNumLocks := h.tag.mu.numLocks
+	manual.Increment(100)
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("a"),
@@ -967,6 +971,7 @@ func TestContentionEventTracer(t *testing.T) {
 	require.Zero(t, h.tag.mu.lockWait)
 	require.Equal(t, prevNumLocks, h.tag.mu.numLocks)
 
+	manual.Increment(100)
 	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("b"),
@@ -978,21 +983,27 @@ func TestContentionEventTracer(t *testing.T) {
 	require.Equal(t, roachpb.Key("a"), events[0].Key)
 	require.NotZero(t, events[0].Duration)
 
+	manual.Increment(100)
 	h.notify(ctx, waitingState{kind: doneWaiting})
 	require.NotZero(t, h.tag.mu.lockWait)
 	require.Len(t, events, 2)
 
 	lockWaitBefore := h.tag.mu.lockWait
+	manual.Increment(100)
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("b"),
 		txn:  &txn.TxnMeta,
 	})
+
+	manual.Increment(100)
 	h.notify(ctx, waitingState{
 		kind: doneWaiting,
 	})
 	require.Len(t, events, 3)
 	require.Less(t, lockWaitBefore, h.tag.mu.lockWait)
+
+	manual.Increment(100)
 	rec = sp.GetRecording(tracing.RecordingVerbose)
 	require.Equal(t, "3", rec[0].Tags[tagNumLocks])
 	require.Contains(t, rec[0].Tags, tagWaited)
