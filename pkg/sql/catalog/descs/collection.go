@@ -240,6 +240,7 @@ func (tc *Collection) WriteDescToBatch(
 	if kvTrace {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, proto)
 	}
+
 	b.Put(descKey, proto)
 	return nil
 }
