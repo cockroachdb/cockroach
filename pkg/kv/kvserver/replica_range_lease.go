@@ -425,11 +425,13 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 						}
 					}
 				}
-				// Set error for propagation to all waiters below.
+				// Set error for propagation to all waiters below. Don't include the
+				// previous lease, which we know isn't valid. In particular, if it was
+				// ours but we failed to reacquire it (e.g. because our heartbeat failed
+				// due to a stalled disk) then we don't want DistSender to retry us.
 				if err != nil {
-					// TODO(bdarnell): is status.Lease really what we want to put in the NotLeaseHolderError here?
 					pErr = roachpb.NewError(newNotLeaseHolderError(
-						status.Lease, p.repl.store.StoreID(), p.repl.Desc(),
+						roachpb.Lease{}, p.repl.store.StoreID(), p.repl.Desc(),
 						fmt.Sprintf("failed to manipulate liveness record: %s", err)))
 				}
 			}
