@@ -52,6 +52,12 @@ type Interval struct {
 // timestamps is uncertain to a reader with a ReadTimestamp below the value's
 // version timestamp and with the specified uncertainty interval.
 func (in Interval) IsUncertain(valueTs hlc.Timestamp, localTs hlc.ClockTimestamp) bool {
+	if valueTs.IsEmpty() {
+		panic("unexpected empty value timestamp")
+	}
+	if localTs.IsEmpty() {
+		panic("unexpected empty local timestamp")
+	}
 	if !in.LocalLimit.IsEmpty() && in.LocalLimit.Less(localTs) {
 		// The reader has an observed timestamp that precedes the local timestamp of
 		// this value. There is no uncertainty as the reader transaction must have
