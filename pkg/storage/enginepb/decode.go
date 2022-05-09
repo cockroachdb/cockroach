@@ -25,6 +25,9 @@ import (
 // code out from abstract interfaces -- See #30114 and #30001.
 
 // SplitMVCCKey returns the key and timestamp components of an encoded MVCC key.
+// This function is similar to storage.DecodeEngineKey.
+// TODO(sumeer): remove SplitMVCCKey. It requires moving EngineKey into
+// enginepb.
 func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 	if len(mvccKey) == 0 {
 		return nil, nil, false

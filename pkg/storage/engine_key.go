@@ -196,9 +196,9 @@ func (k EngineKey) Validate() error {
 	return nil
 }
 
-// DecodeEngineKey decodes the given bytes as an EngineKey. This function is
-// similar to enginepb.SplitMVCCKey.
-// TODO(sumeer): consider removing SplitMVCCKey.
+// DecodeEngineKey decodes the given bytes as an EngineKey. If the caller
+// already knows that the key is an MVCCKey, the Version returned is the
+// encoded timestamp.
 func DecodeEngineKey(b []byte) (key EngineKey, ok bool) {
 	if len(b) == 0 {
 		return EngineKey{}, false

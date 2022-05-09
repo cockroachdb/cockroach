@@ -76,14 +76,7 @@ type SimpleMVCCIterator interface {
 
 // IteratorStats is returned from {MVCCIterator,EngineIterator}.Stats.
 type IteratorStats struct {
-	// TODO(sumeer): populate this stat that was inherited from RocksDB, which
-	// counts the number of deletes or single deletes skipped over during
-	// iteration. It may be better to replace this with the number of Pebble
-	// key-values encountered, which would encompass Pebble versions that were
-	// explicitly deleted and those that were obsoleted due to newer Pebble
-	// versions.
-	InternalDeleteSkippedCount int
-	TimeBoundNumSSTs           int
+	TimeBoundNumSSTs int
 
 	// Iteration stats. We directly expose pebble.IteratorStats. Callers
 	// may want to aggregate and interpret these in the following manner:
