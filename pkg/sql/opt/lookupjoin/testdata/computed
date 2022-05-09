@@ -105,16 +105,18 @@ input projections:
   v_eq = a + 10
   lookup_join_const_col_@7 = 1
 
-# TODO(mgartner): We should be able to generate a lookup join constraint by
-# projecting an expression for v.
 lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
 x = a AND y IN (1, 2)
 ----
-lookup join not possible
+input projections:
+  v_eq = a + 10
+lookup expression:
+  ((v_eq = v) AND (a = x)) AND (y IN (1, 2))
 
-# TODO(mgartner): We should be able to generate a lookup join constraint by
-# projecting an expression for v.
 lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
 x = a AND y > 0
 ----
-lookup join not possible
+input projections:
+  v_eq = a + 10
+lookup expression:
+  ((v_eq = v) AND (a = x)) AND (y > 0)

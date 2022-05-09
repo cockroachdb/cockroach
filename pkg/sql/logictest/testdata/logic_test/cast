@@ -1223,7 +1223,7 @@ statement ok
 CREATE TABLE t66067_a (
   a INT,
   c CHAR(26),
-  CONSTRAINT c UNIQUE (c)
+  INDEX (c, a)
 );
 
 statement ok

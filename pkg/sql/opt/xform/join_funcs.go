@@ -412,8 +412,13 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(lookupConstraint.RightSideCols.ToSet())
 
 		// Add input columns and lookup expression columns, since these will be
-		// needed for all join types and cases.
-		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols()
+		// needed for all join types and cases. Exclude synthesized projection
+		// columns.
+		var projectionCols opt.ColSet
+		for i := range lookupConstraint.InputProjections {
+			projectionCols.Add(lookupConstraint.InputProjections[i].Col)
+		}
+		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols().Difference(projectionCols)
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
 		// At this point the filter may have been reduced by partial index
@@ -1191,6 +1196,17 @@ func (c *CustomFuncs) CreateLocalityOptimizedLookupJoinPrivate(
 	newPrivate.RemoteLookupExpr = remoteLookupExpr
 	newPrivate.LocalityOptimized = true
 	return &newPrivate
+}
+
+// CreateLocalityOptimizedLookupJoinPrivateIncludingCols is similar to
+// CreateLocalityOptimizedLookupJoinPrivate. The new lookup join private
+// contains both the columns in the given private and the given columns.
+func (c *CustomFuncs) CreateLocalityOptimizedLookupJoinPrivateIncludingCols(
+	lookupExpr, remoteLookupExpr memo.FiltersExpr, private *memo.LookupJoinPrivate, cols opt.ColSet,
+) *memo.LookupJoinPrivate {
+	newPrivate := c.CreateLocalityOptimizedLookupJoinPrivate(lookupExpr, remoteLookupExpr, private)
+	newPrivate.Cols.UnionWith(cols)
+	return newPrivate
 }
 
 // GetLocalityOptimizedLookupJoinExprs returns the local and remote lookup
