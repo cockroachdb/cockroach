@@ -28,6 +28,7 @@ import (
 // engine and then validating the state of the iterator as it iterates that
 // data.
 func TestGCIterator(t *testing.T) {
+	storage.SkipIfSimpleValueEncodingDisabled(t)
 	// dataItem represents a version in the storage engine and optionally a
 	// corresponding transaction which will make the MVCCKeyValue an intent.
 	type dataItem struct {

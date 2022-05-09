@@ -113,7 +113,11 @@ func slurpSSTablesLatestKey(
 		} else if !ok || !it.UnsafeKey().Less(end) {
 			break
 		}
-		kvs = append(kvs, storage.MVCCKeyValue{Key: it.Key(), Value: it.Value()})
+		val, err := storage.DecodeMVCCValue(it.Value())
+		if err != nil {
+			t.Fatal(err)
+		}
+		kvs = append(kvs, storage.MVCCKeyValue{Key: it.Key(), Value: val.Value.RawBytes})
 	}
 	return kvs
 }

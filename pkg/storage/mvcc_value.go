@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -136,10 +138,40 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Print(v.Value.PrettyPrint())
 }
 
+// When running a metamorphic build, disable the simple MVCC value encoding to
+// prevent code from assuming that the MVCCValue encoding is identical to the
+// roachpb.Value encoding.
+var disableSimpleValueEncoding = util.ConstantWithMetamorphicTestBool(
+	"mvcc-value-disable-simple-encoding", false)
+
+// SkipIfSimpleValueEncodingDisabled skips this test during metamorphic runs
+// that have disabled the simple MVCC value encoding.
+func SkipIfSimpleValueEncodingDisabled(t skip.SkippableTest) {
+	t.Helper()
+	if disableSimpleValueEncoding {
+		skip.IgnoreLint(t, "disabled under metamorphic")
+	}
+}
+
+var emptyValueHeader = func() enginepb.MVCCValueHeader {
+	var h enginepb.MVCCValueHeader
+	// Hacky: we don't have room in the mid-stack inlining budget in either
+	// encodedMVCCValueSize or EncodeMVCCValue to add to the simple encoding
+	// condition (e.g. `&& !disableSimpleValueEncoding`). So to have the same
+	// effect, we replace the empty value header with a header we never expect
+	// to see. We never expect LocalTimestamp to be set to MaxClockTimestamp
+	// because if it was set to that value, LocalTimestampNeeded would never
+	// return true.
+	if disableSimpleValueEncoding {
+		h.LocalTimestamp = hlc.MaxClockTimestamp
+	}
+	return h
+}()
+
 // encodedMVCCValueSize returns the size of the MVCCValue when encoded.
 //gcassert:inline
 func encodedMVCCValueSize(v MVCCValue) int {
-	if v.MVCCValueHeader == (enginepb.MVCCValueHeader{}) {
+	if v.MVCCValueHeader == emptyValueHeader {
 		return len(v.Value.RawBytes)
 	}
 	return extendedPreludeSize + v.MVCCValueHeader.Size() + len(v.Value.RawBytes)
@@ -149,7 +181,7 @@ func encodedMVCCValueSize(v MVCCValue) int {
 // comment on MVCCValue for a description of the encoding scheme.
 //gcassert:inline
 func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
-	if v.MVCCValueHeader == (enginepb.MVCCValueHeader{}) {
+	if v.MVCCValueHeader == emptyValueHeader {
 		// Simple encoding. Use the roachpb.Value encoding directly with no
 		// modification. No need to re-allocate or copy.
 		return v.Value.RawBytes, nil

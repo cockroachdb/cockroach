@@ -57,10 +57,14 @@ func slurpUserDataKVs(t testing.TB, e storage.Engine) []roachpb.KeyValue {
 			if !it.UnsafeKey().IsValue() {
 				return errors.Errorf("found intent key %v", it.UnsafeKey())
 			}
-			kvs = append(kvs, roachpb.KeyValue{
-				Key:   it.Key().Key,
-				Value: roachpb.Value{RawBytes: it.Value(), Timestamp: it.UnsafeKey().Timestamp},
-			})
+			mvccValue, err := storage.DecodeMVCCValue(it.Value())
+			if err != nil {
+				t.Fatal(err)
+			}
+			value := mvccValue.Value
+			value.Timestamp = it.UnsafeKey().Timestamp
+			kv := roachpb.KeyValue{Key: it.Key().Key, Value: value}
+			kvs = append(kvs, kv)
 		}
 		return nil
 	})

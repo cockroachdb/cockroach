@@ -772,8 +772,10 @@ func TestEvalAddSSTable(t *testing.T) {
 						ts := iter.Key().Timestamp.WallTime
 						var value []byte
 						if iter.Key().IsValue() {
-							if len(iter.Value()) > 0 {
-								value, err = roachpb.Value{RawBytes: iter.Value()}.GetBytes()
+							mvccVal, err := storage.DecodeMVCCValue(iter.Value())
+							require.NoError(t, err)
+							if !mvccVal.IsTombstone() {
+								value, err = mvccVal.Value.GetBytes()
 								require.NoError(t, err)
 							}
 						} else {
@@ -1091,6 +1093,7 @@ func runTestDBAddSSTable(
 func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	storage.SkipIfSimpleValueEncodingDisabled(t)
 
 	const max = 1 << 10
 	ctx := context.Background()
@@ -1209,6 +1212,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	storage.SkipIfSimpleValueEncodingDisabled(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -1467,7 +1471,9 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, kvs, 1)
 	require.Equal(t, storage.MVCCKey{Key: roachpb.Key("key"), Timestamp: writeTS}, kvs[0].Key)
-	v, err := roachpb.Value{RawBytes: kvs[0].Value}.GetBytes()
+	mvccVal, err := storage.DecodeMVCCValue(kvs[0].Value)
+	require.NoError(t, err)
+	v, err := mvccVal.Value.GetBytes()
 	require.NoError(t, err)
 	require.Equal(t, "sst", string(v))
 }
