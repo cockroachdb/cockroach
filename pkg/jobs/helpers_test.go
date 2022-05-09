@@ -139,5 +139,5 @@ var (
 	CancelIntervalSetting           = cancelIntervalSetting
 	CancellationsUpdateLimitSetting = cancellationsUpdateLimitSetting
 	GcIntervalSetting               = gcIntervalSetting
-	RetentionTimeSetting            = retentionTimeSetting
+	RetentionTimeSetting            = RetentionTimeSetting
 )

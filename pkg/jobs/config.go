@@ -109,7 +109,7 @@ var (
 		settings.PositiveDuration,
 	)
 
-	retentionTimeSetting = settings.RegisterDurationSetting(
+	RetentionTimeSetting = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		retentionTimeSettingKey,
 		"the amount of time to retain records for completed jobs before",
