@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -1251,18 +1252,32 @@ func (nl *NodeLiveness) updateLiveness(
 	ctx context.Context, update livenessUpdate, handleCondFailed func(actual Record) error,
 ) (Record, error) {
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+		// We synchronously write to all disks before updating liveness because we
+		// don't want any excessively slow disks to prevent leases from being
+		// shifted to other nodes. A slow/stalled disk would block here and cause
+		// the node to lose its leases.
 		nl.mu.RLock()
 		engines := nl.mu.engines
 		nl.mu.RUnlock()
-		for _, eng := range engines {
-			// We synchronously write to all disks before updating liveness because we
-			// don't want any excessively slow disks to prevent leases from being
-			// shifted to other nodes. A slow/stalled disk would block here and cause
-			// the node to lose its leases.
-			if err := storage.WriteSyncNoop(eng); err != nil {
-				return Record{}, errors.Wrapf(err, "couldn't update node liveness because disk write failed")
+		var err error
+		if len(engines) == 1 {
+			// If we have only one store, write in the current goroutine.
+			err = storage.WriteSyncNoop(engines[0])
+		} else {
+			// If we have multiple stores, write in parallel using an errgroup.
+			// Doing so gives each store the same amount of time to write as it
+			// would be given if it was the only store on its node.
+			var g errgroup.Group
+			for _, eng := range engines {
+				eng := eng // copy for closure
+				g.Go(func() error { return storage.WriteSyncNoop(eng) })
 			}
+			err = g.Wait()
 		}
+		if err != nil {
+			return Record{}, errors.Wrapf(err, "couldn't update node liveness because disk write failed")
+		}
+
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {
