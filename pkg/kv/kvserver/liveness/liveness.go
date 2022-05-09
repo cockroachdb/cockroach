@@ -1259,7 +1259,7 @@ func (nl *NodeLiveness) updateLiveness(
 			// don't want any excessively slow disks to prevent leases from being
 			// shifted to other nodes. A slow/stalled disk would block here and cause
 			// the node to lose its leases.
-			if err := storage.WriteSyncNoop(ctx, eng); err != nil {
+			if err := storage.WriteSyncNoop(eng); err != nil {
 				return Record{}, errors.Wrapf(err, "couldn't update node liveness because disk write failed")
 			}
 		}
