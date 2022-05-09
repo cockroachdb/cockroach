@@ -44,9 +44,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/codahale/hdrhistogram"
-	humanize "github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
+	prometheusgo "github.com/prometheus/client_model/go"
 )
 
 const (
@@ -531,12 +531,10 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 	// TODO(tschottdorf,ajwerner): consider moving this switch to a single
 	// interface implemented by the individual metric types.
 	type (
-		float64Valuer   interface{ Value() float64 }
-		int64Valuer     interface{ Value() int64 }
-		int64Counter    interface{ Count() int64 }
-		histogramValuer interface {
-			Windowed() (*hdrhistogram.Histogram, time.Duration)
-		}
+		float64Valuer          interface{ Value() float64 }
+		int64Valuer            interface{ Value() int64 }
+		int64Counter           interface{ Count() int64 }
+		prometheusMetricValuer interface{ ToPrometheusMetric() *prometheusgo.Metric }
 	)
 	switch mtr := mtr.(type) {
 	case float64:
@@ -547,7 +545,7 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 		fn(name, float64(mtr.Value()))
 	case int64Counter:
 		fn(name, float64(mtr.Count()))
-	case histogramValuer:
+	case *metric.Histogram:
 		// TODO(mrtracy): Where should this comment go for better
 		// visibility?
 		//
@@ -567,6 +565,21 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 			fn(name+pt.suffix, float64(curr.ValueAtQuantile(pt.quantile)))
 		}
 		fn(name+"-count", float64(curr.TotalCount()))
+	case *metric.HistogramV2:
+		// NB: this branch is intentionally at the bottom since all metrics implement it.
+		cur := mtr.Windowed()
+		var m prometheusgo.Metric
+		_ = cur.Write(&m)
+		hist := m.Histogram
+		n := float64(*hist.SampleCount)
+		fn(name+"-count", n)
+		fn(name+"-avg", *hist.SampleSum/n)
+		// TODO(obs-inf): add quantiles like for the hdrhistogram.
+	case prometheusMetricValuer:
+		// TODO we should be able to handle all non-histogram branches using this, i.e.
+		// can delete the float, int, etc, cases above.
+		_ = mtr.ToPrometheusMetric()
+
 	default:
 		return errors.Errorf("cannot extract value for type %T", mtr)
 	}

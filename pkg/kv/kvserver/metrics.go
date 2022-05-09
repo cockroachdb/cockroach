@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -1474,7 +1475,7 @@ type StoreMetrics struct {
 	RaftCommandCommitLatency  *metric.Histogram
 	RaftHandleReadyLatency    *metric.Histogram
 	RaftApplyCommittedLatency *metric.Histogram
-	RaftSchedulerLatency      *metric.Histogram
+	RaftSchedulerLatency      *metric.HistogramV2
 	RaftTimeoutCampaign       *metric.Counter
 
 	// Raft message metrics.
@@ -1927,8 +1928,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftCommandCommitLatency:  metric.NewLatency(metaRaftCommandCommitLatency, histogramWindow),
 		RaftHandleReadyLatency:    metric.NewLatency(metaRaftHandleReadyLatency, histogramWindow),
 		RaftApplyCommittedLatency: metric.NewLatency(metaRaftApplyCommittedLatency, histogramWindow),
-		RaftSchedulerLatency:      metric.NewLatency(metaRaftSchedulerLatency, histogramWindow),
-		RaftTimeoutCampaign:       metric.NewCounter(metaRaftTimeoutCampaign),
+		RaftSchedulerLatency: metric.NewHistogramV2(metaRaftSchedulerLatency, histogramWindow, prometheus.HistogramOpts{
+			Buckets: metric.IOLatencyBuckets(),
+		}),
+		RaftTimeoutCampaign: metric.NewCounter(metaRaftTimeoutCampaign),
 
 		// Raft message metrics.
 		RaftRcvdMessages: [...]*metric.Counter{

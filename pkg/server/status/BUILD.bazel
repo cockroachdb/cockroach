@@ -67,6 +67,8 @@ go_library(
         "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_elastic_gosigar//:gosigar",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_model//go",
         "@com_github_shirou_gopsutil_v3//net",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
