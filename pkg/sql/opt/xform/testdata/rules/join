@@ -5052,8 +5052,7 @@ exec-ddl
 CREATE INDEX j_v1 ON virt (j, v1)
 ----
 
-# Covering case with a cross join for multiple constant values based on optional
-# filters.
+# Covering case with a set of possible values based on optional filters.
 opt
 SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1
 ----
@@ -5073,8 +5072,7 @@ project
       │    └── columns: m:1
       └── filters (true)
 
-# Non-covering case with a cross join for multiple constant values based on optional
-# filters.
+# Non-covering case with a set of possible values based on optional filters.
 opt
 SELECT m, virt.i, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1
 ----
@@ -5142,8 +5140,7 @@ left-join (lookup virt)
  │    └── filters (true)
  └── filters (true)
 
-# Semi-join with a cross join for multiple constant values based on optional
-# filters.
+# Semi-join with a set of possible values based on optional filters.
 opt expect=GenerateLookupJoinsWithVirtualCols
 SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v1)
 ----
@@ -5553,8 +5550,7 @@ project
       │    └── filters (true)
       └── filters (true)
 
-# Covering case with a cross join for multiple constant values for the leading
-# lookup column.
+# Covering case with a set of possible values for the leading lookup column.
 opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
 SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON virt.i IN (1, 2, 3) AND m = virt.v1
 ----
@@ -5574,8 +5570,7 @@ project
       │    └── columns: m:1
       └── filters (true)
 
-# Non-covering case with a cross join for multiple constant values for the
-# leading lookup column.
+# Non-covering case with a set of possible values for the leading lookup column.
 opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
 SELECT m, virt.j, virt.v1 FROM small INNER LOOKUP JOIN virt ON virt.i IN (1, 2, 3) AND m = virt.v1
 ----
