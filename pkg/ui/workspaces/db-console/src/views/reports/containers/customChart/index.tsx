@@ -206,7 +206,7 @@ export class CustomChart extends React.Component<
         setTimeScale={this.props.setTimeScale}
         history={this.props.history}
       >
-        <LineGraph>
+        <LineGraph title={metrics.map(m => m.metric).join(", ")}>
           <Axis units={units} label={AxisUnits[units]}>
             {metrics.map((m, i) => {
               if (m.metric !== "") {
