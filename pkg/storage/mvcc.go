@@ -766,7 +766,6 @@ func MVCCGet(
 	return value.ToPointer(), intent, err
 }
 
-// TODO(erikgrinaker): all callers must use a pointSynthesizingIter.
 func mvccGet(
 	ctx context.Context,
 	iter MVCCIterator,
@@ -1387,9 +1386,11 @@ func mvccPutInternal(
 		return err
 	}
 
-	// TODO(erikgrinaker): Iterator use below (e.g. mvccGet) must handle MVCC
-	// range tombstones. This will be implemented using a point synthesizing
-	// iterator.
+	// Everything below (mvccGet in particular) needs point tombstone synthesis
+	// for MVCC range tombstones.
+	if iter != nil {
+		iter = newPointSynthesizingIter(iter, true /* emitOnSeekGE */)
+	}
 
 	// Verify we're not mixing inline and non-inline values.
 	putIsInline := timestamp.IsEmpty()
@@ -2018,7 +2019,9 @@ func (m mvccKeyFormatter) Format(f fmt.State, c rune) {
 // combines time series observations if the roachpb.Value tag value
 // indicates the value byte slice is of type TIMESERIES.
 //
-// TODO(erikgrinaker): Needs to handle MVCC range tombstones.
+// Merges are not really MVCC operations, as they operate on inlined values.
+// They have no version, and do not check for conflicts with other MVCC
+// versions.
 func MVCCMerge(
 	_ context.Context,
 	rw ReadWriter,
@@ -3023,6 +3026,9 @@ func MVCCResolveWriteIntent(
 // unsafeNextVersion positions the iterator at the successor to latestKey. If this value
 // exists and is a version of the same key, returns the UnsafeKey() and UnsafeValue() of that
 // key-value pair along with `true`.
+//
+// NB: This does not handle MVCC range tombstones explicitly, and assumes that
+// the caller uses a pointSynthesizingIter.
 func unsafeNextVersion(iter MVCCIterator, latestKey MVCCKey) (MVCCKey, []byte, bool, error) {
 	// Compute the next possible mvcc value for this key.
 	nextKey := latestKey.Next()
@@ -3030,50 +3036,17 @@ func unsafeNextVersion(iter MVCCIterator, latestKey MVCCKey) (MVCCKey, []byte, b
 	if ok, err := iter.Valid(); err != nil || !ok || !iter.UnsafeKey().Key.Equal(latestKey.Key) {
 		return MVCCKey{}, nil, false /* never ok */, err
 	}
-	unsafeKey := iter.UnsafeKey()
-
-	// If we land on a range key, find the first matching timestamp.
-	//
-	// TODO(erikgrinaker): This should be handled with a point synthesizing
-	// iterator.
-	var rkTimestamp hlc.Timestamp
-	if hasPoint, hasRange := iter.HasPointAndRange(); hasRange {
-		for _, rk := range iter.RangeKeys() {
-			if rk.Timestamp.Less(latestKey.Timestamp) {
-				rkTimestamp = rk.Timestamp
-				break
-			}
-		}
-		// If this is a bare range key, step forward to look for a point key.
-		if !hasPoint {
-			iter.Next()
-			ok, err := iter.Valid()
-			if err != nil {
-				return MVCCKey{}, nil, false, err
-			} else if ok {
-				unsafeKey = iter.UnsafeKey()
-				ok, _ = iter.HasPointAndRange()
-				ok = ok && unsafeKey.Key.Equal(latestKey.Key)
-			}
-			// If we didn't find a point key colocated with the range key,
-			// then return the matching range tombstone if any.
-			if !ok {
-				if rkTimestamp.IsSet() {
-					return MVCCKey{Key: latestKey.Key, Timestamp: rkTimestamp}, nil, true, nil
-				}
-				return MVCCKey{}, nil, false, nil
-			}
-		}
+	if _, hasRange := iter.HasPointAndRange(); hasRange {
+		return MVCCKey{}, nil, false,
+			errors.AssertionFailedf("unexpected MVCC range tombstone at %s", iter.UnsafeKey())
 	}
 
-	// We now have a point key and possibly a matching range key. If the range
-	// key covers the point key, return it. Otherwise, return the point key.
+	unsafeKey := iter.UnsafeKey()
+
 	if !unsafeKey.IsValue() {
 		return MVCCKey{}, nil, false, errors.Errorf("expected an MVCC value key: %s", unsafeKey)
 	}
-	if rkTimestamp.IsSet() && unsafeKey.Timestamp.LessEq(rkTimestamp) {
-		return MVCCKey{Key: unsafeKey.Key, Timestamp: rkTimestamp}, nil, true, nil
-	}
+
 	return unsafeKey, iter.UnsafeValue(), true, nil
 }
 
@@ -4149,6 +4122,8 @@ func MVCCGarbageCollect(
 // MVCCFindSplitKey finds a key from the given span such that the left side of
 // the split is roughly targetSize bytes. The returned key will never be chosen
 // from the key ranges listed in keys.NoSplitSpans.
+//
+// TODO(erikgrinaker): This should take MVCC range tombstones into account.
 func MVCCFindSplitKey(
 	_ context.Context, reader Reader, key, endKey roachpb.RKey, targetSize int64,
 ) (roachpb.Key, error) {

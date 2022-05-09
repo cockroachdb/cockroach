@@ -56,6 +56,7 @@ import (
 // txn_step       t=<name> [n=<int>]
 // txn_advance    t=<name> ts=<int>[,<int>]
 // txn_status     t=<name> status=<txnstatus>
+// txn_ignore_seqs t=<name> seqs=[<int>-<int>[,<int>-<int>...]]
 //
 // resolve_intent t=<name> k=<key> [status=<txnstatus>]
 // resolve_intent_range t=<name> k=<key> end=<key> [status=<txnstatus>]
@@ -65,8 +66,10 @@ import (
 // del            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
 // del_range_ts   [ts=<int>[,<int>]] k=<key> end=<key>
+// initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [failOnTombstones]
 // get            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // increment      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
+// merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put_rangekey   k=<key> end=<key> ts=<int>[,<int>]
 // scan           [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
@@ -479,6 +482,7 @@ var commands = map[string]cmd{
 	"del_range_ts": {typDataUpdate, cmdDeleteRangeTombstone},
 	"get":          {typReadOnly, cmdGet},
 	"increment":    {typDataUpdate, cmdIncrement},
+	"initput":      {typDataUpdate, cmdInitPut},
 	"merge":        {typDataUpdate, cmdMerge},
 	"put":          {typDataUpdate, cmdPut},
 	"put_rangekey": {typDataUpdate, cmdPutRangeKey},
@@ -712,6 +716,26 @@ func cmdCPut(e *evalCtx) error {
 
 	return e.withWriter("cput", func(rw ReadWriter) error {
 		if err := MVCCConditionalPut(e.ctx, rw, e.ms, key, ts, val, expVal, behavior, txn); err != nil {
+			return err
+		}
+		if resolve {
+			return e.resolveIntent(rw, key, txn, resolveStatus)
+		}
+		return nil
+	})
+}
+
+func cmdInitPut(e *evalCtx) error {
+	txn := e.getTxn(optional)
+	ts := e.getTs(txn)
+
+	key := e.getKey()
+	val := e.getVal()
+	failOnTombstones := e.hasArg("failOnTombstones")
+	resolve, resolveStatus := e.getResolve()
+
+	return e.withWriter("cput", func(rw ReadWriter) error {
+		if err := MVCCInitPut(e.ctx, rw, e.ms, key, ts, val, failOnTombstones, txn); err != nil {
 			return err
 		}
 		if resolve {
