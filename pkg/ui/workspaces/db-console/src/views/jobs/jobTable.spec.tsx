@@ -14,6 +14,7 @@ import { assert } from "chai";
 import { JobTable, JobTableProps } from "src/views/jobs/jobTable";
 
 import "src/enzymeInit";
+import moment from "moment";
 
 describe("<JobTable>", () => {
   it("should reset page to 1 after job list prop changes", () => {
@@ -31,6 +32,7 @@ describe("<JobTable>", () => {
       current: 2,
       pageSize: 2,
       isUsedFilter: true,
+      retentionTime: moment.duration(336, "hours"),
     };
     const jobTable = shallow<JobTable>(
       <JobTable
@@ -40,6 +42,7 @@ describe("<JobTable>", () => {
         current={jobTableProps.current}
         pageSize={jobTableProps.pageSize}
         isUsedFilter={jobTableProps.isUsedFilter}
+        retentionTime={jobTableProps.retentionTime}
       />,
     );
     assert.equal(jobTable.state().pagination.current, 2);

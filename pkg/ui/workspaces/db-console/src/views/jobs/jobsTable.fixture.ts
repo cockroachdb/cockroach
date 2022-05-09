@@ -283,11 +283,13 @@ const staticJobProps: Pick<
   | "status"
   | "show"
   | "type"
+  | "retentionTime"
   | "setSort"
   | "setStatus"
   | "setShow"
   | "setType"
   | "refreshJobs"
+  | "refreshSettings"
 > = {
   history,
   location: {
@@ -309,11 +311,13 @@ const staticJobProps: Pick<
   status: "",
   show: "50",
   type: 0,
+  retentionTime: moment.duration(336, "hours"),
   setSort: () => {},
   setStatus: () => {},
   setShow: () => {},
   setType: () => {},
   refreshJobs: () => null,
+  refreshSettings: () => null,
 };
 
 const getJobsTableProps = (jobs: Array<Job>): JobsTableProps => ({
