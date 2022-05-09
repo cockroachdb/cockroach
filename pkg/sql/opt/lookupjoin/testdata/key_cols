@@ -156,3 +156,37 @@ key cols:
   y = b
 input projections:
   lookup_join_const_col_@7 = 1
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y, z)
+x = a AND y = b
+optional: z IN (3, 4)
+----
+lookup expression:
+  (a = x) AND (b = y)
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y, z)
+x = 1 AND y = b
+optional: z IN (3, 4)
+----
+input projections:
+  lookup_join_const_col_@6 = 1
+lookup expression:
+  (lookup_join_const_col_@6 = x) AND (b = y)
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y, z)
+x = a AND y = b
+optional: z > 10
+----
+key cols:
+  x = a
+  y = b
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y, z)
+x = 1 AND y = b
+optional: z > 10
+----
+key cols:
+  x = lookup_join_const_col_@6
+  y = b
+input projections:
+  lookup_join_const_col_@6 = 1

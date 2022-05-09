@@ -153,6 +153,12 @@ func (b *ConstraintBuilder) Build(
 
 	allFilters := append(onFilters, optionalFilters...)
 
+	// isOptionalFilter returns returns true if the given ordinal of a filter in
+	// allFilters originated from optionalFilters.
+	isOptionalFilter := func(ord int) bool {
+		return ord >= len(onFilters)
+	}
+
 	// Check if the first column in the index either:
 	//
 	//   1. Has an equality constraint.
@@ -181,6 +187,7 @@ func (b *ConstraintBuilder) Build(
 	var lookupExpr memo.FiltersExpr
 	var constFilters memo.FiltersExpr
 	var filterOrdsToExclude util.FastIntSet
+	var lastMultiValLookupExprIdx, lastMultiValAllIdx int
 	foundEqualityCols := false
 	lookExprRequired := false
 
@@ -295,12 +302,30 @@ func (b *ConstraintBuilder) Build(
 			lookupExpr = append(lookupExpr, valsFilter)
 			constFilters = append(constFilters, valsFilter)
 			filterOrdsToExclude.Add(allIdx)
+
+			// If the values were found in an optional filter then we do not
+			// want to use these values to constrain the last column in the
+			// constraint. They will only increase the number of lookup spans
+			// without making the constraint more selective. We keep track of
+			// the position of the expressions within lookupExpr so that we ca
+			// recognize this case after the loop, and we keep track of allIdx
+			// so that after the loop we can remove it from filterOrdsToExclude.
+			lastMultiValLookupExprIdx = len(lookupExpr) - 1
+			lastMultiValAllIdx = allIdx
+
 			continue
 		}
 
 		// If constant values were not found, try to find a filter that
 		// constrains this index column to a range.
 		if allIdx, foundRange := b.findJoinFilterRange(allFilters, idxCol); foundRange {
+			// If the range was found in an optional filter then the range
+			// filter will not make a lookup more selective, so there is no need
+			// to use it in the constraint.
+			if isOptionalFilter(allIdx) {
+				break
+			}
+
 			lookExprRequired = true
 
 			// Convert previously collected keyCols and rightSideCols to
@@ -322,6 +347,16 @@ func (b *ConstraintBuilder) Build(
 	// expression x=1) are not useful.
 	if !foundEqualityCols {
 		return Constraint{}
+	}
+
+	// Remove the last expression in lookupExpr if it constrains the column to
+	// multiple values and it was derived from an optional filter. Also remove
+	// its origin filter index from filterOrdsToRemove.
+	if lookupExpr != nil && lastMultiValLookupExprIdx == len(lookupExpr)-1 &&
+		isOptionalFilter(lastMultiValAllIdx) {
+		lookupExpr = lookupExpr[:len(lookupExpr)-1]
+		constFilters = constFilters[:len(constFilters)-1]
+		filterOrdsToExclude.Remove(lastMultiValAllIdx)
 	}
 
 	c := Constraint{
