@@ -145,7 +145,7 @@ func runOneRoundCostFuzz(
 
 	// Initialize a smither that generates only deterministic SELECT statements.
 	smither, err := sqlsmith.NewSmither(conn, rnd,
-		sqlsmith.DisableMutations(), sqlsmith.DisableImpureFuncs(), sqlsmith.DisableLimits(),
+		sqlsmith.DisableMutations(), sqlsmith.DisableImpureFns(), sqlsmith.DisableLimits(),
 		sqlsmith.SetComplexity(.3),
 	)
 	if err != nil {
