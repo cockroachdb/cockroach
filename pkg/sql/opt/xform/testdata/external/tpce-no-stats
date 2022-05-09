@@ -56,8 +56,8 @@ sort
       │    │    │    ├── columns: sc_id:1!null sc_name:2!null in_id:5!null in_sc_id:7!null co_id:10!null co_in_id:13!null s_symb:21!null s_co_id:26!null tr_s_symb:41!null tr_qty:42!null tr_bid_price:43!null tr_b_id:44!null b_id:47!null b_name:49!null
       │    │    │    ├── lookup expression
       │    │    │    │    └── filters
-      │    │    │    │         ├── tr_b_id:44 = b_id:47 [outer=(44,47), constraints=(/44: (/NULL - ]; /47: (/NULL - ]), fd=(44)==(47), (47)==(44)]
-      │    │    │    │         └── b_name:49 IN ('Broker1', 'Broker10', 'Broker11', 'Broker12', 'Broker13', 'Broker14', 'Broker15', 'Broker16', 'Broker17', 'Broker18', 'Broker19', 'Broker2', 'Broker20', 'Broker21', 'Broker22', 'Broker23', 'Broker24', 'Broker25', 'Broker26', 'Broker27', 'Broker28', 'Broker29', 'Broker3', 'Broker30', 'Broker4', 'Broker5', 'Broker6', 'Broker7', 'Broker8', 'Broker9') [outer=(49), constraints=(/49: [/'Broker1' - /'Broker1'] [/'Broker10' - /'Broker10'] [/'Broker11' - /'Broker11'] [/'Broker12' - /'Broker12'] [/'Broker13' - /'Broker13'] [/'Broker14' - /'Broker14'] [/'Broker15' - /'Broker15'] [/'Broker16' - /'Broker16'] [/'Broker17' - /'Broker17'] [/'Broker18' - /'Broker18'] [/'Broker19' - /'Broker19'] [/'Broker2' - /'Broker2'] [/'Broker20' - /'Broker20'] [/'Broker21' - /'Broker21'] [/'Broker22' - /'Broker22'] [/'Broker23' - /'Broker23'] [/'Broker24' - /'Broker24'] [/'Broker25' - /'Broker25'] [/'Broker26' - /'Broker26'] [/'Broker27' - /'Broker27'] [/'Broker28' - /'Broker28'] [/'Broker29' - /'Broker29'] [/'Broker3' - /'Broker3'] [/'Broker30' - /'Broker30'] [/'Broker4' - /'Broker4'] [/'Broker5' - /'Broker5'] [/'Broker6' - /'Broker6'] [/'Broker7' - /'Broker7'] [/'Broker8' - /'Broker8'] [/'Broker9' - /'Broker9']; tight)]
+      │    │    │    │         ├── b_name:49 IN ('Broker1', 'Broker10', 'Broker11', 'Broker12', 'Broker13', 'Broker14', 'Broker15', 'Broker16', 'Broker17', 'Broker18', 'Broker19', 'Broker2', 'Broker20', 'Broker21', 'Broker22', 'Broker23', 'Broker24', 'Broker25', 'Broker26', 'Broker27', 'Broker28', 'Broker29', 'Broker3', 'Broker30', 'Broker4', 'Broker5', 'Broker6', 'Broker7', 'Broker8', 'Broker9') [outer=(49), constraints=(/49: [/'Broker1' - /'Broker1'] [/'Broker10' - /'Broker10'] [/'Broker11' - /'Broker11'] [/'Broker12' - /'Broker12'] [/'Broker13' - /'Broker13'] [/'Broker14' - /'Broker14'] [/'Broker15' - /'Broker15'] [/'Broker16' - /'Broker16'] [/'Broker17' - /'Broker17'] [/'Broker18' - /'Broker18'] [/'Broker19' - /'Broker19'] [/'Broker2' - /'Broker2'] [/'Broker20' - /'Broker20'] [/'Broker21' - /'Broker21'] [/'Broker22' - /'Broker22'] [/'Broker23' - /'Broker23'] [/'Broker24' - /'Broker24'] [/'Broker25' - /'Broker25'] [/'Broker26' - /'Broker26'] [/'Broker27' - /'Broker27'] [/'Broker28' - /'Broker28'] [/'Broker29' - /'Broker29'] [/'Broker3' - /'Broker3'] [/'Broker30' - /'Broker30'] [/'Broker4' - /'Broker4'] [/'Broker5' - /'Broker5'] [/'Broker6' - /'Broker6'] [/'Broker7' - /'Broker7'] [/'Broker8' - /'Broker8'] [/'Broker9' - /'Broker9']; tight)]
+      │    │    │    │         └── tr_b_id:44 = b_id:47 [outer=(44,47), constraints=(/44: (/NULL - ]; /47: (/NULL - ]), fd=(44)==(47), (47)==(44)]
       │    │    │    ├── lookup columns are key
       │    │    │    ├── fd: ()-->(1,2,7), (10)-->(13), (21)-->(26), (47)-->(49), (44)==(47), (47)==(44), (21)==(41), (41)==(21), (10)==(26), (26)==(10), (5)==(13), (13)==(5), (1)==(7), (7)==(1)
       │    │    │    ├── inner-join (hash)
@@ -1038,7 +1038,7 @@ project
  │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null co_id:6!null co_in_id:9!null
  │    │    │    │    │    │    ├── lookup expression
  │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │         ├── co_in_id:9 = in_id:1 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │    │    │    │    │    │         ├── in_id:1 = co_in_id:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
  │    │    │    │    │    │    │         └── (co_id:6 >= 1) AND (co_id:6 <= 5000) [outer=(6), constraints=(/6: [/1 - /5000]; tight)]
  │    │    │    │    │    │    ├── cardinality: [0 - 5000]
  │    │    │    │    │    │    ├── key: (6)
@@ -1156,7 +1156,7 @@ project
  │    │    │    │    │    │    │    │    ├── flags: force lookup join (into right side)
  │    │    │    │    │    │    │    │    ├── lookup expression
  │    │    │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │    │    │         ├── co_in_id:9 = in_id:1 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │    │    │    │    │    │    │    │         ├── in_id:1 = co_in_id:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
  │    │    │    │    │    │    │    │    │         └── (co_id:6 >= 1) AND (co_id:6 <= 5000) [outer=(6), constraints=(/6: [/1 - /5000]; tight)]
  │    │    │    │    │    │    │    │    ├── cardinality: [0 - 5000]
  │    │    │    │    │    │    │    │    ├── key: (6)
@@ -4065,18 +4065,25 @@ project
  │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null cr_c_tier:45!null cr_tt_id:46!null cr_ex_id:47!null cr_from_qty:48!null cr_to_qty:49!null commission_rate.cr_rate:50!null
  │    │    │    ├── lookup expression
  │    │    │    │    └── filters
- │    │    │    │         ├── cr_ex_id:47 = s_ex_id:31 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
  │    │    │    │         ├── cr_c_tier:45 IN (1, 2, 3) [outer=(45), constraints=(/45: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
- │    │    │    │         ├── cr_tt_id:46 = 'TLS' [outer=(46), constraints=(/46: [/'TLS' - /'TLS']; tight), fd=()-->(46)]
+ │    │    │    │         ├── "lookup_join_const_col_@46":54 = cr_tt_id:46 [outer=(46,54), constraints=(/46: (/NULL - ]; /54: (/NULL - ]), fd=(46)==(54), (54)==(46)]
+ │    │    │    │         ├── s_ex_id:31 = cr_ex_id:47 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
  │    │    │    │         └── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
  │    │    │    ├── key: (45,48)
  │    │    │    ├── fd: ()-->(27,30,31,46,47), (45,48)-->(49,50), (31)==(47), (47)==(31)
- │    │    │    ├── scan security
- │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
- │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "lookup_join_const_col_@46":54!null s_symb:27!null s_name:30!null s_ex_id:31!null
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
- │    │    │    │    └── fd: ()-->(27,30,31)
+ │    │    │    │    ├── fd: ()-->(27,30,31,54)
+ │    │    │    │    ├── scan security
+ │    │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
+ │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    └── fd: ()-->(27,30,31)
+ │    │    │    │    └── projections
+ │    │    │    │         └── 'TLS' [as="lookup_join_const_col_@46":54]
  │    │    │    └── filters
  │    │    │         └── cr_to_qty:49 >= 200 [outer=(49), constraints=(/49: [/200 - ]; tight)]
  │    │    ├── scan customer
@@ -4120,32 +4127,39 @@ project
  │    │    ├── flags: force lookup join (into right side)
  │    │    ├── lookup expression
  │    │    │    └── filters
- │    │    │         ├── cr_c_tier:45 = c_tier:8 [outer=(8,45), constraints=(/8: (/NULL - ]; /45: (/NULL - ]), fd=(8)==(45), (45)==(8)]
- │    │    │         ├── cr_ex_id:47 = s_ex_id:31 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
- │    │    │         ├── cr_tt_id:46 = 'TLS' [outer=(46), constraints=(/46: [/'TLS' - /'TLS']; tight), fd=()-->(46)]
+ │    │    │         ├── c_tier:8 = cr_c_tier:45 [outer=(8,45), constraints=(/8: (/NULL - ]; /45: (/NULL - ]), fd=(8)==(45), (45)==(8)]
+ │    │    │         ├── "lookup_join_const_col_@46":54 = cr_tt_id:46 [outer=(46,54), constraints=(/46: (/NULL - ]; /54: (/NULL - ]), fd=(46)==(54), (54)==(46)]
+ │    │    │         ├── s_ex_id:31 = cr_ex_id:47 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
  │    │    │         └── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
  │    │    ├── key: (48)
  │    │    ├── fd: ()-->(1,8,27,30,31,45-47), (48)-->(49,50), (8)==(45), (45)==(8), (31)==(47), (47)==(31)
  │    │    ├── limit hint: 1.00
- │    │    ├── inner-join (cross)
- │    │    │    ├── columns: c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    ├── project
+ │    │    │    ├── columns: "lookup_join_const_col_@46":54!null c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null
  │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(1,8,27,30,31)
- │    │    │    ├── scan customer
- │    │    │    │    ├── columns: c_id:1!null c_tier:8!null
- │    │    │    │    ├── constraint: /1: [/0 - /0]
+ │    │    │    ├── fd: ()-->(1,8,27,30,31,54)
+ │    │    │    ├── inner-join (cross)
+ │    │    │    │    ├── columns: c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null
  │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    │    ├── key: ()
- │    │    │    │    └── fd: ()-->(1,8)
- │    │    │    ├── scan security
- │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
- │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
- │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    ├── key: ()
- │    │    │    │    └── fd: ()-->(27,30,31)
- │    │    │    └── filters (true)
+ │    │    │    │    ├── fd: ()-->(1,8,27,30,31)
+ │    │    │    │    ├── scan customer
+ │    │    │    │    │    ├── columns: c_id:1!null c_tier:8!null
+ │    │    │    │    │    ├── constraint: /1: [/0 - /0]
+ │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    └── fd: ()-->(1,8)
+ │    │    │    │    ├── scan security
+ │    │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
+ │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    └── fd: ()-->(27,30,31)
+ │    │    │    │    └── filters (true)
+ │    │    │    └── projections
+ │    │    │         └── 'TLS' [as="lookup_join_const_col_@46":54]
  │    │    └── filters
  │    │         └── cr_to_qty:49 >= 200 [outer=(49), constraints=(/49: [/200 - ]; tight)]
  │    └── 1
@@ -6091,7 +6105,7 @@ limit
  │    │         ├── columns: wi_wl_id:19!null wi_s_symb:20!null wl_id:23!null wl_c_id:24!null
  │    │         ├── lookup expression
  │    │         │    └── filters
- │    │         │         ├── wi_wl_id:19 = wl_id:23 [outer=(19,23), constraints=(/19: (/NULL - ]; /23: (/NULL - ]), fd=(19)==(23), (23)==(19)]
+ │    │         │         ├── wl_id:23 = wi_wl_id:19 [outer=(19,23), constraints=(/19: (/NULL - ]; /23: (/NULL - ]), fd=(19)==(23), (23)==(19)]
  │    │         │         └── wi_s_symb:20 > 'GOOG' [outer=(20), constraints=(/20: [/e'GOOG\x00' - ]; tight)]
  │    │         ├── key: (20,23)
  │    │         ├── fd: ()-->(24), (19)==(23), (23)==(19)
