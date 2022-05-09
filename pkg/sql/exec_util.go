@@ -2976,6 +2976,10 @@ func (m *sessionDataMutator) SetLargeFullScanRows(val float64) {
 	m.data.LargeFullScanRows = val
 }
 
+func (m *sessionDataMutator) SetMultipleModificationsOfTable(val bool) {
+	m.data.MultipleModificationsOfTable = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
