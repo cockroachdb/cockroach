@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -478,7 +477,7 @@ type function struct {
 	overload *tree.Overload
 }
 
-func functions(s *Smither) map[tree.FunctionClass]map[oid.Oid][]function {
+var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 	m := map[tree.FunctionClass]map[oid.Oid][]function{}
 	for _, def := range tree.FunDefs {
 		switch def.Name {
@@ -510,19 +509,6 @@ func functions(s *Smither) map[tree.FunctionClass]map[oid.Oid][]function {
 		}
 		if skip {
 			continue
-		}
-		if s.disableImpureFuncs {
-			var impure bool
-			for _, def := range def.Definition {
-				overload := def.(*tree.Overload)
-				switch overload.Volatility {
-				case volatility.Stable, volatility.Volatile:
-					impure = true
-				}
-			}
-			if impure {
-				continue
-			}
 		}
 		if _, ok := m[def.Class]; !ok {
 			m[def.Class] = map[oid.Oid][]function{}
@@ -557,4 +543,4 @@ func functions(s *Smither) map[tree.FunctionClass]map[oid.Oid][]function {
 		}
 	}
 	return m
-}
+}()
