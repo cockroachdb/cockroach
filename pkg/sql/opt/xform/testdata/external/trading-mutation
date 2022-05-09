@@ -837,30 +837,40 @@ project
  │         │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null transactiondetails.dealerid:24 isbuy:25 transactiondate:26 transactiondetails.cardid:27 quantity:28
  │         │    │    ├── lookup expression
  │         │    │    │    └── filters
- │         │    │    │         ├── transactiondetails.cardid:27 = id:1 [outer=(1,27), constraints=(/1: (/NULL - ]; /27: (/NULL - ]), fd=(1)==(27), (27)==(1)]
- │         │    │    │         ├── transactiondetails.dealerid:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
- │         │    │    │         ├── NOT isbuy:25 [outer=(25), constraints=(/25: [/false - /false]; tight), fd=()-->(25)]
+ │         │    │    │         ├── "lookup_join_const_col_@24":48 = transactiondetails.dealerid:24 [outer=(24,48), constraints=(/24: (/NULL - ]; /48: (/NULL - ]), fd=(24)==(48), (48)==(24)]
+ │         │    │    │         ├── "lookup_join_const_col_@25":49 = isbuy:25 [outer=(25,49), constraints=(/25: (/NULL - ]; /49: (/NULL - ]), fd=(25)==(49), (49)==(25)]
+ │         │    │    │         ├── id:1 = transactiondetails.cardid:27 [outer=(1,27), constraints=(/1: (/NULL - ]; /27: (/NULL - ]), fd=(1)==(27), (27)==(1)]
  │         │    │    │         └── (transactiondate:26 >= '2020-02-28 00:00:00+00:00') AND (transactiondate:26 <= '2020-03-01 00:00:00+00:00') [outer=(26), constraints=(/26: [/'2020-02-28 00:00:00+00:00' - /'2020-03-01 00:00:00+00:00']; tight)]
  │         │    │    ├── immutable
  │         │    │    ├── stats: [rows=423333.3, distinct(1)=19000, null(1)=0, avgsize(1)=4, distinct(2)=13000, null(2)=0, avgsize(2)=4, distinct(5)=829, null(5)=0, avgsize(5)=4, distinct(6)=5601.15, null(6)=0, avgsize(6)=4, distinct(27)=19000, null(27)=0, avgsize(27)=4]
  │         │    │    ├── key: (1,26-28)
  │         │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (1,26-28)-->(24,25)
  │         │    │    ├── ordering: +1
- │         │    │    ├── select
- │         │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+ │         │    │    ├── project
+ │         │    │    │    ├── columns: "lookup_join_const_col_@24":48!null "lookup_join_const_col_@25":49!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
  │         │    │    │    ├── immutable
- │         │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, avgsize(1)=4, distinct(2)=13000, null(2)=0, avgsize(2)=4, distinct(5)=829, null(5)=0, avgsize(5)=4, distinct(6)=5601.15, null(6)=0, avgsize(6)=4]
+ │         │    │    │    ├── stats: [rows=19000]
  │         │    │    │    ├── key: (1)
- │         │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
- │         │    │    │    ├── ordering: +1
- │         │    │    │    ├── scan cards
+ │         │    │    │    ├── fd: ()-->(48,49), (1)-->(2-6), (2,4,5)~~>(1,3,6)
+ │         │    │    │    ├── ordering: +1 opt(48,49) [actual: +1]
+ │         │    │    │    ├── select
  │         │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
- │         │    │    │    │    ├── stats: [rows=57000, distinct(1)=57000, null(1)=0, avgsize(1)=4, distinct(2)=39000, null(2)=0, avgsize(2)=4, distinct(5)=829, null(5)=0, avgsize(5)=4, distinct(6)=5700, null(6)=0, avgsize(6)=4]
+ │         │    │    │    │    ├── immutable
+ │         │    │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, avgsize(1)=4, distinct(2)=13000, null(2)=0, avgsize(2)=4, distinct(5)=829, null(5)=0, avgsize(5)=4, distinct(6)=5601.15, null(6)=0, avgsize(6)=4]
  │         │    │    │    │    ├── key: (1)
  │         │    │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
- │         │    │    │    │    └── ordering: +1
- │         │    │    │    └── filters
- │         │    │    │         └── (name:2, setname:4, number:5) > ('Shock', '7E', 248) [outer=(2,4,5), immutable, constraints=(/2/4/5: [/'Shock'/'7E'/249 - ]; tight)]
+ │         │    │    │    │    ├── ordering: +1
+ │         │    │    │    │    ├── scan cards
+ │         │    │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+ │         │    │    │    │    │    ├── stats: [rows=57000, distinct(1)=57000, null(1)=0, avgsize(1)=4, distinct(2)=39000, null(2)=0, avgsize(2)=4, distinct(5)=829, null(5)=0, avgsize(5)=4, distinct(6)=5700, null(6)=0, avgsize(6)=4]
+ │         │    │    │    │    │    ├── key: (1)
+ │         │    │    │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
+ │         │    │    │    │    │    └── ordering: +1
+ │         │    │    │    │    └── filters
+ │         │    │    │    │         └── (name:2, setname:4, number:5) > ('Shock', '7E', 248) [outer=(2,4,5), immutable, constraints=(/2/4/5: [/'Shock'/'7E'/249 - ]; tight)]
+ │         │    │    │    └── projections
+ │         │    │    │         ├── 1 [as="lookup_join_const_col_@24":48]
+ │         │    │    │         └── false [as="lookup_join_const_col_@25":49]
  │         │    │    └── filters (true)
  │         │    ├── scan cardsinfo
  │         │    │    ├── columns: cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
@@ -1104,8 +1114,8 @@ top-k
       │    │    ├── columns: id:6!null quantity:7!null dealerid:8!null cardid:9!null accountname:10!null inventorydetails.quantity:11!null
       │    │    ├── lookup expression
       │    │    │    └── filters
-      │    │    │         ├── cardid:9 = id:6 [outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
       │    │    │         ├── dealerid:8 IN (1, 2, 3, 4, 5) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]; tight)]
+      │    │    │         ├── id:6 = cardid:9 [outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
       │    │    │         └── accountname:10 IN ('account-1', 'account-2', 'account-3') [outer=(10), constraints=(/10: [/'account-1' - /'account-1'] [/'account-2' - /'account-2'] [/'account-3' - /'account-3']; tight)]
       │    │    ├── fd: (8-10)-->(11), (6)==(9), (9)==(6)
       │    │    ├── values

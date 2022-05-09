@@ -312,7 +312,7 @@ New expression 3 of 3:
 memo join-limit=0 expect-not=ReorderJoins
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~27KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
+memo (optimized, ~22KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
  ├── G1: (inner-join G2 G3 G4) (merge-join G2 G3 G5 inner-join,+1,+10)
  │    └── [presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12]
  │         ├── best: (merge-join G2="[ordering: +1]" G3 G5 inner-join,+1,+10)
@@ -324,11 +324,11 @@ memo (optimized, ~27KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  │    └── []
  │         ├── best: (scan bx,cols=(1,2))
  │         └── cost: 1064.42
- ├── G3: (inner-join G6 G7 G8) (merge-join G6 G7 G5 inner-join,+5,+11) (lookup-join G9 G8 abc,keyCols=[15],outCols=(5,6,9-12))
+ ├── G3: (inner-join G6 G7 G8) (merge-join G6 G7 G5 inner-join,+5,+11)
  │    └── []
  │         ├── best: (merge-join G6="[ordering: +5]" G7 G5 inner-join,+5,+11)
  │         └── cost: 1078.54
- ├── G4: (filters G10)
+ ├── G4: (filters G9)
  ├── G5: (filters)
  ├── G6: (scan cy,cols=(5,6))
  │    ├── [ordering: +5]
@@ -337,35 +337,30 @@ memo (optimized, ~27KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  │    └── []
  │         ├── best: (scan cy,cols=(5,6))
  │         └── cost: 1064.42
- ├── G7: (select G11 G12) (scan abc,cols=(9-12),constrained)
+ ├── G7: (select G10 G11) (scan abc,cols=(9-12),constrained)
  │    └── []
  │         ├── best: (scan abc,cols=(9-12),constrained)
  │         └── cost: 5.09
- ├── G8: (filters G13)
- ├── G9: (project G6 G14 c y)
- │    └── []
- │         ├── best: (project G6 G14 c y)
- │         └── cost: 1084.44
- ├── G10: (eq G15 G16)
- ├── G11: (scan abc,cols=(9-12))
+ ├── G8: (filters G12)
+ ├── G9: (eq G13 G14)
+ ├── G10: (scan abc,cols=(9-12))
  │    └── []
  │         ├── best: (scan abc,cols=(9-12))
  │         └── cost: 1104.82
- ├── G12: (filters G17)
- ├── G13: (eq G18 G19)
- ├── G14: (projections G20)
- ├── G15: (variable abc.b)
- ├── G16: (variable bx.b)
- ├── G17: (eq G21 G20)
- ├── G18: (variable abc.c)
- ├── G19: (variable cy.c)
- ├── G20: (const 1)
- └── G21: (variable a)
+ ├── G11: (filters G15)
+ ├── G12: (eq G16 G17)
+ ├── G13: (variable abc.b)
+ ├── G14: (variable bx.b)
+ ├── G15: (eq G18 G19)
+ ├── G16: (variable abc.c)
+ ├── G17: (variable cy.c)
+ ├── G18: (variable a)
+ └── G19: (const 1)
 
 memo join-limit=2
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~43KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
+memo (optimized, ~33KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (merge-join G2 G3 G8 inner-join,+1,+10) (merge-join G3 G2 G8 inner-join,+10,+1) (lookup-join G3 G8 bx,keyCols=[10],outCols=(1,2,5,6,9-12)) (merge-join G5 G6 G8 inner-join,+5,+11) (merge-join G6 G5 G8 inner-join,+11,+5) (lookup-join G6 G8 cy,keyCols=[11],outCols=(1,2,5,6,9-12))
  │    └── [presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12]
  │         ├── best: (lookup-join G3 G8 bx,keyCols=[10],outCols=(1,2,5,6,9-12))
@@ -377,11 +372,11 @@ memo (optimized, ~43KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  │    └── []
  │         ├── best: (scan bx,cols=(1,2))
  │         └── cost: 1064.42
- ├── G3: (inner-join G5 G9 G7) (inner-join G9 G5 G7) (merge-join G5 G9 G8 inner-join,+5,+11) (lookup-join G10 G7 abc,keyCols=[15],outCols=(5,6,9-12)) (merge-join G9 G5 G8 inner-join,+11,+5) (lookup-join G9 G8 cy,keyCols=[11],outCols=(5,6,9-12))
+ ├── G3: (inner-join G5 G9 G7) (inner-join G9 G5 G7) (merge-join G5 G9 G8 inner-join,+5,+11) (merge-join G9 G5 G8 inner-join,+11,+5) (lookup-join G9 G8 cy,keyCols=[11],outCols=(5,6,9-12))
  │    └── []
  │         ├── best: (lookup-join G9 G8 cy,keyCols=[11],outCols=(5,6,9-12))
  │         └── cost: 11.13
- ├── G4: (filters G11)
+ ├── G4: (filters G10)
  ├── G5: (scan cy,cols=(5,6))
  │    ├── [ordering: +5]
  │    │    ├── best: (scan cy,cols=(5,6))
@@ -389,39 +384,30 @@ memo (optimized, ~43KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  │    └── []
  │         ├── best: (scan cy,cols=(5,6))
  │         └── cost: 1064.42
- ├── G6: (inner-join G2 G9 G4) (inner-join G9 G2 G4) (merge-join G2 G9 G8 inner-join,+1,+10) (lookup-join G12 G4 abc,keyCols=[16],outCols=(1,2,9-12)) (merge-join G9 G2 G8 inner-join,+10,+1) (lookup-join G9 G8 bx,keyCols=[10],outCols=(1,2,9-12))
+ ├── G6: (inner-join G2 G9 G4) (inner-join G9 G2 G4) (merge-join G2 G9 G8 inner-join,+1,+10) (merge-join G9 G2 G8 inner-join,+10,+1) (lookup-join G9 G8 bx,keyCols=[10],outCols=(1,2,9-12))
  │    └── []
  │         ├── best: (lookup-join G9 G8 bx,keyCols=[10],outCols=(1,2,9-12))
  │         └── cost: 11.13
- ├── G7: (filters G13)
+ ├── G7: (filters G11)
  ├── G8: (filters)
- ├── G9: (select G14 G15) (scan abc,cols=(9-12),constrained)
+ ├── G9: (select G12 G13) (scan abc,cols=(9-12),constrained)
  │    └── []
  │         ├── best: (scan abc,cols=(9-12),constrained)
  │         └── cost: 5.09
- ├── G10: (project G5 G16 c y)
- │    └── []
- │         ├── best: (project G5 G16 c y)
- │         └── cost: 1084.44
- ├── G11: (eq G17 G18)
- ├── G12: (project G2 G16 b x)
- │    └── []
- │         ├── best: (project G2 G16 b x)
- │         └── cost: 1084.44
- ├── G13: (eq G19 G20)
- ├── G14: (scan abc,cols=(9-12))
+ ├── G10: (eq G14 G15)
+ ├── G11: (eq G16 G17)
+ ├── G12: (scan abc,cols=(9-12))
  │    └── []
  │         ├── best: (scan abc,cols=(9-12))
  │         └── cost: 1104.82
- ├── G15: (filters G21)
- ├── G16: (projections G22)
- ├── G17: (variable abc.b)
- ├── G18: (variable bx.b)
- ├── G19: (variable abc.c)
- ├── G20: (variable cy.c)
- ├── G21: (eq G23 G22)
- ├── G22: (const 1)
- └── G23: (variable a)
+ ├── G13: (filters G18)
+ ├── G14: (variable abc.b)
+ ├── G15: (variable bx.b)
+ ├── G16: (variable abc.c)
+ ├── G17: (variable cy.c)
+ ├── G18: (eq G19 G20)
+ ├── G19: (variable a)
+ └── G20: (const 1)
 
 opt join-limit=3 expect=ReorderJoins
 SELECT * FROM bx, cy, dz, abc WHERE a = 1

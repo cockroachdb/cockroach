@@ -151,6 +151,9 @@ func TestLookupConstraints(t *testing.T) {
 				if lookupConstraint.IsUnconstrained() {
 					b.WriteString("lookup join not possible")
 				}
+				if len(lookupConstraint.KeyCols) > 0 && len(lookupConstraint.LookupExpr) > 0 {
+					t.Errorf("expected lookup constraint to have either KeyCols or LookupExpr, not both")
+				}
 				if len(lookupConstraint.KeyCols) > 0 {
 					b.WriteString("key cols:\n")
 					for i := range lookupConstraint.KeyCols {

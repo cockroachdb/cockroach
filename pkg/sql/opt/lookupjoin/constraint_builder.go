@@ -47,8 +47,23 @@ type Constraint struct {
 	// columns constrained by LookupExpr.
 	RightSideCols opt.ColList
 
-	// LookupExpr is a lookup expression for multi-span lookup joins. It will be
-	// nil if KeyCols is non-nil.
+	// LookupExpr is a lookup expression for multi-span lookup joins. It is used
+	// when some index columns were constrained to multiple constant values or a
+	// range expression, making it impossible to construct a lookup join with
+	// KeyCols. LookupExpr is used to construct multiple lookup spans for each
+	// input row at execution time.
+	//
+	// For example, if the index cols are (region, id) and the
+	// LookupExpr is `region in ('east', 'west') AND id = input.id`,
+	// each input row will generate two spans to be scanned in the
+	// lookup:
+	//
+	//   [/'east'/<id> - /'east'/<id>]
+	//   [/'west'/<id> - /'west'/<id>]
+	//
+	// Where <id> is the value of input.id for the current input row.
+	//
+	// LookupExpr will be nil if KeyCols is non-nil.
 	LookupExpr memo.FiltersExpr
 
 	// InputProjections contains constant values and computed columns that must
@@ -166,16 +181,51 @@ func (b *ConstraintBuilder) Build(
 	var lookupExpr memo.FiltersExpr
 	var constFilters memo.FiltersExpr
 	var filterOrdsToExclude util.FastIntSet
-	shouldBuildMultiSpanLookupJoin := false
+	foundEqualityCols := false
+	lookExprRequired := false
+
+	// addEqualityColumns adds the given columns as an equality in keyCols if
+	// lookupExprRequired is false. Otherwise, the equality is added as an
+	// expression in lookupExpr. In both cases, rightCol is added to
+	// rightSideCols so the caller of Build can determine if the right equality
+	// columns form a key.
+	addEqualityColumns := func(leftCol, rightCol opt.ColumnID) {
+		if !lookExprRequired {
+			keyCols = append(keyCols, leftCol)
+			rightSideCols = append(rightSideCols, rightCol)
+		} else {
+			lookupExpr = append(lookupExpr, b.constructColEquality(leftCol, rightCol))
+			if b.rightCols.Contains(rightCol) {
+				rightSideCols = append(rightSideCols, rightCol)
+			}
+		}
+	}
+
+	// convertKeyColsToEqualityExprs converts previously collected keyCols and
+	// rightSideCols to equality expression in lookupExpr. It is used when it is
+	// discovered that a lookup expression is required to build a constraint,
+	// and keyCols and rightSideCols have already been collected. After building
+	// expressions, keyCols is reset to nil.
+	convertKeyColsToEqualityExprs := func() {
+		newRightSideCols := make(opt.ColList, 0, len(rightSideCols))
+		for i := range keyCols {
+			lookupExpr = append(lookupExpr, b.constructColEquality(keyCols[i], rightSideCols[i]))
+			if b.rightCols.Contains(rightSideCols[i]) {
+				newRightSideCols = append(newRightSideCols, rightSideCols[i])
+			}
+		}
+		keyCols = nil
+		rightSideCols = newRightSideCols
+	}
 
 	// All the lookup conditions must apply to the prefix of the index and so
 	// the projected columns created must be created in order.
 	for j := 0; j < numIndexKeyCols; j++ {
 		idxCol := b.table.IndexColumnID(index, j)
 		if eqIdx, ok := rightEq.Find(idxCol); ok {
-			keyCols = append(keyCols, leftEq[eqIdx])
-			rightSideCols = append(rightSideCols, idxCol)
+			addEqualityColumns(leftEq[eqIdx], idxCol)
 			filterOrdsToExclude.Add(eqFilterOrds[eqIdx])
+			foundEqualityCols = true
 			continue
 		}
 
@@ -200,8 +250,8 @@ func (b *ConstraintBuilder) Build(
 			// in rightEq to corresponding columns in leftEq.
 			projection := b.f.ConstructProjectionsItem(b.f.RemapCols(expr, b.eqColMap), compEqCol)
 			inputProjections = append(inputProjections, projection)
-			keyCols = append(keyCols, compEqCol)
-			rightSideCols = append(rightSideCols, idxCol)
+			addEqualityColumns(compEqCol, idxCol)
+			foundEqualityCols = true
 			continue
 		}
 
@@ -210,9 +260,10 @@ func (b *ConstraintBuilder) Build(
 		// join implements logic equivalent to simple equality between
 		// columns (where NULL never equals anything).
 		foundVals, allIdx, ok := FindJoinFilterConstants(allFilters, idxCol, b.evalCtx)
+
+		// If a single constant value was found, project it in the input
+		// and use it as an equality column.
 		if ok && len(foundVals) == 1 {
-			// If a single constant value was found, project it in the input
-			// and use it as an equality column.
 			idxColType := b.md.ColumnMeta(idxCol).Type
 			constColID := b.md.AddColumn(
 				fmt.Sprintf("lookup_join_const_col_@%d", idxCol),
@@ -223,86 +274,62 @@ func (b *ConstraintBuilder) Build(
 				constColID,
 			))
 			constFilters = append(constFilters, allFilters[allIdx])
-			keyCols = append(keyCols, constColID)
-			rightSideCols = append(rightSideCols, idxCol)
+			addEqualityColumns(constColID, idxCol)
 			filterOrdsToExclude.Add(allIdx)
 			continue
 		}
 
-		var foundRange bool
-		if !ok {
-			// If constant values were not found, try to find a filter that
-			// constrains this index column to a range.
-			_, foundRange = b.findJoinFilterRange(allFilters, idxCol)
+		// If multiple constant values were found, we must use a lookup
+		// expression.
+		if ok {
+			lookExprRequired = true
+
+			// Convert previously collected keyCols and rightSideCols to
+			// expressions in lookupExpr and clear keyCols.
+			convertKeyColsToEqualityExprs()
+
+			valsFilter := allFilters[allIdx]
+			if !isCanonicalFilter(valsFilter) {
+				valsFilter = b.f.ConstructConstFilter(idxCol, foundVals)
+			}
+			lookupExpr = append(lookupExpr, valsFilter)
+			constFilters = append(constFilters, valsFilter)
+			filterOrdsToExclude.Add(allIdx)
+			continue
 		}
 
-		// If more than one constant value or a range to constrain the index
-		// column was found, use a LookupExpr rather than KeyCols.
-		if len(foundVals) > 1 || foundRange {
-			shouldBuildMultiSpanLookupJoin = true
+		// If constant values were not found, try to find a filter that
+		// constrains this index column to a range.
+		if allIdx, foundRange := b.findJoinFilterRange(allFilters, idxCol); foundRange {
+			lookExprRequired = true
+
+			// Convert previously collected keyCols and rightSideCols to
+			// expressions in lookupExpr and clear keyCols.
+			convertKeyColsToEqualityExprs()
+
+			lookupExpr = append(lookupExpr, allFilters[allIdx])
+			constFilters = append(lookupExpr, allFilters[allIdx])
+			filterOrdsToExclude.Add(allIdx)
 		}
 
-		// Either multiple constant values or a range were found, or the
-		// index column cannot be constrained. In all cases, we cannot
-		// continue on to the next index column, so we break out of the
-		// loop.
+		// Either a range was found, or the index column cannot be constrained.
+		// In both cases, we cannot continue on to the next index column, so we
+		// break out of the loop.
 		break
 	}
 
-	var c Constraint
-	if shouldBuildMultiSpanLookupJoin {
-		// Some of the index columns were constrained to multiple constant
-		// values or a range expression, so we cannot build a lookup join
-		// with KeyCols. As an alternative, we store all the filters needed
-		// for the lookup in LookupExpr, which will be used to construct
-		// spans at execution time. Each input row will generate multiple
-		// spans to lookup in the index.
-		//
-		// For example, if the index cols are (region, id) and the
-		// LookupExpr is `region in ('east', 'west') AND id = input.id`,
-		// each input row will generate two spans to be scanned in the
-		// lookup:
-		//
-		//   [/'east'/<id> - /'east'/<id>]
-		//   [/'west'/<id> - /'west'/<id>]
-		//
-		// Where <id> is the value of input.id for the current input row.
-		var eqFilters memo.FiltersExpr
-		extractEqualityFilter := func(leftCol, rightCol opt.ColumnID) memo.FiltersItem {
-			return memo.ExtractJoinEqualityFilter(
-				leftCol, rightCol, b.leftCols, b.rightCols, onFilters,
-			)
-		}
-		var multiSpanFilterOrdsToExclude util.FastIntSet
-		eqFilters, constFilters, rightSideCols, multiSpanFilterOrdsToExclude =
-			b.findFiltersForIndexLookup(
-				allFilters, b.table, index, leftEq, rightEq, eqFilterOrds, extractEqualityFilter,
-			)
-		lookupExpr = append(eqFilters, constFilters...)
-		filterOrdsToExclude.UnionWith(multiSpanFilterOrdsToExclude)
-
-		// A multi-span lookup join with a lookup expression has no key columns
-		// and requires no projections on the input.
-		c = Constraint{
-			RightSideCols: rightSideCols,
-			LookupExpr:    lookupExpr,
-			ConstFilters:  constFilters,
-		}
-	} else {
-		// If we did not build a lookup expression, use the key columns we
-		// found, if any.
-		c = Constraint{
-			KeyCols:          keyCols,
-			RightSideCols:    rightSideCols,
-			InputProjections: inputProjections,
-			ConstFilters:     constFilters,
-		}
+	// Lookup join constraints that contain no equality columns (e.g., a lookup
+	// expression x=1) are not useful.
+	if !foundEqualityCols {
+		return Constraint{}
 	}
 
-	// We have not found a valid constraint, so there is no need to calculate
-	// the remaining filters.
-	if c.IsUnconstrained() {
-		return c
+	c := Constraint{
+		KeyCols:          keyCols,
+		RightSideCols:    rightSideCols,
+		LookupExpr:       lookupExpr,
+		InputProjections: inputProjections,
+		ConstFilters:     constFilters,
 	}
 
 	// Reduce the remaining filters.
@@ -388,85 +415,6 @@ func (b *ConstraintBuilder) findComputedColJoinEquality(
 	return expr, true
 }
 
-// findFiltersForIndexLookup finds the equality and constraint filters in
-// filters that can be used to constrain the given index. Constraint filters
-// can be either constants or inequality conditions.
-func (b *ConstraintBuilder) findFiltersForIndexLookup(
-	filters memo.FiltersExpr,
-	tabID opt.TableID,
-	index cat.Index,
-	leftEq, rightEq opt.ColList,
-	eqFiltersOrds []int,
-	extractEqualityFilter func(opt.ColumnID, opt.ColumnID) memo.FiltersItem,
-) (
-	eqFilters, constFilters memo.FiltersExpr,
-	rightSideCols opt.ColList,
-	filterOrdsToExclude util.FastIntSet,
-) {
-	numIndexKeyCols := index.LaxKeyColumnCount()
-
-	eqFilters = make(memo.FiltersExpr, 0, len(filters))
-	rightSideCols = make(opt.ColList, 0, len(filters))
-
-	// All the lookup conditions must apply to the prefix of the index.
-	for j := 0; j < numIndexKeyCols; j++ {
-		idxCol := tabID.IndexColumnID(index, j)
-		if eqIdx, ok := rightEq.Find(idxCol); ok {
-			eqFilter := extractEqualityFilter(leftEq[eqIdx], rightEq[eqIdx])
-			eqFilters = append(eqFilters, eqFilter)
-			rightSideCols = append(rightSideCols, idxCol)
-			filterOrdsToExclude.Add(eqFiltersOrds[eqIdx])
-			continue
-		}
-
-		var foundRange bool
-		// Try to find a filter that constrains this column to non-NULL
-		// constant values. We cannot use a NULL value because the lookup
-		// join implements logic equivalent to simple equality between
-		// columns (where NULL never equals anything).
-		values, allIdx, foundConstFilter := FindJoinFilterConstants(filters, idxCol, b.evalCtx)
-		if !foundConstFilter {
-			// If there's no const filters look for an inequality range.
-			allIdx, foundRange = b.findJoinFilterRange(filters, idxCol)
-			if !foundRange {
-				break
-			}
-		}
-
-		// At this point, we've found either a set of values or a range that
-		// constrain the index column.
-		filterOrdsToExclude.Add(allIdx)
-		if constFilters == nil {
-			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
-		}
-
-		// Construct a constant filter as an equality, IN expression, or
-		// inequality. These are the only types of expressions currently
-		// supported by the lookupJoiner for building lookup spans.
-		if foundConstFilter {
-			constFilter := filters[allIdx]
-			if !isCanonicalFilter(constFilter) {
-				constFilter = b.f.ConstructConstFilter(idxCol, values)
-			}
-			constFilters = append(constFilters, constFilter)
-		}
-		// Non-canonical range filters aren't supported and are already filtered
-		// out by findJoinFilterRange above.
-		if foundRange {
-			constFilters = append(constFilters, filters[allIdx])
-			// Generating additional columns after a range isn't helpful so stop here.
-			break
-		}
-	}
-
-	if len(eqFilters) == 0 {
-		// We couldn't find equality columns which we can lookup.
-		return nil, nil, nil, util.FastIntSet{}
-	}
-
-	return eqFilters, constFilters, rightSideCols, filterOrdsToExclude
-}
-
 // findJoinFilterRange tries to find an inequality range for this column.
 func (b *ConstraintBuilder) findJoinFilterRange(
 	filters memo.FiltersExpr, col opt.ColumnID,
@@ -530,6 +478,17 @@ func (b *ConstraintBuilder) findJoinFilterRange(
 		}
 	}
 	return -1, false
+}
+
+// constructColEquality returns a FiltersItem representing equality between the
+// given columns.
+func (b *ConstraintBuilder) constructColEquality(leftCol, rightCol opt.ColumnID) memo.FiltersItem {
+	return b.f.ConstructFiltersItem(
+		b.f.ConstructEq(
+			b.f.ConstructVariable(leftCol),
+			b.f.ConstructVariable(rightCol),
+		),
+	)
 }
 
 // isCanonicalFilter returns true for the limited set of expr's that are

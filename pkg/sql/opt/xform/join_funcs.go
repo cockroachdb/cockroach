@@ -411,8 +411,13 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(lookupConstraint.RightSideCols.ToSet())
 
 		// Add input columns and lookup expression columns, since these will be
-		// needed for all join types and cases.
-		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols()
+		// needed for all join types and cases. Exclude synthesized projection
+		// columns.
+		var projectionCols opt.ColSet
+		for i := range lookupConstraint.InputProjections {
+			projectionCols.Add(lookupConstraint.InputProjections[i].Col)
+		}
+		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols().Difference(projectionCols)
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
 		// At this point the filter may have been reduced by partial index
