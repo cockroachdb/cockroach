@@ -337,6 +337,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 				nil, /* ms */
 				key,
 				hlc.Timestamp{},
+				hlc.ClockTimestamp{},
 				roachpb.MakeValueFromString("fake value for "+key.String()),
 				nil, /* txn */
 			); err != nil {
@@ -370,7 +371,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 
 			t.Logf("writing tombstone at rangeID=%d", rangeID)
 			if err := storage.MVCCPutProto(
-				ctx, eng, nil /* ms */, keys.RangeTombstoneKey(rangeID), hlc.Timestamp{}, nil /* txn */, &tombstone,
+				ctx, eng, nil /* ms */, keys.RangeTombstoneKey(rangeID), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, &tombstone,
 			); err != nil {
 				t.Fatal(err)
 			}

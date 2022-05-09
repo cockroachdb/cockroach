@@ -1120,7 +1120,7 @@ func TestDecodeKey(t *testing.T) {
 					t.Fatalf("%+v", err)
 				}
 			} else {
-				if err := b.PutMVCC(test, nil); err != nil {
+				if err := b.PutMVCC(test, MVCCValue{}); err != nil {
 					t.Fatalf("%+v", err)
 				}
 			}

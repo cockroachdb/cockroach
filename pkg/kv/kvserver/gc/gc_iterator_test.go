@@ -28,6 +28,7 @@ import (
 // engine and then validating the state of the iterator as it iterates that
 // data.
 func TestGCIterator(t *testing.T) {
+	storage.SkipIfSimpleValueEncodingDisabled(t)
 	// dataItem represents a version in the storage engine and optionally a
 	// corresponding transaction which will make the MVCCKeyValue an intent.
 	type dataItem struct {
@@ -35,14 +36,14 @@ func TestGCIterator(t *testing.T) {
 		txn *roachpb.Transaction
 	}
 	// makeDataItem is a shorthand to construct dataItems.
-	makeDataItem := func(k roachpb.Key, val []byte, ts int64, txn *roachpb.Transaction) dataItem {
+	makeDataItem := func(k roachpb.Key, val roachpb.Value, ts int64, txn *roachpb.Transaction) dataItem {
 		return dataItem{
 			MVCCKeyValue: storage.MVCCKeyValue{
 				Key: storage.MVCCKey{
 					Key:       k,
 					Timestamp: hlc.Timestamp{WallTime: ts * time.Nanosecond.Nanoseconds()},
 				},
-				Value: val,
+				Value: val.RawBytes,
 			},
 			txn: txn,
 		}

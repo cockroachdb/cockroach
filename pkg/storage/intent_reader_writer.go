@@ -30,9 +30,8 @@ type intentDemuxWriter struct {
 	w Writer
 }
 
-func wrapIntentWriter(ctx context.Context, w Writer) intentDemuxWriter {
-	idw := intentDemuxWriter{w: w}
-	return idw
+func wrapIntentWriter(w Writer) intentDemuxWriter {
+	return intentDemuxWriter{w: w}
 }
 
 // ClearIntent has the same behavior as Writer.ClearIntent. buf is used as

@@ -71,10 +71,12 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 			// Write some committed keys and intents at txn1TS.
 			batch := engine.NewBatch()
 			for _, key := range keys {
-				require.NoError(t, batch.PutMVCC(MVCCKey{Key: roachpb.Key(key), Timestamp: txn1TS}, []byte("value")))
+				mvccKey := MVCCKey{Key: roachpb.Key(key), Timestamp: txn1TS}
+				mvccValue := MVCCValue{Value: roachpb.MakeValueFromString("value")}
+				require.NoError(t, batch.PutMVCC(mvccKey, mvccValue))
 			}
 			for _, key := range intents {
-				require.NoError(t, MVCCPut(ctx, batch, nil, roachpb.Key(key), txn1TS, roachpb.MakeValueFromString("intent"), txn1))
+				require.NoError(t, MVCCPut(ctx, batch, nil, roachpb.Key(key), txn1TS, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("intent"), txn1))
 			}
 			require.NoError(t, batch.Commit(true))
 			batch.Close()
@@ -146,11 +148,11 @@ func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 			b.Fatalf("unknown value mode %d", valueMode)
 		}
 
-		var v roachpb.Value
-		v.SetBytes(value)
-		v.InitChecksum(key)
+		var v MVCCValue
+		v.Value.SetBytes(value)
+		v.Value.InitChecksum(key)
 
-		require.NoError(b, writer.PutMVCC(MVCCKey{Key: key, Timestamp: sstTimestamp}, v.RawBytes))
+		require.NoError(b, writer.PutMVCC(MVCCKey{Key: key, Timestamp: sstTimestamp}, v))
 	}
 	writer.Close()
 	b.Logf("%vMB %v keys", sstFile.Len()/1e6, i)

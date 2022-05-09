@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -52,16 +51,16 @@ import (
 // txn_advance    t=<name> ts=<int>[,<int>]
 // txn_status     t=<name> status=<txnstatus>
 //
-// resolve_intent t=<name> k=<key> [status=<txnstatus>]
+// resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]]
 // check_intent   k=<key> [none]
 //
-// cput      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
-// del       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
-// del_range [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
-// increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
-// put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
+// cput      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
+// del       [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
+// del_range [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
+// increment [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
+// put       [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
+// get       [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
+// scan      [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
@@ -91,6 +90,7 @@ import (
 func TestMVCCHistories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	SkipIfSimpleValueEncodingDisabled(t)
 
 	ctx := context.Background()
 
@@ -99,17 +99,15 @@ func TestMVCCHistories(t *testing.T) {
 
 	datadriven.Walk(t, testutils.TestDataPath(t, "mvcc_histories"), func(t *testing.T, path string) {
 		// We start from a clean slate in every test file.
-		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
-			func(cfg *engineConfig) error {
-				// Latest cluster version, since these tests are not ones where we
-				// are examining differences related to separated intents.
-				cfg.Settings = cluster.MakeTestingClusterSettings()
-				return nil
-			})
+		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer engine.Close()
+
+		if strings.Contains(path, "_disable_local_timestamps") {
+			localTimestampsEnabled.Override(ctx, &engine.settings.SV, false)
+		}
 
 		reportDataEntries := func(buf *redact.StringBuilder) error {
 			hasData := false
@@ -124,7 +122,12 @@ func TestMVCCHistories(t *testing.T) {
 						buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
 					}
 				} else {
-					buf.Printf("data: %v -> %s\n", r.Key, roachpb.Value{RawBytes: r.Value}.PrettyPrint())
+					val, err := DecodeMVCCValue(r.Value)
+					if err != nil {
+						buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
+					} else {
+						buf.Printf("data: %v -> %s\n", r.Key, val)
+					}
 				}
 				return nil
 			})
@@ -423,7 +426,7 @@ func cmdTxnBegin(e *evalCtx) error {
 	var txnName string
 	e.scanArg("t", &txnName)
 	ts := e.getTs(nil)
-	globalUncertaintyLimit := e.getTsWithName(nil, "globalUncertaintyLimit")
+	globalUncertaintyLimit := e.getTsWithName("globalUncertaintyLimit")
 	key := roachpb.KeyMin
 	if e.hasArg("k") {
 		key = e.getKey()
@@ -543,14 +546,20 @@ func cmdResolveIntent(e *evalCtx) error {
 	txn := e.getTxn(mandatory)
 	key := e.getKey()
 	status := e.getTxnStatus()
-	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status)
+	clockWhilePending := hlc.ClockTimestamp(e.getTsWithName("clockWhilePending"))
+	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status, clockWhilePending)
 }
 
 func (e *evalCtx) resolveIntent(
-	rw ReadWriter, key roachpb.Key, txn *roachpb.Transaction, resolveStatus roachpb.TransactionStatus,
+	rw ReadWriter,
+	key roachpb.Key,
+	txn *roachpb.Transaction,
+	resolveStatus roachpb.TransactionStatus,
+	clockWhilePending hlc.ClockTimestamp,
 ) error {
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
+	intent.ClockWhilePending = roachpb.ObservedTimestamp{Timestamp: clockWhilePending}
 	_, err := MVCCResolveWriteIntent(e.ctx, rw, nil, intent)
 	return err
 }
@@ -587,6 +596,7 @@ func cmdClearRange(e *evalCtx) error {
 func cmdCPut(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 
 	key := e.getKey()
 	val := e.getVal()
@@ -603,11 +613,11 @@ func cmdCPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("cput", func(rw ReadWriter) error {
-		if err := MVCCConditionalPut(e.ctx, rw, nil, key, ts, val, expVal, behavior, txn); err != nil {
+		if err := MVCCConditionalPut(e.ctx, rw, nil, key, ts, localTs, val, expVal, behavior, txn); err != nil {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
 		return nil
 	})
@@ -617,13 +627,14 @@ func cmdDelete(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	key := e.getKey()
 	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw ReadWriter) error {
-		if err := MVCCDelete(e.ctx, rw, nil, key, ts, txn); err != nil {
+		if err := MVCCDelete(e.ctx, rw, nil, key, ts, localTs, txn); err != nil {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
 		return nil
 	})
@@ -633,6 +644,7 @@ func cmdDeleteRange(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	returnKeys := e.hasArg("returnKeys")
 	max := 0
 	if e.hasArg("max") {
@@ -641,7 +653,8 @@ func cmdDeleteRange(e *evalCtx) error {
 
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del_range", func(rw ReadWriter) error {
-		deleted, resumeSpan, num, err := MVCCDeleteRange(e.ctx, rw, nil, key, endKey, int64(max), ts, txn, returnKeys)
+		deleted, resumeSpan, num, err := MVCCDeleteRange(
+			e.ctx, rw, nil, key, endKey, int64(max), ts, localTs, txn, returnKeys)
 		if err != nil {
 			return err
 		}
@@ -654,7 +667,7 @@ func cmdDeleteRange(e *evalCtx) error {
 		}
 
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
 		return nil
 	})
@@ -676,8 +689,8 @@ func cmdGet(e *evalCtx) error {
 		opts.FailOnMoreRecent = true
 	}
 	opts.Uncertainty = uncertainty.Interval{
-		GlobalLimit: e.getTsWithName(nil, "globalUncertaintyLimit"),
-		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),
+		GlobalLimit: e.getTsWithName("globalUncertaintyLimit"),
+		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName("localUncertaintyLimit")),
 	}
 	if opts.Txn != nil {
 		if !opts.Uncertainty.GlobalLimit.IsEmpty() {
@@ -703,6 +716,7 @@ func cmdGet(e *evalCtx) error {
 func cmdIncrement(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 
 	key := e.getKey()
 	inc := int64(1)
@@ -715,13 +729,13 @@ func cmdIncrement(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("increment", func(rw ReadWriter) error {
-		curVal, err := MVCCIncrement(e.ctx, rw, nil, key, ts, txn, inc)
+		curVal, err := MVCCIncrement(e.ctx, rw, nil, key, ts, localTs, txn, inc)
 		if err != nil {
 			return err
 		}
 		e.results.buf.Printf("inc: current value = %d\n", curVal)
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
 		return nil
 	})
@@ -729,14 +743,7 @@ func cmdIncrement(e *evalCtx) error {
 
 func cmdMerge(e *evalCtx) error {
 	key := e.getKey()
-	var value string
-	e.scanArg("v", &value)
-	var val roachpb.Value
-	if e.hasArg("raw") {
-		val.RawBytes = []byte(value)
-	} else {
-		val.SetString(value)
-	}
+	val := e.getVal()
 	ts := e.getTs(nil)
 	return e.withWriter("merge", func(rw ReadWriter) error {
 		return MVCCMerge(e.ctx, rw, nil, key, ts, val)
@@ -746,6 +753,7 @@ func cmdMerge(e *evalCtx) error {
 func cmdPut(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 
 	key := e.getKey()
 	val := e.getVal()
@@ -753,11 +761,11 @@ func cmdPut(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw ReadWriter) error {
-		if err := MVCCPut(e.ctx, rw, nil, key, ts, val, txn); err != nil {
+		if err := MVCCPut(e.ctx, rw, nil, key, ts, localTs, val, txn); err != nil {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
 		return nil
 	})
@@ -782,8 +790,8 @@ func cmdScan(e *evalCtx) error {
 		opts.FailOnMoreRecent = true
 	}
 	opts.Uncertainty = uncertainty.Interval{
-		GlobalLimit: e.getTsWithName(nil, "globalUncertaintyLimit"),
-		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),
+		GlobalLimit: e.getTsWithName("globalUncertaintyLimit"),
+		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName("localUncertaintyLimit")),
 	}
 	if opts.Txn != nil {
 		if !opts.Uncertainty.GlobalLimit.IsEmpty() {
@@ -899,10 +907,14 @@ func (e *evalCtx) getResolve() (bool, roachpb.TransactionStatus) {
 }
 
 func (e *evalCtx) getTs(txn *roachpb.Transaction) hlc.Timestamp {
-	return e.getTsWithName(txn, "ts")
+	return e.getTsWithTxnAndName(txn, "ts")
 }
 
-func (e *evalCtx) getTsWithName(txn *roachpb.Transaction, name string) hlc.Timestamp {
+func (e *evalCtx) getTsWithName(name string) hlc.Timestamp {
+	return e.getTsWithTxnAndName(nil, name)
+}
+
+func (e *evalCtx) getTsWithTxnAndName(txn *roachpb.Transaction, name string) hlc.Timestamp {
 	var ts hlc.Timestamp
 	if txn != nil {
 		ts = txn.ReadTimestamp

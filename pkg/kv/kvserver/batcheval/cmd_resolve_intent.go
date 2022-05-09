@@ -89,6 +89,10 @@ func ResolveIntent(
 	}
 
 	update := args.AsLockUpdate()
+	if update.ClockWhilePending.NodeID != cArgs.EvalCtx.NodeID() {
+		// The observation was from the wrong node. Ignore.
+		update.ClockWhilePending = roachpb.ObservedTimestamp{}
+	}
 	ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
 	if err != nil {
 		return result.Result{}, err

@@ -13,7 +13,6 @@ package storage
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -107,7 +106,7 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 		r.err = r.iter.Error()
 	}
 	if r.iterValid && r.err == nil && r.verify && r.mvccKey.IsValue() {
-		r.err = roachpb.Value{RawBytes: r.value}.Verify(r.mvccKey.Key)
+		r.verifyValue()
 	}
 	r.prevSeekKey.Key = append(r.prevSeekKey.Key[:0], r.mvccKey.Key...)
 	r.prevSeekKey.Timestamp = r.mvccKey.Timestamp
@@ -134,7 +133,7 @@ func (r *sstIterator) Next() {
 		r.err = r.iter.Error()
 	}
 	if r.iterValid && r.err == nil && r.verify && r.mvccKey.IsValue() {
-		r.err = roachpb.Value{RawBytes: r.value}.Verify(r.mvccKey.Key)
+		r.verifyValue()
 	}
 }
 
@@ -157,4 +156,17 @@ func (r *sstIterator) UnsafeKey() MVCCKey {
 // UnsafeValue implements the SimpleMVCCIterator interface.
 func (r *sstIterator) UnsafeValue() []byte {
 	return r.value
+}
+
+// verifyValue verifies the checksum of the current value.
+func (r *sstIterator) verifyValue() {
+	mvccValue, ok, err := tryDecodeSimpleMVCCValue(r.value)
+	if !ok && err == nil {
+		mvccValue, err = decodeExtendedMVCCValue(r.value)
+	}
+	if err != nil {
+		r.err = err
+	} else {
+		r.err = mvccValue.Value.Verify(r.mvccKey.Key)
+	}
 }

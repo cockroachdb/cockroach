@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -56,6 +57,10 @@ type pebbleBatch struct {
 	wrappedIntentWriter intentDemuxWriter
 	// scratch space for wrappedIntentWriter.
 	scratch []byte
+
+	settings                         *cluster.Settings
+	shouldWriteLocalTimestamps       bool
+	shouldWriteLocalTimestampsCached bool
 }
 
 var _ Batch = &pebbleBatch{}
@@ -67,7 +72,9 @@ var pebbleBatchPool = sync.Pool{
 }
 
 // Instantiates a new pebbleBatch.
-func newPebbleBatch(db *pebble.DB, batch *pebble.Batch, writeOnly bool) *pebbleBatch {
+func newPebbleBatch(
+	db *pebble.DB, batch *pebble.Batch, writeOnly bool, settings *cluster.Settings,
+) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
 		db:    db,
@@ -94,8 +101,9 @@ func newPebbleBatch(db *pebble.DB, batch *pebble.Batch, writeOnly bool) *pebbleB
 			reusable:      true,
 		},
 		writeOnly: writeOnly,
+		settings:  settings,
 	}
-	pb.wrappedIntentWriter = wrapIntentWriter(context.Background(), pb)
+	pb.wrappedIntentWriter = wrapIntentWriter(pb)
 	return pb
 }
 
@@ -438,9 +446,21 @@ func (p *pebbleBatch) Merge(key MVCCKey, value []byte) error {
 }
 
 // PutMVCC implements the Batch interface.
-func (p *pebbleBatch) PutMVCC(key MVCCKey, value []byte) error {
+func (p *pebbleBatch) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
+	}
+	encValue, err := EncodeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	return p.put(key, encValue)
+}
+
+// PutRawMVCC implements the Batch interface.
+func (p *pebbleBatch) PutRawMVCC(key MVCCKey, value []byte) error {
+	if key.Timestamp.IsEmpty() {
+		panic("PutRawMVCC timestamp is empty")
 	}
 	return p.put(key, value)
 }
@@ -527,4 +547,14 @@ func (p *pebbleBatch) Repr() []byte {
 	reprCopy := make([]byte, len(repr))
 	copy(reprCopy, repr)
 	return reprCopy
+}
+
+// ShouldWriteLocalTimestamps implements the Writer interface.
+func (p *pebbleBatch) ShouldWriteLocalTimestamps(ctx context.Context) bool {
+	// pebbleBatch is short-lived, so cache the value for performance.
+	if !p.shouldWriteLocalTimestampsCached {
+		p.shouldWriteLocalTimestamps = shouldWriteLocalTimestamps(ctx, p.settings)
+		p.shouldWriteLocalTimestampsCached = true
+	}
+	return p.shouldWriteLocalTimestamps
 }

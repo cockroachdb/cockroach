@@ -108,7 +108,7 @@ func TestMultiIterator(t *testing.T) {
 							t.Fatalf("%+v", err)
 						}
 					} else {
-						if err := batch.PutMVCC(MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
+						if err := batch.PutRawMVCC(MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
 							t.Fatalf("%+v", err)
 						}
 					}

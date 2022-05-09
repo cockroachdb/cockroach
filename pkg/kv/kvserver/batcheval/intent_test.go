@@ -129,9 +129,9 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 				txn := roachpb.MakeTransaction("test", key, roachpb.NormalUserPriority, ts, 0, 1)
 				var err error
 				if delete {
-					err = storage.MVCCDelete(ctx, db, nil, key, ts, &txn)
+					err = storage.MVCCDelete(ctx, db, nil, key, ts, hlc.ClockTimestamp{}, &txn)
 				} else {
-					err = storage.MVCCPut(ctx, db, nil, key, ts, val, &txn)
+					err = storage.MVCCPut(ctx, db, nil, key, ts, hlc.ClockTimestamp{}, val, &txn)
 				}
 				require.NoError(t, err)
 

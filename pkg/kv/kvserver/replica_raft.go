@@ -104,7 +104,7 @@ func (r *Replica) evalAndPropose(
 	ctx context.Context,
 	ba *roachpb.BatchRequest,
 	g *concurrency.Guard,
-	st kvserverpb.LeaseStatus,
+	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	tok TrackedRequestToken,
 ) (chan proposalResult, func(), kvserverbase.CmdIDKey, *roachpb.Error) {
@@ -124,7 +124,7 @@ func (r *Replica) evalAndPropose(
 
 	// Attach the endCmds to the proposal and assume responsibility for
 	// releasing the concurrency guard if the proposal makes it to Raft.
-	proposal.ec = endCmds{repl: r, g: g, st: st}
+	proposal.ec = endCmds{repl: r, g: g, st: *st}
 
 	// Pull out proposal channel to return. proposal.doneCh may be set to
 	// nil if it is signaled in this function.
@@ -2116,8 +2116,14 @@ func handleTruncatedStateBelowRaftPreApply(
 	// The suggested truncated state moves us forward; apply it and tell
 	// the caller as much.
 	if err := storage.MVCCPutProto(
-		ctx, readWriter, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
-		hlc.Timestamp{}, nil /* txn */, suggestedTruncatedState,
+		ctx,
+		readWriter,
+		nil, /* ms */
+		prefixBuf.RaftTruncatedStateKey(),
+		hlc.Timestamp{},
+		hlc.ClockTimestamp{},
+		nil, /* txn */
+		suggestedTruncatedState,
 	); err != nil {
 		return false, errors.Wrap(err, "unable to write RaftTruncatedState")
 	}

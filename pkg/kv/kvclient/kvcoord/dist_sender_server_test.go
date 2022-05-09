@@ -75,9 +75,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	key := testutils.MakeKey(keys.Meta1Prefix, roachpb.KeyMax)
 	now := s.Clock().Now()
 	txn := roachpb.MakeTransaction("txn", roachpb.Key("foobar"), 0, now, 0, int32(s.SQLInstanceID()))
-	if err := storage.MVCCPutProto(
-		context.Background(), s.Engines()[0],
-		nil, key, now, &txn, &roachpb.RangeDescriptor{}); err != nil {
+	if err := storage.MVCCPutProto(context.Background(), s.Engines()[0], nil, key, now, hlc.ClockTimestamp{}, &txn, &roachpb.RangeDescriptor{}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -722,7 +722,12 @@ func (c *cluster) PushTransaction(
 func (c *cluster) ResolveIntent(
 	ctx context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions,
 ) *roachpb.Error {
-	log.Eventf(ctx, "resolving intent %s for txn %s with %s status", intent.Key, intent.Txn.ID.Short(), intent.Status)
+	var obsStr string
+	if obs := intent.ClockWhilePending; obs != (roachpb.ObservedTimestamp{}) {
+		obsStr = fmt.Sprintf(" and clock observation {%d %v}", obs.NodeID, obs.Timestamp)
+	}
+	log.Eventf(ctx, "resolving intent %s for txn %s with %s status%s",
+		intent.Key, intent.Txn.ID.Short(), intent.Status, obsStr)
 	c.m.OnLockUpdated(ctx, &intent)
 	return nil
 }

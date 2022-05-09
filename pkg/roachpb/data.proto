@@ -67,6 +67,12 @@ enum ValueType {
 
   // TIMESERIES is applied to values which contain InternalTimeSeriesData.
   TIMESERIES = 100;
+
+  // MVCC_EXTENDED_ENCODING_SENTINEL is a sentinel tag value used in the
+  // MVCCValue extended encoding to indicate that an encoded Value is wrapped
+  // with a header. It should not be used in the Value encoding directly. See
+  // MVCCValue for more details.
+  MVCC_EXTENDED_ENCODING_SENTINEL = 101;
 }
 
 // Value specifies the value at a key. Multiple values at the same key are
@@ -535,13 +541,15 @@ message LockAcquisition {
 // A LockUpdate is a Span together with Transaction state. LockUpdate messages
 // are used to update all locks held by the transaction within the span to the
 // transaction's authoritative state. As such, the message is used as input
-// argument to intent resolution, to pass the current txn status, timestamps and
-// ignored seqnum ranges to the resolution algorithm.
+// argument to intent resolution, to pass the current txn status, timestamps,
+// ignored seqnum ranges, and clock observations to the resolution algorithm.
+// For details about these arguments, see the comments on ResolveIntentRequest.
 message LockUpdate {
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+  ObservedTimestamp clock_while_pending = 5 [(gogoproto.nullable) = false];
 }
 
 // A LockStateInfo represents the metadata of a lock tracked in a replica's

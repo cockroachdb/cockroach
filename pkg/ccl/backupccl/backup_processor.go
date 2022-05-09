@@ -846,7 +846,7 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 				return err
 			}
 		} else {
-			if err := s.sst.PutMVCC(sst.UnsafeKey(), sst.UnsafeValue()); err != nil {
+			if err := s.sst.PutRawMVCC(sst.UnsafeKey(), sst.UnsafeValue()); err != nil {
 				return err
 			}
 		}

@@ -47,24 +47,6 @@ func (r *Replica) addToTSCacheChecked(
 			"cache after evaluating %v (resp=%v; err=%v) with lease expiration %v. The timestamp "+
 			"cache update could be lost of a non-cooperative lease change.", ts, ba, br, pErr, exp)
 	}
-	// All updates the to timestamp cache with non-synthetic timestamps must be
-	// performed at or below the current time. This is no longer strictly
-	// required for correctness as lease transfers now read the timestamp cache
-	// directly instead of using the local HLC clock as a proxy for its high
-	// water-mark, but it serves as a good proxy for proper handling of HLC
-	// clock updates and, by extension, observed timestamps.
-	//
-	// TODO(nvanbenschoten): this is currently disabled because we seem to
-	// regularly hit it on master. Now that we ship a snapshot of the timestamp
-	// cache on lease transfers instead of just the current clock time, the
-	// property this is asserting is no longer quite as important, so we can
-	// disable the check. However, it would still be nice to track down how we
-	// can hit this.
-	if !ts.Synthetic && st.Now.ToTimestamp().Less(ts) && false {
-		log.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
-			"cache after evaluating %v (resp=%v; err=%v) with local hlc clock at timestamp %s. "+
-			"Non-synthetic timestamps should always lag the local hlc clock.", ts, ba, br, pErr, st.Now)
-	}
 	r.store.tsCache.Add(start, end, ts, txnID)
 }
 

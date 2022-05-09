@@ -234,6 +234,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// good to make sure we're overly redacting said diff.
 	defer log.TestingSetRedactable(true)()
 
+	// Test expects simple MVCC value encoding.
+	storage.SkipIfSimpleValueEncodingDisabled(t)
+
 	// Test uses sticky registry to have persistent pebble state that could
 	// be analyzed for existence of snapshots and to verify snapshot content
 	// after failures.
@@ -416,7 +419,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	val.SetInt(42)
 	diffTimestamp = ts.Clock().Now()
 	if err := storage.MVCCPut(
-		context.Background(), store1.Engine(), nil, diffKey, diffTimestamp, val, nil,
+		context.Background(), store1.Engine(), nil, diffKey, diffTimestamp, hlc.ClockTimestamp{}, val, nil,
 	); err != nil {
 		t.Fatal(err)
 	}

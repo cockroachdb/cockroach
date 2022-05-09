@@ -31,11 +31,9 @@ import "github.com/cockroachdb/cockroach/pkg/util/hlc"
 // a range. This can lead to values that would otherwise be considered uncertain
 // by the original global limit to be considered "certainly concurrent", and
 // thus not causally related, with the transaction due to observed timestamps.
-//
-// However, the local limit does not apply to all committed values on a range.
-// Specifically, values with "synthetic timestamps" must use the interval's
-// global limit for the purposes of uncertainty, because observed timestamps do
-// not apply to values with synthetic timestamps.
+// However, the local limit does not operate on a value's version timestamp. It
+// instead applies to a value's local timestamp, which is a recording of the
+// local HLC clock on the leaseholder that originally wrote the value.
 //
 // Uncertainty intervals also apply to non-transactional requests that require
 // strong consistency (single-key linearizability). These requests defer their
@@ -50,12 +48,21 @@ type Interval struct {
 	LocalLimit  hlc.ClockTimestamp
 }
 
-// IsUncertain determines whether a value with the provided timestamp is
-// uncertain to a reader with a ReadTimestamp below the value's and with
-// the specified uncertainty interval.
-func (in Interval) IsUncertain(valueTs hlc.Timestamp) bool {
-	if !in.LocalLimit.IsEmpty() && !valueTs.Synthetic {
-		return valueTs.LessEq(in.LocalLimit.ToTimestamp())
+// IsUncertain determines whether a value with the provided version and local
+// timestamps is uncertain to a reader with a ReadTimestamp below the value's
+// version timestamp and with the specified uncertainty interval.
+func (in Interval) IsUncertain(valueTs hlc.Timestamp, localTs hlc.ClockTimestamp) bool {
+	if valueTs.IsEmpty() {
+		panic("unexpected empty value timestamp")
+	}
+	if localTs.IsEmpty() {
+		panic("unexpected empty local timestamp")
+	}
+	if !in.LocalLimit.IsEmpty() && in.LocalLimit.Less(localTs) {
+		// The reader has an observed timestamp that precedes the local timestamp of
+		// this value. There is no uncertainty as the reader transaction must have
+		// started before the writer transaction completed, so they are concurrent.
+		return false
 	}
 	return valueTs.LessEq(in.GlobalLimit)
 }

@@ -165,9 +165,24 @@ func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 // An error is returned if it is not greater than any previously added entry
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
-func (fw *SSTWriter) PutMVCC(key MVCCKey, value []byte) error {
+func (fw *SSTWriter) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
+	}
+	encValue, err := EncodeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	return fw.put(key, encValue)
+}
+
+// PutRawMVCC implements the Writer interface.
+// An error is returned if it is not greater than any previously added entry
+// (according to the comparator configured during writer creation). `Close`
+// cannot have been called.
+func (fw *SSTWriter) PutRawMVCC(key MVCCKey, value []byte) error {
+	if key.Timestamp.IsEmpty() {
+		panic("PutRawMVCC timestamp is empty")
 	}
 	return fw.put(key, value)
 }
@@ -317,6 +332,11 @@ func (fw *SSTWriter) Close() {
 	// method just makes for messy defers.
 	_ = fw.fw.Close()
 	fw.fw = nil
+}
+
+// ShouldWriteLocalTimestamps implements the Writer interface.
+func (fw *SSTWriter) ShouldWriteLocalTimestamps(context.Context) bool {
+	return false
 }
 
 // MemFile is a file-like struct that buffers all data written to it in memory.

@@ -335,7 +335,7 @@ func EvalAddSSTable(
 					return result.Result{}, err
 				}
 			} else {
-				if err := readWriter.PutMVCC(k, sstIter.UnsafeValue()); err != nil {
+				if err := readWriter.PutRawMVCC(k, sstIter.UnsafeValue()); err != nil {
 					return result.Result{}, err
 				}
 			}
@@ -401,11 +401,15 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 			break
 		}
 
-		key, value := iter.UnsafeKey(), iter.UnsafeValue()
+		key, valueRaw := iter.UnsafeKey(), iter.UnsafeValue()
+		value, err := storage.DecodeMVCCValue(valueRaw)
+		if err != nil {
+			return err
+		}
 		if key.Timestamp.IsEmpty() {
 			return errors.AssertionFailedf("SST contains inline value or intent for key %s", key)
 		}
-		if len(value) == 0 {
+		if value.IsTombstone() {
 			return errors.AssertionFailedf("SST contains tombstone for key %s", key)
 		}
 		if sstTimestamp.IsSet() && key.Timestamp != sstTimestamp {

@@ -51,7 +51,7 @@ func (kv KV) Value() roachpb.Value {
 	return value
 }
 
-// ValueBytes returns the roachpb.Value byte-representation of the value.
-func (kv KV) ValueBytes() []byte {
-	return kv.Value().RawBytes
+// MVCCValue returns the storage.MVCCValue representation of the value.
+func (kv KV) MVCCValue() storage.MVCCValue {
+	return storage.MVCCValue{Value: kv.Value()}
 }

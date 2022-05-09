@@ -70,14 +70,12 @@ The linearizability guarantee is important to note as two sequential (in real
 time) transactions via two different gateway nodes can be assigned timestamps
 in reverse order (the second gateway's clock may be behind), but must still see
 results according to real-time order if they access overlapping keys (e.g. B
-must see A's write). Also keep in mind that an intent's written timestamp
+must see A's write). Also keep in mind that an intent's local timestamp
 signifies when the intent itself was written, but the final value will be
 resolved to the transaction's commit timestamp, which may be later than the
-written timestamp. Since the commit status and timestamp are non-local
+local timestamp. Since the commit status and timestamp are non-local
 properties, a range may contain committed values (as unresolved intents) that
 turn out to exist in the future of the local HLC when the intent gets resolved.
-
-TODO(nvanbenschoten): Update the above on written timestamps after #72121.
 
  - Cooperative lease transfers (Raft channel). During a cooperative lease
    transfer from one replica of a range to another, the outgoing leaseholder
@@ -89,16 +87,13 @@ TODO(nvanbenschoten): Update the above on written timestamps after #72121.
 
    The invariant that a leaseholder's clock is always >= its lease's start time
    is used in a few places. First, it ensures that the leaseholder's clock
-   always leads the written_timestamp of any value in its keyspace written by a
+   always leads the local_timestamp of any value in its keyspace written by a
    prior leaseholder on its range, which is an important property for the
    correctness of observed timestamps. Second, it ensures that the leaseholder
    immediately views itself as the leaseholder. Third, it ensures that if the
    new leaseholder was to transfer the lease away at some point in the future,
    this later lease's start time could be pulled from the local clock and be
    guaranteed to receive an even greater starting timestamp.
-
-   TODO(nvanbenschoten): the written_timestamp concept does not yet exist in
-   code. It will be introduced in the replacement to #72121.
 
  - Range merges (Raft + BatchRequest channels). During a merge of two ranges,
    the right-hand side of the merge passes a "frozen timestamp" clock reading
@@ -109,21 +104,21 @@ TODO(nvanbenschoten): Update the above on written timestamps after #72121.
    merge and officially takes control of the combined range, it forwards its HLC
    to this frozen timestamp. Like the previous interaction, this one is also
    necessary to ensure that the leaseholder of the joint range has a clock that
-   leads the written_timestamp of any value in its keyspace, even one written
+   leads the local_timestamp of any value in its keyspace, even one written
    originally on the right-hand side range.
 
  - Observed timestamps (Raft + BatchRequest channels). During the lifetime of a
    transaction, its coordinator issues BatchRequests to other nodes in the
    cluster. Each time a given transaction visits a node for the first time, it
    captures an observation from the node's HLC. Separately, when a leaseholder
-   on a given node serves a write, it ensures that the node's HLC clock is >=
-   the written_timestamp of the write. This written_timestamp is retained even
-   if an intent is moved to a higher timestamp if it is asynchronously resolved.
-   As a result, these "observed timestamps" captured during the lifetime of a
-   transaction can be used to make a claim about values that could not have been
-   written yet at the time that the transaction first visited the node, and by
-   extension, at the time that the transaction began. This allows the
-   transaction to avoid uncertainty restarts in some circumstances.
+   on a given node serves a write, it assigns the write a local_timestamp from
+   its node's HLC clock. This local_timestamp is retained even if an intent is
+   moved to a higher timestamp if it is asynchronously resolved. As a result,
+   these "observed timestamps" captured during the lifetime of a transaction can
+   be used to make a claim about values that could not have been written yet at
+   the time that the transaction first visited the node, and by extension, at
+   the time that the transaction began. This allows the transaction to avoid
+   uncertainty restarts in some circumstances.
 
    A variant of this same mechanism applies to non-transactional requests that
    defer their timestamp allocation to the leaseholder of their (single) range.

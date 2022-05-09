@@ -39,36 +39,36 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			defer ol.Close()
 
 			// Write a value and an intent.
-			if err := MVCCPut(ctx, ol, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey1, hlc.Timestamp{Logical: 1}, hlc.ClockTimestamp{}, value1, nil); err != nil {
 				t.Fatal(err)
 			}
 			txn1ts := makeTxn(*txn1, hlc.Timestamp{Logical: 2})
-			if err := MVCCPut(ctx, ol, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey1, txn1ts.ReadTimestamp, hlc.ClockTimestamp{}, value2, txn1ts); err != nil {
 				t.Fatal(err)
 			}
 
 			// Write a value and an intent on local keys.
 			localKey := keys.MakeRangeIDPrefix(1)
-			if err := MVCCPut(ctx, ol, nil, localKey, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
+			if err := MVCCPut(ctx, ol, nil, localKey, hlc.Timestamp{Logical: 1}, hlc.ClockTimestamp{}, value1, nil); err != nil {
 				t.Fatal(err)
 			}
-			if err := MVCCPut(ctx, ol, nil, localKey, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
+			if err := MVCCPut(ctx, ol, nil, localKey, txn1ts.ReadTimestamp, hlc.ClockTimestamp{}, value2, txn1ts); err != nil {
 				t.Fatal(err)
 			}
 
 			// Update the intents and write another.
 			txn1ts.Sequence++
 			txn1ts.WriteTimestamp = hlc.Timestamp{Logical: 3}
-			if err := MVCCPut(ctx, ol, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey1, txn1ts.ReadTimestamp, hlc.ClockTimestamp{}, value2, txn1ts); err != nil {
 				t.Fatal(err)
 			}
-			if err := MVCCPut(ctx, ol, nil, localKey, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
+			if err := MVCCPut(ctx, ol, nil, localKey, txn1ts.ReadTimestamp, hlc.ClockTimestamp{}, value2, txn1ts); err != nil {
 				t.Fatal(err)
 			}
 			// Set the txn timestamp to a larger value than the intent.
 			txn1LargerTS := makeTxn(*txn1, hlc.Timestamp{Logical: 4})
 			txn1LargerTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
-			if err := MVCCPut(ctx, ol, nil, testKey2, txn1LargerTS.ReadTimestamp, value3, txn1LargerTS); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey2, txn1LargerTS.ReadTimestamp, hlc.ClockTimestamp{}, value3, txn1LargerTS); err != nil {
 				t.Fatal(err)
 			}
 
@@ -92,7 +92,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 
 			// Write another intent, push it, then abort it.
 			txn2ts := makeTxn(*txn2, hlc.Timestamp{Logical: 5})
-			if err := MVCCPut(ctx, ol, nil, testKey3, txn2ts.ReadTimestamp, value4, txn2ts); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey3, txn2ts.ReadTimestamp, hlc.ClockTimestamp{}, value4, txn2ts); err != nil {
 				t.Fatal(err)
 			}
 			txn2Pushed := *txn2
