@@ -19,9 +19,11 @@ import Job = cockroach.server.serverpb.IJobResponse;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import {
   ColumnDescriptor,
+  EmptyTable,
   Pagination,
   ResultsPerPageLabel,
   SortSetting,
+  SortedTable,
   util,
 } from "@cockroachlabs/cluster-ui";
 import {
@@ -32,11 +34,11 @@ import {
   jobTable,
 } from "src/util/docs";
 import { trackDocsLink } from "src/util/analytics";
-import { EmptyTable, SortedTable } from "@cockroachlabs/cluster-ui";
 import { Anchor } from "src/components";
 import emptyTableResultsIcon from "assets/emptyState/empty-table-results.svg";
 import magnifyingGlassIcon from "assets/emptyState/magnifying-glass.svg";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import moment from "moment";
 
 class JobsSortedTable extends SortedTable<Job> {}
 
@@ -216,6 +218,7 @@ export interface JobTableProps {
   pageSize?: number;
   current?: number;
   isUsedFilter: boolean;
+  retentionTime: moment.Duration | null;
 }
 
 export interface JobTableState {
@@ -244,16 +247,6 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
   onChangePage = (current: number) => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
-  };
-
-  renderCounts = () => {
-    const {
-      pagination: { current, pageSize },
-    } = this.state;
-    const total = this.props.jobs.data.jobs.length;
-    const pageCount = current * pageSize > total ? total : current * pageSize;
-    const count = total > 10 ? pageCount : current * total;
-    return `${count} of ${total} jobs`;
   };
 
   renderEmptyState = () => {
@@ -304,18 +297,31 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     trackDocsLink(e.currentTarget.text);
   };
 
+  formatJobsRetentionMessage = (retentionTime: moment.Duration): string => {
+    const jobsOldestTime = moment()
+      .subtract(retentionTime)
+      .utc();
+    return `Since ${jobsOldestTime.format(DATE_FORMAT_24_UTC)}`;
+  };
+
   render() {
     const jobs = this.props.jobs.data.jobs;
     const { pagination } = this.state;
 
     return (
       <React.Fragment>
-        <div className="cl-table-statistic">
+        <div className="cl-table-statistic jobs-table-summary">
           <h4 className="cl-count-title">
             <ResultsPerPageLabel
               pagination={{ ...pagination, total: jobs.length }}
               pageName="jobs"
             />
+            {this.props.retentionTime && (
+              <>
+                <span className="jobs-table-summary__retention-divider">|</span>
+                {this.formatJobsRetentionMessage(this.props.retentionTime)}
+              </>
+            )}
           </h4>
         </div>
         <JobsSortedTable
