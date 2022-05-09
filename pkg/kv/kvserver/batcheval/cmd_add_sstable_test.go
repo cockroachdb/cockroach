@@ -683,7 +683,7 @@ func TestEvalAddSSTable(t *testing.T) {
 						if kv.WallTimestamp == intentTS {
 							txn = &intentTxn
 						}
-						require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key(), kv.Timestamp(), kv.Value(), txn))
+						require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key(), kv.Timestamp(), hlc.ClockTimestamp{}, kv.Value(), txn))
 					}
 					require.NoError(t, b.Commit(false))
 					stats := engineStats(t, engine, 0)
@@ -772,8 +772,10 @@ func TestEvalAddSSTable(t *testing.T) {
 						ts := iter.Key().Timestamp.WallTime
 						var value []byte
 						if iter.Key().IsValue() {
-							if len(iter.Value()) > 0 {
-								value, err = roachpb.Value{RawBytes: iter.Value()}.GetBytes()
+							mvccVal, err := storage.DecodeMVCCValue(iter.Value())
+							require.NoError(t, err)
+							if !mvccVal.IsTombstone() {
+								value, err = mvccVal.Value.GetBytes()
 								require.NoError(t, err)
 							}
 						} else {
@@ -1091,6 +1093,7 @@ func runTestDBAddSSTable(
 func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	storage.SkipIfSimpleValueEncodingDisabled(t)
 
 	const max = 1 << 10
 	ctx := context.Background()
@@ -1117,7 +1120,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		{"e", 1, "e"},
 		{"z", 2, "zzzzzz"},
 	} {
-		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
+		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.MVCCValue()))
 	}
 
 	sst, start, end := sstutil.MakeSST(t, st, []sstutil.KV{
@@ -1209,6 +1212,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	storage.SkipIfSimpleValueEncodingDisabled(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -1228,7 +1232,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 		{"y", 5, "yyy"},
 		{"z", 2, "zz"},
 	} {
-		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
+		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.MVCCValue()))
 	}
 
 	// This test ensures accuracy of MVCCStats in the situation that successive
@@ -1270,7 +1274,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	// ingesting the perfectly shadowing KVs (same ts and same value) in the
 	// second SST.
 	for _, kv := range kvs {
-		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
+		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.MVCCValue()))
 	}
 
 	// Evaluate the second SST. Both the KVs are perfectly shadowing and should
@@ -1467,7 +1471,9 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, kvs, 1)
 	require.Equal(t, storage.MVCCKey{Key: roachpb.Key("key"), Timestamp: writeTS}, kvs[0].Key)
-	v, err := roachpb.Value{RawBytes: kvs[0].Value}.GetBytes()
+	mvccVal, err := storage.DecodeMVCCValue(kvs[0].Value)
+	require.NoError(t, err)
+	v, err := mvccVal.Value.GetBytes()
 	require.NoError(t, err)
 	require.Equal(t, "sst", string(v))
 }

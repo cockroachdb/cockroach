@@ -924,7 +924,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		p.makeMetricEtcEventListener(ctx),
 	)
 	p.eventListener = &cfg.Opts.EventListener
-	p.wrappedIntentWriter = wrapIntentWriter(ctx, p)
+	p.wrappedIntentWriter = wrapIntentWriter(p)
 
 	// Read the current store cluster version.
 	storeClusterVersion, err := getMinVersion(unencryptedFS, cfg.Dir)
@@ -1246,9 +1246,21 @@ func (p *Pebble) Merge(key MVCCKey, value []byte) error {
 }
 
 // PutMVCC implements the Engine interface.
-func (p *Pebble) PutMVCC(key MVCCKey, value []byte) error {
+func (p *Pebble) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
+	}
+	encValue, err := EncodeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	return p.put(key, encValue)
+}
+
+// PutRawMVCC implements the Engine interface.
+func (p *Pebble) PutRawMVCC(key MVCCKey, value []byte) error {
+	if key.Timestamp.IsEmpty() {
+		panic("PutRawMVCC timestamp is empty")
 	}
 	return p.put(key, value)
 }
@@ -1289,6 +1301,45 @@ func (p *Pebble) LogData(data []byte) error {
 // LogLogicalOp implements the Engine interface.
 func (p *Pebble) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
 	// No-op. Logical logging disabled.
+}
+
+// localTimestampsEnabled controls whether local timestamps are written in MVCC
+// values. A true setting is also gated on clusterversion.LocalTimestamps. After
+// all nodes in a cluster are at or beyond clusterversion.LocalTimestamps,
+// different nodes will see the version state transition at different times.
+// Nodes that have not yet seen the transition may remove the local timestamp
+// from an intent that has one during intent resolution. This will not cause
+// problems.
+//
+// TODO(nvanbenschoten): remove this cluster setting and its associated plumbing
+// when removing the cluster version, once we're confident in the efficacy and
+// stability of local timestamps.
+var localTimestampsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"storage.transaction.local_timestamps.enabled",
+	"if enabled, MVCC keys will be written with local timestamps",
+	true,
+)
+
+func shouldWriteLocalTimestamps(ctx context.Context, settings *cluster.Settings) bool {
+	if !localTimestampsEnabled.Get(&settings.SV) {
+		// Not enabled.
+		return false
+	}
+	ver := settings.Version.ActiveVersionOrEmpty(ctx)
+	if ver == (clusterversion.ClusterVersion{}) {
+		// Some tests fail to configure settings. In these cases, assume that it
+		// is safe to write local timestamps.
+		return true
+	}
+	return ver.IsActive(clusterversion.LocalTimestamps)
+}
+
+// ShouldWriteLocalTimestamps implements the Writer interface.
+func (p *Pebble) ShouldWriteLocalTimestamps(ctx context.Context) bool {
+	// This is not fast. Pebble should not be used by writers that want
+	// performance. They should use pebbleBatch.
+	return shouldWriteLocalTimestamps(ctx, p.settings)
 }
 
 // Attrs implements the Engine interface.
@@ -1527,7 +1578,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */)
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings)
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1537,7 +1588,7 @@ func (p *Pebble) NewReadOnly(durability DurabilityRequirement) ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly)
+	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly, p.settings)
 }
 
 // NewSnapshot implements the Engine interface.
@@ -2071,7 +2122,11 @@ func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) PutMVCC(key MVCCKey, value []byte) error {
+func (p *pebbleReadOnly) PutMVCC(key MVCCKey, value MVCCValue) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) PutRawMVCC(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
 
@@ -2094,6 +2149,10 @@ func (p *pebbleReadOnly) LogData(data []byte) error {
 }
 
 func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ShouldWriteLocalTimestamps(ctx context.Context) bool {
 	panic("not implemented")
 }
 
@@ -2286,7 +2345,6 @@ func pebbleExportToSst(
 			break
 		}
 
-		unsafeValue := iter.UnsafeValue()
 		isNewKey := !options.ExportAllRevisions || !unsafeKey.Key.Equal(curKey)
 		if trackKeyBoundary && options.ExportAllRevisions && isNewKey {
 			curKey = append(curKey[:0], unsafeKey.Key...)
@@ -2319,10 +2377,27 @@ func pebbleExportToSst(
 			}
 		}
 
-		// Skip tombstone (len=0) records when start time is zero (non-incremental)
-		// and we are not exporting all versions.
-		skipTombstones := !options.ExportAllRevisions && options.StartTS.IsEmpty()
-		if len(unsafeValue) > 0 || !skipTombstones {
+		unsafeValue := iter.UnsafeValue()
+		skip := false
+		if unsafeKey.IsValue() {
+			mvccValue, ok, err := tryDecodeSimpleMVCCValue(unsafeValue)
+			if !ok && err == nil {
+				mvccValue, err = decodeExtendedMVCCValue(unsafeValue)
+			}
+			if err != nil {
+				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
+			}
+
+			// Export only the inner roachpb.Value, not the MVCCValue header.
+			unsafeValue = mvccValue.Value.RawBytes
+
+			// Skip tombstone records when start time is zero (non-incremental)
+			// and we are not exporting all versions.
+			skipTombstones := !options.ExportAllRevisions && options.StartTS.IsEmpty()
+			skip = skipTombstones && mvccValue.IsTombstone()
+		}
+
+		if !skip {
 			if err := rows.Count(unsafeKey.Key); err != nil {
 				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding %s", unsafeKey)
 			}
@@ -2351,7 +2426,7 @@ func pebbleExportToSst(
 					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			} else {
-				if err := sstWriter.PutMVCC(unsafeKey, unsafeValue); err != nil {
+				if err := sstWriter.PutRawMVCC(unsafeKey, unsafeValue); err != nil {
 					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			}

@@ -929,6 +929,7 @@ func MakeTransaction(
 // occurred, i.e. the maximum of ReadTimestamp and LastHeartbeat.
 func (t Transaction) LastActive() hlc.Timestamp {
 	ts := t.LastHeartbeat
+	// TODO(nvanbenschoten): remove this when we remove synthetic timestamps.
 	if !t.ReadTimestamp.Synthetic {
 		ts.Forward(t.ReadTimestamp)
 	}
@@ -2488,7 +2489,6 @@ var _ = (SequencedWriteBySeq{}).Find
 func init() {
 	// Inject the format dependency into the enginepb package.
 	enginepb.FormatBytesAsKey = func(k []byte) string { return Key(k).String() }
-	enginepb.FormatBytesAsValue = func(v []byte) string { return Value{RawBytes: v}.PrettyPrint() }
 }
 
 // SafeValue implements the redact.SafeValue interface.

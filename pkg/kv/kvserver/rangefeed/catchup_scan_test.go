@@ -34,10 +34,10 @@ func TestCatchupScan(t *testing.T) {
 		testKey1 = roachpb.Key("/db1")
 		testKey2 = roachpb.Key("/db2")
 
-		testValue1 = []byte("val1")
-		testValue2 = []byte("val2")
-		testValue3 = []byte("val3")
-		testValue4 = []byte("val4")
+		testValue1 = roachpb.MakeValueFromString("val1")
+		testValue2 = roachpb.MakeValueFromString("val2")
+		testValue3 = roachpb.MakeValueFromString("val3")
+		testValue4 = roachpb.MakeValueFromString("val4")
 
 		ts1 = hlc.Timestamp{WallTime: 1, Logical: 0}
 		ts2 = hlc.Timestamp{WallTime: 2, Logical: 0}
@@ -46,7 +46,7 @@ func TestCatchupScan(t *testing.T) {
 		ts5 = hlc.Timestamp{WallTime: 4, Logical: 0}
 	)
 
-	makeTxn := func(key roachpb.Key, val []byte, ts hlc.Timestamp,
+	makeTxn := func(key roachpb.Key, val roachpb.Value, ts hlc.Timestamp,
 	) (roachpb.Transaction, roachpb.Value) {
 		txnID := uuid.MakeV4()
 		txnMeta := enginepb.TxnMeta{
@@ -59,12 +59,12 @@ func TestCatchupScan(t *testing.T) {
 				TxnMeta:       txnMeta,
 				ReadTimestamp: ts,
 			}, roachpb.Value{
-				RawBytes: val,
+				RawBytes: val.RawBytes,
 			}
 	}
 
-	makeKTV := func(key roachpb.Key, ts hlc.Timestamp, value []byte) storage.MVCCKeyValue {
-		return storage.MVCCKeyValue{Key: storage.MVCCKey{Key: key, Timestamp: ts}, Value: value}
+	makeKTV := func(key roachpb.Key, ts hlc.Timestamp, value roachpb.Value) storage.MVCCKeyValue {
+		return storage.MVCCKeyValue{Key: storage.MVCCKey{Key: key, Timestamp: ts}, Value: value.RawBytes}
 	}
 	// testKey1 has an intent and provisional value that will be skipped. Both
 	// testKey1 and testKey2 have a value that is older than what we need with
@@ -83,12 +83,12 @@ func TestCatchupScan(t *testing.T) {
 	// Put with no intent.
 	for _, kv := range []storage.MVCCKeyValue{kv1_1_1, kv1_2_2, kv1_3_3, kv2_1_1, kv2_2_2, kv2_5_3} {
 		v := roachpb.Value{RawBytes: kv.Value}
-		if err := storage.MVCCPut(ctx, eng, nil, kv.Key.Key, kv.Key.Timestamp, v, nil); err != nil {
+		if err := storage.MVCCPut(ctx, eng, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Put with an intent.
-	if err := storage.MVCCPut(ctx, eng, nil, kv1_4_4.Key.Key, txn.ReadTimestamp, val, &txn); err != nil {
+	if err := storage.MVCCPut(ctx, eng, nil, kv1_4_4.Key.Key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val, &txn); err != nil {
 		t.Fatal(err)
 	}
 	testutils.RunTrueAndFalse(t, "useTBI", func(t *testing.T, useTBI bool) {

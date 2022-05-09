@@ -249,5 +249,5 @@ func writeTombstoneKey(
 	}
 	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
-		hlc.Timestamp{}, tombstone, nil)
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, tombstone, nil)
 }

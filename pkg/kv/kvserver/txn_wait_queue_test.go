@@ -39,7 +39,7 @@ import (
 
 func writeTxnRecord(ctx context.Context, tc *testContext, txn *roachpb.Transaction) error {
 	key := keys.TransactionKey(txn.Key, txn.ID)
-	return storage.MVCCPutProto(ctx, tc.store.Engine(), nil, key, hlc.Timestamp{}, nil, txn)
+	return storage.MVCCPutProto(ctx, tc.store.Engine(), nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, txn)
 }
 
 // createTxnForPushQueue creates a txn struct and writes a "fake"

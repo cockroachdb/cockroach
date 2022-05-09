@@ -612,11 +612,18 @@ func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	return s.w.Merge(key, value)
 }
 
-func (s spanSetWriter) PutMVCC(key storage.MVCCKey, value []byte) error {
+func (s spanSetWriter) PutMVCC(key storage.MVCCKey, value storage.MVCCValue) error {
 	if err := s.checkAllowed(key.Key); err != nil {
 		return err
 	}
 	return s.w.PutMVCC(key, value)
+}
+
+func (s spanSetWriter) PutRawMVCC(key storage.MVCCKey, value []byte) error {
+	if err := s.checkAllowed(key.Key); err != nil {
+		return err
+	}
+	return s.w.PutRawMVCC(key, value)
 }
 
 func (s spanSetWriter) PutUnversioned(key roachpb.Key, value []byte) error {
@@ -653,6 +660,10 @@ func (s spanSetWriter) LogLogicalOp(
 	op storage.MVCCLogicalOpType, details storage.MVCCLogicalOpDetails,
 ) {
 	s.w.LogLogicalOp(op, details)
+}
+
+func (s spanSetWriter) ShouldWriteLocalTimestamps(ctx context.Context) bool {
+	return s.w.ShouldWriteLocalTimestamps(ctx)
 }
 
 // ReadWriter is used outside of the spanset package internally, in ccl.

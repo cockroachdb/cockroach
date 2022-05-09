@@ -36,7 +36,14 @@ const (
 )
 
 // MVCCKey is a versioned key, distinguished from roachpb.Key with the addition
-// of a timestamp.
+// of a "version" timestamp.
+//
+// The version timestamp dictates the key's visibility to readers. Readers with
+// read timestamps equal to or greater than the version timestamp observe the
+// key. Readers with read timestamps below the version timestamp ignore the key.
+// Keys are stored in decreasing version order, with the exception of version
+// zero (timestamp 0), which is referred to as a "meta" version and is stored
+// before all other versions of the same key.
 type MVCCKey struct {
 	Key       roachpb.Key
 	Timestamp hlc.Timestamp
@@ -246,6 +253,7 @@ func encodedMVCCKeyLength(key MVCCKey) int {
 		if key.Timestamp.Logical != 0 || key.Timestamp.Synthetic {
 			keyLen += mvccEncodedTimeLogicalLen
 			if key.Timestamp.Synthetic {
+				// TODO(nvanbenschoten): stop writing Synthetic timestamps in v23.1.
 				keyLen += mvccEncodedTimeSyntheticLen
 			}
 		}
@@ -307,6 +315,7 @@ func decodeMVCCTimestamp(encodedTS []byte) (hlc.Timestamp, error) {
 	case 13:
 		ts.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
 		ts.Logical = int32(binary.BigEndian.Uint32(encodedTS[8:12]))
+		// TODO(nvanbenschoten): stop writing Synthetic timestamps in v23.1.
 		ts.Synthetic = encodedTS[12] != 0
 	default:
 		return hlc.Timestamp{}, errors.Errorf("bad timestamp %x", encodedTS)

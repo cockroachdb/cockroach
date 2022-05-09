@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
@@ -117,6 +118,7 @@ type CommandArgs struct {
 	EvalCtx EvalContext
 	Header  roachpb.Header
 	Args    roachpb.Request
+	Now     hlc.ClockTimestamp
 	// *Stats should be mutated to reflect any writes made by the command.
 	Stats       *enginepb.MVCCStats
 	Uncertainty uncertainty.Interval

@@ -74,8 +74,8 @@ func CheckSSTConflicts(
 			return enginepb.MVCCStats{}, err
 		}
 
-		extKey, extValue := extIter.UnsafeKey(), extIter.UnsafeValue()
-		sstKey, sstValue := sstIter.UnsafeKey(), sstIter.UnsafeValue()
+		extKey, extValueRaw := extIter.UnsafeKey(), extIter.UnsafeValue()
+		sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
 
 		// Keep seeking the iterators until both keys are equal.
 		if cmp := bytes.Compare(extKey.Key, sstKey.Key); cmp < 0 {
@@ -94,7 +94,14 @@ func CheckSSTConflicts(
 		if !sstKey.IsValue() {
 			return enginepb.MVCCStats{}, errors.New("SST keys must have timestamps")
 		}
-		if len(sstValue) == 0 {
+		sstValue, ok, err := tryDecodeSimpleMVCCValue(sstValueRaw)
+		if !ok && err == nil {
+			sstValue, err = decodeExtendedMVCCValue(sstValueRaw)
+		}
+		if err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		if sstValue.IsTombstone() {
 			return enginepb.MVCCStats{}, errors.New("SST values cannot be tombstones")
 		}
 		if !extKey.IsValue() {
@@ -125,6 +132,13 @@ func CheckSSTConflicts(
 				continue
 			}
 		}
+		extValue, ok, err := tryDecodeSimpleMVCCValue(extValueRaw)
+		if !ok && err == nil {
+			extValue, err = decodeExtendedMVCCValue(extValueRaw)
+		}
+		if err != nil {
+			return enginepb.MVCCStats{}, err
+		}
 
 		// Allow certain idempotent writes where key/timestamp/value all match:
 		//
@@ -133,7 +147,7 @@ func CheckSSTConflicts(
 		allowIdempotent := (!disallowShadowingBelow.IsEmpty() && disallowShadowingBelow.LessEq(extKey.Timestamp)) ||
 			(disallowShadowingBelow.IsEmpty() && disallowShadowing)
 		if allowIdempotent && sstKey.Timestamp.Equal(extKey.Timestamp) &&
-			bytes.Equal(extValue, sstValue) {
+			bytes.Equal(extValueRaw, sstValueRaw) {
 			// This SST entry will effectively be a noop, but its stats have already
 			// been accounted for resulting in double-counting. To address this we
 			// send back a stats diff for these existing KVs so that we can subtract
@@ -151,10 +165,10 @@ func CheckSSTConflicts(
 			statsDiff.KeyCount--
 
 			// Update the stats to account for the skipped versioned key/value.
-			totalBytes = int64(len(sstValue)) + MVCCVersionTimestampSize
+			totalBytes = int64(len(sstValueRaw)) + MVCCVersionTimestampSize
 			statsDiff.LiveBytes -= totalBytes
 			statsDiff.KeyBytes -= MVCCVersionTimestampSize
-			statsDiff.ValBytes -= int64(len(sstValue))
+			statsDiff.ValBytes -= int64(len(sstValueRaw))
 			statsDiff.ValCount--
 
 			sstIter.NextKey()
@@ -171,9 +185,9 @@ func CheckSSTConflicts(
 		// a WriteTooOldError -- that error implies that the client should
 		// retry at a higher timestamp, but we already know that such a retry
 		// would fail (because it will shadow an existing key).
-		if len(extValue) > 0 && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
+		if !extValue.IsTombstone() && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
 			allowShadow := !disallowShadowingBelow.IsEmpty() &&
-				disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValue, sstValue)
+				disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValueRaw, sstValueRaw)
 			if !allowShadow {
 				return enginepb.MVCCStats{}, errors.Errorf(
 					"ingested key collides with an existing one: %s", sstKey.Key)
@@ -194,10 +208,10 @@ func CheckSSTConflicts(
 		// to take into account the existing KV pair.
 		statsDiff.KeyCount--
 		statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
-		if len(extValue) > 0 {
+		if !extValue.IsTombstone() {
 			statsDiff.LiveCount--
 			statsDiff.LiveBytes -= int64(len(extKey.Key) + 1)
-			statsDiff.LiveBytes -= int64(len(extValue)) + MVCCVersionTimestampSize
+			statsDiff.LiveBytes -= int64(len(extValueRaw)) + MVCCVersionTimestampSize
 		}
 
 		sstIter.NextKey()
@@ -277,7 +291,7 @@ func UpdateSSTTimestamps(
 			return nil, errors.Errorf("unexpected timestamp %s (expected %s) for key %s",
 				key.Timestamp, from, key.Key)
 		}
-		err = writer.PutMVCC(MVCCKey{Key: iter.UnsafeKey().Key, Timestamp: to}, iter.UnsafeValue())
+		err = writer.PutRawMVCC(MVCCKey{Key: key.Key, Timestamp: to}, iter.UnsafeValue())
 		if err != nil {
 			return nil, err
 		}

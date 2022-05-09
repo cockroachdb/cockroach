@@ -587,7 +587,8 @@ func (tc *TxnCoordSender) Send(
 // clock to read below that future-time value, violating "monotonic reads".
 //
 // In practice, most transactions do not need to wait at all, because their
-// commit timestamps were pulled from an HLC clock (i.e. are not synthetic)
+// commit timestamps were pulled from an HLC clock (either the local clock
+// or a remote clock on a node whom the local node has communicated with)
 // and so they will be guaranteed to lead the local HLC's clock, assuming
 // proper HLC time propagation. Only transactions whose commit timestamps
 // were pushed into the future will need to wait, like those who wrote to a
@@ -640,17 +641,19 @@ func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) er
 	commitTS := tc.mu.txn.WriteTimestamp
 	readOnly := tc.mu.txn.Sequence == 0
 	linearizable := tc.linearizable
-	needWait := commitTS.Synthetic || (linearizable && !readOnly)
-	if !needWait {
-		// No need to wait. If !Synthetic then we know the commit timestamp
-		// leads the local HLC clock, and since that's all we'd need to wait
-		// for, we can short-circuit.
-		return nil
-	}
 
 	waitUntil := commitTS
 	if linearizable && !readOnly {
 		waitUntil = waitUntil.Add(tc.clock.MaxOffset().Nanoseconds(), 0)
+	}
+	if waitUntil.LessEq(tc.clock.Now()) {
+		// No wait fast-path. This is the common case for most transactions. Only
+		// transactions who have their commit timestamp bumped into the future will
+		// need to wait.
+		return nil
+	}
+	if fn := tc.testingKnobs.CommitWaitFilter; fn != nil {
+		fn()
 	}
 
 	before := tc.clock.PhysicalTime()

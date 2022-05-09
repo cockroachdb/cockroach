@@ -589,8 +589,15 @@ type Writer interface {
 	// timestamp is non-empty (see {PutUnversioned,PutIntent} if the timestamp
 	// is empty).
 	//
-	// It is safe to modify the contents of the arguments after Put returns.
-	PutMVCC(key MVCCKey, value []byte) error
+	// It is safe to modify the contents of the arguments after PutMVCC returns.
+	PutMVCC(key MVCCKey, value MVCCValue) error
+	// PutRawMVCC is like PutMVCC, but it accepts an encoded MVCCValue. It
+	// can be used to avoid decoding and immediately re-encoding an MVCCValue,
+	// but should generally be avoided due to the lack of type safety.
+	//
+	// It is safe to modify the contents of the arguments after PutRawMVCC
+	// returns.
+	PutRawMVCC(key MVCCKey, value []byte) error
 	// PutUnversioned sets the given key to the value provided. It is for use
 	// with inline metadata (not intents) and other unversioned keys (like
 	// Range-ID local keys).
@@ -638,6 +645,11 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	SingleClearEngineKey(key EngineKey) error
+
+	// ShouldWriteLocalTimestamps is only for internal use in the storage package.
+	// This method is temporary, to handle the transition from clusters where not
+	// all nodes understand local timestamps.
+	ShouldWriteLocalTimestamps(ctx context.Context) bool
 }
 
 // ReadWriter is the read/write interface to an engine's data.

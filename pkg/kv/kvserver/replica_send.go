@@ -270,14 +270,10 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 	// instead, we commit wait here and then assert that transactions with commit
 	// triggers do not need to commit wait further by the time they reach command
 	// evaluation.
-	//
-	// NOTE: just like in TxnCoordSender.maybeCommitWait, we only need to perform
-	// a commit-wait sleep if the commit timestamp is "synthetic". Otherwise, it
-	// is known not to be in advance of present time.
-	if !txn.WriteTimestamp.Synthetic {
-		return nil
-	}
-	if !r.Clock().Now().Less(txn.WriteTimestamp) {
+	if txn.WriteTimestamp.LessEq(r.Clock().Now()) {
+		// No wait fast-path. This is the common case for most transactions. Only
+		// transactions who have their commit timestamp bumped into the future will
+		// need to wait.
 		return nil
 	}
 
@@ -789,7 +785,7 @@ func (r *Replica) handleReadWithinUncertaintyIntervalError(
 	if !canDoServersideRetry(ctx, pErr, ba, nil /* br */, nil /* g */, nil /* deadline */) {
 		return nil, pErr
 	}
-	if ba.Txn == nil && ba.Timestamp.Synthetic {
+	if ba.Txn == nil {
 		// If the request is non-transactional and it was refreshed into the future
 		// after observing a value with a timestamp in the future, immediately sleep
 		// until its new read timestamp becomes present. We don't need to do this
