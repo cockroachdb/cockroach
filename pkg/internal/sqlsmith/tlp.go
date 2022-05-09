@@ -59,13 +59,6 @@ SELECT (SELECT count(*) FROM undiff), (SELECT count(*) FROM diff)`,
 // have all been implemented in SQLancer. See:
 // https://github.com/sqlancer/sqlancer/tree/1.1.0/src/sqlancer/cockroachdb/oracle/tlp.
 func (s *Smither) GenerateTLP() (unpartitioned, partitioned string, args []interface{}) {
-	// Set disableImpureFns to true so that generated predicates are immutable.
-	originalDisableImpureFns := s.disableImpureFns
-	s.disableImpureFns = true
-	defer func() {
-		s.disableImpureFns = originalDisableImpureFns
-	}()
-
 	switch tlpType := s.rnd.Intn(5); tlpType {
 	case 0:
 		partitioned, unpartitioned, args = s.generateWhereTLP()
