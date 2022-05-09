@@ -56,6 +56,10 @@ func TestRangeMap(t *testing.T) {
 	require.Equal(t, r1.MinKey, m.GetRange("c").MinKey)
 	require.Equal(t, r2.MinKey, m.GetRange("g").MinKey)
 	require.Equal(t, r3.MinKey, m.GetRange("z").MinKey)
+
+	require.Panics(t, func() { m.AddRange("b") }, "Adding a range with the same minKey twice should panic")
+	require.Panics(t, func() { m.AddRange("f") }, "Adding a range with the same minKey twice should panic")
+	require.Panics(t, func() { m.AddRange("x") }, "Adding a range with the same minKey twice should panic")
 }
 
 func TestAddReplica(t *testing.T) {
