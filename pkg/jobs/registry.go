@@ -827,7 +827,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			if r.knobs.IntervalOverrides.RetentionTime != nil {
 				return *r.knobs.IntervalOverrides.RetentionTime
 			}
-			return retentionTimeSetting.Get(&r.settings.SV)
+			return RetentionTimeSetting.Get(&r.settings.SV)
 		}
 
 		for {
