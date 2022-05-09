@@ -12,6 +12,7 @@ package sessionrevival
 
 import (
 	"crypto/ed25519"
+	"crypto/x509"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -96,8 +97,16 @@ func ValidateSessionRevivalToken(
 	if err := validatePayloadContents(payload, user); err != nil {
 		return err
 	}
+
+	var signatureAlg x509.SignatureAlgorithm
+	switch payload.Algorithm {
+	case x509.Ed25519.String():
+		signatureAlg = x509.PureEd25519
+	default:
+		return errors.Newf("unsupported algorithm %s", payload.Algorithm)
+	}
 	for _, c := range cert.ParsedCertificates {
-		if err := c.CheckSignature(c.SignatureAlgorithm, token.Payload, token.Signature); err == nil {
+		if err := c.CheckSignature(signatureAlg, token.Payload, token.Signature); err == nil {
 			return nil
 		}
 	}
