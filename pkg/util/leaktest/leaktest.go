@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/petermattis/goid"
@@ -94,6 +95,18 @@ var PrintLeakedStoppers = func(t testing.TB) {}
 // function to be run at the end of tests to see whether any
 // goroutines leaked.
 func AfterTest(t testing.TB) func() {
+	var pc [1]uintptr
+	runtime.Callers(1, pc[:])
+	frs := runtime.CallersFrames(pc[:])
+	fr, _ := frs.Next()
+	lastDotIdx := strings.LastIndex(fr.Function, ".")
+	if lastDotIdx < 0 {
+		t.Fatalf("unable to determine package name from %s", fr.Function)
+	}
+	if reason, skipped := skip.DefaultRegistry.IsSkipped(fr.Function[:lastDotIdx], t.Name()); skipped {
+		t.Skip(reason)
+	}
+
 	// Try a best effort GC to help the race tests move along.
 	runtime.GC()
 	orig := interestingGoroutines()
