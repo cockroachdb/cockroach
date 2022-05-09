@@ -17,6 +17,7 @@ import { withData, empty, loading, error } from "./jobsTable.fixture";
 storiesOf("JobsTable", module)
   .addDecorator(withRouterDecorator)
   .add("With data", () => <JobsTable {...withData} />)
+  .add("Non-admin, no retention time", () => <JobsTable {...nonAdmin} />)
   .add("Empty", () => <JobsTable {...empty} />)
   .add("Loading; with delayed message", () => <JobsTable {...loading} />)
   .add("Timeout error", () => <JobsTable {...error} />);

@@ -17,7 +17,7 @@ import {
   allJobsFixture,
   retryRunningJobFixture,
 } from "src/views/jobs/jobsTable.fixture";
-import { refreshJobs } from "src/redux/apiReducers";
+import { refreshJobs, refreshSettings } from "src/redux/apiReducers";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
@@ -47,7 +47,9 @@ const getMockJobsTableProps = (jobs: Array<Job>): JobsTableProps => {
       inFlight: false,
       valid: true,
     },
+    retentionTime: moment.duration(336, "hours"),
     refreshJobs,
+    refreshSettings,
     location: history.location,
     history,
     match: {
