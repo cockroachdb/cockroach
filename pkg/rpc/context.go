@@ -171,6 +171,14 @@ type ServerInterceptorInfo struct {
 	StreamInterceptors []grpc.StreamServerInterceptor
 }
 
+// ClientInterceptorInfo !!!
+type ClientInterceptorInfo struct {
+	// UnaryInterceptors lists the interceptors for regular (unary) RPCs.
+	UnaryInterceptors []grpc.UnaryClientInterceptor
+	// StreamInterceptors lists the interceptors for streaming RPCs.
+	StreamInterceptors []grpc.StreamClientInterceptor
+}
+
 // NewServerEx is like NewServer, but also returns the interceptors that have
 // been registered with gRPC for the server. These interceptors can be used
 // manually when bypassing gRPC to call into the server (like the
@@ -700,8 +708,9 @@ func makeInternalClientAdapter(
 	unaryServerInterceptors []grpc.UnaryServerInterceptor,
 	streamServerInterceptors []grpc.StreamServerInterceptor,
 	clientUnaryInterceptors []grpc.UnaryClientInterceptor,
+	clientStreamInteceptors []grpc.StreamClientInterceptor,
 ) internalClientAdapter {
-	return internalClientAdapter{
+	a := internalClientAdapter{
 		server:                   server,
 		serverStreamInterceptors: streamServerInterceptors,
 		clientUnaryInterceptors: clientUnaryInterceptors,
@@ -993,7 +1002,7 @@ func IsLocal(iface RestrictedInternalClient) bool {
 func (rpcCtx *Context) SetLocalInternalServer(
 	internalServer roachpb.InternalServer,
 	serverInterceptors ServerInterceptorInfo,
-	clientUnaryInterceptors []grpc.UnaryClientInterceptor,
+	clientInterceptors ClientInterceptorInfo,
 ) {
 	rpcCtx.localInternalClient = makeInternalClientAdapter(
 		internalServer,
@@ -1092,51 +1101,16 @@ func (rpcCtx *Context) grpcDialOptions(
 	// [1]: https://github.com/grpc/grpc-go/blob/c0736608/Documentation/proxy.md
 	dialOpts = append(dialOpts, grpc.WithNoProxy())
 
-	var unaryInterceptors []grpc.UnaryClientInterceptor
-	var streamInterceptors []grpc.StreamClientInterceptor
-
-	// !!! I've copied this to the ctor. Remove from here.
-	if tracer := rpcCtx.Stopper.Tracer(); tracer != nil {
-		// TODO(tbg): re-write all of this for our tracer.
-
-		// We use a decorator to set the "node" tag. All other spans get the
-		// node tag from context log tags.
-		//
-		// Unfortunately we cannot use the corresponding interceptor on the
-		// server-side of gRPC to set this tag on server spans because that
-		// interceptor runs too late - after a traced RPC's recording had
-		// already been collected. So, on the server-side, the equivalent code
-		// is in setupSpanForIncomingRPC().
-		//
-		tagger := func(span *tracing.Span) {
-			span.SetTag("node", attribute.IntValue(int(rpcCtx.NodeID.Get())))
-		}
-		compatMode := func(reqCtx context.Context) bool {
-			return !rpcCtx.ContextOptions.Settings.Version.IsActive(reqCtx, clusterversion.SelectRPCsTakeTracingInfoInband)
-		}
-
-		if rpcCtx.ClientOnly {
-			// client-only RPC contexts don't have a node ID to report nor a
-			// cluster version to check against.
-			tagger = func(span *tracing.Span) {}
-			compatMode = func(_ context.Context) bool { return false }
-		}
-
-		unaryInterceptors = append(unaryInterceptors,
-			grpcinterceptor.ClientInterceptor(tracer, tagger, compatMode))
-		streamInterceptors = append(streamInterceptors,
-			grpcinterceptor.StreamClientInterceptor(tracer, tagger))
-	}
-	if rpcCtx.Knobs.UnaryClientInterceptor != nil {
-		testingUnaryInterceptor := rpcCtx.Knobs.UnaryClientInterceptor(target, class)
-		if testingUnaryInterceptor != nil {
-			unaryInterceptors = append(unaryInterceptors, testingUnaryInterceptor)
-		}
-	}
+	// Append a testing stream interceptor, if so configured. Note that this can
+	// only be done at Dial() time, as opposed to when the rpcCtx is created,
+	// because the testing knob callback wants access to the dial details for this
+	// particular connection.
+	streamInterceptors := rpcCtx.clientStreamInterceptors
 	if rpcCtx.Knobs.StreamClientInterceptor != nil {
 		testingStreamInterceptor := rpcCtx.Knobs.StreamClientInterceptor(target, class)
 		if testingStreamInterceptor != nil {
-			streamInterceptors = append(streamInterceptors, testingStreamInterceptor)
+			// Make a copy of the interceptors slice and append the knob one.
+			streamInterceptors = append(append([]grpc.StreamClientInterceptor(nil), streamInterceptors...), testingStreamInterceptor)
 		}
 	}
 	if rpcCtx.Knobs.ArtificialLatencyMap != nil {
@@ -1156,8 +1130,8 @@ func (rpcCtx *Context) grpcDialOptions(
 		dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
 	}
 
-	if len(unaryInterceptors) > 0 {
-		dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
+	if len(rpcCtx.clientUnaryInterceptors) > 0 {
+		dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptors...))
 	}
 	if len(streamInterceptors) > 0 {
 		dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(streamInterceptors...))
@@ -1166,11 +1140,11 @@ func (rpcCtx *Context) grpcDialOptions(
 }
 
 // !!! comment
-func (rpcCtx *Context) ClientInterceptors() (
-	[]grpc.UnaryClientInterceptor,
-	[]grpc.StreamClientInterceptor,
-) {
-	return rpcCtx.clientUnaryInterceptors, rpcCtx.clientStreamInterceptors
+func (rpcCtx *Context) ClientInterceptors() ClientInterceptorInfo {
+	return ClientInterceptorInfo{
+		UnaryInterceptors:  rpcCtx.clientUnaryInterceptors,
+		StreamInterceptors: rpcCtx.clientStreamInterceptors,
+	}
 }
 
 // growStackCodec wraps the default grpc/encoding/proto codec to detect

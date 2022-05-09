@@ -1886,39 +1886,14 @@ func TestTestingKnobs(t *testing.T) {
 				return cs, nil
 			}
 		},
-		UnaryClientInterceptor: func(
-			target string, class ConnectionClass,
-		) grpc.UnaryClientInterceptor {
-			return func(
-				ctx context.Context, method string, req, reply interface{},
-				cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption,
-			) error {
-				recordCall(unaryCall{
-					target: target,
-					class:  class,
-					method: method,
-				})
-				return invoker(ctx, method, req, reply, cc, opts...)
-			}
-		},
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
 	require.Nil(t, err)
 	remoteAddr := ln.Addr().String()
-	sysConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, SystemClass).Connect(context.Background())
-	require.Nil(t, err)
 	defConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
 	require.Nil(t, err)
-	const unaryMethod = "/cockroach.rpc.Testing/Foo"
 	const streamMethod = "/cockroach.rpc.Testing/Bar"
-	const numSysUnary = 3
-	for i := 0; i < numSysUnary; i++ {
-		ba := roachpb.BatchRequest{}
-		br := roachpb.BatchResponse{}
-		err := sysConn.Invoke(context.Background(), unaryMethod, &ba, &br)
-		require.Nil(t, err)
-	}
 	const numDefStream = 4
 	for i := 0; i < numDefStream; i++ {
 		desc := grpc.StreamDesc{
@@ -1934,11 +1909,6 @@ func TestTestingKnobs(t *testing.T) {
 	}
 
 	exp := map[interface{}]int{
-		unaryCall{
-			target: remoteAddr,
-			class:  SystemClass,
-			method: unaryMethod,
-		}: numSysUnary,
 		streamCall{
 			target: remoteAddr,
 			class:  DefaultClass,
