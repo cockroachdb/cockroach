@@ -655,12 +655,10 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// we want to read the intent regardless of our read timestamp and fall
 		// into case 11 below.
 		if p.checkUncertainty {
-			if p.uncertainty.IsUncertain(metaTS) {
-				return p.uncertaintyError(metaTS)
-			}
-			// The intent is not within the uncertainty window, but there could
-			// be an uncertain committed value, so seek and check uncertainty
-			// using the uncertainty interval's GlobalLimit.
+			// The intent's provisional value may be within the uncertainty window. Or
+			// there could be a different, uncertain committed value in the window. To
+			// detect either case, seek to and past the uncertainty interval's global
+			// limit and check uncertainty as we scan.
 			return p.seekVersion(ctx, p.uncertainty.GlobalLimit, true)
 		}
 		return p.seekVersion(ctx, p.ts, false)
