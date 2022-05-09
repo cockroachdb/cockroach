@@ -751,7 +751,7 @@ vectorized: true
 │               │ columns: (column1, column3)
 │               │ estimated row count: 1 (missing stats)
 │               │ table: uniq_enum@uniq_enum_pkey
-│               │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+│               │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = i)
 │               │ pred: column1 != r
 │               │
 │               └── • project
@@ -775,7 +775,7 @@ vectorized: true
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 1 (missing stats)
                 │ table: uniq_enum@uniq_enum_r_s_j_key
-                │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
                 │ pred: (column1 != r) OR (column3 != i)
                 │
                 └── • project
@@ -844,7 +844,7 @@ vectorized: true
                 │ columns: (r_default, column2)
                 │ estimated row count: 1 (missing stats)
                 │ table: uniq_enum@uniq_enum_pkey
-                │ lookup condition: (column2 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = i)
                 │ pred: r_default != r
                 │
                 └── • project
@@ -885,14 +885,14 @@ vectorized: true
         │ estimated row count: 0 (missing stats)
         │ table: uniq_enum@uniq_enum_pkey
         │ equality cols are key
-        │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+        │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = i)
         │
         └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4)
             │ estimated row count: 0 (missing stats)
             │ table: uniq_enum@uniq_enum_r_s_j_key
             │ equality cols are key
-            │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+            │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
             │
             └── • values
                   columns: (column1, column2, column3, column4)
@@ -1288,7 +1288,7 @@ vectorized: true
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 1
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: (column1 != r) OR (column2 != a)
                 │
                 └── • filter
@@ -1350,7 +1350,7 @@ vectorized: true
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 0
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: column4 IN ('bar', 'baz', 'foo')
                 │
                 └── • lookup join (anti)
@@ -2130,7 +2130,7 @@ vectorized: true
 │               │ columns: (r_new, i_new)
 │               │ estimated row count: 3 (missing stats)
 │               │ table: uniq_enum@uniq_enum_pkey
-│               │ lookup condition: (i_new = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+│               │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (i_new = i)
 │               │ pred: r_new != r
 │               │
 │               └── • project
@@ -2154,7 +2154,7 @@ vectorized: true
                 │ columns: (r_new, s_new, i_new, j)
                 │ estimated row count: 3 (missing stats)
                 │ table: uniq_enum@uniq_enum_r_s_j_key
-                │ lookup condition: ((s_new = s) AND (j = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (s_new = s)) AND (j = j)
                 │ pred: (r_new != r) OR (i_new != i)
                 │
                 └── • project
@@ -2422,7 +2422,7 @@ vectorized: true
                 │ columns: (r, a, b_new, c)
                 │ estimated row count: 0
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                │ lookup condition: (b_new = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (b_new = b)
                 │ pred: (r != r) OR (a != a)
                 │
                 └── • filter
@@ -3304,7 +3304,7 @@ vectorized: true
 │               │ columns: (upsert_r, upsert_i)
 │               │ estimated row count: 1 (missing stats)
 │               │ table: uniq_enum@uniq_enum_pkey
-│               │ lookup condition: (upsert_i = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+│               │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (upsert_i = i)
 │               │ pred: upsert_r != r
 │               │
 │               └── • project
@@ -3328,7 +3328,7 @@ vectorized: true
                 │ columns: (upsert_r, column2, upsert_i, column4)
                 │ estimated row count: 1 (missing stats)
                 │ table: uniq_enum@uniq_enum_r_s_j_key
-                │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
                 │ pred: (upsert_r != r) OR (upsert_i != i)
                 │
                 └── • project
@@ -3397,7 +3397,7 @@ vectorized: true
 │                       │ estimated row count: 2 (missing stats)
 │                       │ table: uniq_enum@uniq_enum_r_s_j_key
 │                       │ equality cols are key
-│                       │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+│                       │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
 │                       │ locking strength: for update
 │                       │
 │                       └── • values
@@ -3425,7 +3425,7 @@ vectorized: true
                 │ columns: (upsert_r, upsert_i)
                 │ estimated row count: 1 (missing stats)
                 │ table: uniq_enum@uniq_enum_pkey
-                │ lookup condition: (upsert_i = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (upsert_i = i)
                 │ pred: upsert_r != r
                 │
                 └── • project
@@ -3939,7 +3939,7 @@ vectorized: true
                 │ columns: (upsert_r, upsert_a, column3, column4)
                 │ estimated row count: 1
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: (upsert_r != r) OR (upsert_a != a)
                 │
                 └── • filter
@@ -4001,7 +4001,7 @@ vectorized: true
                 │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4, r, a, b)
                 │ estimated row count: 2
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
-                │ lookup condition: (column3 = b) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: column4 IN ('bar', 'baz', 'foo')
                 │
                 └── • distinct
