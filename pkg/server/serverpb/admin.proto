@@ -24,6 +24,7 @@ import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 // ZoneConfigurationLevel indicates, for objects with a Zone Configuration,
@@ -604,6 +605,7 @@ message JobsRequest {
 // JobsResponse contains the job record for each matching job.
 message JobsResponse {
   repeated JobResponse jobs = 1 [(gogoproto.nullable) = false];
+  google.protobuf.Timestamp earliest_retained_time = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
 // JobRequest requests system job information for the given job_id.

@@ -316,18 +316,23 @@ const staticJobProps: Pick<
   refreshJobs: () => null,
 };
 
+const now = moment("Mon Oct 21 2021 14:01:45 GMT-0400 (Eastern Daylight Time)");
+export const earliestRetainedTime = new protos.google.protobuf.Timestamp({
+  seconds: new Long(1633611318),
+  nanos: 200459000,
+});
+
 const getJobsTableProps = (jobs: Array<Job>): JobsTableProps => ({
   ...staticJobProps,
   jobs: {
     inFlight: false,
     valid: false,
-    requestedAt: moment(
-      "Mon Oct 18 2021 14:01:45 GMT-0400 (Eastern Daylight Time)",
-    ),
-    setAt: moment("Mon Oct 18 2021 14:01:50 GMT-0400 (Eastern Daylight Time)"),
+    requestedAt: now,
+    setAt: moment("Mon Oct 21 2021 14:01:50 GMT-0400 (Eastern Daylight Time)"),
     lastError: null,
     data: JobsResponse.create({
       jobs: jobs,
+      earliest_retained_time: earliestRetainedTime,
     }),
   },
 });
@@ -339,9 +344,7 @@ export const loading: JobsTableProps = {
   jobs: {
     inFlight: true,
     valid: false,
-    requestedAt: moment(
-      "Mon Oct 18 2021 14:01:45 GMT-0400 (Eastern Daylight Time)",
-    ),
+    requestedAt: now,
   },
 };
 
@@ -350,9 +353,7 @@ export const error: JobsTableProps = {
   jobs: {
     inFlight: false,
     valid: false,
-    requestedAt: moment(
-      "Mon Oct 18 2021 14:01:45 GMT-0400 (Eastern Daylight Time)",
-    ),
+    requestedAt: now,
     lastError: new Error(jobsTimeoutErrorMessage),
   },
 };
