@@ -105,6 +105,10 @@ type TestingKnobs struct {
 	// BlobClientFactory supplies a BlobClientFactory for
 	// use by servers.
 	BlobClientFactory blobs.BlobClientFactory
+
+	// StubTimeNow allows tests to override the timeutil.Now() function used
+	// in the jobs endpoint to calculate earliest_retained_time.
+	StubTimeNow func() time.Time
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
