@@ -64,7 +64,7 @@ func (rm *RangeMap) AddRange(minKey string) *Range {
 	rm.ranges.AscendGreaterOrEqual(r, func(i btree.Item) bool {
 		// The min key already exists in the range map, we cannot return a new
 		// range. Instead crash here as this is a bug.
-		if i.Less(r) {
+		if !r.Less(i) {
 			panic(fmt.Sprintf("Range with minKey: %s already exists within the range map, unable to add new range", r.MinKey))
 		}
 
