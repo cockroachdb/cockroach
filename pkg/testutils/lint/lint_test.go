@@ -866,6 +866,7 @@ func TestLint(t *testing.T) {
 			":!util/tracing/*_test.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_simple_directory_svr.go",
+			":!ccl/sqlproxyccl/tenantdirsvr/test_static_directory_svr.go",
 		)
 		if err != nil {
 			t.Fatal(err)
