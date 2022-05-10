@@ -46,7 +46,6 @@ ALL_TESTS = [
     "//pkg/ccl/spanconfigccl/spanconfigsqlwatcherccl:spanconfigsqlwatcherccl_test",
     "//pkg/ccl/sqlproxyccl/balancer:balancer_test",
     "//pkg/ccl/sqlproxyccl/denylist:denylist_test",
-    "//pkg/ccl/sqlproxyccl/idle:idle_test",
     "//pkg/ccl/sqlproxyccl/interceptor:interceptor_test",
     "//pkg/ccl/sqlproxyccl/tenant:tenant_test",
     "//pkg/ccl/sqlproxyccl/throttler:throttler_test",
