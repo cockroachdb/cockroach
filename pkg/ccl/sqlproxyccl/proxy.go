@@ -41,7 +41,6 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 			codeBackendDisconnected,
 			codeAuthFailed,
 			codeProxyRefusedConnection,
-			codeIdleDisconnect,
 			codeUnavailable:
 			msg = codeErr.Error()
 		// The rest - the message sent back is sanitized.
@@ -49,16 +48,9 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 			msg = "server requires encryption"
 		}
 
-		var pgCode string
-		if codeErr.code == codeIdleDisconnect {
-			pgCode = pgcode.AdminShutdown.String()
-		} else {
-			pgCode = pgcode.SQLserverRejectedEstablishmentOfSQLconnection.String()
-		}
-
 		return &pgproto3.ErrorResponse{
 			Severity: "FATAL",
-			Code:     pgCode,
+			Code:     pgcode.SQLserverRejectedEstablishmentOfSQLconnection.String(),
 			Message:  msg,
 			Hint:     errors.FlattenHints(err),
 		}

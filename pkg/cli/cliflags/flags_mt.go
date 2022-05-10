@@ -91,11 +91,6 @@ var (
 		Description: "Polling interval changes in config file.",
 	}
 
-	DrainTimeout = FlagInfo{
-		Name:        "drain-timeout",
-		Description: "Close DRAINING connections idle for this duration.",
-	}
-
 	TestDirectoryListenPort = FlagInfo{
 		Name:        "port",
 		Description: "Test directory server binds and listens on this port.",
