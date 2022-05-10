@@ -53,9 +53,15 @@ jobs:
         # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
     # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
-    # If this step fails, then you should remove it and run the build manually (see below)
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v2
+    # If this step fails, then you should remove it and run the build manually (see below)    
+    #- name: Autobuild
+    #  uses: github/codeql-action/autobuild@v2
+    
+    # Autobuilder was built with Autobuilder was built with go1.17.9, environment has go1.17.9
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.17.9
 
     # ℹ️ Command-line programs to run using the OS shell.
     # 📚 https://git.io/JvXDl
