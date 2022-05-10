@@ -48,7 +48,7 @@ type Process struct {
 // is a possibility that between the two calls, the parent stopper completes a
 // stop and then the leak detection may find a leaked stopper.
 func NewSubStopper(parentStopper *stop.Stopper) *stop.Stopper {
-	mu := &syncutil.Mutex{}
+	var mu syncutil.Mutex
 	var subStopper *stop.Stopper
 	parentStopper.AddCloser(stop.CloserFn(func() {
 		mu.Lock()
