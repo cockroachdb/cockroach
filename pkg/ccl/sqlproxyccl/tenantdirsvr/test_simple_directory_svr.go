@@ -44,7 +44,7 @@ type TestSimpleDirectoryServer struct {
 var _ tenant.DirectoryServer = &TestSimpleDirectoryServer{}
 
 // NewTestSimpleDirectoryServer constructs a new simple directory server.
-func NewTestSimpleDirectoryServer(podAddr string) (tenant.DirectoryServer, *grpc.Server) {
+func NewTestSimpleDirectoryServer(podAddr string) (*TestSimpleDirectoryServer, *grpc.Server) {
 	dir := &TestSimpleDirectoryServer{podAddr: podAddr}
 	dir.mu.deleted = make(map[roachpb.TenantID]struct{})
 	grpcServer := grpc.NewServer()

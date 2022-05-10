@@ -105,9 +105,13 @@ type ProxyOptions struct {
 		// proxy.
 		dirOpts []tenant.DirOption
 
-		// directoryServer represents the in-memory directory server that is
-		// created whenever a routing rule is used.
+		// directoryServer represents the directory server that will be used
+		// by the proxy handler. If unset, initializing the proxy handler will
+		// create one, and populate this value.
 		directoryServer tenant.DirectoryServer
+
+		// balancerOpts is used to customize the balancer created by the proxy.
+		balancerOpts []balancer.Option
 	}
 }
 
@@ -184,8 +188,31 @@ func newProxyHandler(
 		throttler.WithBaseDelay(handler.ThrottleBaseDelay),
 	)
 
+	// TODO(jaylim-crl): Clean up how we start different types of directory
+	// servers. We could have two options: remote or local. Local servers that
+	// are using the in-memory implementation should only be used for testing
+	// only. For production use-cases, we will need to update that to listen
+	// on an actual network address, but there are no plans to support that at
+	// the moment.
 	var conn *grpc.ClientConn
-	if handler.DirectoryAddr != "" {
+	if handler.testingKnobs.directoryServer != nil {
+		// TODO(jaylim-crl): For now, only support the static version. We should
+		// make this part of a LocalDirectoryServer interface for us to grab the
+		// in-memory listener.
+		directoryServer, ok := handler.testingKnobs.directoryServer.(*tenantdirsvr.TestStaticDirectoryServer)
+		if !ok {
+			return nil, errors.New("unsupported test directory server")
+		}
+		conn, err = grpc.DialContext(
+			ctx,
+			"",
+			grpc.WithContextDialer(directoryServer.DialerFunc),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err != nil {
+			return nil, err
+		}
+	} else if handler.DirectoryAddr != "" {
 		conn, err = grpc.Dial(
 			handler.DirectoryAddr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -235,7 +262,11 @@ func newProxyHandler(
 
 	balancerMetrics := balancer.NewMetrics()
 	registry.AddMetricStruct(balancerMetrics)
-	handler.balancer, err = balancer.NewBalancer(ctx, stopper, balancerMetrics, handler.directoryCache)
+	var balancerOpts []balancer.Option
+	if handler.testingKnobs.balancerOpts != nil {
+		balancerOpts = append(balancerOpts, handler.testingKnobs.balancerOpts...)
+	}
+	handler.balancer, err = balancer.NewBalancer(ctx, stopper, balancerMetrics, handler.directoryCache, balancerOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -406,22 +437,26 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 }
 
 // startPodWatcher runs on a background goroutine and listens to pod change
-// notifications. When a pod enters the DRAINING state, connections to that pod
-// are subject to an idle timeout that closes them after a short period of
-// inactivity. If a pod transitions back to the RUNNING state or to the DELETING
-// state, then the idle timeout needs to be cleared.
-//
-// TODO(jaylim-crl): Update comment above.
+// notifications. When a pod transitions into the DRAINING state, a rebalance
+// operation will be attempted for that particular pod's tenant.
 func (handler *proxyHandler) startPodWatcher(ctx context.Context, podWatcher chan *tenant.Pod) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-podWatcher:
-			// TODO(jaylim-crl): Invoke rebalance logic here whenever we see
-			// a new SQL pod.
+		case pod := <-podWatcher:
+			// For better responsiveness, we only care about RUNNING pods.
+			// DRAINING pods can wait until the next rebalance tick.
 			//
-			// Do nothing for now.
+			// Note that there's no easy way to tell whether a SQL pod is new
+			// since this may race with fetchPodsLocked in tenantEntry, so we
+			// will just attempt to rebalance whenever we see a RUNNING pod
+			// event. In most cases, this should only occur when a new SQL pod
+			// gets added (i.e. stamped), or a DRAINING pod transitions to a
+			// RUNNING pod.
+			if pod.State == tenant.RUNNING && pod.TenantID != 0 {
+				handler.balancer.RebalanceTenant(ctx, roachpb.MakeTenantID(pod.TenantID))
+			}
 		}
 	}
 }

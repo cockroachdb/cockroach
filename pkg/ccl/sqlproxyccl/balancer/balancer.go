@@ -50,15 +50,15 @@ const (
 	// NOTE: This must be between 0 and 1 inclusive.
 	rebalancePercentDeviation = 0.15
 
-	// rebalanceRate defines the rate of rebalancing assignments across SQL
-	// pods. This rate applies to both RUNNING and DRAINING pods. For example,
-	// consider the case where the rate is 0.50; if we have decided that we need
-	// to move 15 assignments away from a particular pod, only 7 pods will be
-	// moved at a time.
+	// defaultRebalanceRate defines the rate of rebalancing assignments across
+	// SQL pods. This rate applies to both RUNNING and DRAINING pods. For
+	// example, consider the case where the rate is 0.50; if we have decided
+	// that we need to move 15 assignments away from a particular pod, only 7
+	// pods will be moved at a time.
 	//
 	// NOTE: This must be between 0 and 1 inclusive. 0 means no rebalancing
 	// will occur.
-	rebalanceRate = 0.50
+	defaultRebalanceRate = 0.50
 
 	// defaultMaxConcurrentRebalances represents the maximum number of
 	// concurrent rebalance requests that are being processed. This effectively
@@ -78,6 +78,7 @@ type balancerOptions struct {
 	maxConcurrentRebalances int
 	noRebalanceLoop         bool
 	timeSource              timeutil.TimeSource
+	rebalanceRate           float32
 }
 
 // Option defines an option that can be passed to NewBalancer in order to
@@ -106,6 +107,14 @@ func NoRebalanceLoop() Option {
 func TimeSource(ts timeutil.TimeSource) Option {
 	return func(opts *balancerOptions) {
 		opts.timeSource = ts
+	}
+}
+
+// RebalanceRate defines the rate of rebalancing across pods. Set to -1 to
+// disable rebalancing (i.e. connection transfers).
+func RebalanceRate(rate float32) Option {
+	return func(opts *balancerOptions) {
+		opts.rebalanceRate = rate
 	}
 }
 
@@ -140,6 +149,9 @@ type Balancer struct {
 	// timeutil.DefaultTimeSource. Override with the TimeSource() option when
 	// calling NewBalancer.
 	timeSource timeutil.TimeSource
+
+	// rebalanceRate represents the rate of rebalancing connections.
+	rebalanceRate float32
 }
 
 // NewBalancer constructs a new Balancer instance that is responsible for
@@ -162,6 +174,12 @@ func NewBalancer(
 	if options.timeSource == nil {
 		options.timeSource = timeutil.DefaultTimeSource{}
 	}
+	if options.rebalanceRate == 0 {
+		options.rebalanceRate = defaultRebalanceRate
+	}
+	if options.rebalanceRate == -1 {
+		options.rebalanceRate = 0
+	}
 
 	// Ensure that ctx gets cancelled on stopper's quiescing.
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
@@ -178,6 +196,7 @@ func NewBalancer(
 		queue:          q,
 		processSem:     semaphore.New(options.maxConcurrentRebalances),
 		timeSource:     options.timeSource,
+		rebalanceRate:  options.rebalanceRate,
 	}
 	b.connTracker, err = NewConnTracker(ctx, b.stopper, b.timeSource)
 	if err != nil {
@@ -300,57 +319,57 @@ func (b *Balancer) rebalanceLoop(ctx context.Context) {
 }
 
 // rebalance attempts to rebalance connections for all tenants within the proxy.
-//
-// TODO(jaylim-crl): Update this to support rebalancing a single tenant. That
-// way, the pod watcher could call this to rebalance a single tenant. We may
-// also want to rate limit the number of rebalances per tenant for requests
-// coming from the pod watcher.
 func (b *Balancer) rebalance(ctx context.Context) {
 	// getTenantIDs ensures that tenants will have at least one connection.
 	tenantIDs := b.connTracker.getTenantIDs()
-
 	for _, tenantID := range tenantIDs {
-		tenantPods, err := b.directoryCache.TryLookupTenantPods(ctx, tenantID)
-		if err != nil {
-			// This case shouldn't really occur unless there's a bug in the
-			// directory server (e.g. deleted pod events, but the pod is still
-			// alive).
-			log.Errorf(ctx, "could not lookup pods for tenant %s: %v", tenantID, err.Error())
-			continue
-		}
-
-		// Construct a map so we could easily retrieve the pod by address.
-		podMap := make(map[string]*tenant.Pod)
-		var hasRunningPod bool
-		for _, pod := range tenantPods {
-			podMap[pod.Addr] = pod
-
-			if pod.State == tenant.RUNNING {
-				hasRunningPod = true
-			}
-		}
-
-		// Only attempt to rebalance if we have a RUNNING pod. In theory, this
-		// case would happen if we're scaling down from 1 to 0, which in that
-		// case, we can't transfer connections anywhere. Practically, we will
-		// never scale a tenant from 1 to 0 if there are still active
-		// connections, so this case should not occur.
-		if !hasRunningPod {
-			continue
-		}
-
-		activeList, idleList := b.connTracker.listAssignments(tenantID)
-		b.rebalancePartition(podMap, activeList)
-		b.rebalancePartition(podMap, idleList)
+		b.RebalanceTenant(ctx, tenantID)
 	}
+}
+
+// RebalanceTenant rebalances connections for the given tenant. If no RUNNING
+// pod exists for the given tenant, this is a no-op.
+//
+// TODO(jaylim-crl): Rate limit the number of rebalances per tenant for requests
+// coming from the pod watcher.
+func (b *Balancer) RebalanceTenant(ctx context.Context, tenantID roachpb.TenantID) {
+	tenantPods, err := b.directoryCache.TryLookupTenantPods(ctx, tenantID)
+	if err != nil {
+		log.Errorf(ctx, "could not rebalance tenant %s: %v", tenantID, err.Error())
+		return
+	}
+
+	// Construct a map so we could easily retrieve the pod by address.
+	podMap := make(map[string]*tenant.Pod)
+	var hasRunningPod bool
+	for _, pod := range tenantPods {
+		podMap[pod.Addr] = pod
+
+		if pod.State == tenant.RUNNING {
+			hasRunningPod = true
+		}
+	}
+
+	// Only attempt to rebalance if we have a RUNNING pod. In theory, this
+	// case would happen if we're scaling down from 1 to 0, which in that
+	// case, we can't transfer connections anywhere. Practically, we will
+	// never scale a tenant from 1 to 0 if there are still active
+	// connections, so this case should not occur.
+	if !hasRunningPod {
+		return
+	}
+
+	activeList, idleList := b.connTracker.listAssignments(tenantID)
+	b.rebalancePartition(podMap, activeList)
+	b.rebalancePartition(podMap, idleList)
 }
 
 // rebalancePartition rebalances the given assignments partition.
 func (b *Balancer) rebalancePartition(
 	pods map[string]*tenant.Pod, assignments []*ServerAssignment,
 ) {
-	// Nothing to do here.
-	if len(pods) == 0 || len(assignments) == 0 {
+	// Nothing to do here if there are no assignments, or only one pod.
+	if len(pods) <= 1 || len(assignments) == 0 {
 		return
 	}
 
@@ -371,7 +390,7 @@ func (b *Balancer) rebalancePartition(
 //
 // NOTE: Elements in the list may be shuffled around once this method returns.
 func (b *Balancer) enqueueRebalanceRequests(list []*ServerAssignment) {
-	toMoveCount := int(math.Ceil(float64(len(list)) * float64(rebalanceRate)))
+	toMoveCount := int(math.Ceil(float64(len(list)) * float64(b.rebalanceRate)))
 	partition, _ := partitionNRandom(list, toMoveCount)
 	for _, a := range partition {
 		b.queue.enqueue(&rebalanceRequest{
