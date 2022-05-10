@@ -26,7 +26,7 @@ import {
   ExecutionsColumn,
 } from "../execTableCommon";
 
-interface ActiveTransactionsTable {
+interface ActiveTransactionsTableProps {
   data: ActiveTransaction[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
@@ -121,7 +121,7 @@ export function getColumnOptions(
     }));
 }
 
-export const ActiveTransactionsTable: React.FC<ActiveTransactionsTable> = props => {
+export const ActiveTransactionsTable: React.FC<ActiveTransactionsTableProps> = props => {
   const { selectedColumns, ...rest } = props;
   const columns = makeActiveTransactionsColumns().filter(col =>
     isSelectedColumn(selectedColumns, col),
