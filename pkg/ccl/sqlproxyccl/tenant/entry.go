@@ -239,6 +239,7 @@ func (e *tenantEntry) fetchPodsLocked(
 	ctx context.Context, client DirectoryClient,
 ) (tenantPods []*Pod, err error) {
 	// List the pods for the given tenant.
+	//
 	// TODO(andyk): This races with the pod watcher, which may receive updates
 	// that are newer than what ListPods returns. This could be fixed by adding
 	// version values to the pods in order to detect races.
