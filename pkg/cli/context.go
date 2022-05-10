@@ -649,7 +649,6 @@ func setProxyContextDefaults() {
 	proxyContext.RatelimitBaseDelay = 50 * time.Millisecond
 	proxyContext.ValidateAccessInterval = 30 * time.Second
 	proxyContext.PollConfigInterval = 30 * time.Second
-	proxyContext.DrainTimeout = 0
 	proxyContext.ThrottleBaseDelay = time.Second
 }
 
