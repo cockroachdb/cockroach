@@ -274,7 +274,6 @@ func TestPebbleIterBoundSliceStabilityAndNoop(t *testing.T) {
 
 	tc := []struct {
 		expectSetBounds bool
-		setUpperOnly    bool
 		lb              roachpb.Key
 		ub              roachpb.Key
 	}{
@@ -289,12 +288,6 @@ func TestPebbleIterBoundSliceStabilityAndNoop(t *testing.T) {
 			ub:              roachpb.Key("www"),
 		},
 		{
-			// [nil, www)
-			expectSetBounds: false,
-			setUpperOnly:    true,
-			ub:              roachpb.Key("www"),
-		},
-		{
 			// [ddd, www)
 			expectSetBounds: true,
 			lb:              roachpb.Key("ddd"),
@@ -303,14 +296,8 @@ func TestPebbleIterBoundSliceStabilityAndNoop(t *testing.T) {
 		{
 			// [ddd, www)
 			expectSetBounds: false,
-			setUpperOnly:    true,
+			lb:              roachpb.Key("ddd"),
 			ub:              roachpb.Key("www"),
-		},
-		{
-			// [ddd, xxx)
-			expectSetBounds: true,
-			setUpperOnly:    true,
-			ub:              roachpb.Key("xxx"),
 		},
 		{
 			// [aaa, bbb)
@@ -340,13 +327,8 @@ func TestPebbleIterBoundSliceStabilityAndNoop(t *testing.T) {
 		t.Run(fmt.Sprintf("%v", c), func(t *testing.T) {
 			checker.expectSetBounds = c.expectSetBounds
 			checker.t = t
-			if c.setUpperOnly {
-				iter.SetUpperBound(c.ub)
-				ub = c.ub
-			} else {
-				iter.setBounds(c.lb, c.ub)
-				lb, ub = c.lb, c.ub
-			}
+			iter.setBounds(c.lb, c.ub)
+			lb, ub = c.lb, c.ub
 			require.False(t, checker.expectSetBounds)
 			for i, bound := range [][]byte{lb, ub} {
 				if (bound == nil) != (checker.boundsSlicesCopied[i] == nil) {

@@ -208,11 +208,6 @@ func (i *MVCCIterator) FindSplitKey(
 	return i.i.FindSplitKey(start, end, minSplitKey, targetSize)
 }
 
-// SetUpperBound is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SetUpperBound(key roachpb.Key) {
-	i.i.SetUpperBound(key)
-}
-
 // Stats is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Stats() storage.IteratorStats {
 	return i.i.Stats()
@@ -372,11 +367,6 @@ func (i *EngineIterator) Value() []byte {
 // UnsafeRawEngineKey is part of the storage.EngineIterator interface.
 func (i *EngineIterator) UnsafeRawEngineKey() []byte {
 	return i.i.UnsafeRawEngineKey()
-}
-
-// SetUpperBound is part of the storage.EngineIterator interface.
-func (i *EngineIterator) SetUpperBound(key roachpb.Key) {
-	i.i.SetUpperBound(key)
 }
 
 // GetRawIter is part of the storage.EngineIterator interface.
