@@ -327,6 +327,7 @@ export class StatementsPage extends React.Component<
 
   componentDidUpdate = (): void => {
     this.updateQueryParams();
+    this.refreshStatements();
     if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
       this.props.refreshStatementDiagnosticsRequests();
     }

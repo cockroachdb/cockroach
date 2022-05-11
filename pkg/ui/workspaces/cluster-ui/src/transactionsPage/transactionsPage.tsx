@@ -221,6 +221,7 @@ export class TransactionsPage extends React.Component<
 
   componentDidUpdate(): void {
     this.updateQueryParams();
+    this.refreshData();
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {
