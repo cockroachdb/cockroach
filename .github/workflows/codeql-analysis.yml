@@ -57,6 +57,13 @@ jobs:
     #- name: Autobuild
     #  uses: github/codeql-action/autobuild@v2
     
+    # Makefile:248: *** GOPATH is not set and could not be automatically determined.  Stop.
+    - name: setup env
+      shell: bash
+      run: |
+        echo "::set-env name=GOPATH::${{ github.workspace }}/go"
+        echo "::add-path::${{ github.workspace }}/go/bin"
+    
     # Autobuilder was built with Autobuilder was built with go1.17.9, environment has go1.17.9
     - name: Set up Go
       uses: actions/setup-go@v3
