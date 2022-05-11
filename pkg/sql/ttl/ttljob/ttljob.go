@@ -463,11 +463,11 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				var nextRange rangeToProcess
 				nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, p.ExecCfg().Codec, pkTypes, &alloc)
 				if err != nil {
-					return err
+					return errors.Wrapf(err, "error decoding starting PRIMARY KEY for range ID %d", rangeDesc.RangeID)
 				}
 				nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, p.ExecCfg().Codec, pkTypes, &alloc)
 				if err != nil {
-					return err
+					return errors.Wrapf(err, "error decoding ending PRIMARY KEY for range ID %d", rangeDesc.RangeID)
 				}
 				ch <- nextRange
 			}
@@ -721,11 +721,11 @@ func keyToDatums(
 	// as the key for the range (e.g. a PK (a, b) may only be split on (a)).
 	rKey, err := codec.StripTenantPrefix(key.AsRawKey())
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "error decoding tenant prefix of %x", key)
 	}
 	rKey, _, _, err = rowenc.DecodePartialTableIDIndexID(key)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "error decoding table/index ID of %x", key)
 	}
 	encDatums := make([]rowenc.EncDatum, 0, len(pkTypes))
 	for len(rKey) > 0 && len(encDatums) < len(pkTypes) {
@@ -736,7 +736,7 @@ func keyToDatums(
 		var val rowenc.EncDatum
 		val, rKey, err = rowenc.EncDatumFromBuffer(pkTypes[i], enc, rKey)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "error decoding EncDatum of %x", key)
 		}
 		encDatums = append(encDatums, val)
 	}
@@ -744,7 +744,7 @@ func keyToDatums(
 	datums := make(tree.Datums, len(encDatums))
 	for i, encDatum := range encDatums {
 		if err := encDatum.EnsureDecoded(pkTypes[i], alloc); err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "error ensuring encoded of %x", key)
 		}
 		datums[i] = encDatum.Datum
 	}
