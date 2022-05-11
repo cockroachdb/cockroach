@@ -1181,6 +1181,16 @@ func NewStore(
 	}
 	s.replRankings = newReplicaRankings()
 
+	s.raftRecvQueues.mon = mon.NewUnlimitedMonitor(
+		ctx,
+		"raft-receive-queue",
+		mon.MemoryResource,
+		s.metrics.RaftRcvdQueuedBytes,
+		nil,
+		math.MaxInt64,
+		cfg.Settings,
+	)
+
 	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
 
