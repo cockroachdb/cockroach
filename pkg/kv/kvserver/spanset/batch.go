@@ -592,11 +592,11 @@ func (s spanSetWriter) ClearMVCCRange(start, end storage.MVCCKey) error {
 	return s.w.ClearMVCCRange(start, end)
 }
 
-func (s spanSetWriter) ClearIterRange(iter storage.MVCCIterator, start, end roachpb.Key) error {
+func (s spanSetWriter) ClearIterRange(start, end roachpb.Key) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearIterRange(iter, start, end)
+	return s.w.ClearIterRange(start, end)
 }
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {

@@ -408,27 +408,24 @@ func (p *pebbleBatch) clearRange(start, end MVCCKey) error {
 	return p.batch.DeleteRange(p.buf, buf2, nil)
 }
 
-// Clear implements the Batch interface.
-func (p *pebbleBatch) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
-	// Note that this method has the side effect of modifying iter's bounds.
-	// Since all calls to `ClearIterRange` are on new throwaway iterators with no
-	// lower bounds, calling SetUpperBound should be sufficient and safe.
-	// Furthermore, the start and end keys are always metadata keys (i.e.
-	// have zero timestamps), so we can ignore the bounds' MVCC timestamps.
-	iter.SetUpperBound(end)
-	iter.SeekGE(MakeMVCCMetadataKey(start))
+// ClearIterRange implements the Batch interface.
+func (p *pebbleBatch) ClearIterRange(start, end roachpb.Key) error {
+	iter := p.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		LowerBound: start,
+		UpperBound: end,
+	})
+	defer iter.Close()
 
-	for ; ; iter.Next() {
-		valid, err := iter.Valid()
-		if err != nil {
+	for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
+		if valid, err := iter.Valid(); err != nil {
 			return err
 		} else if !valid {
 			break
 		}
+
 		// NB: UnsafeRawKey could be a serialized lock table key, and not just an
 		// MVCCKey.
-		err = p.batch.Delete(iter.UnsafeRawKey(), nil)
-		if err != nil {
+		if err := p.batch.Delete(iter.UnsafeRawKey(), nil); err != nil {
 			return err
 		}
 	}

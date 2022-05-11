@@ -1012,9 +1012,7 @@ func TestEngineDeleteIterRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
-		defer iter.Close()
-		return engine.ClearIterRange(iter, start.Key, end.Key)
+		return engine.ClearIterRange(start.Key, end.Key)
 	})
 }
 

@@ -556,17 +556,11 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearMVCCRange(start, end MVCCKey) error
 
-	// ClearIterRange removes a set of entries, from start (inclusive) to end
-	// (exclusive). Similar to Clear and ClearRange, this method actually
-	// removes entries from the storage engine. Unlike ClearRange, the entries
-	// to remove are determined by iterating over iter and per-key storage
-	// tombstones (not MVCC tombstones) are generated. If the MVCCIterator was
-	// constructed using MVCCKeyAndIntentsIterKind, any separated intents/locks
-	// will also be cleared.
-	//
-	// It is safe to modify the contents of the arguments after ClearIterRange
-	// returns.
-	ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
+	// ClearIterRange removes all keys in the given span using an iterator to
+	// iterate over point keys and remove them from the storage engine using
+	// per-key storage tombstones (not MVCC tombstones). Any separated
+	// intents/locks will also be cleared.
+	ClearIterRange(start, end roachpb.Key) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
