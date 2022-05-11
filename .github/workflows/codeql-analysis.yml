@@ -57,6 +57,15 @@ jobs:
     #- name: Autobuild
     #  uses: github/codeql-action/autobuild@v2
     
+    # GO env debugging
+    - name: go info
+      shell: bash
+      run: |          
+          echo $(go version) at $(which go)
+          echo go version: $(go version)
+          echo go env: $(go env GOPATH) 
+          echo cache: $(ls $RUNNER_TOOL_CACHE/go)
+    
     # Makefile:248: *** GOPATH is not set and could not be automatically determined.  Stop.
     - name: setup env
       shell: bash
