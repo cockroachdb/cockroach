@@ -344,7 +344,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		ttlSettings.LabelMetrics,
 		relationName,
 	)
-	var rangeDesc roachpb.RangeDescriptor
 	var alloc tree.DatumAlloc
 	type rangeToProcess struct {
 		startPK, endPK tree.Datums
@@ -456,6 +455,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 			// Send these to each goroutine worker.
 			for _, r := range ranges {
+				var rangeDesc roachpb.RangeDescriptor
 				if err := r.ValueProto(&rangeDesc); err != nil {
 					return err
 				}
