@@ -341,7 +341,11 @@ type slotGranter struct {
 	workKind            WorkKind
 	requester           requester
 	usedSlots           int
-	totalSlots          int
+	usedSoftSlots          int
+	totalHighLoadSlots     int
+	totalModerateLoadSlots int
+	failedSoftSlotsGet     bool
+	runnableEWMA float64
 	skipSlotEnforcement bool
 
 	// Optional. Nil for a slotGranter used for KVWork since the slots for that
@@ -373,7 +377,7 @@ func (sg *slotGranter) tryGetLocked(count int64) grantResult {
 	if sg.cpuOverload != nil && sg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
-	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement {
+	if sg.usedSlots < sg.totalHighLoadSlots || sg.skipSlotEnforcement {
 		sg.usedSlots++
 		sg.usedSlotsMetric.Update(int64(sg.usedSlots))
 		return grantSuccess
@@ -386,6 +390,31 @@ func (sg *slotGranter) tryGetLocked(count int64) grantResult {
 
 func (sg *slotGranter) returnGrant(count int64) {
 	sg.coord.returnGrant(sg.workKind, count)
+}
+
+func (sg *slotGranter) tryGetSoftSlots(count int) int {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
+	spareModerateLoadSlots := sg.totalModerateLoadSlots - sg.usedSoftSlots - sg.usedSlots
+	if spareModerateLoadSlots <= 0 {
+		sg.failedSoftSlotsGet = true
+		return 0
+	}
+	allocatedSlots := count
+	if allocatedSlots > spareModerateLoadSlots {
+		allocatedSlots = spareModerateLoadSlots
+	}
+	sg.usedSoftSlots += allocatedSlots
+	return allocatedSlots
+}
+
+func (sg *slotGranter) returnSoftSlots(count int) {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
+	sg.usedSoftSlots -= count
+	if sg.usedSoftSlots < 0 {
+		panic("used soft slots is negative")
+	}
 }
 
 func (sg *slotGranter) returnGrantLocked(count int64) {
@@ -737,7 +766,8 @@ func NewGrantCoordinators(
 	kvg := &slotGranter{
 		coord:           coord,
 		workKind:        KVWork,
-		totalSlots:      opts.MinCPUSlots,
+		totalHighLoadSlots:      opts.MinCPUSlots,
+		totalModerateLoadSlots: 0,
 		usedSlotsMetric: metrics.KVUsedSlots,
 	}
 	kvSlotAdjuster.granter = kvg
@@ -772,7 +802,7 @@ func NewGrantCoordinators(
 	sg := &slotGranter{
 		coord:           coord,
 		workKind:        SQLStatementLeafStartWork,
-		totalSlots:      opts.SQLStatementLeafStartWorkSlots,
+		totalHighLoadSlots:      opts.SQLStatementLeafStartWorkSlots,
 		cpuOverload:     kvSlotAdjuster,
 		usedSlotsMetric: metrics.SQLLeafStartUsedSlots,
 	}
@@ -784,7 +814,7 @@ func NewGrantCoordinators(
 	sg = &slotGranter{
 		coord:           coord,
 		workKind:        SQLStatementRootStartWork,
-		totalSlots:      opts.SQLStatementRootStartWorkSlots,
+		totalHighLoadSlots:      opts.SQLStatementRootStartWorkSlots,
 		cpuOverload:     kvSlotAdjuster,
 		usedSlotsMetric: metrics.SQLRootStartUsedSlots,
 	}
@@ -863,7 +893,7 @@ func NewGrantCoordinatorSQL(
 	sg := &slotGranter{
 		coord:           coord,
 		workKind:        SQLStatementLeafStartWork,
-		totalSlots:      opts.SQLStatementLeafStartWorkSlots,
+		totalHighLoadSlots:      opts.SQLStatementLeafStartWorkSlots,
 		cpuOverload:     sqlNodeCPU,
 		usedSlotsMetric: metrics.SQLLeafStartUsedSlots,
 	}
@@ -875,7 +905,7 @@ func NewGrantCoordinatorSQL(
 	sg = &slotGranter{
 		coord:           coord,
 		workKind:        SQLStatementRootStartWork,
-		totalSlots:      opts.SQLStatementRootStartWorkSlots,
+		totalHighLoadSlots:      opts.SQLStatementRootStartWorkSlots,
 		cpuOverload:     sqlNodeCPU,
 		usedSlotsMetric: metrics.SQLRootStartUsedSlots,
 	}
@@ -1211,15 +1241,18 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 		case KVWork:
 			switch g := coord.granters[i].(type) {
 			case *slotGranter:
-				s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots,
-					g.totalSlots)
+				s.Printf("%s%s: used: %d, high(moderate)-total: %d(%d)", curSep, workKindString(kind),
+					g.usedSlots, g.totalHighLoadSlots, g.totalModerateLoadSlots)
+				if g.usedSoftSlots > 0 {
+					s.Printf(" used-soft: %d", g.usedSoftSlots)
+				}
 			case *kvStoreTokenGranter:
 				s.Printf(" io-avail: %d", g.availableIOTokens)
 			}
 		case SQLStatementLeafStartWork, SQLStatementRootStartWork:
 			if coord.granters[i] != nil {
 				g := coord.granters[i].(*slotGranter)
-				s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalSlots)
+				s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalHighLoadSlots)
 			}
 		case SQLKVResponseWork, SQLSQLResponseWork:
 			if coord.granters[i] != nil {
@@ -1460,11 +1493,13 @@ var _ cpuOverloadIndicator = &kvSlotAdjuster{}
 var _ CPULoadListener = &kvSlotAdjuster{}
 
 func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, _ time.Duration) {
+	kvsa.granter.runnableEWMA = kvsa.granter.runnableEWMA * 0.991 + float64(runnable) * 0.009
 	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&kvsa.settings.SV))
 
 	// Simple heuristic, which worked ok in experiments. More sophisticated ones
 	// could be devised.
-	if runnable >= threshold*procs {
+	usedSlots := kvsa.granter.usedSlots + kvsa.granter.usedSoftSlots
+	tryDecreaseSlots := func(total int) int {
 		// Overload.
 		// If using some slots, and the used slots is less than the total slots,
 		// and total slots hasn't bottomed out at the min, decrease the total
@@ -1477,29 +1512,94 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, _ time.Duration) {
 		// so it is suggests that the drop in slots should not be causing cpu
 		// under-utilization, but one cannot be sure. Experiment with a smoothed
 		// signal or other ways to prevent a fast drop.
-		if kvsa.granter.usedSlots > 0 && kvsa.granter.totalSlots > kvsa.minCPUSlots &&
-			kvsa.granter.usedSlots <= kvsa.granter.totalSlots {
-			kvsa.granter.totalSlots--
+		// This should be total slots, we're using total moderate slots.
+		if usedSlots > 0 && total > kvsa.minCPUSlots && usedSlots <= total {
+			total--
 		}
-	} else if float64(runnable) <= float64((threshold*procs)/2) {
+		return total
+	}
+	tryIncreaseSlots := func(total int) int {
+		// TODO: 0.8 is arbitrary.
+		closeToTotalSlots := int(float64(total) * 0.8)
 		// Underload.
-		// Used all its slots and can increase further, so additive increase.
-		if kvsa.granter.usedSlots >= kvsa.granter.totalSlots &&
-			kvsa.granter.totalSlots < kvsa.maxCPUSlots {
+		// Used all its slots and can increase further, so additive increase. We
+		// also handle the case where the used slots are a bit less than total
+		// slots, since callers for soft slots don't block.
+		if (usedSlots >= total || (usedSlots >= closeToTotalSlots && kvsa.granter.failedSoftSlotsGet)) &&
+			total < kvsa.maxCPUSlots {
 			// NB: If the workload is IO bound, the slot count here will keep
 			// incrementing until these slots are no longer the bottleneck for
 			// admission. So it is not unreasonable to see this slot count go into
 			// the 1000s. If the workload switches to being CPU bound, we can
 			// decrease by 1000 slots every second (because the CPULoad ticks are at
 			// 1ms intervals, and we do additive decrease).
-			kvsa.granter.totalSlots++
+			total++
 		}
+		return total
 	}
-	kvsa.totalSlotsMetric.Update(int64(kvsa.granter.totalSlots))
+
+	// TODO: the fractions below are arbitrary and subject to tuning.
+	if runnable >= threshold*procs {
+		// Very overloaded.
+		kvsa.granter.totalHighLoadSlots = tryDecreaseSlots(kvsa.granter.totalHighLoadSlots)
+		kvsa.granter.totalModerateLoadSlots = tryDecreaseSlots(kvsa.granter.totalModerateLoadSlots)
+	} else if float64(runnable) <= float64((threshold*procs)/4) {
+		// Very underloaded.
+		kvsa.granter.totalHighLoadSlots = tryIncreaseSlots(kvsa.granter.totalHighLoadSlots)
+		kvsa.granter.totalModerateLoadSlots = tryIncreaseSlots(kvsa.granter.totalModerateLoadSlots)
+	} else if float64(runnable) <= float64((threshold*procs)/2) {
+		// Moderately underloaded -- can afford to increase regular slots.
+		kvsa.granter.totalHighLoadSlots = tryIncreaseSlots(kvsa.granter.totalHighLoadSlots)
+	} else if runnable >= 3*threshold*procs/4 {
+		// Moderately overloaded -- should decrease moderate load slots.
+		//
+		// NB: decreasing moderate load slots may not halt the runnable growth
+		// since the regular traffic may be high and can use up to the high load
+		// slots. When usedSlots>totalModerateLoadSlots, we won't actually
+		// decrease totalModerateLoadSlots (see the logic in tryDecreaseSlots).
+		// However, that doesn't mean that totalModerateLoadSlots is accurate.
+		// This inaccuracy is fine since we have chosen to be in a high load
+		// regime, since all the work we are doing is non-optional regular work
+		// (not background work).
+		//
+		// Where this will help is when what is pushing us over moderate load is
+		// optional background work, so by decreasing totalModerateLoadSlots we will
+		// contain the load due to that work.
+		kvsa.granter.totalModerateLoadSlots = tryDecreaseSlots(kvsa.granter.totalModerateLoadSlots)
+	}
+	// Consider the following cases, when we started this method with
+	// totalHighLoadSlots==totalModerateLoadSlots.
+	// - underload such that we are able to increase totalModerateLoadSlots: in
+	//   this case we will also be able to increase totalHighLoadSlots (since
+	//   the used and total comparisons gating the increase in tryIncreaseSlots
+	//   will also be true for totalHighLoadSlots).
+	// - overload such that we are able to decrease totalHighLoadSlots: in this
+	//   case the logic in tryDecreaseSlots will also be able to decrease
+	//   totalModerateLoadSlots.
+	// So the natural behavior of the slot adjustment itself guarantees
+	// totalHighLoadSlots >= totalModerateLoadSlots. But as a defensive measure
+	// we clamp totalModerateLoadSlots to not exceed totalHighLoadSlots.
+	if kvsa.granter.totalHighLoadSlots < kvsa.granter.totalModerateLoadSlots {
+		kvsa.granter.totalModerateLoadSlots = kvsa.granter.totalHighLoadSlots
+	}
+
+	// Take the runnable go routines into account to clamp down on the available moderate load slots.
+	// There are cases where work not accounted for by admission control will cause runnable goroutine
+	// spikes. In such situations, we don't want to grant soft slots.
+	moderateThreshold := int(float64(threshold * procs) / 2 - kvsa.granter.runnableEWMA)
+	if kvsa.granter.totalModerateLoadSlots > moderateThreshold {
+		kvsa.granter.totalModerateLoadSlots = moderateThreshold
+	}
+	if kvsa.granter.totalModerateLoadSlots < 0 {
+		kvsa.granter.totalModerateLoadSlots = 0
+	}
+
+	kvsa.granter.failedSoftSlotsGet = false
+	kvsa.totalSlotsMetric.Update(int64(kvsa.granter.totalHighLoadSlots))
 }
 
 func (kvsa *kvSlotAdjuster) isOverloaded() bool {
-	return kvsa.granter.usedSlots >= kvsa.granter.totalSlots && !kvsa.granter.skipSlotEnforcement
+	return kvsa.granter.usedSlots >= kvsa.granter.totalHighLoadSlots && !kvsa.granter.skipSlotEnforcement
 }
 
 // sqlNodeCPUOverloadIndicator is the implementation of cpuOverloadIndicator
@@ -1926,3 +2026,33 @@ var _ = NewGrantCoordinatorSQL
 // uses the term "slot" for these is that we have a completion indicator, and
 // when we do have such an indicator it can be beneficial to be able to keep
 // track of how many ongoing work items we have.
+
+// SoftSlotGranter grants soft slots without queueing. See the comment with
+// kvGranter.
+type SoftSlotGranter struct {
+	kvGranter *slotGranter
+}
+
+// MakeSoftSlotGranter constructs a SoftSlotGranter given a GrantCoordinator
+// that is responsible for KV and lower layers.
+func MakeSoftSlotGranter(gc *GrantCoordinator) (*SoftSlotGranter, error) {
+	kvGranter, ok := gc.granters[KVWork].(*slotGranter)
+	if !ok {
+		return nil, errors.Errorf("GrantCoordinator does not support soft slots")
+	}
+	return &SoftSlotGranter{
+		kvGranter: kvGranter,
+	}, nil
+}
+
+// TryGetSlots attempts to acquire count slots and returns what was acquired
+// (possibly 0).
+// TODO: experiment with calling this when opening an sstable.Writer.
+func (ssg *SoftSlotGranter) TryGetSlots(count int) int {
+	return ssg.kvGranter.tryGetSoftSlots(count)
+}
+
+// ReturnSlots returns count slots (count must be >= 0).
+func (ssg *SoftSlotGranter) ReturnSlots(count int) {
+	ssg.kvGranter.returnSoftSlots(count)
+}

@@ -107,6 +107,7 @@ func TestGranterBasic(t *testing.T) {
 	var ambientCtx log.AmbientContext
 	var requesters [numWorkKinds]*testRequester
 	var coord *GrantCoordinator
+	var ssg *SoftSlotGranter
 	clearRequesterAndCoord := func() {
 		coord = nil
 		for i := range requesters {
@@ -153,6 +154,9 @@ func TestGranterBasic(t *testing.T) {
 			delayForGrantChainTermination = 0
 			coords, _ := NewGrantCoordinators(ambientCtx, opts)
 			coord = coords.Regular
+			var err error
+			ssg, err = MakeSoftSlotGranter(coord)
+			require.NoError(t, err)
 			return flushAndReset()
 
 		case "init-store-grant-coordinator":
@@ -249,6 +253,19 @@ func TestGranterBasic(t *testing.T) {
 			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableIOTokensLocked(int64(tokens))
 			coord.mu.Unlock()
 			coord.testingTryGrant()
+			return flushAndReset()
+
+		case "try-get-soft-slots":
+			var slots int
+			d.ScanArgs(t, "slots", &slots)
+			granted := ssg.TryGetSlots(slots)
+			fmt.Fprintf(&buf, "requested: %d, granted: %d\n", slots, granted)
+			return flushAndReset()
+
+		case "return-soft-slots":
+			var slots int
+			d.ScanArgs(t, "slots", &slots)
+			ssg.ReturnSlots(slots)
 			return flushAndReset()
 
 		default:
