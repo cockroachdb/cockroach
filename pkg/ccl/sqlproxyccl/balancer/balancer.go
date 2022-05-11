@@ -38,6 +38,12 @@ const (
 	// DRAINING state before the proxy starts moving connections away from it.
 	minDrainPeriod = 1 * time.Minute
 
+	// defaultRebalanceDelay is the minimum amount of time that must elapse
+	// between rebalance operations. This was deliberately chosen to be half of
+	// rebalanceInterval, and is mainly used to rate limit effects due to events
+	// from the pod watcher.
+	defaultRebalanceDelay = 15 * time.Second
+
 	// rebalancePercentDeviation defines the percentage threshold that the
 	// current number of assignments can deviate away from the mean. Having a
 	// 15% "deadzone" reduces frequent transfers especially when load is
@@ -79,6 +85,7 @@ type balancerOptions struct {
 	noRebalanceLoop         bool
 	timeSource              timeutil.TimeSource
 	rebalanceRate           float32
+	rebalanceDelay          time.Duration
 }
 
 // Option defines an option that can be passed to NewBalancer in order to
@@ -110,11 +117,22 @@ func TimeSource(ts timeutil.TimeSource) Option {
 	}
 }
 
-// RebalanceRate defines the rate of rebalancing across pods. Set to -1 to
-// disable rebalancing (i.e. connection transfers).
+// RebalanceRate defines the rate of rebalancing across pods. This must be
+// between 0 and 1 inclusive. 0 means no rebalancing will occur.
 func RebalanceRate(rate float32) Option {
 	return func(opts *balancerOptions) {
 		opts.rebalanceRate = rate
+	}
+}
+
+// RebalanceDelay specifies the minimum amount of time that must elapse between
+// attempts to rebalance a given tenant. This delay has the effect of throttling
+// RebalanceTenant calls to avoid constantly moving connections around.
+//
+// RebalanceDelay defaults to defaultRebalanceDelay. Use -1 to never throttle.
+func RebalanceDelay(delay time.Duration) Option {
+	return func(opts *balancerOptions) {
+		opts.rebalanceDelay = delay
 	}
 }
 
@@ -152,6 +170,19 @@ type Balancer struct {
 
 	// rebalanceRate represents the rate of rebalancing connections.
 	rebalanceRate float32
+
+	// rebalanceDelay is the minimum amount of time that must elapse between
+	// attempts to rebalance a given tenant. Defaults to defaultRebalanceDelay.
+	rebalanceDelay time.Duration
+
+	// lastRebalance is the last time the tenants are rebalanced. This is used
+	// to rate limit the number of rebalances per tenant. Synchronization is
+	// needed since rebalance operations can be triggered by the rebalance loop,
+	// or the pod watcher.
+	lastRebalance struct {
+		syncutil.Mutex
+		tenants map[roachpb.TenantID]time.Time
+	}
 }
 
 // NewBalancer constructs a new Balancer instance that is responsible for
@@ -164,21 +195,14 @@ func NewBalancer(
 	opts ...Option,
 ) (*Balancer, error) {
 	// Handle options.
-	options := &balancerOptions{}
+	options := &balancerOptions{
+		maxConcurrentRebalances: defaultMaxConcurrentRebalances,
+		timeSource:              timeutil.DefaultTimeSource{},
+		rebalanceRate:           defaultRebalanceRate,
+		rebalanceDelay:          defaultRebalanceDelay,
+	}
 	for _, opt := range opts {
 		opt(options)
-	}
-	if options.maxConcurrentRebalances == 0 {
-		options.maxConcurrentRebalances = defaultMaxConcurrentRebalances
-	}
-	if options.timeSource == nil {
-		options.timeSource = timeutil.DefaultTimeSource{}
-	}
-	if options.rebalanceRate == 0 {
-		options.rebalanceRate = defaultRebalanceRate
-	}
-	if options.rebalanceRate == -1 {
-		options.rebalanceRate = 0
 	}
 
 	// Ensure that ctx gets cancelled on stopper's quiescing.
@@ -197,7 +221,10 @@ func NewBalancer(
 		processSem:     semaphore.New(options.maxConcurrentRebalances),
 		timeSource:     options.timeSource,
 		rebalanceRate:  options.rebalanceRate,
+		rebalanceDelay: options.rebalanceDelay,
 	}
+	b.lastRebalance.tenants = make(map[roachpb.TenantID]time.Time)
+
 	b.connTracker, err = NewConnTracker(ctx, b.stopper, b.timeSource)
 	if err != nil {
 		return nil, err
@@ -216,6 +243,46 @@ func NewBalancer(
 	}
 
 	return b, nil
+}
+
+// RebalanceTenant rebalances connections to the given tenant. If no RUNNING
+// pod exists for the given tenant, or the tenant has been recently rebalanced,
+// this is a no-op.
+func (b *Balancer) RebalanceTenant(ctx context.Context, tenantID roachpb.TenantID) {
+	// If rebalanced recently, no-op.
+	if !b.canRebalanceTenant(tenantID) {
+		return
+	}
+
+	tenantPods, err := b.directoryCache.TryLookupTenantPods(ctx, tenantID)
+	if err != nil {
+		log.Errorf(ctx, "could not rebalance tenant %s: %v", tenantID, err.Error())
+		return
+	}
+
+	// Construct a map so we could easily retrieve the pod by address.
+	podMap := make(map[string]*tenant.Pod)
+	var hasRunningPod bool
+	for _, pod := range tenantPods {
+		podMap[pod.Addr] = pod
+
+		if pod.State == tenant.RUNNING {
+			hasRunningPod = true
+		}
+	}
+
+	// Only attempt to rebalance if we have a RUNNING pod. In theory, this
+	// case would happen if we're scaling down from 1 to 0, which in that
+	// case, we can't transfer connections anywhere. Practically, we will
+	// never scale a tenant from 1 to 0 if there are still active
+	// connections, so this case should not occur.
+	if !hasRunningPod {
+		return
+	}
+
+	activeList, idleList := b.connTracker.listAssignments(tenantID)
+	b.rebalancePartition(podMap, activeList)
+	b.rebalancePartition(podMap, idleList)
 }
 
 // SelectTenantPod selects a tenant pod from the given list based on a weighted
@@ -318,6 +385,20 @@ func (b *Balancer) rebalanceLoop(ctx context.Context) {
 	}
 }
 
+// canRebalanceTenant returns true if it has been at least `rebalanceDelay`
+// since the last time the given tenant was rebalanced, or false otherwise.
+func (b *Balancer) canRebalanceTenant(tenantID roachpb.TenantID) bool {
+	b.lastRebalance.Lock()
+	defer b.lastRebalance.Unlock()
+
+	now := b.timeSource.Now()
+	if now.Sub(b.lastRebalance.tenants[tenantID]) < b.rebalanceDelay {
+		return false
+	}
+	b.lastRebalance.tenants[tenantID] = now
+	return true
+}
+
 // rebalance attempts to rebalance connections for all tenants within the proxy.
 func (b *Balancer) rebalance(ctx context.Context) {
 	// getTenantIDs ensures that tenants will have at least one connection.
@@ -325,43 +406,6 @@ func (b *Balancer) rebalance(ctx context.Context) {
 	for _, tenantID := range tenantIDs {
 		b.RebalanceTenant(ctx, tenantID)
 	}
-}
-
-// RebalanceTenant rebalances connections for the given tenant. If no RUNNING
-// pod exists for the given tenant, this is a no-op.
-//
-// TODO(jaylim-crl): Rate limit the number of rebalances per tenant for requests
-// coming from the pod watcher.
-func (b *Balancer) RebalanceTenant(ctx context.Context, tenantID roachpb.TenantID) {
-	tenantPods, err := b.directoryCache.TryLookupTenantPods(ctx, tenantID)
-	if err != nil {
-		log.Errorf(ctx, "could not rebalance tenant %s: %v", tenantID, err.Error())
-		return
-	}
-
-	// Construct a map so we could easily retrieve the pod by address.
-	podMap := make(map[string]*tenant.Pod)
-	var hasRunningPod bool
-	for _, pod := range tenantPods {
-		podMap[pod.Addr] = pod
-
-		if pod.State == tenant.RUNNING {
-			hasRunningPod = true
-		}
-	}
-
-	// Only attempt to rebalance if we have a RUNNING pod. In theory, this
-	// case would happen if we're scaling down from 1 to 0, which in that
-	// case, we can't transfer connections anywhere. Practically, we will
-	// never scale a tenant from 1 to 0 if there are still active
-	// connections, so this case should not occur.
-	if !hasRunningPod {
-		return
-	}
-
-	activeList, idleList := b.connTracker.listAssignments(tenantID)
-	b.rebalancePartition(podMap, activeList)
-	b.rebalancePartition(podMap, idleList)
 }
 
 // rebalancePartition rebalances the given assignments partition.
