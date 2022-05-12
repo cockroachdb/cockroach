@@ -96,4 +96,5 @@ rm -rf crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 rm -rf crdb-checkout/pkg/ui/node_modules
 rm -rf crdb-checkout/pkg/ui/workspaces/db-console/node_modules
+rm -rf crdb-checkout/pkg/ui/workspaces/db-console/src/js/node_modules
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/node_modules

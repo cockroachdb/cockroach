@@ -282,6 +282,7 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 					pathsToDelete,
 					filepath.Join(workspace, "pkg", "ui", "node_modules"),
 					filepath.Join(uiDirs.dbConsole, "node_modules"),
+					filepath.Join(uiDirs.dbConsole, "src", "js", "node_modules"),
 					filepath.Join(uiDirs.clusterUI, "node_modules"),
 				)
 			}
