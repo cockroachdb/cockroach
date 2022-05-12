@@ -13,11 +13,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -128,26 +127,16 @@ func newConfluentAvroEncoder(
 
 // Get the raw SQL-formatted string for a table name
 // and apply full_table_name and avro_schema_prefix options
-func (e *confluentAvroEncoder) rawTableName(
-	desc catalog.TableDescriptor, familyID descpb.FamilyID,
-) (string, error) {
+func (e *confluentAvroEncoder) rawTableName(src cdcevent.EventSource) (string, error) {
 	for _, target := range e.targets {
-		if target.TableID == desc.GetID() {
+		if target.TableID == src.TableID() {
 			switch target.Type {
 			case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
 				return e.schemaPrefix + target.StatementTimeName, nil
 			case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
-				family, err := desc.FindFamilyByID(familyID)
-				if err != nil {
-					return "", err
-				}
-				return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, family.Name), nil
+				return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, src.FamilyName()), nil
 			case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
-				family, err := desc.FindFamilyByID(familyID)
-				if err != nil {
-					return "", err
-				}
-				if family.Name != target.FamilyName {
+				if src.FamilyName() != target.FamilyName {
 					// Not the right target specification for this family
 					continue
 				}
@@ -158,26 +147,31 @@ func (e *confluentAvroEncoder) rawTableName(
 			return "", errors.AssertionFailedf("Found a matching target with unimplemented type %s", target.Type)
 		}
 	}
-	return desc.GetName(), errors.Newf("Could not find TargetSpecification for descriptor %v", desc)
+	return src.TableName(), errors.Newf(
+		"Could not find TargetSpecification for %s", cdcevent.EventSourceString(src))
 }
 
 // EncodeKey implements the Encoder interface.
-func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]byte, error) {
+func (e *confluentAvroEncoder) EncodeKey(
+	ctx context.Context, row cdcevent.EventRow,
+) ([]byte, error) {
 	// No familyID in the cache key for keys because it's the same schema for all families
-	cacheKey := tableIDAndVersion{tableID: row.tableDesc.GetID(), version: row.tableDesc.GetVersion()}
+	cacheKey := tableIDAndVersion{tableID: row.TableID(), version: row.Version()}
 
 	var registered confluentRegisteredKeySchema
 	v, ok := e.keyCache.Get(cacheKey)
 	if ok {
 		registered = v.(confluentRegisteredKeySchema)
-		registered.schema.refreshTypeMetadata(row.tableDesc)
+		if err := registered.schema.refreshTypeMetadata(row); err != nil {
+			return nil, err
+		}
 	} else {
 		var err error
-		tableName, err := e.rawTableName(row.tableDesc, row.familyID)
+		tableName, err := e.rawTableName(row)
 		if err != nil {
 			return nil, err
 		}
-		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex(), tableName, e.schemaPrefix)
+		registered.schema, err = primaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -198,50 +192,56 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
-	return registered.schema.BinaryFromRow(header, row.datums)
+	return registered.schema.BinaryFromRow(header, row.ForEachKeyColumn())
 }
 
 // EncodeValue implements the Encoder interface.
-func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) ([]byte, error) {
+func (e *confluentAvroEncoder) EncodeValue(
+	ctx context.Context, evCtx eventContext, updatedRow cdcevent.EventRow, prevRow cdcevent.EventRow,
+) ([]byte, error) {
 	if e.keyOnly {
 		return nil, nil
 	}
 
 	var cacheKey tableIDAndVersionPair
-	if e.beforeField && row.prevTableDesc != nil {
+	if e.beforeField && prevRow.IsInitialized() {
 		cacheKey[0] = tableIDAndVersion{
-			tableID: row.prevTableDesc.GetID(), version: row.prevTableDesc.GetVersion(), familyID: row.prevFamilyID,
+			tableID: prevRow.TableID(), version: prevRow.Version(), familyID: prevRow.FamilyID(),
 		}
 	}
 	cacheKey[1] = tableIDAndVersion{
-		tableID: row.tableDesc.GetID(), version: row.tableDesc.GetVersion(), familyID: row.familyID,
+		tableID: updatedRow.TableID(), version: updatedRow.Version(), familyID: updatedRow.FamilyID(),
 	}
 
 	var registered confluentRegisteredEnvelopeSchema
 	v, ok := e.valueCache.Get(cacheKey)
 	if ok {
 		registered = v.(confluentRegisteredEnvelopeSchema)
-		registered.schema.after.refreshTypeMetadata(row.tableDesc)
-		if row.prevTableDesc != nil && registered.schema.before != nil {
-			registered.schema.before.refreshTypeMetadata(row.prevTableDesc)
+		if err := registered.schema.after.refreshTypeMetadata(updatedRow); err != nil {
+			return nil, err
+		}
+		if prevRow.IsInitialized() && registered.schema.before != nil {
+			if err := registered.schema.before.refreshTypeMetadata(prevRow); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		var beforeDataSchema *avroDataRecord
-		if e.beforeField && row.prevTableDesc != nil {
+		if e.beforeField && prevRow.IsInitialized() {
 			var err error
-			beforeDataSchema, err = tableToAvroSchema(row.prevTableDesc, row.prevFamilyID, `before`, e.schemaPrefix, e.virtualColumnVisibility)
+			beforeDataSchema, err = tableToAvroSchema(prevRow, `before`, e.schemaPrefix)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		afterDataSchema, err := tableToAvroSchema(row.tableDesc, row.familyID, avroSchemaNoSuffix, e.schemaPrefix, e.virtualColumnVisibility)
+		afterDataSchema, err := tableToAvroSchema(updatedRow, avroSchemaNoSuffix, e.schemaPrefix)
 		if err != nil {
 			return nil, err
 		}
 
 		opts := avroEnvelopeOpts{afterField: true, beforeField: e.beforeField, updatedField: e.updatedField}
-		name, err := e.rawTableName(row.tableDesc, row.familyID)
+		name, err := e.rawTableName(updatedRow)
 		if err != nil {
 			return nil, err
 		}
@@ -264,23 +264,17 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 	var meta avroMetadata
 	if registered.schema.opts.updatedField {
 		meta = map[string]interface{}{
-			`updated`: row.updated,
+			`updated`: evCtx.updated,
 		}
 	}
-	var beforeDatums, afterDatums rowenc.EncDatumRow
-	if row.prevDatums != nil && !row.prevDeleted {
-		beforeDatums = row.prevDatums
-	}
-	if !row.deleted {
-		afterDatums = row.datums
-	}
+
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
 		changefeedbase.ConfluentAvroWireFormatMagic,
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
-	return registered.schema.BinaryFromRow(header, meta, beforeDatums, afterDatums)
+	return registered.schema.BinaryFromRow(header, meta, prevRow, updatedRow)
 }
 
 // EncodeResolvedTimestamp implements the Encoder interface.
@@ -318,7 +312,8 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
-	return registered.schema.BinaryFromRow(header, meta, nil /* beforeRow */, nil /* afterRow */)
+	var nilRow cdcevent.EventRow
+	return registered.schema.BinaryFromRow(header, meta, nilRow, nilRow)
 }
 
 func (e *confluentAvroEncoder) register(

@@ -11,8 +11,8 @@ package changefeedccl
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
@@ -225,7 +225,7 @@ func (tn *TopicNamer) nameFromComponents(components ...string) string {
 }
 
 type tableDescriptorTopic struct {
-	tableDesc           catalog.TableDescriptor
+	cdcevent.EventSource
 	spec                jobspb.ChangefeedTargetSpecification
 	nameComponentsCache []string
 	identifierCache     TopicIdentifier
@@ -243,7 +243,7 @@ func (tdt *tableDescriptorTopic) GetNameComponents() []string {
 func (tdt *tableDescriptorTopic) GetTopicIdentifier() TopicIdentifier {
 	if tdt.identifierCache.TableID == 0 {
 		tdt.identifierCache = TopicIdentifier{
-			TableID: tdt.tableDesc.GetID(),
+			TableID: tdt.TableID(),
 		}
 	}
 	return tdt.identifierCache
@@ -251,7 +251,7 @@ func (tdt *tableDescriptorTopic) GetTopicIdentifier() TopicIdentifier {
 
 // GetVersion implements the TopicDescriptor interface
 func (tdt *tableDescriptorTopic) GetVersion() descpb.DescriptorVersion {
-	return tdt.tableDesc.GetVersion()
+	return tdt.Version()
 }
 
 // GetTargetSpecification implements the TopicDescriptor interface
@@ -262,8 +262,7 @@ func (tdt *tableDescriptorTopic) GetTargetSpecification() jobspb.ChangefeedTarge
 var _ TopicDescriptor = &tableDescriptorTopic{}
 
 type columnFamilyTopic struct {
-	tableDesc           catalog.TableDescriptor
-	familyDesc          descpb.ColumnFamilyDescriptor
+	cdcevent.EventSource
 	spec                jobspb.ChangefeedTargetSpecification
 	nameComponentsCache []string
 	identifierCache     TopicIdentifier
@@ -274,7 +273,7 @@ func (cft *columnFamilyTopic) GetNameComponents() []string {
 	if len(cft.nameComponentsCache) == 0 {
 		cft.nameComponentsCache = []string{
 			cft.spec.StatementTimeName,
-			cft.familyDesc.Name,
+			cft.FamilyName(),
 		}
 	}
 	return cft.nameComponentsCache
@@ -284,8 +283,8 @@ func (cft *columnFamilyTopic) GetNameComponents() []string {
 func (cft *columnFamilyTopic) GetTopicIdentifier() TopicIdentifier {
 	if cft.identifierCache.TableID == 0 {
 		cft.identifierCache = TopicIdentifier{
-			TableID:  cft.tableDesc.GetID(),
-			FamilyID: cft.familyDesc.ID,
+			TableID:  cft.TableID(),
+			FamilyID: cft.FamilyID(),
 		}
 	}
 	return cft.identifierCache
@@ -293,7 +292,7 @@ func (cft *columnFamilyTopic) GetTopicIdentifier() TopicIdentifier {
 
 // GetVersion implements the TopicDescriptor interface
 func (cft *columnFamilyTopic) GetVersion() descpb.DescriptorVersion {
-	return cft.tableDesc.GetVersion()
+	return cft.Version()
 }
 
 // GetTargetSpecification implements the TopicDescriptor interface
@@ -323,24 +322,19 @@ func (n noTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
 
 var _ TopicDescriptor = &noTopic{}
 
-func makeTopicDescriptorFromSpecForRow(
-	s jobspb.ChangefeedTargetSpecification, r encodeRow,
+func makeTopicDescriptorFromSpec(
+	s jobspb.ChangefeedTargetSpecification, src cdcevent.EventSource,
 ) (TopicDescriptor, error) {
 	switch s.Type {
 	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
 		return &tableDescriptorTopic{
-			tableDesc: r.tableDesc,
-			spec:      s,
+			EventSource: src,
+			spec:        s,
 		}, nil
 	case jobspb.ChangefeedTargetSpecification_EACH_FAMILY, jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
-		familyDesc, err := r.tableDesc.FindFamilyByID(r.familyID)
-		if err != nil {
-			return noTopic{}, err
-		}
 		return &columnFamilyTopic{
-			tableDesc:  r.tableDesc,
-			spec:       s,
-			familyDesc: *familyDesc,
+			EventSource: src,
+			spec:        s,
 		}, nil
 	default:
 		return noTopic{}, errors.AssertionFailedf("Unsupported target type %s", s.Type)

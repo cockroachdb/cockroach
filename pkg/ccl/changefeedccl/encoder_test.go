@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -223,32 +224,24 @@ func TestEncoders(t *testing.T) {
 			}
 			require.NoError(t, err)
 
-			rowInsert := encodeRow{
-				datums:        row,
-				updated:       ts,
-				tableDesc:     tableDesc,
-				prevDatums:    nil,
-				prevTableDesc: tableDesc,
-			}
+			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, row, false)
+			prevRow := cdcevent.TestingMakeEventRow(tableDesc, nil, false)
+			evCtx := eventContext{updated: ts}
+
 			keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
 			require.NoError(t, err)
 			keyInsert = append([]byte(nil), keyInsert...)
-			valueInsert, err := e.EncodeValue(context.Background(), rowInsert)
+			valueInsert, err := e.EncodeValue(context.Background(), evCtx, rowInsert, prevRow)
 			require.NoError(t, err)
 			require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
 
-			rowDelete := encodeRow{
-				datums:        row,
-				deleted:       true,
-				prevDatums:    row,
-				updated:       ts,
-				tableDesc:     tableDesc,
-				prevTableDesc: tableDesc,
-			}
+			rowDelete := cdcevent.TestingMakeEventRow(tableDesc, row, true)
+			prevRow = cdcevent.TestingMakeEventRow(tableDesc, row, false)
+
 			keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
 			require.NoError(t, err)
 			keyDelete = append([]byte(nil), keyDelete...)
-			valueDelete, err := e.EncodeValue(context.Background(), rowDelete)
+			valueDelete, err := e.EncodeValue(context.Background(), evCtx, rowDelete, prevRow)
 			require.NoError(t, err)
 			require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
 
@@ -371,32 +364,23 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		e, err := getEncoder(opts, targets)
 		require.NoError(t, err)
 
-		rowInsert := encodeRow{
-			datums:        row,
-			updated:       ts,
-			tableDesc:     tableDesc,
-			prevDatums:    nil,
-			prevTableDesc: tableDesc,
-		}
+		rowInsert := cdcevent.TestingMakeEventRow(tableDesc, row, false)
+		var prevRow cdcevent.EventRow
+		evCtx := eventContext{updated: ts}
 		keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
 		require.NoError(t, err)
 		keyInsert = append([]byte(nil), keyInsert...)
-		valueInsert, err := e.EncodeValue(context.Background(), rowInsert)
+		valueInsert, err := e.EncodeValue(context.Background(), evCtx, rowInsert, prevRow)
 		require.NoError(t, err)
 		require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
 
-		rowDelete := encodeRow{
-			datums:        row,
-			deleted:       true,
-			prevDatums:    row,
-			updated:       ts,
-			tableDesc:     tableDesc,
-			prevTableDesc: tableDesc,
-		}
+		rowDelete := cdcevent.TestingMakeEventRow(tableDesc, row, true)
+		prevRow = cdcevent.TestingMakeEventRow(tableDesc, row, false)
+
 		keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
 		require.NoError(t, err)
 		keyDelete = append([]byte(nil), keyDelete...)
-		valueDelete, err := e.EncodeValue(context.Background(), rowDelete)
+		valueDelete, err := e.EncodeValue(context.Background(), evCtx, rowDelete, prevRow)
 		require.NoError(t, err)
 		require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
 
