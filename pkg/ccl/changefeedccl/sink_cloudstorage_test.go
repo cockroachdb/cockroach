@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -51,7 +53,15 @@ func makeTopic(name string) *tableDescriptorTopic {
 		TableID:           desc.GetID(),
 		StatementTimeName: name,
 	}
-	return &tableDescriptorTopic{tableDesc: desc, spec: spec}
+	return &tableDescriptorTopic{Metadata: makeMetadata(desc), spec: spec}
+}
+
+func makeMetadata(desc catalog.TableDescriptor) cdcevent.Metadata {
+	return cdcevent.Metadata{
+		TableID:   desc.GetID(),
+		TableName: desc.GetName(),
+		Version:   desc.GetVersion(),
+	}
 }
 
 func TestCloudStorageSink(t *testing.T) {
@@ -283,7 +293,7 @@ func TestCloudStorageSink(t *testing.T) {
 				require.True(t, forwardFrontier(sf, testSpan, 4))
 				require.NoError(t, s.Flush(ctx))
 				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v4`), ts(4), ts(4), zeroAlloc))
-				t1.tableDesc.TableDesc().Version = 2
+				t1.Version = 2
 				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v5`), ts(5), ts(5), zeroAlloc))
 				require.NoError(t, s.Flush(ctx))
 				expected = []string{
@@ -677,11 +687,11 @@ func TestCloudStorageSink(t *testing.T) {
 		defer func() { require.NoError(t, s.Close()) }()
 
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1), ts(1), zeroAlloc))
-		t1.tableDesc.TableDesc().Version = 1
+		t1.Version = 1
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v3`), ts(1), ts(1), zeroAlloc))
 		// Make the first file exceed its file size threshold. This should trigger a flush
 		// for the first file but not the second one.
-		t1.tableDesc.TableDesc().Version = 0
+		t1.Version = 0
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`trigger-flush-v1`), ts(1), ts(1), zeroAlloc))
 		require.Equal(t, []string{
 			"v1\ntrigger-flush-v1\n",
@@ -690,7 +700,7 @@ func TestCloudStorageSink(t *testing.T) {
 		// Now make the file with the newer schema exceed its file size threshold and ensure
 		// that the file with the older schema is flushed (and ordered) before.
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v2`), ts(1), ts(1), zeroAlloc))
-		t1.tableDesc.TableDesc().Version = 1
+		t1.Version = 1
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`trigger-flush-v3`), ts(1), ts(1), zeroAlloc))
 		require.Equal(t, []string{
 			"v1\ntrigger-flush-v1\n",
@@ -700,7 +710,7 @@ func TestCloudStorageSink(t *testing.T) {
 
 		// Calling `Flush()` on the sink should emit files in the order of their schema IDs.
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`w1`), ts(1), ts(1), zeroAlloc))
-		t1.tableDesc.TableDesc().Version = 0
+		t1.Version = 0
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`x1`), ts(1), ts(1), zeroAlloc))
 		require.NoError(t, s.Flush(ctx))
 		require.Equal(t, []string{
