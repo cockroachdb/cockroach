@@ -22,6 +22,9 @@ interface HighwaterProps {
 
 export class HighwaterTimestamp extends React.PureComponent<HighwaterProps> {
   render() {
+    if (this.props.highwater === null) {
+      return null;
+    }
     let highwaterMoment = moment(
       this.props.highwater.seconds.toNumber() * 1000,
     );
@@ -34,7 +37,7 @@ export class HighwaterTimestamp extends React.PureComponent<HighwaterProps> {
 
     return (
       <ToolTipWrapper text={`System Time: ${this.props.tooltip}`}>
-        High-water Timestamp: {highwaterMoment.format(DATE_FORMAT)}
+        {highwaterMoment.format(DATE_FORMAT)}
       </ToolTipWrapper>
     );
   }
