@@ -327,6 +327,18 @@ export const Tracez = () => {
 
   useEffect(refreshTracingSnapshots, []);
 
+  const refreshLive = () => {
+    getLiveTrace(
+      new GetTraceRequest({
+        trace_id: requestedSpan.trace_id,
+        recording_type: RecordingMode.VERBOSE,
+      }),
+    ).then(resp => {
+      setCurrentTrace(resp);
+      setShowTrace(true);
+    });
+  };
+
   useEffect(() => {
     if (showTrace) {
       if (showLiveTrace) {
@@ -387,9 +399,11 @@ export const Tracez = () => {
             setShowTrace(false);
             setShowLiveTrace(false);
           }}
-          showLive={() => {
-            setShowLiveTrace(true);
+          showLive={showLiveTrace}
+          setShowLive={(z: boolean) => {
+            setShowLiveTrace(z);
           }}
+          refreshLive={refreshLive}
           operation={requestedSpan.operation}
         />
       ) : (
@@ -414,7 +428,9 @@ export const Tracez = () => {
 interface TraceViewProps {
   currentTrace: IGetTraceResponse;
   cancel: () => void;
-  showLive: () => void;
+  showLive: boolean;
+  setShowLive: (l: boolean) => void;
+  refreshLive: () => void;
   operation: string;
 }
 
@@ -422,6 +438,8 @@ const TraceView = ({
   currentTrace,
   cancel,
   showLive,
+  setShowLive,
+  refreshLive,
   operation,
 }: TraceViewProps) => {
   return (
@@ -444,10 +462,20 @@ const TraceView = ({
           </Button>
         </PageConfigItem>
         <PageConfigItem>
-          <Button as={"button"} onClick={showLive}>
-            Switch to Latest
-          </Button>
+          <label style={{ marginRight: "10px" }}>Show Live</label>
+          <Switch
+            checked={showLive}
+            onClick={() => setShowLive(!showLive)}
+            title={"Show Live"}
+          />
         </PageConfigItem>
+        {showLive ? (
+          <PageConfigItem>
+            <Button as={"button"} onClick={refreshLive}>
+              Refresh
+            </Button>
+          </PageConfigItem>
+        ) : null}
       </PageConfig>
       <section className="section" style={{ maxWidth: "none" }}>
         <pre>{currentTrace.serialized_recording}</pre>
