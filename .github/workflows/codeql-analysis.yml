@@ -72,7 +72,7 @@ jobs:
     - name: setup env
       shell: bash
       run: |      
-        echo "GOPATH=/home/runner/work/cockroach" >> $GITHUB_ENV        
+        echo "GOPATH=/home/runner/work" >> $GITHUB_ENV        
         
         #Error: Command failed: go env GOPATH $GOPATH/go.mod exists but should not
         echo "GOPATH=${{ github.workspace }}" >> $GITHUB_ENV        
