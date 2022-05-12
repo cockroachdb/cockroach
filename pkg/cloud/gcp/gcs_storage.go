@@ -196,7 +196,7 @@ func (g *gcsStorage) ReadFileAt(
 			// if file does not exist.  Regardless why we couldn't open the stream
 			// (whether its invalid bucket or file doesn't exist),
 			// return our internal ErrFileDoesNotExist.
-			err = errors.Wrapf(cloud.ErrFileDoesNotExist, "gcs object does not exist: %s", err.Error())
+			err = errors.Wrapf(cloud.ErrFileDoesNotExist, "gcs object %q does not exist: %s", object, err.Error())
 		}
 		return nil, 0, err
 	}
