@@ -25,6 +25,8 @@ import (
 // TODO: HTTP requests should be bound to context via http.NewRequestWithContext
 // Proper logging context to be decided/designed.
 
+// httpSinkOptions is safe to use concurrently due to the delegation of
+// operations to `http.Client` which is safe to use concurrently.
 type httpSinkOptions struct {
 	unsafeTLS         bool
 	timeout           time.Duration
