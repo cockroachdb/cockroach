@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -26,9 +27,12 @@ type fluentSink struct {
 	network string
 	addr    string
 
-	// good indicates that the connection can be used.
-	good bool
-	conn net.Conn
+	mu struct {
+		syncutil.RWMutex
+		// good indicates that the connection can be used.
+		good bool
+		conn net.Conn
+	}
 }
 
 const fluentDialTimeout = 5 * time.Second
@@ -61,71 +65,76 @@ func (l *fluentSink) exitCode() exit.Code {
 
 // output implements the logSink interface.
 func (l *fluentSink) output(extraSync bool, b []byte) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	// Try to write and reconnect immediately if the first write fails.
-	_ = l.tryWrite(b)
-	if l.good {
+	_ = l.tryWriteLocked(b)
+	if l.mu.good {
 		return nil
 	}
 
-	if err := l.ensureConn(b); err != nil {
+	if err := l.ensureConnLocked(b); err != nil {
 		return err
 	}
-	return l.tryWrite(b)
+	return l.tryWriteLocked(b)
 }
 
 // emergencyOutput implements the logSink interface.
 func (l *fluentSink) emergencyOutput(b []byte) {
-	_ = l.tryWrite(b)
-	if !l.good {
-		_ = l.ensureConn(b)
-		_ = l.tryWrite(b)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	_ = l.tryWriteLocked(b)
+	if !l.mu.good {
+		_ = l.ensureConnLocked(b)
+		_ = l.tryWriteLocked(b)
 	}
 }
 
-func (l *fluentSink) close() {
-	l.good = false
-	if l.conn != nil {
-		if err := l.conn.Close(); err != nil {
+func (l *fluentSink) closeLocked() {
+	l.mu.good = false
+	if l.mu.conn != nil {
+		if err := l.mu.conn.Close(); err != nil {
 			fmt.Fprintf(OrigStderr, "error closing network logger: %v\n", err)
 		}
-		l.conn = nil
+		l.mu.conn = nil
 	}
 }
 
-func (l *fluentSink) ensureConn(b []byte) error {
-	if l.good {
+func (l *fluentSink) ensureConnLocked(b []byte) error {
+	if l.mu.good {
 		return nil
 	}
-	l.close()
+	l.closeLocked()
 	var err error
-	l.conn, err = net.DialTimeout(l.network, l.addr, fluentDialTimeout)
+	l.mu.conn, err = net.DialTimeout(l.network, l.addr, fluentDialTimeout)
 	if err != nil {
 		fmt.Fprintf(OrigStderr, "%s: error dialing network logger: %v\n%s", l, err, b)
 		return err
 	}
 	fmt.Fprintf(OrigStderr, "%s: connection to network logger resumed\n", l)
-	l.good = true
+	l.mu.good = true
 	return nil
 }
 
 var errNoConn = errors.New("no connection opened")
 
-func (l *fluentSink) tryWrite(b []byte) error {
-	if !l.good {
+func (l *fluentSink) tryWriteLocked(b []byte) error {
+	if !l.mu.good {
 		return errNoConn
 	}
-	if err := l.conn.SetWriteDeadline(timeutil.Now().Add(fluentWriteTimeout)); err != nil {
+	if err := l.mu.conn.SetWriteDeadline(timeutil.Now().Add(fluentWriteTimeout)); err != nil {
 		// An error here is suggestive of a bug in the Go runtime.
 		fmt.Fprintf(OrigStderr, "%s: set write deadline error: %v\n%s",
 			l, err, b)
-		l.good = false
+		l.mu.good = false
 		return err
 	}
-	n, err := l.conn.Write(b)
+	n, err := l.mu.conn.Write(b)
 	if err != nil || n < len(b) {
 		fmt.Fprintf(OrigStderr, "%s: logging error: %v or short write (%d/%d)\n%s",
 			l, err, n, len(b), b)
-		l.good = false
+		l.mu.good = false
 	}
 	return err
 }
