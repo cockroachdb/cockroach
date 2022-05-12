@@ -3373,12 +3373,8 @@ func (s *Store) ManuallyEnqueue(
 	// Many queues are only meant to be run on leaseholder replicas, so attempt to
 	// take the lease here or bail out early if a different replica has it.
 	if needsLease {
-		hasLease, pErr := repl.getLeaseForGossip(ctx)
-		if pErr != nil {
-			return nil, nil, pErr.GoError()
-		}
-		if !hasLease {
-			return nil, errors.Newf("replica %v does not have the range lease", repl), nil
+		if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
+			return nil, nil, errors.Wrapf(pErr.GoError(), "replica %v does not have the range lease", repl)
 		}
 	}
 
