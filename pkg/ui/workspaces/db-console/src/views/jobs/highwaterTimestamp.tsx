@@ -16,14 +16,17 @@ import { google } from "src/js/protos";
 import ITimestamp = google.protobuf.ITimestamp;
 
 interface HighwaterProps {
-  highwater: ITimestamp;
-  tooltip: string;
+  timestamp: ITimestamp;
+  decimalString: string;
 }
 
 export class HighwaterTimestamp extends React.PureComponent<HighwaterProps> {
   render() {
+    if (!this.props.timestamp) {
+      return null;
+    }
     let highwaterMoment = moment(
-      this.props.highwater.seconds.toNumber() * 1000,
+      this.props.timestamp.seconds.toNumber() * 1000,
     );
     // It's possible due to client clock skew that this timestamp could be in
     // the future. To avoid confusion, set a maximum bound of now.
@@ -33,8 +36,8 @@ export class HighwaterTimestamp extends React.PureComponent<HighwaterProps> {
     }
 
     return (
-      <ToolTipWrapper text={`System Time: ${this.props.tooltip}`}>
-        High-water Timestamp: {highwaterMoment.format(DATE_FORMAT)}
+      <ToolTipWrapper text={highwaterMoment.format(DATE_FORMAT)}>
+        {this.props.decimalString}
       </ToolTipWrapper>
     );
   }
