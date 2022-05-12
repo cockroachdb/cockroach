@@ -59,6 +59,8 @@ jobs:
     
     # GO env debugging
     - name: go info
+      env:
+        ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
       shell: bash
       run: |          
           echo $(go version) at $(which go)
