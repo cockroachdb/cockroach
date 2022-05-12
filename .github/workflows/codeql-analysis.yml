@@ -65,8 +65,10 @@ jobs:
     # Makefile:248: *** GOPATH is not set and could not be automatically determined.  Stop.    
     - name: setup env
       shell: bash
-      run: |              
-        echo "GOPATH=/home/runner/work/cockroach/go" >> $GITHUB_ENV        
+      run: |
+        echo "GOPATH=${{ github.workspace }}/go" >> $GITHUB_ENV
+        # Restructure - need gopath to be root of workspace!
+        #echo "GOPATH=/home/runner/work/cockroach/go" >> $GITHUB_ENV        
         
         #Error: Command failed: go env GOPATH $GOPATH/go.mod exists but should not
         echo "GOPATH=${{ github.workspace }}" >> $GITHUB_ENV        
