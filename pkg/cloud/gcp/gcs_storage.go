@@ -202,7 +202,7 @@ func (g *gcsStorage) ReadFileAt(
 			// return our internal ErrFileDoesNotExist.
 			// nolint:errwrap
 			err = errors.Wrapf(
-				errors.Wrap(cloud.ErrFileDoesNotExist, "gcs object does not exist"),
+				errors.Wrapf(cloud.ErrFileDoesNotExist, "gcs object %q does not exist", object),
 				"%v",
 				err.Error(),
 			)
