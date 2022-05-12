@@ -68,11 +68,15 @@ jobs:
           echo go env: $(go env GOPATH) 
           echo cache: $(ls $RUNNER_TOOL_CACHE/go)
     
-    # Makefile:248: *** GOPATH is not set and could not be automatically determined.  Stop.
+    # Makefile:248: *** GOPATH is not set and could not be automatically determined.  Stop.    
     - name: setup env
       shell: bash
       run: |
-        echo "GOPATH=${{ github.workspace }}/go" >> $GITHUB_ENV
+        echo "GOPATH=${{ github.workspace }}" >> $GITHUB_ENV
+        
+        #** Current directory "/home/runner/work/cockroach/cockroach" is not within GOPATH "/home/runner/work/cockroach/cockroach/go".  Stop.  
+        #echo "GOPATH=${{ github.workspace }}/go" >> $GITHUB_ENV
+        # The `set-env` command is disabled. Please upgrade to using Environment Files or opt into unsecure command execution by setting the `ACTIONS_ALLOW_UNSECURE_COMMANDS` environment variable to `true`. For more information see: https://github.blog/changelog/2020-10-01-github-actions-deprecating-set-env-and-add-path-commands/
         #echo "::set-env name=GOPATH::${{ github.workspace }}/go"
         #echo "::add-path::${{ github.workspace }}/go/bin"
     
