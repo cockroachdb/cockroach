@@ -72,8 +72,9 @@ jobs:
     - name: setup env
       shell: bash
       run: |
-        echo "::set-env name=GOPATH::${{ github.workspace }}/go"
-        echo "::add-path::${{ github.workspace }}/go/bin"
+        echo "GOPATH=${{ github.workspace }}/go" >> $GITHUB_ENV
+        #echo "::set-env name=GOPATH::${{ github.workspace }}/go"
+        #echo "::add-path::${{ github.workspace }}/go/bin"
     
     # Autobuilder was built with Autobuilder was built with go1.17.9, environment has go1.17.9
     - name: Set up Go
