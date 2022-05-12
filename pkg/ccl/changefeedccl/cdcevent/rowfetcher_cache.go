@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package changefeedccl
+package cdcevent
 
 import (
 	"context"
@@ -58,7 +58,7 @@ type watchedFamily struct {
 	familyName string
 }
 
-var rfCacheConfig = cache.Config{
+var defaultCacheConfig = cache.Config{
 	Policy: cache.CacheFIFO,
 	// TODO: If we find ourselves thrashing here in changefeeds on many tables,
 	// we can improve performance by eagerly evicting versions using Resolved notifications.
@@ -72,6 +72,7 @@ type idVersion struct {
 	family  descpb.FamilyID
 }
 
+// newRowFetcherCache constructs row fetcher cache.
 func newRowFetcherCache(
 	ctx context.Context,
 	codec keys.SQLCodec,
@@ -90,12 +91,43 @@ func newRowFetcherCache(
 		leaseMgr:        leaseMgr,
 		collection:      cf.NewCollection(ctx, nil /* TemporarySchemaProvider */),
 		db:              db,
-		fetchers:        cache.NewUnorderedCache(rfCacheConfig),
+		fetchers:        cache.NewUnorderedCache(defaultCacheConfig),
 		watchedFamilies: watchedFamilies,
 	}
 }
 
-func (c *rowFetcherCache) TableDescForKey(
+func refreshUDT(
+	ctx context.Context, tableID descpb.ID, db *kv.DB, collection *descs.Collection, ts hlc.Timestamp,
+) (tableDesc catalog.TableDescriptor, err error) {
+	// If the table contains user defined types, then use the
+	// descs.Collection to retrieve a TableDescriptor with type metadata
+	// hydrated. We open a transaction here only because the
+	// descs.Collection needs one to get a read timestamp. We do this lookup
+	// again behind a conditional to avoid allocating any transaction
+	// metadata if the table has user defined types. This can be bypassed
+	// once (#53751) is fixed. Once the descs.Collection can take in a read
+	// timestamp rather than a whole transaction, we can use the
+	// descs.Collection directly here.
+	// TODO (SQL Schema): #53751.
+	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		err := txn.SetFixedTimestamp(ctx, ts)
+		if err != nil {
+			return err
+		}
+		tableDesc, err = collection.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+		return err
+	}); err != nil {
+		// Manager can return all kinds of errors during chaos, but based on
+		// its usage, none of them should ever be terminal.
+		return nil, changefeedbase.MarkRetryableError(err)
+	}
+	// Immediately release the lease, since we only need it for the exact
+	// timestamp requested.
+	collection.ReleaseAll(ctx)
+	return tableDesc, nil
+}
+
+func (c *rowFetcherCache) tableDescForKey(
 	ctx context.Context, key roachpb.Key, ts hlc.Timestamp,
 ) (catalog.TableDescriptor, descpb.FamilyID, error) {
 	var tableDesc catalog.TableDescriptor
@@ -128,31 +160,10 @@ func (c *rowFetcherCache) TableDescForKey(
 	// timestamp requested.
 	desc.Release(ctx)
 	if tableDesc.ContainsUserDefinedTypes() {
-		// If the table contains user defined types, then use the
-		// descs.Collection to retrieve a TableDescriptor with type metadata
-		// hydrated. We open a transaction here only because the
-		// descs.Collection needs one to get a read timestamp. We do this lookup
-		// again behind a conditional to avoid allocating any transaction
-		// metadata if the table has user defined types. This can be bypassed
-		// once (#53751) is fixed. Once the descs.Collection can take in a read
-		// timestamp rather than a whole transaction, we can use the
-		// descs.Collection directly here.
-		// TODO (SQL Schema): #53751.
-		if err := c.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			err := txn.SetFixedTimestamp(ctx, ts)
-			if err != nil {
-				return err
-			}
-			tableDesc, err = c.collection.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
-			return err
-		}); err != nil {
-			// Manager can return all kinds of errors during chaos, but based on
-			// its usage, none of them should ever be terminal.
-			return nil, family, changefeedbase.MarkRetryableError(err)
+		tableDesc, err = refreshUDT(ctx, tableID, c.db, c.collection, ts)
+		if err != nil {
+			return nil, family, err
 		}
-		// Immediately release the lease, since we only need it for the exact
-		// timestamp requested.
-		c.collection.ReleaseAll(ctx)
 	}
 
 	// Skip over the column data.
@@ -171,14 +182,16 @@ func (c *rowFetcherCache) TableDescForKey(
 // is not being watched and does not need to be decoded.
 var ErrUnwatchedFamily = errors.New("watched table but unwatched family")
 
+// RowFetcherForColumnFamily returns row.Fetcher for the specified column family.
+// Returns ErrUnwatchedFamily error if family is not watched.
 func (c *rowFetcherCache) RowFetcherForColumnFamily(
 	tableDesc catalog.TableDescriptor, family descpb.FamilyID,
-) (*row.Fetcher, error) {
+) (*row.Fetcher, *descpb.ColumnFamilyDescriptor, error) {
 	idVer := idVersion{id: tableDesc.GetID(), version: tableDesc.GetVersion(), family: family}
 	if v, ok := c.fetchers.Get(idVer); ok {
 		f := v.(*cachedFetcher)
 		if f.skip {
-			return &f.fetcher, ErrUnwatchedFamily
+			return nil, nil, ErrUnwatchedFamily
 		}
 		// Ensure that all user defined types are up to date with the cached
 		// version and the desired version to use the cache. It is safe to use
@@ -187,13 +200,13 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		// fetchers are always initialized with a single tabledesc.Immutable.
 		// TODO (zinger): Only check types used in the relevant family.
 		if catalog.UserDefinedTypeColsHaveSameVersion(tableDesc, f.tableDesc) {
-			return &f.fetcher, nil
+			return &f.fetcher, &f.familyDesc, nil
 		}
 	}
 
 	familyDesc, err := tableDesc.FindFamilyByID(family)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	f := &cachedFetcher{
@@ -207,7 +220,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		_, familyWatched := c.watchedFamilies[watchedFamily{tableID: tableDesc.GetID(), familyName: familyDesc.Name}]
 		if !familyWatched {
 			f.skip = true
-			return rf, ErrUnwatchedFamily
+			return nil, nil, ErrUnwatchedFamily
 		}
 	}
 
@@ -218,7 +231,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 	if err := rowenc.InitIndexFetchSpec(
 		&spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), tableDesc.PublicColumnIDs(),
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := rf.Init(
@@ -228,7 +241,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 			Spec:  &spec,
 		},
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Necessary because virtual columns are not populated.
@@ -236,5 +249,5 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 	rf.IgnoreUnexpectedNulls = true
 
 	c.fetchers.Add(idVer, f)
-	return rf, nil
+	return rf, familyDesc, nil
 }
