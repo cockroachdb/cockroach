@@ -37,6 +37,7 @@ import { Anchor } from "src/components";
 import emptyTableResultsIcon from "assets/emptyState/empty-table-results.svg";
 import magnifyingGlassIcon from "assets/emptyState/magnifying-glass.svg";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import { HighwaterTimestamp } from "oss/src/views/jobs/highwaterTimestamp";
 
 class JobsSortedTable extends SortedTable<Job> {}
 
@@ -173,6 +174,25 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     cell: job =>
       util.TimestampToMoment(job?.last_run).format(DATE_FORMAT_24_UTC),
     sort: job => util.TimestampToMoment(job?.last_run).valueOf(),
+  },
+  {
+    name: "High-water Timestamp",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>Date and time the job was last executed.</p>}
+      >
+        {"High-water Timestamp"}
+      </Tooltip>
+    ),
+    cell: job => (
+      <HighwaterTimestamp
+        timestamp={job.highwater_timestamp}
+        decimalString={job.highwater_decimal}
+      />
+    ),
+    sort: job => util.TimestampToMoment(job?.highwater_timestamp).valueOf(),
   },
   {
     name: "executionCount",
