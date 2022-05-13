@@ -2916,6 +2916,10 @@ func countPaths(conjunct *FiltersItem) int {
 		return 1
 	}
 
+	if conjunct.Condition.Op() == opt.JsonExistsOp {
+		return 1
+	}
+
 	rhs := conjunct.Condition.Child(1)
 	if !CanExtractConstDatum(rhs) {
 		return 0
@@ -3069,6 +3073,7 @@ func (sb *statisticsBuilder) applyFiltersItem(
 	// we can't get to the JSON or Array datum or enumerate its paths, count
 	// the whole operator as one conjunct.
 	if filter.Condition.Op() == opt.ContainsOp ||
+		filter.Condition.Op() == opt.JsonExistsOp ||
 		(filter.Condition.Op() == opt.EqOp && filter.Condition.Child(0).Op() == opt.FetchValOp) {
 		numPaths := countPaths(filter)
 		if numPaths == 0 {
