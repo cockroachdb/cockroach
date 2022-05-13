@@ -494,6 +494,8 @@ ALL_TESTS = [
     "//pkg/util/sdnotify:sdnotify_test",
     "//pkg/util/search:search_test",
     "//pkg/util/shuffle:shuffle_test",
+    "//pkg/util/slidingwindow:sliding_window_test",
+    "//pkg/util/slidingwindow:slidingwindow_test",
     "//pkg/util/span:span_test",
     "//pkg/util/stop:stop_test",
     "//pkg/util/stringarena:stringarena_test",
