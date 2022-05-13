@@ -671,7 +671,7 @@ var charts = []sectionDescription{
 		Charts: []chartDescription{
 			{
 				Title:   "L0 sub-level rebalancing",
-				Metrics: []string{"rebalancing.l0_sublevels_histogram"},
+				Metrics: []string{"rebalancing.l0_sublevels_max"},
 			},
 		},
 	},

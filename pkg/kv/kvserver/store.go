@@ -75,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
+	"github.com/cockroachdb/cockroach/pkg/util/slidingwindow"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -753,6 +754,12 @@ type Store struct {
 	gossipQueriesPerSecondVal syncutil.AtomicFloat64
 	gossipWritesPerSecondVal  syncutil.AtomicFloat64
 
+	// l0SublevelsTracker tracks the maximum sub-levels seen in L0 recently.
+	l0SublevelsTracker struct {
+		syncutil.Mutex
+		swag *slidingwindow.Swag
+	}
+
 	coalescedMu struct {
 		syncutil.Mutex
 		heartbeats         map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat
@@ -1290,6 +1297,14 @@ func NewStore(
 
 	s.tenantRateLimiters = tenantrate.NewLimiterFactory(&cfg.Settings.SV, &cfg.TestingKnobs.TenantRateKnobs)
 	s.metrics.registry.AddMetricStruct(s.tenantRateLimiters.Metrics())
+
+	s.l0SublevelsTracker.Lock()
+	s.l0SublevelsTracker.swag = slidingwindow.NewMaxSwag(
+		timeutil.Now(),
+		allocatorimpl.L0SublevelInterval,
+		5,
+	)
+	s.l0SublevelsTracker.Unlock()
 
 	s.systemConfigUpdateQueueRateLimiter = quotapool.NewRateLimiter(
 		"SystemConfigUpdateQueue",
@@ -2956,10 +2971,19 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	var logicalBytes int64
 	var totalQueriesPerSecond float64
 	var totalWritesPerSecond float64
+	var l0SublevelsMax float64
 	replicaCount := s.metrics.ReplicaCount.Value()
 	bytesPerReplica := make([]float64, 0, replicaCount)
 	writesPerReplica := make([]float64, 0, replicaCount)
 	rankingsAccumulator := s.replRankings.newAccumulator()
+
+	// Query the current L0 sublevels and record the updated maximum to metrics.
+	s.l0SublevelsTracker.Lock()
+	s.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(s.metrics.RdbL0Sublevels.Value()))
+	l0SublevelsMax, _ = s.l0SublevelsTracker.swag.Query(timeutil.Now())
+	s.l0SublevelsTracker.Unlock()
+
+	s.metrics.L0SubLevelsMax.Update(l0SublevelsMax)
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		rangeCount++
 		if r.OwnsValidLease(ctx, now) {
@@ -2993,11 +3017,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.LogicalBytes = logicalBytes
 	capacity.QueriesPerSecond = totalQueriesPerSecond
 	capacity.WritesPerSecond = totalWritesPerSecond
-	// We gossip the maximum number of L0 sub-levels that have been seen in
-	// past 2 windows. The recording length may vary between 5 and 10 minutes
-	// accordingly.
-	windowedL0Sublevels, _ := s.metrics.L0SubLevelsHistogram.Windowed()
-	capacity.L0Sublevels = windowedL0Sublevels.Max()
+	capacity.L0Sublevels = int64(l0SublevelsMax)
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)

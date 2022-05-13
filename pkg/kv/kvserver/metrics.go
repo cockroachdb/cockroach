@@ -18,7 +18,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -295,9 +294,9 @@ var (
 		Measurement: "Keys/Sec",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaL0SubLevelHistogram = metric.Metadata{
-		Name:        "rebalancing.l0_sublevels_histogram",
-		Help:        "The summary view of sub levels in level 0 of the stores LSM",
+	metaL0SubLevelMax = metric.Metadata{
+		Name:        "rebalancing.l0_sublevels_max",
+		Help:        "The maximum number of sub levels in level 0 of the stores LSM, seen in the last 10 minutes",
 		Measurement: "Storage",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1453,7 +1452,7 @@ type StoreMetrics struct {
 	Reserved           *metric.Gauge
 
 	// Rebalancing metrics.
-	L0SubLevelsHistogram       *metric.Histogram
+	L0SubLevelsMax             *metric.GaugeFloat64
 	AverageQueriesPerSecond    *metric.GaugeFloat64
 	AverageWritesPerSecond     *metric.GaugeFloat64
 	AverageReadsPerSecond      *metric.GaugeFloat64
@@ -1917,15 +1916,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		Reserved:  metric.NewGauge(metaReserved),
 
 		// Rebalancing metrics.
-		AverageQueriesPerSecond: metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
-		AverageWritesPerSecond:  metric.NewGaugeFloat64(metaAverageWritesPerSecond),
-		// TODO(tbg): this histogram seems bogus? What are we tracking here?
-		L0SubLevelsHistogram: metric.NewHistogram(
-			metaL0SubLevelHistogram,
-			allocatorimpl.L0SublevelInterval,
-			allocatorimpl.L0SublevelMaxSampled,
-			1, /* sig figures (integer) */
-		),
+		AverageQueriesPerSecond:    metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
+		AverageWritesPerSecond:     metric.NewGaugeFloat64(metaAverageWritesPerSecond),
+		L0SubLevelsMax:             metric.NewGaugeFloat64(metaL0SubLevelMax),
 		AverageRequestsPerSecond:   metric.NewGaugeFloat64(metaAverageRequestsPerSecond),
 		AverageReadsPerSecond:      metric.NewGaugeFloat64(metaAverageReadsPerSecond),
 		AverageWriteBytesPerSecond: metric.NewGaugeFloat64(metaAverageWriteBytesPerSecond),
@@ -2193,7 +2186,6 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbReadAmplification.Update(int64(m.ReadAmp()))
 	sm.RdbPendingCompaction.Update(int64(m.Compact.EstimatedDebt))
 	sm.RdbMarkedForCompactionFiles.Update(int64(m.Compact.MarkedFiles))
-	sm.L0SubLevelsHistogram.RecordValue(int64(m.Levels[0].Sublevels))
 	sm.RdbNumSSTables.Update(m.NumSSTables())
 	sm.RdbWriteStalls.Update(m.WriteStallCount)
 	sm.DiskSlow.Update(m.DiskSlowCount)
