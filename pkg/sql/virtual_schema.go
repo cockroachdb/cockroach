@@ -227,6 +227,38 @@ func (t virtualSchemaTable) isUnimplemented() bool {
 	return t.unimplemented
 }
 
+// preferIndexOverGenerator defines the cases in which we are able to use a
+// virtual index's populate function when we have a virtual table defined with
+// a generator function instead of a populate function. Specifically, use of a
+// virtual index is supported when we have only single key constraints, and are
+// not using a partial index, and therefore do not need to fallback on an
+// undefined populate function.
+func (t virtualSchemaTable) preferIndexOverGenerator(
+	p *planner, index catalog.Index, idxConstraint *constraint.Constraint,
+) bool {
+	if idxConstraint == nil || idxConstraint.IsUnconstrained() {
+		return false
+	}
+
+	if index.GetID() == 1 {
+		return false
+	}
+
+	virtualIdx := t.getIndex(index.GetID())
+	if virtualIdx.partial {
+		return false
+	}
+
+	for i := 0; i < idxConstraint.Spans.Count(); i++ {
+		constraintSpan := idxConstraint.Spans.Get(i)
+		if !constraintSpan.HasSingleKey(p.EvalContext()) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // getSchema is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) getSchema() string {
 	return v.schema
@@ -521,7 +553,7 @@ func (e *virtualDefEntry) getPlanInfo(
 				return nil, newInvalidVirtualSchemaError()
 			}
 
-			if def.generator != nil {
+			if def.generator != nil && !def.preferIndexOverGenerator(p, index, idxConstraint) {
 				next, cleanup, err := def.generator(ctx, p, dbDesc, stopper)
 				if err != nil {
 					return nil, err
@@ -654,6 +686,13 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 		newConstraint.Spans.Alloc(nSpans)
 		for ; currentSpan < idxConstraint.Spans.Count(); currentSpan++ {
 			newConstraint.Spans.Append(idxConstraint.Spans.Get(currentSpan))
+		}
+
+		// NB: If we allow virtualSchemaTables with generator to perform a constrained scan,
+		// we then need to ensure that we don't call populate without checking, as it may be nil.
+		if def.populate == nil {
+			return errors.AssertionFailedf(
+				"programming error: can't fall back to unconstrained scan on generated vtables")
 		}
 		return def.populate(ctx, p, dbDesc, addRowIfPassesFilter(&newConstraint))
 	}
