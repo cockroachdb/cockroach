@@ -5,6 +5,8 @@ set -e
 echo "Available certs:"
 ls -l /certs
 
+chown $(whoami) /certs/client.root.key /certs/client.root.crt
+
 echo "Environment:"
 env
 
