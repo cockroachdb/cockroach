@@ -808,6 +808,60 @@ vectorized: true
               table: d@foo_inv
               spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /"b"/"a"/"b"-/"b"/"a"/"b"/PrefixEnd /???-/???
 
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b ?| ARRAY['foo', 'bar']
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@d_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 6
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"bar"-/"bar"/PrefixEnd /"foo"-/"foo"/PrefixEnd /Arr/"bar"-/Arr/"bar"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/??? /???-/???
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b ?& ARRAY['foo', 'bar']
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@d_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 6
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"bar"-/"bar"/PrefixEnd /"foo"-/"foo"/PrefixEnd /Arr/"bar"-/Arr/"bar"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/??? /???-/???
+
 # Multi-path contains queries. Should create zigzag joins.
 
 query T

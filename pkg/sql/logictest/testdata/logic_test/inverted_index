@@ -1097,11 +1097,11 @@ CREATE TABLE e (k int PRIMARY KEY, j JSON, INVERTED INDEX i(j))
 statement ok
 INSERT INTO e VALUES
   (0, '{"a": "b"}'),
-  (1, '{"a": {}}'),
-  (2, '{"a": []}'),
+  (1, '{"a": {}, "b": null}'),
+  (2, '{"a": [], "b": 2, "c": 3}'),
   (3, '{"b": {"a": "c"}}'),
   (4, '["a", "b"]'),
-  (5, '["b", "a"]'),
+  (5, '["b", "a", "c"]'),
   (6, '["a"]'),
   (7, '["aargh"]'),
   (8, '"a"'),
@@ -1112,10 +1112,10 @@ query T
 SELECT j FROM e@i WHERE j ? 'a' ORDER BY k
 ----
 {"a": "b"}
-{"a": {}}
-{"a": []}
+{"a": {}, "b": null}
+{"a": [], "b": 2, "c": 3}
 ["a", "b"]
-["b", "a"]
+["b", "a", "c"]
 ["a"]
 "a"
 
@@ -1125,6 +1125,26 @@ SELECT j FROM e@i WHERE j ? 'aargh' OR j->'b' @> '{"a": "c"}' ORDER BY k
 ----
 {"b": {"a": "c"}}
 ["aargh"]
+
+query T
+SELECT j FROM e@i WHERE j ?& ARRAY['a', 'b'] ORDER BY k
+----
+{"a": {}, "b": null}
+{"a": [], "b": 2, "c": 3}
+["a", "b"]
+["b", "a", "c"]
+
+query T
+SELECT j FROM e@i WHERE j ?| ARRAY['a', 'b'] ORDER BY k
+----
+{"a": "b"}
+{"a": {}, "b": null}
+{"a": [], "b": 2, "c": 3}
+{"b": {"a": "c"}}
+["a", "b"]
+["b", "a", "c"]
+["a"]
+"a"
 
 subtest arrays
 

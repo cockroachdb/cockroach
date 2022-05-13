@@ -648,10 +648,13 @@ func EncodeContainedInvertedIndexSpans(
 // string datum. These spans should be used to find the objects in the index
 // that have the string datum as a top-level key.
 //
+// If val is an array, then the inverted expression is a disjunction if all is
+// true, and a conjunction otherwise.
+//
 // The spans are returned in an inverted.SpanExpression, which represents the
 // set operations that must be applied on the spans read during execution.
 func EncodeExistsInvertedIndexSpans(
-	evalCtx *eval.Context, val tree.Datum,
+	evalCtx *eval.Context, val tree.Datum, all bool,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
@@ -661,6 +664,28 @@ func EncodeExistsInvertedIndexSpans(
 	case types.StringFamily:
 		s := string(*val.(*tree.DString))
 		return json.EncodeExistsInvertedIndexSpans(nil /* inKey */, s)
+	case types.ArrayFamily:
+		if val.ResolvedType().ArrayContents().Family() != types.StringFamily {
+			return nil, errors.AssertionFailedf(
+				"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+			)
+		}
+		var expr inverted.Expression
+		for _, d := range val.(*tree.DArray).Array {
+			s := string(*d.(*tree.DString))
+			newExpr, err := json.EncodeExistsInvertedIndexSpans(nil /* inKey */, s)
+			if err != nil {
+				return nil, err
+			}
+			if expr == nil {
+				expr = newExpr
+			} else if all {
+				expr = inverted.And(expr, newExpr)
+			} else {
+				expr = inverted.Or(expr, newExpr)
+			}
+		}
+		return expr, nil
 	default:
 		return nil, errors.AssertionFailedf(
 			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
