@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "slidingwindow",
+    srcs = [
+        "helpers.go",
+        "sliding_window.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/slidingwindow",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "slidingwindow_test",
+    srcs = ["sliding_window_test.go"],
+    embed = [":slidingwindow"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
