@@ -645,15 +645,15 @@ ReadyForQuery
 # the octal-encoded input for the bytea column is properly decoded -- that is
 # because of the way CRDB and PG process bytea literals, and *not* because of
 # CSV escaping.
-# Because of https://github.com/cockroachdb/cockroach/issues/26128 we cannot
-# test the `\xAA` escape style with a bytea column.
 send
 Query {"String": "DROP TABLE IF EXISTS tb"}
 Query {"String": "CREATE TABLE tb (i INT, b BYTEA, c TEXT)"}
 Query {"String": "COPY tb FROM STDIN WITH CSV"}
 CopyData {"Data": "1,one,one\n"}
 CopyData {"Data": "2,two,two\\x54\n"}
-CopyData {"Data": "3,ab\\011\\143d,ab\\011\\143d"}
+CopyData {"Data": "3,ab\\011\\143d,ab\\011\\143d\n"}
+CopyData {"Data": "4,\"\\x6869\",hi\n"}
+CopyData {"Data": "5,\\x6869,hi\n"}
 CopyDone
 Query {"String": "SELECT i, encode(b, 'hex'), c FROM tb ORDER BY i"}
 ----
@@ -669,12 +669,14 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CopyInResponse","ColumnFormatCodes":[0,0,0]}
-{"Type":"CommandComplete","CommandTag":"COPY 3"}
+{"Type":"CommandComplete","CommandTag":"COPY 5"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"DataRow","Values":[{"text":"1"},{"text":"6f6e65"},{"text":"one"}]}
 {"Type":"DataRow","Values":[{"text":"2"},{"text":"74776f"},{"text":"two\\x54"}]}
 {"Type":"DataRow","Values":[{"text":"3"},{"text":"6162096364"},{"text":"ab\\011\\143d"}]}
-{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"DataRow","Values":[{"text":"4"},{"text":"6869"},{"text":"hi"}]}
+{"Type":"DataRow","Values":[{"text":"5"},{"text":"6869"},{"text":"hi"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 5"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Test error cases for COPY CSV.
