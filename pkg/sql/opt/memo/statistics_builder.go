@@ -2939,6 +2939,7 @@ func countPaths(conjunct *FiltersItem) int {
 		return len(paths)
 	}
 
+	// This case applies for both array-array exprs and json-array exprs.
 	if rd, ok := rightDatum.(*tree.DArray); ok {
 		return rd.Len()
 	}
@@ -3068,13 +3069,16 @@ func (sb *statisticsBuilder) applyFiltersItem(
 
 	// Special case: The current conjunct is a JSON or Array Contains
 	// operator, or an equality operator with a JSON fetch value operator on
-	// the left (for example j->'a' = '1'). If so, count every path to a
-	// leaf node in the RHS as a separate conjunct. If for whatever reason
-	// we can't get to the JSON or Array datum or enumerate its paths, count
-	// the whole operator as one conjunct.
-	if filter.Condition.Op() == opt.ContainsOp ||
-		filter.Condition.Op() == opt.JsonExistsOp ||
-		(filter.Condition.Op() == opt.EqOp && filter.Condition.Child(0).Op() == opt.FetchValOp) {
+	// the left (for example j->'a' = '1'), or a JSON exists operator. If so,
+	// count every path to a leaf node in the RHS as a separate conjunct. If for
+	// whatever reason we can't get to the JSON or Array datum or enumerate its
+	// paths, count the whole operator as one conjunct.
+	filterOp := filter.Condition.Op()
+	if filterOp == opt.ContainsOp ||
+		filterOp == opt.JsonExistsOp ||
+		filterOp == opt.JsonAllExistsOp ||
+		filterOp == opt.JsonSomeExistsOp ||
+		(filterOp == opt.EqOp && filter.Condition.Child(0).Op() == opt.FetchValOp) {
 		numPaths := countPaths(filter)
 		if numPaths == 0 {
 			numUnappliedConjuncts++
