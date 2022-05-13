@@ -3,11 +3,12 @@
 # when RaceEnabled=true. This file contains the output when
 # RaceEnabled=true
 
-# Error case: Multiple intents for a key
+# Error case: Multiple intents for a key but only one has corresponding
+# version.
 define
 locks
 meta k=a ts=10 txn=1
-meta k=b ts=20 txn=2
+meta k=b ts=19 txn=2
 meta k=b ts=20 txn=4
 meta k=c ts=30 txn=4
 mvcc
@@ -16,6 +17,8 @@ value k=b ts=20 v=b20
 value k=c ts=30 v=c30
 ----
 
+# We don't catch the error on forward iteration, since we forget the simple-committed
+# intent.
 iter lower=a upper=d
 seek-ge k=a
 next
@@ -32,11 +35,11 @@ prev
 seek-ge "a"/0,0: output: meta k=a ts=10.000000000,0 txn=1
 next: output: value k=a ts=10.000000000,0 v=a10
 next: output: meta k=b ts=20.000000000,0 txn=4
-next: output: err: intentIter incorrectly positioned, cmp: 0
-next: output: err: intentIter incorrectly positioned, cmp: 0
-next: output: err: intentIter incorrectly positioned, cmp: 0
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: meta k=c ts=30.000000000,0 txn=4
+next: output: value k=c ts=30.000000000,0 v=c30
 seek-lt "d"/0,0: output: value k=c ts=30.000000000,0 v=c30
 prev: output: meta k=c ts=30.000000000,0 txn=4
 prev: output: value k=b ts=20.000000000,0 v=b20
-prev: output: meta k=b ts=20.000000000,0 txn=2
-prev: output: err: intentIter should not be after iter
+prev: output: meta k=b ts=20.000000000,0 txn=4
+prev: output: value k=a ts=10.000000000,0 v=a10
