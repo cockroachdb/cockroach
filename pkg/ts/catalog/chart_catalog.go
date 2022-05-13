@@ -665,17 +665,6 @@ var charts = []sectionDescription{
 	{
 		Organization: [][]string{
 			{DistributionLayer, "Rebalancing"},
-		},
-		Charts: []chartDescription{
-			{
-				Title:   "L0 sub-level rebalancing",
-				Metrics: []string{"rebalancing.l0_sublevels_histogram"},
-			},
-		},
-	},
-	{
-		Organization: [][]string{
-			{DistributionLayer, "Rebalancing"},
 			{ReplicationLayer, "Leases"},
 		},
 		Charts: []chartDescription{
