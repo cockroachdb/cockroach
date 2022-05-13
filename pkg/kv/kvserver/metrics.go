@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/slidingwindow"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -295,9 +297,9 @@ var (
 		Measurement: "Keys/Sec",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaL0SubLevelHistogram = metric.Metadata{
-		Name:        "rebalancing.l0_sublevels_histogram",
-		Help:        "The summary view of sub levels in level 0 of the stores LSM",
+	metaL0SubLevelMax = metric.Metadata{
+		Name:        "rebalancing.l0_sublevels_max",
+		Help:        "The maximum number of sub levels in level 0 of the stores LSM, seen in the last 10 minutes",
 		Measurement: "Storage",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1453,13 +1455,19 @@ type StoreMetrics struct {
 	Reserved           *metric.Gauge
 
 	// Rebalancing metrics.
-	L0SubLevelsHistogram       *metric.Histogram
 	AverageQueriesPerSecond    *metric.GaugeFloat64
 	AverageWritesPerSecond     *metric.GaugeFloat64
 	AverageReadsPerSecond      *metric.GaugeFloat64
 	AverageRequestsPerSecond   *metric.GaugeFloat64
 	AverageWriteBytesPerSecond *metric.GaugeFloat64
 	AverageReadBytesPerSecond  *metric.GaugeFloat64
+	// L0SubLevelsMaxTracker doesn't get recorded to metrics itself, it
+	// maintains an ad-hoc history for gosipping information for allocator use.
+	L0SubLevelsMax     *metric.Gauge
+	l0SublevelsTracker struct {
+		syncutil.Mutex
+		swag *slidingwindow.Swag
+	}
 
 	// Follower read metrics.
 	FollowerReadsCount *metric.Counter
@@ -1879,6 +1887,7 @@ func newTenantsStorageMetrics() *TenantsStorageMetrics {
 func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	storeRegistry := metric.NewRegistry()
 	rdbBytesIngested := storageLevelGaugeSlice(metaRdbBytesIngested)
+
 	sm := &StoreMetrics{
 		registry:              storeRegistry,
 		TenantsStorageMetrics: newTenantsStorageMetrics(),
@@ -1917,15 +1926,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		Reserved:  metric.NewGauge(metaReserved),
 
 		// Rebalancing metrics.
-		AverageQueriesPerSecond: metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
-		AverageWritesPerSecond:  metric.NewGaugeFloat64(metaAverageWritesPerSecond),
-		// TODO(tbg): this histogram seems bogus? What are we tracking here?
-		L0SubLevelsHistogram: metric.NewHistogram(
-			metaL0SubLevelHistogram,
-			allocatorimpl.L0SublevelInterval,
-			allocatorimpl.L0SublevelMaxSampled,
-			1, /* sig figures (integer) */
-		),
+		AverageQueriesPerSecond:    metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
+		AverageWritesPerSecond:     metric.NewGaugeFloat64(metaAverageWritesPerSecond),
 		AverageRequestsPerSecond:   metric.NewGaugeFloat64(metaAverageRequestsPerSecond),
 		AverageReadsPerSecond:      metric.NewGaugeFloat64(metaAverageReadsPerSecond),
 		AverageWriteBytesPerSecond: metric.NewGaugeFloat64(metaAverageWriteBytesPerSecond),
@@ -2127,9 +2129,37 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaCircuitBreakerCurTripped: metric.NewGauge(metaReplicaCircuitBreakerCurTripped),
 		ReplicaCircuitBreakerCumTripped: metric.NewCounter(metaReplicaCircuitBreakerCumTripped),
 	}
-	storeRegistry.AddMetricStruct(sm)
+	sm.annotateL0SublevelsTracker()
 
+	storeRegistry.AddMetricStruct(sm)
 	return sm
+}
+
+func (sm *StoreMetrics) annotateL0SublevelsTracker() {
+	// Track the maximum L0 sublevels seen in the last 10 minutes. The guage is
+	// backed by a sliding window, which we  record and query indirectly in
+	// L0SublevelsMax.
+	l0SubLevelsMaxTracker := slidingwindow.NewMaxSwag(
+		timeutil.Now(),
+		allocatorimpl.L0SublevelInterval,
+		// 5 sliding windows, by the default interval (2 mins) will track the
+		// maximum for up to 10 minutes. Selected experimentally.
+		5,
+	)
+	sm.l0SublevelsTracker.Lock()
+	sm.l0SublevelsTracker.swag = l0SubLevelsMaxTracker
+	sm.l0SublevelsTracker.Unlock()
+
+	sm.L0SubLevelsMax = metric.NewFunctionalGauge(metaL0SubLevelMax, func() int64 {
+		sm.l0SublevelsTracker.Lock()
+		defer sm.l0SublevelsTracker.Unlock()
+		//  Query the current sublevels and  record them into the sliding
+		//  window. We then query the sliding window for an up to date max
+		//  value over the tracked period.
+		l0SubLevelsMaxTracker.Record(timeutil.Now(), float64(sm.RdbL0Sublevels.Value()))
+		val, _ := l0SubLevelsMaxTracker.Query(timeutil.Now())
+		return int64(val)
+	})
 }
 
 // incMVCCGauges increments each individual metric from an MVCCStats delta. The
@@ -2193,7 +2223,6 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbReadAmplification.Update(int64(m.ReadAmp()))
 	sm.RdbPendingCompaction.Update(int64(m.Compact.EstimatedDebt))
 	sm.RdbMarkedForCompactionFiles.Update(int64(m.Compact.MarkedFiles))
-	sm.L0SubLevelsHistogram.RecordValue(int64(m.Levels[0].Sublevels))
 	sm.RdbNumSSTables.Update(m.NumSSTables())
 	sm.RdbWriteStalls.Update(m.WriteStallCount)
 	sm.DiskSlow.Update(m.DiskSlowCount)
