@@ -863,6 +863,51 @@ func EncodeContainedInvertedIndexSpans(
 	return invertedExpr, nil
 }
 
+// EncodeExistsInvertedIndexSpans takes in a key prefix and returns the
+// spans that must be scanned in the inverted index to evaluate an exists (?)
+// predicate with the given JSON (i.e., find the objects/arrays in the index
+// that contain the given string as a key, or *are* the given string).
+//
+// The spans are returned in an inverted.SpanExpression, which represents the
+// set operations that must be applied on the spans read during execution. See
+// comments in the SpanExpression definition for details.
+//
+// The input inKey is prefixed to the keys in all returned spans.
+func EncodeExistsInvertedIndexSpans(
+	b []byte, s string,
+) (invertedExpr inverted.Expression, err error) {
+	b = encoding.EncodeJSONAscending(b)
+	js := jsonString(s)
+	// Make an inverted expression that contains both arrays containing the input
+	// string and objects with keys that are the input string.
+	builder := NewArrayBuilder(1)
+	builder.Add(js)
+	arrayKeys, err := builder.Build().encodeInvertedIndexKeys(b)
+	if err != nil {
+		return nil, err
+	}
+	scalarKeys, err := js.encodeInvertedIndexKeys(b[:len(b):len(b)])
+	if err != nil {
+		return nil, err
+	}
+	if len(arrayKeys) != 1 || len(scalarKeys) != 1 {
+		return nil, errors.AssertionFailedf("unexpectedly found more than 1 inverted index child in single-key array")
+	}
+	arrayKey := arrayKeys[0]
+	scalarKey := scalarKeys[0]
+	// We pass end=true so that we don't get an extra separator at the end of the
+	// key, which would exclude keys that point to non-scalars like non-empty
+	// arrays or non-empty objects.
+	objectKey := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], s, true /* end */)
+	return inverted.Or(
+		inverted.Or(
+			inverted.ExprForSpan(inverted.MakeSingleValSpan(arrayKey), true /* tight */),
+			inverted.ExprForSpan(inverted.MakeSingleValSpan(objectKey), true /* tight */),
+		),
+		inverted.ExprForSpan(inverted.MakeSingleValSpan(scalarKey), true /* tight */),
+	), nil
+}
+
 func (j jsonNull) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeNullAscending(b)}, nil

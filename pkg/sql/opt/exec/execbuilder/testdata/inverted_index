@@ -733,6 +733,91 @@ vectorized: true
               table: d@foo_inv
               spans: 2 spans
 
+# Exists operators.
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b ? 'foo'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 111 (missing stats)
+│ table: d@d_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 3
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /???-/???
+
+# Note: we use an index hint here because we're unable to determine the
+# selectivity of the filter, which leads to a bad plan without the hint.
+query T
+EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b ? 'foo' OR b @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ table: d@d_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 4
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /"a"/"b"-/"a"/"b"/PrefixEnd /???-/???
+
+query T
+EXPLAIN (VERBOSE) SELECT * from d where b ? 'foo' AND b->'b' @> '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 12 (missing stats)
+│ table: d@d_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 4
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: d@foo_inv
+              spans: /"foo"-/"foo"/PrefixEnd /Arr/"foo"-/Arr/"foo"/PrefixEnd /"b"/"a"/"b"-/"b"/"a"/"b"/PrefixEnd /???-/???
+
 # Multi-path contains queries. Should create zigzag joins.
 
 query T

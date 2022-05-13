@@ -643,6 +643,31 @@ func EncodeContainedInvertedIndexSpans(
 	}
 }
 
+// EncodeExistsInvertedIndexSpans returns the spans that must be scanned in
+// the inverted index to evaluate an exists (?) predicate with the given
+// string datum. These spans should be used to find the objects in the index
+// that have the string datum as a top-level key.
+//
+// The spans are returned in an inverted.SpanExpression, which represents the
+// set operations that must be applied on the spans read during execution.
+func EncodeExistsInvertedIndexSpans(
+	evalCtx *eval.Context, val tree.Datum,
+) (invertedExpr inverted.Expression, err error) {
+	if val == tree.DNull {
+		return nil, nil
+	}
+	datum := eval.UnwrapDatum(evalCtx, val)
+	switch val.ResolvedType().Family() {
+	case types.StringFamily:
+		s := string(*val.(*tree.DString))
+		return json.EncodeExistsInvertedIndexSpans(nil /* inKey */, s)
+	default:
+		return nil, errors.AssertionFailedf(
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+		)
+	}
+}
+
 // EncodeOverlapsInvertedIndexSpans returns the spans that must be scanned in
 // the inverted index to evaluate an overlaps (&&) predicate with the given
 // datum, which should be an Array. These spans should be used to find the

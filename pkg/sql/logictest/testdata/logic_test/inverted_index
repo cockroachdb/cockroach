@@ -767,7 +767,8 @@ INSERT INTO f VALUES
   (31, 'null'),
   (32, '{}'),
   (33, '[]'),
-  (34, '{"a": {"b": []}}')
+  (34, '{"a": {"b": []}}'),
+  (35, '["a"]')
 
 query T
 SELECT j FROM f@i WHERE j->'a' = '1' ORDER BY k
@@ -1087,6 +1088,46 @@ SELECT j FROM f@i WHERE j->'a'->'b' <@ '{"c": [1, 2], "d": 2}' OR j->'a'->'b' <@
 query T
 SELECT j FROM f@i WHERE j @> '{"a": "c"}' AND (j @> '{"a": "b"}' OR j @> '{"a": "c"}')
 ----
+
+subtest json_exists
+
+statement ok
+CREATE TABLE e (k int PRIMARY KEY, j JSON, INVERTED INDEX i(j))
+
+statement ok
+INSERT INTO e VALUES
+  (0, '{"a": "b"}'),
+  (1, '{"a": {}}'),
+  (2, '{"a": []}'),
+  (3, '{"b": {"a": "c"}}'),
+  (4, '["a", "b"]'),
+  (5, '["b", "a"]'),
+  (6, '["a"]'),
+  (7, '["aargh"]'),
+  (8, '"a"'),
+  (9, '[]'),
+  (10, '3'),
+  (11, NULL),
+  (12, 'null'),
+  (13, 'true')
+
+query T
+SELECT j FROM e@i WHERE j ? 'a' ORDER BY k
+----
+{"a": "b"}
+{"a": {}}
+{"a": []}
+["a", "b"]
+["b", "a"]
+["a"]
+"a"
+
+# Disjunctions containing exists operators use the inverted index.
+query T
+SELECT j FROM e@i WHERE j ? 'aargh' OR j->'b' @> '{"a": "c"}' ORDER BY k
+----
+{"b": {"a": "c"}}
+["aargh"]
 
 subtest arrays
 
