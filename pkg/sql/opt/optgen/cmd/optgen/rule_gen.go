@@ -706,8 +706,7 @@ func (g *newRuleGen) genMatchLet(let *lang.LetExpr, noMatch bool) {
 
 // genNormalizeReplace generates the replace pattern code for normalization
 // rules. Normalization rules recursively call other factory methods in order to
-// construct results. They also need to detect rule invocation cycles when the
-// DetectCycle tag is present on the rule.
+// construct results.
 func (g *newRuleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.RuleExpr) {
 	g.w.nestIndent("if _f.matchedRule == nil || _f.matchedRule(opt.%s) {\n", rule.Name)
 
