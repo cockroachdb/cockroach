@@ -2264,6 +2264,9 @@ func (ds *DistSender) sendToReplicas(
 }
 
 func (ds *DistSender) maybeIncrementErrCounters(br *roachpb.BatchResponse, err error) {
+	if err == nil && br == nil {
+		panic("!!! all nil")
+	}
 	if err == nil && br.Error == nil {
 		return
 	}

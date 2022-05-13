@@ -242,6 +242,7 @@ func ClientInterceptor(
 		// For most RPCs we pass along tracing info as gRPC metadata. Some select
 		// RPCs carry the tracing in the request protos, which is more efficient.
 		if compatibilityMode(ctx) || !methodExcludedFromTracing(method) {
+			// !!! don't do this for local requests. Also get rid of compatibilityMode.
 			ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		}
 		var err error

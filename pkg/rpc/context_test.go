@@ -308,7 +308,7 @@ func TestInternalServerAddress(t *testing.T) {
 	serverCtx.NodeID.Set(context.Background(), 1)
 
 	internal := &internalServer{}
-	serverCtx.SetLocalInternalServer(internal, ServerInterceptorInfo{})
+	serverCtx.SetLocalInternalServer(internal, ServerInterceptorInfo{}, ClientInterceptorInfo{})
 
 	ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, 1)
 	lic, ok := ic.(internalClientAdapter)
@@ -333,45 +333,61 @@ func TestInternalClientAdapterRunsServerInterceptors(t *testing.T) {
 	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_ /* server */, interceptors := NewServerEx(serverCtx)
+	_ /* server */, serverInterceptors := NewServerEx(serverCtx)
 
 	// Pile on one more interceptor to make sure it's called.
-	var interceptor1Called, interceptor2Called bool
+	var serverUnaryInterceptor1Called, serverUnaryInterceptor2Called bool
 	interceptor1 := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		interceptor1Called = true
+		serverUnaryInterceptor1Called = true
 		return handler(ctx, req)
 	}
-	interceptors.UnaryInterceptors = append([]grpc.UnaryServerInterceptor{interceptor1}, interceptors.UnaryInterceptors...)
-	interceptors.UnaryInterceptors = append(interceptors.UnaryInterceptors, func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		interceptor2Called = true
+	serverInterceptors.UnaryInterceptors = append([]grpc.UnaryServerInterceptor{interceptor1}, serverInterceptors.UnaryInterceptors...)
+	serverInterceptors.UnaryInterceptors = append(serverInterceptors.UnaryInterceptors, func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		serverUnaryInterceptor2Called = true
 		return handler(ctx, req)
 	})
 
 	streamInterceptor1Called := false
-	interceptors.StreamInterceptors = append(interceptors.StreamInterceptors, func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors, func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		streamInterceptor1Called = true
 		return handler(srv, stream)
 	})
 	streamInterceptor2Called := false
-	interceptors.StreamInterceptors = append(interceptors.StreamInterceptors, func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors, func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		streamInterceptor2Called = true
 		return handler(srv, stream)
 	})
 
+	var clientInterceptors ClientInterceptorInfo
+	var clientUnaryInterceptor1Called, clientUnaryInterceptor2Called bool
+	clientInterceptors.UnaryInterceptors = append(clientInterceptors.UnaryInterceptors,
+		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			clientUnaryInterceptor1Called = true
+			return invoker(ctx, method, req, reply, cc, opts...)
+		})
+	clientInterceptors.UnaryInterceptors = append(clientInterceptors.UnaryInterceptors,
+		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			clientUnaryInterceptor2Called = true
+			return invoker(ctx, method, req, reply, cc, opts...)
+		})
+
 	internal := &internalServer{}
-	serverCtx.SetLocalInternalServer(internal, interceptors)
+	serverCtx.SetLocalInternalServer(internal, serverInterceptors, clientInterceptors)
 	ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, 1)
 	lic, ok := ic.(internalClientAdapter)
 	require.True(t, ok)
 	require.Equal(t, internal, lic.server)
 
 	for i := 0; i < 2; i++ {
-		interceptor1Called, interceptor2Called = false, false
+		serverUnaryInterceptor1Called, serverUnaryInterceptor2Called = false, false
+		clientUnaryInterceptor1Called, clientUnaryInterceptor2Called = false, false
 		ba := &roachpb.BatchRequest{}
 		_, err := lic.Batch(ctx, ba)
 		require.NoError(t, err)
-		require.True(t, interceptor1Called)
-		require.True(t, interceptor2Called)
+		require.True(t, serverUnaryInterceptor1Called)
+		require.True(t, serverUnaryInterceptor2Called)
+		require.True(t, clientUnaryInterceptor1Called)
+		require.True(t, clientUnaryInterceptor2Called)
 	}
 
 	for i := 0; i < 2; i++ {
@@ -400,9 +416,9 @@ func BenchmarkInternalClientAdapter(b *testing.B) {
 
 	_, interceptors := NewServerEx(serverCtx)
 	internal := &internalServer{}
-	serverCtx.SetLocalInternalServer(internal, interceptors)
-	ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, 1)
-	lic, ok := ic.(*internalClientAdapter)
+	serverCtx.SetLocalInternalServer(internal, interceptors, ClientInterceptorInfo{})
+	ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, roachpb.NodeID(1))
+	lic, ok := ic.(internalClientAdapter)
 	require.True(b, ok)
 	require.Equal(b, internal, lic.server)
 	ba := &roachpb.BatchRequest{}
@@ -575,7 +591,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Ensure that the local Addr returns ErrNotHeartbeated without having dialed
 	// a connection but the local AdvertiseAddr successfully returns no error when
 	// an internal server has been registered.
-	clientCtx.SetLocalInternalServer(&internalServer{}, ServerInterceptorInfo{})
+	clientCtx.SetLocalInternalServer(&internalServer{}, ServerInterceptorInfo{}, ClientInterceptorInfo{})
 
 	if err := clientCtx.TestingConnHealth(clientCtx.Config.Addr, clientNodeID); !errors.Is(err, ErrNotHeartbeated) {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
