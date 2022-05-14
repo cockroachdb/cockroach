@@ -301,6 +301,8 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	type testCase struct {
 		desc              string
 		createTable       string
+		preSetup          []string
+		postSetup         []string
 		numExpiredRows    int
 		numNonExpiredRows int
 		numSplits         int
@@ -313,6 +315,23 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 	text TEXT
 ) WITH (ttl_expire_after = '30 days')`,
+			numExpiredRows:    1001,
+			numNonExpiredRows: 5,
+		},
+		{
+			desc: "one column pk, table ranges overlap",
+			createTable: `CREATE TABLE tbl (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	text TEXT
+) WITH (ttl_expire_after = '30 days')`,
+			preSetup: []string{
+				`CREATE TABLE tbm (id INT PRIMARY KEY)`,
+				`ALTER TABLE tbm SPLIT AT VALUES (1)`,
+			},
+			postSetup: []string{
+				`CREATE TABLE tbl2 (id INT PRIMARY KEY)`,
+				`ALTER TABLE tbl2 SPLIT AT VALUES (1)`,
+			},
 			numExpiredRows:    1001,
 			numNonExpiredRows: 5,
 		},
@@ -388,9 +407,12 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	other_col INT,
 	"quote-kw-col" TIMESTAMPTZ,
 	text TEXT,
-	INDEX (text),
+	INDEX text_idx (text),
 	PRIMARY KEY (id, other_col, "quote-kw-col")
 ) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = 50, ttl_delete_batch_size = 10, ttl_range_concurrency = 3)`,
+			postSetup: []string{
+				`ALTER INDEX tbl@text_idx SPLIT AT VALUES ('bob')`,
+			},
 			numExpiredRows:    1001,
 			numNonExpiredRows: 5,
 			numSplits:         10,
@@ -439,6 +461,11 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 
 			rangeBatchSize := 1 + rng.Intn(3)
 			t.Logf("range batch size: %d", rangeBatchSize)
+
+			for _, stmt := range tc.preSetup {
+				t.Logf("running pre statement: %s", stmt)
+				th.sqlDB.Exec(t, stmt)
+			}
 
 			th.sqlDB.Exec(t, tc.createTable)
 			th.sqlDB.Exec(t, `SET CLUSTER SETTING sql.ttl.range_batch_size = $1`, rangeBatchSize)
@@ -527,6 +554,11 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			}
 			for i := 0; i < tc.numNonExpiredRows; i++ {
 				addRow(timeutil.Now().Add(time.Hour * 24 * 30))
+			}
+
+			for _, stmt := range tc.postSetup {
+				t.Logf("running post statement: %s", stmt)
+				th.sqlDB.Exec(t, stmt)
 			}
 
 			// Force the schedule to execute.

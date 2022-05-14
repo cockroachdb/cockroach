@@ -284,12 +284,11 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 	var initialVersion descpb.DescriptorVersion
 
-	// TODO(#75428): feature flag check, ttl pause check.
 	var ttlSettings catpb.RowLevelTTL
 	var pkColumns []string
 	var pkTypes []*types.T
 	var relationName string
-	var rangeSpan roachpb.Span
+	var rangeSpan, entirePKSpan roachpb.Span
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := descsCol.GetImmutableTableByID(
 			ctx,
@@ -333,7 +332,8 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		}
 
 		relationName = tn.FQString()
-		rangeSpan = desc.TableSpan(p.ExecCfg().Codec)
+		entirePKSpan = desc.IndexSpan(p.ExecCfg().Codec, desc.GetPrimaryIndex().GetID())
+		rangeSpan = entirePKSpan
 		ttlSettings = *ttl
 		return nil
 	}); err != nil {
@@ -459,15 +459,40 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				if err := r.ValueProto(&rangeDesc); err != nil {
 					return err
 				}
-				rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
 				var nextRange rangeToProcess
-				nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, p.ExecCfg().Codec, pkTypes, &alloc)
-				if err != nil {
-					return err
+				// A single range can contain multiple tables or indexes.
+				// If this is the case, the rangeDesc.StartKey would be less than entirePKSpan.Key
+				// or the rangeDesc.EndKey would be greater than the entirePKSpan.EndKey, meaning
+				// the range contains the start or the end of the range respectively.
+				// Trying to decode keys outside the PK range will lead to a decoding error.
+				// As such, only populate nextRange.startPK and nextRange.endPK if this is the case
+				// (by default, a 0 element startPK or endPK means the beginning or end).
+				if rangeDesc.StartKey.AsRawKey().Compare(entirePKSpan.Key) > 0 {
+					nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, p.ExecCfg().Codec, pkTypes, &alloc)
+					if err != nil {
+						return errors.Wrapf(
+							err,
+							"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
+							rangeDesc.RangeID,
+							rangeDesc.StartKey.AsRawKey(),
+							entirePKSpan.Key,
+						)
+					}
 				}
-				nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, p.ExecCfg().Codec, pkTypes, &alloc)
-				if err != nil {
-					return err
+				if rangeDesc.EndKey.AsRawKey().Compare(entirePKSpan.EndKey) < 0 {
+					rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
+					nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, p.ExecCfg().Codec, pkTypes, &alloc)
+					if err != nil {
+						return errors.Wrapf(
+							err,
+							"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
+							rangeDesc.RangeID,
+							rangeDesc.EndKey.AsRawKey(),
+							entirePKSpan.EndKey,
+						)
+					}
+				} else {
+					done = true
 				}
 				ch <- nextRange
 			}
@@ -721,11 +746,11 @@ func keyToDatums(
 	// as the key for the range (e.g. a PK (a, b) may only be split on (a)).
 	rKey, err := codec.StripTenantPrefix(key.AsRawKey())
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "error decoding tenant prefix of %x", key)
 	}
 	rKey, _, _, err = rowenc.DecodePartialTableIDIndexID(key)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "error decoding table/index ID of %x", key)
 	}
 	encDatums := make([]rowenc.EncDatum, 0, len(pkTypes))
 	for len(rKey) > 0 && len(encDatums) < len(pkTypes) {
@@ -736,7 +761,7 @@ func keyToDatums(
 		var val rowenc.EncDatum
 		val, rKey, err = rowenc.EncDatumFromBuffer(pkTypes[i], enc, rKey)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "error decoding EncDatum of %x", key)
 		}
 		encDatums = append(encDatums, val)
 	}
@@ -744,7 +769,7 @@ func keyToDatums(
 	datums := make(tree.Datums, len(encDatums))
 	for i, encDatum := range encDatums {
 		if err := encDatum.EnsureDecoded(pkTypes[i], alloc); err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "error ensuring encoded of %x", key)
 		}
 		datums[i] = encDatum.Datum
 	}
