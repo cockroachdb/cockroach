@@ -356,6 +356,15 @@ const (
 
 	// LocalTimestamps enables the use of local timestamps in MVCC values.
 	LocalTimestamps
+	// EnsurePebbleFormatVersionRangeKeys is the first step of a two-part
+	// migration that bumps Pebble's format major version to a version that
+	// supports range keys.
+	EnsurePebbleFormatVersionRangeKeys
+	// EnablePebbleFormatVersionRangeKeys is the second of a two-part migration
+	// and is used as the feature gate for use of range keys. Any node at this
+	// version is guaranteed to reside in a cluster where all nodes support range
+	// keys at the Pebble layer.
+	EnablePebbleFormatVersionRangeKeys
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -620,6 +629,14 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     LocalTimestamps,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 4},
+	},
+	{
+		Key:     EnsurePebbleFormatVersionRangeKeys,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 6},
+	},
+	{
+		Key:     EnablePebbleFormatVersionRangeKeys,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 8},
 	},
 
 	// *************************************************
