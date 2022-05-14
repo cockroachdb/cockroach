@@ -5803,7 +5803,6 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 2250108209  20          2205        NULL      i            NULL
 2250108210  20          2206        NULL      i            NULL
 2250108214  20          2202        NULL      i            NULL
-2350774022  20          1560        NULL      e            NULL
 2350774202  20          1700        NULL      i            NULL
 2384329297  20          21          NULL      a            NULL
 2384329299  20          23          NULL      a            NULL
