@@ -3019,3 +3019,28 @@ message ScanStats {
   uint64 point_count = 9;
   uint64 points_covered_by_range_tombstones = 10;
 }
+
+// ExportStats is a message containing information about each
+// Export{Request,Response}.
+message ExportStats {
+  // NumFiles is the number of SST files produced by the ExportRequest.
+  int64 num_files = 1;
+  // DataSize is the byte size of all the SST files produced by the
+  // ExportRequest.
+  int64 data_size = 2;
+
+
+  // SentPerNode is a mapping from NodeID to the number of ExportRequests sent
+  // by the node for evaluation.
+  map <int32, int32> sent_per_node = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "NodeID"
+  ];
+
+  // EvaluatedPerNode is a mapping from NodeID to the number of ExportRequests
+  // evaluated by the node.
+  map <int32, int32> evaluated_per_node = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "NodeID"
+  ];
+}

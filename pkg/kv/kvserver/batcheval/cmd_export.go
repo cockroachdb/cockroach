@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/types"
 )
 
 // SSTTargetSizeSetting is the cluster setting name for the
@@ -104,14 +103,6 @@ func evalExport(
 
 	ctx, evalExportSpan := tracing.ChildSpan(ctx, fmt.Sprintf("Export [%s,%s)", args.Key, args.EndKey))
 	defer evalExportSpan.Finish()
-
-	var evalExportTrace types.StringValue
-	if cArgs.EvalCtx.NodeID() == h.GatewayNodeID {
-		evalExportTrace.Value = fmt.Sprintf("evaluating Export on gateway node %d", cArgs.EvalCtx.NodeID())
-	} else {
-		evalExportTrace.Value = fmt.Sprintf("evaluating Export on remote node %d", cArgs.EvalCtx.NodeID())
-	}
-	evalExportSpan.RecordStructured(&evalExportTrace)
 
 	// Table's marked to be excluded from backup are expected to be configured
 	// with a short GC TTL. Additionally, backup excludes such table's from being
@@ -270,5 +261,30 @@ func evalExport(
 		}
 	}
 
+	// If we have a trace, emit the export stats corresponding to this
+	// ExportRequest.
+	sp := tracing.SpanFromContext(ctx)
+	recordExportStats(sp, h.GatewayNodeID, cArgs.EvalCtx.NodeID(), reply)
+
 	return result.Result{}, nil
+}
+
+// recordExportStats emits a StructuredEvent containing the stats about the
+// evaluated ExportRequest.
+func recordExportStats(
+	sp *tracing.Span, sendNode, evalNode roachpb.NodeID, resp *roachpb.ExportResponse,
+) {
+	if sp == nil {
+		return
+	}
+	exportStats := roachpb.ExportStats{
+		SentPerNode:      map[roachpb.NodeID]int32{sendNode: 1},
+		EvaluatedPerNode: map[roachpb.NodeID]int32{evalNode: 1},
+	}
+	for _, f := range resp.Files {
+		file := f
+		exportStats.NumFiles++
+		exportStats.DataSize += int64(len(file.SST))
+	}
+	sp.RecordStructured(&exportStats)
 }
