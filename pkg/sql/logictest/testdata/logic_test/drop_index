@@ -216,6 +216,23 @@ SHOW TABLES
 ----
 public  users  table  root  0  NULL
 
+# Test that schema change job description is correct #80889
+statement ok
+CREATE TABLE tbl (c string);
+
+statement ok
+CREATE INDEX expr_idx ON tbl(lower(c));
+
+statement ok
+DROP INDEX expr_idx;
+
+query T colnames
+SELECT description FROM [show jobs] ORDER BY created DESC LIMIT 2;
+----
+description
+GC for DROP INDEX test.public.tbl@expr_idx
+DROP INDEX test.public.tbl@expr_idx
+
 # Test the syntax without a '@'
 
 statement ok
