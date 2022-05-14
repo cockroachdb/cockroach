@@ -519,7 +519,7 @@ CREATE TABLE sharded_primary_with_many_column_types  (
     ts    TIMESTAMP,
     da    DATE,
     inet  INET,
-    vb    VARBIT,
+    vb    VARBIT(1),
     FAMILY (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb),
     PRIMARY KEY (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb) USING HASH WITH (bucket_count=7)
 );
@@ -540,7 +540,7 @@ EXPLAIN (VERBOSE) SELECT * FROM sharded_primary_with_many_column_types WHERE (i2
                          1::TIMESTAMP,
                          1::DATE,
                          ('127.0.0.' || 1::STRING)::INET,
-                         1::VARBIT);
+                         1::VARBIT(1));
 ----
 distribution: local
 vectorized: true
@@ -549,7 +549,7 @@ vectorized: true
   columns: (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb)
   estimated row count: 1 (missing stats)
   table: sharded_primary_with_many_column_types@sharded_primary_with_many_column_types_pkey
-  spans: /3/1/1/1/1/1/"1"/"1"/"1"/1/00:00:01/1/1970-01-01T00:00:01Z/1970-01-01T00:00:01Z/1/"\x00 \u007f\x00\x00\x01"/B/0
+  spans: /5/1/1/1/1/1/"1"/"1"/"1"/1/00:00:01/1/1970-01-01T00:00:01Z/1970-01-01T00:00:01Z/1/"\x00 \u007f\x00\x00\x01"/B1/0
 
 # Test to make sure constraint on shard column value is added correctly when
 # creating a table with output show create table.
