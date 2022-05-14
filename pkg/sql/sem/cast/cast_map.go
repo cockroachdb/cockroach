@@ -352,7 +352,6 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_name: {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 	},
 	oid.T_int2: {
-		oid.T_bit:          {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		oid.T_bool:         {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		oid.T_date:         {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		oid.T_float4:       {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
@@ -370,7 +369,6 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_regtype:      {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		oid.T_timestamp:    {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		oid.T_timestamptz:  {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
-		oid.T_varbit:       {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_char:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
@@ -379,7 +377,6 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_varchar: {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 	},
 	oid.T_int4: {
-		oid.T_bit:          {MaxContext: ContextExplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		oid.T_bool:         {MaxContext: ContextExplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		oid.T_char:         {MaxContext: ContextExplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		oid.T_date:         {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
@@ -398,7 +395,6 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_regtype:      {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		oid.T_timestamp:    {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		oid.T_timestamptz:  {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
-		oid.T_varbit:       {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_name:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
@@ -406,7 +402,6 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_varchar: {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 	},
 	oid.T_int8: {
-		oid.T_bit:          {MaxContext: ContextExplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		oid.T_bool:         {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		oid.T_date:         {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		oid.T_float4:       {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
@@ -424,7 +419,6 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_regtype:      {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		oid.T_timestamp:    {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		oid.T_timestamptz:  {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
-		oid.T_varbit:       {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_char:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
