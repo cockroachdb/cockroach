@@ -110,7 +110,7 @@ func TestMVCCValueFormat(t *testing.T) {
 
 func TestEncodeDecodeMVCCValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 
 	var strVal, intVal roachpb.Value
 	strVal.SetString("foo")
