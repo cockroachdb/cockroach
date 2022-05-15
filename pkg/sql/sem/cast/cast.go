@@ -290,8 +290,8 @@ func LookupCast(src, tgt *types.T, so SessionOptions) (Cast, bool) {
 
 	// Casts from int types to varbit types only if the the length of the varbit
 	// is define
-	if srcFamily == types.Int || srcFamily == types.Int2 || srcFamily == types.Int4 &&
-		(tgtFamily == types.VarBit) &&
+	if srcFamily == types.IntFamily &&
+		(tgtFamily == types.BitFamily) &&
 		tgt.Width() != 0 {
 		return Cast{
 			MaxContext: ContextExplicit,
