@@ -330,7 +330,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s1.ImportRemoteSpans(rec)
+	s1.ImportRemoteRecording(rec)
 	if err := CheckRecordedSpans(s1.FinishAndGetRecording(RecordingVerbose), `
 		span: a
 			tags: _verbose=1
@@ -492,7 +492,7 @@ func TestTracer_VisitSpans(t *testing.T) {
 	childChild := tr2.StartSpan("root.child.remotechild", WithRemoteParentFromSpanMeta(child.Meta()))
 	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithRemoteParentFromSpanMeta(child.Meta()))
 	require.Len(t, tr2.activeSpansRegistry.mu.m, 2)
-	child.ImportRemoteSpans(childChildFinished.FinishAndGetRecording(RecordingVerbose))
+	child.ImportRemoteRecording(childChildFinished.FinishAndGetRecording(RecordingVerbose))
 	require.Len(t, tr2.activeSpansRegistry.mu.m, 1)
 
 	// All spans are part of the recording (root.child.remotechilddone was
@@ -524,7 +524,7 @@ func TestSpanRecordingFinished(t *testing.T) {
 	tr2 := NewTracer()
 	childTraceInfo := child.Meta().ToProto()
 	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithRemoteParentFromTraceInfo(&childTraceInfo))
-	child.ImportRemoteSpans(remoteChildChild.GetRecording(RecordingVerbose))
+	child.ImportRemoteRecording(remoteChildChild.GetRecording(RecordingVerbose))
 	remoteChildChild.Finish()
 
 	// All spans are un-finished.

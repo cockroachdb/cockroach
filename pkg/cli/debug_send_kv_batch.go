@@ -249,7 +249,7 @@ func sendKVBatchRequestWithTracingOption(
 
 	if sp != nil {
 		// Import the remotely collected spans, if any.
-		sp.ImportRemoteSpans(br.CollectedSpans)
+		sp.ImportRemoteRecording(br.CollectedSpans)
 
 		// Extract the recording.
 		rec = sp.GetRecording(tracing.RecordingVerbose)

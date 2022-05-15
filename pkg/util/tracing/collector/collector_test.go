@@ -86,7 +86,7 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, 
 
 	// Start another remote child span on "node 2" that we finish.
 	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithRemoteParentFromSpanMeta(child.Meta()))
-	child.ImportRemoteSpans(childRemoteChildFinished.FinishAndGetRecording(tracing.RecordingVerbose))
+	child.ImportRemoteRecording(childRemoteChildFinished.FinishAndGetRecording(tracing.RecordingVerbose))
 
 	// Start a root span on "node 2".
 	root2 := t2.StartSpan("root2", tracing.WithRecording(tracing.RecordingVerbose))
