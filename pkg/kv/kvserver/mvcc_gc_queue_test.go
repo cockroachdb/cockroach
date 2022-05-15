@@ -356,7 +356,7 @@ func (cws *cachedWriteSimulator) shouldQueue(
 func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	storage.SkipIfSimpleValueEncodingDisabled(t)
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	cws := newCachedWriteSimulator(t)
 
@@ -464,7 +464,7 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 func TestMVCCGCQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	storage.SkipIfSimpleValueEncodingDisabled(t)
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()

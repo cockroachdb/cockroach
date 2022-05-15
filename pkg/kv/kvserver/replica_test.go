@@ -6177,7 +6177,7 @@ func verifyRangeStats(
 func TestRangeStatsComputation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	storage.SkipIfSimpleValueEncodingDisabled(t)
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
