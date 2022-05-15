@@ -1656,3 +1656,195 @@ func TestScanIntents(t *testing.T) {
 		})
 	}
 }
+
+// TestEngineIteratorVisibility checks iterator visibility for various readers.
+// See comment on Engine.NewMVCCIterator for detailed visibility semantics.
+func TestEngineIteratorVisibility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testcases := map[string]struct {
+		makeReader       func(Engine) Reader
+		expectConsistent bool
+		canWrite         bool
+		readOwnWrites    bool
+	}{
+		"Engine": {
+			makeReader:       func(e Engine) Reader { return e },
+			expectConsistent: false,
+			canWrite:         true,
+			readOwnWrites:    true,
+		},
+		"Batch": {
+			makeReader:       func(e Engine) Reader { return e.NewBatch() },
+			expectConsistent: true,
+			canWrite:         true,
+			readOwnWrites:    true,
+		},
+		"UnindexedBatch": {
+			makeReader:       func(e Engine) Reader { return e.NewUnindexedBatch(false) },
+			expectConsistent: true,
+			canWrite:         true,
+			readOwnWrites:    false,
+		},
+		"ReadOnly": {
+			makeReader:       func(e Engine) Reader { return e.NewReadOnly(StandardDurability) },
+			expectConsistent: true,
+			canWrite:         false,
+		},
+		"Snapshot": {
+			makeReader:       func(e Engine) Reader { return e.NewSnapshot() },
+			expectConsistent: true,
+			canWrite:         false,
+		},
+	}
+	keyKinds := []interface{}{MVCCKeyAndIntentsIterKind, MVCCKeyIterKind}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			testutils.RunValues(t, "IterKind", keyKinds, func(t *testing.T, iterKindI interface{}) {
+				iterKind := iterKindI.(MVCCIterKind)
+				eng := NewDefaultInMemForTesting()
+				defer eng.Close()
+
+				// Write initial point key.
+				require.NoError(t, eng.PutMVCC(pointKey("a", 1), stringValue("a1")))
+
+				// Set up two readers: one regular and one which will be pinned.
+				r := tc.makeReader(eng)
+				defer r.Close()
+				rPinned := tc.makeReader(eng)
+				defer rPinned.Close()
+
+				require.Equal(t, tc.expectConsistent, r.ConsistentIterators())
+
+				// Create an iterator. This will see the old engine state regardless
+				// of the type of reader.
+				opts := IterOptions{
+					LowerBound: keys.LocalMax,
+					UpperBound: keys.MaxKey,
+				}
+				iterOld := r.NewMVCCIterator(iterKind, opts)
+				defer iterOld.Close()
+
+				// Pin the pinned reader, if it supports it. This should ensure later
+				// iterators see the current state.
+				if rPinned.ConsistentIterators() {
+					require.NoError(t, rPinned.PinEngineStateForIterators())
+				} else {
+					require.Error(t, rPinned.PinEngineStateForIterators())
+				}
+
+				// Write a new key to the engine, and set up the expected results.
+				require.NoError(t, eng.PutMVCC(pointKey("a", 2), stringValue("a2")))
+
+				expectOld := []MVCCKeyValue{
+					pointKV("a", 1, "a1"),
+				}
+				expectNew := []MVCCKeyValue{
+					pointKV("a", 2, "a2"),
+					pointKV("a", 1, "a1"),
+				}
+
+				// The existing (old) iterator should all see the old engine state,
+				// regardless of reader type.
+				require.Equal(t, expectOld, scanIter(t, iterOld))
+
+				// Create another iterator from the regular reader. Consistent iterators
+				// should see the old state (because iterOld was already created for
+				// it), others should see the new state.
+				iterNew := r.NewMVCCIterator(iterKind, opts)
+				defer iterNew.Close()
+				if r.ConsistentIterators() {
+					require.Equal(t, expectOld, scanIter(t, iterNew))
+				} else {
+					require.Equal(t, expectNew, scanIter(t, iterNew))
+				}
+
+				// Create a new iterator from the pinned reader. Readers with consistent
+				// iterators should see the old (pinned) state, others should see the
+				// new state.
+				iterPinned := rPinned.NewMVCCIterator(iterKind, opts)
+				defer iterPinned.Close()
+				if rPinned.ConsistentIterators() {
+					require.Equal(t, expectOld, scanIter(t, iterPinned))
+				} else {
+					require.Equal(t, expectNew, scanIter(t, iterPinned))
+				}
+
+				// If the reader is also a writer, check write interactions. In
+				// particular, a Batch should read its own writes for any new iterators,
+				// but not for any existing iterators.
+				if tc.canWrite {
+					w, ok := r.(Writer)
+					require.Equal(t, tc.canWrite, ok)
+
+					// Write a new key to the writer (not engine), and set up expected
+					// results.
+					require.NoError(t, w.PutMVCC(pointKey("a", 3), stringValue("a3")))
+					expectNewAndOwn := []MVCCKeyValue{
+						pointKV("a", 3, "a3"),
+						pointKV("a", 2, "a2"),
+						pointKV("a", 1, "a1"),
+					}
+					expectOldAndOwn := []MVCCKeyValue{
+						pointKV("a", 3, "a3"),
+						pointKV("a", 1, "a1"),
+					}
+
+					// The existing iterators should see the same state as before these
+					// writes, because they always have a consistent view from when they
+					// were created.
+					require.Equal(t, expectOld, scanIter(t, iterOld))
+					if r.ConsistentIterators() {
+						require.Equal(t, expectOld, scanIter(t, iterNew))
+						require.Equal(t, expectOld, scanIter(t, iterPinned))
+					} else {
+						require.Equal(t, expectNew, scanIter(t, iterNew))
+						require.Equal(t, expectNew, scanIter(t, iterPinned))
+					}
+
+					// A new iterator should read our own writes if the reader supports it,
+					// but consistent iterators should not see the changes to the underlying
+					// engine either way.
+					iterOwn := r.NewMVCCIterator(iterKind, opts)
+					defer iterOwn.Close()
+					if tc.readOwnWrites {
+						if r.ConsistentIterators() {
+							require.Equal(t, expectOldAndOwn, scanIter(t, iterOwn))
+						} else {
+							require.Equal(t, expectNewAndOwn, scanIter(t, iterOwn))
+						}
+					} else {
+						if r.ConsistentIterators() {
+							require.Equal(t, expectOld, scanIter(t, iterOwn))
+						} else {
+							require.Equal(t, expectNew, scanIter(t, iterOwn))
+						}
+					}
+				}
+			})
+		})
+	}
+}
+
+// scanIter scans all point KVs from the iterator.
+func scanIter(t *testing.T, iter MVCCIterator) []MVCCKeyValue {
+	t.Helper()
+
+	iter.SeekGE(MVCCKey{Key: keys.LocalMax})
+
+	var keys []MVCCKeyValue
+	for {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		keys = append(keys, MVCCKeyValue{
+			Key:   iter.Key(),
+			Value: iter.Value(),
+		})
+		iter.Next()
+	}
+	return keys
+}
