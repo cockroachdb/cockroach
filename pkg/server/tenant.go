@@ -639,13 +639,12 @@ func (noopTenantSideCostController) Start(
 	return nil
 }
 
-func (noopTenantSideCostController) OnRequestWait(
-	ctx context.Context, info tenantcostmodel.RequestInfo,
-) error {
+func (noopTenantSideCostController) OnRequestWait(ctx context.Context) error {
 	return nil
 }
 
-func (noopTenantSideCostController) OnResponse(
+func (noopTenantSideCostController) OnResponseWait(
 	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
-) {
+) error {
+	return nil
 }
