@@ -131,11 +131,11 @@ func (v MVCCValue) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 	if v.MVCCValueHeader != (enginepb.MVCCValueHeader{}) {
-		w.Printf("vheader{")
+		w.Printf("{")
 		if !v.LocalTimestamp.IsEmpty() {
-			w.Printf(" localTs=%s", v.LocalTimestamp)
+			w.Printf("localTs=%s", v.LocalTimestamp)
 		}
-		w.Printf(" } ")
+		w.Printf("}")
 	}
 	w.Print(v.Value.PrettyPrint())
 }
