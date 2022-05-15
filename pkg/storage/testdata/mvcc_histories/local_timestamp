@@ -7,7 +7,7 @@ with ts=20
   put localTs=30 k=k3 v=v
 ----
 >> at end:
-data: "k1"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k1"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 data: "k2"/20.000000000,0 -> /BYTES/v
 data: "k3"/20.000000000,0 -> /BYTES/v
 
@@ -19,10 +19,10 @@ with ts=30
 ----
 >> at end:
 data: "k1"/30.000000000,0 -> /BYTES/v
-data: "k1"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k1"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 data: "k2"/30.000000000,0 -> /BYTES/v
 data: "k2"/20.000000000,0 -> /BYTES/v
-data: "k3"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v
+data: "k3"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v
 data: "k3"/20.000000000,0 -> /BYTES/v
 
 run ok
@@ -32,14 +32,14 @@ with ts=40
   del localTs=50 k=k3
 ----
 >> at end:
-data: "k1"/40.000000000,0 -> vheader{ localTs=30.000000000,0 } /<empty>
+data: "k1"/40.000000000,0 -> {localTs=30.000000000,0}/<empty>
 data: "k1"/30.000000000,0 -> /BYTES/v
-data: "k1"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k1"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 data: "k2"/40.000000000,0 -> /<empty>
 data: "k2"/30.000000000,0 -> /BYTES/v
 data: "k2"/20.000000000,0 -> /BYTES/v
 data: "k3"/40.000000000,0 -> /<empty>
-data: "k3"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v
+data: "k3"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v
 data: "k3"/20.000000000,0 -> /BYTES/v
 
 run ok
@@ -53,16 +53,16 @@ inc: current value = 1
 inc: current value = 1
 >> at end:
 data: "k1"/50.000000000,0 -> /INT/1
-data: "k1"/40.000000000,0 -> vheader{ localTs=30.000000000,0 } /<empty>
+data: "k1"/40.000000000,0 -> {localTs=30.000000000,0}/<empty>
 data: "k1"/30.000000000,0 -> /BYTES/v
-data: "k1"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k1"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 data: "k2"/50.000000000,0 -> /INT/1
 data: "k2"/40.000000000,0 -> /<empty>
 data: "k2"/30.000000000,0 -> /BYTES/v
 data: "k2"/20.000000000,0 -> /BYTES/v
-data: "k3"/50.000000000,0 -> vheader{ localTs=40.000000000,0 } /INT/1
+data: "k3"/50.000000000,0 -> {localTs=40.000000000,0}/INT/1
 data: "k3"/40.000000000,0 -> /<empty>
-data: "k3"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v
+data: "k3"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v
 data: "k3"/20.000000000,0 -> /BYTES/v
 
 run ok
@@ -75,20 +75,20 @@ del_range: "k1"-"k2" -> deleted 1 key(s)
 del_range: "k2"-"k3" -> deleted 1 key(s)
 del_range: "k3"-"k4" -> deleted 1 key(s)
 >> at end:
-data: "k1"/60.000000000,0 -> vheader{ localTs=50.000000000,0 } /<empty>
+data: "k1"/60.000000000,0 -> {localTs=50.000000000,0}/<empty>
 data: "k1"/50.000000000,0 -> /INT/1
-data: "k1"/40.000000000,0 -> vheader{ localTs=30.000000000,0 } /<empty>
+data: "k1"/40.000000000,0 -> {localTs=30.000000000,0}/<empty>
 data: "k1"/30.000000000,0 -> /BYTES/v
-data: "k1"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k1"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 data: "k2"/60.000000000,0 -> /<empty>
 data: "k2"/50.000000000,0 -> /INT/1
 data: "k2"/40.000000000,0 -> /<empty>
 data: "k2"/30.000000000,0 -> /BYTES/v
 data: "k2"/20.000000000,0 -> /BYTES/v
 data: "k3"/60.000000000,0 -> /<empty>
-data: "k3"/50.000000000,0 -> vheader{ localTs=40.000000000,0 } /INT/1
+data: "k3"/50.000000000,0 -> {localTs=40.000000000,0}/INT/1
 data: "k3"/40.000000000,0 -> /<empty>
-data: "k3"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v
+data: "k3"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v
 data: "k3"/20.000000000,0 -> /BYTES/v
 
 run ok
@@ -219,29 +219,29 @@ with t=A ts=20 localTs=10
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k1"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k1"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k10"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k10"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k11"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k11"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k11"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k12"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k12"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k12"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k2"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k2"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k3"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k3"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k4"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k4"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k4"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k5"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k5"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k5"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k6"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k6"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k6"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k7"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k7"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k7"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k8"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k8"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k8"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 meta: "k9"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k9"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+data: "k9"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
 
 run ok
 with t=A
@@ -267,30 +267,30 @@ with t=A localTs=20
   put k=k12 v=v2
 ----
 >> at end:
-meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k1"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k10"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k11"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k11"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k12"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k12"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k2"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k3"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k4"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k4"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k5"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k5"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k6"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k6"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k7"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k7"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k8"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k8"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k9"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k9"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
+meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k1"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k10"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k11"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k11"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k12"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k12"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k2"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k3"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k4"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k5"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k5"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k6"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k6"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k7"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k7"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k8"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k8"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k9"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k9"/30.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
 
 run ok
 with t=A
@@ -310,15 +310,15 @@ with t=A
 ----
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
-data: "k10"/40.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-data: "k11"/40.000000000,0 -> vheader{ localTs=30.000000000,0 } /BYTES/v2
+data: "k10"/40.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+data: "k11"/40.000000000,0 -> {localTs=30.000000000,0}/BYTES/v2
 data: "k12"/40.000000000,0 -> /BYTES/v2
-meta: "k5"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k5"/40.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k6"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k6"/40.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
-meta: "k7"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k7"/40.000000000,0 -> vheader{ localTs=30.000000000,0 } /BYTES/v2
-meta: "k8"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=7 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k5"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k5"/40.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k6"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k6"/40.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2
+meta: "k7"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k7"/40.000000000,0 -> {localTs=30.000000000,0}/BYTES/v2
+meta: "k8"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=7 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k8"/40.000000000,0 -> /BYTES/v2
-data: "k9"/40.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
+data: "k9"/40.000000000,0 -> {localTs=20.000000000,0}/BYTES/v2

@@ -51,7 +51,7 @@ with t=A
   txn_remove
 ----
 >> at end:
-data: "k"/124.000000000,0 -> vheader{ localTs=123.000000000,0 } /BYTES/v3
+data: "k"/124.000000000,0 -> {localTs=123.000000000,0}/BYTES/v3
 
 # Write value4 with an old timestamp without txn...should get a write
 # too old error.
@@ -61,7 +61,7 @@ cput k=k v=v4 cond=v3 ts=123
 ----
 >> at end:
 data: "k"/124.000000000,1 -> /BYTES/v4
-data: "k"/124.000000000,0 -> vheader{ localTs=123.000000000,0 } /BYTES/v3
+data: "k"/124.000000000,0 -> {localTs=123.000000000,0}/BYTES/v3
 error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 123.000000000,0 too old; wrote at 124.000000000,1
 
 # Reset for next test
