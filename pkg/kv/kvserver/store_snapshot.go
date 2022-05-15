@@ -1343,7 +1343,7 @@ func delegateSnapshot(
 				"trying to ingest remote spans but there is no recording span set up",
 			)
 		} else {
-			span.ImportRemoteSpans(resp.CollectedSpans)
+			span.ImportRemoteRecording(resp.CollectedSpans)
 		}
 	}
 	switch resp.SnapResponse.Status {

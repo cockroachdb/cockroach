@@ -73,7 +73,7 @@ func TestRecordingString(t *testing.T) {
 	remoteChild.Record("remote child 1")
 
 	remoteRec := remoteChild.FinishAndGetRecording(RecordingVerbose)
-	root.ImportRemoteSpans(remoteRec)
+	root.ImportRemoteRecording(remoteRec)
 
 	root.Record("root 3")
 
@@ -162,7 +162,7 @@ func TestRecordingInRecording(t *testing.T) {
 	// have to be imported into the parent manually (this would usually happen via
 	// code at the RPC boundaries).
 	grandChild := tr.StartSpan("grandchild", WithParent(child), WithDetachedRecording())
-	child.ImportRemoteSpans(grandChild.FinishAndGetRecording(RecordingVerbose))
+	child.ImportRemoteRecording(grandChild.FinishAndGetRecording(RecordingVerbose))
 	childRec := child.FinishAndGetRecording(RecordingVerbose)
 	require.NoError(t, CheckRecordedSpans(childRec, `
 		span: child
@@ -189,7 +189,7 @@ func TestRecordingInRecording(t *testing.T) {
 
 // Verify that GetRecording propagates the structured events even when the
 // receiving Span isn't verbose during import.
-func TestImportRemoteSpans(t *testing.T) {
+func TestImportRemoteRecording(t *testing.T) {
 	for _, verbose := range []bool{false, true} {
 		t.Run(fmt.Sprintf("%s=%t", "verbose-child=", verbose), func(t *testing.T) {
 			tr := NewTracerWithOpt(context.Background())
@@ -203,7 +203,7 @@ func TestImportRemoteSpans(t *testing.T) {
 			ch := tr.StartSpan("child", WithParent(sp), WithDetachedRecording())
 			ch.RecordStructured(&types.Int32Value{Value: 4})
 			ch.Record("foo")
-			sp.ImportRemoteSpans(ch.FinishAndGetRecording(RecordingVerbose))
+			sp.ImportRemoteRecording(ch.FinishAndGetRecording(RecordingVerbose))
 
 			if verbose {
 				require.NoError(t, CheckRecording(sp.FinishAndGetRecording(RecordingVerbose), `
@@ -223,7 +223,7 @@ func TestImportRemoteSpans(t *testing.T) {
 	}
 }
 
-func TestImportRemoteSpansMaintainsRightByteSize(t *testing.T) {
+func TestImportRemoteRecordingMaintainsRightByteSize(t *testing.T) {
 	tr1 := NewTracer()
 
 	child := tr1.StartSpan("child", WithRecording(RecordingStructured))
@@ -231,7 +231,7 @@ func TestImportRemoteSpansMaintainsRightByteSize(t *testing.T) {
 	child.RecordStructured(&types.StringValue{Value: "test"})
 
 	root := tr1.StartSpan("root", WithRecording(RecordingStructured))
-	root.ImportRemoteSpans(child.GetRecording(RecordingStructured))
+	root.ImportRemoteRecording(child.GetRecording(RecordingStructured))
 	c := root.i.crdb
 	c.mu.Lock()
 	buf := c.mu.recording.structured
