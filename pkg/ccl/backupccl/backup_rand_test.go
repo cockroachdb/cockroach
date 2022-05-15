@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -41,6 +42,9 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			UseDatabase:   "rand",
 			ExternalIODir: dir,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
 		},
 	}
 	ctx := context.Background()
@@ -92,12 +96,12 @@ database_name = 'rand' AND schema_name = 'public'`)
 	dbBackups := []string{dbBackup, tablesBackup}
 
 	if err := verifyBackupRestoreStatementResult(
-		t, sqlDB, "BACKUP DATABASE rand TO $1", dbBackup,
+		t, sqlDB, "BACKUP DATABASE rand INTO $1", dbBackup,
 	); err != nil {
 		t.Fatal(err)
 	}
 	if err := verifyBackupRestoreStatementResult(
-		t, sqlDB, "BACKUP TABLE rand.* TO $1", tablesBackup,
+		t, sqlDB, "BACKUP TABLE rand.* INTO $1", tablesBackup,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +124,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 		sqlDB.Exec(t, "CREATE DATABASE restoredb")
 		if err := verifyBackupRestoreStatementResult(
-			t, sqlDB, "RESTORE rand.* FROM $1 WITH OPTIONS (into_db='restoredb')", backup,
+			t, sqlDB, "RESTORE rand.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb')", backup,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -128,7 +132,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
 
 		if err := verifyBackupRestoreStatementResult(
-			t, sqlDB, "RESTORE DATABASE rand FROM $1 WITH OPTIONS (new_db_name='restoredb')", backup,
+			t, sqlDB, "RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb')", backup,
 		); err != nil {
 			t.Fatal(err)
 		}

@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -133,11 +132,7 @@ CREATE TABLE data2.foo (a int);
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
-	numUsers := 1000
-	if util.RaceEnabled {
-		numUsers = 10
-	}
-	for i := 0; i < numUsers; i++ {
+	for i := 0; i < 10; i++ {
 		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
 		sqlDB.Exec(t, fmt.Sprintf("ALTER USER maxroach%d CREATEDB", i))
 	}
@@ -149,7 +144,7 @@ CREATE TABLE data2.foo (a int);
 	// Note: this is not the backup under test, this just serves as a job which
 	// should appear in the restore.
 	// This job will eventually fail since it will run from a new cluster.
-	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://0/throwawayjob'`)
+	sqlDB.Exec(t, `BACKUP data.bank INTO 'nodelocal://0/throwawayjob'`)
 	preBackupJobs := sqlDB.QueryStr(t, jobsQuery)
 	// Populate system.settings.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 5`)
@@ -172,15 +167,11 @@ CREATE TABLE data2.foo (a int);
 	sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR BACKUP]`)
 
 	injectStats(t, sqlDB, "data.bank", "id")
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
 	// Create a bunch of user tables on the restoring cluster that we're going
 	// to delete.
-	numTables := 50
-	if util.RaceEnabled {
-		numTables = 2
-	}
-	for i := 0; i < numTables; i++ {
+	for i := 0; i < 10; i++ {
 		sqlDBRestore.Exec(t, `CREATE DATABASE db_to_drop`)
 		sqlDBRestore.Exec(t, `CREATE TABLE db_to_drop.table_to_drop (a int)`)
 		sqlDBRestore.Exec(t, `ALTER TABLE db_to_drop.table_to_drop CONFIGURE ZONE USING gc.ttlseconds=1`)
@@ -194,7 +185,7 @@ CREATE TABLE data2.foo (a int);
 
 	doneRestore := make(chan struct{})
 	go func() {
-		sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+		sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 		close(doneRestore)
 	}()
 
@@ -618,14 +609,6 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 
 	skip.UnderRace(t, "takes >1 min under race")
 	params := base.TestServerArgs{}
-	// Disable GC job so that the final check of crdb_internal.tables is
-	// guaranteed to not be cleaned up. Although this was never observed by a
-	// stress test, it is here for safety.
-	blockCh := make(chan struct{})
-	defer close(blockCh)
-	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
-		RunBeforeResume: func(_ jobspb.JobID) error { <-blockCh; return nil },
-	}
 
 	const numAccounts = 1000
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
@@ -633,11 +616,13 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
-	for i := 0; i < 1000; i++ {
+	sqlDB.Exec(t, `BEGIN`)
+	for i := 0; i < 10; i++ {
 		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
 	}
+	sqlDB.Exec(t, `COMMIT`)
 
-	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/missing-ssts'`)
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/missing-ssts'`)
 
 	// Bugger the backup by removing the SST files. (Note this messes up all of
 	// the backups, but there is only one at this point.)
@@ -658,13 +643,14 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	// Note: this is not the backup under test, this just serves as a job which
 	// should appear in the restore.
 	// This job will eventually fail since it will run from a new cluster.
-	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://0/throwawayjob'`)
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP data.bank INTO 'nodelocal://0/throwawayjob'`)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
 	t.Run("during restoration of data", func(t *testing.T) {
-		_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+		_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir,
+			InitManualReplication, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
-		sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM 'nodelocal://1/missing-ssts'`)
+		sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM LATEST IN 'nodelocal://1/missing-ssts'`)
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
@@ -690,8 +676,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 
 	// This test retries the job (by injected a retry error) after restoring a
 	// every system table that has a custom restore function. This tried to tease
-	// out any errors that may occur if some of the system table restoration
-	// functions are not idempotent.
+	// out any errors that may occur if some system table restoration functions
+	// are not idempotent.
 	t.Run("retry-during-custom-system-table-restore", func(t *testing.T) {
 		customRestoreSystemTables := make([]string, 0)
 		for table, config := range systemTableBackupConfiguration {
@@ -704,7 +690,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 				}}
-				tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, args)
+				tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
+					tempDir, InitManualReplication, args)
 				defer cleanupEmptyCluster()
 
 				// Inject a retry error, that returns once.
@@ -726,7 +713,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 					}
 				}
 				// The initial restore will return an error, and restart.
-				sqlDBRestore.ExpectErr(t, `running execution from '.*' to '.*' on \d+ failed: injected error`, `RESTORE FROM $1`, localFoo)
+				sqlDBRestore.ExpectErr(t, `running execution from '.*' to '.*' on \d+ failed: injected error`,
+					`RESTORE FROM LATEST IN $1`, localFoo)
 				// Reduce retry delays.
 				sqlDBRestore.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.initial_delay = '1ms'")
 				// Expect the restore to succeed.
@@ -738,7 +726,18 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	})
 
 	t.Run("during system table restoration", func(t *testing.T) {
-		tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+		// Disable GC job so that the final check of crdb_internal.tables is
+		// guaranteed to not be cleaned up. Although this was never observed by a
+		// stress test, it is here for safety.
+		blockCh := make(chan struct{})
+		params.Knobs.GCJob = &sql.GCJobTestingKnobs{
+			RunBeforeResume: func(_ jobspb.JobID) error {
+				<-blockCh
+				return nil
+			},
+		}
+		tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
+			tempDir, InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 		defer cleanupEmptyCluster()
 
 		// Bugger the backup by injecting a failure while restoring the system data.
@@ -755,7 +754,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 			}
 		}
 
-		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, localFoo)
+		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM LATEST IN $1`, localFoo)
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
@@ -777,10 +776,13 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"zones"},
 			},
 		)
+
+		close(blockCh)
 	})
 
 	t.Run("after offline tables", func(t *testing.T) {
-		tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+		tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir,
+			InitManualReplication, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
 
 		// Bugger the backup by injecting a failure while restoring the system data.
@@ -797,7 +799,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 			}
 		}
 
-		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, localFoo)
+		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM LATEST IN $1`, localFoo)
 	})
 }
 
