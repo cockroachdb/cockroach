@@ -166,7 +166,7 @@ get: "k" -> /BYTES/b @14.000000000,0
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=32} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=20} ts=14.000000000,0 del=false klen=12 vlen=19 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -229,7 +229,7 @@ meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 mi
 get: "k" -> /BYTES/b @14.000000000,0
 >> at end:
 txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -255,7 +255,7 @@ meta: "l" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 mi
 get: "l" -> /BYTES/c @20.000000000,0
 >> at end:
 txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -282,7 +282,7 @@ meta: "l" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 mi
 get: "l" -> <no data>
 >> at end:
 txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=35} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0 isn=1
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -320,7 +320,7 @@ meta: "m" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 mi
 get: "m" -> /BYTES/c @30.000000000,0
 >> at end:
 txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -342,7 +342,7 @@ meta: "m" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 mi
 get: "m" -> /BYTES/a @30.000000000,0
 >> at end:
 txn: "C" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0 isn=1
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -370,7 +370,7 @@ meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 mi
 get: "n" -> /BYTES/c @40.000000000,0
 >> at end:
 txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -398,7 +398,7 @@ meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=45.000000000,0 mi
 get: "n" -> /BYTES/c @45.000000000,0
 >> at end:
 txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -407,7 +407,7 @@ meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.0000000
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
 meta: "n"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} ts=45.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "n"/45.000000000,0 -> vheader{ localTs=40.000000000,0 } /BYTES/c
+data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
 
 # Ignore sequence numbers other than the current one, then commit. The value
 # shouldn't change.
@@ -426,7 +426,7 @@ get: "n" -> /BYTES/c @45.000000000,0
 get: "n" -> /BYTES/c @45.000000000,0
 >> at end:
 txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -434,7 +434,7 @@ data: "k/20"/11.000000000,0 -> /BYTES/20
 meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
-data: "n"/45.000000000,0 -> vheader{ localTs=40.000000000,0 } /BYTES/c
+data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
 
 # Write a couple values at different sequence numbers on this key, then ignore
 # them all, then do a resolve_intent while the txn is pending. The intent should
@@ -458,7 +458,7 @@ get: "n" -> /BYTES/c @45.000000000,0
 get: "o" -> <no data>
 >> at end:
 txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -468,7 +468,7 @@ data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
 meta: "n"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "n"/50.000000000,0 -> /BYTES/c
-data: "n"/45.000000000,0 -> vheader{ localTs=40.000000000,0 } /BYTES/c
+data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
 meta: "o"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "o"/50.000000000,0 -> /BYTES/c
 
@@ -485,7 +485,7 @@ get: "n" -> /BYTES/c @45.000000000,0
 get: "o" -> <no data>
 >> at end:
 txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -493,7 +493,7 @@ data: "k/20"/11.000000000,0 -> /BYTES/20
 meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
-data: "n"/45.000000000,0 -> vheader{ localTs=40.000000000,0 } /BYTES/c
+data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
 
 run ok
 with t=E
@@ -533,7 +533,7 @@ with t=E
 meta: "o" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> at end:
 txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -541,7 +541,7 @@ data: "k/20"/11.000000000,0 -> /BYTES/20
 meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
-data: "n"/45.000000000,0 -> vheader{ localTs=40.000000000,0 } /BYTES/c
+data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
 meta: "o"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "o"/50.000000000,0 -> /BYTES/c
 
@@ -556,7 +556,7 @@ with t=E
 get: "o" -> <no data>
 >> at end:
 txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=55.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -564,7 +564,7 @@ data: "k/20"/11.000000000,0 -> /BYTES/20
 meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
-data: "n"/45.000000000,0 -> vheader{ localTs=40.000000000,0 } /BYTES/c
+data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
 
 
 run error
@@ -589,7 +589,7 @@ meta: "o" -> txn={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min
 get: "o" -> /BYTES/b @50.000000000,0
 >> at end:
 txn: "F" meta={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -597,7 +597,7 @@ data: "k/20"/11.000000000,0 -> /BYTES/20
 meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
-data: "n"/45.000000000,0 -> vheader{ localTs=40.000000000,0 } /BYTES/c
+data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
 meta: "o"/0,0 -> txn={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "o"/50.000000000,0 -> /BYTES/b
 
@@ -618,7 +618,7 @@ meta: "o" -> txn={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min
 get: "o" -> /BYTES/a @50.000000000,0
 >> at end:
 txn: "F" meta={id=00000000 key="o" pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0 isn=1
-data: "k"/14.000000000,0 -> vheader{ localTs=11.000000000,0 } /BYTES/b
+data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
 meta: "k/20"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -626,6 +626,6 @@ data: "k/20"/11.000000000,0 -> /BYTES/20
 meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
-data: "n"/45.000000000,0 -> vheader{ localTs=40.000000000,0 } /BYTES/c
+data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
 meta: "o"/0,0 -> txn={id=00000000 key="o" pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=10} ts=50.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "o"/50.000000000,0 -> /BYTES/a
