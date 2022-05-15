@@ -497,7 +497,7 @@ func assertEqualKVs(
 func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
 
 	var (
@@ -635,7 +635,7 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 func TestMVCCIncrementalIteratorNextKeyIgnoringTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
 
 	var (
@@ -766,7 +766,7 @@ func TestMVCCIncrementalIteratorNextKeyIgnoringTime(t *testing.T) {
 func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
 
 	var (
@@ -861,7 +861,7 @@ func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
 func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
 
 	var (
@@ -1042,7 +1042,7 @@ func expectIntent(t *testing.T, iter SimpleMVCCIterator, intent roachpb.Intent) 
 func TestMVCCIncrementalIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
 
 	var (
@@ -1323,7 +1323,7 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 
 	txn := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.Transaction {
 		return &roachpb.Transaction{
@@ -1541,7 +1541,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 func TestMVCCIterateTimeBound(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
