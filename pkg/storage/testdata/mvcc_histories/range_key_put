@@ -57,7 +57,7 @@ put_rangekey k=c end=e ts=2 localTs=1
 ----
 >> at end:
 rangekey: {a-c}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: {c-e}/[2.000000000,0=vheader{ localTs=1.000000000,0 } /<empty> 1.000000000,0=/<empty>]
+rangekey: {c-e}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 rangekey: {e-k}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
 
 # Write the original value again to unfragment everything.
