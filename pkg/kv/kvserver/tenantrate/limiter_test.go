@@ -83,13 +83,14 @@ type testState struct {
 }
 
 type launchState struct {
-	id         string
-	tenantID   roachpb.TenantID
-	ctx        context.Context
-	cancel     context.CancelFunc
-	writeCount int64
-	writeBytes int64
-	reserveCh  chan error
+	id            string
+	tenantID      roachpb.TenantID
+	ctx           context.Context
+	cancel        context.CancelFunc
+	writeBatches  int64
+	writeRequests int64
+	writeBytes    int64
+	reserveCh     chan error
 }
 
 func (s launchState) String() string {
@@ -131,9 +132,10 @@ var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 // of initialization (00:00:00.000). For example:
 //
 //  init
-//  requests: { rate: 1, burst: 2 }
-//  readbytes: { rate: 1024, burst: 2048 }
-//  writebytes: { rate: 1024, burst: 2048 }
+//  rate:  1
+//  burst: 2
+//  read:  { perbatch: 1, perrequest: 1, perbyte: 1 }
+//  write: { perbatch: 1, perrequest: 1, perbyte: 1 }
 //  ----
 //  00:00:00.000
 //
@@ -206,10 +208,11 @@ func (ts *testState) advance(t *testing.T, d *datadriven.TestData) string {
 //
 func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 	var cmds []struct {
-		ID         string
-		Tenant     uint64
-		WriteCount int64
-		WriteBytes int64
+		ID            string
+		Tenant        uint64
+		WriteBatches  int64
+		WriteRequests int64
+		WriteBytes    int64
 	}
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &cmds); err != nil {
 		d.Fatalf(t, "failed to parse launch command: %v", err)
@@ -220,7 +223,8 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 		s.tenantID = roachpb.MakeTenantID(cmd.Tenant)
 		s.ctx, s.cancel = context.WithCancel(context.Background())
 		s.reserveCh = make(chan error, 1)
-		s.writeCount = cmd.WriteCount
+		s.writeBatches = cmd.WriteBatches
+		s.writeRequests = cmd.WriteRequests
 		s.writeBytes = cmd.WriteBytes
 		ts.running[s.id] = &s
 		lims := ts.tenants[s.tenantID]
@@ -229,9 +233,12 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 		}
 		go func() {
 			// We'll not worry about ever releasing tenant Limiters.
-			s.reserveCh <- lims[0].Wait(
-				s.ctx, tenantcostmodel.TestingRequestInfo(s.writeCount, s.writeBytes),
-			)
+			reqInfo := tenantcostmodel.TestingRequestInfo(s.writeRequests, s.writeBytes)
+			if s.writeBatches == 0 {
+				// Read-only request.
+				reqInfo = tenantcostmodel.TestingRequestInfo(-1, 0)
+			}
+			s.reserveCh <- lims[0].Wait(s.ctx, reqInfo)
 		}()
 	}
 	return ts.FormatRunning()
@@ -262,7 +269,7 @@ func (ts *testState) await(t *testing.T, d *datadriven.TestData) string {
 		}
 		select {
 		case <-ctx.Done():
-			d.Fatalf(t, "goroutined %s failed to finish in time", id)
+			d.Fatalf(t, "goroutine %s failed to finish in time", id)
 		case err := <-ls.reserveCh:
 			if err != nil {
 				d.Fatalf(t, "expected no error for id %s, got %q", id, err)
@@ -303,21 +310,22 @@ func (ts *testState) cancel(t *testing.T, d *datadriven.TestData) string {
 }
 
 // recordRead accounts for bytes read from a request. It takes as input a
-// yaml list with fields tenant, readcount, and readbytes. It returns the set of
-// tasks currently running like launch, await, and cancel.
+// yaml list with fields tenant, readbatches, readrequests, and readbytes. It
+// returns the set of tasks currently running like launch, await, and cancel.
 //
 // For example:
 //
 //  record_read
-//  - { tenant: 2, readcount: 1, readbytes: 32 }
+//  - { tenant: 2, readbatches: 1, readrequests: 1, readbytes: 32 }
 //  ----
 //  [a@2]
 //
 func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 	var reads []struct {
-		Tenant    uint64
-		ReadCount int64
-		ReadBytes int64
+		Tenant       uint64
+		ReadBatches  int64
+		ReadRequests int64
+		ReadBytes    int64
 	}
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &reads); err != nil {
 		d.Fatalf(t, "failed to unmarshal reads: %v", err)
@@ -328,7 +336,7 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 		if len(lims) == 0 {
 			d.Fatalf(t, "no outstanding limiters for %v", tid)
 		}
-		lims[0].RecordRead(context.Background(), tenantcostmodel.TestingResponseInfo(r.ReadCount, r.ReadBytes))
+		lims[0].RecordRead(context.Background(), tenantcostmodel.TestingResponseInfo(r.ReadBatches, r.ReadBytes))
 	}
 	return ts.FormatRunning()
 }
@@ -352,12 +360,18 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 //  kv_tenant_rate_limit_read_requests_admitted 0
 //  kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 0
 //  kv_tenant_rate_limit_read_requests_admitted{tenant_id="system"} 0
+//  kv_tenant_rate_limit_read_batches_admitted 0
+//  kv_tenant_rate_limit_read_batches_admitted{tenant_id="2"} 0
+//  kv_tenant_rate_limit_read_batches_admitted{tenant_id="system"} 0
 //  kv_tenant_rate_limit_write_bytes_admitted 50
 //  kv_tenant_rate_limit_write_bytes_admitted{tenant_id="2"} 50
 //  kv_tenant_rate_limit_write_bytes_admitted{tenant_id="system"} 0
 //  kv_tenant_rate_limit_write_requests_admitted 0
 //  kv_tenant_rate_limit_write_requests_admitted{tenant_id="2"} 0
 //  kv_tenant_rate_limit_write_requests_admitted{tenant_id="system"} 0
+//  kv_tenant_rate_limit_write_batches_admitted 0
+//  kv_tenant_rate_limit_write_batches_admitted{tenant_id="2"} 0
+//  kv_tenant_rate_limit_write_batches_admitted{tenant_id="system"} 0
 //
 // Or with a regular expression:
 //
@@ -494,7 +508,8 @@ func (ts *testState) releaseTenants(t *testing.T, d *datadriven.TestData) string
 }
 
 // estimateIOPS takes in the description of a workload and produces an estimate
-// of the IOPS for that workload (under the default settings).
+// of the number of batches processed per second for that workload (under the
+// default settings).
 //
 // For example:
 //
@@ -519,6 +534,7 @@ func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 	}
 	config := tenantrate.DefaultConfig()
 
+	// Assume one read or write request per batch.
 	calculateIOPS := func(rate float64) float64 {
 		readCost := config.ReadBatchUnits + config.ReadRequestUnits +
 			float64(workload.ReadSize)*config.ReadUnitsPerByte
@@ -605,8 +621,9 @@ type SettingValues struct {
 
 // Factors for reads and writes.
 type Factors struct {
-	Base    float64
-	PerByte float64
+	PerBatch   float64
+	PerRequest float64
+	PerByte    float64
 }
 
 // parseSettings parses a SettingValues yaml and updates the given config.
@@ -624,11 +641,11 @@ func parseSettings(t *testing.T, d *datadriven.TestData, config *tenantrate.Conf
 	}
 	override(&config.Rate, vals.Rate)
 	override(&config.Burst, vals.Burst)
-	override(&config.ReadBatchUnits, vals.Read.Base)
-	override(&config.ReadRequestUnits, vals.Read.Base)
+	override(&config.ReadBatchUnits, vals.Read.PerBatch)
+	override(&config.ReadRequestUnits, vals.Read.PerRequest)
 	override(&config.ReadUnitsPerByte, vals.Read.PerByte)
-	override(&config.WriteBatchUnits, vals.Write.Base)
-	override(&config.WriteRequestUnits, vals.Write.Base)
+	override(&config.WriteBatchUnits, vals.Write.PerBatch)
+	override(&config.WriteRequestUnits, vals.Write.PerRequest)
 	override(&config.WriteUnitsPerByte, vals.Write.PerByte)
 }
 

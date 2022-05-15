@@ -19,13 +19,6 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 // using one CPU for a second costs 1000 RUs.
 type RU float64
 
-// replicationFactor is the the number of replicas to which writes are sent, for
-// reasons of high availability and durability. This is 3 by default in CRDB.
-// TODO(andyk): This constant should be replaced by a dynamic determination of
-// the replication factor for a given request batch. While today tenants cannot
-// change the default replication factor, they will be able to in the future.
-const replicationFactor = 3
-
 // Config contains the cost model parameters. The values are controlled by
 // cluster settings.
 //
@@ -120,7 +113,7 @@ type RequestInfo struct {
 }
 
 // MakeRequestInfo extracts the relevant information from a BatchRequest.
-func MakeRequestInfo(ba *roachpb.BatchRequest) RequestInfo {
+func MakeRequestInfo(ba *roachpb.BatchRequest, numReplicas int) RequestInfo {
 	// The cost of read-only batches is captured by MakeResponseInfo.
 	if !ba.IsWrite() {
 		return RequestInfo{writeCount: -1}
@@ -136,9 +129,9 @@ func MakeRequestInfo(ba *roachpb.BatchRequest) RequestInfo {
 		case *roachpb.PutRequest, *roachpb.ConditionalPutRequest, *roachpb.IncrementRequest,
 			*roachpb.DeleteRequest, *roachpb.DeleteRangeRequest, *roachpb.ClearRangeRequest,
 			*roachpb.RevertRangeRequest, *roachpb.InitPutRequest, *roachpb.AddSSTableRequest:
-			writeCount++
+			writeCount += int64(numReplicas)
 			if swr, isSizedWrite := req.(roachpb.SizedWriteRequest); isSizedWrite {
-				writeBytes += swr.WriteBytes()
+				writeBytes += swr.WriteBytes() * int64(numReplicas)
 			}
 		}
 	}

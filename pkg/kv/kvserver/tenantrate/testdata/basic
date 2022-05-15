@@ -1,8 +1,8 @@
 init
 rate:  1
-burst: 2
-read:  { base: 1, perbyte: 1 }
-write: { base: 1, perbyte: 1 }
+burst: 3
+read:  { perbatch: 1, perrequest: 1, perbyte: 1 }
+write: { perbatch: 1, perrequest: 1, perbyte: 1 }
 ----
 00:00:00.000
 
@@ -20,7 +20,7 @@ get_tenants
 launch
 - { id: g0, tenant: 1 }
 - { id: g1, tenant: 2 }
-- { id: g2, tenant: 2, writecount: 2 }
+- { id: g2, tenant: 2, writebatches: 1, writerequests: 2 }
 - { id: g3, tenant: 3 }
 ----
 [g0@system, g1@2, g2@2, g3@3]
@@ -34,10 +34,10 @@ await
 []
 
 # Launch another write request on behalf of tenant 2; it will block because the
-# burst limit only supports two requests.
+# burst limit only supports three request units.
 
 launch
-- { id: g4, tenant: 2, writecount: 1 }
+- { id: g4, tenant: 2, writebatches: 1, writerequests: 0 }
 ----
 [g4@2]
 
@@ -85,13 +85,23 @@ kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
 # have yet been admitted (since that happens during response).
 
 metrics
-kv_tenant_rate_limit_.*_requests_admitted
+kv_tenant_rate_limit_.*_(batches|requests)_admitted
 ----
+kv_tenant_rate_limit_read_batches_admitted 0
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="2"} 0
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="3"} 0
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="5"} 0
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="system"} 0
 kv_tenant_rate_limit_read_requests_admitted 0
 kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 0
 kv_tenant_rate_limit_read_requests_admitted{tenant_id="3"} 0
 kv_tenant_rate_limit_read_requests_admitted{tenant_id="5"} 0
 kv_tenant_rate_limit_read_requests_admitted{tenant_id="system"} 0
+kv_tenant_rate_limit_write_batches_admitted 1
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="2"} 1
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="3"} 0
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="5"} 0
+kv_tenant_rate_limit_write_batches_admitted{tenant_id="system"} 0
 kv_tenant_rate_limit_write_requests_admitted 2
 kv_tenant_rate_limit_write_requests_admitted{tenant_id="2"} 2
 kv_tenant_rate_limit_write_requests_admitted{tenant_id="3"} 0
