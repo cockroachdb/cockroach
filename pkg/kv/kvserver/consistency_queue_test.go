@@ -235,7 +235,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer log.TestingSetRedactable(true)()
 
 	// Test expects simple MVCC value encoding.
-	storage.SkipIfSimpleValueEncodingDisabled(t)
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	// Test uses sticky registry to have persistent pebble state that could
 	// be analyzed for existence of snapshots and to verify snapshot content

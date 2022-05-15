@@ -90,7 +90,7 @@ import (
 func TestMVCCHistories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 
 	ctx := context.Background()
 

@@ -1214,7 +1214,7 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 
 func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 
 	eng := createTestPebbleEngine()
 	defer eng.Close()

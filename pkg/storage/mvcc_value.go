@@ -13,10 +13,10 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -144,12 +144,15 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 var disableSimpleValueEncoding = util.ConstantWithMetamorphicTestBool(
 	"mvcc-value-disable-simple-encoding", false)
 
-// SkipIfSimpleValueEncodingDisabled skips this test during metamorphic runs
-// that have disabled the simple MVCC value encoding.
-func SkipIfSimpleValueEncodingDisabled(t skip.SkippableTest) {
+// DisableMetamorphicSimpleValueEncoding disables the disableSimpleValueEncoding
+// metamorphic bool for the duration of a test, resetting it at the end.
+func DisableMetamorphicSimpleValueEncoding(t *testing.T) {
 	t.Helper()
 	if disableSimpleValueEncoding {
-		skip.IgnoreLint(t, "disabled under metamorphic")
+		disableSimpleValueEncoding = false
+		t.Cleanup(func() {
+			disableSimpleValueEncoding = true
+		})
 	}
 }
 
