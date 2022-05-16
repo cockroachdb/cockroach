@@ -117,10 +117,9 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	serverParams.Knobs.SpanConfig = &spanconfig.TestingKnobs{
 		ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
 	}
-	// Need to disable the SQL server here as the non-tenant case below
-	// assumes that it's operating on the host cluster, but creating a default
-	// tenant will have it operate in the SQL server.
-	serverParams.DisableDefaultSQLServer = true
+	// Need to disable the test tenant here as the non-tenant case below
+	// assumes that it's operating within the system tenant.
+	serverParams.DisableDefaultTestTenant = true
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: serverParams,
 	})

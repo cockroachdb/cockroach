@@ -544,8 +544,9 @@ func TestExportDataAOST(t *testing.T) {
 			ExternalIODir: dir,
 			Insecure:      true,
 			// Have to disable testing in MT mode until backups with revision
-			// history are supported for SQL servers. Tracked with #76378.
-			DisableDefaultSQLServer: true})
+			// history are supported for encapsulated tenants. Tracked with
+			// #76378.
+			DisableDefaultTestTenant: true})
 	defer srv.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -778,8 +779,9 @@ func TestExportDataWithRevisions(t *testing.T) {
 			ExternalIODir: dir,
 			Insecure:      true,
 			// Have to disable testing in MT mode until backups with revision
-			// history are supported for SQL servers.
-			DisableDefaultSQLServer: true})
+			// history are supported for encapsulated tenants. Tracked with
+			// #76378.
+			DisableDefaultTestTenant: true})
 	defer srv.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)

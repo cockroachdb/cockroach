@@ -178,9 +178,9 @@ func TestImportFixture(t *testing.T) {
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 
 	s, db, _ := serverutils.StartServer(t,
-		// Need to disable the SQL server until we have a fix for #75449.
+		// Need to disable the test tenant until we have a fix for #75449.
 		base.TestServerArgs{
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 		},
 	)
 	defer s.Stopper().Stop(ctx)
@@ -225,8 +225,8 @@ func TestImportFixtureCSVServer(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			UseDatabase: `d`,
-			// Test fails with SQL server due to #75449.
-			DisableDefaultSQLServer: true,
+			// Test fails within a test tenant due to #75449.
+			DisableDefaultTestTenant: true,
 		},
 	)
 	defer s.Stopper().Stop(ctx)

@@ -2052,7 +2052,12 @@ func TestChangefeedAuthorization(t *testing.T) {
 		},
 		{name: `cloud`,
 			statement: `CREATE CHANGEFEED FOR d.table_a INTO 'nodelocal://12/nope/'`,
-			errMsg:    `connecting to node 12`,
+			// Ideally, this should be returning "connecting to node 12", but
+			// since (with #76582) we're using a local-only blob client by
+			// default for tenants, we get a different error message. This
+			// error message should be reverted when we generalize the blob
+			// client creation in tenants. Tracked with #76378.
+			errMsg: `connecting to remote node not supported`,
 		},
 		{name: `sinkless`,
 			statement: `EXPERIMENTAL CHANGEFEED FOR d.table_a WITH resolved='1'`,
@@ -4850,9 +4855,12 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 
 	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			UseDatabase:   "test",
-			Knobs:         knobs,
-			ExternalIODir: sinkDir,
+			// Test uses SPLIT AT, which isn't currently supported for
+			// secondary tenants. Tracked with #76378.
+			DisableDefaultTestTenant: true,
+			UseDatabase:              "test",
+			Knobs:                    knobs,
+			ExternalIODir:            sinkDir,
 		}})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -6188,7 +6196,6 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	tenant1Args := base.TestTenantArgs{
 		TenantID:     serverutils.TestTenantID(),
 		TestingKnobs: tenantKnobs,
-		Existing:     false,
 	}
 	tenant1Server, tenant1DB := serverutils.StartTenant(t, tc.Server(0), tenant1Args)
 	tenantRunner := sqlutils.MakeSQLRunner(tenant1DB)
@@ -6197,7 +6204,7 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	defer tenant1DB.Close()
 
 	tenant2Args := tenant1Args
-	tenant2Args.Existing = true
+	tenant2Args.DisableCreateTenant = true
 	_, db2 := serverutils.StartTenant(t, tc.Server(1), tenant2Args)
 	defer db2.Close()
 

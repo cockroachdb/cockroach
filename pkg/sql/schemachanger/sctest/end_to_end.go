@@ -50,7 +50,7 @@ type NewClusterFunc func(
 func SingleNodeCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, func()) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Disabled due to a failure in TestBackupRestore. Tracked with #76378.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			SQLDeclarativeSchemaChanger: knobs,
 			JobsTestingKnobs:            jobs.NewTestingKnobsWithShortIntervals(),

@@ -39,11 +39,11 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Fails with the default SQL server due to span limits. Tracked
+			// Fails with the default test tenant due to span limits. Tracked
 			// with #76378.
-			DisableDefaultSQLServer: true,
-			UseDatabase:             "rand",
-			ExternalIODir:           dir,
+			DisableDefaultTestTenant: true,
+			UseDatabase:              "rand",
+			ExternalIODir:            dir,
 		},
 	}
 	ctx := context.Background()
