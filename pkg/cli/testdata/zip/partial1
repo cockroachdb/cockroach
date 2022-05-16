@@ -9,6 +9,8 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [cluster] requesting data for debug/rangelog... received response... converting to JSON... writing binary output: debug/rangelog.json... done
 [cluster] requesting data for debug/settings... received response... converting to JSON... writing binary output: debug/settings.json... done
 [cluster] requesting data for debug/reports/problemranges... received response... converting to JSON... writing binary output: debug/reports/problemranges.json... done
+[cluster] retrieving list of system tables... done
+[cluster] 36 system tables found
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/crdb_internal.cluster_contention_events.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/crdb_internal.cluster_distsql_flows.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
@@ -18,14 +20,6 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [cluster] retrieving SQL data for crdb_internal.cluster_transactions... writing output: debug/crdb_internal.cluster_transactions.txt... done
 [cluster] retrieving SQL data for crdb_internal.default_privileges... writing output: debug/crdb_internal.default_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.jobs... writing output: debug/crdb_internal.jobs.txt... done
-[cluster] retrieving SQL data for system.jobs... writing output: debug/system.jobs.txt... done
-[cluster] retrieving SQL data for system.descriptor... writing output: debug/system.descriptor.txt... done
-[cluster] retrieving SQL data for system.namespace... writing output: debug/system.namespace.txt... done
-[cluster] retrieving SQL data for system.scheduled_jobs... writing output: debug/system.scheduled_jobs.txt... done
-[cluster] retrieving SQL data for system.settings... writing output: debug/system.settings.txt... done
-[cluster] retrieving SQL data for system.replication_stats... writing output: debug/system.replication_stats.txt... done
-[cluster] retrieving SQL data for system.replication_critical_localities... writing output: debug/system.replication_critical_localities.txt... done
-[cluster] retrieving SQL data for system.replication_constraint_stats... writing output: debug/system.replication_constraint_stats.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_statements... writing output: debug/crdb_internal.create_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_type_statements... writing output: debug/crdb_internal.create_type_statements.txt... done
 [cluster] retrieving SQL data for crdb_internal.kv_node_liveness... writing output: debug/crdb_internal.kv_node_liveness.txt... done
@@ -37,6 +31,34 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [cluster] retrieving SQL data for crdb_internal.zones... writing output: debug/crdb_internal.zones.txt... done
 [cluster] retrieving SQL data for crdb_internal.invalid_objects... writing output: debug/crdb_internal.invalid_objects.txt... done
 [cluster] retrieving SQL data for crdb_internal.index_usage_statistics... writing output: debug/crdb_internal.index_usage_statistics.txt... done
+[cluster] retrieving SQL data for crdb_internal.table_indexes... writing output: debug/crdb_internal.table_indexes.txt... done
+[cluster] retrieving SQL data for system.database_role_settings... writing output: debug/system.database_role_settings.txt... done
+[cluster] retrieving SQL data for system.descriptor... writing output: debug/system.descriptor.txt... done
+[cluster] retrieving SQL data for system.eventlog... writing output: debug/system.eventlog.txt... done
+[cluster] retrieving SQL data for system.jobs... writing output: debug/system.jobs.txt... done
+[cluster] retrieving SQL data for system.lease... writing output: debug/system.lease.txt... done
+[cluster] retrieving SQL data for system.locations... writing output: debug/system.locations.txt... done
+[cluster] retrieving SQL data for system.migrations... writing output: debug/system.migrations.txt... done
+[cluster] retrieving SQL data for system.namespace... writing output: debug/system.namespace.txt... done
+[cluster] retrieving SQL data for system.protected_ts_meta... writing output: debug/system.protected_ts_meta.txt... done
+[cluster] retrieving SQL data for system.protected_ts_records... writing output: debug/system.protected_ts_records.txt... done
+[cluster] retrieving SQL data for system.rangelog... writing output: debug/system.rangelog.txt... done
+[cluster] retrieving SQL data for system.replication_constraint_stats... writing output: debug/system.replication_constraint_stats.txt... done
+[cluster] retrieving SQL data for system.replication_critical_localities... writing output: debug/system.replication_critical_localities.txt... done
+[cluster] retrieving SQL data for system.replication_stats... writing output: debug/system.replication_stats.txt... done
+[cluster] retrieving SQL data for system.reports_meta... writing output: debug/system.reports_meta.txt... done
+[cluster] retrieving SQL data for system.role_members... writing output: debug/system.role_members.txt... done
+[cluster] retrieving SQL data for system.role_options... writing output: debug/system.role_options.txt... done
+[cluster] retrieving SQL data for system.scheduled_jobs... writing output: debug/system.scheduled_jobs.txt... done
+[cluster] retrieving SQL data for system.settings... writing output: debug/system.settings.txt... done
+[cluster] retrieving SQL data for system.span_configurations... writing output: debug/system.span_configurations.txt... done
+[cluster] retrieving SQL data for system.sql_instances... writing output: debug/system.sql_instances.txt... done
+[cluster] retrieving SQL data for system.sqlliveness... writing output: debug/system.sqlliveness.txt... done
+[cluster] retrieving SQL data for system.statement_diagnostics... writing output: debug/system.statement_diagnostics.txt... done
+[cluster] retrieving SQL data for system.statement_diagnostics_requests... writing output: debug/system.statement_diagnostics_requests.txt... done
+[cluster] retrieving SQL data for system.table_statistics... writing output: debug/system.table_statistics.txt... done
+[cluster] retrieving SQL data for system.tenant_usage... writing output: debug/system.tenant_usage.txt... done
+[cluster] retrieving SQL data for system.tenants... writing output: debug/system.tenants.txt... done
 [cluster] requesting nodes... received response... converting to JSON... writing binary output: debug/nodes.json... done
 [cluster] requesting liveness... received response... converting to JSON... writing binary output: debug/liveness.json... done
 [node 1] node status... converting to JSON... writing binary output: debug/nodes/1/status.json... done

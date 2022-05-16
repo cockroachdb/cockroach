@@ -79,7 +79,6 @@ table_name NOT IN (
 	'interleaved',
 	'lost_descriptors_with_data',
 	'table_columns',
-	'table_indexes',
 	'table_row_statistics',
 	'ranges',
 	'ranges_no_leases',
@@ -102,17 +101,6 @@ ORDER BY name ASC`)
 		assert.NoError(t, rows.Scan(&table))
 		tables = append(tables, table)
 	}
-	tables = append(
-		tables,
-		"system.jobs",
-		"system.descriptor",
-		"system.namespace",
-		"system.scheduled_jobs",
-		"system.replication_constraint_stats",
-		"system.replication_critical_localities",
-		"system.replication_stats",
-		"system.settings",
-	)
 	sort.Strings(tables)
 
 	var exp []string
