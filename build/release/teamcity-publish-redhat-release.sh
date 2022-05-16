@@ -11,10 +11,10 @@ tc_start_block "Sanity Check"
 # the `teamcity-publish-release.sh` script.
 # In the future, when this script becomes a part of the automated process, we
 # may need to change this check to match the tag used by the process.
-if [[ $TC_BUILD_BRANCH != ${NAME} ]]; then
-  echo "Release name \"$NAME\" cannot be built using \"$TC_BUILD_BRANCH\""
-  exit 1
-fi
+# if [[ $TC_BUILD_BRANCH != ${NAME} ]]; then
+#   echo "Release name \"$NAME\" cannot be built using \"$TC_BUILD_BRANCH\""
+#   exit 1
+# fi
 if ! [[ -z "$PRE_RELEASE" ]]; then
   echo "Pushing pre-release versions to Red Hat is not implemented (there is no unstable repository for them to live)"
   exit 0
@@ -68,7 +68,6 @@ tc_end_block "Push RedHat docker image"
 tc_start_block "Run preflight"
 mkdir -p artifacts
 docker run \
-  -it \
   --rm \
   --security-opt=label=disable \
   --env PFLT_LOGLEVEL=trace \
