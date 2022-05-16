@@ -240,15 +240,20 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 		streamEvent.Checkpoint = nil
 		return event
 	}
+	var event streamingccl.Event
 	if streamEvent.Batch != nil {
-		event := streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues[0])
-		streamEvent.Batch.KeyValues = streamEvent.Batch.KeyValues[1:]
-		if len(streamEvent.Batch.KeyValues) == 0 {
+		if len(streamEvent.Batch.Ssts) > 0 {
+			event = streamingccl.MakeSSTableEvent(streamEvent.Batch.Ssts[0])
+			streamEvent.Batch.Ssts = streamEvent.Batch.Ssts[1:]
+		} else if len(streamEvent.Batch.KeyValues) > 0 {
+			event = streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues[0])
+			streamEvent.Batch.KeyValues = streamEvent.Batch.KeyValues[1:]
+		}
+		if len(streamEvent.Batch.KeyValues) == 0 && len(streamEvent.Batch.Ssts) == 0 {
 			streamEvent.Batch = nil
 		}
-		return event
 	}
-	return nil
+	return event
 }
 
 // Subscribe implements the Subscription interface.
