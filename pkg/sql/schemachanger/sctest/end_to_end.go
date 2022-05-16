@@ -48,6 +48,8 @@ type NewClusterFunc func(
 // SingleNodeCluster is a NewClusterFunc.
 func SingleNodeCluster(t *testing.T, knobs *scrun.TestingKnobs) (*gosql.DB, func()) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disabled due to a failure in TestBackupRestore. Tracked with #76378.
+		DisableDefaultSQLServer: true,
 		Knobs: base.TestingKnobs{
 			SQLDeclarativeSchemaChanger: knobs,
 			JobsTestingKnobs:            jobs.NewTestingKnobsWithShortIntervals(),
