@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -115,7 +117,9 @@ var Factory ConnectorFactory = requiresCCLBinaryFactory{}
 type requiresCCLBinaryFactory struct{}
 
 func (requiresCCLBinaryFactory) NewConnector(_ ConnectorConfig, _ []string) (Connector, error) {
-	return nil, errors.Errorf(`tenant connector requires a CCL binary`)
+	return nil, pgerror.WithCandidateCode(
+		errors.New(`tenant connector requires a CCL binary`),
+		pgcode.CCLRequired)
 }
 
 // AddressResolver wraps a NodeDescStore interface in an adapter that allows it

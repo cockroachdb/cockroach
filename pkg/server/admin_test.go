@@ -135,7 +135,11 @@ func debugURL(s serverutils.TestServerInterface) string {
 func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	jI, err := getJSON(s, debugURL(s)+"vars")
@@ -156,7 +160,11 @@ func TestAdminDebugExpVar(t *testing.T) {
 func TestAdminDebugMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	jI, err := getJSON(s, debugURL(s)+"metrics")
@@ -177,7 +185,11 @@ func TestAdminDebugMetrics(t *testing.T) {
 func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	body, err := getText(s, debugURL(s)+"pprof/block?debug=1")
@@ -194,7 +206,11 @@ func TestAdminDebugPprof(t *testing.T) {
 func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	tc := []struct {
@@ -219,7 +235,11 @@ func TestAdminDebugAuth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
@@ -273,7 +293,11 @@ func TestAdminDebugAuth(t *testing.T) {
 func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
@@ -316,7 +340,11 @@ func TestAdminDebugRedirect(t *testing.T) {
 func TestAdminAPIDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
@@ -446,7 +474,11 @@ func TestAdminAPIDatabases(t *testing.T) {
 func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	const errPattern = "database.+does not exist"
@@ -458,7 +490,11 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	const fakedb = "system;DROP DATABASE system;"
@@ -606,7 +642,11 @@ select range_id, database_name, table_name, start_pretty, end_pretty from crdb_i
 func TestAdminAPITableDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	const fakename = "i_do_not_exist"
@@ -626,7 +666,11 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 func TestAdminAPITableSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails with
+		// it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	const fakeTable = "users;DROP DATABASE system;"
@@ -650,7 +694,11 @@ func TestAdminAPITableDetails(t *testing.T) {
 		{name: "upper", dbName: "TEST", tblName: `"TBL"`, pkName: "TBL_pkey"}, // Regression test for issue #14056
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+				// Disable the default SQL server for now as this tests fails
+				// with it enabled. Tracked with #81590.
+				DisableDefaultSQLServer: true,
+			})
 			defer s.Stopper().Stop(context.Background())
 			ts := s.(*TestServer)
 
@@ -816,7 +864,11 @@ func TestAdminAPITableDetails(t *testing.T) {
 func TestAdminAPIZoneDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
@@ -919,7 +971,11 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 func TestAdminAPIUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	// Create sample users.
@@ -956,7 +1012,11 @@ VALUES ('adminUser', 'abc'), ('bob', 'xyz')`
 func TestAdminAPIEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	setupQueries := []string{
@@ -1088,7 +1148,11 @@ func TestAdminAPISettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	// Any bool that defaults to true will work here.
@@ -1205,7 +1269,11 @@ func TestAdminAPISettings(t *testing.T) {
 func TestAdminAPIUIData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
@@ -1312,7 +1380,11 @@ func TestAdminAPIUIData(t *testing.T) {
 func TestAdminAPIUISeparateData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	// Make a setting for an admin user.
@@ -1351,7 +1423,11 @@ func TestAdminAPIUISeparateData(t *testing.T) {
 func TestClusterAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	testutils.RunTrueAndFalse(t, "reportingOn", func(t *testing.T, reportingOn bool) {
@@ -1401,7 +1477,11 @@ func TestHealthAPI(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
 
@@ -1490,7 +1570,11 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -1665,7 +1749,11 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -1809,7 +1897,11 @@ func TestAdminAPILocations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -1850,7 +1942,11 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -1884,7 +1980,11 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 func TestAdminAPIRangeLogByRangeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	rangeID := 654321
@@ -1950,6 +2050,9 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
+			// Disable the default SQL server for now as this tests fails
+			// with it enabled. Tracked with #81590.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableSplitQueue: true,
@@ -2283,7 +2386,11 @@ func TestStatsforSpanOnLocalMax(t *testing.T) {
 func TestEndpointTelemetryBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	// Check that calls over HTTP are recorded.
@@ -2382,7 +2489,10 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 		ServerArgs: base.TestServerArgs{
-			Insecure: true, // allows admin client without setting up certs
+			// Disable the default SQL server for now as this tests fails
+			// with it enabled. Tracked with #81590.
+			DisableDefaultSQLServer: true,
+			Insecure:                true, // allows admin client without setting up certs
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -2546,7 +2656,11 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -2626,6 +2740,9 @@ func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
 	stubDropUnusedDuration := time.Hour
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default SQL server for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DisableDefaultSQLServer: true,
 		Knobs: base.TestingKnobs{
 			UnusedIndexRecommendKnobs: &idxusage.UnusedIndexRecommendationTestingKnobs{
 				GetCreatedAt:   stubTime.getCreatedAt,
