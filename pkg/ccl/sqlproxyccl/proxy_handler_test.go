@@ -679,14 +679,12 @@ func TestDirectoryConnect(t *testing.T) {
 
 	// New proxy server using the directory. Define both the directory and the
 	// routing rule so that fallback to the routing rule can be tested.
-	const drainTimeout = 200 * time.Millisecond
 	opts := &ProxyOptions{
 		RoutingRule:   srv.ServingSQLAddr(),
 		DirectoryAddr: tdsAddr.String(),
 		Insecure:      true,
-		DrainTimeout:  drainTimeout,
 	}
-	proxy, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
+	_, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
 
 	t.Run("fallback when tenant not found", func(t *testing.T) {
 		url := fmt.Sprintf(
@@ -762,35 +760,6 @@ func TestDirectoryConnect(t *testing.T) {
 			require.NoError(t, runTestQuery(ctx, conn))
 			return true
 		}, 30*time.Second, 100*time.Millisecond)
-	})
-
-	t.Run("drain connection", func(t *testing.T) {
-		url := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable&options=--cluster=tenant-cluster-28", addr)
-		te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-			// The current connection count can take a bit of time to drop to 1,
-			// since the previous successful connection asynchronously closes.
-			// PGX cuts the connection on the client side, but it can take time
-			// for the proxy to get the notification and react.
-			require.Eventually(t, func() bool {
-				return proxy.metrics.CurConnCount.Value() == 1
-			}, 10*time.Second, 10*time.Millisecond)
-
-			// Connection should be forcefully terminated after the drain timeout,
-			// even though it's being continuously used.
-			require.Eventually(t, func() bool {
-				// Trigger drain of connections. Do this repeatedly inside the
-				// loop in order to avoid race conditions where the proxy is not
-				// yet hooked up to the directory server (and thus misses any
-				// one-time DRAIN notifications).
-				tds2.Drain()
-
-				// Run query until it fails (because connection was closed).
-				return runTestQuery(ctx, conn) != nil
-			}, 30*time.Second, 5*drainTimeout)
-
-			// Ensure failure was due to forced drain disconnection.
-			require.Equal(t, int64(1), proxy.metrics.IdleDisconnectCount.Count())
-		})
 	})
 }
 
