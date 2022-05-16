@@ -518,8 +518,16 @@ func evaluateCommand(
 			}
 			return s
 		}
+		var resp string
+		if reply.Size() > 1024 /* 1kb */ {
+			// Avoid printing the entire response before truncating.
+			header := reply.Header()
+			resp = trunc(header.String())
+		} else {
+			resp = trunc(reply.String())
+		}
 		log.VEventf(ctx, 2, "evaluated %s command %s, txn=%v : resp=%s, err=%v",
-			args.Method(), trunc(args.String()), h.Txn, trunc(reply.String()), err)
+			args.Method(), trunc(args.String()), h.Txn, resp, err)
 	}
 	return pd, err
 }
