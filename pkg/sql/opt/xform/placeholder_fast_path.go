@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
@@ -198,6 +199,9 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 		for j := range sel.Filters {
 			eq := sel.Filters[j].Condition.(*memo.EqExpr)
 			if v := eq.Left.(*memo.VariableExpr); v.Col == col {
+				if !verifyType(o.mem.Metadata(), col, eq.Right.DataType()) {
+					return nil, false, nil
+				}
 				span[i] = eq.Right
 				break
 			}
@@ -220,4 +224,13 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 	}
 
 	return placeholderScan, true, nil
+}
+
+// verifyType checks that the type of the index column col matches the
+// given type. We disallow mixed-type comparisons because it would result in
+// incorrect encodings (See #4313 and #81315).
+// TODO(rytaft): We may be able to use the placeholder fast path for
+// this case if we add logic similar to UnifyComparisonTypes.
+func verifyType(md *opt.Metadata, col opt.ColumnID, typ *types.T) bool {
+	return typ.Family() == types.UnknownFamily || md.ColumnMeta(col).Type.Equivalent(typ)
 }
