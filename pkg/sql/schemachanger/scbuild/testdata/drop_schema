@@ -1,48 +1,15 @@
-create-schema
-CREATE SCHEMA SC1
-----
-
-create-schema
-CREATE SCHEMA SC2
-----
-
-create-sequence
-CREATE SEQUENCE sc1.SQ1
-----
-
-create-table
-CREATE TABLE sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('sc1.sq1'))
-----
-
-create-view
-CREATE VIEW sc1.v1 AS (SELECT name FROM sc1.t1)
-----
-
-create-view
-CREATE VIEW sc1.v2 AS (SELECT name AS n1, name AS n2 FROM sc1.v1)
-----
-
-create-view
-CREATE VIEW sc1.v3 AS (SELECT name, n1 FROM sc1.v1, sc1.v2);
-----
-
-create-view
-CREATE VIEW sc1.v4 AS (SELECT n2, n1 FROM sc1.v2);
-----
-
-create-type
-CREATE TYPE sc1.typ AS ENUM('a')
-----
-
-create-view
-CREATE VIEW sc1.v5 AS (SELECT 'a'::sc1.typ::string AS k, n2, n1 from sc1.v4)
-----
-
-create-view
-CREATE VIEW sc2.v6 AS (SELECT 'a'::sc1.typ::string AS k, n2, n1 from sc1.v4)
-----
-
 setup
+CREATE SCHEMA SC1;
+CREATE SCHEMA SC2;
+CREATE SEQUENCE sc1.SQ1;
+CREATE TABLE sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('sc1.sq1'));
+CREATE VIEW sc1.v1 AS (SELECT name FROM sc1.t1);
+CREATE VIEW sc1.v2 AS (SELECT name AS n1, name AS n2 FROM sc1.v1);
+CREATE VIEW sc1.v3 AS (SELECT name, n1 FROM sc1.v1, sc1.v2);
+CREATE VIEW sc1.v4 AS (SELECT n2, n1 FROM sc1.v2);
+CREATE TYPE sc1.typ AS ENUM('a');
+CREATE VIEW sc1.v5 AS (SELECT 'a'::sc1.typ::string AS k, n2, n1 from sc1.v4);
+CREATE VIEW sc2.v6 AS (SELECT 'a'::sc1.typ::string AS k, n2, n1 from sc1.v4);
 COMMENT ON SCHEMA sc1 IS 'sc1 is good';
 COMMENT ON TABLE sc1.t1 IS 't1 is good';
 COMMENT ON COLUMN sc1.t1.id IS 'id is good';

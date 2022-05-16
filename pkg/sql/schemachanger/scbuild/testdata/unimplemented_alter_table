@@ -1,4 +1,4 @@
-create-table
+setup
 CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
 ----
 

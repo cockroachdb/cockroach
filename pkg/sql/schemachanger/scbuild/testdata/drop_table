@@ -1,25 +1,13 @@
-create-table
+setup
 CREATE TABLE defaultdb.customers (id INT PRIMARY KEY, email STRING UNIQUE);
-----
-
-create-table
 CREATE TABLE IF NOT EXISTS defaultdb.orders (
     id INT PRIMARY KEY,
     customer INT UNIQUE NOT NULL REFERENCES customers (id),
     orderTotal DECIMAL(9,2),
     INDEX (customer)
   );
-----
-
-create-sequence
 CREATE SEQUENCE defaultdb.SQ2;
-----
-
-create-type
-CREATE TYPE defaultdb.typ AS ENUM('a')
-----
-
-create-table
+CREATE TYPE defaultdb.typ AS ENUM('a');
 CREATE TABLE defaultdb.shipments (
     tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     carrier STRING,
@@ -30,17 +18,8 @@ CREATE TABLE defaultdb.shipments (
     CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES customers(id),
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES orders(customer)
   );
-----
-
-create-sequence
-CREATE SEQUENCE defaultdb.SQ1 OWNED BY defaultdb.shipments.carrier
-----
-
-create-view
+CREATE SEQUENCE defaultdb.SQ1 OWNED BY defaultdb.shipments.carrier;
 CREATE VIEW v1 as (select customer_id, carrier from defaultdb.shipments);
-----
-
-setup
 COMMENT ON TABLE defaultdb.shipments IS 'shipment is important';
 COMMENT ON COLUMN defaultdb.shipments.tracking_number IS 'tracking_number is good';
 COMMENT ON INDEX defaultdb.shipments@shipments_pkey IS 'pkey is good';

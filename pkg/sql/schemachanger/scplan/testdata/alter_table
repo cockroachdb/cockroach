@@ -1,9 +1,6 @@
-create-table
-CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
-----
-
-create-type
-CREATE TYPE defaultdb.footyp AS ENUM('a')
+setup
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY);
+CREATE TYPE defaultdb.footyp AS ENUM('a');
 ----
 
 ops
@@ -764,7 +761,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
       JobID: 1
 
 
-create-table
+setup
 CREATE TABLE defaultdb.bar (j INT);
 ----
 

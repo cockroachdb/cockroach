@@ -1,4 +1,4 @@
-create-table
+setup
 CREATE TABLE customer (
   id INT PRIMARY KEY,
   name STRING NOT NULL,
@@ -36,7 +36,7 @@ COMMENT ON DATABASE defaultdb IS NULL;
     comment: defaultdb real comment
     databaseId: 100
 
-create-schema
+setup
 CREATE SCHEMA test_schema;
 ----
 
