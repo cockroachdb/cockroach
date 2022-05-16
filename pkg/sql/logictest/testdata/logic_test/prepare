@@ -1393,3 +1393,30 @@ PREPARE q64765 as SELECT * FROM t64765 WHERE x = $1 AND y = $2
 
 statement ok
 EXECUTE q64765(1, 1)
+
+# Regression test for #81315.
+statement ok
+CREATE TABLE t81315 (a DECIMAL NOT NULL PRIMARY KEY, b INT);
+PREPARE q81315 AS SELECT * FROM t81315 WHERE a = $1::INT8;
+INSERT INTO t81315 VALUES (1, 100), (2, 200)
+
+query TI
+SELECT * FROM t81315 WHERE a = 1
+----
+1  100
+
+query TI
+EXECUTE q81315 (1)
+----
+1  100
+
+statement ok
+CREATE TABLE t81315_2 (
+  k INT PRIMARY KEY,
+  a INT
+);
+PREPARE q81315_2 AS SELECT * FROM t81315_2 WHERE k = $1;
+INSERT INTO t81315_2 VALUES (1, 1)
+
+statement error expected EXECUTE parameter expression to have type int
+EXECUTE q81315_2(1::DECIMAL)
