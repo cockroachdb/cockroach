@@ -107,8 +107,12 @@ func (c *tenantStreamingClusters) startStreamReplication(startTime string) (int,
 func createtenantStreamingClusters(
 	ctx context.Context, t *testing.T, args tenantStreamingClustersArgs,
 ) (*tenantStreamingClusters, func()) {
-	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{
-		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+	serverArgs := base.TestServerArgs{
+		// Test fails because it tries to set a cluster setting only accessible
+		// to system tenants. Tracked with #76378.
+		DisableDefaultSQLServer: true,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	}
 
 	startTestClusterWithTenant := func(
