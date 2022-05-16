@@ -230,6 +230,13 @@ func (q *byIDLookupContext) lookupUncommitted(id descpb.ID) (_ catalog.Descripto
 		return nil, nil
 	}
 	log.VEventf(q.ctx, 2, "found uncommitted descriptor %d", id)
+	// Hydrate any types in the descriptor if necessary.
+	if tableDesc, isTableDesc := ud.(catalog.TableDescriptor); isTableDesc {
+		ud, err = q.tc.hydrateTypesInTableDesc(q.ctx, q.txn, tableDesc)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if !q.flags.RequireMutable {
 		return ud, nil
 	}
