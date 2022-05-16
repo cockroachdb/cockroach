@@ -300,3 +300,30 @@ placeholder-fast-path
 SELECT * FROM xyz WHERE x = $1 AND y = $2
 ----
 no fast path
+
+# Regresssion test for #81315. Do not use the placeholder fast path
+# if the types do not match.
+exec-ddl
+CREATE TABLE t_dec (a DECIMAL NOT NULL PRIMARY KEY, b INT);
+----
+
+# TODO(rytaft): We may be able to use the placeholder fast path for
+# this case if we add logic similar to UnifyComparisonTypes.
+placeholder-fast-path
+SELECT * FROM t_dec WHERE a = $1::INT8;
+----
+no fast path
+
+placeholder-fast-path
+SELECT * FROM t_dec WHERE a = $1;
+----
+placeholder-scan t.public.t_dec
+ ├── columns: a:1(decimal!null) b:2(int)
+ ├── cardinality: [0 - 1]
+ ├── immutable, has-placeholder
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4]
+ ├── cost: 1
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ └── span
+      └── placeholder: $1 [type=decimal]
