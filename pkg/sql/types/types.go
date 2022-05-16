@@ -1729,6 +1729,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return "unknown"
 	case UuidFamily:
 		return "uuid"
+	case VoidFamily:
+		return "void"
 	case EnumFamily:
 		return t.TypeMeta.Name.Basename()
 	default:
