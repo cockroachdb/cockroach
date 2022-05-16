@@ -58,10 +58,15 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 
 	h, cleanup := streamingtest.NewReplicationHelper(t,
 		base.TestServerArgs{
+			// Need to disable the SQL server until tenant-level restore is
+			// supported. Tracked with #76378.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-		}, serverutils.TestTenantID())
+		},
+		serverutils.TestTenantID(),
+	)
 	defer cleanup()
 
 	ctx := context.Background()

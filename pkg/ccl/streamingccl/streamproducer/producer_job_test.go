@@ -102,6 +102,9 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	ctx := context.Background()
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			// Test fails with the SQL server defined. More investigation
+			// is required. Tracked with #76378.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

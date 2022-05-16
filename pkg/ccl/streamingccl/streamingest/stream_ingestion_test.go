@@ -116,7 +116,12 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	var receivedRevertRequest chan struct{}
 	var allowResponse chan struct{}
 	var revertRangeTargetTime hlc.Timestamp
-	params := base.TestClusterArgs{}
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Test hangs with SQL server. More investigation is required.
+			DisableDefaultSQLServer: true,
+		},
+	}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 			for _, req := range ba.Requests {
