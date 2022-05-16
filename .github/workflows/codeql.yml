@@ -55,6 +55,12 @@ jobs:
           echo go env GOPATH: $(go env GOPATH) 
           echo go env GOROOT: $(go env GOROOT) 
           echo cache: $(ls $RUNNER_TOOL_CACHE/go)
+          
+    # Limit GOGC as per LGTM: https://lgtm.com/projects/g/cockroachdb/cockroach/logs/languages/lang:go
+    - name: setup env
+      shell: bash
+      run: |
+        echo "GOGC=50" >> $GITHUB_ENV
     
     - name: Checkout repository
       uses: actions/checkout@v3
