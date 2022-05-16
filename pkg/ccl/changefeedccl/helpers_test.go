@@ -340,9 +340,12 @@ func startTestFullServer(
 		options.knobsFn(&knobs)
 	}
 	args := base.TestServerArgs{
-		Knobs:         knobs,
-		UseDatabase:   `d`,
-		ExternalIODir: options.externalIODir,
+		Knobs: knobs,
+		// This test suite is already probabilistically running with SQL
+		// servers. No need for the SQL server.
+		DisableDefaultSQLServer: true,
+		UseDatabase:             `d`,
+		ExternalIODir:           options.externalIODir,
 	}
 
 	if options.argsFn != nil {
@@ -517,7 +520,7 @@ func withKnobsFn(fn updateKnobsFn) feedTestOption {
 var _ = withKnobsFn(nil /* fn */)
 
 func newTestOptions() feedTestOptions {
-	// percentTenant is the percentange of tests that will be run against
+	// percentTenant is the percentage of tests that will be run against
 	// a SQL-node in a multi-tenant server. 1 for all tests to be run on a
 	// tenant.
 	const percentTenant = 1
