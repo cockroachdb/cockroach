@@ -300,7 +300,7 @@ func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
 }
 
 // ClearIterRange implements the Writer interface.
-func (fw *SSTWriter) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
+func (fw *SSTWriter) ClearIterRange(start, end roachpb.Key) error {
 	panic("ClearIterRange is unsupported")
 }
 

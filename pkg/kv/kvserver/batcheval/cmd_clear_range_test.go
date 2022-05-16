@@ -35,9 +35,9 @@ type wrappedBatch struct {
 	clearRangeCount int
 }
 
-func (wb *wrappedBatch) ClearIterRange(iter storage.MVCCIterator, start, end roachpb.Key) error {
+func (wb *wrappedBatch) ClearIterRange(start, end roachpb.Key) error {
 	wb.clearIterCount++
-	return wb.Batch.ClearIterRange(iter, start, end)
+	return wb.Batch.ClearIterRange(start, end)
 }
 
 func (wb *wrappedBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {

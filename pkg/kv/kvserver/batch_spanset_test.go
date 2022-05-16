@@ -78,9 +78,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 			t.Errorf("ClearRange: unexpected error %v", err)
 		}
 		{
-			iter := batch.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
-			err := batch.ClearIterRange(iter, outsideKey.Key, outsideKey2.Key)
-			iter.Close()
+			err := batch.ClearIterRange(outsideKey.Key, outsideKey2.Key)
 			if !isWriteSpanErr(err) {
 				t.Errorf("ClearIterRange: unexpected error %v", err)
 			}
@@ -101,9 +99,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 			t.Errorf("ClearRange: unexpected error %v", err)
 		}
 		{
-			iter := batch.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
-			err := batch.ClearIterRange(iter, insideKey2.Key, outsideKey4.Key)
-			iter.Close()
+			err := batch.ClearIterRange(outsideKey2.Key, outsideKey4.Key)
 			if !isWriteSpanErr(err) {
 				t.Errorf("ClearIterRange: unexpected error %v", err)
 			}
@@ -325,9 +321,7 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 			t.Errorf("Clear: unexpected error %v", err)
 		}
 		{
-			iter := batch.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
-			err := batch.ClearIterRange(iter, wkey.Key, wkey.Key)
-			iter.Close()
+			err := batch.ClearIterRange(wkey.Key, wkey.Key)
 			if !isWriteSpanErr(err) {
 				t.Errorf("ClearIterRange: unexpected error %v", err)
 			}

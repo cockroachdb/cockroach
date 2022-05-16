@@ -236,8 +236,12 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	if opts.Prefix {
 		iter = &p.prefixIter
 	}
+	handle := pebble.Reader(p.batch)
+	if !p.batch.Indexed() {
+		handle = p.db
+	}
 	if iter.inuse {
-		panic("iterator already in use")
+		return newPebbleIterator(handle, p.iter, opts, StandardDurability)
 	}
 	// Ensures no timestamp hints etc.
 	checkOptionsForIterReuse(opts)
@@ -245,11 +249,7 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	if iter.iter != nil {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
-		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, p.iterUnused, opts, StandardDurability)
-		} else {
-			iter.init(p.db, p.iter, p.iterUnused, opts, StandardDurability)
-		}
+		iter.init(handle, p.iter, p.iterUnused, opts, StandardDurability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -279,8 +279,12 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if opts.Prefix {
 		iter = &p.prefixEngineIter
 	}
+	handle := pebble.Reader(p.batch)
+	if !p.batch.Indexed() {
+		handle = p.db
+	}
 	if iter.inuse {
-		panic("iterator already in use")
+		return newPebbleIterator(handle, p.iter, opts, StandardDurability)
 	}
 	// Ensures no timestamp hints etc.
 	checkOptionsForIterReuse(opts)
@@ -288,11 +292,7 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.iter != nil {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
-		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, p.iterUnused, opts, StandardDurability)
-		} else {
-			iter.init(p.db, p.iter, p.iterUnused, opts, StandardDurability)
-		}
+		iter.init(handle, p.iter, p.iterUnused, opts, StandardDurability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -408,27 +408,24 @@ func (p *pebbleBatch) clearRange(start, end MVCCKey) error {
 	return p.batch.DeleteRange(p.buf, buf2, nil)
 }
 
-// Clear implements the Batch interface.
-func (p *pebbleBatch) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
-	// Note that this method has the side effect of modifying iter's bounds.
-	// Since all calls to `ClearIterRange` are on new throwaway iterators with no
-	// lower bounds, calling SetUpperBound should be sufficient and safe.
-	// Furthermore, the start and end keys are always metadata keys (i.e.
-	// have zero timestamps), so we can ignore the bounds' MVCC timestamps.
-	iter.SetUpperBound(end)
-	iter.SeekGE(MakeMVCCMetadataKey(start))
+// ClearIterRange implements the Batch interface.
+func (p *pebbleBatch) ClearIterRange(start, end roachpb.Key) error {
+	iter := p.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		LowerBound: start,
+		UpperBound: end,
+	})
+	defer iter.Close()
 
-	for ; ; iter.Next() {
-		valid, err := iter.Valid()
-		if err != nil {
+	for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
+		if valid, err := iter.Valid(); err != nil {
 			return err
 		} else if !valid {
 			break
 		}
+
 		// NB: UnsafeRawKey could be a serialized lock table key, and not just an
 		// MVCCKey.
-		err = p.batch.Delete(iter.UnsafeRawKey(), nil)
-		if err != nil {
+		if err := p.batch.Delete(iter.UnsafeRawKey(), nil); err != nil {
 			return err
 		}
 	}
