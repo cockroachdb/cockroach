@@ -197,9 +197,7 @@ query TTTTTB colnames,rowsort
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
-system         public       descriptor  admin    GRANT           true
 system         public       descriptor  admin    SELECT          true
-system         public       descriptor  root     GRANT           true
 system         public       descriptor  root     SELECT          true
 
 query TTBITTBB colnames

@@ -11,7 +11,7 @@ func _() {
 	_ = x[ALL-1]
 	_ = x[CREATE-2]
 	_ = x[DROP-3]
-	_ = x[GRANT-4]
+	_ = x[GRANT_DEPRECATED-4]
 	_ = x[SELECT-5]
 	_ = x[INSERT-6]
 	_ = x[DELETE-7]

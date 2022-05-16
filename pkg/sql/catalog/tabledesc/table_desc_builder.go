@@ -242,8 +242,7 @@ func maybeFillInDescriptor(
 		privilege.Table,
 		desc.GetName(),
 	)
-	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(desc.Privileges)
-	set(catalog.UpgradedPrivileges, fixedPrivileges || addedGrantOptions)
+	set(catalog.UpgradedPrivileges, fixedPrivileges)
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
 

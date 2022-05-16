@@ -36,14 +36,14 @@ test           public       enum_a+b   user1    USAGE           false
 test           schema_a     enum_b     admin    ALL             true
 test           schema_a     enum_b     public   USAGE           false
 test           schema_a     enum_b     root     ALL             true
-test           schema_a     enum_b     user1    ALL             true
+test           schema_a     enum_b     user1    ALL             false
 
 query TTTTTB colnames
 SHOW GRANTS ON TYPE schema_a.enum_b, enum_a, int4 FOR user1
 ----
 database_name  schema_name  type_name  grantee  privilege_type  is_grantable
 test           public       enum_a     user1    USAGE           false
-test           schema_a     enum_b     user1    ALL             true
+test           schema_a     enum_b     user1    ALL             false
 
 query TTTTT colnames
 SHOW GRANTS FOR user1
@@ -69,9 +69,9 @@ SHOW GRANTS ON TYPE other.typ
 other  public  typ  admin   ALL    true
 other  public  typ  public  USAGE  false
 other  public  typ  root    ALL    true
-other  public  typ  user1   ALL    true
+other  public  typ  user1   ALL    false
 
 query TTTTTB
 SHOW GRANTS ON TYPE other.typ FOR user1
 ----
-other  public  typ  user1  ALL  true
+other  public  typ  user1  ALL  false

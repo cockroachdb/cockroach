@@ -335,27 +335,6 @@ func (p *PrivilegeDescriptor) Revoke(
 	}
 }
 
-// GrantPrivilegeToGrantOptions adjusts a user's grant option bits based on whether the GRANT or ALL
-// privilege was just granted or revoked. If GRANT/ALL was just granted, the user should obtain grant
-// options for each privilege it currently has. If GRANT/ALL was just revoked, the user should lose
-// grant options for each privilege it has
-// TODO(jackcwu): delete this function once the GRANT privilege is finally removed
-func (p *PrivilegeDescriptor) GrantPrivilegeToGrantOptions(
-	user username.SQLUsername, isGrant bool,
-) {
-	if isGrant {
-		userPriv := p.FindOrCreateUser(user)
-		userPriv.WithGrantOption = userPriv.Privileges
-	} else {
-		userPriv, ok := p.FindUser(user)
-		if !ok || userPriv.Privileges == 0 {
-			// Removing privileges from a user without privileges is a no-op.
-			return
-		}
-		userPriv.WithGrantOption = 0
-	}
-}
-
 // ValidateSuperuserPrivileges ensures that superusers have exactly the maximum
 // allowed privilege set for the object.
 // It requires the ID of the descriptor it is applied on to determine whether

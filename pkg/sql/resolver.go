@@ -261,20 +261,11 @@ func (p *planner) HasAnyPrivilege(
 		}
 
 		if priv.GrantOption {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-				if err := p.CheckPrivilegeForUser(ctx, desc, privilege.GRANT, user); err != nil {
-					if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
-						continue
-					}
-					return eval.HasNoPrivilege, err
+			if err := p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, user, true /* isGrant */); err != nil {
+				if pgerror.GetPGCode(err) == pgcode.WarningPrivilegeNotGranted {
+					continue
 				}
-			} else {
-				if err := p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, user, true /* isGrant */); err != nil {
-					if pgerror.GetPGCode(err) == pgcode.WarningPrivilegeNotGranted {
-						continue
-					}
-					return eval.HasNoPrivilege, err
-				}
+				return eval.HasNoPrivilege, err
 			}
 		}
 		return eval.HasPrivilege, nil

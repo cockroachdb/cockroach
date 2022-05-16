@@ -31,18 +31,20 @@ type Kind uint32
 // Do not change values of privileges. These correspond to the position
 // of the privilege in a bit field and are expected to stay constant.
 const (
-	ALL        Kind = 1
-	CREATE     Kind = 2
-	DROP       Kind = 3
-	GRANT      Kind = 4
-	SELECT     Kind = 5
-	INSERT     Kind = 6
-	DELETE     Kind = 7
-	UPDATE     Kind = 8
-	USAGE      Kind = 9
-	ZONECONFIG Kind = 10
-	CONNECT    Kind = 11
-	RULE       Kind = 12
+	ALL    Kind = 1
+	CREATE Kind = 2
+	DROP   Kind = 3
+	SELECT Kind = 5
+	// GRANT_DEPRECATED is a placeholder to make sure that 4 is not reused.
+	// It was previously used for the GRANT privilege that is now represented by the more granular Privilege.GrantOption.
+	GRANT_DEPRECATED Kind = 4
+	INSERT           Kind = 6
+	DELETE           Kind = 7
+	UPDATE           Kind = 8
+	USAGE            Kind = 9
+	ZONECONFIG       Kind = 10
+	CONNECT          Kind = 11
+	RULE             Kind = 12
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
@@ -52,7 +54,7 @@ type Privilege struct {
 	// Each privilege Kind has an optional "grant option" flag associated with
 	// it. A role can only grant a privilege on an object to others if it is the
 	// owner of the object or if it itself holds that privilege WITH GRANT OPTION
-	// on the object. This replaces the CockroachDB-specific GRANT privilege.
+	// on the object. This replaced the CockroachDB-specific GRANT privilege.
 	GrantOption bool
 }
 
@@ -74,13 +76,13 @@ const (
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges    = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
-	ReadData         = List{GRANT, SELECT}
-	ReadWriteData    = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
-	DBPrivileges     = List{ALL, CONNECT, CREATE, DROP, GRANT, ZONECONFIG}
-	TablePrivileges  = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
-	SchemaPrivileges = List{ALL, GRANT, CREATE, USAGE}
-	TypePrivileges   = List{ALL, GRANT, USAGE}
+	AllPrivileges    = List{ALL, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
+	ReadData         = List{SELECT}
+	ReadWriteData    = List{SELECT, INSERT, DELETE, UPDATE}
+	DBPrivileges     = List{ALL, CONNECT, CREATE, DROP, ZONECONFIG}
+	TablePrivileges  = List{ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	SchemaPrivileges = List{ALL, CREATE, USAGE}
+	TypePrivileges   = List{ALL, USAGE}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -95,7 +97,7 @@ func (k Kind) IsSetIn(bits uint32) bool {
 
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
-	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE,
+	ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE,
 }
 
 // ByName is a map of string -> kind value.
@@ -104,7 +106,6 @@ var ByName = map[string]Kind{
 	"CONNECT":    CONNECT,
 	"CREATE":     CREATE,
 	"DROP":       DROP,
-	"GRANT":      GRANT,
 	"SELECT":     SELECT,
 	"INSERT":     INSERT,
 	"DELETE":     DELETE,

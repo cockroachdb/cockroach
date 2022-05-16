@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -126,12 +124,6 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 
-	if n.withGrantOption && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to use grant options",
-			clusterversion.ByKey(clusterversion.ValidateGrantOption))
-	}
-
 	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
 		return err
 	}
@@ -169,79 +161,33 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	// we update them in KV below.
 	b := p.txn.NewBatch()
 	for _, descriptor := range descriptors {
-		// Disallow privilege changes on system objects. For more context, see #43842.
-		op := "REVOKE"
-		if n.isGrant {
-			op = "GRANT"
-		}
+
 		if catalog.IsSystemDescriptor(descriptor) {
+			// Disallow privilege changes on system objects. For more context, see #43842.
+			op := "REVOKE"
+			if n.isGrant {
+				op = "GRANT"
+			}
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "cannot %s on system object", op)
 		}
 
-		// The check for GRANT is only needed before the v22.1 upgrade is finalized.
-		// Otherwise, we check grant options later in this function.
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-			if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
-				return err
-			}
-		}
-
 		if len(n.desiredprivs) > 0 {
-			grantPresent, allPresent := false, false
 			for _, priv := range n.desiredprivs {
 				// Only allow granting/revoking privileges that the requesting
 				// user themselves have on the descriptor.
 				if err := p.CheckPrivilege(ctx, descriptor, priv); err != nil {
 					return err
 				}
-				grantPresent = grantPresent || priv == privilege.GRANT
-				allPresent = allPresent || priv == privilege.ALL
 			}
+
+			err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, p.User(), n.isGrant)
+			if err != nil {
+				return err
+			}
+
 			privileges := descriptor.GetPrivileges()
-
-			noticeMessage := ""
-			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-				err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, p.User(), n.isGrant)
-				if err != nil {
-					return err
-				}
-
-				// We only output the message for ALL privilege if it is being granted
-				// without the WITH GRANT OPTION flag if GRANT privilege is involved, we
-				// must always output the message
-				if allPresent && n.isGrant && !n.withGrantOption {
-					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
-				} else if grantPresent {
-					noticeMessage = "the GRANT privilege is deprecated"
-				}
-			}
-
 			for _, grantee := range n.grantees {
 				n.changePrivilege(privileges, n.desiredprivs, grantee)
-
-				// TODO (sql-exp): remove the rest of this loop in 22.2.
-				granteeHasGrantPriv := privileges.CheckPrivilege(grantee, privilege.GRANT)
-
-				if granteeHasGrantPriv && n.isGrant && !n.withGrantOption && len(noticeMessage) == 0 {
-					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
-				}
-				if !n.withGrantOption && (grantPresent || allPresent || (granteeHasGrantPriv && n.isGrant)) {
-					if n.isGrant {
-						privileges.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
-					} else {
-						privileges.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
-					}
-				}
-			}
-
-			if len(noticeMessage) > 0 {
-				params.p.BufferClientNotice(
-					ctx,
-					errors.WithHint(
-						pgnotice.Newf("%s", noticeMessage),
-						"please use WITH GRANT OPTION",
-					),
-				)
 			}
 
 			// Ensure superusers have exactly the allowed privilege set.

@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -91,12 +89,6 @@ func (p *planner) alterDefaultPrivileges(
 }
 
 func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
-	if (n.n.Grant.WithGrantOption || n.n.Revoke.GrantOptionFor) &&
-		!params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.ValidateGrantOption) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to use grant options",
-			clusterversion.ByKey(clusterversion.ValidateGrantOption))
-	}
 	targetRoles, err := decodeusername.FromRoleSpecList(
 		params.SessionData(), username.PurposeValidation, n.n.Roles,
 	)
@@ -206,39 +198,14 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 			return err
 		}
 
-		grantPresent, allPresent := false, false
-		for _, priv := range privileges {
-			grantPresent = grantPresent || priv == privilege.GRANT
-			allPresent = allPresent || priv == privilege.ALL
-		}
-		if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.ValidateGrantOption) {
-			noticeMessage := ""
-			// we only output the message for ALL privilege if it is being granted without the WITH GRANT OPTION flag
-			// if GRANT privilege is involved, we must always output the message
-			if allPresent && n.n.IsGrant && !grantOption {
-				noticeMessage = "grant options were automatically applied but this behavior is deprecated"
-			} else if grantPresent {
-				noticeMessage = "the GRANT privilege is deprecated"
-			}
-			if len(noticeMessage) > 0 {
-				params.p.BufferClientNotice(
-					params.ctx,
-					errors.WithHint(
-						pgnotice.Newf("%s", noticeMessage),
-						"please use WITH GRANT OPTION",
-					),
-				)
-			}
-		}
-
 		for _, role := range roles {
 			if n.n.IsGrant {
 				defaultPrivs.GrantDefaultPrivileges(
-					role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+					role, privileges, granteeSQLUsernames, objectType, grantOption,
 				)
 			} else {
 				defaultPrivs.RevokeDefaultPrivileges(
-					role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+					role, privileges, granteeSQLUsernames, objectType, grantOption,
 				)
 			}
 
@@ -310,40 +277,14 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 		return err
 	}
 
-	grantPresent, allPresent := false, false
-	for _, priv := range privileges {
-		grantPresent = grantPresent || priv == privilege.GRANT
-		allPresent = allPresent || priv == privilege.ALL
-	}
-	if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.ValidateGrantOption) {
-		noticeMessage := ""
-		// we only output the message for ALL privilege if it is being granted without the WITH GRANT OPTION flag
-		// if GRANT privilege is involved, we must always output the message
-		if allPresent && n.n.IsGrant && !grantOption {
-			noticeMessage = "grant options were automatically applied but this behavior is deprecated"
-		} else if grantPresent {
-			noticeMessage = "the GRANT privilege is deprecated"
-		}
-
-		if len(noticeMessage) > 0 {
-			params.p.BufferClientNotice(
-				params.ctx,
-				errors.WithHint(
-					pgnotice.Newf("%s", noticeMessage),
-					"please use WITH GRANT OPTION",
-				),
-			)
-		}
-	}
-
 	for _, role := range roles {
 		if n.n.IsGrant {
 			defaultPrivs.GrantDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+				role, privileges, granteeSQLUsernames, objectType, grantOption,
 			)
 		} else {
 			defaultPrivs.RevokeDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+				role, privileges, granteeSQLUsernames, objectType, grantOption,
 			)
 		}
 
