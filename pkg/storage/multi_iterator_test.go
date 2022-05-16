@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMultiIterator(t *testing.T) {
@@ -125,13 +126,9 @@ func populateBatch(t *testing.T, batch Batch, input string) {
 		}
 		i += 2
 		if ts.IsEmpty() {
-			if err := batch.PutUnversioned(k, v); err != nil {
-				t.Fatalf("%+v", err)
-			}
+			require.NoError(t, batch.PutUnversioned(k, v))
 		} else {
-			if err := batch.PutRawMVCC(MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
-				t.Fatalf("%+v", err)
-			}
+			require.NoError(t, batch.PutRawMVCC(MVCCKey{Key: k, Timestamp: ts}, v))
 		}
 	}
 }
@@ -148,9 +145,7 @@ func iterateSimpleMultiIter(t *testing.T, it SimpleMVCCIterator, subtest iterSub
 	var output bytes.Buffer
 	for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; subtest.fn(it) {
 		ok, err := it.Valid()
-		if err != nil {
-			t.Fatalf("unexpected error: %+v", err)
-		}
+		require.NoError(t, err)
 		if !ok {
 			break
 		}
@@ -164,7 +159,5 @@ func iterateSimpleMultiIter(t *testing.T, it SimpleMVCCIterator, subtest iterSub
 			}
 		}
 	}
-	if actual := output.String(); actual != subtest.expected {
-		t.Errorf("got %q expected %q", actual, subtest.expected)
-	}
+	require.Equal(t, subtest.expected, output.String())
 }

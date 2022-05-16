@@ -405,7 +405,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 	entry := sst.entry
 	iter := sst.iter
-
 	defer sst.cleanup()
 
 	writeAtBatchTS := restoreAtNow.Get(&evalCtx.Settings.SV)
