@@ -476,6 +476,19 @@ func (sp *Span) GetLazyTag(key string) (interface{}, bool) {
 	return sp.i.GetLazyTag(key)
 }
 
+// EventListener is an object that can be registered to listen for Structured
+// events recorded by the span and its children.
+type EventListener interface {
+	// Notify is invoked on every Structured event recorded by the span and its
+	// children, recursively.
+	//
+	// Note that this method should not run for a long time as it will hold up the
+	// span recording Structured events during traced operations.
+	//
+	// Notify will not be called concurrently on the same span.
+	Notify(event Structured)
+}
+
 // TraceID retrieves a span's trace ID.
 func (sp *Span) TraceID() tracingpb.TraceID {
 	if sp.detectUseAfterFinish() {
@@ -546,6 +559,7 @@ func (sp *Span) reset(
 	goroutineID uint64,
 	startTime time.Time,
 	logTags *logtags.Buffer,
+	eventListeners []EventListener,
 	kind oteltrace.SpanKind,
 	otelSpan oteltrace.Span,
 	netTr trace.Trace,
@@ -625,6 +639,9 @@ func (sp *Span) reset(
 		if c.mu.recording.logs.Len() != 0 {
 			panic("unexpected logs in span being reset")
 		}
+		if len(c.mu.eventListeners) != 0 {
+			panic(fmt.Sprintf("unexpected event listeners in span being reset: %v", c.mu.eventListeners))
+		}
 
 		h := sp.helper
 		c.mu.crdbSpanMu = crdbSpanMu{
@@ -635,7 +652,8 @@ func (sp *Span) reset(
 				logs:       makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */),
 				structured: makeSizeLimitedBuffer(maxStructuredBytesPerSpan, h.structuredEventsAlloc[:]),
 			},
-			tags: h.tagsAlloc[:0],
+			tags:           h.tagsAlloc[:0],
+			eventListeners: eventListeners,
 		}
 
 		if kind != oteltrace.SpanKindUnspecified {
