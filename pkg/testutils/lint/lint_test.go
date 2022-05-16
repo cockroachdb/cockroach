@@ -194,6 +194,15 @@ func TestLint(t *testing.T) {
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 `)
 
+		apacheHeader := regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 \(the "License"\);
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+`)
+
 		// These extensions identify source files that should have copyright headers.
 		extensions := []string{
 			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.styl", "*.proto", "*.rl",
@@ -219,14 +228,6 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`geo/geographiclib/geodesic\.c$`),
 			stream.GrepNot(`geo/geographiclib/geodesic\.h$`),
 		), func(filename string) {
-			isCCL := strings.Contains(filename, "ccl/")
-			var expHeader *regexp.Regexp
-			if isCCL {
-				expHeader = cclHeader
-			} else {
-				expHeader = bslHeader
-			}
-
 			file, err := os.Open(filepath.Join(pkgDir, filename))
 			if err != nil {
 				t.Error(err)
@@ -240,8 +241,15 @@ func TestLint(t *testing.T) {
 			}
 			data = data[0:n]
 
-			if expHeader.Find(data) == nil {
-				t.Errorf("did not find expected license header (ccl=%v) in %s", isCCL, filename)
+			isCCL := strings.Contains(filename, "ccl/")
+			if isCCL {
+				if cclHeader.Find(data) == nil {
+					t.Errorf("did not find expected license header (ccl=%t) in %s", isCCL, filename)
+				}
+			} else {
+				if bslHeader.Find(data) == nil && apacheHeader.Find(data) == nil {
+					t.Errorf("did not find expected license header (ccl=%t) in %s", isCCL, filename)
+				}
 			}
 		}); err != nil {
 			t.Fatal(err)
@@ -1664,6 +1672,10 @@ func TestLint(t *testing.T) {
 				stream.GrepNot("pkg/sql/oidext/oidext.go.*don't use underscores in Go names; const T_"),
 				stream.GrepNot("server/api_v2.go.*package comment should be of the form"),
 				stream.GrepNot("pkg/util/timeutil/time_zone_util.go.*error strings should not be capitalized or end with punctuation or a newline"),
+
+				// The Observability Service doesn't want this blunt rule.
+				stream.GrepNot("pkg/obsservice.*error strings should not be capitalized or end with punctuation or a newline"),
+
 				stream.GrepNot("pkg/sql/job_exec_context_test_util.go.*exported method ExtendedEvalContext returns unexported type"),
 				stream.GrepNot("pkg/sql/job_exec_context_test_util.go.*exported method SessionDataMutatorIterator returns unexported type"),
 
