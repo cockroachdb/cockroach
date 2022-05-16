@@ -149,8 +149,8 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 			tc := testcluster.StartTestCluster(b, 1, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					// Requires span_configuration table which is not visible
-					// from the default SQL server.
-					DisableDefaultSQLServer: true,
+					// from secondary tenants.
+					DisableDefaultTestTenant: true,
 				},
 			})
 			defer tc.Stopper().Stop(ctx)
@@ -191,8 +191,8 @@ func TestKVAccessorPagination(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Requires span_configuration table which is not visible
-			// from the default SQL server.
-			DisableDefaultSQLServer: true,
+			// from secondary tenants.
+			DisableDefaultTestTenant: true,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)

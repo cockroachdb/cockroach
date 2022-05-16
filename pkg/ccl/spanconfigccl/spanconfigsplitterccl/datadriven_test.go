@@ -69,7 +69,7 @@ func TestDataDriven(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				// Fails with nil pointer dereference. Tracked with #76378.
-				DisableDefaultSQLServer: true,
+				DisableDefaultTestTenant: true,
 				Knobs: base.TestingKnobs{
 					SpanConfig: scKnobs,
 				},
