@@ -25,15 +25,29 @@ import (
 )
 
 // hydrateTypesInTableDesc installs user defined type metadata in all types.T
+//// present in the input TableDescriptor. See hydrateTypesInTableDescWitOptions.
+func (tc *Collection) hydrateTypesInTableDesc(
+	ctx context.Context, txn *kv.Txn, desc catalog.TableDescriptor,
+) (catalog.TableDescriptor, error) {
+	return tc.hydrateTypesInTableDescWitOptions(ctx,
+		txn,
+		desc,
+		false, /* includeOffline */
+		false /*avoidLeased*/)
+}
+
+// hydrateTypesInTableDescWitOptions installs user defined type metadata in all types.T
 // present in the input TableDescriptor. It always returns the same type of
 // TableDescriptor that was passed in. It ensures that ImmutableTableDescriptors
 // are not modified during the process of metadata installation. Dropped tables
-// do not get hydrated.
-//
-// TODO(ajwerner): This should accept flags to indicate whether we can resolve
-// offline descriptors.
-func (tc *Collection) hydrateTypesInTableDesc(
-	ctx context.Context, txn *kv.Txn, desc catalog.TableDescriptor,
+// do not get hydrated. Optionally, when hydrating types we can include offline
+// descriptors and avoid leasing depending on the context.
+func (tc *Collection) hydrateTypesInTableDescWitOptions(
+	ctx context.Context,
+	txn *kv.Txn,
+	desc catalog.TableDescriptor,
+	includeOffline bool,
+	avoidLeased bool,
 ) (catalog.TableDescriptor, error) {
 	if desc.Dropped() {
 		return desc, nil
@@ -79,17 +93,34 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		getType := typedesc.TypeLookupFunc(func(
 			ctx context.Context, id descpb.ID,
 		) (tree.TypeName, catalog.TypeDescriptor, error) {
-			desc, err := tc.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
+			desc, err := tc.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:       true,
+					AvoidSynthetic: true,
+					IncludeOffline: includeOffline,
+					AvoidLeased:    avoidLeased,
+				},
+			})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
 			_, dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(),
-				tree.DatabaseLookupFlags{Required: true})
+				tree.DatabaseLookupFlags{
+					Required:       true,
+					AvoidSynthetic: true,
+					IncludeOffline: includeOffline,
+					AvoidLeased:    avoidLeased,
+				})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
 			sc, err := tc.GetImmutableSchemaByID(
-				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
+				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{
+					Required:       true,
+					AvoidSynthetic: true,
+					IncludeOffline: includeOffline,
+					AvoidLeased:    avoidLeased,
+				})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
