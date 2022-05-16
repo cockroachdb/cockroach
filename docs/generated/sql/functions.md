@@ -378,6 +378,8 @@
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><a name="crypt"></a><code>crypt(password: <a href="string.html">string</a>, salt: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a hash based on a password and salt. The hash algorithm and number of rounds if applicable are encoded in the salt.</p>
+</span></td></tr>
 <tr><td><a name="digest"></a><code>digest(data: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Computes a binary hash of the given <code>data</code>. <code>type</code> is the algorithm to use (md5, sha1, sha224, sha256, sha384, or sha512).</p>
 </span></td></tr>
 <tr><td><a name="digest"></a><code>digest(data: <a href="string.html">string</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Computes a binary hash of the given <code>data</code>. <code>type</code> is the algorithm to use (md5, sha1, sha224, sha256, sha384, or sha512).</p>
