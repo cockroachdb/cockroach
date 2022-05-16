@@ -1,0 +1,256 @@
+define
+locks
+meta k=a ts=10 txn=1
+meta k=b ts=15 txn=2
+meta k=b ts=25 txn=3
+meta k=b ts=20 txn=4
+meta k=c ts=30 txn=5
+mvcc
+value k=a ts=10 v=a10
+value k=b ts=25 v=b25
+value k=b ts=20 v=b20
+value k=b ts=15 v=b15
+value k=c ts=30 v=c30
+----
+
+iter lower=a upper=d
+seek-ge k=a
+next
+next
+next
+next
+next
+next
+next
+next
+seek-lt k=d
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+----
+seek-ge "a"/0,0: output: meta k=a ts=10.000000000,0 txn=1
+next: output: value k=a ts=10.000000000,0 v=a10
+next: output: meta k=b ts=25.000000000,0 txn=3
+next: output: value k=b ts=25.000000000,0 v=b25
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: value k=b ts=15.000000000,0 v=b15
+next: output: meta k=c ts=30.000000000,0 txn=5
+next: output: value k=c ts=30.000000000,0 v=c30
+next: output: .
+seek-lt "d"/0,0: output: value k=c ts=30.000000000,0 v=c30
+prev: output: meta k=c ts=30.000000000,0 txn=5
+prev: output: value k=b ts=15.000000000,0 v=b15
+prev: output: value k=b ts=20.000000000,0 v=b20
+prev: output: value k=b ts=25.000000000,0 v=b25
+prev: output: meta k=b ts=25.000000000,0 txn=3
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: meta k=a ts=10.000000000,0 txn=1
+prev: output: .
+
+iter lower=a upper=d
+seek-ge k=b
+next
+next
+next
+prev
+prev
+prev
+prev
+prev
+prev
+seek-ge k=b
+next-key
+prev
+prev
+prev
+prev
+prev
+prev
+prev
+seek-lt k=b ts=25
+seek-lt k=b ts=24
+next
+next
+next
+seek-lt k=b ts=24
+prev
+next
+next
+next
+next
+next
+----
+seek-ge "b"/0,0: output: meta k=b ts=25.000000000,0 txn=3
+next: output: value k=b ts=25.000000000,0 v=b25
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: value k=b ts=15.000000000,0 v=b15
+prev: output: value k=b ts=20.000000000,0 v=b20
+prev: output: value k=b ts=25.000000000,0 v=b25
+prev: output: meta k=b ts=25.000000000,0 txn=3
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: meta k=a ts=10.000000000,0 txn=1
+prev: output: .
+seek-ge "b"/0,0: output: meta k=b ts=25.000000000,0 txn=3
+next-key: output: meta k=c ts=30.000000000,0 txn=5
+prev: output: value k=b ts=15.000000000,0 v=b15
+prev: output: value k=b ts=20.000000000,0 v=b20
+prev: output: value k=b ts=25.000000000,0 v=b25
+prev: output: meta k=b ts=25.000000000,0 txn=3
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: meta k=a ts=10.000000000,0 txn=1
+prev: output: .
+seek-lt "b"/25.000000000,0: output: err: SeekLT cannot be used to skip the latest version and land on intent
+seek-lt "b"/24.000000000,0: output: value k=b ts=25.000000000,0 v=b25
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: value k=b ts=15.000000000,0 v=b15
+next: output: meta k=c ts=30.000000000,0 txn=5
+seek-lt "b"/24.000000000,0: output: value k=b ts=25.000000000,0 v=b25
+prev: output: meta k=b ts=25.000000000,0 txn=3
+next: output: value k=b ts=25.000000000,0 v=b25
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: value k=b ts=15.000000000,0 v=b15
+next: output: meta k=c ts=30.000000000,0 txn=5
+next: output: value k=c ts=30.000000000,0 v=c30
+
+# Intents for b are simple-committed since there is a more recent version with
+# no intent.
+define
+locks
+meta k=a ts=10 txn=1
+meta k=b ts=15 txn=2
+meta k=b ts=20 txn=4
+meta k=c ts=30 txn=5
+mvcc
+value k=a ts=10 v=a10
+value k=b ts=25 v=b25
+value k=b ts=20 v=b20
+value k=b ts=15 v=b15
+value k=c ts=30 v=c30
+----
+
+iter lower=a upper=d
+seek-ge k=a
+next
+next
+next
+next
+next
+prev
+prev
+prev
+prev
+prev
+prev
+----
+seek-ge "a"/0,0: output: meta k=a ts=10.000000000,0 txn=1
+next: output: value k=a ts=10.000000000,0 v=a10
+next: output: value k=b ts=25.000000000,0 v=b25
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: value k=b ts=15.000000000,0 v=b15
+next: output: meta k=c ts=30.000000000,0 txn=5
+prev: output: value k=b ts=15.000000000,0 v=b15
+prev: output: value k=b ts=20.000000000,0 v=b20
+prev: output: value k=b ts=25.000000000,0 v=b25
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: meta k=a ts=10.000000000,0 txn=1
+prev: output: .
+
+# Test that if intents vanish we are able to change direction correctly.
+iter lower=a upper=d
+seek-ge k=a
+next
+next
+prev
+prev
+prev
+seek-lt k=b ts=24
+prev
+next
+next
+next
+next
+next
+----
+seek-ge "a"/0,0: output: meta k=a ts=10.000000000,0 txn=1
+next: output: value k=a ts=10.000000000,0 v=a10
+next: output: value k=b ts=25.000000000,0 v=b25
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: meta k=a ts=10.000000000,0 txn=1
+prev: output: .
+seek-lt "b"/24.000000000,0: output: value k=b ts=25.000000000,0 v=b25
+prev: output: value k=a ts=10.000000000,0 v=a10
+next: output: value k=b ts=25.000000000,0 v=b25
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: value k=b ts=15.000000000,0 v=b15
+next: output: meta k=c ts=30.000000000,0 txn=5
+next: output: value k=c ts=30.000000000,0 v=c30
+
+# Test with commitMap
+iter lower=a upper=d commit-map=1,5
+seek-ge k=a
+next
+next
+next
+next
+next
+prev
+prev
+prev
+prev
+prev
+prev
+----
+seek-ge "a"/0,0: output: value k=a ts=10.000000000,0 v=a10
+next: output: value k=b ts=25.000000000,0 v=b25
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: value k=b ts=15.000000000,0 v=b15
+next: output: value k=c ts=30.000000000,0 v=c30
+next: output: .
+prev: output: value k=c ts=30.000000000,0 v=c30
+prev: output: value k=b ts=15.000000000,0 v=b15
+prev: output: value k=b ts=20.000000000,0 v=b20
+prev: output: value k=b ts=25.000000000,0 v=b25
+prev: output: value k=a ts=10.000000000,0 v=a10
+prev: output: .
+
+define
+locks
+meta k=a ts=10 txn=1
+meta k=b ts=15 txn=2
+meta k=b ts=20 txn=4
+meta k=c ts=30 txn=5
+mvcc
+value k=a ts=10 v=a10
+value k=b ts=20 v=b20
+value k=b ts=15 v=b15
+value k=c ts=30 v=c30
+----
+
+# Latest intent for b is simple-committed because of commit-map and older
+# intent for is simple-committed because of being non-youngest version.
+# Intents for a and c are also simple-committed because of commit-map.
+iter lower=a upper=d commit-map=1,4,5
+seek-ge k=a
+next
+next
+next
+next
+prev
+prev
+prev
+prev
+----
+seek-ge "a"/0,0: output: value k=a ts=10.000000000,0 v=a10
+next: output: value k=b ts=20.000000000,0 v=b20
+next: output: value k=b ts=15.000000000,0 v=b15
+next: output: value k=c ts=30.000000000,0 v=c30
+next: output: .
+prev: output: value k=c ts=30.000000000,0 v=c30
+prev: output: value k=b ts=15.000000000,0 v=b15
+prev: output: value k=b ts=20.000000000,0 v=b20
+prev: output: value k=a ts=10.000000000,0 v=a10

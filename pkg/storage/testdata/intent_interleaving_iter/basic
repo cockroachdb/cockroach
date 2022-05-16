@@ -1,11 +1,11 @@
-# Both separated and interleaved intents, and one inline meta.
+# Separated intents, and one inline meta.
 define
 locks
 meta k=a ts=20 txn=1
+meta k=b ts=30 txn=2
 mvcc
 value k=a ts=20 v=a20
 value k=a ts=10 v=a10
-meta k=b ts=30 txn=2
 value k=b ts=30 v=b30
 meta k=c
 value k=d ts=25 v=d25
@@ -18,7 +18,7 @@ value k=d ts=25 v=d25
 #   iterators.
 # - The second stats call below (after some prev steps) shows a higher value
 #   of interface reverse steps compared to internal reverse steps. This is
-#   because the intent iterator is being called with PrevWithLimit ans is
+#   because the intent iterator is being called with PrevWithLimit and is
 #   already at the separated intent "a", so does not have to step the internal
 #   iterator.
 iter lower=a upper=f
@@ -65,7 +65,7 @@ next: output: value k=b ts=30.000000000,0 v=b30
 next: output: meta k=c
 next: output: value k=d ts=25.000000000,0 v=d25
 next: output: .
-stats: (interface (dir, seek, step): (fwd, 2, 7), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 0, 0))
+stats: (interface (dir, seek, step): (fwd, 2, 9), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 0, 0))
 prev: output: value k=d ts=25.000000000,0 v=d25
 prev: output: meta k=c
 prev: output: value k=b ts=30.000000000,0 v=b30
@@ -74,17 +74,17 @@ prev: output: value k=a ts=10.000000000,0 v=a10
 prev: output: value k=a ts=20.000000000,0 v=a20
 prev: output: meta k=a ts=20.000000000,0 txn=1
 prev: output: .
-stats: (interface (dir, seek, step): (fwd, 2, 7), (rev, 0, 13)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 2, 7))
+stats: (interface (dir, seek, step): (fwd, 2, 9), (rev, 0, 12)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 2, 7))
 set-upper c
 seek-ge "b"/0,0: output: meta k=b ts=30.000000000,0 txn=2
-stats: (interface (dir, seek, step): (fwd, 4, 7), (rev, 0, 13)), (internal (dir, seek, step): (fwd, 4, 7), (rev, 2, 7))
+stats: (interface (dir, seek, step): (fwd, 4, 10), (rev, 0, 12)), (internal (dir, seek, step): (fwd, 4, 8), (rev, 2, 7))
 next: output: value k=b ts=30.000000000,0 v=b30
 next: output: .
 prev: output: value k=b ts=30.000000000,0 v=b30
 prev: output: meta k=b ts=30.000000000,0 txn=2
 prev: output: value k=a ts=10.000000000,0 v=a10
 seek-lt "b"/0,0: output: value k=a ts=10.000000000,0 v=a10
-stats: (interface (dir, seek, step): (fwd, 4, 9), (rev, 2, 19)), (internal (dir, seek, step): (fwd, 4, 9), (rev, 6, 13))
+stats: (interface (dir, seek, step): (fwd, 4, 11), (rev, 2, 17)), (internal (dir, seek, step): (fwd, 4, 9), (rev, 6, 13))
 next: output: meta k=b ts=30.000000000,0 txn=2
 prev: output: value k=a ts=10.000000000,0 v=a10
 prev: output: value k=a ts=20.000000000,0 v=a20
@@ -160,6 +160,8 @@ next: output: .
 
 # Prefix iteration and NextKey. What we will see after the prefix is
 # exhausted is undefined.
+# seek-ge k=a exhausts the intentIter when extracting the intent, so next or
+# next-key do not see the next intent.
 iter prefix=true
 seek-ge k=d
 next-key
@@ -172,10 +174,10 @@ next-key
 seek-ge "d"/0,0: output: value k=d ts=25.000000000,0 v=d25
 next-key: output: .
 seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
-next-key: output: meta k=b ts=30.000000000,0 txn=2
+next-key: output: value k=b ts=30.000000000,0 v=b30
 seek-ge "a"/0,0: output: meta k=a ts=20.000000000,0 txn=1
 next: output: value k=a ts=20.000000000,0 v=a20
-next-key: output: meta k=b ts=30.000000000,0 txn=2
+next-key: output: value k=b ts=30.000000000,0 v=b30
 
 # Seek to particular timestamp.
 iter lower=a upper=f
@@ -198,6 +200,7 @@ prev
 prev
 next
 seek-lt k=a ts=25
+seek-lt k=a ts=19
 prev
 next
 seek-ge k=a ts=5
@@ -205,6 +208,7 @@ next
 next
 prev
 seek-lt k=b ts=40
+seek-lt k=b ts=19
 prev
 prev
 prev
@@ -228,18 +232,20 @@ seek-lt "a"/15.000000000,0: output: value k=a ts=20.000000000,0 v=a20
 prev: output: meta k=a ts=20.000000000,0 txn=1
 prev: output: .
 next: output: meta k=a ts=20.000000000,0 txn=1
-seek-lt "a"/25.000000000,0: output: meta k=a ts=20.000000000,0 txn=1
-prev: output: .
-next: output: meta k=a ts=20.000000000,0 txn=1
+seek-lt "a"/25.000000000,0: output: err: SeekLT cannot be used to skip the latest version and land on intent
+seek-lt "a"/19.000000000,0: output: value k=a ts=20.000000000,0 v=a20
+prev: output: meta k=a ts=20.000000000,0 txn=1
+next: output: value k=a ts=20.000000000,0 v=a20
 seek-ge "a"/5.000000000,0: output: meta k=b ts=30.000000000,0 txn=2
 next: output: value k=b ts=30.000000000,0 v=b30
 next: output: meta k=c
 prev: output: value k=b ts=30.000000000,0 v=b30
-seek-lt "b"/40.000000000,0: output: meta k=b ts=30.000000000,0 txn=2
+seek-lt "b"/40.000000000,0: output: err: SeekLT cannot be used to skip the latest version and land on intent
+seek-lt "b"/19.000000000,0: output: value k=b ts=30.000000000,0 v=b30
+prev: output: meta k=b ts=30.000000000,0 txn=2
 prev: output: value k=a ts=10.000000000,0 v=a10
 prev: output: value k=a ts=20.000000000,0 v=a20
-prev: output: meta k=a ts=20.000000000,0 txn=1
-next: output: value k=a ts=20.000000000,0 v=a20
+next: output: value k=a ts=10.000000000,0 v=a10
 
 # Seek to particular timestamp and prefix iteration. What we will
 # see after the prefix is exhausted is undefined.
@@ -293,17 +299,17 @@ next-key: output: value k=d ts=25.000000000,0 v=d25
 next-key: output: .
 
 
-# Multiple separated intents and multiple interleaved intents.
+# Multiple separated intents.
 define
 locks
+meta k=a ts=10 txn=1
 meta k=b ts=20 txn=2
+meta k=c ts=30 txn=3
 meta k=d ts=40 txn=4
 meta k=e ts=50 txn=5
 mvcc
-meta k=a ts=10 txn=1
 value k=a ts=10 v=a10
 value k=b ts=20 v=b20
-meta k=c ts=30 txn=3
 value k=c ts=30 v=c30
 value k=d ts=40 v=d40
 value k=e ts=50 v=e50
@@ -386,24 +392,24 @@ prev
 seek-lt k=e
 prev
 ----
-seek-ge "a"/0,0: output: meta k=b ts=20.000000000,0 txn=2
-next: output: err: intentIter at intent, but iter not at provisional value
-seek-lt "e"/0,0: output: meta k=d ts=40.000000000,0 txn=4
-next: output: err: intent has no provisional value
-seek-ge "d"/0,0: output: meta k=d ts=40.000000000,0 txn=4
-next-key: output: err: intentIter at intent, but iter not at provisional value
-seek-ge "d"/0,0: output: meta k=d ts=40.000000000,0 txn=4
-prev: output: err: iter not at provisional value, cmp: -1
-seek-lt "e"/0,0: output: meta k=d ts=40.000000000,0 txn=4
-prev: output: err: reverse iteration discovered intent without provisional value
+seek-ge "a"/0,0: output: err: intent with no version
+next: output: err: intent with no version
+seek-lt "e"/0,0: output: err: SeekLT cannot be used to skip the latest version and land on intent
+next: output: err: SeekLT cannot be used to skip the latest version and land on intent
+seek-ge "d"/0,0: output: err: intent with no version
+next-key: output: err: intent with no version
+seek-ge "d"/0,0: output: err: intent with no version
+prev: output: err: intent with no version
+seek-lt "e"/0,0: output: err: SeekLT cannot be used to skip the latest version and land on intent
+prev: output: err: SeekLT cannot be used to skip the latest version and land on intent
 
 # Local range keys. This exercises local keys having separated locks.
 define
 locks
+meta k=La ts=10 txn=1
 meta k=Lb ts=20 txn=2
 meta k=Lc ts=30 txn=4
 mvcc
-meta k=La ts=10 txn=1
 value k=La ts=10 v=a10
 value k=Lb ts=20 v=b20
 value k=Lc ts=30 v=c30
@@ -523,12 +529,7 @@ seek-ge "Lb"/25.000000000,0: output: value k=Lb ts=20.000000000,0 v=b20
 next: output: .
 seek-ge "Lc"/25.000000000,0: output: .
 
-# Keys with \x00 byte. To exercise the slow-path in UnsafeRawMVCCKey. The keys
-# that are length 8, 16 will exercise the slow-path. The len(key) < 8 does
-# not. DecodeLockTableSingleKey allocates a new slice for all these keys, due
-# to the escaping. However the starting capacity is 8, and the next growth
-# step is 16, which means that when len(key) < 8, the len of the allocated
-# slice is smaller than cap and the first byte beyond len is 0.
+# Keys with \x00 byte.
 define
 locks
 meta k=abcdefg\0 ts=20 txn=1
@@ -593,12 +594,12 @@ prev: output: .
 
 define
 locks
+meta k=La ts=10 txn=1
 meta k=Lb ts=20 txn=2
 meta k=Lc ts=30 txn=4
 meta k=b ts=40 txn=5
 meta k=d ts=50 txn=6
 mvcc
-meta k=La ts=10 txn=1
 value k=La ts=10 v=a10
 value k=Lb ts=20 v=b20
 value k=Lc ts=30 v=c30

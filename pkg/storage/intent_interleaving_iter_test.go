@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -332,7 +333,24 @@ func TestIntentInterleavingIter(t *testing.T) {
 				if d.HasArg("prefix") {
 					d.ScanArgs(t, "prefix", &opts.Prefix)
 				}
-				iter := wrapInUnsafeIter(newIntentInterleavingIterator(eng, opts))
+				var committedTxns *commitMap
+				if d.HasArg("commit-map") {
+					var commitTxnsStr string
+					d.ScanArgs(t, "commit-map", &commitTxnsStr)
+					txns := strings.Split(commitTxnsStr, ",")
+					committedTxns = &commitMap{
+						simpleCommits: make(map[uuid.UUID]struct{}),
+					}
+					for i := range txns {
+						txn, err := strconv.Atoi(txns[i])
+						require.NoError(t, err)
+						txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(txn)))
+						committedTxns.simpleCommits[txnUUID] = struct{}{}
+					}
+				}
+				iiter := newIntentInterleavingIterator(eng, opts)
+				iiter.(*intentInterleavingIter).commitMap = committedTxns
+				iter := wrapInUnsafeIter(iiter)
 				var b strings.Builder
 				defer iter.Close()
 				// pos is the original <file>:<lineno> prefix computed by
@@ -723,6 +741,8 @@ func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings
 		}
 	}
 }
+
+// TODO: fix test.
 
 var seedFlag = flag.Int64("seed", -1, "specify seed to use for random number generator")
 
