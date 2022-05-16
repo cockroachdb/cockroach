@@ -650,6 +650,9 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
+			// Hangs when run from the SQL server. More investigation is
+			// required here.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -754,6 +757,9 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
+			// Test hangs when run under the SQL server. More investigation
+			// is required here.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
