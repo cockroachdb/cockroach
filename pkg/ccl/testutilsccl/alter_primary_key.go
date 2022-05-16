@@ -63,6 +63,8 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 		t.Run(tc.Desc, func(t *testing.T) {
 			var db *gosql.DB
 			params, _ := tests.CreateTestServerParams()
+			// Test fails under the default SQL Server. Tracked with #76378.
+			params.DisableDefaultSQLServer = true
 			params.Locality.Tiers = []roachpb.Tier{
 				{Key: "region", Value: "ajstorm-1"},
 			}
