@@ -35,10 +35,9 @@ import (
 var enableRaftFollowerAdmissionControl = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_FOLLOWER_ADMISSION_CONTROL_ENABLED", true)
 
 type raftRequestInfo struct {
-	req           *kvserverpb.RaftMessageRequest
-	size          int64       // size of req in bytes
-	admCtrlHandle interface{} // for AdmittedKVWorkDone
-	respStream    RaftMessageResponseStream
+	req        *kvserverpb.RaftMessageRequest
+	size       int64 // size of req in bytes
+	respStream RaftMessageResponseStream
 }
 
 type raftReceiveQueue struct {
@@ -102,7 +101,7 @@ func (q *raftReceiveQueue) Recycle(processed []raftRequestInfo) {
 }
 
 func (q *raftReceiveQueue) Append(
-	req *kvserverpb.RaftMessageRequest, admCtrlHandle interface{}, s RaftMessageResponseStream,
+	req *kvserverpb.RaftMessageRequest, s RaftMessageResponseStream,
 ) (shouldQueue bool, size int64, appended bool) {
 	size = int64(req.Size())
 	q.mu.Lock()
@@ -114,10 +113,9 @@ func (q *raftReceiveQueue) Append(
 		return false, size, false
 	}
 	q.mu.infos = append(q.mu.infos, raftRequestInfo{
-		req:           req,
-		admCtrlHandle: admCtrlHandle,
-		respStream:    s,
-		size:          size,
+		req:        req,
+		respStream: s,
+		size:       size,
 	})
 	// The operation that enqueues the first message will
 	// be put in charge of triggering a drain of the queue.
@@ -331,19 +329,8 @@ func (s *Store) HandleRaftUncoalescedRequest(
 			}
 		}()
 
-		admissionHandle, err := func() (interface{}, error) {
-			c := s.cfg.KVAdmissionController
-			if c == nil || !enableRaftFollowerAdmissionControl || req.Message.Type != raftpb.MsgApp {
-				return nil, nil
-			}
-			return c.AdmitKVWork(ctx, roachpb.SystemTenantID, &ba)
-		}()
-		if err != nil {
-			return 0, false
-		}
-
 		q, _ := s.raftRecvQueues.LoadOrCreate(req.RangeID)
-		enqueue, size, appended := q.Append(req, admissionHandle, respStream)
+		enqueue, size, appended := q.Append(req, respStream)
 		if !appended {
 			return 0, false
 		}
@@ -618,11 +605,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		info := &infos[i]
 		if pErr := s.withReplicaForRequest(
 			ctx, info.req, func(_ context.Context, r *Replica) *roachpb.Error {
-				pErr := s.processRaftRequestWithReplica(r.raftCtx, r, info.req)
-				if info.admCtrlHandle != nil {
-					s.cfg.KVAdmissionController.AdmittedKVWorkDone(info.admCtrlHandle)
-				}
-				return pErr
+				return s.processRaftRequestWithReplica(r.raftCtx, r, info.req)
 			},
 		); pErr != nil {
 			hadError = true

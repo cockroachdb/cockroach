@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -654,6 +655,35 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	stats := handleRaftReadyStats{
 		tBegin: timeutil.Now(),
 	}
+
+	var ba roachpb.BatchRequest
+	ba.AdmissionHeader = roachpb.AdmissionHeader{
+		Priority:                 int32(admissionpb.NormalPri),
+		CreateTime:               timeutil.Now().UnixNano(),
+		Source:                   roachpb.AdmissionHeader_ROOT_KV,
+		NoMemoryReservedAtSource: true,
+	}
+	// Need to make sure ba.IsWrite() == true.
+	ba.Add(roachpb.NewDelete(roachpb.Key("foo")))
+	if !ba.IsWrite() {
+		panic("not a write")
+	}
+	ba.Replica.StoreID = r.store.StoreID()
+
+	admissionHandle, err := func() (interface{}, error) {
+		c := r.store.cfg.KVAdmissionController
+		if c == nil || !enableRaftFollowerAdmissionControl || r.RangeID < 45 {
+			return nil, nil
+		}
+		return c.AdmitKVWork(ctx, roachpb.SystemTenantID, &ba)
+	}()
+	if err != nil {
+		panic(err)
+	}
+	if admissionHandle != nil {
+		defer r.store.cfg.KVAdmissionController.AdmittedKVWorkDone(admissionHandle)
+	}
+
 	if inSnap.Desc != nil {
 		stats.snap.offered = true
 	}
@@ -666,7 +696,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
-	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+	err = r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		numFlushed, err := r.mu.proposalBuf.FlushLockedWithRaftGroup(ctx, raftGroup)
 		if err != nil {
 			return false, err
