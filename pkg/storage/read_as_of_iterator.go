@@ -12,46 +12,49 @@ package storage
 
 import "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
-// ReadAsOfIterator wraps an iterator that implements the SimpleMVCCIterator
-// such that any valid MVCC key returned will have a timestamp less than the
-// asOf timestamp, is neither a delete tombstone, nor shadowed by a delete
-// tombstone less than the asOf timestamp.
+// ReadAsOfIterator wraps a SimpleMVCCIterator and only surfaces the latest
+// valid key of a given MVCC key that is also below the asOf timestamp, if set.
+// Further, the iterator does not surface delete tombstones, nor any MVCC keys
+// shadowed by delete tombstones below the asOf timestamp, if set. The iterator
+// assumes that it will not encounter any write intents.
 type ReadAsOfIterator struct {
 	iter SimpleMVCCIterator
 
-	// asOf is the latest timestamp an MVCC key will have that the
-	// ReadAsOfIterator will return
+	// asOf is the latest timestamp of a key surfaced by the iterator.
 	asOf hlc.Timestamp
 }
 
 var _ SimpleMVCCIterator = &ReadAsOfIterator{}
 
-// Close no-ops. The caller is responsible for closing the underlying iterator.
+// Close closes the underlying iterator.
 func (f *ReadAsOfIterator) Close() {
+	f.iter.Close()
 }
 
 // SeekGE advances the iterator to the first key in the engine which is >= the
 // provided key that obeys the ReadAsOfIterator key constraints.
 func (f *ReadAsOfIterator) SeekGE(originalKey MVCCKey) {
 	// To ensure SeekGE seeks to a key that isn't shadowed by a tombstone that the
-	// ReadAsOfIterator would have skipped (i.e. at a time earlier than the AOST),
-	// seek to the key with the latest possible timestamp, advance to the next
-	// valid key only if this valid key is less (at a newer timestamp, and same
-	// key) than the original key.
-	synthetic := MVCCKey{Key: originalKey.Key, Timestamp: hlc.MaxTimestamp}
-	f.iter.SeekGE(synthetic)
-	if ok := f.advance(); !ok {
-		return
+	// ReadAsOfIterator would have skipped (i.e. a tombstone below asOf), seek to
+	// the key with the latest possible timestamp that the iterator could surface
+	// (i.e. asOf, if set) and iterate to the next valid key at or below the caller's
+	// key that also obeys the iterator's constraints.
+	maxTime := f.asOf
+	if f.asOf.IsEmpty() {
+		maxTime = hlc.MaxTimestamp
 	}
-	for f.UnsafeKey().Less(originalKey) {
+	synthetic := MVCCKey{Key: originalKey.Key, Timestamp: maxTime}
+	f.iter.SeekGE(synthetic)
+
+	if ok := f.advance(); ok && f.UnsafeKey().Less(originalKey) {
 		// The following is true:
-		// originalKey.Key == syntheticKey.key &&
-		// f.asOf timestamp >= current timestamp > originalKey timestamp
-		// move to the next key and advance to a key that obeys the asOf constraints.
-		f.iter.Next()
-		if ok := f.advance(); !ok {
-			return
-		}
+		// originalKey.Key == f.UnsafeKey &&
+		// f.asOf timestamp (if set) >= current timestamp > originalKey timestamp.
+		//
+		// This implies the caller is seeking to a key that is shadowed by a valid
+		// key that obeys the iterator 's constraints. The caller's key is NOT the
+		// latest key of the given MVCC key; therefore, skip to the next MVCC key.
+		f.NextKey()
 	}
 }
 
@@ -60,15 +63,17 @@ func (f *ReadAsOfIterator) Valid() (bool, error) {
 	return f.iter.Valid()
 }
 
-// Next advances the iterator to the next valid key/value in the iteration that
-// has a timestamp less than f.asOf.
+// Next advances the iterator to the next valid MVCC key obeying the iterator's
+// constraints. Note that Next and NextKey have the same implementation because
+// the iterator only surfaces the latest valid MVCC key below the asOf timestamp.
 func (f *ReadAsOfIterator) Next() {
-	f.iter.Next()
-	f.advance()
+	f.NextKey()
 }
 
-// NextKey advances the iterator to the next valid MVCC key that has a timestamp
-// less than f.asOf.
+// NextKey advances the iterator to the next valid MVCC key obeying the
+// iterator's constraints. NextKey() is only guaranteed to return a key that
+// obeys the iterator's constraints if the iterator is on a key that obeys the
+// constraints. To ensure this, always call SeekGE before iterating with NextKey().
 func (f *ReadAsOfIterator) NextKey() {
 	f.iter.NextKey()
 	f.advance()
@@ -86,72 +91,30 @@ func (f *ReadAsOfIterator) UnsafeValue() []byte {
 	return f.iter.UnsafeValue()
 }
 
-// advance moves past keys with timestamps later than the f.asOf and MVCC keys whose
-// value has been deleted.
+// advance moves past keys with timestamps later than f.asOf and skips MVCC keys
+// whose latest value (subject to f.asOF) has been deleted. Note that advance
+// moves past keys above asOF before evaluating tombstones, implying the
+// iterator will never call NextKey() on a tombstone with a timestamp later than
+// f.asOF.
 func (f *ReadAsOfIterator) advance() bool {
-	if ok, _ := f.Valid(); !ok {
-		return ok
-	}
-
-	// If neither of the internal functions move the iterator, then the current
-	// key, if valid, is guaranteed to have a timestamp earlier than the asOf time and is
-	// not a deleted key. If either function moves the iterator, the timestamp and
-	// tombstone presence must be checked again.
-	var ok bool
-	moved := true
 	for {
-		ok, moved = f.advanceAsOf()
-		if !ok {
-			return ok
-		}
-		if moved {
-			continue
-		}
-		ok, moved = f.advanceDel()
-		if !ok {
-			return ok
-		}
-		if !moved {
-			break
-		}
-	}
-	return true
-}
-
-// advanceDel moves the iterator to the next key if the current key is a delete
-// tombstone.
-func (f *ReadAsOfIterator) advanceDel() (bool, bool) {
-	var moved bool
-	if len(f.iter.UnsafeValue()) == 0 {
-		// Implies the latest version of the given key is a tombstone.
-		f.iter.NextKey()
-		moved = true
-		if ok, _ := f.Valid(); !ok {
-			return ok, moved
+		if ok, err := f.Valid(); err != nil || !ok {
+			// No valid keys found.
+			return false
+		} else if !f.asOf.IsEmpty() && f.asOf.Less(f.iter.UnsafeKey().Timestamp) {
+			// Skip keys above the asOf timestamp.
+			f.iter.Next()
+		} else if len(f.iter.UnsafeValue()) == 0 {
+			// Skip to the next MVCC key if we find a tombstone.
+			f.iter.NextKey()
+		} else {
+			// On a valid key.
+			return true
 		}
 	}
-	return true, moved
 }
 
-// advanceAsOf moves the iterator to the next key if the current key is later
-// than the asOf timestamp.
-func (f *ReadAsOfIterator) advanceAsOf() (bool, bool) {
-	var moved bool
-	if !f.asOf.IsEmpty() && f.asOf.Less(f.iter.UnsafeKey().Timestamp) {
-		f.iter.Next()
-		moved = true
-		if ok, _ := f.Valid(); !ok {
-			return ok, moved
-		}
-	}
-	return true, moved
-}
-
-// NewReadAsOfIterator constructs a ReadAsOfIterator which wraps a
-// SimpleMVCCIterator such that any valid MVCC key returned will have a
-// timestamp less than the asOf timestamp, is neither a delete tombstone, nor
-// shadowed by a delete tombstone less than the asOf timestamp. The caller is
-// responsible for closing the underlying SimpleMVCCIterator.
+// NewReadAsOfIterator constructs a ReadAsOfIterator.
 func NewReadAsOfIterator(iter SimpleMVCCIterator, asOf hlc.Timestamp) *ReadAsOfIterator {
 	return &ReadAsOfIterator{iter: iter, asOf: asOf}
 }

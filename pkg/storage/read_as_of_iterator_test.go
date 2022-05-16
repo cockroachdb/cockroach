@@ -20,12 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 type asOfTest struct {
 	input           string
 	expectedNextKey string
-	expectedNext    string
 	asOf            string
 }
 
@@ -34,50 +34,48 @@ func TestReadAsOfIterator(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	pebble, err := Open(context.Background(), InMemory(), CacheSize(1<<20 /* 1 MiB */))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer pebble.Close()
 
 	// Each `input` is turned into an iterator and these are passed to a new
-	// readAsOfIterator, which is fully iterated (using either NextKey or Next) and
-	// turned back into a string in the same format as `input`. This is compared
-	// to 'expectedNextKey' or 'expectedNext'. The 'asOf' field represents the
-	// wall time of the hlc.Timestamp for the readAsOfIterator. This field is a
-	// string to play nice with the 'input' parser in populateBatch.
+	// readAsOfIterator, which is fully iterated (using either NextKey or Next)
+	// and turned back into a string in the same format as `input`. This is
+	// compared to 'expectedNextKey'. The 'asOf' field represents the wall time of
+	// the hlc.Timestamp for the readAsOfIterator. This field is a string to play
+	// nice with the 'input' parser in populateBatch.
 	tests := []asOfTest{
-		// ensure next and nextkey work as expected
-		{input: "b1c1", expectedNextKey: "b1c1", expectedNext: "b1c1", asOf: ""},
-		{input: "b2b1", expectedNextKey: "b2", expectedNext: "b2b1", asOf: ""},
+		// ensure nextkey works as expected
+		{input: "b1c1", expectedNextKey: "b1c1", asOf: ""},
+		{input: "b2b1", expectedNextKey: "b2", asOf: ""},
 
 		// ensure AOST is an inclusive upper bound
-		{input: "b1", expectedNextKey: "b1", expectedNext: "b1", asOf: "1"},
-		{input: "b2b1", expectedNextKey: "b1", expectedNext: "b1", asOf: "1"},
+		{input: "b1", expectedNextKey: "b1", asOf: "1"},
+		{input: "b2b1", expectedNextKey: "b1", asOf: "1"},
 
 		//double skip within keys
-		{input: "b3b2b1", expectedNextKey: "b1", expectedNext: "b1", asOf: "1"},
+		{input: "b3b2b1", expectedNextKey: "b1", asOf: "1"},
 
 		// double skip across keys
-		{input: "b2c2c1", expectedNextKey: "c1", expectedNext: "c1", asOf: "1"},
+		{input: "b2c2c1", expectedNextKey: "c1", asOf: "1"},
 
 		// ensure next key captures at most one mvcc key per key after an asOf skip
-		{input: "b3c2c1", expectedNextKey: "c2", expectedNext: "c2c1", asOf: "2"},
+		{input: "b3c2c1", expectedNextKey: "c2", asOf: "2"},
 
 		// ensure an AOST 'next' takes precedence over a tombstone 'nextkey'
-		{input: "b2Xb1c1", expectedNextKey: "c1", expectedNext: "c1", asOf: ""},
-		{input: "b2Xb1c1", expectedNextKey: "b1c1", expectedNext: "b1c1", asOf: "1"},
+		{input: "b2Xb1c1", expectedNextKey: "c1", asOf: ""},
+		{input: "b2Xb1c1", expectedNextKey: "b1c1", asOf: "1"},
 
 		// Ensure clean iteration over double tombstone
-		{input: "a1Xb2Xb1c1", expectedNextKey: "c1", expectedNext: "c1", asOf: ""},
-		{input: "a1Xb2Xb1c1", expectedNextKey: "b1c1", expectedNext: "b1c1", asOf: "1"},
+		{input: "a1Xb2Xb1c1", expectedNextKey: "c1", asOf: ""},
+		{input: "a1Xb2Xb1c1", expectedNextKey: "b1c1", asOf: "1"},
 
 		// ensure tombstone is skipped after an AOST skip
-		{input: "b3c2Xc1d1", expectedNextKey: "d1", expectedNext: "d1", asOf: "2"},
-		{input: "b3c2Xc1d1", expectedNextKey: "c1d1", expectedNext: "c1d1", asOf: "1"},
+		{input: "b3c2Xc1d1", expectedNextKey: "d1", asOf: "2"},
+		{input: "b3c2Xc1d1", expectedNextKey: "c1d1", asOf: "1"},
 
 		// Ensure key before delete tombstone gets read if under AOST
-		{input: "b2b1Xc1", expectedNextKey: "b2c1", expectedNext: "b2c1", asOf: ""},
-		{input: "b2b1Xc1", expectedNextKey: "c1", expectedNext: "c1", asOf: "1"},
+		{input: "b2b1Xc1", expectedNextKey: "b2c1", asOf: ""},
+		{input: "b2b1Xc1", expectedNextKey: "c1", asOf: "1"},
 	}
 
 	for i, test := range tests {
@@ -91,7 +89,6 @@ func TestReadAsOfIterator(t *testing.T) {
 
 			subtests := []iterSubtest{
 				{"NextKey", test.expectedNextKey, (SimpleMVCCIterator).NextKey},
-				{"Next", test.expectedNext, (SimpleMVCCIterator).Next},
 			}
 			for _, subtest := range subtests {
 				t.Run(subtest.name, func(t *testing.T) {
@@ -112,9 +109,7 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	pebble, err := Open(context.Background(), InMemory(), CacheSize(1<<20 /* 1 MiB */))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer pebble.Close()
 
 	tests := []struct {
@@ -124,8 +119,12 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 		asOf     string
 	}{
 		// Ensure vanilla seek works
-		{"a3a2a1", "a1", "a1", ""},
-		{"a3a2a1", "a1", "a1", "2"},
+		{"a1b1", "a1", "a1", ""},
+
+		// Ensure seek always returns the latest key of an MVCC key
+		{"a2a1b1", "a1", "b1", ""},
+		{"a2a1b1", "a1", "b1", "2"},
+		{"a2a1b1", "a1", "a1", "1"},
 
 		// Ensure out of bounds seek fails gracefully
 		{"a1", "b1", "notOK", ""},
@@ -173,20 +172,16 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 			}
 			it.SeekGE(seekKey)
 			ok, err := it.Valid()
-			if err != nil {
-				t.Fatalf("unexpected error: %+v", err)
-			}
+			require.NoError(t, err)
 			if !ok {
 				if test.expected == "notOK" {
 					return
 				}
-				t.Fatalf("unexpected error: seek not ok")
+				require.NoError(t, err, "seek not ok")
 			}
 			output.Write(it.UnsafeKey().Key)
 			output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
-			if actual := output.String(); actual != test.expected {
-				t.Errorf("got %q expected %q", actual, test.expected)
-			}
+			require.Equal(t, test.expected, output.String())
 		})
 	}
 }
