@@ -225,7 +225,7 @@ func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 
 // AddMVCCKey adds a key+timestamp/value pair to the batch (flushing if needed).
 // This is only for callers that want to control the timestamp on individual
-// keys -- like RESTORE where we want the restored data to look the like backup.
+// keys -- like RESTORE where we want the restored data to look like the backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
 	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) && !b.ingestAll {
