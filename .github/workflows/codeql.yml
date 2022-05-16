@@ -9,7 +9,7 @@
 # the `language` matrix defined below to confirm you have the correct set of
 # supported CodeQL languages.
 #
-name: "CodeQL"
+name: "CodeQL Manual Build"
 
 on:
   push:
@@ -45,7 +45,7 @@ jobs:
         go-version: 1.17.9
         
     # GO env debugging
-    - name: go info
+    - name: Debug Print Go Info
       env:
         ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
       shell: bash
@@ -57,7 +57,7 @@ jobs:
           echo cache: $(ls $RUNNER_TOOL_CACHE/go)
           
     # Limit GOGC as per LGTM: https://lgtm.com/projects/g/cockroachdb/cockroach/logs/languages/lang:go
-    - name: setup env
+    - name: Setup Go Environment
       shell: bash
       run: |
         echo "GOGC=50" >> $GITHUB_ENV
@@ -71,7 +71,7 @@ jobs:
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v2
       with:
-        debug: true
+        #debug: true
         languages: ${{ matrix.language }}
         # If you wish to specify custom queries, you can do so here or in a config file.
         # By default, queries listed here will override any specified in a config file.
@@ -95,7 +95,7 @@ jobs:
     #   make release
     
      # https://www.cockroachlabs.com/docs/v21.1/install-cockroachdb-linux#build-from-source
-    - name: fetch
+    - name: Fetch and Build
       shell: bash
       run: |
           curl https://binaries.cockroachdb.com/cockroach-v21.1.19.src.tgz | tar -xz
