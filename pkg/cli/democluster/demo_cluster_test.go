@@ -66,6 +66,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 2 << 10,
 			cacheSize:         1 << 10,
 			expected: base.TestServerArgs{
+				DisableDefaultSQLServer: true,
 				PartOfCluster:           true,
 				JoinAddr:                "127.0.0.1",
 				DisableTLSForHTTP:       true,
@@ -89,6 +90,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 4 << 10,
 			cacheSize:         4 << 10,
 			expected: base.TestServerArgs{
+				DisableDefaultSQLServer: true,
 				PartOfCluster:           true,
 				JoinAddr:                "127.0.0.1",
 				SQLAddr:                 ":1236",

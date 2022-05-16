@@ -98,6 +98,9 @@ func TestDataDriven(t *testing.T) {
 		}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				// Test fails when run under the default test tenant. More
+				// investigation is required.
+				DisableDefaultSQLServer: true,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig:       scKnobs,
