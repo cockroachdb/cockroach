@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -30,10 +32,13 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
+var enableRaftFollowerAdmissionControl = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_FOLLOWER_ADMISSION_CONTROL_ENABLED", true)
+
 type raftRequestInfo struct {
-	req        *kvserverpb.RaftMessageRequest
-	size       int64 // size of req in bytes
-	respStream RaftMessageResponseStream
+	req           *kvserverpb.RaftMessageRequest
+	size          int64       // size of req in bytes
+	admCtrlHandle interface{} // for AdmittedKVWorkDone
+	respStream    RaftMessageResponseStream
 }
 
 type raftReceiveQueue struct {
@@ -97,7 +102,7 @@ func (q *raftReceiveQueue) Recycle(processed []raftRequestInfo) {
 }
 
 func (q *raftReceiveQueue) Append(
-	req *kvserverpb.RaftMessageRequest, s RaftMessageResponseStream,
+	req *kvserverpb.RaftMessageRequest, admCtrlHandle interface{}, s RaftMessageResponseStream,
 ) (shouldQueue bool, size int64, appended bool) {
 	size = int64(req.Size())
 	q.mu.Lock()
@@ -109,9 +114,10 @@ func (q *raftReceiveQueue) Append(
 		return false, size, false
 	}
 	q.mu.infos = append(q.mu.infos, raftRequestInfo{
-		req:        req,
-		respStream: s,
-		size:       size,
+		req:           req,
+		admCtrlHandle: admCtrlHandle,
+		respStream:    s,
+		size:          size,
 	})
 	// The operation that enqueues the first message will
 	// be put in charge of triggering a drain of the queue.
@@ -292,7 +298,7 @@ func (s *Store) HandleRaftRequest(
 // Raft scheduler. It requires that s.mu is not held.
 func (s *Store) HandleRaftUncoalescedRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
-) (enqueue bool) {
+) bool /* enqueue */ {
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		log.Fatalf(ctx, "HandleRaftUncoalescedRequest cannot be given coalesced heartbeats or heartbeat responses, received %s", req)
 	}
@@ -301,15 +307,48 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	// count them.
 	s.metrics.RaftRcvdMessages[req.Message.Type].Inc(1)
 
-	q, _ := s.raftRecvQueues.LoadOrCreate(req.RangeID)
-	enqueue, size, appended := q.Append(req, respStream)
-	if !appended {
-		// TODO(peter): Return an error indicating the request was dropped. Note
-		// that dropping the request is safe. Raft will retry.
-		s.metrics.RaftRcvdDropped.Inc(1)
-		s.metrics.RaftRcvdDroppedBytes.Inc(size)
-		return false
+	var ba roachpb.BatchRequest
+	ba.AdmissionHeader = roachpb.AdmissionHeader{
+		Priority:                 int32(admissionpb.NormalPri),
+		CreateTime:               timeutil.Now().UnixNano(),
+		Source:                   roachpb.AdmissionHeader_ROOT_KV,
+		NoMemoryReservedAtSource: true,
 	}
+	// Need to make sure ba.IsWrite() == true.
+	ba.Add(roachpb.NewDelete(roachpb.Key("foo")))
+	if !ba.IsWrite() {
+		panic("not a write")
+	}
+	ba.Replica.StoreID = s.StoreID()
+
+	_, enqueue := func() (size int64, enqueue bool) {
+		defer func() {
+			if !enqueue {
+				// TODO(peter): Return an error indicating the request was dropped. Note
+				// that dropping the request is safe. Raft will retry.
+				s.metrics.RaftRcvdDropped.Inc(1)
+				s.metrics.RaftRcvdDroppedBytes.Inc(size)
+			}
+		}()
+
+		admissionHandle, err := func() (interface{}, error) {
+			c := s.cfg.KVAdmissionController
+			if c == nil || !enableRaftFollowerAdmissionControl || req.Message.Type != raftpb.MsgApp {
+				return nil, nil
+			}
+			return c.AdmitKVWork(ctx, roachpb.SystemTenantID, &ba)
+		}()
+		if err != nil {
+			return 0, false
+		}
+
+		q, _ := s.raftRecvQueues.LoadOrCreate(req.RangeID)
+		enqueue, size, appended := q.Append(req, admissionHandle, respStream)
+		if !appended {
+			return 0, false
+		}
+		return size, enqueue
+	}()
 	return enqueue
 }
 
@@ -579,7 +618,11 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		info := &infos[i]
 		if pErr := s.withReplicaForRequest(
 			ctx, info.req, func(_ context.Context, r *Replica) *roachpb.Error {
-				return s.processRaftRequestWithReplica(r.raftCtx, r, info.req)
+				pErr := s.processRaftRequestWithReplica(r.raftCtx, r, info.req)
+				if info.admCtrlHandle != nil {
+					s.cfg.KVAdmissionController.AdmittedKVWorkDone(info.admCtrlHandle)
+				}
+				return pErr
 			},
 		); pErr != nil {
 			hadError = true
