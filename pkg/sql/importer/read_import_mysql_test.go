@@ -135,9 +135,9 @@ func readMysqlCreateFrom(
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Test relies on descriptor validation, which doesn't seem to be
-		// supported within SQL servers. Tracked with #76378.
-		DisableDefaultSQLServer: true,
-		Settings:                cluster.MakeTestingClusterSettings(),
+		// supported within secondary tenants. Tracked with #76378.
+		DisableDefaultTestTenant: true,
+		Settings:                 cluster.MakeTestingClusterSettings(),
 	})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)

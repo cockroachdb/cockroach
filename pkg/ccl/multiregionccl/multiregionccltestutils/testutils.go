@@ -82,9 +82,9 @@ func TestingCreateMultiRegionCluster(
 			// we could disable multi-tenancy just for those tests, but this function
 			// is used to create the MR cluster for all test cases. For
 			// bonus points, the code to re-enable this should also provide more
-			// flexibility in disabling the default SQL Server by callers of this
+			// flexibility in disabling the default test tenant by callers of this
 			// function. Re-enablement is tracked with #76378.
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
 			},

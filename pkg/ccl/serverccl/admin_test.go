@@ -49,10 +49,10 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	testCluster := serverutils.StartNewTestCluster(t, 3,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Need to disable the SQL server because this test fails
+				// Need to disable the test tenant because this test fails
 				// when run through a tenant (with internal server error).
-				// More investigation is required.
-				DisableDefaultSQLServer: true,
+				// More investigation is required. Tracked with #76387.
+				DisableDefaultTestTenant: true,
 			},
 		})
 	defer testCluster.Stopper().Stop(context.Background())
@@ -123,9 +123,9 @@ func TestAdminAPIJobs(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Fails with the default SQL Server. Tracked with #76378.
-		DisableDefaultSQLServer: true,
-		ExternalIODir:           dir})
+		// Fails with the default test tenant. Tracked with #76378.
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            dir})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -301,7 +302,9 @@ func init() {
 			// Vitess registers flags directly.
 			flag.Hidden = true
 		}
-		if flag.Name == logflags.ShowLogsName || flag.Name == logflags.TestLogConfigName {
+		if flag.Name == logflags.ShowLogsName ||
+			flag.Name == logflags.TestLogConfigName ||
+			flag.Name == serverutils.TenantModeFlagName {
 			// test-only flag
 			flag.Hidden = true
 		}

@@ -911,7 +911,9 @@ func TestSQLLivenessExemption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{})
+	// This test fails when run with the default test tenant. Disabling and
+	// tracking with #76378.
+	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
 	defer hostServer.Stopper().Stop(context.Background())
 
 	tenantID := serverutils.TestTenantID()
@@ -928,7 +930,6 @@ func TestSQLLivenessExemption(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &st.SV, time.Millisecond)
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
-		Existing:                    true,
 		TenantID:                    tenantID,
 		Settings:                    st,
 		AllowSettingClusterSettings: true,
@@ -1045,7 +1046,9 @@ func TestConsumptionExternalStorage(t *testing.T) {
 	defer dirCleanupFn()
 	blobClientFactory := blobs.NewLocalOnlyBlobClientFactory(dir)
 	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: dir,
+		// Test fails when run within the default tenant. Tracked with #76378.
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            dir,
 	})
 	defer hostServer.Stopper().Stop(context.Background())
 	hostSQL := sqlutils.MakeSQLRunner(hostDB)
@@ -1152,7 +1155,10 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	hostServer, hostSQL, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	hostServer, hostSQL, _ := serverutils.StartServer(b,
+		base.TestServerArgs{
+			DisableDefaultTestTenant: true,
+		})
 	defer hostServer.Stopper().Stop(context.Background())
 
 	// Override the external I/O egress cost so that we don't run out of RUs

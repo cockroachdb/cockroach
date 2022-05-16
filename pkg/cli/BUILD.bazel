@@ -175,6 +175,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/ts",
         "//pkg/ts/tspb",
         "//pkg/util",
