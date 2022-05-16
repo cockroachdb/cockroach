@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -86,14 +87,6 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.default_privileges",
 
 	"crdb_internal.jobs",
-	"system.jobs",       // get the raw, restorable jobs records too.
-	"system.descriptor", // descriptors also contain job-like mutation state.
-	"system.namespace",
-	"system.scheduled_jobs",
-	"system.settings", // get the raw settings to determine what's explicitly set.
-	"system.replication_stats",
-	"system.replication_critical_localities",
-	"system.replication_constraint_stats",
 
 	// The synthetic SQL CREATE statements for all tables.
 	// Note the "". to collect across all databases.
@@ -115,6 +108,18 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.index_usage_statistics",
 	"crdb_internal.table_indexes",
 	"crdb_internal.transaction_contention_events",
+}
+
+// forbiddenSystemTables are system tables which we do not wish to
+// retrieve during a zip operation, foremost because of
+// confidentiality concerns.
+var forbiddenSystemTables = map[string]struct{}{
+	"system.users":                   {}, // avoid downloading passwords.
+	"system.web_sessions":            {}, // avoid downloading active session tokens.
+	"system.join_tokens":             {}, // avoid downloading secret join keys.
+	"system.comments":                {}, // avoid downloading noise from SQL schema.
+	"system.ui":                      {}, // avoid downloading noise from UI customizations.
+	"system.statement_bundle_chunks": {}, // avoid downloading a large table that's hard to interpret currently.
 }
 
 // nodesInfo holds node details pulled from a SQL or storage node.
@@ -139,8 +144,20 @@ func (zc *debugZipContext) collectClusterData(
 		}
 	}
 
-	for _, table := range debugZipTablesPerCluster {
-		query := fmt.Sprintf(`SELECT * FROM %s`, table)
+	allSysTables, err := zc.getListOfSystemTables(ctx)
+	if err != nil {
+		return nodesInfo{}, nil, err
+	}
+	var sysTables []string
+	for _, s := range allSysTables {
+		if _, ok := forbiddenSystemTables[s]; !ok {
+			sysTables = append(sysTables, s)
+		}
+	}
+	tablesToQuery := append(debugZipTablesPerCluster, sysTables...)
+
+	for _, table := range tablesToQuery {
+		query := fmt.Sprintf(`TABLE %s`, table)
 		if override, ok := customQuery[table]; ok {
 			query = override
 		}
@@ -230,6 +247,41 @@ func (zc *debugZipContext) collectClusterData(
 	}
 
 	return ni, livenessByNodeID, nil
+}
+
+// getListOfSystemTables retrieves the list of tables in the `system` catalog,
+// qualified with `system.` and without the `public` schema prefix. The names
+// are sorted.
+func (zc *debugZipContext) getListOfSystemTables(ctx context.Context) ([]string, error) {
+	const getSysTablesQuery = `
+WITH
+  sysid AS (SELECT id FROM system.namespace WHERE "parentID" = 0 AND name = 'system'),
+  scid  AS (SELECT id FROM system.namespace WHERE "parentID" IN (TABLE sysid) AND "parentSchemaID" = 0 AND name = 'public')
+SELECT name
+FROM system.namespace WHERE "parentID" IN (TABLE sysid) AND "parentSchemaID" IN (TABLE scid)
+ORDER BY name
+`
+	s := zc.clusterPrinter.start("retrieving list of system tables")
+	_, rows, requestErr := sqlExecCtx.RunQuery(ctx,
+		zc.firstNodeSQLConn,
+		clisqlclient.MakeQuery(getSysTablesQuery), true /* showMoreChars */)
+	if requestErr != nil {
+		if err := zc.z.createError(s, "system", requestErr); err != nil {
+			return nil, errors.Wrap(err, "fetching list of system tables")
+		}
+	} else {
+		s.done()
+	}
+
+	zc.clusterPrinter.info("%d system tables found", len(rows))
+
+	// Build the result list.
+	names := make([]string, 0, len(rows))
+	for _, t := range rows {
+		names = append(names, "system."+t[0])
+	}
+
+	return names, nil
 }
 
 // nodesInfo constructs debug data for all nodes for the debug zip output.
