@@ -1,3 +1,4 @@
+# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants
 # LogicTest: local
 
 statement error syntax
