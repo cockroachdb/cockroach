@@ -413,7 +413,11 @@ func TestImportInTenant(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := sharedTestdata(t)
-	args := base.TestServerArgs{ExternalIODir: baseDir}
+	args := base.TestServerArgs{
+		ExternalIODir: baseDir,
+		// Test is designed to run inside a tenant.
+		DisableDefaultSQLServer: true,
+	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
@@ -476,8 +480,8 @@ func TestImportInMultiServerTenant(t *testing.T) {
 
 	// Setup another SQL server on the same tenant.
 	_, conn2 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		TenantID: roachpb.MakeTenantID(10),
-		Existing: true,
+		TenantID:            roachpb.MakeTenantID(10),
+		DisableCreateTenant: true,
 	})
 	defer conn2.Close()
 	t2 := sqlutils.MakeSQLRunner(conn2)

@@ -20,7 +20,10 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
+	"flag"
+	"math/rand"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,14 +34,68 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+var tenantModeFlag = flag.String(
+	"tenantMode", "default",
+	"tenantMode in which to run tests. Options are forceTenant, forceNoTenant, and default "+
+		"which alternates between tenant and no-tenant mode probabilistically. Note that the two force "+
+		"modes are ignored if the test is already forced to run in one of the two modes.")
+
+const (
+	tenantModeForceTenant   = "forceTenant"
+	tenantModeForceNoTenant = "forceNoTenant"
+	tenantModeForceDefault  = "default"
+)
+
+// ShouldStartDefaultSQLServer determines whether a default SQL server (aka
+// tenant) should be started for test servers or clusters. It defaults to 50%
+// probability, but can be overridden by the tenantMode test flag or the
+// COCKROACH_TEST_TENANT_MODE environment variable. If both the environment
+// variable and the test flag are set, the environment variable wins out.
+func ShouldStartDefaultSQLServer(t testing.TB) bool {
+	probabilityOfStartingDefaultSQLServer := 0.5
+
+	tenantModeTestString, envSet := envutil.EnvString("COCKROACH_TEST_TENANT_MODE", 0)
+	if !envSet {
+		tenantModeTestString = *tenantModeFlag
+	}
+
+	switch tenantModeTestString {
+	case tenantModeForceTenant:
+		probabilityOfStartingDefaultSQLServer = 1.0
+	case tenantModeForceNoTenant:
+		probabilityOfStartingDefaultSQLServer = 0.0
+	case tenantModeForceDefault:
+		probabilityOfStartingDefaultSQLServer = 0.5
+	default:
+		t.Fatal("invalid setting of tenantMode flag")
+	}
+
+	if rand.Float64() > probabilityOfStartingDefaultSQLServer {
+		return false
+	}
+
+	// We're starting the default SQL server (i.e. we're running this test in a
+	// tenant). Log this for easier debugging.
+	log.Shout(context.Background(), severity.INFO,
+		"NOTE: Running test with the default SQL Server (i.e. within a tenant). "+
+			"If you are only seeing a test case failure when this message appears, there may be a "+
+			"problem with your test case running within tenants.")
+
+	return true
+}
 
 // TestServerInterface defines test server functionality that tests need; it is
 // implemented by server.TestServer.
@@ -224,11 +281,27 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
+	if !params.DisableDefaultSQLServer {
+		// Determine if we should probabilistically start a default SQL server
+		// (aka tenant) for this server.
+		startDefaultSQLServer := ShouldStartDefaultSQLServer(t)
+		if !startDefaultSQLServer {
+			// If we're told not to start a default SQL server, set the
+			// disable flag explicitly.
+			params.DisableDefaultSQLServer = true
+		}
+	}
+
 	server, err := NewServer(params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
+
 	if err := server.Start(context.Background()); err != nil {
+		if strings.Contains(err.Error(), "requires a CCL binary") {
+			server.Stopper().Stop(context.Background())
+			skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+		}
 		t.Fatalf("%+v", err)
 	}
 	goDB := OpenDBConn(
@@ -297,6 +370,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 		return nil, err
 	}
 	if err := server.Start(context.Background()); err != nil {
+		server.Stopper().Stop(context.Background())
 		return nil, err
 	}
 	return server, nil
