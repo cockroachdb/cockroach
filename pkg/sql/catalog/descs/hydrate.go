@@ -31,7 +31,7 @@ import (
 // do not get hydrated.
 //
 // TODO(ajwerner): This should accept flags to indicate whether we can resolve
-// offline descriptors.
+// dropped / offline descriptors.
 func (tc *Collection) hydrateTypesInTableDesc(
 	ctx context.Context, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (catalog.TableDescriptor, error) {
@@ -79,17 +79,26 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		getType := typedesc.TypeLookupFunc(func(
 			ctx context.Context, id descpb.ID,
 		) (tree.TypeName, catalog.TypeDescriptor, error) {
-			desc, err := tc.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
+			desc, err := tc.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:       true,
+					AvoidSynthetic: true,
+				},
+			})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
 			_, dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(),
-				tree.DatabaseLookupFlags{Required: true})
+				tree.DatabaseLookupFlags{
+					Required:       true,
+					AvoidSynthetic: true})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
 			sc, err := tc.GetImmutableSchemaByID(
-				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
+				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{
+					Required:       true,
+					AvoidSynthetic: true})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
