@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/idle"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
@@ -96,9 +95,6 @@ type ProxyOptions struct {
 	// PollConfigInterval defines polling interval for pickup up changes in
 	// config file.
 	PollConfigInterval time.Duration
-	// DrainTimeout if set, will close DRAINING connections that have been idle
-	// for this duration.
-	DrainTimeout time.Duration
 	// ThrottleBaseDelay is the initial exponential backoff triggered in
 	// response to the first connection failure.
 	ThrottleBaseDelay time.Duration
@@ -134,9 +130,6 @@ type proxyHandler struct {
 
 	// throttleService will do throttling of incoming connection requests.
 	throttleService throttler.Service
-
-	// idleMonitor will detect idle connections to DRAINING pods.
-	idleMonitor *idle.Monitor
 
 	// directoryCache is used to resolve tenants to their IP addresses.
 	directoryCache tenant.DirectoryCache
@@ -227,18 +220,9 @@ func newProxyHandler(
 		_ = conn.Close() // nolint:grpcconnclose
 	}))
 
-	// If a drain timeout has been specified, then start the idle monitor and
-	// the pod watcher. When a pod enters the DRAINING state, the pod watcher
-	// will set the idle monitor to detect connections without activity and
-	// terminate them.
 	var dirOpts []tenant.DirOption
-	if options.DrainTimeout != 0 {
-		handler.idleMonitor = idle.NewMonitor(ctx, options.DrainTimeout)
-
-		podWatcher := make(chan *tenant.Pod)
-		go handler.startPodWatcher(ctx, podWatcher)
-		dirOpts = append(dirOpts, tenant.PodWatcher(podWatcher))
-	}
+	podWatcher := make(chan *tenant.Pod)
+	dirOpts = append(dirOpts, tenant.PodWatcher(podWatcher))
 	if handler.testingKnobs.dirOpts != nil {
 		dirOpts = append(dirOpts, handler.testingKnobs.dirOpts...)
 	}
@@ -255,6 +239,10 @@ func newProxyHandler(
 	if err != nil {
 		return nil, err
 	}
+
+	// Only start the pod watcher once everything has been initialized. This
+	// will depend on the balancer eventually.
+	go handler.startPodWatcher(ctx, podWatcher)
 
 	return &handler, nil
 }
@@ -346,19 +334,6 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		connector.TLSConfig = &tls.Config{InsecureSkipVerify: handler.SkipVerify}
 	}
 
-	// Monitor for idle connection, if requested.
-	if handler.idleMonitor != nil {
-		connector.IdleMonitorWrapperFn = func(serverConn net.Conn) net.Conn {
-			return handler.idleMonitor.DetectIdle(serverConn, func() {
-				err := newErrorf(codeIdleDisconnect, "idle connection closed")
-				select {
-				case errConnection <- err: /* error reported */
-				default: /* the channel already contains an error */
-				}
-			})
-		}
-	}
-
 	f := newForwarder(ctx, connector, handler.metrics, nil /* timeSource */)
 	defer f.Close()
 
@@ -420,7 +395,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	case err := <-f.errCh: // From forwarder.
 		handler.metrics.updateForError(err)
 		return err
-	case err := <-errConnection: // From denyListWatcher or idleMonitor.
+	case err := <-errConnection: // From denyListWatcher.
 		handler.metrics.updateForError(err)
 		return err
 	case <-handler.stopper.ShouldQuiesce():
@@ -435,20 +410,18 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 // are subject to an idle timeout that closes them after a short period of
 // inactivity. If a pod transitions back to the RUNNING state or to the DELETING
 // state, then the idle timeout needs to be cleared.
+//
+// TODO(jaylim-crl): Update comment above.
 func (handler *proxyHandler) startPodWatcher(ctx context.Context, podWatcher chan *tenant.Pod) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case pod := <-podWatcher:
+		case <-podWatcher:
 			// TODO(jaylim-crl): Invoke rebalance logic here whenever we see
 			// a new SQL pod.
-			if pod.State == tenant.DRAINING {
-				handler.idleMonitor.SetIdleChecks(pod.Addr)
-			} else {
-				// Clear idle checks either for RUNNING or DELETING.
-				handler.idleMonitor.ClearIdleChecks(pod.Addr)
-			}
+			//
+			// Do nothing for now.
 		}
 	}
 }

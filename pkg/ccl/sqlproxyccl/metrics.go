@@ -200,8 +200,6 @@ func (metrics *metrics) updateForError(err error) {
 			metrics.BackendDisconnectCount.Inc(1)
 		case codeClientDisconnected:
 			metrics.ClientDisconnectCount.Inc(1)
-		case codeIdleDisconnect:
-			metrics.IdleDisconnectCount.Inc(1)
 		case codeProxyRefusedConnection:
 			metrics.RefusedConnCount.Inc(1)
 			metrics.BackendDownCount.Inc(1)

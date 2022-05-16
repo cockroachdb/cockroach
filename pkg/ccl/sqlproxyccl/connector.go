@@ -72,16 +72,6 @@ type connector struct {
 	// NOTE: This field is optional.
 	TLSConfig *tls.Config
 
-	// IdleMonitorWrapperFn is used to wrap the connection to the SQL pod with
-	// an idle monitor. If not specified, the raw connection to the SQL pod
-	// will be returned.
-	//
-	// In the case of connecting with an authentication phase, the connection
-	// will be wrapped before starting the authentication.
-	//
-	// NOTE: This field is optional.
-	IdleMonitorWrapperFn func(serverConn net.Conn) net.Conn
-
 	// Testing knobs for internal connector calls. If specified, these will
 	// be called instead of the actual logic.
 	testingKnobs struct {
@@ -111,10 +101,6 @@ func (c *connector) OpenTenantConnWithToken(
 			serverConn.Close()
 		}
 	}()
-
-	if c.IdleMonitorWrapperFn != nil {
-		serverConn = c.IdleMonitorWrapperFn(serverConn)
-	}
 
 	// When we use token-based authentication, we will still get the initial
 	// connection data messages (e.g. ParameterStatus and BackendKeyData).
@@ -160,10 +146,6 @@ func (c *connector) OpenTenantConnWithAuth(
 			serverConn.Close()
 		}
 	}()
-
-	if c.IdleMonitorWrapperFn != nil {
-		serverConn = c.IdleMonitorWrapperFn(serverConn)
-	}
 
 	// Perform user authentication for non-token-based auth methods. This will
 	// block until the server has authenticated the client.
