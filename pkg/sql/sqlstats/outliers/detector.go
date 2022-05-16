@@ -17,7 +17,31 @@ type detector interface {
 	isOutlier(*Outlier_Statement) bool
 }
 
+var _ detector = &anyDetector{}
 var _ detector = &latencyThresholdDetector{}
+
+type anyDetector struct {
+	detectors []detector
+}
+
+func (a anyDetector) enabled() bool {
+	for _, d := range a.detectors {
+		if d.enabled() {
+			return true
+		}
+	}
+	return false
+}
+
+func (a anyDetector) isOutlier(statement *Outlier_Statement) bool {
+	// Because some detectors may need to observe all statements to build up
+	// their baseline sense of what "normal" is, we avoid short-circuiting.
+	result := false
+	for _, d := range a.detectors {
+		result = d.isOutlier(statement) || result
+	}
+	return result
+}
 
 type latencyThresholdDetector struct {
 	st *cluster.Settings

@@ -66,7 +66,7 @@ func New(st *cluster.Settings) *Registry {
 			return size > maxCacheSize
 		},
 	}
-	r := &Registry{detector: latencyThresholdDetector{st: st}}
+	r := &Registry{detector: anyDetector{detectors: []detector{latencyThresholdDetector{st: st}}}}
 	r.mu.statements = make(map[clusterunique.ID][]*Outlier_Statement)
 	r.mu.outliers = cache.NewUnorderedCache(config)
 	return r
