@@ -28,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -87,7 +85,7 @@ type changeAggregator struct {
 	// eventProducer produces the next event from the kv feed.
 	eventProducer kvevent.Reader
 	// eventConsumer consumes the event.
-	eventConsumer kvEventConsumer
+	eventConsumer *kvEventToRowConsumer
 
 	// lastFlush and flushFrequency keep track of the flush frequency.
 	lastFlush      time.Time
@@ -294,7 +292,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		kvFeedHighWater = ca.spec.Feed.StatementTime
 	}
 
-	ca.eventProducer, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, endTime, ca.sliMetrics)
+	ca.eventProducer, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, endTime)
 	if err != nil {
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
@@ -302,13 +300,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	if ca.spec.Feed.Opts[changefeedbase.OptFormat] == string(changefeedbase.OptFormatNative) {
-		ca.eventConsumer = newNativeKVConsumer(ca.sink)
-	} else {
-		ca.eventConsumer = newKVEventToRowConsumer(
-			ctx, ca.flowCtx.Cfg, ca.frontier.SpanFrontier(), kvFeedHighWater,
-			ca.sink, ca.encoder, ca.spec.Feed, ca.knobs, ca.topicNamer)
-	}
+	ca.eventConsumer = newKVEventToRowConsumer(
+		ctx, ca.flowCtx.Cfg, ca.frontier.SpanFrontier(), kvFeedHighWater,
+		ca.sink, ca.encoder, ca.spec.Feed, ca.knobs, ca.topicNamer)
 }
 
 func (ca *changeAggregator) startKVFeed(
@@ -317,7 +311,6 @@ func (ca *changeAggregator) startKVFeed(
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
 	endTime hlc.Timestamp,
-	sm *sliMetrics,
 ) (kvevent.Reader, error) {
 	cfg := ca.flowCtx.Cfg
 	buf := kvevent.NewThrottlingBuffer(
@@ -326,7 +319,7 @@ func (ca *changeAggregator) startKVFeed(
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
 	// we return the kvevent.Reader part to the caller.
-	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan, endTime, sm)
+	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan, endTime)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -358,7 +351,6 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
 	endTime hlc.Timestamp,
-	sm *sliMetrics,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		ca.spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
@@ -657,11 +649,6 @@ func (ca *changeAggregator) ConsumerClosed() {
 	ca.close()
 }
 
-type kvEventConsumer interface {
-	// ConsumeEvent responsible for consuming kv event.
-	ConsumeEvent(ctx context.Context, event kvevent.Event) error
-}
-
 type kvEventToRowConsumer struct {
 	frontier             *span.Frontier
 	encoder              Encoder
@@ -676,8 +663,6 @@ type kvEventToRowConsumer struct {
 	topicNamer           *TopicNamer
 }
 
-var _ kvEventConsumer = &kvEventToRowConsumer{}
-
 func newKVEventToRowConsumer(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
@@ -688,7 +673,7 @@ func newKVEventToRowConsumer(
 	details jobspb.ChangefeedDetails,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
-) kvEventConsumer {
+) *kvEventToRowConsumer {
 	rfCache := newRowFetcherCache(
 		ctx,
 		cfg.Codec,
@@ -708,129 +693,6 @@ func newKVEventToRowConsumer(
 		knobs:                knobs,
 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 		topicNamer:           topicNamer,
-	}
-}
-
-type tableDescriptorTopic struct {
-	tableDesc           catalog.TableDescriptor
-	spec                jobspb.ChangefeedTargetSpecification
-	nameComponentsCache []string
-	identifierCache     TopicIdentifier
-}
-
-// GetNameComponents implements the TopicDescriptor interface
-func (tdt *tableDescriptorTopic) GetNameComponents() []string {
-	if len(tdt.nameComponentsCache) == 0 {
-		tdt.nameComponentsCache = []string{tdt.spec.StatementTimeName}
-	}
-	return tdt.nameComponentsCache
-}
-
-// GetTopicIdentifier implements the TopicDescriptor interface
-func (tdt *tableDescriptorTopic) GetTopicIdentifier() TopicIdentifier {
-	if tdt.identifierCache.TableID == 0 {
-		tdt.identifierCache = TopicIdentifier{
-			TableID: tdt.tableDesc.GetID(),
-		}
-	}
-	return tdt.identifierCache
-}
-
-// GetVersion implements the TopicDescriptor interface
-func (tdt *tableDescriptorTopic) GetVersion() descpb.DescriptorVersion {
-	return tdt.tableDesc.GetVersion()
-}
-
-// GetTargetSpecification implements the TopicDescriptor interface
-func (tdt *tableDescriptorTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
-	return tdt.spec
-}
-
-var _ TopicDescriptor = &tableDescriptorTopic{}
-
-type columnFamilyTopic struct {
-	tableDesc           catalog.TableDescriptor
-	familyDesc          descpb.ColumnFamilyDescriptor
-	spec                jobspb.ChangefeedTargetSpecification
-	nameComponentsCache []string
-	identifierCache     TopicIdentifier
-}
-
-// GetNameComponents implements the TopicDescriptor interface
-func (cft *columnFamilyTopic) GetNameComponents() []string {
-	if len(cft.nameComponentsCache) == 0 {
-		cft.nameComponentsCache = []string{
-			cft.spec.StatementTimeName,
-			cft.familyDesc.Name,
-		}
-	}
-	return cft.nameComponentsCache
-}
-
-// GetTopicIdentifier implements the TopicDescriptor interface
-func (cft *columnFamilyTopic) GetTopicIdentifier() TopicIdentifier {
-	if cft.identifierCache.TableID == 0 {
-		cft.identifierCache = TopicIdentifier{
-			TableID:  cft.tableDesc.GetID(),
-			FamilyID: cft.familyDesc.ID,
-		}
-	}
-	return cft.identifierCache
-}
-
-// GetVersion implements the TopicDescriptor interface
-func (cft *columnFamilyTopic) GetVersion() descpb.DescriptorVersion {
-	return cft.tableDesc.GetVersion()
-}
-
-// GetTargetSpecification implements the TopicDescriptor interface
-func (cft *columnFamilyTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
-	return cft.spec
-}
-
-var _ TopicDescriptor = &columnFamilyTopic{}
-
-type noTopic struct{}
-
-func (n noTopic) GetNameComponents() []string {
-	return []string{}
-}
-
-func (n noTopic) GetTopicIdentifier() TopicIdentifier {
-	return TopicIdentifier{}
-}
-
-func (n noTopic) GetVersion() descpb.DescriptorVersion {
-	return 0
-}
-
-func (n noTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
-	return jobspb.ChangefeedTargetSpecification{}
-}
-
-var _ TopicDescriptor = &noTopic{}
-
-func makeTopicDescriptorFromSpecForRow(
-	s jobspb.ChangefeedTargetSpecification, r encodeRow,
-) (TopicDescriptor, error) {
-	switch s.Type {
-	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
-		return &tableDescriptorTopic{
-			tableDesc: r.tableDesc,
-			spec:      s,
-		}, nil
-	case jobspb.ChangefeedTargetSpecification_EACH_FAMILY, jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
-		familyDesc, err := r.tableDesc.FindFamilyByID(r.familyID)
-		if err != nil {
-			return noTopic{}, err
-		}
-		return &columnFamilyTopic{
-			tableDesc:  r.tableDesc,
-			spec:       s,
-			familyDesc: *familyDesc,
-		}, nil
-	default:
-		return noTopic{}, errors.AssertionFailedf("Unsupported target type %s", s.Type)
 	}
 }
 
@@ -1041,32 +903,6 @@ func (c *kvEventToRowConsumer) eventToRow(
 	}
 
 	return r, nil
-}
-
-type nativeKVConsumer struct {
-	sink Sink
-}
-
-var _ kvEventConsumer = &nativeKVConsumer{}
-
-func newNativeKVConsumer(sink Sink) kvEventConsumer {
-	return &nativeKVConsumer{sink: sink}
-}
-
-// ConsumeEvent implements kvEventConsumer interface.
-func (c *nativeKVConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
-	if ev.Type() != kvevent.TypeKV {
-		return errors.AssertionFailedf("expected kv ev, got %v", ev.Type())
-	}
-	keyBytes := []byte(ev.KV().Key)
-	val := ev.KV().Value
-	valBytes, err := protoutil.Marshal(&val)
-	if err != nil {
-		return err
-	}
-
-	return c.sink.EmitRow(
-		ctx, &noTopic{}, keyBytes, valBytes, val.Timestamp, val.Timestamp, ev.DetachAlloc())
 }
 
 const (

@@ -444,7 +444,7 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	bucket, accessKey, secretKey := checkS3Credentials(t)
+	const unredactedSinkURI = "null://blah?AWS_ACCESS_KEY_ID=the_secret"
 
 	params, _ := tests.CreateTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
@@ -475,9 +475,7 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 		},
 	}
 
-	query = fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo, bar INTO
-		's3://%s/fake/path?AWS_ACCESS_KEY_ID=%s&AWS_SECRET_ACCESS_KEY=%s'`, bucket, accessKey, secretKey)
-	sqlDB.QueryRow(t, query).Scan(&changefeedID)
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR TABLE foo, bar INTO $1`, unredactedSinkURI).Scan(&changefeedID)
 
 	sqlDB.Exec(t, `PAUSE JOB $1`, changefeedID)
 	waitForJobStatus(sqlDB, t, changefeedID, `paused`)
@@ -492,15 +490,12 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 	details, ok := job.Details().(jobspb.ChangefeedDetails)
 	require.True(t, ok)
 
-	require.Equal(t, details.SinkURI,
-		fmt.Sprintf(`s3://%s/fake/path?AWS_ACCESS_KEY_ID=%s&AWS_SECRET_ACCESS_KEY=%s`, bucket, accessKey, secretKey))
+	require.Equal(t, unredactedSinkURI, details.SinkURI)
 }
 
 func TestAlterChangefeedChangeSinkTypeError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	bucket, accessKey, secretKey := checkS3Credentials(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -516,8 +511,8 @@ func TestAlterChangefeedChangeSinkTypeError(t *testing.T) {
 		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
 
 		sqlDB.ExpectErr(t,
-			`pq: New sink type "s3" does not match original sink type "kafka". Altering the sink type of a changefeed is disallowed, consider creating a new changefeed instead.`,
-			fmt.Sprintf(`ALTER CHANGEFEED %d SET sink = 's3://%s/fake/path?AWS_ACCESS_KEY_ID=%s&AWS_SECRET_ACCESS_KEY=%s'`, feed.JobID(), bucket, accessKey, secretKey),
+			`pq: New sink type "null" does not match original sink type "kafka". Altering the sink type of a changefeed is disallowed, consider creating a new changefeed instead.`,
+			fmt.Sprintf(`ALTER CHANGEFEED %d SET sink = 'null://'`, feed.JobID()),
 		)
 	}
 

@@ -26,6 +26,9 @@ type TestingKnobs struct {
 	// OnRangeFeedStart invoked when rangefeed starts.  It is given
 	// the list of SpanTimePairs.
 	OnRangeFeedStart func(spans []kvcoord.SpanTimePair)
+	// EndTimeReached is a callback that may return true to indicate the
+	// feed should exit because its end time has been reached.
+	EndTimeReached func() bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
