@@ -486,10 +486,12 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 	}
 	msg := "failed preemptive refresh"
 	if refreshErr != nil {
+		backupMsg := refreshErr.String()
 		if refreshErr, ok := refreshErr.GetDetail().(*roachpb.RefreshFailedError); ok {
 			msg = fmt.Sprintf("%s due to a conflict: %s on key %s", msg, refreshErr.FailureReason(), refreshErr.Key)
 		} else {
-			msg = fmt.Sprintf("%s - unknown error: %s", msg, refreshErr)
+			// We can't get details, so return the refreshErr string
+			msg = fmt.Sprintf("%s - unknown error %s", msg, backupMsg)
 		}
 	}
 	retryErr := roachpb.NewTransactionRetryError(reason, msg)

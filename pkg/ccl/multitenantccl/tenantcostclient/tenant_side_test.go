@@ -641,7 +641,9 @@ func TestSQLLivenessExemption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{})
+	// Have to disable the SQL server because test below assumes it's
+	// running on the host tenant and creates a user tenant.
+	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultSQLServer: true})
 	defer hostServer.Stopper().Stop(context.Background())
 
 	tenantID := serverutils.TestTenantID()
@@ -658,7 +660,6 @@ func TestSQLLivenessExemption(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &st.SV, time.Millisecond)
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
-		Existing:                    true,
 		TenantID:                    tenantID,
 		Settings:                    st,
 		AllowSettingClusterSettings: true,

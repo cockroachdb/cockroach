@@ -64,7 +64,9 @@ func TestTenantUpgrade(t *testing.T) {
 		clusterversion.TestingBinaryMinSupportedVersion, &settings.SV))
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings: settings,
+			// Test validates tenant behavior. No need for a SQL server.
+			DisableDefaultSQLServer: true,
+			Settings:                settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -138,7 +140,6 @@ func TestTenantUpgrade(t *testing.T) {
 		{
 			tenantServer, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
 				TenantID: roachpb.MakeTenantID(initialTenantID),
-				Existing: true,
 			})
 			require.NoError(t, err)
 			initialTenant, cleanup = connectToTenant(t, tenantServer.SQLAddr())
@@ -163,7 +164,6 @@ func TestTenantUpgrade(t *testing.T) {
 		{
 			tenantServer, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
 				TenantID: roachpb.MakeTenantID(postUpgradeTenantID),
-				Existing: true,
 			})
 			require.NoError(t, err)
 			postUpgradeTenant, cleanup = connectToTenant(t, tenantServer.SQLAddr())
@@ -212,7 +212,9 @@ func TestTenantUpgradeFailure(t *testing.T) {
 	// Initialize the version to the BinaryMinSupportedVersion.
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings: settings,
+			// Test validates tenant behavior. No need for a SQL server.
+			DisableDefaultSQLServer: true,
+			Settings:                settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -227,7 +229,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 	startAndConnectToTenant := func(t *testing.T, tenantInfo *tenantInfo) (_ *gosql.DB, cleanup func()) {
 		tenant, err := tc.Server(0).StartTenant(ctx, *tenantInfo.tenantArgs)
 		require.NoError(t, err)
-		tenantInfo.tenantArgs.Existing = true
 		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(username.RootUser))
 		tenantDB, err := gosql.Open("postgres", pgURL.String())
 		require.NoError(t, err)
@@ -236,7 +237,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			cleanupPGUrl()
 		}
 	}
-	mkTenant := func(t *testing.T, id uint64, existing bool) *tenantInfo {
+	mkTenant := func(t *testing.T, id uint64) *tenantInfo {
 		settings := cluster.MakeTestingClusterSettingsWithVersions(
 			v2,
 			v0,
@@ -251,7 +252,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		tenantArgs := base.TestTenantArgs{
 			Stopper:  v2onMigrationStopper,
 			TenantID: roachpb.MakeTenantID(id),
-			Existing: existing,
 			TestingKnobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				MigrationManager: &migration.TestingKnobs{
@@ -296,7 +296,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 	t.Run("upgrade tenant have it crash then resume", func(t *testing.T) {
 		// Create a tenant before upgrading anything and verify its version.
 		const initialTenantID = 10
-		tenantInfo := mkTenant(t, initialTenantID, false /*existing*/)
+		tenantInfo := mkTenant(t, initialTenantID)
 		tenant, cleanup := startAndConnectToTenant(t, tenantInfo)
 		initialTenantRunner := sqlutils.MakeSQLRunner(tenant)
 		// Ensure that the tenant works.
@@ -326,7 +326,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			v2.String())
 		<-waitForTenantClose
 		cleanup()
-		tenantInfo = mkTenant(t, initialTenantID, true /*existing*/)
+		tenantInfo = mkTenant(t, initialTenantID)
 		tenant, cleanup = startAndConnectToTenant(t, tenantInfo)
 		initialTenantRunner = sqlutils.MakeSQLRunner(tenant)
 		// Ensure that the tenant still works and the target
@@ -383,6 +383,9 @@ func TestTenantSystemConfigUpgrade(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: settings,
+			// Test is designed to run with explicit tenants. No need to run
+			// with an implicit tenant.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),

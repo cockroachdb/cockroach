@@ -58,7 +58,6 @@ func TestTenantWithDecommissionedID(t *testing.T) {
 	for instanceID := 1; instanceID <= int(decommissionID); instanceID++ {
 		sqlServer, tenant := serverutils.StartTenant(t, server, base.TestTenantArgs{
 			TenantID: tenantID,
-			Existing: instanceID != 1,
 			// Set a low heartbeat interval. The first heartbeat succeeds
 			// because the tenant needs to communicate with the kv node to
 			// determine its instance id.
