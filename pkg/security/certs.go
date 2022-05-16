@@ -158,10 +158,6 @@ func createCACertAndKey(
 			CAPem, ClientCAPem, UICAPem, caType)
 	}
 
-	// The certificate manager expands the env for the certs directory.
-	// For consistency, we need to do this for the key as well.
-	caKeyPath = os.ExpandEnv(caKeyPath)
-
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
@@ -269,10 +265,6 @@ func CreateNodePair(
 		return errors.New("the path to the certs directory is required")
 	}
 
-	// The certificate manager expands the env for the certs directory.
-	// For consistency, we need to do this for the key as well.
-	caKeyPath = os.ExpandEnv(caKeyPath)
-
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
@@ -331,10 +323,6 @@ func CreateUIPair(
 		return errors.New("the path to the certs directory is required")
 	}
 
-	// The certificate manager expands the env for the certs directory.
-	// For consistency, we need to do this for the key as well.
-	caKeyPath = os.ExpandEnv(caKeyPath)
-
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
@@ -392,10 +380,6 @@ func CreateClientPair(
 	if len(certsDir) == 0 {
 		return errors.New("the path to the certs directory is required")
 	}
-
-	// The certificate manager expands the env for the certs directory.
-	// For consistency, we need to do this for the key as well.
-	caKeyPath = os.ExpandEnv(caKeyPath)
 
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
@@ -477,10 +461,6 @@ func CreateTenantPair(
 	if len(certsDir) == 0 {
 		return nil, errors.New("the path to the certs directory is required")
 	}
-
-	// The certificate manager expands the env for the certs directory.
-	// For consistency, we need to do this for the key as well.
-	caKeyPath = os.ExpandEnv(caKeyPath)
 
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
