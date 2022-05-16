@@ -20,7 +20,10 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
+	"flag"
+	"math/rand"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,14 +34,72 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+var TenantModeFlag = flag.String(
+	TenantModeFlagName, tenantModeDefault,
+	"tenantMode in which to run tests. Options are forceTenant, forceNoTenant, and default "+
+		"which alternates between tenant and no-tenant mode probabilistically. Note that the two force "+
+		"modes are ignored if the test is already forced to run in one of the two modes.")
+
+const TenantModeFlagName = "tenantMode"
+
+const (
+	tenantModeForceTenant   = "forceTenant"
+	tenantModeForceNoTenant = "forceNoTenant"
+	tenantModeDefault       = "default"
+)
+
+// ShouldStartDefaultTestTenant determines whether a default test tenant
+// should be started for test servers or clusters, to serve SQL traffic by
+// default. It defaults to 50% probability, but can be overridden by the
+// tenantMode test flag or the COCKROACH_TEST_TENANT_MODE environment variable.
+// If both the environment variable and the test flag are set, the environment
+// variable wins out.
+func ShouldStartDefaultTestTenant(t testing.TB) bool {
+	const defaultProbabilityOfStartingTestTenant = 0.5
+	var probabilityOfStartingDefaultTestTenant float64
+
+	tenantModeTestString, envSet := envutil.EnvString("COCKROACH_TEST_TENANT_MODE", 0)
+	if !envSet {
+		tenantModeTestString = *TenantModeFlag
+	}
+
+	switch tenantModeTestString {
+	case tenantModeForceTenant:
+		probabilityOfStartingDefaultTestTenant = 1.0
+	case tenantModeForceNoTenant:
+		probabilityOfStartingDefaultTestTenant = 0.0
+	case tenantModeDefault:
+		probabilityOfStartingDefaultTestTenant = defaultProbabilityOfStartingTestTenant
+	default:
+		t.Fatal("invalid setting of tenantMode flag")
+	}
+
+	if rand.Float64() > probabilityOfStartingDefaultTestTenant {
+		return false
+	}
+
+	// We're starting the default SQL server (i.e. we're running this test in a
+	// tenant). Log this for easier debugging.
+	log.Shout(context.Background(), severity.INFO,
+		"Running test with the default test tenant. "+
+			"If you are only seeing a test case failure when this message appears, there may be a "+
+			"problem with your test case running within tenants.")
+
+	return true
+}
 
 // TestServerInterface defines test server functionality that tests need; it is
 // implemented by server.TestServer.
@@ -228,11 +289,26 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
+	if !params.DisableDefaultTestTenant {
+		// Determine if we should probabilistically start a test tenant
+		// for this server.
+		startDefaultSQLServer := ShouldStartDefaultTestTenant(t)
+		if !startDefaultSQLServer {
+			// If we're told not to start a test tenant, set the
+			// disable flag explicitly.
+			params.DisableDefaultTestTenant = true
+		}
+	}
+
 	server, err := NewServer(params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
+
 	if err := server.Start(context.Background()); err != nil {
+		if strings.Contains(err.Error(), "requires a CCL binary") {
+			skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+		}
 		t.Fatalf("%+v", err)
 	}
 	goDB := OpenDBConn(

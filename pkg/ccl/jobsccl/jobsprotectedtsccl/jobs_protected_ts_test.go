@@ -137,9 +137,9 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Tests fail with SQL server. Disabling until we can
-			// investigate further.
-			DisableDefaultSQLServer: true,
+			// Tests fail within a tenant. Disabling until we can
+			// investigate further. Tracked with #76378.
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -261,9 +261,9 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Test fails with SQL server. Disabling pending further
-			// investigation.
-			DisableDefaultSQLServer: true,
+			// Test fails within a tenant. Disabling pending further
+			// investigation. Tracked with #76378.
+			DisableDefaultTestTenant: true,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)

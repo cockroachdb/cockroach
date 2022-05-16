@@ -91,7 +91,7 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 		test.Start(t, serverArgs)
 		defer test.Close()
 
-		if testTenant || test.cluster.StartedDefaultSQLServer() {
+		if testTenant || test.cluster.StartedDefaultTestTenant() {
 			// TODO(andyk): Re-enable these tests once tenant clusters fully
 			// support the features they're using.
 			switch path {
