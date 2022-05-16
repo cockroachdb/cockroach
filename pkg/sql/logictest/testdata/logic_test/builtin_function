@@ -2058,6 +2058,7 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('unknown'::regtype, -1)),
        (format_type('varbit'::regtype, -1)),
        (format_type('varchar'::regtype, -1)),
+       (format_type('void'::regtype, -1)),
        (format_type('int[]'::regtype, -1)),
        (format_type('int2[]'::regtype, -1)),
        (format_type('string[]'::regtype, -1)),
@@ -2102,6 +2103,7 @@ uuid
 unknown
 bit varying
 character varying
+void
 bigint[]
 smallint[]
 text[]
@@ -2154,6 +2156,10 @@ query T
 SELECT format_type(oid, -1) FROM pg_type WHERE typname='_text' LIMIT 1
 ----
 text[]
+
+# Ensure each type can be formatted.
+statement ok
+SELECT format_type(oid, NULL) FROM pg_type
 
 query T
 SELECT pg_catalog.pg_get_userbyid((SELECT oid FROM pg_roles WHERE rolname='root'))
