@@ -41,6 +41,8 @@ func ShowCreateTableTest(
 	t *testing.T, extraQuerySetup string, testCases []ShowCreateTableTestCase,
 ) {
 	params, _ := tests.CreateTestServerParams()
+	// We're running tenant tests, no need for a default SQL server.
+	params.DisableDefaultSQLServer = true
 	params.Locality.Tiers = []roachpb.Tier{
 		{Key: "region", Value: "us-west1"},
 	}
