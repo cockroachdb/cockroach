@@ -61,6 +61,8 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			ExternalIODir: dir,
+			// Test already runs from a SQL server.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
@@ -286,6 +288,8 @@ func TestSQLWatcherMultiple(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			// Test already runs from a SQL server.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
@@ -416,6 +420,8 @@ func TestSQLWatcherOnEventError(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			// Test already runs from a SQL server.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
@@ -465,6 +471,8 @@ func TestSQLWatcherHandlerError(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			// Test already runs from a SQL server.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
@@ -541,6 +549,8 @@ func TestWatcherReceivesNoopCheckpoints(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			// Test already runs from a SQL server.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
