@@ -1,21 +1,12 @@
-create-table
+setup
 CREATE TABLE defaultdb.customers (id INT PRIMARY KEY, email STRING UNIQUE);
-----
-
-create-table
 CREATE TABLE IF NOT EXISTS defaultdb.orders (
     id INT PRIMARY KEY,
     customer INT UNIQUE NOT NULL REFERENCES customers (id),
     orderTotal DECIMAL(9,2),
     INDEX (customer)
   );
-----
-
-create-sequence
 CREATE SEQUENCE defaultdb.SQ2;
-----
-
-create-table
 CREATE TABLE defaultdb.shipments (
     tracking_number UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     carrier STRING,
@@ -25,17 +16,8 @@ CREATE TABLE defaultdb.shipments (
     CONSTRAINT fk_customers FOREIGN KEY (customer_id) REFERENCES customers(id),
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES orders(customer)
   );
-----
-
-create-sequence
-CREATE SEQUENCE defaultdb.SQ1 OWNED BY defaultdb.shipments.carrier
-----
-
-create-view
-CREATE VIEW v1 AS (SELECT customer_id, carrier FROM defaultdb.shipments)
-----
-
-setup
+CREATE SEQUENCE defaultdb.SQ1 OWNED BY defaultdb.shipments.carrier;
+CREATE VIEW v1 AS (SELECT customer_id, carrier FROM defaultdb.shipments);
 COMMENT ON TABLE defaultdb.shipments IS 'shipment is important';
 COMMENT ON COLUMN defaultdb.shipments.tracking_number IS 'tracking_number is a must';
 COMMENT ON INDEX defaultdb.shipments@shipments_pkey IS 'pkey is good';
@@ -672,11 +654,8 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: view drops before the types, views and tables it depends on
 
-create-type
+setup
 CREATE TYPE defaultdb.greeting AS ENUM ('hello');
-----
-
-create-table
 CREATE TABLE defaultdb.greeter (
   x BOOL DEFAULT ('hello'::defaultdb.greeting = 'hello'::defaultdb.greeting),
   y defaultdb.greeting NOT NULL,

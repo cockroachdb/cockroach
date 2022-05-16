@@ -1,52 +1,16 @@
-create-database
-CREATE DATABASE db1;
-----
-
-create-schema
-CREATE SCHEMA db1.sc1
-----
-
-create-sequence
-CREATE SEQUENCE db1.public.SQ1
-----
-
-create-sequence
-CREATE SEQUENCE db1.sc1.SQ1
-----
-
-create-table
-CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'))
-----
-
-create-table
-CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'))
-----
-
-create-view
-CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1)
-----
-
-create-view
-CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
-----
-
-create-view
-CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
-----
-
-create-view
-CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
-----
-
-create-type
-CREATE TYPE db1.sc1.typ AS ENUM('a')
-----
-
-create-view
-CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
-----
-
 setup
+CREATE DATABASE db1;
+CREATE SCHEMA db1.sc1;
+CREATE SEQUENCE db1.public.SQ1;
+CREATE SEQUENCE db1.sc1.SQ1;
+CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'));
+CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'));
+CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1);
+CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1);
+CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
+CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
+CREATE TYPE db1.sc1.typ AS ENUM('a');
+CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4);
 COMMENT ON DATABASE db1 IS 'db1 is good';
 COMMENT ON SCHEMA db1.sc1 IS 'sc1 is good';
 COMMENT ON TABLE db1.sc1.t1 IS 't1 is good';

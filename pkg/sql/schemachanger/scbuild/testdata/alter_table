@@ -1,4 +1,4 @@
-create-table
+setup
 CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
 ----
 
@@ -280,7 +280,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       - 2
       tableId: 104
 
-create-table
+setup
 CREATE TABLE defaultdb.bar (j INT);
 ----
 

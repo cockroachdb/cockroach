@@ -1,4 +1,4 @@
-create-sequence
+setup
 CREATE SEQUENCE defaultdb.SQ1
 ----
 
@@ -72,12 +72,9 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
       IsNonCancelable: true
       JobID: 1
 
-create-table
-CREATE TABLE defaultdb.blog_posts (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING)
-----
-
-create-table
-CREATE TABLE defaultdb.blog_posts2 (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING)
+setup
+CREATE TABLE defaultdb.blog_posts (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING);
+CREATE TABLE defaultdb.blog_posts2 (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING);
 ----
 
 ops

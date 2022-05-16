@@ -1,12 +1,6 @@
-create-database
+setup
 CREATE DATABASE db1;
-----
-
-create-schema
 CREATE SCHEMA db1.sc1;
-----
-
-create-table
 CREATE TABLE db1.sc1.t1 (
   id INT PRIMARY KEY,
   amount INT,

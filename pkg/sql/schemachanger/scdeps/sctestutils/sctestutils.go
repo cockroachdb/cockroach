@@ -23,12 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -191,4 +193,18 @@ func TruncateJobOps(plan *scplan.Plan) {
 			}
 		}
 	}
+}
+
+func TableNameFromStmt(stmt parser.Statement) string {
+	tableName := ""
+	switch node := stmt.AST.(type) {
+	case *tree.CreateTable:
+		tableName = node.Table.String()
+	case *tree.CreateSequence:
+		tableName = node.Name.String()
+	case *tree.CreateView:
+		tableName = node.Name.String()
+	}
+
+	return tableName
 }
