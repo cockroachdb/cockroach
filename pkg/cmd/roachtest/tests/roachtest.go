@@ -24,6 +24,20 @@ import (
 
 func registerRoachtest(r registry.Registry) {
 	r.Add(registry.TestSpec{
+		Name:  "setup-prometheus",
+		Tags:  []string{"setup-prometheus"},
+		Owner: registry.OwnerTestEng,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			setupPrometheus(ctx, t, c, tpccOptions{}, []workloadInstance{
+				{
+					nodes:          c.Node(c.Spec().NodeCount),
+					prometheusPort: 2112,
+				},
+			})
+		},
+		Cluster: r.MakeClusterSpec(4),
+	})
+	r.Add(registry.TestSpec{
 		Name:    "roachtest/noop",
 		Tags:    []string{"roachtest"},
 		Owner:   registry.OwnerTestEng,
