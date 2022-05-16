@@ -24,6 +24,7 @@ import (
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -271,6 +273,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TempStorageConfig = params.TempStorageConfig
 	}
 
+	cfg.DisableDefaultSQLServer = params.DisableDefaultSQLServer
+
 	if cfg.TestingKnobs.Store == nil {
 		cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
 	}
@@ -307,6 +311,11 @@ type TestServer struct {
 	*Server
 	// httpTestServer provides the HTTP APIs of TestTenantInterface.
 	*httpTestServer
+	// The SQL servers associated with this server, and used for probabilistic
+	// testing within SQL servers (aka tenants). Currently, there is only one
+	// SQL server created by default, but longer term we may allow for the
+	// creation of multiple SQLServers for more advanced testing.
+	SQLServers []serverutils.TestTenantInterface
 }
 
 var _ serverutils.TestServerInterface = &TestServer{}
@@ -488,6 +497,76 @@ func (ts *TestServer) TenantStatusServer() interface{} {
 	return ts.status
 }
 
+// maybeStartTestSQLServer might start a test SQL server. This can then be used
+// for multi-tenant testing, where the default SQL connection will be made to
+// this SQL server instead of to the system SQL server. Note that we will
+// currently only attempt to start a SQL server if we're running in an
+// enterprise enabled build. This is due to licensing restrictions on the MT
+// capabilities.
+func (ts *TestServer) maybeStartTestSQLServer(ctx context.Context) error {
+	org := sql.ClusterOrganization.Get(&ts.st.SV)
+	clusterID := ts.sqlServer.execCfg.LogicalClusterID
+	if err := base.CheckEnterpriseEnabled(ts.st, clusterID(), org, "SQL servers"); err != nil {
+		// If not enterprise enabled, we won't be able to use SQL Servers so eat
+		// the error and return without creating/starting a SQL server.
+		ts.cfg.DisableDefaultSQLServer = true
+		return nil // nolint:returnerrcheck
+	}
+
+	// If the flag has been set to disable the default SQL server, don't start
+	// it here.
+	if ts.params.DisableDefaultSQLServer || ts.cfg.DisableDefaultSQLServer {
+		return nil
+	}
+
+	tempStorageConfig := base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
+	params := base.TestTenantArgs{
+		// Currently, all the servers leverage the same tenant ID. We may
+		// want to change this down the road, for more elaborate testing.
+		TenantID:                    serverutils.TestTenantID(),
+		MemoryPoolSize:              ts.params.SQLMemoryPoolSize,
+		TempStorageConfig:           &tempStorageConfig,
+		Locality:                    ts.params.Locality,
+		ExternalIODir:               ts.params.ExternalIODir,
+		ExternalIODirConfig:         ts.params.ExternalIODirConfig,
+		ForceInsecure:               ts.Insecure(),
+		UseDatabase:                 ts.params.UseDatabase,
+		SSLCertsDir:                 ts.params.SSLCertsDir,
+		AllowSettingClusterSettings: true,
+		// These settings are inherited from the SQL server creation in
+		// logicTest.newCluster, and are required to run the logic test suite
+		// successfully.
+		TestingKnobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				DeterministicExplain: true,
+			},
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				AOSTClause: "AS OF SYSTEM TIME '-1us'",
+			},
+		},
+	}
+
+	tenant, err := ts.StartTenant(ctx, params)
+	if err != nil {
+		return err
+	}
+
+	if len(ts.SQLServers) == 0 {
+		ts.SQLServers = make([]serverutils.TestTenantInterface, 1)
+		ts.SQLServers[0] = tenant
+	} else {
+		// We restrict the creation of multiple default SQL servers because if
+		// we allow for more than one to be created, it's not clear what we
+		// should return in ServingSQLAddr() as the default SQL address. Panic
+		// here to prevent more than one from being added. If you're hitting
+		// this panic it's likely that you're trying to expose multiple default
+		// SQL servers, in which case, you should evaluate what to do about
+		// returning a default SQL address in ServingSQLAddr().
+		return errors.AssertionFailedf("invalid number of test SQL servers %d", len(ts.SQLServers))
+	}
+	return nil
+}
+
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
@@ -495,7 +574,16 @@ func (ts *TestServer) TenantStatusServer() interface{} {
 // Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
 func (ts *TestServer) Start(ctx context.Context) error {
-	return ts.Server.Start(ctx)
+	if err := ts.Server.Start(ctx); err != nil {
+		return err
+	}
+	if err := ts.maybeStartTestSQLServer(ctx); err != nil {
+		// We're failing the call to this function but we've already started
+		// the TestServer above. Stop it here to avoid leaking the server.
+		ts.Stopper().Stop(context.Background())
+		return err
+	}
+	return nil
 }
 
 type tenantProtectedTSProvider struct {
@@ -656,21 +744,30 @@ func (t *TestTenant) DrainClients(ctx context.Context) error {
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
 ) (serverutils.TestTenantInterface, error) {
-	if !params.Existing {
-		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	if !params.SkipTenantCheck {
+	// Determine if we need to create the tenant before starting it.
+	if !params.DisableCreateTenant {
 		rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
 			ctx, "testserver-check-tenant-active", nil,
 			"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
 			params.TenantID.ToUint64(),
 		)
-
+		if err != nil {
+			return nil, err
+		}
+		if rowCount == 0 {
+			// Tenant doesn't exist. Create it.
+			if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+				ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
+			); err != nil {
+				return nil, err
+			}
+		}
+	} else if !params.SkipTenantCheck {
+		rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+			ctx, "testserver-check-tenant-active", nil,
+			"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
+			params.TenantID.ToUint64(),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -678,6 +775,7 @@ func (ts *TestServer) StartTenant(
 			return nil, errors.New("not found")
 		}
 	}
+
 	st := params.Settings
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
@@ -713,6 +811,17 @@ func (ts *TestServer) StartTenant(
 	baseCfg.Locality = params.Locality
 	baseCfg.HeapProfileDirName = params.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
+
+	tk := &baseCfg.TestingKnobs
+	blobClientFactory := blobs.NewLocalOnlyBlobClientFactory(params.ExternalIODir)
+	if serverKnobs, ok := tk.Server.(*TestingKnobs); ok {
+		serverKnobs.BlobClientFactory = blobClientFactory
+	} else {
+		tk.Server = &TestingKnobs{
+			BlobClientFactory: blobClientFactory,
+		}
+	}
+
 	if params.SSLCertsDir != "" {
 		baseCfg.SSLCertsDir = params.SSLCertsDir
 	}
@@ -821,9 +930,26 @@ func (ts *TestServer) ServingRPCAddr() string {
 	return ts.cfg.AdvertiseAddr
 }
 
-// ServingSQLAddr returns the server's SQL address. Should be used by clients.
-func (ts *TestServer) ServingSQLAddr() string {
+// HostSQLAddr returns the host cluster's SQL address.
+func (ts *TestServer) HostSQLAddr() string {
 	return ts.cfg.SQLAdvertiseAddr
+}
+
+// ServingSQLAddr returns the server's SQL address. Should be used by clients.
+// If a SQL server is started, return the first SQL server's address.
+func (ts *TestServer) ServingSQLAddr() string {
+	if len(ts.SQLServers) == 0 {
+		return ts.cfg.SQLAdvertiseAddr
+	}
+	if len(ts.SQLServers) != 1 {
+		// If the number of SQL servers is not equal to 1, it's not clear what
+		// to return here. This isn't currently possible, but panic here to
+		// alert anyone down the road who changes the number of default SQL
+		// servers to the fact that they'll need to reconsider this function
+		// along with their change.
+		panic(fmt.Sprintf("invalid number of test SQL servers %d", len(ts.SQLServers)))
+	}
+	return ts.SQLServers[0].SQLAddr()
 }
 
 // HTTPAddr returns the server's HTTP address. Should be used by clients.
