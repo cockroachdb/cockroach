@@ -596,6 +596,13 @@ is located starts following the recovery.`,
 		Unit: metric.Unit_COUNT,
 	}
 
+	metaRaftRcvdAdmissionWait = metric.Metadata{
+		Name:        "raft.rcvd.admission_wait",
+		Help:        `TODO`,
+		Measurement: "Seconds",
+		Unit:        metric.Unit_SECONDS,
+	}
+
 	// Raft processing metrics.
 	metaRaftTicks = metric.Metadata{
 		Name:        "raft.ticks",
@@ -1526,6 +1533,7 @@ type StoreMetrics struct {
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
 	RaftQuotaPoolPercentUsed  *metric.Histogram
+	RaftRcvdAdmissionWait     *metric.Counter
 	RaftWorkingDurationNanos  *metric.Counter
 	RaftTickingDurationNanos  *metric.Counter
 	RaftCommandsApplied       *metric.Counter
@@ -1986,6 +1994,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			// NB: this results in 64 buckets (i.e. 64 timeseries in prometheus).
 			metaRaftQuotaPoolPercentUsed, histogramWindow, 100 /* maxVal */, 1, /* sigFigs */
 		),
+		RaftRcvdAdmissionWait:     metric.NewCounter(metaRaftRcvdAdmissionWait),
 		RaftWorkingDurationNanos:  metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos:  metric.NewCounter(metaRaftTickingDurationNanos),
 		RaftCommandsApplied:       metric.NewCounter(metaRaftCommandsApplied),

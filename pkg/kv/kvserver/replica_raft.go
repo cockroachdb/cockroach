@@ -681,7 +681,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		panic(err)
 	}
 	if admissionHandle != nil {
-		defer r.store.cfg.KVAdmissionController.AdmittedKVWorkDone(admissionHandle)
+		r.store.metrics.RaftRcvdAdmissionWait.Inc(int64(timeutil.Since(stats.tBegin)))
+		r.store.cfg.KVAdmissionController.AdmittedKVWorkDone(admissionHandle)
 	}
 
 	if inSnap.Desc != nil {
