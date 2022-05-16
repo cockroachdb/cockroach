@@ -492,7 +492,11 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 
 			switch event.Type() {
 			case streamingccl.KVEvent:
-				if err := sip.bufferKV(event); err != nil {
+				if err := sip.bufferKV(event.GetKV()); err != nil {
+					return nil, err
+				}
+			case streamingccl.SSTableEvent:
+				if err := sip.bufferSST(event.GetSSTable()); err != nil {
 					return nil, err
 				}
 			case streamingccl.CheckpointEvent:
@@ -543,11 +547,35 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 	return nil, nil
 }
 
-func (sip *streamIngestionProcessor) bufferKV(event partitionEvent) error {
+func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) error {
+	iter, err := storage.NewMemSSTIterator(sst.Data, true)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+		for ; ; iter.Next() {
+			if ok, err := iter.Valid(); err != nil {
+				return err
+			} else if !ok { // cursor passed the span end key
+				break
+			}
+			if err = sip.bufferKV(&roachpb.KeyValue{
+				Key: iter.UnsafeKey().Key,
+				Value: roachpb.Value{
+					RawBytes:  iter.UnsafeValue(),
+					Timestamp: iter.UnsafeKey().Timestamp,
+				},
+			}); err != nil {
+				return err
+			}
+		}
+	return nil
+}
+
+func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 	// TODO: In addition to flushing when receiving a checkpoint event, we
 	// should also flush when we've buffered sufficient KVs. A buffering adder
 	// would save us here.
-	kv := event.GetKV()
 	if kv == nil {
 		return errors.New("kv event expected to have kv")
 	}

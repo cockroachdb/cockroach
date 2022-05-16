@@ -11,6 +11,7 @@ package streamproducer
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -92,6 +94,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		}),
 
 		rangefeed.WithMemoryMonitor(s.mon),
+
+		rangefeed.WithOnSSTable(s.onSSTable),
 	}
 
 	frontier, err := span.MakeFrontier(s.spec.Spans...)
@@ -129,7 +133,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	// Start rangefeed, which spins up a separate go routine to perform it's job.
 	s.rf = s.execCfg.RangeFeedFactory.New(
-		fmt.Sprintf("streamID=%d", s.streamID), s.spec.StartFrom, s.onEvent, opts...)
+		fmt.Sprintf("streamID=%d", s.streamID), s.spec.StartFrom, s.onValue, opts...)
 	if err := s.rf.Start(ctx, s.spec.Spans); err != nil {
 		return err
 	}
@@ -214,12 +218,12 @@ func (s *eventStream) Close(ctx context.Context) {
 	s.sp.Finish()
 }
 
-func (s *eventStream) onEvent(ctx context.Context, value *roachpb.RangeFeedValue) {
+func (s *eventStream) onValue(ctx context.Context, value *roachpb.RangeFeedValue) {
 	select {
 	case <-ctx.Done():
 	case s.eventsCh <- roachpb.RangeFeedEvent{Val: value}:
 		if log.V(1) {
-			log.Infof(ctx, "onEvent: %s@%s", value.Key, value.Value.Timestamp)
+			log.Infof(ctx, "onValue: %s@%s", value.Key, value.Value.Timestamp)
 		}
 	}
 }
@@ -248,6 +252,10 @@ func (s *eventStream) onSpanCompleted(ctx context.Context, sp roachpb.Span) erro
 		}
 		return nil
 	}
+}
+
+func (s *eventStream) onSSTable(ctx context.Context, sst *roachpb.RangeFeedSSTable) {
+	s.eventsCh <- roachpb.RangeFeedEvent{SST: sst}
 }
 
 // makeCheckpoint generates checkpoint based on the frontier.
@@ -324,6 +332,58 @@ func (p *checkpointPacer) shouldCheckpoint(
 	return false
 }
 
+func (s *eventStream) trimSST(sst *roachpb.RangeFeedSSTable, batch *streampb.StreamEvent_Batch) (int, error) {
+	iter, err := storage.NewMemSSTIterator(sst.Data, true)
+	if err != nil {
+		return 0, err
+	}
+	defer iter.Close()
+
+	copyKV := func(mvccKey storage.MVCCKey, value []byte) roachpb.KeyValue {
+		keyCopy := make([]byte, len(mvccKey.Key))
+		copy(keyCopy, mvccKey.Key)
+		valueCopy := make([]byte, len(value))
+		copy(valueCopy, value)
+		return roachpb.KeyValue{
+			Key:   keyCopy,
+			Value: roachpb.Value{RawBytes: valueCopy, Timestamp: mvccKey.Timestamp},
+		}
+	}
+
+	size := 0
+	sort.Sort(roachpb.Spans(s.spec.Spans))
+	for _, sp := range s.spec.Spans {
+		iter.SeekGE(storage.MVCCKey{Key: sp.Key})
+		endKey := storage.MVCCKey{Key: sp.EndKey}
+		for ; ; iter.Next() {
+			if ok, err := iter.Valid(); err != nil {
+				return 0, err
+			} else if !ok {
+				break
+			} else if !iter.UnsafeKey().Less(endKey) {
+				break
+			}
+			keyValue := copyKV(iter.UnsafeKey(), iter.UnsafeValue())
+			batch.KeyValues = append(batch.KeyValues, keyValue)
+			size += keyValue.Size()
+		}
+	}
+	return size, nil
+}
+
+// Add a RangeFeedSSTable into current batch and return size of the bytes added.
+func (s *eventStream) addSST(sst *roachpb.RangeFeedSSTable, batch *streampb.StreamEvent_Batch) (int, error) {
+	for _, sp := range s.spec.Spans {
+		if sp.Contains(sst.Span) {
+			batch.Ssts = append(batch.Ssts, *sst)
+			return sst.Size(), nil
+		}
+	}
+	// If span of the sst exceeds boundaries of the watched spans,
+	// we trim the sst data to avoid sending unnecessary data.
+	return s.trimSST(sst, batch)
+}
+
 // streamLoop is the main processing loop responsible for reading rangefeed events,
 // accumulating them in a batch, and sending those events to the ValueGenerator.
 func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) error {
@@ -345,6 +405,7 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 			defer func() {
 				batchSize = 0
 				batch.KeyValues = batch.KeyValues[:0]
+				batch.Ssts = batch.Ssts[:0]
 			}()
 			return s.flushEvent(ctx, &streampb.StreamEvent{Batch: &batch})
 		}
@@ -384,8 +445,16 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 						return err
 					}
 				}
+			case ev.SST != nil:
+				size, err := s.addSST(ev.SST, &batch)
+				if err != nil {
+					return nil
+				}
+				batchSize += size
+				if err := maybeFlushBatch(flushIfNeeded); err != nil {
+					return err
+				}
 			default:
-				// TODO(yevgeniy): Handle SSTs.
 				return errors.AssertionFailedf("unexpected event")
 			}
 		}

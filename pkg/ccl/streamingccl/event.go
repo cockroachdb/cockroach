@@ -20,6 +20,9 @@ const (
 	// KVEvent indicates that the KV field of an event holds an updated KV which
 	// needs to be ingested.
 	KVEvent EventType = iota
+	// SSTableEvent indicates that the SSTable field of an event holds an updated
+	// SSTable which needs to be ingested.
+	SSTableEvent
 	// CheckpointEvent indicates that GetResolved will be meaningful. The resolved
 	// timestamp indicates that all KVs have been emitted up to this timestamp.
 	CheckpointEvent
@@ -36,6 +39,9 @@ type Event interface {
 
 	// GetKV returns a KV event if the EventType is KVEvent.
 	GetKV() *roachpb.KeyValue
+
+	// GetSSTable returns a SSTable event if the EventType is SSTable.
+	GetSSTable() *roachpb.RangeFeedSSTable
 	// GetResolved returns a resolved timestamp if the EventType is
 	// CheckpointEvent. The resolved timestamp indicates that all KV events until
 	// this time have been emitted.
@@ -59,10 +65,43 @@ func (kve kvEvent) GetKV() *roachpb.KeyValue {
 	return &kve.kv
 }
 
+// GetSSTable implements the Event interface.
+func (kve kvEvent) GetSSTable() *roachpb.RangeFeedSSTable {
+	return nil
+}
+
 // GetResolved implements the Event interface.
 func (kve kvEvent) GetResolved() *hlc.Timestamp {
 	return nil
 }
+
+
+// sstableEvent is a sstable that needs to be ingested.
+type sstableEvent struct {
+	sst roachpb.RangeFeedSSTable
+}
+
+// Type implements the Event interface.
+func (sste sstableEvent) Type() EventType {
+	return SSTableEvent
+}
+
+// GetKV implements the Event interface.
+func (sste sstableEvent) GetKV() *roachpb.KeyValue {
+	return nil
+}
+
+// GetSSTable implements the Event interface.
+func (sste sstableEvent) GetSSTable() *roachpb.RangeFeedSSTable {
+	return &sste.sst
+}
+
+// GetResolved implements the Event interface.
+func (sste sstableEvent) GetResolved() *hlc.Timestamp {
+	return nil
+}
+
+var _ Event = sstableEvent{}
 
 // checkpointEvent indicates that the stream has emitted every change for all
 // keys in the span it is responsible for up until this timestamp.
@@ -79,6 +118,11 @@ func (ce checkpointEvent) Type() EventType {
 
 // GetKV implements the Event interface.
 func (ce checkpointEvent) GetKV() *roachpb.KeyValue {
+	return nil
+}
+
+// GetSSTable implements the Event interface.
+func (ce checkpointEvent) GetSSTable() *roachpb.RangeFeedSSTable {
 	return nil
 }
 
@@ -102,6 +146,11 @@ func (ge generationEvent) GetKV() *roachpb.KeyValue {
 	return nil
 }
 
+// GetSSTable implements the Event interface.
+func (ge generationEvent) GetSSTable() *roachpb.RangeFeedSSTable {
+	return nil
+}
+
 // GetResolved implements the Event interface.
 func (ge generationEvent) GetResolved() *hlc.Timestamp {
 	return nil
@@ -110,6 +159,11 @@ func (ge generationEvent) GetResolved() *hlc.Timestamp {
 // MakeKVEvent creates an Event from a KV.
 func MakeKVEvent(kv roachpb.KeyValue) Event {
 	return kvEvent{kv: kv}
+}
+
+// MakeSSTableEvent creates an Event from a SSTable.
+func MakeSSTableEvent(sst roachpb.RangeFeedSSTable) Event {
+	return sstableEvent{sst: sst}
 }
 
 // MakeCheckpointEvent creates an Event from a resolved timestamp.
