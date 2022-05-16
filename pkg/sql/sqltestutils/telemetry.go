@@ -91,6 +91,20 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 		test.Start(t, serverArgs)
 		defer test.Close()
 
+		if testTenant || test.cluster.StartedDefaultSQLServer() {
+			// TODO(andyk): Re-enable these tests once tenant clusters fully
+			// support the features they're using.
+			switch path {
+			case "testdata/telemetry/execution",
+				// Disabled because it requires multi-region syntax to be
+				// enabled for secondary tenants.
+				"testdata/telemetry/index",
+				"testdata/telemetry/planning",
+				"testdata/telemetry/sql-stats":
+				skip.WithIssue(t, 47893, "tenant clusters do not support SQL features used by this test")
+			}
+		}
+
 		// Run test against physical CRDB cluster.
 		t.Run("server", func(t *testing.T) {
 			datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
@@ -103,15 +117,6 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 		if testTenant {
 			// Run test against logical tenant cluster.
 			t.Run("tenant", func(t *testing.T) {
-				// TODO(andyk): Re-enable these tests once tenant clusters fully
-				// support the features they're using.
-				switch path {
-				case "testdata/telemetry/execution",
-					"testdata/telemetry/planning",
-					"testdata/telemetry/sql-stats":
-					skip.WithIssue(t, 47893, "tenant clusters do not support SQL features used by this test")
-				}
-
 				datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 					sqlServer := test.server.SQLServer().(*sql.Server)
 					reporter := test.tenant.DiagnosticsReporter().(*diagnostics.Reporter)
