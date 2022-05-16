@@ -23,7 +23,6 @@ go_library(
         "//pkg/base",
         "//pkg/ccl/sqlproxyccl/balancer",
         "//pkg/ccl/sqlproxyccl/denylist",
-        "//pkg/ccl/sqlproxyccl/idle",
         "//pkg/ccl/sqlproxyccl/interceptor",
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",

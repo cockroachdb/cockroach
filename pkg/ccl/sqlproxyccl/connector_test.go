@@ -152,59 +152,6 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 		_, ok := c.StartupMsg.Parameters[sessionRevivalTokenStartupParam]
 		require.False(t, ok)
 	})
-
-	t.Run("idle monitor wrapper is called", func(t *testing.T) {
-		var wrapperCalled bool
-		f := &forwarder{}
-		c := &connector{
-			StartupMsg: &pgproto3.StartupMessage{
-				Parameters: make(map[string]string),
-			},
-			IdleMonitorWrapperFn: func(crdbConn net.Conn) net.Conn {
-				wrapperCalled = true
-				return crdbConn
-			},
-		}
-
-		conn, _ := net.Pipe()
-		defer conn.Close()
-
-		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(
-			ctx context.Context, requester balancer.ConnectionHandle,
-		) (net.Conn, error) {
-			require.Equal(t, f, requester)
-			openCalled = true
-
-			// Validate that token is set.
-			str, ok := c.StartupMsg.Parameters[sessionRevivalTokenStartupParam]
-			require.True(t, ok)
-			require.Equal(t, token, str)
-
-			return conn, nil
-		}
-
-		var authCalled bool
-		defer testutils.TestingHook(
-			&readTokenAuthResult,
-			func(serverConn net.Conn) error {
-				authCalled = true
-				require.Equal(t, conn, serverConn)
-				return nil
-			},
-		)()
-
-		crdbConn, err := c.OpenTenantConnWithToken(ctx, f, token)
-		require.True(t, wrapperCalled)
-		require.True(t, openCalled)
-		require.True(t, authCalled)
-		require.NoError(t, err)
-		require.Equal(t, conn, crdbConn)
-
-		// Ensure that token is deleted.
-		_, ok := c.StartupMsg.Parameters[sessionRevivalTokenStartupParam]
-		require.False(t, ok)
-	})
 }
 
 func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
@@ -329,68 +276,6 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 
 		crdbConn, sentToClient, err := c.OpenTenantConnWithAuth(ctx, f, clientConn, dummyHook)
 		require.True(t, openCalled)
-		require.True(t, authCalled)
-		require.NoError(t, err)
-		require.False(t, sentToClient)
-		require.Equal(t, serverConn, crdbConn)
-	})
-
-	t.Run("idle monitor wrapper is called", func(t *testing.T) {
-		clientConn, _ := net.Pipe()
-		defer clientConn.Close()
-
-		serverConn, _ := net.Pipe()
-		defer serverConn.Close()
-
-		var wrapperCalled bool
-		f := &forwarder{}
-		c := &connector{
-			StartupMsg: &pgproto3.StartupMessage{
-				Parameters: map[string]string{
-					// Passing in a token should have no effect.
-					sessionRevivalTokenStartupParam: "foo",
-				},
-			},
-			IdleMonitorWrapperFn: func(crdbConn net.Conn) net.Conn {
-				wrapperCalled = true
-				return crdbConn
-			},
-		}
-
-		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(
-			ctx context.Context, requester balancer.ConnectionHandle,
-		) (net.Conn, error) {
-			require.Equal(t, f, requester)
-			openCalled = true
-
-			// Validate that token is not set.
-			_, ok := c.StartupMsg.Parameters[sessionRevivalTokenStartupParam]
-			require.False(t, ok)
-
-			return serverConn, nil
-		}
-
-		var authCalled bool
-		defer testutils.TestingHook(
-			&authenticate,
-			func(
-				client net.Conn,
-				server net.Conn,
-				throttleHook func(status throttler.AttemptStatus) error,
-			) error {
-				authCalled = true
-				require.Equal(t, clientConn, client)
-				require.NotNil(t, server)
-				require.Equal(t, reflect.ValueOf(dummyHook).Pointer(),
-					reflect.ValueOf(throttleHook).Pointer())
-				return nil
-			},
-		)()
-
-		crdbConn, sentToClient, err := c.OpenTenantConnWithAuth(ctx, f, clientConn, dummyHook)
-		require.True(t, openCalled)
-		require.True(t, wrapperCalled)
 		require.True(t, authCalled)
 		require.NoError(t, err)
 		require.False(t, sentToClient)
