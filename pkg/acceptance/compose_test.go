@@ -17,8 +17,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 func TestComposeGSS(t *testing.T) {
@@ -26,7 +24,6 @@ func TestComposeGSS(t *testing.T) {
 }
 
 func TestComposeGSSPython(t *testing.T) {
-	skip.WithIssue(t, 81254)
 	testCompose(t, filepath.Join("compose", "gss", "docker-compose-python.yml"), "python")
 }
 
