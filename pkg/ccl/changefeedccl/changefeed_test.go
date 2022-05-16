@@ -4850,9 +4850,12 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 
 	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			UseDatabase:   "test",
-			Knobs:         knobs,
-			ExternalIODir: sinkDir,
+			// Test uses SPLIT AT, which isn't currently supported for
+			// non-system SQL servers. Tracked with #76378.
+			DisableDefaultSQLServer: true,
+			UseDatabase:             "test",
+			Knobs:                   knobs,
+			ExternalIODir:           sinkDir,
 		}})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -6188,7 +6191,6 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	tenant1Args := base.TestTenantArgs{
 		TenantID:     serverutils.TestTenantID(),
 		TestingKnobs: tenantKnobs,
-		Existing:     false,
 	}
 	tenant1Server, tenant1DB := serverutils.StartTenant(t, tc.Server(0), tenant1Args)
 	tenantRunner := sqlutils.MakeSQLRunner(tenant1DB)
@@ -6197,7 +6199,7 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	defer tenant1DB.Close()
 
 	tenant2Args := tenant1Args
-	tenant2Args.Existing = true
+	tenant2Args.DisableCreateTenant = true
 	_, db2 := serverutils.StartTenant(t, tc.Server(1), tenant2Args)
 	defer db2.Close()
 

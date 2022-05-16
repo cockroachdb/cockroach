@@ -180,6 +180,9 @@ type BaseConfig struct {
 	// Environment Variable: COCKROACH_DISABLE_SPAN_CONFIGS
 	SpanConfigsDisabled bool
 
+	// Disables the default SQL server.
+	DisableDefaultSQLServer bool
+
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 

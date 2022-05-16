@@ -954,7 +954,12 @@ func backupAndRestore(
 				t.Fatal(err)
 			}
 		}
-		args := base.TestServerArgs{ExternalIODir: tc.Servers[backupNodeID].ClusterSettings().ExternalIODir}
+		args := base.TestServerArgs{
+			ExternalIODir: tc.Servers[backupNodeID].ClusterSettings().ExternalIODir,
+			// Test fails when run under a SQL server. More investigation is
+			// required. Tracked with #76378.
+			DisableDefaultSQLServer: tc.Servers[backupNodeID].Cfg.DisableDefaultSQLServer,
+		}
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(ctx)
 		sqlDBRestore := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
@@ -5356,7 +5361,9 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	const numAccounts = 1
 	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
+	// Test fails when run under a SQL server. More investigation is
+	// required. Tracked with #76378.
+	args := base.TestServerArgs{ExternalIODir: dir, DisableDefaultSQLServer: true}
 
 	// Setup for sequence ownership backup/restore tests in the same database.
 	backupLoc := localFoo + `/d`
@@ -5911,6 +5918,9 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	// This test hangs when run from a SQL server. More investigation is
+	// required. Tracked with #76378.
+	params.ServerArgs.DisableDefaultSQLServer = true
 	tc := testcluster.StartTestCluster(t, 1, params)
 	defer tc.Stopper().Stop(ctx)
 
@@ -6373,6 +6383,9 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
+	// This test fails when run from a SQL server. More investigation is
+	// required. Tracked with #76378.
+	params.ServerArgs.DisableDefaultSQLServer = true
 	jobsTableKey := keys.SystemSQLCodec.TablePrefix(uint32(systemschema.JobsTable.GetID()))
 	var shouldFail, failures int64
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
@@ -6422,6 +6435,9 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
+	// This test fails when run from a SQL server. More investigation is
+	// required. Tracked with #76378.
+	params.ServerArgs.DisableDefaultSQLServer = true
 	tc := testcluster.StartTestCluster(t, 1, params)
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
@@ -6441,6 +6457,8 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 		params.ServerArgs.ExternalIODir = dir
 		params.ServerArgs.Knobs.ProtectedTS = &protectedts.TestingKnobs{
 			DisableProtectedTimestampForMultiTenant: true}
+		// Test fails under the default SQL server. Tracked with #76378.
+		params.ServerArgs.DisableDefaultSQLServer = true
 		tc := testcluster.StartTestCluster(t, 1, params)
 		defer tc.Stopper().Stop(ctx)
 		db := tc.ServerConn(0)
@@ -6818,7 +6836,7 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 	const npods = 2
 
 	makeTenant := func(srv serverutils.TestServerInterface, tenant uint64, existing bool) (*sqlutils.SQLRunner, func()) {
-		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(tenant), Existing: existing})
+		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(tenant), DisableCreateTenant: existing})
 		cleanup := func() { conn.Close() }
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
@@ -7029,7 +7047,10 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
 			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 				ExternalIODir: dir,
-				Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+				// This test fails when run from a SQL server as it assumes that
+				// it's not running in SQL server. Tracked with #76378.
+				DisableDefaultSQLServer: true,
+				Knobs:                   base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
@@ -7050,7 +7071,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		ten10Stopper := stop.NewStopper()
 		_, restoreConn10 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{
-				TenantID: roachpb.MakeTenantID(10), Existing: true, Stopper: ten10Stopper,
+				TenantID: roachpb.MakeTenantID(10), Stopper: ten10Stopper,
 			},
 		)
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -7092,7 +7113,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		_, restoreConn10 = serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 = sqlutils.MakeSQLRunner(restoreConn10)
@@ -7118,7 +7139,12 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	t.Run("restore-t10-from-cluster-backup", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
-			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}},
+			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+				ExternalIODir: dir,
+				// This test fails when run from a SQL server as it assumes that
+				// it's not running in SQL server. Tracked with #76378.
+				DisableDefaultSQLServer: true,
+			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
@@ -7131,7 +7157,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		_, restoreConn10 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -7142,7 +7168,12 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	t.Run("restore-all-from-cluster-backup", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
-			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}},
+			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+				ExternalIODir: dir,
+				// This test fails when run from a SQL server as it assumes that
+				// it's not running in SQL server. Tracked with #76378.
+				DisableDefaultSQLServer: true,
+			}},
 		)
 
 		defer restoreTC.Stopper().Stop(ctx)
@@ -7160,7 +7191,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		_, restoreConn10 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -7173,7 +7204,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.kv_write_cost_per_megabyte`, [][]string{{"456"}})
 
 		_, restoreConn11 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11), Existing: true},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11)},
 		)
 		defer restoreConn11.Close()
 		restoreTenant11 := sqlutils.MakeSQLRunner(restoreConn11)
@@ -7187,7 +7218,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH tenant = '20'`)
 		_, restoreConn20 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20), Existing: true},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20), DisableCreateTenant: true},
 		)
 		defer restoreConn20.Close()
 		restoreTenant20 := sqlutils.MakeSQLRunner(restoreConn20)
@@ -7207,7 +7238,12 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	t.Run("restore-tenant10-to-ts1", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
-			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}},
+			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+				ExternalIODir: dir,
+				// This test fails when run from a SQL server as it assumes that
+				// it's not running in SQL server. Tracked with #76378.
+				DisableDefaultSQLServer: true,
+			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
@@ -7215,7 +7251,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
 
 		_, restoreConn10 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -7225,7 +7261,12 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	t.Run("restore-tenant20-to-latest", func(t *testing.T) {
 		restoreTC := testcluster.StartTestCluster(
-			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}},
+			t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+				ExternalIODir: dir,
+				// This test fails when run from a SQL server as it assumes that
+				// it's not running in SQL server. Tracked with #76378.
+				DisableDefaultSQLServer: true,
+			}},
 		)
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
@@ -7233,7 +7274,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `RESTORE TENANT 20 FROM 'nodelocal://1/t20'`)
 
 		_, restoreConn20 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20), Existing: true},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20)},
 		)
 		defer restoreConn20.Close()
 		restoreTenant20 := sqlutils.MakeSQLRunner(restoreConn20)
@@ -8185,6 +8226,8 @@ func TestFullClusterTemporaryBackupAndRestore(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
+	// This test fails when run from a SQL server. Tracked with #76378.
+	params.ServerArgs.DisableDefaultSQLServer = true
 	params.ServerArgs.UseDatabase = "defaultdb"
 	params.ServerArgs.Settings = settings
 	knobs := base.TestingKnobs{
@@ -8945,6 +8988,11 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		ExternalIODir: baseDir,
+		// This test hangs when run from a SQL server. It's likely that
+		// the cause of the hang is the fact that we're waiting on the GC to
+		// complete, and we don't have visibility into the GC completing from
+		// the tenant. More investigation is required. Tracked with #76378.
+		DisableDefaultSQLServer: true,
 		Knobs: base.TestingKnobs{
 			GCJob: &sql.GCJobTestingKnobs{RunBeforePerformGC: func(id jobspb.JobID) error {
 				gcJobID = id
@@ -9216,7 +9264,13 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	ctx := context.Background()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	args := base.TestClusterArgs{}
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Test fails when run under the default SQL server as zone config
+			// updates are not allowed by default. Tracked with 73768.
+			DisableDefaultSQLServer: true,
+		},
+	}
 	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		DisableGCQueue:            true,
 		DisableLastProcessedCheck: true,
@@ -9307,6 +9361,9 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
+	// Test fails when run under a SQL server. More investigation is
+	// required. Tracked with #76378.
+	params.ServerArgs.DisableDefaultSQLServer = true
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		DisableGCQueue:            true,
 		DisableLastProcessedCheck: true,
