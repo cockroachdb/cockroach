@@ -33,6 +33,9 @@ func TestTenantRangeQPSStat(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DisableWebSessionAuthentication: true,
+			// Must disable SQL server because test below assumes that
+			// it is connecting to the host tenant.
+			DisableDefaultSQLServer: true,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)

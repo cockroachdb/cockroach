@@ -96,6 +96,9 @@ func TestDataDriven(t *testing.T) {
 		}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				// We need to disable the SQL server here due to failures
+				// in the multitenant tests.
+				DisableDefaultSQLServer: true,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig:       scKnobs,
