@@ -121,8 +121,6 @@ const (
 	OptFormatAvro FormatType = `avro`
 	OptFormatCSV  FormatType = `csv`
 
-	OptFormatNative FormatType = `native`
-
 	OptOnErrorFail  OnErrorType = `fail`
 	OptOnErrorPause OnErrorType = `pause`
 
