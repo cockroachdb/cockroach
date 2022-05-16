@@ -32,7 +32,7 @@ jobs:
       run: |
           curl https://binaries.cockroachdb.com/cockroach-v21.1.19.src.tgz | tar -xz
           cd cockroach-v21.1.19
-          ls -l
+          ls -la
     
     # Autobuilder was built with Autobuilder was built with go1.17.9, environment has go1.17.9
     - name: Set up Go
@@ -56,4 +56,6 @@ jobs:
     - name: build
       shell: bash
       run: |   
+          pwd
+          cd cockroach-v21.1.19
           make build
