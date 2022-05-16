@@ -68,7 +68,6 @@ tc_end_block "Push RedHat docker image"
 tc_start_block "Run preflight"
 mkdir -p artifacts
 docker run \
-  -it \
   --rm \
   --security-opt=label=disable \
   --env PFLT_LOGLEVEL=trace \

@@ -257,12 +257,12 @@ func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
 
 // A CertsLocator provides locations to certificates.
 type CertsLocator struct {
-	certsDir string // os.ExpandEnv'ed
+	certsDir string
 }
 
 // MakeCertsLocator initializes a CertsLocator.
 func MakeCertsLocator(certsDir string) CertsLocator {
-	return CertsLocator{certsDir: os.ExpandEnv(certsDir)}
+	return CertsLocator{certsDir: certsDir}
 }
 
 // CACertPath returns the expected file path for the CA certificate.
