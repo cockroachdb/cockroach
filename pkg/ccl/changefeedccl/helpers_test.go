@@ -341,11 +341,11 @@ func startTestFullServer(
 	}
 	args := base.TestServerArgs{
 		Knobs: knobs,
-		// This test suite is already probabilistically running with SQL
-		// servers. No need for the SQL server.
-		DisableDefaultSQLServer: true,
-		UseDatabase:             `d`,
-		ExternalIODir:           options.externalIODir,
+		// This test suite is already probabilistically running with
+		// tenants. No need for the test tenant.
+		DisableDefaultTestTenant: true,
+		UseDatabase:              `d`,
+		ExternalIODir:            options.externalIODir,
 	}
 
 	if options.argsFn != nil {

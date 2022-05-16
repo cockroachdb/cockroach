@@ -924,9 +924,9 @@ GRANT ALL ON system.lease TO testuser
 
 # NB: the "order by" is necessary or this test is flaky under DistSQL.
 # This is somewhat surprising.
-# With probabilistic SQL server creation, we have to filter out
+# With probabilistic test tenant creation, we have to filter out
 # kv.range_merge.queue_enabled, since it will only be set in cases
-# where a SQL server is not allocated.
+# where a test tenant is not allocated.
 query T
 SELECT name
 FROM system.settings
@@ -961,7 +961,7 @@ statement ok
 INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
 
 # Have to exclude kv.range_merge.queue_enabled as it is not accessible
-# to SQL servers.
+# to tenants.
 query TT
 SELECT name, value
 FROM system.settings

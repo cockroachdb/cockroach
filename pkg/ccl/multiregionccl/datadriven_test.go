@@ -146,12 +146,12 @@ func TestMultiRegionDataDriven(t *testing.T) {
 					}
 					serverArgs[i] = base.TestServerArgs{
 						Locality: localityCfg,
-						// We need to disable the SQL server here because
-						// it appears as though operations like
+						// We need to disable the default test tenant here
+						// because it appears as though operations like
 						// "wait-for-zone-config-changes" only work correctly
-						// when called from the system SQL server. More
-						// investigation is required here (tracked with #76378).
-						DisableDefaultSQLServer: true,
+						// when called from the system tenant. More
+						// investigation is required (tracked with #76378).
+						DisableDefaultTestTenant: true,
 						Knobs: base.TestingKnobs{
 							SQLExecutor: &sql.ExecutorTestingKnobs{
 								WithStatementTrace: func(trace tracingpb.Recording, stmt string) {

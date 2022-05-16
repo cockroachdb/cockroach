@@ -226,7 +226,14 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: false,
+		// Need to disable the test tenant here because it appears as though
+		// we're not able to establish the necessary connections from within
+		// it. More investigation required (tracked with #76378).
+		DisableDefaultTestTenant: true,
+	},
+	)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
 	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs.TestingEnableAuthLogging()
@@ -378,7 +385,15 @@ func TestProxyTLSClose(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	sql, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Insecure: false,
+			// Need to disable the test tenant here because it appears as though
+			// we're not able to establish the necessary connections from within
+			// it. More investigation required (tracked with #76378).
+			DisableDefaultTestTenant: true,
+		},
+	)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
 	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs.TestingEnableAuthLogging()
@@ -426,7 +441,15 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	sql, sqlDB, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Insecure: false,
+			// Need to disable the test tenant here because it appears as though
+			// we're not able to establish the necessary connections from within
+			// it. More investigation required (tracked with #76378).
+			DisableDefaultTestTenant: true,
+		},
+	)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
 	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs.TestingEnableAuthLogging()
@@ -482,7 +505,16 @@ func TestInsecureProxy(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	sql, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			// Need to disable the test tenant here as the test below
+			// complains about not being able to find the user. This may be
+			// because of the connection through the proxy server. More
+			// investigation is required (tracked with #76378).
+			DisableDefaultTestTenant: true,
+			Insecure:                 false,
+		},
+	)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
 	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs.TestingEnableAuthLogging()
@@ -594,7 +626,15 @@ func TestDenylistUpdate(t *testing.T) {
 	denyList, err := ioutil.TempFile("", "*_denylist.yml")
 	require.NoError(t, err)
 
-	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	sql, sqlDB, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Insecure: false,
+			// Need to disable the test tenant here because it appears as though
+			// we're not able to establish the necessary connections from within
+			// it. More investigation required (tracked with #76378).
+			DisableDefaultTestTenant: true,
+		},
+	)
 	sql.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
 	defer sql.Stopper().Stop(ctx)
 
@@ -667,7 +707,15 @@ func TestDirectoryConnect(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	srv, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Insecure: true,
+			// Need to disable the test tenant here because it appears as though
+			// we're not able to establish the necessary connections from within
+			// it. More investigation required (tracked with #76378).
+			DisableDefaultTestTenant: true,
+		},
+	)
 	srv.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
 	defer srv.Stopper().Stop(ctx)
 
@@ -958,6 +1006,8 @@ func TestConnectionMigration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	// Test must be run from the system tenant as it's altering tenants.
+	params.DisableDefaultTestTenant = true
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tenantID := serverutils.TestTenantID()
@@ -973,7 +1023,7 @@ func TestConnectionMigration(t *testing.T) {
 
 	// Start second SQL pod.
 	params2 := tests.CreateTestTenantParams(tenantID)
-	params2.Existing = true
+	params2.DisableCreateTenant = true
 	tenant2, tenantDB2 := serverutils.StartTenant(t, s, params2)
 	tenant2.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
 	defer tenant2.Stopper().Stop(ctx)
@@ -1829,7 +1879,6 @@ func newDirectoryServer(
 
 		tenantStopper := tenantdirsvr.NewSubStopper(tdsStopper)
 		ten, err := srv.StartTenant(ctx, base.TestTenantArgs{
-			Existing:      true,
 			TenantID:      roachpb.MakeTenantID(tenantID),
 			ForceInsecure: true,
 			Stopper:       tenantStopper,

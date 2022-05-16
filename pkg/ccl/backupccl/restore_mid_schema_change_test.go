@@ -235,12 +235,12 @@ func restoreMidSchemaChange(
 		params := base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				ExternalIODir: dir,
-				// This test fails when run with the default SQL server because
+				// This test fails when run within a tenant because
 				// it relies on TestingGetTableDescriptor which isn't supported
 				// in multi-tenancy. More work is required here. Tracked with
 				// #76378.
-				DisableDefaultSQLServer: true,
-				Knobs:                   base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+				DisableDefaultTestTenant: true,
+				Knobs:                    base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 			},
 		}
 		tc := testcluster.StartTestCluster(t, singleNode, params)

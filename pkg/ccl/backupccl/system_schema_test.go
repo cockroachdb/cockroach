@@ -29,9 +29,9 @@ func TestAllSystemTablesHaveBackupConfig(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Disabling the SQL server due to test failures. More
+				// Disabling the test tenant due to test failures. More
 				// investigation is required. Tracked with #76378.
-				DisableDefaultSQLServer: true,
+				DisableDefaultTestTenant: true,
 			}})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])

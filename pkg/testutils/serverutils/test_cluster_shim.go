@@ -201,6 +201,16 @@ type TestClusterInterface interface {
 	// WaitForFullReplication waits until all stores in the cluster
 	// have no ranges with replication pending.
 	WaitForFullReplication() error
+
+	// StartedDefaultTestTenant returns whether this cluster started a
+	// default tenant for testing.
+	StartedDefaultTestTenant() bool
+
+	// StorageClusterConn returns a gosql.DB connection to the first server in a
+	// storage cluster. This is useful in environments where it's not clear
+	// whether ServerConn is returning a connection to the storage cluster or a
+	// secondary tenant.
+	StorageClusterConn() *gosql.DB
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim

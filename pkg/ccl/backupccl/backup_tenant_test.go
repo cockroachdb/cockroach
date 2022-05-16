@@ -43,7 +43,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				// Test is designed to run with explicit tenants. No need to
 				// implicitly create a tenant.
-				DisableDefaultSQLServer: true,
+				DisableDefaultTestTenant: true,
 			},
 		})
 	defer tc.Stopper().Stop(ctx)

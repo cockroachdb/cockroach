@@ -100,7 +100,7 @@ func TestDataDriven(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				// Test fails when run under the default test tenant. More
 				// investigation is required.
-				DisableDefaultSQLServer: true,
+				DisableDefaultTestTenant: true,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig:       scKnobs,

@@ -41,8 +41,8 @@ func TestPublicSchemaMigrationWithCreateChangefeed(t *testing.T) {
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Cannot set version cluster setting from tenants.
-			DisableDefaultSQLServer: true,
-			Knobs:                   knobs,
+			DisableDefaultTestTenant: true,
+			Knobs:                    knobs,
 		},
 	}
 

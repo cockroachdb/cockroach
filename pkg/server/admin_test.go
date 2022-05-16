@@ -136,9 +136,9 @@ func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -161,9 +161,9 @@ func TestAdminDebugMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -186,9 +186,9 @@ func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -207,9 +207,9 @@ func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -236,9 +236,9 @@ func TestAdminDebugAuth(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
@@ -294,9 +294,9 @@ func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
@@ -341,9 +341,9 @@ func TestAdminAPIDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
@@ -475,9 +475,9 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -491,9 +491,9 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -643,9 +643,9 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -667,9 +667,9 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails with
+		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -695,9 +695,9 @@ func TestAdminAPITableDetails(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-				// Disable the default SQL server for now as this tests fails
+				// Disable the default test tenant for now as this tests fails
 				// with it enabled. Tracked with #81590.
-				DisableDefaultSQLServer: true,
+				DisableDefaultTestTenant: true,
 			})
 			defer s.Stopper().Stop(context.Background())
 			ts := s.(*TestServer)
@@ -865,9 +865,9 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
@@ -972,9 +972,9 @@ func TestAdminAPIUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1013,9 +1013,9 @@ func TestAdminAPIEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1149,9 +1149,9 @@ func TestAdminAPISettings(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1270,9 +1270,9 @@ func TestAdminAPIUIData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1381,9 +1381,9 @@ func TestAdminAPIUISeparateData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1424,9 +1424,9 @@ func TestClusterAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1478,9 +1478,9 @@ func TestHealthAPI(t *testing.T) {
 	ctx := context.Background()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
@@ -1573,9 +1573,9 @@ func TestAdminAPIJobs(t *testing.T) {
 	now := timeutil.Now()
 	retentionTime := 336 * time.Hour
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: &jobs.TestingKnobs{
 				IntervalOverrides: jobs.TestingIntervalOverrides{
@@ -1766,9 +1766,9 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -1914,9 +1914,9 @@ func TestAdminAPILocations(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -1959,9 +1959,9 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -1997,9 +1997,9 @@ func TestAdminAPIRangeLogByRangeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -2066,9 +2066,9 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			// Disable the default SQL server for now as this tests fails
+			// Disable the default test tenant for now as this tests fails
 			// with it enabled. Tracked with #81590.
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableSplitQueue: true,
@@ -2403,9 +2403,9 @@ func TestEndpointTelemetryBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(context.Background())
 
@@ -2578,10 +2578,10 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 		ServerArgs: base.TestServerArgs{
-			// Disable the default SQL server for now as this tests fails
+			// Disable the default test tenant for now as this tests fails
 			// with it enabled. Tracked with #81590.
-			DisableDefaultSQLServer: true,
-			Insecure:                true, // allows admin client without setting up certs
+			DisableDefaultTestTenant: true,
+			Insecure:                 true, // allows admin client without setting up certs
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -2746,9 +2746,9 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -2829,9 +2829,9 @@ func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
 	stubDropUnusedDuration := time.Hour
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default SQL server for now as this tests fails
+		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			UnusedIndexRecommendKnobs: &idxusage.UnusedIndexRecommendationTestingKnobs{
 				GetCreatedAt:   stubTime.getCreatedAt,

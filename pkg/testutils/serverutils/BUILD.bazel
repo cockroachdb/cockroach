@@ -23,6 +23,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
