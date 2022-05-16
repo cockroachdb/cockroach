@@ -167,6 +167,10 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	serverArgs := base.TestServerArgs{
+		// This test fails when run from the SQL server. This is likely due
+		// to the lack of support for tenant streaming, but more investigation
+		// is required. Tracked with #76378.
+		DisableDefaultSQLServer: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
@@ -241,7 +245,13 @@ func TestReplicationStreamInitialization(t *testing.T) {
 func TestStreamPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{}, serverutils.TestTenantID())
+	h, cleanup := streamingtest.NewReplicationHelper(t,
+		base.TestServerArgs{
+			// Test fails with SQL server. More investigation is required.
+			// Tracked with #76378.
+			DisableDefaultSQLServer: true,
+		},
+		serverutils.TestTenantID())
 	defer cleanup()
 
 	h.Tenant.SQL.Exec(t, `

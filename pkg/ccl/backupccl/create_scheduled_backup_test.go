@@ -86,6 +86,9 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 
 	args := base.TestServerArgs{
 		ExternalIODir: dir,
+		// Some scheduled backup tests fail when run from a SQL server. More
+		// investigation is required. Tracked with #76378.
+		DisableDefaultSQLServer: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: knobs,
 		},

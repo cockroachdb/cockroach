@@ -235,7 +235,12 @@ func restoreMidSchemaChange(
 		params := base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				ExternalIODir: dir,
-				Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+				// This test fails when run with the default SQL server because
+				// it relies on TestingGetTableDescriptor which isn't supported
+				// in multi-tenancy. More work is required here. Tracked with
+				// #76378.
+				DisableDefaultSQLServer: true,
+				Knobs:                   base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 			},
 		}
 		tc := testcluster.StartTestCluster(t, singleNode, params)
