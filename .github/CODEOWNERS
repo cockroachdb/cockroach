@@ -291,6 +291,7 @@
 /pkg/util/stop               @cockroachdb/server-prs
 /pkg/util/tracing            @cockroachdb/obs-inf-prs
 /pkg/workload/               @cockroachdb/sql-experience-noreview
+/pkg/obsservice/             @cockroachdb/obs-inf-prs
 
 # Allow the security team to have insight into changes to
 # authn/authz code.
