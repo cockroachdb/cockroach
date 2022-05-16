@@ -88,8 +88,11 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				UseDatabase:       "d",
-				SQLMemoryPoolSize: sqlMemoryPoolSize,
+				// The SQL server needs to be disabled for this test until
+				// we address #75449.
+				DisableDefaultSQLServer: true,
+				UseDatabase:             "d",
+				SQLMemoryPoolSize:       sqlMemoryPoolSize,
 			})
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
@@ -146,7 +149,10 @@ func TestAllRegisteredSetup(t *testing.T) {
 			defer log.Scope(t).Close(t)
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				UseDatabase: "d",
+				// Need to disable the SQL server here until we resolve
+				// #75449 as this test makes use of import through a fixture.
+				DisableDefaultSQLServer: true,
+				UseDatabase:             "d",
 			})
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
