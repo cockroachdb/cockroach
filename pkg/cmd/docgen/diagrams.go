@@ -1235,6 +1235,9 @@ var specs = []stmtSpec{
 	{
 		name:   "show_default_privileges_stmt",
 		inline: []string{"opt_for_roles", "role_or_group_or_user", "name_list"},
+		replace: map[string]string{
+			"opt_in_schema": "( 'IN' 'SCHEMA' ( ( qualifiable_schema_name ) ( ( ',' qualifiable_schema_name ) )* ) | )",
+		},
 	},
 	{
 		name: "show_enums",
