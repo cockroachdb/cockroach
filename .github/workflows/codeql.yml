@@ -56,13 +56,10 @@ jobs:
           echo go env GOROOT: $(go env GOROOT) 
           echo cache: $(ls $RUNNER_TOOL_CACHE/go)
     
-    # Instead of using repo - download pre-packaged
-    #- name: Checkout repository
-    #  uses: actions/checkout@v3
-    #  with:
-    #    path: go/src/github.com/cockroachdb/cockroach
-
-
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      #with:
+      #  path: go/src/github.com/cockroachdb/cockroach
                    
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
