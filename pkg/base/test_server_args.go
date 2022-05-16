@@ -147,6 +147,11 @@ type TestServerArgs struct {
 	// TODO(irfansharif): Remove all uses of this when we rip out the system
 	// config span.
 	DisableSpanConfigs bool
+
+	// TestServer will probabilistically start a single SQL server on each
+	// node for multi-tenant testing, and default all connections to that
+	// SQL server. Use this flag to disable that behavior.
+	DisableDefaultSQLServer bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -247,6 +252,11 @@ type TestTenantArgs struct {
 	// Existing, if true, indicates an existing tenant, rather than a new tenant
 	// to be created by StartTenant.
 	Existing bool
+
+	// DisableCreateTenant disables the explicit creation of a tenant when
+	// StartTenant is attempted. It's used in cases where we want to validate
+	// that a tenant doesn't start if it isn't existing.
+	DisableCreateTenant bool
 
 	// Settings allows the caller to control the settings object used for the
 	// tenant cluster.
