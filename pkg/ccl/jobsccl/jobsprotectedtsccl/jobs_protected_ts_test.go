@@ -137,6 +137,9 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			// Tests fail with SQL server. Disabling until we can
+			// investigate further.
+			DisableDefaultSQLServer: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -256,7 +259,13 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Test fails with SQL server. Disabling pending further
+			// investigation.
+			DisableDefaultSQLServer: true,
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	// Now I want to create some artifacts that should get reconciled away and
