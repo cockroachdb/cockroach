@@ -441,12 +441,15 @@ SET DATABASE = test
 
 # Set and unset a cluster setting
 ##################
-
-skipif config 3node-tenant
+# Cluster settings which aren't available from within tenants can only
+# be tested from the local config, as that's the only config where we're
+# guaranteed to not be running within a tenant. All other configs will
+# probabilistically be run within tenants.
+onlyif config local
 statement ok
 SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false
 
-skipif config 3node-tenant
+onlyif config local
 statement ok
 SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = DEFAULT
 
@@ -458,10 +461,7 @@ EXECUTE set_setting('some string')
 
 # verify setting changes are logged
 ##################
-#
-# The result differs in 3node-tenant because the
-# kv.range_merge.queue_enabled cluster setting is not set.
-skipif config 3node-tenant
+onlyif config local
 query IIT
 SELECT "targetID", "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
