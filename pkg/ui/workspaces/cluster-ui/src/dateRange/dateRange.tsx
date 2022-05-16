@@ -47,7 +47,7 @@ export function DateRangeMenu({
   onCancel,
 }: DateRangeMenuProps): React.ReactElement {
   const dateFormat = "MMMM D, YYYY";
-  const timeFormat = "H:mm [(UTC)]";
+  const timeFormat = "H:mm";
   const [startMoment, setStartMoment] = useState<Moment>(
     startInit || moment.utc(),
   );
@@ -108,7 +108,7 @@ export function DateRangeMenu({
   return (
     <div className={cx("popup-content")}>
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
-        Start
+        Start (UTC)
       </Text>
       <DatePicker
         disabledDate={isDisabled}
@@ -127,7 +127,7 @@ export function DateRangeMenu({
       />
       <div className={cx("divider")} />
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
-        End
+        End (UTC)
       </Text>
       <DatePicker
         allowClear={false}
