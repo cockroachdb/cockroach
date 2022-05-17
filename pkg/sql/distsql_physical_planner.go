@@ -2604,6 +2604,8 @@ func (dsp *DistSQLPlanner) planZigzagJoin(
 			s.EqColumns.Columns[j] = uint32(col)
 		}
 		s.FixedValues = *side.fixedValues
+		s.LockingStrength = side.lockingStrength
+		s.LockingWaitPolicy = side.lockingWaitPolicy
 	}
 
 	// The zigzag join node only represents inner joins, so hardcode Type to
