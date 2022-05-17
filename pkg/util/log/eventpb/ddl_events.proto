@@ -236,6 +236,17 @@ message CommentOnDatabase {
   bool null_comment = 6  [(gogoproto.jsontag) = ",omitempty"];
 }
 
+message CommentOnSchema {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Name of the affected schema.
+  string schema_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The new comment.
+  string comment = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // Set to true if the comment was removed entirely.
+  bool null_comment = 5 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // CommentOnTable is recorded when a table is commented.
 message CommentOnTable {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
