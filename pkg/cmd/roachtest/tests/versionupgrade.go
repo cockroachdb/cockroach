@@ -123,9 +123,15 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// Verify that backups can be created in various configurations. This is
 		// important to test because changes in system tables might cause backups to
 		// fail in mixed-version clusters.
-		dest := fmt.Sprintf("nodelocal://0/%d", timeutil.Now().UnixNano())
-		_, err := u.conn(ctx, t, 1).ExecContext(ctx, `BACKUP TO $1`, dest)
+		dest := fmt.Sprintf("nodelocal://1/%d", timeutil.Now().UnixNano())
+		_, err := u.conn(ctx, t, 1).ExecContext(ctx, `BACKUP INTO $1`, dest)
 		require.NoError(t, err)
+	}
+	printVersionStep := func(version string, haveWaitedForUpgrade bool) versionStep {
+		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+			t.L().Printf("running tests with binary version: %s; cluster version finalized: %t",
+				haveWaitedForUpgrade)
+		}
 	}
 
 	// The steps below start a cluster at predecessorVersion (from a fixture),
@@ -143,6 +149,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
 		uploadAndInitSchemaChangeWorkload(),
 		waitForUpgradeStep(c.All()),
+		printVersionStep(predecessorVersion, true /* haveWaitedForUpgrade */),
 		testFeaturesStep,
 
 		// NB: at this point, cluster and binary version equal predecessorVersion,
@@ -157,6 +164,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		preventAutoUpgradeStep(1),
 		// Roll nodes forward.
 		binaryUpgradeStep(c.All(), ""),
+		printVersionStep("<current>", false /* haveWaitedForUpgrade */),
 		testFeaturesStep,
 		// Run a quick schemachange workload in between each upgrade.
 		// The maxOps is 10 to keep the test runtime under 1-2 minutes.
@@ -167,6 +175,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// exercises this in more detail, so here we just rely on things working
 		// as they ought to.
 		binaryUpgradeStep(c.All(), predecessorVersion),
+		printVersionStep(predecessorVersion, false /* haveWaitedForUpgrade */),
 		testFeaturesStep,
 		// schemaChangeStep,
 		backupStep,
@@ -174,10 +183,12 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// for it to happen.
 		binaryUpgradeStep(c.All(), ""),
 		allowAutoUpgradeStep(1),
+		printVersionStep("<current>", false /* haveWaitedForUpgrade */),
 		testFeaturesStep,
 		// schemaChangeStep,
 		backupStep,
 		waitForUpgradeStep(c.All()),
+		printVersionStep("<current>", true /* haveWaitedForUpgrade */),
 		testFeaturesStep,
 		// schemaChangeStep,
 		backupStep,
@@ -186,6 +197,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// catch most memory leaks since this test doesn't run for too long or does
 		// too much work). Then, run the previous tests again.
 		enableTracingGloballyStep,
+		printVersionStep("<current>", true /* haveWaitedForUpgrade */),
 		testFeaturesStep,
 		// schemaChangeStep,
 		backupStep,

@@ -446,12 +446,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 		}
 
-		if err := writeBackupManifestCheckpoint(
-			ctx, details.URI, details.EncryptionOptions, backupManifest, p.ExecCfg(), p.User(),
-		); err != nil {
-			return err
-		}
-
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return planSchedulePTSChaining(ctx, p.ExecCfg(), txn, &details, b.job.CreatedBy())
 		}); err != nil {
@@ -470,6 +464,24 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if initialDetails.Destination.Subdir == "LATEST" && strings.Count(description, unresolvedText) == 1 {
 			description = strings.ReplaceAll(description, unresolvedText, fmt.Sprintf("INTO '%s' IN", details.Destination.Subdir))
 		}
+
+		// Write the `BACKUP-CHECKPOINT` as the last step before we update the job
+		// details. This reduces the probability of the job getting resumed after
+		// writing the `BACKUP-CHECKPOINT` file and having to re-execute this whole
+		// block. This is important because the `checkForPreviousBackup` that looks
+		// for a `BACKUP-CHECKPOINT` file in the bucket to lock out concurrent
+		// backups is not idempotent, and so the job can stumble over a
+		// `BACKUP-CHECKPOINT` it wrote itself in a prior call to Resume().
+		if err := writeBackupManifestCheckpoint(
+			ctx, details.URI, details.EncryptionOptions, backupManifest, p.ExecCfg(), p.User(),
+		); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.resolved_job_details_update"); err != nil {
+			return err
+		}
+
 
 		// Update the job payload (non-volatile job definition) once, with the now
 		// resolved destination, updated description, etc. If we resume again we'll
