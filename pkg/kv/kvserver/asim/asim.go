@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/google/btree"
 )
@@ -163,12 +164,28 @@ func (s *State) AddNode() (nodeID int) {
 	return nodeID
 }
 
+// nodeCountFn returns the total number of active nodes within the simulator.
+// TODO(kvoli,lidorcarmel): Update this function to account for cluster
+// membership.
+func (s *State) nodeCountFn() int {
+	return len(s.Nodes)
+}
+
+// nodeLivenessFn returns the liveness of the node associated with nodeID.
+// TODO(kvoli,lidorcarmel): Update this function to consider simulated
+// liveness.
+func (s *State) nodeLivenessFn(
+	nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration,
+) livenesspb.NodeLivenessStatus {
+	return livenesspb.NodeLivenessStatus_LIVE
+}
+
 // AddStore adds a store to an existing node.
 // TODO(lidorcarmel,kvoli): Add storeID parameter to support multi-store
 // configurations.
 func (s *State) AddStore(node int) {
 	allocator := allocatorimpl.MakeAllocator(
-		nil,
+		NewStorePool(s.nodeCountFn, s.nodeLivenessFn),
 		func(string) (time.Duration, bool) {
 			return 0, true
 		},
@@ -239,6 +256,36 @@ func (s *State) AddReplica(r *Range, node int) int {
 	return int(desc.ReplicaID)
 }
 
+func (s *State) storeDescriptors() []roachpb.StoreDescriptor {
+	storeDescriptors := make([]roachpb.StoreDescriptor, 0, 1)
+	// TODO(kvoli): storeID needs to be consistent.
+	for i, node := range s.Nodes {
+		for _, store := range node.Stores {
+			storeDesc := roachpb.StoreDescriptor{
+				StoreID:  roachpb.StoreID(i),
+				Node:     *node.nodeDesc,
+				Capacity: store.Capacity(),
+			}
+			storeDescriptors = append(storeDescriptors, storeDesc)
+		}
+	}
+	return storeDescriptors
+}
+
+// updateStorePools puts the current tick store descriptors into the state
+// exchange. It then updates the exchanged descriptors for each store's store
+// pool.
+func (s *Simulator) updateStorePools(tick time.Time) {
+	storeDescriptors := s.state.storeDescriptors()
+	s.exchange.Put(tick, storeDescriptors...)
+	for i, node := range s.state.Nodes {
+		for _, store := range node.Stores {
+			sp := store.allocator.StorePool
+			sp.DetailsMu.StoreDetails = s.exchange.Get(tick, roachpb.StoreID(i))
+		}
+	}
+}
+
 // ApplyAllocatorAction updates the state with allocator ops such as
 // moving/adding/removing replicas.
 func (s *State) ApplyAllocatorAction(
@@ -281,12 +328,18 @@ type Simulator struct {
 
 	// The simulator can run multiple workload Generators in parallel.
 	generators []WorkloadGenerator
-	state      *State
+
+	state    *State
+	exchange StateExchange
 }
 
 // NewSimulator constructs a valid Simulator.
 func NewSimulator(
-	start, end time.Time, interval time.Duration, wgs []WorkloadGenerator, initialState *State,
+	start, end time.Time,
+	interval time.Duration,
+	wgs []WorkloadGenerator,
+	initialState *State,
+	exchange StateExchange,
 ) *Simulator {
 	return &Simulator{
 		curr:       start,
@@ -294,6 +347,7 @@ func NewSimulator(
 		interval:   interval,
 		generators: wgs,
 		state:      initialState,
+		exchange:   exchange,
 	}
 }
 
@@ -337,14 +391,17 @@ func (s *Simulator) RunSim(ctx context.Context) {
 			}
 		}
 
-		// Done with config and load updates, the state is ready for the allocators.
+		// Update each allocators view of the stores in the cluster.
+		s.updateStorePools(tick)
+
+		// Done with config and load updates, the state is ready for the
+		// allocators.
 		stateForAlloc := s.state
 
 		for _, node := range stateForAlloc.Nodes {
 			for _, store := range node.Stores {
 				for {
 					r := store.pacer.Next(tick)
-
 					// No replicas to consider at this tick.
 					if r == nil {
 						break
