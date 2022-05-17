@@ -2508,3 +2508,46 @@ select (select count(*) from t81448@t81448_b_key bk inner join t81448_b cp on (c
 
 statement ok
 drop table t81448, t81448_b
+
+subtest sequence_is_referenced_by_ID
+
+statement ok
+DROP TABLE IF EXISTS tbl
+
+statement ok
+CREATE TABLE tbl (i INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS s1
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS s2
+
+statement ok
+ALTER TABLE tbl ADD COLUMN j INT NOT NULL DEFAULT nextval('s1') ON UPDATE nextval('s2')
+
+query TT
+SHOW CREATE TABLE tbl
+----
+tbl  CREATE TABLE public.tbl (
+     i INT8 NOT NULL,
+     j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
+     CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+)
+
+# Now use `ALTER COLUMN` to swap the use of sequence 's1' and 's2'
+
+statement ok
+ALTER TABLE tbl ALTER COLUMN j SET DEFAULT nextval('s2')
+
+statement ok
+ALTER TABLE tbl ALTER COLUMN j SET ON UPDATE nextval('s1')
+
+query TT
+SHOW CREATE TABLE tbl
+----
+tbl  CREATE TABLE public.tbl (
+     i INT8 NOT NULL,
+     j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
+     CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+)
