@@ -57,7 +57,8 @@ func asEventPayload(
 			return &eventpb.DropSchema{SchemaName: fullName}, nil
 		case *scpb.AliasType, *scpb.EnumType:
 			return &eventpb.DropType{TypeName: fullName}, nil
-		case *scpb.TableComment, *scpb.ColumnComment, *scpb.IndexComment, *scpb.ConstraintComment, *scpb.DatabaseComment:
+		case *scpb.TableComment, *scpb.ColumnComment, *scpb.IndexComment, *scpb.ConstraintComment,
+			*scpb.DatabaseComment, *scpb.SchemaComment:
 			return asCommentEventPayload(ctx, fullName, e, targetStatus, m, true /* isNullComment */)
 		}
 	}
@@ -99,13 +100,13 @@ func asEventPayload(
 		default:
 			return nil, errors.AssertionFailedf("unknown target status %s", targetStatus)
 		}
-	case *scpb.TableComment, *scpb.ColumnComment, *scpb.IndexComment, *scpb.ConstraintComment, *scpb.DatabaseComment:
+	case *scpb.TableComment, *scpb.ColumnComment, *scpb.IndexComment, *scpb.ConstraintComment,
+		*scpb.DatabaseComment, *scpb.SchemaComment:
 		return asCommentEventPayload(ctx, fullName, e, targetStatus, m, false /* isNullComment */)
 	}
 	return nil, errors.AssertionFailedf("unknown %s element type %T", targetStatus.String(), e)
 }
 
-// TODO (Chengxiong): add event log support for schema comment
 func asCommentEventPayload(
 	ctx context.Context,
 	fullName string,
@@ -171,6 +172,12 @@ func asCommentEventPayload(
 			DatabaseName: fullName,
 			Comment:      e.Comment,
 			NullComment:  isNullComment,
+		}, nil
+	case *scpb.SchemaComment:
+		return &eventpb.CommentOnSchema{
+			SchemaName:  fullName,
+			Comment:     e.Comment,
+			NullComment: isNullComment,
 		}, nil
 	}
 	return nil, errors.AssertionFailedf("unknown %s element type %T", targetStatus.String(), e)
