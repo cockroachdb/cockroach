@@ -1088,3 +1088,35 @@
     )
     $private
 )
+
+# PushCaseWhenConditionIntoSubquery matches on one or more projected CASE
+# expressions having:
+#   1. A single WHEN clause and an implicit or explicit ELSE NULL clause
+#   2. A Subquery in the THEN clause with a chain of single input relation
+#      expressions, e.g.
+#      SubQuery(Project(Limit (Select a,b,c from abc)), ColSet(a,b)))
+#
+# If the WHEN clause condition is not volatile and the THEN clause is a Subquery
+# with a limited set of relational expressions (Select, Project, Limit, Offset,
+# RecursiveCTE, InnerJoin, Scan, WithScan, ScalarGroupBy, Window), then the WHEN
+# clause condition is pushed as a filtered Select above each Scan or WithScan,
+# and the CASE expression is replaced by the Subquery in the THEN clause. This
+# rewrite enables hoisting of the subquery above the projection. See function
+# PushCaseWhenIntoSubquery and helper functions pushableCondition and
+# tryAddOuterPredicateToRelExpr for more details.
+[PushCaseWhenConditionIntoSubquery, Normalize]
+(Project
+    $input:*
+    $projections:*
+    $passthrough:* &
+        (Let
+            ($resultExpr $ok):(PushCaseWhenIntoSubquery
+                $input
+                $projections
+                $passthrough
+            )
+            $ok
+        )
+)
+=>
+$resultExpr

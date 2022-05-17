@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -1047,4 +1048,375 @@ func (r *subqueryHoister) constructGroupByAny(
 		)},
 		opt.ColSet{},
 	)
+}
+
+// PushCaseWhenIntoSubquery examines each CASE expression in a set of
+// projections where there is exactly one WHEN clause and an ELSE NULL clause
+// (either explicit or implicit) and attempts to push the scalar boolean
+// conditional expression in the WHEN clause into a SubqueryExpr in the THEN
+// clause. Any ScanExpr or WithScanExpr found is modified with a new parent
+// SelectExpr including the WHEN condition as a filter. Scans under the branches
+// of a RECURSIVE WITH expression are also traversed and are candidates for
+// rewrite. The CASE expression is then removed and the THEN clause subquery
+// promoted to be the main projected scalar expression. Since a subquery
+// matching zero rows evaluates to null, the ELSE clause is implicitly handled
+// by subquery semantics and is not needed. Note that a RECURSIVE WITH
+// expression under an aggregation would not be allowed since a COUNT expression
+// may return a row when the WHEN clause is not qualified.
+//
+// The point of this rewrite is to create a SQL subexpression for which hoisting
+// the subquery above the projection into an ApplyJoin is permitted (a
+// non-leakproof subquery in a CASE expression may not be hoisted due to
+// potential side-effects of evaluating it on unqualified rows).
+//
+// An example of this rewrite:
+// SELECT (CASE
+//            WHEN t.typtype = 'c'
+//            THEN (WITH RECURSIVE typebases (oid, depth)
+//                    AS (SELECT t2.typbasetype AS oid, 0 AS depth
+//                            FROM  pg_type AS t2
+//                            WHERE t2.oid = t.oid
+//                            UNION ALL
+//                        SELECT t2.typbasetype AS oid, tb.depth + 1 AS depth
+//                        FROM pg_type AS t2, typebases AS tb
+//                        WHERE tb.oid = t2.oid AND t2.typbasetype != 0)
+//	                SELECT oid FROM typebases
+//	                ORDER BY depth DESC
+//	                LIMIT 1
+//                 )
+//            ELSE NULL
+//            END
+//       ) AS basetype
+//       FROM pg_catalog.pg_type AS t;
+//
+// ----->>
+//
+// SELECT (SELECT (WITH RECURSIVE typebases (oid, depth)
+//                    AS (SELECT t2.typbasetype AS oid, 0 AS depth
+//                            FROM  pg_type AS t2
+//                            WHERE t.typtype = 'c' AND -- WHEN clause pushed
+//                                                      -- into seed
+//                                  t2.oid = t.oid
+//                            UNION ALL
+//                        SELECT t2.typbasetype AS oid, tb.depth + 1 AS depth
+//                        FROM pg_type AS t2, typebases AS tb
+//                        WHERE t.typtype='c' AND  -- WHEN clause pushed into
+//                                                 -- recursive UNION ALL branch
+//                              tb.oid = t2.oid AND t2.typbasetype != 0)
+//	                SELECT oid FROM typebases
+//	                ORDER BY depth DESC
+//	                LIMIT 1)
+//       ) AS basetype
+//       FROM pg_catalog.pg_type AS t;
+func (c *CustomFuncs) PushCaseWhenIntoSubquery(
+	input memo.RelExpr, projections memo.ProjectionsExpr, passthrough opt.ColSet,
+) (result memo.RelExpr, ok bool) {
+
+	rewriteDone := false
+	for i, projectionsItem := range projections {
+		if projectionsItem.Element.Op() == opt.CaseOp {
+			caseExpr := projectionsItem.Element.(*memo.CaseExpr)
+			// The WHEN clause must evaluate to constant TRUE to be matched.
+			if caseExpr.Input.Op() != opt.TrueOp {
+				continue
+			}
+			// The ELSE clause must be a null expression.
+			if caseExpr.OrElse.Op() != opt.NullOp {
+				continue
+			}
+			// There must be exactly one WHEN clause.
+			if len(caseExpr.Whens) != 1 {
+				continue
+			}
+			whenExpr := caseExpr.Whens[0].(*memo.WhenExpr)
+			if whenExpr == nil {
+				continue
+			}
+			thenExpr := whenExpr.Value
+			// This rewrite only applies to subqueries in the THEN clause.
+			if thenExpr.Op() != opt.SubqueryOp {
+				continue
+			}
+			whenCondition := whenExpr.Condition
+			if !c.pushableCondition(whenCondition) {
+				continue
+			}
+			var newProjectionsElement opt.ScalarExpr
+			if newProjectionsElement, ok =
+				c.tryAddOuterPredicateToRelExpr(projectionsItem.Element, whenCondition); !ok {
+				// If a rewrite didn't take place for this projectionsItem, continue
+				// to the next one.
+				continue
+			}
+			// Reference the newly-rewritten CASE expression, so we can use the THEN
+			// clause directly in the projection.
+			caseExpr = newProjectionsElement.(*memo.CaseExpr)
+			whenExpr = caseExpr.Whens[0].(*memo.WhenExpr)
+			thenExpr = whenExpr.Value
+
+			newProjectionsItem := c.f.ConstructProjectionsItem(thenExpr, projectionsItem.Col)
+			projections[i] = newProjectionsItem
+			rewriteDone = true
+		}
+	}
+	if !rewriteDone {
+		return nil, false
+	}
+	newProjectExpr := c.f.ConstructProject(input, projections, passthrough)
+	return newProjectExpr, true
+}
+
+// pushableCondition returns false if any Volatile or disallowed Stable
+// operators or functions are found in the scalar expression tree `e`, otherwise
+// true.
+func (c *CustomFuncs) pushableCondition(e opt.ScalarExpr) bool {
+	// Scalar expressions that we consider for pushing can't be volatile since
+	// we're going to be potentially evaluating them a different number of times
+	// than the original once per outer row (via the WHEN clause), which we're
+	// replacing. The result can't be changing for different occurrences of the
+	// evaluation within the subquery and any function calls can't have side
+	// effects.
+
+	var checkFn ReplaceFunc
+	pushable := true
+	checkFn = func(e opt.Expr) opt.Expr {
+		if !pushable {
+			return e
+		}
+		if functionExpr, ok := e.(*memo.FunctionExpr); ok {
+			if !c.CanFoldOperator(functionExpr.Overload.Volatility) {
+				pushable = false
+				return e
+			}
+		} else if opt.IsConstValueOp(e) {
+			// Constants are OK.
+		} else if e.Op() == opt.TupleOp {
+			// It's only the elements of the tuple that need to be examined.
+		} else if e.Op() == opt.VariableOp {
+			// Accessing a column doesn't have side effects...
+		} else if e.Op() == opt.PlaceholderOp {
+			// ... neither does accessing a placeholder.
+		} else if e.Op() == opt.CastOp || e.Op() == opt.AssignmentCastOp {
+			from := e.Child(0).(opt.ScalarExpr).DataType()
+			to := e.Private().(*types.T)
+			volatility, ok := cast.LookupCastVolatility(from, to, c.f.EvalContext().CastSessionOptions())
+			if !ok || !c.CanFoldOperator(volatility) {
+				pushable = false
+				return e
+			}
+		} else if opt.IsUnaryOp(e) {
+			inputType := e.Child(0).(opt.ScalarExpr).DataType()
+			o, ok := memo.FindUnaryOverload(e.Op(), inputType)
+			if !ok || !c.CanFoldOperator(o.Volatility) {
+				pushable = false
+				return e
+			}
+		} else if opt.IsBinaryOp(e) {
+			leftType := e.Child(0).(opt.ScalarExpr).DataType()
+			rightType := e.Child(0).(opt.ScalarExpr).DataType()
+			o, ok := memo.FindBinaryOverload(e.Op(), leftType, rightType)
+			if !ok || !c.CanFoldOperator(o.Volatility) {
+				pushable = false
+				return e
+			}
+		} else if opt.IsComparisonOp(e) {
+			leftType := e.Child(0).(opt.ScalarExpr).DataType()
+			rightType := e.Child(1).(opt.ScalarExpr).DataType()
+			o, _, _, ok := memo.FindComparisonOverload(e.Op(), leftType, rightType)
+			if !ok || !c.CanFoldOperator(o.Volatility) {
+				pushable = false
+				return e
+			}
+		} else if opt.IsBoolOp(e) {
+			// These are all OK, do nothing.
+		} else if opt.IsMutationOp(e) {
+			pushable = false
+			return e
+		} else if opt.IsRelationalOp(e) {
+			pushable = false
+			return e
+		} else {
+			// Be safe and for now don't allow any Ops which are not explicitly
+			// handled above.
+			pushable = false
+			return e
+		}
+		// We're not replacing any expressions, just utilizing Replace to walk the
+		// entire tree and run checkFn.
+		return c.f.Replace(e, checkFn)
+	}
+	checkFn(e)
+	return pushable
+}
+
+// tryAddOuterPredicateToRelExpr walks the scalar/relational expression tree,
+// and if an unbroken path from the top-level relational expression through
+// supported relational expressions (Select, Project, Limit, Offset,
+// RecursiveCTE, InnerJoin, ScalarGroupBy, Window) having only a single input
+// RelExpr on the path to a rewritable node (Scan, WithScan) is found, the
+// rewritable nodes are given a new SelectExpr parent node with `predicate` as
+// the filter. In the case of RecursiveCTEExpr, both the Initial portion of the
+// CTE and the Recursive portion have `predicate` added as a filter.
+//
+// Aggregation and window expressions only allow aggregate functions which
+// evaluate to NULL when the input is empty, as this rewrite counts on a false
+// evaluation of the WHEN clause having the same behavior as an ELSE NULL
+// clause. A projection on top of an aggregation is not allowed, as it may
+// convert null to not null, or add new constant non-null expressions.
+func (c *CustomFuncs) tryAddOuterPredicateToRelExpr(
+	scalar opt.ScalarExpr, predicate opt.ScalarExpr,
+) (newExpr opt.ScalarExpr, ok bool) {
+	skipRewrite := false
+	rewriteDone := false
+	projectionsDepth := 0
+
+	// Recursively walk the scalar sub-tree, and for a small set of operations
+	// which we choose to support rewrites on, find all Scans and construct a
+	// Select operation above each with `predicate` added as the filter.
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		if skipRewrite {
+			return e
+		}
+
+		switch t := e.(type) {
+		case *memo.ScanExpr:
+			newfilters := c.newSinglePredFilter(predicate)
+			rewriteDone = true
+			return c.f.ConstructSelect(t, newfilters)
+		case *memo.WithScanExpr:
+			newfilters := c.newSinglePredFilter(predicate)
+			rewriteDone = true
+			return c.f.ConstructSelect(t, newfilters)
+		case *memo.RecursiveCTEExpr:
+			if rewriteDone {
+				// We already did the rewrite. If there's a nested recursive CTE,
+				// bail out. This may or may not be an OK case to handle.
+				skipRewrite = true
+				return e
+			}
+			binding := t.Binding
+			initial := replace(t.Initial).(memo.RelExpr)
+			recursive := replace(t.Recursive).(memo.RelExpr)
+
+			if initial == t.Initial || recursive == t.Recursive {
+				// Both the seed and the recursive portion must be filtered to ensure
+				// no side effects.
+				skipRewrite = true
+				return e
+			}
+			return c.f.ConstructRecursiveCTE(binding, initial, recursive, &t.RecursiveCTEPrivate)
+		case *memo.InnerJoinExpr:
+			left := t.Left
+			right := t.Right
+			left = replace(left).(memo.RelExpr)
+			right = replace(right).(memo.RelExpr)
+			if left == t.Left || right == t.Right {
+				skipRewrite = true
+				return e
+			}
+			return c.f.ConstructInnerJoin(left, right, t.On, &t.JoinPrivate)
+		case *memo.SelectExpr:
+			input := replace(t.Input).(memo.RelExpr)
+			if input == t.Input {
+				skipRewrite = true
+				return e
+			}
+			filters, _ := c.f.replaceFiltersExpr(t.Filters, replace)
+			return c.f.ConstructSelect(input, filters)
+		case *memo.LimitExpr:
+			input := replace(t.Input).(memo.RelExpr)
+			if input == t.Input {
+				skipRewrite = true
+				return e
+			}
+			return c.f.ConstructLimit(input, t.Limit, t.Ordering)
+		case *memo.ProjectExpr:
+			if len(t.Projections) > 0 {
+				projectionsDepth++
+			}
+			input := replace(t.Input).(memo.RelExpr)
+			if len(t.Projections) > 0 {
+				projectionsDepth--
+			}
+			if input == t.Input {
+				skipRewrite = true
+				return e
+			}
+			return c.f.ConstructProject(input, t.Projections, t.Passthrough)
+			// These are supported chained RelExprs.
+		case *memo.OffsetExpr:
+			input := replace(t.Input).(memo.RelExpr)
+			if input == t.Input {
+				skipRewrite = true
+				return e
+			}
+			return c.f.ConstructOffset(input, t.Offset, t.Ordering)
+		case *memo.ScalarGroupByExpr:
+			input := replace(t.Input).(memo.RelExpr)
+			if input == t.Input {
+				skipRewrite = true
+				return e
+			}
+			if projectionsDepth > 0 {
+				// A projection on top of an aggregation may convert a null due to zero
+				// rows processed into a non-null, which breaks the assumption of this
+				// rewrite that when no rows are qualified only nulls are returned.
+				skipRewrite = true
+				return e
+			}
+			for _, aggregationsItem := range t.Aggregations {
+				// COUNT converts a zero-rows null into non-null, so disallow it.
+				if !opt.AggregateIsNullOnEmpty(aggregationsItem.Agg.Op()) {
+					skipRewrite = true
+					return e
+				}
+			}
+			aggregations, _ := c.f.replaceAggregationsExpr(t.Aggregations, replace)
+			return c.f.ConstructScalarGroupBy(input, aggregations, &t.GroupingPrivate)
+		case *memo.WindowExpr:
+			input := replace(t.Input).(memo.RelExpr)
+			if input == t.Input {
+				skipRewrite = true
+				return e
+			}
+			if projectionsDepth > 0 {
+				// A projection on top of an aggregation may convert a null due to zero
+				// rows processed into a non-null, which breaks the assumption of this
+				// rewrite that when no rows are qualified only nulls are returned.
+				skipRewrite = true
+				return e
+			}
+			for _, windowsItem := range t.Windows {
+				// COUNT converts a zero-rows null into non-null, so disallow it.
+				if !opt.AggregateIsNullOnEmpty(windowsItem.Function.Op()) {
+					skipRewrite = true
+					return e
+				}
+			}
+			windows, _ := c.f.replaceWindowsExpr(t.Windows, replace)
+			return c.f.ConstructWindow(input, windows, &t.WindowPrivate)
+		default:
+			// Only rewrite chains of supported relational expressions.
+			if _, ok := e.(memo.RelExpr); ok {
+				// An unsupported RelExpr! Bail out of our rewrite attempt.
+				skipRewrite = true
+				return e
+			}
+		}
+
+		return c.f.Replace(e, replace)
+	}
+
+	newExpression := replace(scalar).(opt.ScalarExpr)
+	if skipRewrite || !rewriteDone {
+		return nil, false
+	}
+	return newExpression, true
+}
+
+func (c *CustomFuncs) newSinglePredFilter(predicate opt.ScalarExpr) memo.FiltersExpr {
+	newfilters := make(memo.FiltersExpr, 1)
+	newfilters[0] = c.f.ConstructFiltersItem(predicate)
+	return newfilters
 }

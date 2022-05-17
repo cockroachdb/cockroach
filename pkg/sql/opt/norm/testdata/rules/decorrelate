@@ -5833,3 +5833,608 @@ project
  │              └── xy.x:8
  └── projections
       └── xy.x:8 [as=x:12, outer=(8)]
+
+# --------------------------------------------------
+# PushCaseWhenConditionIntoSubquery
+# --------------------------------------------------
+# A WHEN condition can be pushed into a recursive query.
+norm expect=PushCaseWhenConditionIntoSubquery
+SELECT (CASE
+            WHEN xy.x > 0
+            THEN (WITH RECURSIVE rec_with (x, depth)
+                    AS (SELECT xy.x, 0 AS depth
+                            FROM  xy t2
+                            WHERE t2.x = xy.x
+                            UNION ALL
+                        SELECT t2.x, rec_with.depth + 1 AS depth
+                        FROM xy t2, rec_with
+                        WHERE t2.x = rec_with.x+1)
+	                SELECT x FROM rec_with
+	                ORDER BY depth
+	                LIMIT 1
+                 )
+            END
+       ) AS rw_field
+       FROM xy
+----
+project
+ ├── columns: rw_field:23
+ ├── immutable
+ ├── distinct-on
+ │    ├── columns: xy.x:1!null x:21
+ │    ├── grouping columns: xy.x:1!null
+ │    ├── internal-ordering: +22
+ │    ├── immutable
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(21)
+ │    ├── sort
+ │    │    ├── columns: xy.x:1!null x:21 depth:22
+ │    │    ├── immutable
+ │    │    ├── ordering: +22
+ │    │    └── left-join-apply
+ │    │         ├── columns: xy.x:1!null x:21 depth:22
+ │    │         ├── immutable
+ │    │         ├── scan xy
+ │    │         │    ├── columns: xy.x:1!null
+ │    │         │    └── key: (1)
+ │    │         ├── project
+ │    │         │    ├── columns: x:21 depth:22
+ │    │         │    ├── outer: (1)
+ │    │         │    ├── immutable
+ │    │         │    ├── recursive-c-t-e
+ │    │         │    │    ├── columns: x:11 depth:12
+ │    │         │    │    ├── working table binding: &1
+ │    │         │    │    ├── initial columns: x:9 depth:10
+ │    │         │    │    ├── recursive columns: t2.x:13 depth:20
+ │    │         │    │    ├── outer: (1)
+ │    │         │    │    ├── immutable
+ │    │         │    │    ├── fake-rel
+ │    │         │    │    │    ├── columns: x:11 depth:12
+ │    │         │    │    │    └── cardinality: [1 - ]
+ │    │         │    │    ├── project
+ │    │         │    │    │    ├── columns: x:9 depth:10!null
+ │    │         │    │    │    ├── outer: (1)
+ │    │         │    │    │    ├── cardinality: [0 - 1]
+ │    │         │    │    │    ├── key: ()
+ │    │         │    │    │    ├── fd: ()-->(9,10)
+ │    │         │    │    │    ├── select
+ │    │         │    │    │    │    ├── columns: t2.x:5!null
+ │    │         │    │    │    │    ├── outer: (1)
+ │    │         │    │    │    │    ├── cardinality: [0 - 1]
+ │    │         │    │    │    │    ├── key: ()
+ │    │         │    │    │    │    ├── fd: ()-->(5)
+ │    │         │    │    │    │    ├── scan xy [as=t2]
+ │    │         │    │    │    │    │    ├── columns: t2.x:5!null
+ │    │         │    │    │    │    │    └── key: (5)
+ │    │         │    │    │    │    └── filters
+ │    │         │    │    │    │         ├── xy.x:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    │         │    │    │    │         └── t2.x:5 = xy.x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │    │         │    │    │    └── projections
+ │    │         │    │    │         ├── xy.x:1 [as=x:9, outer=(1)]
+ │    │         │    │    │         └── 0 [as=depth:10]
+ │    │         │    │    └── project
+ │    │         │    │         ├── columns: depth:20 t2.x:13!null
+ │    │         │    │         ├── outer: (1)
+ │    │         │    │         ├── immutable
+ │    │         │    │         ├── inner-join (cross)
+ │    │         │    │         │    ├── columns: t2.x:13!null x:17 depth:18
+ │    │         │    │         │    ├── outer: (1)
+ │    │         │    │         │    ├── immutable
+ │    │         │    │         │    ├── fd: (17)-->(13)
+ │    │         │    │         │    ├── select
+ │    │         │    │         │    │    ├── columns: t2.x:13!null
+ │    │         │    │         │    │    ├── outer: (1)
+ │    │         │    │         │    │    ├── key: (13)
+ │    │         │    │         │    │    ├── scan xy [as=t2]
+ │    │         │    │         │    │    │    ├── columns: t2.x:13!null
+ │    │         │    │         │    │    │    └── key: (13)
+ │    │         │    │         │    │    └── filters
+ │    │         │    │         │    │         └── xy.x:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    │         │    │         │    ├── with-scan &1 (rec_with)
+ │    │         │    │         │    │    ├── columns: x:17 depth:18
+ │    │         │    │         │    │    ├── mapping:
+ │    │         │    │         │    │    │    ├──  x:11 => x:17
+ │    │         │    │         │    │    │    └──  depth:12 => depth:18
+ │    │         │    │         │    │    └── cardinality: [1 - ]
+ │    │         │    │         │    └── filters
+ │    │         │    │         │         ├── t2.x:13 = (x:17 + 1) [outer=(13,17), immutable, constraints=(/13: (/NULL - ]), fd=(17)-->(13)]
+ │    │         │    │         │         └── xy.x:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    │         │    │         └── projections
+ │    │         │    │              └── depth:18 + 1 [as=depth:20, outer=(18), immutable]
+ │    │         │    └── projections
+ │    │         │         ├── x:11 [as=x:21, outer=(11)]
+ │    │         │         └── depth:12 [as=depth:22, outer=(12)]
+ │    │         └── filters (true)
+ │    └── aggregations
+ │         └── first-agg [as=x:21, outer=(21)]
+ │              └── x:21
+ └── projections
+      └── x:21 [as=rw_field:23, outer=(21)]
+
+# Volatile function random cannot be pushed into the subquery.
+norm expect-not=PushCaseWhenConditionIntoSubquery
+SELECT (CASE
+            WHEN t.oid::int < random()
+            then (select cast(t.oid::int as int2) from pg_catalog.pg_type AS t2 limit 1)
+            else null end) AS basetype
+    FROM pg_catalog.pg_type AS t
+----
+project
+ ├── columns: basetype:66
+ ├── volatile
+ ├── scan pg_type [as=t]
+ │    └── columns: t.oid:2!null
+ └── projections
+      └── case [as=basetype:66, outer=(2), volatile, correlated-subquery]
+           ├── true
+           ├── when
+           │    ├── t.oid:2::INT8 < random()
+           │    └── subquery
+           │         └── project
+           │              ├── columns: oid:65
+           │              ├── outer: (2)
+           │              ├── cardinality: [0 - 1]
+           │              ├── immutable
+           │              ├── key: ()
+           │              ├── fd: ()-->(65)
+           │              ├── limit
+           │              │    ├── cardinality: [0 - 1]
+           │              │    ├── key: ()
+           │              │    ├── scan pg_type [as=t2]
+           │              │    │    └── limit hint: 1.00
+           │              │    └── 1
+           │              └── projections
+           │                   └── t.oid:2::INT8::INT2 [as=oid:65, outer=(2), immutable]
+           └── CAST(NULL AS INT2)
+
+# Constant condition may be pushed.
+norm expect=PushCaseWhenConditionIntoSubquery
+SELECT (CASE
+            WHEN t.oid::int < 5
+            then (select cast(t.oid::int as int2) from pg_catalog.pg_type AS t2 limit 1)
+            else null end) AS basetype
+    FROM pg_catalog.pg_type AS t
+----
+project
+ ├── columns: basetype:66
+ ├── immutable
+ ├── left-join-apply
+ │    ├── columns: t.oid:2!null oid:65
+ │    ├── immutable
+ │    ├── scan pg_type [as=t]
+ │    │    └── columns: t.oid:2!null
+ │    ├── project
+ │    │    ├── columns: oid:65
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── immutable
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(65)
+ │    │    ├── limit
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── immutable
+ │    │    │    ├── key: ()
+ │    │    │    ├── select
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── immutable
+ │    │    │    │    ├── limit hint: 1.00
+ │    │    │    │    ├── scan pg_type [as=t2]
+ │    │    │    │    │    └── limit hint: 3.00
+ │    │    │    │    └── filters
+ │    │    │    │         └── t.oid:2::INT8 < 5 [outer=(2), immutable]
+ │    │    │    └── 1
+ │    │    └── projections
+ │    │         └── t.oid:2::INT8::INT2 [as=oid:65, outer=(2), immutable]
+ │    └── filters (true)
+ └── projections
+      └── oid:65 [as=basetype:66, outer=(65)]
+
+# Constant condition with ANDs and ORs may be pushed.
+norm expect=PushCaseWhenConditionIntoSubquery
+SELECT (CASE
+            WHEN (t.oid::int = 5 OR t.oid::int = 7 OR t.oid::int IN (6,8,9)) AND t.oid::int IS NOT NULL
+            then (select cast(t.oid::int as int2) from pg_catalog.pg_type AS t2 limit 1)
+            else null end) AS basetype
+    FROM pg_catalog.pg_type AS t
+----
+project
+ ├── columns: basetype:66
+ ├── immutable
+ ├── left-join-apply
+ │    ├── columns: t.oid:2!null oid:65
+ │    ├── immutable
+ │    ├── scan pg_type [as=t]
+ │    │    └── columns: t.oid:2!null
+ │    ├── project
+ │    │    ├── columns: oid:65
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── immutable
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(65)
+ │    │    ├── limit
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── immutable
+ │    │    │    ├── key: ()
+ │    │    │    ├── select
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── immutable
+ │    │    │    │    ├── limit hint: 1.00
+ │    │    │    │    ├── scan pg_type [as=t2]
+ │    │    │    │    │    └── limit hint: 9.00
+ │    │    │    │    └── filters
+ │    │    │    │         ├── ((t.oid:2::INT8 = 5) OR (t.oid:2::INT8 = 7)) OR (t.oid:2::INT8 IN (6, 8, 9)) [outer=(2), immutable]
+ │    │    │    │         └── t.oid:2::INT8 IS NOT NULL [outer=(2), immutable]
+ │    │    │    └── 1
+ │    │    └── projections
+ │    │         └── t.oid:2::INT8::INT2 [as=oid:65, outer=(2), immutable]
+ │    └── filters (true)
+ └── projections
+      └── oid:65 [as=basetype:66, outer=(65)]
+
+# Constant condition with BETWEEN and tuple IS NOT NULL may be pushed.
+norm expect=PushCaseWhenConditionIntoSubquery
+SELECT (CASE
+            WHEN t.oid::int BETWEEN 1 and 10 OR (t.oid::int, t.oid::int + 5) IS NOT NULL
+            then (select cast(t.oid::int as int2) from pg_catalog.pg_type AS t2 limit 1)
+            else null end) AS basetype
+    FROM pg_catalog.pg_type AS t
+----
+project
+ ├── columns: basetype:66
+ ├── immutable
+ ├── left-join-apply
+ │    ├── columns: t.oid:2!null oid:65
+ │    ├── immutable
+ │    ├── scan pg_type [as=t]
+ │    │    └── columns: t.oid:2!null
+ │    ├── project
+ │    │    ├── columns: oid:65
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── immutable
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(65)
+ │    │    ├── limit
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── immutable
+ │    │    │    ├── key: ()
+ │    │    │    ├── select
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── immutable
+ │    │    │    │    ├── limit hint: 1.00
+ │    │    │    │    ├── scan pg_type [as=t2]
+ │    │    │    │    │    └── limit hint: 3.00
+ │    │    │    │    └── filters
+ │    │    │    │         └── ((t.oid:2::INT8 >= 1) AND (t.oid:2::INT8 <= 10)) OR ((t.oid:2::INT8, t.oid:2::INT8 + 5) IS NOT NULL) [outer=(2), immutable]
+ │    │    │    └── 1
+ │    │    └── projections
+ │    │         └── t.oid:2::INT8::INT2 [as=oid:65, outer=(2), immutable]
+ │    └── filters (true)
+ └── projections
+      └── oid:65 [as=basetype:66, outer=(65)]
+
+# Conditions with placeholders may be pushed.
+# Expect rules only run during AssignPlaceholders, so that check is not added.
+assign-placeholders-norm query-args=(1, 10)
+SELECT (CASE
+            WHEN t.oid::int BETWEEN $1 and $2 OR (t.oid::int, t.oid::int + 5) IS NOT NULL
+            then (select cast(t.oid::int as int2) from pg_catalog.pg_type AS t2 limit 1)
+            else null end) AS basetype
+    FROM pg_catalog.pg_type AS t
+----
+project
+ ├── columns: basetype:66
+ ├── immutable
+ ├── left-join-apply
+ │    ├── columns: t.oid:2!null oid:65
+ │    ├── immutable
+ │    ├── scan pg_type [as=t]
+ │    │    └── columns: t.oid:2!null
+ │    ├── project
+ │    │    ├── columns: oid:65
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── immutable
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(65)
+ │    │    ├── limit
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── immutable
+ │    │    │    ├── key: ()
+ │    │    │    ├── select
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── immutable
+ │    │    │    │    ├── limit hint: 1.00
+ │    │    │    │    ├── scan pg_type [as=t2]
+ │    │    │    │    │    └── limit hint: 3.00
+ │    │    │    │    └── filters
+ │    │    │    │         └── ((t.oid:2::INT8 >= 1) AND (t.oid:2::INT8 <= 10)) OR ((t.oid:2::INT8, t.oid:2::INT8 + 5) IS NOT NULL) [outer=(2), immutable]
+ │    │    │    └── 1
+ │    │    └── projections
+ │    │         └── t.oid:2::INT8::INT2 [as=oid:65, outer=(2), immutable]
+ │    └── filters (true)
+ └── projections
+      └── oid:65 [as=basetype:66, outer=(65)]
+
+# Cannot decorrelate query with COUNT in the THEN clause
+norm expect-not=PushCaseWhenConditionIntoSubquery
+SELECT (CASE
+            WHEN t.typtype = 'c'
+            THEN (WITH RECURSIVE typebases (oid, depth)
+                    AS (SELECT t2.typbasetype AS oid, 0 AS depth
+                            FROM  pg_catalog.pg_type AS t2
+                            WHERE t2.oid = t.oid
+                            UNION ALL
+                        SELECT t2.typbasetype AS oid, tb.depth + 1 AS depth
+                        FROM pg_catalog.pg_type AS t2, typebases AS tb
+                        WHERE tb.oid = t2.oid AND t2.typbasetype != 0)
+	                SELECT count(oid) FROM typebases
+	                group by depth
+	                ORDER BY depth DESC
+	                LIMIT 1
+                 )
+            END
+       ) AS basetype
+       FROM pg_catalog.pg_type AS t
+----
+project
+ ├── columns: basetype:106
+ ├── immutable
+ ├── scan pg_type [as=t]
+ │    └── columns: t.oid:2!null t.typtype:8
+ └── projections
+      └── case [as=basetype:106, outer=(2,8), immutable, correlated-subquery]
+           ├── true
+           ├── when
+           │    ├── t.typtype:8 = 'c'
+           │    └── subquery
+           │         └── project
+           │              ├── columns: count:105!null
+           │              ├── outer: (2)
+           │              ├── cardinality: [0 - 1]
+           │              ├── immutable
+           │              ├── key: ()
+           │              ├── fd: ()-->(105)
+           │              └── limit
+           │                   ├── columns: depth:104 count:105!null
+           │                   ├── internal-ordering: -104
+           │                   ├── outer: (2)
+           │                   ├── cardinality: [0 - 1]
+           │                   ├── immutable
+           │                   ├── key: ()
+           │                   ├── fd: ()-->(104,105)
+           │                   ├── group-by (streaming)
+           │                   │    ├── columns: depth:104 count:105!null
+           │                   │    ├── grouping columns: depth:104
+           │                   │    ├── outer: (2)
+           │                   │    ├── immutable
+           │                   │    ├── key: (104)
+           │                   │    ├── fd: (104)-->(105)
+           │                   │    ├── ordering: -104
+           │                   │    ├── limit hint: 1.00
+           │                   │    ├── sort
+           │                   │    │    ├── columns: oid:103 depth:104
+           │                   │    │    ├── outer: (2)
+           │                   │    │    ├── immutable
+           │                   │    │    ├── ordering: -104
+           │                   │    │    ├── limit hint: 1.00
+           │                   │    │    └── project
+           │                   │    │         ├── columns: oid:103 depth:104
+           │                   │    │         ├── outer: (2)
+           │                   │    │         ├── immutable
+           │                   │    │         ├── recursive-c-t-e
+           │                   │    │         │    ├── columns: oid:66 depth:67
+           │                   │    │         │    ├── working table binding: &1
+           │                   │    │         │    ├── initial columns: t2.typbasetype:58 depth:65
+           │                   │    │         │    ├── recursive columns: t2.typbasetype:93 depth:102
+           │                   │    │         │    ├── outer: (2)
+           │                   │    │         │    ├── immutable
+           │                   │    │         │    ├── fake-rel
+           │                   │    │         │    │    ├── columns: oid:66 depth:67
+           │                   │    │         │    │    └── cardinality: [1 - ]
+           │                   │    │         │    ├── project
+           │                   │    │         │    │    ├── columns: depth:65!null t2.typbasetype:58
+           │                   │    │         │    │    ├── outer: (2)
+           │                   │    │         │    │    ├── fd: ()-->(65)
+           │                   │    │         │    │    ├── select
+           │                   │    │         │    │    │    ├── columns: t2.oid:34!null t2.typbasetype:58
+           │                   │    │         │    │    │    ├── outer: (2)
+           │                   │    │         │    │    │    ├── fd: ()-->(34)
+           │                   │    │         │    │    │    ├── scan pg_type [as=t2]
+           │                   │    │         │    │    │    │    └── columns: t2.oid:34!null t2.typbasetype:58
+           │                   │    │         │    │    │    └── filters
+           │                   │    │         │    │    │         └── t2.oid:34 = t.oid:2 [outer=(2,34), constraints=(/2: (/NULL - ]; /34: (/NULL - ]), fd=(2)==(34), (34)==(2)]
+           │                   │    │         │    │    └── projections
+           │                   │    │         │    │         └── 0 [as=depth:65]
+           │                   │    │         │    └── project
+           │                   │    │         │         ├── columns: depth:102 t2.typbasetype:93!null
+           │                   │    │         │         ├── immutable
+           │                   │    │         │         ├── inner-join (hash)
+           │                   │    │         │         │    ├── columns: t2.oid:69!null t2.typbasetype:93!null oid:100!null depth:101
+           │                   │    │         │         │    ├── fd: (69)==(100), (100)==(69)
+           │                   │    │         │         │    ├── select
+           │                   │    │         │         │    │    ├── columns: t2.oid:69!null t2.typbasetype:93!null
+           │                   │    │         │         │    │    ├── scan pg_type [as=t2]
+           │                   │    │         │         │    │    │    └── columns: t2.oid:69!null t2.typbasetype:93
+           │                   │    │         │         │    │    └── filters
+           │                   │    │         │         │    │         └── t2.typbasetype:93 != 0 [outer=(93), constraints=(/93: (/NULL - /-1] [/1 - ]; tight)]
+           │                   │    │         │         │    ├── with-scan &1 (typebases)
+           │                   │    │         │         │    │    ├── columns: oid:100 depth:101
+           │                   │    │         │         │    │    ├── mapping:
+           │                   │    │         │         │    │    │    ├──  oid:66 => oid:100
+           │                   │    │         │         │    │    │    └──  depth:67 => depth:101
+           │                   │    │         │         │    │    └── cardinality: [1 - ]
+           │                   │    │         │         │    └── filters
+           │                   │    │         │         │         └── oid:100 = t2.oid:69 [outer=(69,100), constraints=(/69: (/NULL - ]; /100: (/NULL - ]), fd=(69)==(100), (100)==(69)]
+           │                   │    │         │         └── projections
+           │                   │    │         │              └── depth:101 + 1 [as=depth:102, outer=(101), immutable]
+           │                   │    │         └── projections
+           │                   │    │              ├── oid:66 [as=oid:103, outer=(66)]
+           │                   │    │              └── depth:67 [as=depth:104, outer=(67)]
+           │                   │    └── aggregations
+           │                   │         └── count [as=count:105, outer=(103)]
+           │                   │              └── oid:103
+           │                   └── 1
+           └── CAST(NULL AS INT8)
+
+# Window function array_agg is supported for this rewrite.
+norm expect=PushCaseWhenConditionIntoSubquery
+SELECT
+CASE WHEN t.typtype = 'c' THEN
+                        (SELECT
+                            array_agg(ia.attname::text ORDER BY ia.attnum)
+                        FROM
+                            pg_catalog.pg_attribute ia
+                            INNER JOIN pg_catalog.pg_class c
+                                ON (ia.attrelid = c.oid)
+                        WHERE
+                            ia.attnum > 0 AND NOT ia.attisdropped
+                            AND c.reltype = t.oid)
+                        ELSE NULL
+                    END                            AS attrnames
+                FROM
+                    pg_catalog.pg_type AS t
+----
+project
+ ├── columns: attrnames:98
+ ├── immutable
+ ├── group-by (hash)
+ │    ├── columns: array_agg:97 rownum:99!null
+ │    ├── grouping columns: rownum:99!null
+ │    ├── immutable
+ │    ├── key: (99)
+ │    ├── fd: (99)-->(97)
+ │    ├── left-join-apply
+ │    │    ├── columns: t.oid:2!null typtype:8 attnum:39 column96:96 array_agg:97 rownum:99!null
+ │    │    ├── immutable
+ │    │    ├── fd: (99)-->(2,8)
+ │    │    ├── ordinality
+ │    │    │    ├── columns: t.oid:2!null typtype:8 rownum:99!null
+ │    │    │    ├── key: (99)
+ │    │    │    ├── fd: (99)-->(2,8)
+ │    │    │    └── scan pg_type [as=t]
+ │    │    │         └── columns: t.oid:2!null typtype:8
+ │    │    ├── window partition=() ordering=+39 opt(50,63)
+ │    │    │    ├── columns: attnum:39!null column96:96 array_agg:97
+ │    │    │    ├── outer: (2,8)
+ │    │    │    ├── immutable
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: column96:96 attnum:39!null
+ │    │    │    │    ├── outer: (2,8)
+ │    │    │    │    ├── immutable
+ │    │    │    │    ├── inner-join (hash)
+ │    │    │    │    │    ├── columns: attrelid:34!null attname:35 attnum:39!null attisdropped:50!null c.oid:60!null reltype:63!null
+ │    │    │    │    │    ├── outer: (2,8)
+ │    │    │    │    │    ├── fd: ()-->(50,63), (34)==(60), (60)==(34)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: attrelid:34!null attname:35 attnum:39!null attisdropped:50!null
+ │    │    │    │    │    │    ├── outer: (8)
+ │    │    │    │    │    │    ├── fd: ()-->(50)
+ │    │    │    │    │    │    ├── scan pg_attribute [as=ia]
+ │    │    │    │    │    │    │    └── columns: attrelid:34!null attname:35 attnum:39 attisdropped:50
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         ├── typtype:8 = 'c' [outer=(8), constraints=(/8: [/'c' - /'c']; tight), fd=()-->(8)]
+ │    │    │    │    │    │         ├── attnum:39 > 0 [outer=(39), constraints=(/39: [/1 - ]; tight)]
+ │    │    │    │    │    │         └── NOT attisdropped:50 [outer=(50), constraints=(/50: [/false - /false]; tight), fd=()-->(50)]
+ │    │    │    │    │    ├── scan pg_class [as=c]
+ │    │    │    │    │    │    └── columns: c.oid:60!null reltype:63
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         ├── attrelid:34 = c.oid:60 [outer=(34,60), constraints=(/34: (/NULL - ]; /60: (/NULL - ]), fd=(34)==(60), (60)==(34)]
+ │    │    │    │    │         ├── reltype:63 = t.oid:2 [outer=(2,63), constraints=(/2: (/NULL - ]; /63: (/NULL - ]), fd=(2)==(63), (63)==(2)]
+ │    │    │    │    │         └── typtype:8 = 'c' [outer=(8), constraints=(/8: [/'c' - /'c']; tight), fd=()-->(8)]
+ │    │    │    │    └── projections
+ │    │    │    │         └── attname:35::STRING [as=column96:96, outer=(35), immutable]
+ │    │    │    └── windows
+ │    │    │         └── array-agg [as=array_agg:97, frame="range from unbounded to unbounded", outer=(96)]
+ │    │    │              └── column96:96
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-not-null-agg [as=array_agg:97, outer=(97)]
+ │              └── array_agg:97
+ └── projections
+      └── array_agg:97 [as=attrnames:98, outer=(97)]
+
+# A projection of a window function or aggregation is not supported.
+norm expect-not=PushCaseWhenConditionIntoSubquery
+SELECT
+CASE WHEN t.typtype = 'c' THEN
+                        (SELECT
+                            IFNULL(array_agg(ia.attname::text ORDER BY ia.attnum), array['hello'])
+                        FROM
+                            pg_catalog.pg_attribute ia
+                            INNER JOIN pg_catalog.pg_class c
+                                ON (ia.attrelid = c.oid)
+                        WHERE
+                            ia.attnum > 0 AND NOT ia.attisdropped
+                            AND c.reltype = t.oid)
+                        ELSE NULL
+                    END                            AS attrnames
+                FROM
+                    pg_catalog.pg_type AS t
+----
+project
+ ├── columns: attrnames:99
+ ├── immutable
+ ├── scan pg_type [as=t]
+ │    └── columns: t.oid:2!null typtype:8
+ └── projections
+      └── case [as=attrnames:99, outer=(2,8), immutable, correlated-subquery]
+           ├── true
+           ├── when
+           │    ├── typtype:8 = 'c'
+           │    └── subquery
+           │         └── project
+           │              ├── columns: coalesce:98
+           │              ├── outer: (2)
+           │              ├── cardinality: [1 - 1]
+           │              ├── immutable
+           │              ├── key: ()
+           │              ├── fd: ()-->(98)
+           │              ├── scalar-group-by
+           │              │    ├── columns: array_agg:97
+           │              │    ├── outer: (2)
+           │              │    ├── cardinality: [1 - 1]
+           │              │    ├── immutable
+           │              │    ├── key: ()
+           │              │    ├── fd: ()-->(97)
+           │              │    ├── window partition=() ordering=+39 opt(50,63)
+           │              │    │    ├── columns: attnum:39!null column96:96 array_agg:97
+           │              │    │    ├── outer: (2)
+           │              │    │    ├── immutable
+           │              │    │    ├── project
+           │              │    │    │    ├── columns: column96:96 attnum:39!null
+           │              │    │    │    ├── outer: (2)
+           │              │    │    │    ├── immutable
+           │              │    │    │    ├── inner-join (hash)
+           │              │    │    │    │    ├── columns: attrelid:34!null attname:35 attnum:39!null attisdropped:50!null c.oid:60!null reltype:63!null
+           │              │    │    │    │    ├── outer: (2)
+           │              │    │    │    │    ├── fd: ()-->(50,63), (34)==(60), (60)==(34)
+           │              │    │    │    │    ├── select
+           │              │    │    │    │    │    ├── columns: attrelid:34!null attname:35 attnum:39!null attisdropped:50!null
+           │              │    │    │    │    │    ├── fd: ()-->(50)
+           │              │    │    │    │    │    ├── scan pg_attribute [as=ia]
+           │              │    │    │    │    │    │    └── columns: attrelid:34!null attname:35 attnum:39 attisdropped:50
+           │              │    │    │    │    │    └── filters
+           │              │    │    │    │    │         ├── attnum:39 > 0 [outer=(39), constraints=(/39: [/1 - ]; tight)]
+           │              │    │    │    │    │         └── NOT attisdropped:50 [outer=(50), constraints=(/50: [/false - /false]; tight), fd=()-->(50)]
+           │              │    │    │    │    ├── scan pg_class [as=c]
+           │              │    │    │    │    │    └── columns: c.oid:60!null reltype:63
+           │              │    │    │    │    └── filters
+           │              │    │    │    │         ├── attrelid:34 = c.oid:60 [outer=(34,60), constraints=(/34: (/NULL - ]; /60: (/NULL - ]), fd=(34)==(60), (60)==(34)]
+           │              │    │    │    │         └── reltype:63 = t.oid:2 [outer=(2,63), constraints=(/2: (/NULL - ]; /63: (/NULL - ]), fd=(2)==(63), (63)==(2)]
+           │              │    │    │    └── projections
+           │              │    │    │         └── attname:35::STRING [as=column96:96, outer=(35), immutable]
+           │              │    │    └── windows
+           │              │    │         └── array-agg [as=array_agg:97, frame="range from unbounded to unbounded", outer=(96)]
+           │              │    │              └── column96:96
+           │              │    └── aggregations
+           │              │         └── const-agg [as=array_agg:97, outer=(97)]
+           │              │              └── array_agg:97
+           │              └── projections
+           │                   └── COALESCE(array_agg:97, ARRAY['hello']) [as=coalesce:98, outer=(97)]
+           └── CAST(NULL AS STRING[])
