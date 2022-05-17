@@ -619,6 +619,10 @@ func (sp *Span) reset(
 	c.operation = operation
 	c.startTime = startTime
 	c.logTags = logTags
+	if len(c.eventListeners) != 0 {
+		panic(fmt.Sprintf("unexpected event listeners in span being reset: %v", c.eventListeners))
+	}
+	c.eventListeners = eventListeners
 	{
 		// Nobody is supposed to have a reference to the span at this point, but let's
 		// take the lock anyway to protect against buggy clients accessing the span
@@ -639,9 +643,6 @@ func (sp *Span) reset(
 		if c.mu.recording.logs.Len() != 0 {
 			panic("unexpected logs in span being reset")
 		}
-		if len(c.mu.eventListeners) != 0 {
-			panic(fmt.Sprintf("unexpected event listeners in span being reset: %v", c.mu.eventListeners))
-		}
 
 		h := sp.helper
 		c.mu.crdbSpanMu = crdbSpanMu{
@@ -652,8 +653,7 @@ func (sp *Span) reset(
 				logs:       makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */),
 				structured: makeSizeLimitedBuffer(maxStructuredBytesPerSpan, h.structuredEventsAlloc[:]),
 			},
-			tags:           h.tagsAlloc[:0],
-			eventListeners: eventListeners,
+			tags: h.tagsAlloc[:0],
 		}
 
 		if kind != oteltrace.SpanKindUnspecified {
