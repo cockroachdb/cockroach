@@ -182,7 +182,7 @@ func (t *testProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderIn
 			rngDesc := roachpb.RangeDescriptor{
 				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
 			}
-			err := roachpb.CheckCanReceiveLease(repDesc, &rngDesc)
+			err := roachpb.CheckCanReceiveLease(repDesc, rngDesc.Replicas())
 			leaderEligibleForLease = err == nil
 		} else {
 			// This matches replicaProposed.leaderStatusRLocked().
