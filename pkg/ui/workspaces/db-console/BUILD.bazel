@@ -157,7 +157,7 @@ DEPENDENCIES = [
     "@npm//whatwg-fetch",
 ] + DEV_DEPENDENCIES
 
-WEBPACK_DATA_OSS = [
+WEBPACK_DATA_COMMON = [
     ".babelrc",
     ".eslintrc.json",
     ".stylintrc",
@@ -169,13 +169,16 @@ WEBPACK_DATA_OSS = [
     "tsconfig.json",
     "webpack.app.js",
     "//pkg/ui/workspaces/cluster-ui:cluster-ui",
+]
+
+WEBPACK_DATA_OSS = WEBPACK_DATA_COMMON + [
     "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
 ] + DEPENDENCIES
 
-WEBPACK_DATA_CCL = WEBPACK_DATA_OSS + [
+WEBPACK_DATA_CCL = WEBPACK_DATA_COMMON + [
     "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
     "ccl",
-]
+] + DEPENDENCIES
 
 webpack(
     name = "db-console-ccl",
