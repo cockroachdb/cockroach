@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package scdeps
+package backfiller
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestBackfillerTracker exercises the logic of the backfillerTracker
+// TestBackfillerTracker exercises the logic of the tracker
 // by using an in-memory implementation of the underlying store and
 // the set of ranges.
 //
@@ -113,7 +113,7 @@ func TestBackfillerTracker(t *testing.T) {
 		ctx := context.Background()
 		var bts backfillerTrackerTestState
 		bts.mu.rangeSpans = tc.rangeSpans
-		tr := newBackfillerTracker(keys.SystemSQLCodec, bts.cfg(), tc.backfillProgress, tc.mergeProgress)
+		tr := newTracker(keys.SystemSQLCodec, bts.cfg(), tc.backfillProgress, tc.mergeProgress)
 
 		t.Run("retrieving initial state", func(t *testing.T) {
 			{
@@ -236,7 +236,7 @@ func TestBackfillerTracker(t *testing.T) {
 		ctx := context.Background()
 		var bts backfillerTrackerTestState
 		bts.mu.rangeSpans = tc.rangeSpans
-		tr := newBackfillerTracker(keys.SystemSQLCodec, bts.cfg(), tc.backfillProgress, tc.mergeProgress)
+		tr := newTracker(keys.SystemSQLCodec, bts.cfg(), tc.backfillProgress, tc.mergeProgress)
 
 		t.Run("retrieving initial state", func(t *testing.T) {
 			{
@@ -345,8 +345,8 @@ type backfillerTrackerTestState struct {
 	}
 }
 
-func (bts *backfillerTrackerTestState) cfg() backfillerTrackerConfig {
-	return backfillerTrackerConfig{
+func (bts *backfillerTrackerTestState) cfg() trackerConfig {
+	return trackerConfig{
 		numRangesInSpanContainedBy: bts.numRangesInSpans,
 		writeProgressFraction:      bts.writeProgressFraction,
 		writeCheckpoint:            bts.writeCheckpoint,
