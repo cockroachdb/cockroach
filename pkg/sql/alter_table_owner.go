@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -79,7 +80,10 @@ func (p *planner) AlterTableOwner(ctx context.Context, n *tree.AlterTableOwner) 
 }
 
 func (n *alterTableOwnerNode) startExec(params runParams) error {
-	telemetry.Inc(n.n.TelemetryCounter())
+	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra(
+		tree.GetTableType(n.n.IsSequence, n.n.IsView, n.n.IsMaterialized),
+		n.n.TelemetryName(),
+	))
 	ctx := params.ctx
 	p := params.p
 	tableDesc := n.desc

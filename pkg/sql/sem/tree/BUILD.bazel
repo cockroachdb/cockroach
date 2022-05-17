@@ -61,7 +61,6 @@ go_library(
         "name_part.go",
         "name_resolution.go",
         "object_name.go",
-        "operators.go",
         "overload.go",
         "parse_array.go",
         "parse_string.go",  # keep
@@ -119,7 +118,6 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",
-        "//pkg/server/telemetry",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
@@ -134,7 +132,6 @@ go_library(
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondatapb",
-        "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/bitarray",

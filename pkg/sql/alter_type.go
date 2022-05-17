@@ -93,7 +93,7 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 }
 
 func (n *alterTypeNode) startExec(params runParams) error {
-	telemetry.Inc(n.n.Cmd.TelemetryCounter())
+	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("type", n.n.Cmd.TelemetryName()))
 
 	typeName := tree.AsStringWithFQNames(n.n.Type, params.p.Ann())
 	eventLogDone := false

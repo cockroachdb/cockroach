@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 type refreshMaterializedViewNode struct {
@@ -79,7 +80,7 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	// results of the view query into the new set of indexes, and then change the
 	// set of indexes over to the new set of indexes atomically.
 
-	telemetry.Inc(n.n.TelemetryCounter())
+	telemetry.Inc(sqltelemetry.SchemaRefreshMaterializedView)
 
 	// Inform the user that CONCURRENTLY is not needed.
 	if n.n.Concurrently {

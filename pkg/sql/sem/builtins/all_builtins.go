@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -59,7 +61,7 @@ func init() {
 		} else if def.props.Class == tree.WindowClass {
 			AllWindowBuiltinNames = append(AllWindowBuiltinNames, name)
 		}
-		for _, overload := range def.overloads {
+		for i, overload := range def.overloads {
 			fnCount := 0
 			if overload.Fn != nil {
 				fnCount++
@@ -83,6 +85,10 @@ func init() {
 						"must be set on overloads; (found %d)",
 					name, fnCount,
 				))
+			}
+			c := sqltelemetry.BuiltinCounter(name, overload.Signature(false))
+			def.overloads[i].OnTypeCheck = func() {
+				telemetry.Inc(c)
 			}
 		}
 	}

@@ -13,12 +13,14 @@ package scbuildstmt
 import (
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,7 +54,9 @@ func init() {
 func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	// Hoist the constraints to separate clauses because other code assumes that
 	// that is how the commands will look.
-	n.HoistAddColumnConstraints()
+	n.HoistAddColumnConstraints(func() {
+		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
+	})
 	// Check if an entry exists for the statement type, in which
 	// case. It's either fully or partially supported. Check the commands
 	// first, since we don't want to do extra work in this transaction

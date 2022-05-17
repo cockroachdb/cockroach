@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -96,7 +97,10 @@ func (p *planner) AlterTableSetSchema(
 }
 
 func (n *alterTableSetSchemaNode) startExec(params runParams) error {
-	telemetry.Inc(n.n.TelemetryCounter())
+	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra(
+		tree.GetTableType(n.n.IsSequence, n.n.IsView, n.n.IsMaterialized),
+		n.n.TelemetryName(),
+	))
 	ctx := params.ctx
 	p := params.p
 	tableDesc := n.tableDesc

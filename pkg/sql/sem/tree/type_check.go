@@ -15,13 +15,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -29,6 +27,15 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"golang.org/x/text/language"
+)
+
+// OnTypeCheck* functions are hooks which get called if not nil and the
+// type checking of the relevant function is made.
+var (
+	OnTypeCheckArraySubscript   func()
+	OnTypeCheckIfErr            func()
+	OnTypeCheckArrayConstructor func()
+	OnTypeCheckArrayFlatten     func()
 )
 
 // SemaContext defines the context in which to perform semantic analysis on an
@@ -353,9 +360,8 @@ func (expr *BinaryExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
 	}
 
-	// Register operator usage in telemetry.
-	if binOp.counter != nil {
-		telemetry.Inc(binOp.counter)
+	if binOp.OnTypeCheck != nil {
+		binOp.OnTypeCheck()
 	}
 
 	expr.Left, expr.Right = leftTyped, rightTyped
@@ -443,7 +449,7 @@ func resolveCast(
 		if err != nil {
 			return err
 		}
-		telemetry.Inc(getCastCounter(fromFamily, toFamily))
+		onCastTypeCheckHook(fromFamily, toFamily)
 		return nil
 
 	case toFamily == types.EnumFamily && fromFamily == types.EnumFamily:
@@ -452,7 +458,7 @@ func resolveCast(
 		if !castFrom.Equivalent(castTo) {
 			return invalidCastError(castFrom, castTo)
 		}
-		telemetry.Inc(getCastCounter(fromFamily, toFamily))
+		onCastTypeCheckHook(fromFamily, toFamily)
 		return nil
 
 	case toFamily == types.TupleFamily && fromFamily == types.TupleFamily:
@@ -481,7 +487,7 @@ func resolveCast(
 				return err
 			}
 		}
-		telemetry.Inc(getCastCounter(fromFamily, toFamily))
+		onCastTypeCheckHook(fromFamily, toFamily)
 		return nil
 
 	default:
@@ -497,48 +503,28 @@ func resolveCast(
 			}
 			return err
 		}
-		telemetry.Inc(getCastCounter(fromFamily, toFamily))
+		onCastTypeCheckHook(fromFamily, toFamily)
 		return nil
 	}
 }
 
-// castCounterType represents a cast from one family to another.
-type castCounterType struct {
-	from, to types.Family
+// CastCounterType represents a cast from one family to another.
+type CastCounterType struct {
+	From, To types.Family
 }
 
-// castCounterMap is a map of cast counter types to their corresponding
-// telemetry counters.
-var castCounters map[castCounterType]telemetry.Counter
+// OnCastTypeCheck is a map of CastCounterTypes to their hook.
+var OnCastTypeCheck map[CastCounterType]func()
 
-// Initialize castCounters.
-func init() {
-	castCounters = make(map[castCounterType]telemetry.Counter)
-	for fromID := range types.Family_name {
-		for toID := range types.Family_name {
-			from := types.Family(fromID)
-			to := types.Family(toID)
-			var c telemetry.Counter
-			switch {
-			case from == types.ArrayFamily && to == types.ArrayFamily:
-				c = sqltelemetry.ArrayCastCounter
-			case from == types.TupleFamily && to == types.TupleFamily:
-				c = sqltelemetry.TupleCastCounter
-			case from == types.EnumFamily && to == types.EnumFamily:
-				c = sqltelemetry.EnumCastCounter
-			default:
-				c = sqltelemetry.CastOpCounter(from.Name(), to.Name())
-			}
-			castCounters[castCounterType{from, to}] = c
-		}
+// onCastTypeCheckHook performs the registered hook for the given cast on type check.
+func onCastTypeCheckHook(from, to types.Family) {
+	// The given map has not been populated, so do not expect any telemetry.
+	if OnCastTypeCheck == nil {
+		return
 	}
-}
-
-// getCastCounter returns the telemetry counter for the cast from one family to
-// another family.
-func getCastCounter(from, to types.Family) telemetry.Counter {
-	if c, ok := castCounters[castCounterType{from, to}]; ok {
-		return c
+	if f, ok := OnCastTypeCheck[CastCounterType{From: from, To: to}]; ok {
+		f()
+		return
 	}
 	panic(errors.AssertionFailedf(
 		"no cast counter found for cast from %s to %s", from.Name(), to.Name(),
@@ -668,7 +654,9 @@ func (expr *IndirectionExpr) TypeCheck(
 	expr.Expr = subExpr
 	expr.typ = typ.ArrayContents()
 
-	telemetry.Inc(sqltelemetry.ArraySubscriptCounter)
+	if OnTypeCheckArraySubscript != nil {
+		OnTypeCheckArraySubscript()
+	}
 	return expr, nil
 }
 
@@ -883,9 +871,8 @@ func (expr *ComparisonExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
 	}
 
-	// Register operator usage in telemetry.
-	if cmpOp.counter != nil {
-		telemetry.Inc(cmpOp.counter)
+	if cmpOp.OnTypeCheck != nil {
+		cmpOp.OnTypeCheck()
 	}
 
 	expr.Left, expr.Right = leftTyped, rightTyped
@@ -1209,8 +1196,8 @@ func (expr *FuncExpr) TypeCheck(
 	if err := semaCtx.checkVolatility(overloadImpl.Volatility); err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
-	if overloadImpl.counter != nil {
-		telemetry.Inc(overloadImpl.counter)
+	if overloadImpl.OnTypeCheck != nil {
+		overloadImpl.OnTypeCheck()
 	}
 	return expr, nil
 }
@@ -1250,7 +1237,9 @@ func (expr *IfErrExpr) TypeCheck(
 	expr.ErrCode = typedErrCode
 	expr.typ = retType
 
-	telemetry.Inc(sqltelemetry.IfErrCounter)
+	if OnTypeCheckIfErr != nil {
+		OnTypeCheckIfErr()
+	}
 	return expr, nil
 }
 
@@ -1496,9 +1485,8 @@ func (expr *UnaryExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
 	}
 
-	// Register operator usage in telemetry.
-	if unaryOp.counter != nil {
-		telemetry.Inc(unaryOp.counter)
+	if unaryOp.OnTypeCheck != nil {
+		unaryOp.OnTypeCheck()
 	}
 
 	expr.Expr = exprTyped
@@ -1607,7 +1595,9 @@ func (expr *Array) TypeCheck(
 		expr.Exprs[i] = typedSubExprs[i]
 	}
 
-	telemetry.Inc(sqltelemetry.ArrayConstructorCounter)
+	if OnTypeCheckArrayConstructor != nil {
+		OnTypeCheckArrayConstructor()
+	}
 	return expr, nil
 }
 
@@ -1627,7 +1617,9 @@ func (expr *ArrayFlatten) TypeCheck(
 	expr.Subquery = subqueryTyped
 	expr.typ = types.MakeArray(subqueryTyped.ResolvedType())
 
-	telemetry.Inc(sqltelemetry.ArrayFlattenCounter)
+	if OnTypeCheckArrayFlatten != nil {
+		OnTypeCheckArrayFlatten()
+	}
 	return expr, nil
 }
 
