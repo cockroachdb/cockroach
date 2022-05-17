@@ -856,6 +856,24 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	`enable_scan_placeholder_fast_path`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_scan_placeholder_fast_path`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_scan_placeholder_fast_path", s)
+			if err != nil {
+				return err
+			}
+			m.SetScanPlaceholderFastPath(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().ScanPlaceholderFastPath), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(scanPlaceholderClusterMode.Get(sv))
+		},
+	},
+
 	// CockroachDB extension.
 	`serial_normalization`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

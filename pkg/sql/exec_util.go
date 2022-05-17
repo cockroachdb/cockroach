@@ -412,6 +412,13 @@ var insertFastPathClusterMode = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
+var scanPlaceholderClusterMode = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.scan_placeholder_fast_path.enabled",
+	"default value for enable_scan_placeholder_fast_path session setting; enables an optimized scan path",
+	true,
+).WithPublic()
+
 var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.defaults.experimental_alter_column_type.enabled",
@@ -3000,6 +3007,10 @@ func (m *sessionDataMutator) SetImplicitSelectForUpdate(val bool) {
 
 func (m *sessionDataMutator) SetInsertFastPath(val bool) {
 	m.data.InsertFastPath = val
+}
+
+func (m *sessionDataMutator) SetScanPlaceholderFastPath(val bool) {
+	m.data.ScanPlaceholderFastPath = val
 }
 
 func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondatapb.SerialNormalizationMode) {

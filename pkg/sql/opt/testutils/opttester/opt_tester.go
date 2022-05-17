@@ -260,6 +260,10 @@ type Flags struct {
 	// UseMultiColStats is the value for SessionData.OptimizerUseMultiColStats.
 	// It defaults to true in New.
 	UseMultiColStats bool
+
+	// ScanPlaceholderFastPath is the value for SessionData.ScanPlaceholderFastPath.
+	// It defaults to true in New.
+	ScanPlaceholderFastPath bool
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -267,7 +271,7 @@ type Flags struct {
 func New(catalog cat.Catalog, sql string) *OptTester {
 	ctx := context.Background()
 	ot := &OptTester{
-		Flags:   Flags{JoinLimit: opt.DefaultJoinOrderLimit, UseMultiColStats: true},
+		Flags:   Flags{JoinLimit: opt.DefaultJoinOrderLimit, UseMultiColStats: true, ScanPlaceholderFastPath: true},
 		catalog: catalog,
 		sql:     sql,
 		ctx:     ctx,
@@ -287,6 +291,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
 	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	ot.evalCtx.SessionData().InsertFastPath = true
+	ot.evalCtx.SessionData().ScanPlaceholderFastPath = true
 
 	return ot
 }
@@ -533,6 +538,10 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //  multi-column statistics are used for cardinality estimation in the
 //  optimizer. This option requires a single boolean argument.
 //
+//  - scan-placeholder-fast-path sets the value for
+//  SessionData.ScanPlaceholderFastPath which indicates whether or not
+//  the placeholder fast path should be used for scans.
+//
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -549,6 +558,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.evalCtx.SessionData().PropagateInputOrdering = ot.Flags.PropagateInputOrdering
 	ot.evalCtx.SessionData().NullOrderedLast = ot.Flags.NullOrderedLast
 	ot.evalCtx.SessionData().OptimizerUseMultiColStats = ot.Flags.UseMultiColStats
+	ot.evalCtx.SessionData().ScanPlaceholderFastPath = ot.Flags.ScanPlaceholderFastPath
 
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
@@ -1103,14 +1113,18 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		f.PropagateInputOrdering = true
 
 	case "use-multi-col-stats":
-		if len(arg.Vals) != 1 {
-			return fmt.Errorf("use-multi-col-stats requires a single argument")
-		}
-		b, err := strconv.ParseBool(arg.Vals[0])
+		b, err := arg.AsBool()
 		if err != nil {
-			return errors.Wrap(err, "use-multi-col-stats")
+			return err
 		}
 		f.UseMultiColStats = b
+
+	case "scan-placeholder-fast-path":
+		b, err := arg.AsBool()
+		if err != nil {
+			return err
+		}
+		f.ScanPlaceholderFastPath = b
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)

@@ -258,6 +258,8 @@ message LocalOnlySessionData {
   // perturb costs with an rng seeded to the given integer. This should only be
   // used in test scenarios and is very much a non-production setting.
   int64 testing_optimizer_random_cost_seed = 70;
+  // ScanPlaceholderFastPath controls whether we optimize placeholder scans.
+  bool scan_placeholder_fast_path = 71;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
