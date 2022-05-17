@@ -313,6 +313,7 @@ func TestValidPrivilegesForObjects(t *testing.T) {
 		{privilege.Database, privilege.DBPrivileges},
 		{privilege.Schema, privilege.SchemaPrivileges},
 		{privilege.Type, privilege.TypePrivileges},
+		{privilege.Sequence, privilege.SequencePrivileges},
 	}
 
 	for _, tc := range testCases {

@@ -91,7 +91,7 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 	name := fmt.Sprintf("%s/%s", s.bulkSrv.URL, s.name("backup"))
 	var targets tree.TargetList
 	seen := map[tree.TableName]bool{}
-	for len(targets.Tables) < 1 || s.coin() {
+	for len(targets.Tables.TablePatterns) < 1 || s.coin() {
 		table, ok := s.getRandTable()
 		if !ok {
 			return nil, false
@@ -100,7 +100,7 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 			continue
 		}
 		seen[*table.TableName] = true
-		targets.Tables = append(targets.Tables, table.TableName)
+		targets.Tables.TablePatterns = append(targets.Tables.TablePatterns, table.TableName)
 	}
 	s.lock.Lock()
 	s.bulkBackups[name] = targets
@@ -129,10 +129,10 @@ func makeRestore(s *Smither) (tree.Statement, bool) {
 		return nil, false
 	}
 	// Choose some random subset of tables.
-	s.rnd.Shuffle(len(targets.Tables), func(i, j int) {
-		targets.Tables[i], targets.Tables[j] = targets.Tables[j], targets.Tables[i]
+	s.rnd.Shuffle(len(targets.Tables.TablePatterns), func(i, j int) {
+		targets.Tables.TablePatterns[i], targets.Tables.TablePatterns[j] = targets.Tables.TablePatterns[j], targets.Tables.TablePatterns[i]
 	})
-	targets.Tables = targets.Tables[:1+s.rnd.Intn(len(targets.Tables))]
+	targets.Tables.TablePatterns = targets.Tables.TablePatterns[:1+s.rnd.Intn(len(targets.Tables.TablePatterns))]
 
 	db := s.name("db")
 	if _, err := s.db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, db)); err != nil {

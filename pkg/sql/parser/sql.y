@@ -4696,6 +4696,18 @@ grant_stmt:
   {
     return unimplemented(sqllex, "grant privileges on schema with")
   }
+| GRANT privileges ON ALL SEQUENCES IN SCHEMA schema_name_list TO role_spec_list opt_with_grant_option
+  {
+    $$.val = &tree.Grant{
+      Privileges: $2.privilegeList(),
+      Targets: tree.TargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllSequencesInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      WithGrantOption: $11.bool(),
+    }
+  }
 | GRANT privileges ON ALL TABLES IN SCHEMA schema_name_list TO role_spec_list opt_with_grant_option
   {
     $$.val = &tree.Grant{
@@ -4707,10 +4719,6 @@ grant_stmt:
       Grantees: $10.roleSpecList(),
       WithGrantOption: $11.bool(),
     }
-  }
-| GRANT privileges ON SEQUENCE error
-  {
-    return unimplementedWithIssueDetail(sqllex, 74780, "grant privileges on sequence")
   }
 | GRANT error // SHOW HELP: GRANT
 
@@ -4792,6 +4800,18 @@ revoke_stmt:
       GrantOptionFor: false,
     }
   }
+| REVOKE privileges ON ALL SEQUENCES IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $2.privilegeList(),
+      Targets: tree.TargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllSequencesInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      GrantOptionFor: false,
+    }
+  }
 | REVOKE GRANT OPTION FOR privileges ON ALL TABLES IN SCHEMA schema_name_list FROM role_spec_list
   {
     $$.val = &tree.Revoke{
@@ -4803,10 +4823,6 @@ revoke_stmt:
       Grantees: $13.roleSpecList(),
       GrantOptionFor: true,
     }
-  }
-| REVOKE privileges ON SEQUENCE error
-  {
-    return unimplemented(sqllex, "revoke privileges on sequence")
   }
 | REVOKE error // SHOW HELP: REVOKE
 
@@ -6772,11 +6788,11 @@ opt_on_targets_roles:
 targets:
   IDENT
   {
-    $$.val = tree.TargetList{Tables: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
   }
 | col_name_keyword
   {
-    $$.val = tree.TargetList{Tables: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
   }
 | unreserved_keyword
   {
@@ -6813,22 +6829,26 @@ targets:
     // of increasing (or attempting to modify) the grey magic occurring
     // here.
     $$.val = tree.TargetList{
-      Tables: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}},
+      Tables: tree.TableAttrs{IsSequence: false, TablePatterns:tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}},
       ForRoles: $1 == "role", // backdoor for "SHOW GRANTS ON ROLE" (no name list)
     }
   }
 | complex_table_pattern
   {
-    $$.val = tree.TargetList{Tables: tree.TablePatterns{$1.unresolvedName()}}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: false, TablePatterns: tree.TablePatterns{$1.unresolvedName()}}}
+  }
+| SEQUENCE table_pattern_list
+  {
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: true, TablePatterns: $2.tablePatterns()}}
   }
 | table_pattern ',' table_pattern_list
   {
     remainderPats := $3.tablePatterns()
-    $$.val = tree.TargetList{Tables: append(tree.TablePatterns{$1.unresolvedName()}, remainderPats...)}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: false, TablePatterns: append(tree.TablePatterns{$1.unresolvedName()}, remainderPats...)}}
   }
 | TABLE table_pattern_list
   {
-    $$.val = tree.TargetList{Tables: $2.tablePatterns()}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: false, TablePatterns: $2.tablePatterns()}}
   }
 // TODO(knz): This should learn how to parse more complex expressions
 // and placeholders.
