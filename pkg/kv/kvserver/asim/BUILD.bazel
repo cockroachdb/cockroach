@@ -5,11 +5,13 @@ go_library(
     srcs = [
         "asim.go",
         "config_loader.go",
+        "load.go",
         "workload.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/roachpb",
         "//pkg/util/timeutil",
