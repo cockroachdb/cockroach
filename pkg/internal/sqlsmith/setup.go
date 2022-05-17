@@ -40,7 +40,9 @@ var Setups = map[string]Setup{
 // specific setup passed in.
 func wrapCommonSetup(setupFn Setup) Setup {
 	return func(r *rand.Rand) []string {
-		return setupFn(r)
+		return append([]string{
+			"SET sql_safe_updates = false;",
+		}, setupFn(r)...)
 	}
 }
 
