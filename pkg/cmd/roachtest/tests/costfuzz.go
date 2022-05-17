@@ -223,13 +223,27 @@ func runCostFuzzQuery(
 	// Then, rerun the statement with cost perturbation.
 	rows2, err := conn.Query(stmt)
 	if err != nil {
-		logStmt(stmt)
-		logStmt(seedStmt)
-		logStmt(stmt)
-		return errors.Wrap(err, "error while running perturbed statement")
+		// If the perturbed plan fails with an internal error while the normal plan
+		// succeeds, we'd like to know, so consider this a test failure.
+		es := err.Error()
+		if strings.Contains(es, "internal error") {
+			logStmt(stmt)
+			logStmt(seedStmt)
+			logStmt(stmt)
+			return errors.Wrap(err, "internal error while running perturbed statement")
+		}
+		// Otherwise, skip perturbed statements that fail with a non-internal
+		// error. This could happen if the statement contains bad arguments to a
+		// function call, for example, and the normal plan was able to skip
+		// evaluation of the function due to short-circuiting (see #81032 for an
+		// example).
+		//nolint:returnerrcheck
+		return nil
 	}
 	defer rows2.Close()
 	perturbedRows, err := sqlutils.RowsToStrMatrix(rows2)
+	// If we've gotten this far, we should be able to print the results of the
+	// perturbed statement, so consider it a test failure if we cannot.
 	if err != nil {
 		logStmt(stmt)
 		logStmt(seedStmt)
@@ -248,6 +262,11 @@ func runCostFuzzQuery(
 			diff, stmt,
 		)
 	}
+
+	// TODO(michae2): If we run into the "-0 flake" described in PR #79551 then
+	// we'll need some other strategy for comparison besides diffing the printed
+	// results. One idea is to CREATE TABLE AS SELECT with both queries, and then
+	// EXCEPT ALL the table contents. But this might be very slow.
 
 	// Finally, disable cost perturbation for the next statement.
 	resetSeedStmt := "RESET testing_optimizer_random_cost_seed"
