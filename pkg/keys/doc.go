@@ -254,8 +254,8 @@ var _ = [...]interface{}{
 	StatusPrefix,           // "status-"
 	StatusNodePrefix,       // "status-node-"
 	StoreIDGenerator,       // "store-idgen"
-	MigrationPrefix,        // "system-version/"
-	MigrationLease,         // "system-version/lease"
+	StartupMigrationPrefix, // "system-version/"
+	StartupMigrationLease,  // "system-version/lease"
 	TimeseriesPrefix,       // "tsd"
 	SystemSpanConfigPrefix, // "xffsys-scfg"
 	SystemMax,

@@ -5833,7 +5833,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.StringArray),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				prefix := ctx.Codec.MigrationKeyPrefix()
+				prefix := ctx.Codec.StartupMigrationKeyPrefix()
 				keyvals, err := ctx.Txn.Scan(ctx.Context, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
 				if err != nil {
 					return nil, errors.Wrapf(err, "failed to get list of completed migrations")
@@ -5841,8 +5841,8 @@ value if you rely on the HLC for accuracy.`,
 				ret := &tree.DArray{ParamTyp: types.String, Array: make(tree.Datums, 0, len(keyvals))}
 				for _, keyval := range keyvals {
 					key := keyval.Key
-					if len(key) > len(keys.MigrationPrefix) {
-						key = key[len(keys.MigrationPrefix):]
+					if len(key) > len(keys.StartupMigrationPrefix) {
+						key = key[len(keys.StartupMigrationPrefix):]
 					}
 					ret.Array = append(ret.Array, tree.NewDString(string(key)))
 				}

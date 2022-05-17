@@ -22,14 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -115,7 +115,7 @@ func setupMixedCluster(
 	})
 
 	// We simulate crashes using this cluster, and having this enabled (which is
-	// a default migration) causes leaktest to complain.
+	// a default upgrade) causes leaktest to complain.
 	if _, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING diagnostics.reporting.enabled = 'false'"); err != nil {
 		t.Fatal(err)
 	}
@@ -417,22 +417,22 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
 			BinaryVersionOverride:          v0,
 		},
-		// Inject a migration which would run to upgrade the cluster.
-		// We'll validate that we never create a job for this migration.
-		MigrationManager: &migration.TestingKnobs{
+		// Inject an upgrade which would run to upgrade the cluster.
+		// We'll validate that we never create a job for this upgrade.
+		UpgradeManager: &upgrade.TestingKnobs{
 			ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
 				return []clusterversion.ClusterVersion{to}
 			},
-			RegistryOverride: func(cv clusterversion.ClusterVersion) (migration.Migration, bool) {
+			RegistryOverride: func(cv clusterversion.ClusterVersion) (upgrade.Upgrade, bool) {
 				if !cv.Version.Equal(v1) {
 					return nil, false
 				}
-				return migration.NewTenantMigration("testing", clusterversion.ClusterVersion{
+				return upgrade.NewTenantUpgrade("testing", clusterversion.ClusterVersion{
 					Version: v1,
 				},
-					migrations.NoPrecondition,
+					upgrades.NoPrecondition,
 					func(
-						ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps, _ *jobs.Job,
+						ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
 					) error {
 						return nil
 					}), true
@@ -470,10 +470,10 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 		})
 	}
 
-	// Ensure that no migration jobs got created.
+	// Ensure that no upgrade jobs got created.
 	{
 		sqlutils.MakeSQLRunner(tc.ServerConn(0)).CheckQueryResults(
-			t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'MIGRATION'", [][]string{})
+			t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'upgrade'", [][]string{})
 	}
 
 	// Check that we can still talk to the first three nodes.

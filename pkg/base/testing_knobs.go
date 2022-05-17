@@ -39,7 +39,7 @@ type TestingKnobs struct {
 	BackupRestore                ModuleTestingKnobs
 	TTL                          ModuleTestingKnobs
 	Streaming                    ModuleTestingKnobs
-	MigrationManager             ModuleTestingKnobs
+	UpgradeManager               ModuleTestingKnobs
 	IndexUsageStatsKnobs         ModuleTestingKnobs
 	SQLStatsKnobs                ModuleTestingKnobs
 	SpanConfig                   ModuleTestingKnobs

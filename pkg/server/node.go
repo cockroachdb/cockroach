@@ -534,8 +534,8 @@ func (n *Node) start(
 	n.admissionController.SetTenantWeightProvider(n, n.stopper)
 
 	// Be careful about moving this line above where we start stores; store
-	// migrations rely on the fact that the cluster version has not been updated
-	// via Gossip (we have migrations that want to run only if the server starts
+	// upgrades rely on the fact that the cluster version has not been updated
+	// via Gossip (we have upgrades that want to run only if the server starts
 	// with a given cluster version, but not if the server starts with a lower
 	// one and gets bumped immediately, which would be possible if gossip got
 	// started earlier).
@@ -1541,7 +1541,7 @@ func (n *Node) Join(
 	// manually create a liveness record to maintain this same invariant.
 	//
 	// NB: This invariant will be required for when we introduce long running
-	// migrations. See https://github.com/cockroachdb/cockroach/pull/48843 for
+	// upgrades. See https://github.com/cockroachdb/cockroach/pull/48843 for
 	// details.
 	if err := n.storeCfg.NodeLiveness.CreateLivenessRecord(ctx, nodeID); err != nil {
 		return nil, err

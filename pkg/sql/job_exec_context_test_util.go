@@ -11,12 +11,12 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
 // FakeJobExecContext is used for mocking the JobExecContext in tests.
@@ -66,7 +66,7 @@ func (p *FakeJobExecContext) User() username.SQLUsername {
 }
 
 // MigrationJobDeps implements the JobExecContext interface.
-func (p *FakeJobExecContext) MigrationJobDeps() migration.JobDeps {
+func (p *FakeJobExecContext) MigrationJobDeps() upgrade.JobDeps {
 	panic("unimplemented")
 }
 
