@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "backfiller",
+    srcs = [
+        "periodic_progress_flusher.go",
+        "progress.go",
+        "tracker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/backfill",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/util",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "backfiller_test",
+    srcs = [
+        "periodic_progress_flusher_test.go",
+        "tracker_test.go",
+    ],
+    embed = [":backfiller"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

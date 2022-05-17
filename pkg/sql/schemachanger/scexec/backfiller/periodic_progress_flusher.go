@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package scdeps
+package backfiller
 
 import (
 	"context"
@@ -33,7 +33,9 @@ func NewPeriodicProgressFlusher(
 	}
 }
 
-func newPeriodicProgressFlusherForIndexBackfill(
+// NewPeriodicProgressFlusherForIndexBackfill returns a PeriodicProgressFlusher
+// that will flush according to the intervals defined in the cluster settings.
+func NewPeriodicProgressFlusherForIndexBackfill(
 	settings *cluster.Settings,
 ) scexec.PeriodicProgressFlusher {
 	return NewPeriodicProgressFlusher(
