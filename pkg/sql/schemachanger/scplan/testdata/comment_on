@@ -36,13 +36,27 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
 ops
 COMMENT ON SCHEMA db1.sc1 IS 'sc1 is good';
 ----
-StatementPhase stage 1 of 1 with 1 MutationType op
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[SchemaComment:{DescID: 106, Comment: sc1 is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertSchemaComment
       Comment: sc1 is good
       SchemaID: 106
+    *scop.LogEvent
+      Element:
+        SchemaComment:
+          comment: sc1 is good
+          schemaId: 106
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: COMMENT ON SCHEMA ‹db1›.‹sc1› IS 'sc1 is good'
+        StatementTag: COMMENT ON SCHEMA
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 2
 
 ops
 COMMENT ON TABLE db1.sc1.t1 IS 't1 is good';
