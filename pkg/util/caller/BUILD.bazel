@@ -16,5 +16,8 @@ go_test(
         "resolver_test.go",
     ],
     embed = [":caller"],
-    deps = ["//pkg/util/log"],
+    deps = [
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
 )
