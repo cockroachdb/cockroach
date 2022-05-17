@@ -574,20 +574,16 @@ func TestEngineMustExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	test := func(errStr string) {
-		tempDir, dirCleanupFn := testutils.TempDir(t)
-		defer dirCleanupFn()
+	tempDir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
 
-		_, err := Open(context.Background(), Filesystem(tempDir), MustExist)
-		if err == nil {
-			t.Fatal("expected error related to missing directory")
-		}
-		if !strings.Contains(fmt.Sprint(err), errStr) {
-			t.Fatal(err)
-		}
+	_, err := Open(context.Background(), Filesystem(tempDir), MustExist)
+	if err == nil {
+		t.Fatal("expected error related to missing directory")
 	}
-
-	test("no such file or directory")
+	if !strings.Contains(fmt.Sprint(err), "no such file or directory") {
+		t.Fatal(err)
+	}
 }
 
 func TestEngineTimeBound(t *testing.T) {
