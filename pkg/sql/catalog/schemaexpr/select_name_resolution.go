@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // NameResolutionVisitor is a tree.Visitor implementation used to
@@ -26,7 +25,6 @@ import (
 type NameResolutionVisitor struct {
 	err        error
 	iVarHelper tree.IndexedVarHelper
-	searchPath sessiondata.SearchPath
 	resolver   colinfo.ColumnResolver
 }
 
@@ -98,11 +96,9 @@ func ResolveNamesUsingVisitor(
 	expr tree.Expr,
 	source *colinfo.DataSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
-	searchPath sessiondata.SearchPath,
 ) (tree.Expr, error) {
 	*v = NameResolutionVisitor{
 		iVarHelper: ivarHelper,
-		searchPath: searchPath,
 		resolver: colinfo.ColumnResolver{
 			Source: source,
 		},
@@ -119,13 +115,10 @@ func (v *NameResolutionVisitor) Err() error {
 
 // MakeNameResolutionVisitor returns initialized name resolution visitor.
 func MakeNameResolutionVisitor(
-	source *colinfo.DataSourceInfo,
-	ivarHelper tree.IndexedVarHelper,
-	searchPath sessiondata.SearchPath,
+	source *colinfo.DataSourceInfo, ivarHelper tree.IndexedVarHelper,
 ) NameResolutionVisitor {
 	return NameResolutionVisitor{
 		iVarHelper: ivarHelper,
-		searchPath: searchPath,
 		resolver: colinfo.ColumnResolver{
 			Source: source,
 		},

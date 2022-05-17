@@ -27,5 +27,5 @@ func (p *planner) resolveNames(
 	if expr == nil {
 		return nil, nil
 	}
-	return schemaexpr.ResolveNamesUsingVisitor(&p.nameResolutionVisitor, expr, source, ivarHelper, p.SessionData().SearchPath)
+	return schemaexpr.ResolveNamesUsingVisitor(&p.nameResolutionVisitor, expr, source, ivarHelper)
 }
