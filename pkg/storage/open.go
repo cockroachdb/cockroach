@@ -164,11 +164,7 @@ type Location struct {
 func Filesystem(dir string) Location {
 	return Location{
 		dir: dir,
-		// fs is left nil intentionally, so that it will be left as the
-		// default of vfs.Default wrapped in vfs.WithDiskHealthChecks
-		// (initialized by DefaultPebbleOptions).
-		// TODO(jackson): Refactor to make it harder to accidentally remove
-		// disk health checks by setting your own VFS in a call to NewPebble.
+		fs:  vfs.Default,
 	}
 }
 
@@ -196,9 +192,7 @@ func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, err
 	var cfg engineConfig
 	cfg.Dir = loc.dir
 	cfg.Opts = DefaultPebbleOptions()
-	if loc.fs != nil {
-		cfg.Opts.FS = loc.fs
-	}
+	cfg.Opts.FS = loc.fs
 	for _, opt := range opts {
 		if err := opt(&cfg); err != nil {
 			return nil, err
