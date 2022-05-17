@@ -1,6 +1,7 @@
 load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "kvcoord",
@@ -168,7 +169,6 @@ go_test(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/kvclientutils",
         "//pkg/testutils/localtestcluster",
         "//pkg/testutils/serverutils",
@@ -208,4 +208,11 @@ stringer(
     name = "gen-txnstate-stringer",
     src = "txn_coord_sender.go",
     typ = "txnState",
+)
+
+disallowed_imports_test(
+    "kvcoord",
+    disallowed_list = [
+        "//pkg/storage",
+    ],
 )

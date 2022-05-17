@@ -8,16 +8,22 @@ load("@io_bazel_rules_go//go:def.bzl", "GoLibrary")
 # dependencies of a go package.
 _DepsInfo = provider(
   fields = {
+    'cdeps': 'dictionary with imported cdep names',
     'deps' : 'depset of targets',
     'dep_pkgs': 'dictionary with package names'
   }
 )
 
 def _deps_aspect_impl(target, ctx):
+  cdeps = {}
+  for cdep in ctx.rule.attr.cdeps:
+    cdeps[cdep.label] = True
   dep_pkgs = {ctx.rule.attr.importpath: True}
   for dep in ctx.rule.attr.deps:
     dep_pkgs.update(dep[_DepsInfo].dep_pkgs)
+    cdeps.update(dep[_DepsInfo].cdeps)
   return [_DepsInfo(
+    cdeps = cdeps,
     deps = depset(
       [target],
       transitive = [dep[_DepsInfo].deps for dep in ctx.rule.attr.deps],
@@ -58,6 +64,12 @@ echo >&2 "ERROR: {0} imports {1}
 \tcheck: bazel query 'somepath({0}, {1})'"\
 """.format(ctx.attr.src.label, d.label) for d in failed
     ])
+  if ctx.attr.disallow_cdeps:
+    for cdep in ctx.attr.src[_DepsInfo].cdeps:
+      failures.extend(["""
+      echo >&2 "ERROR: {0} depends on a c-dep {1}, which is disallowed"
+      """.format(ctx.attr.src.label, cdep)
+      ])
   if failures:
     data = "\n".join(failures + ["exit 1"])
   else:
@@ -73,6 +85,7 @@ _deps_rule = rule(
   executable = True,
   attrs = {
     'src' : attr.label(aspects = [_deps_aspect], providers = [GoLibrary]),
+    'disallow_cdeps': attr.bool(mandatory=False, default=False),
     'disallowed_list': attr.label_list(providers = [GoLibrary]),
     'disallowed_prefixes': attr.string_list(mandatory=False, allow_empty=True),
   },
@@ -93,7 +106,7 @@ def _validate_disallowed_prefixes(prefixes):
       ))
   return validated
 
-def disallowed_imports_test(src, disallowed_list = [], disallowed_prefixes = []):
+def disallowed_imports_test(src, disallowed_list = [], disallowed_prefixes = [], disallow_cdeps = False):
   disallowed_prefixes = _validate_disallowed_prefixes(disallowed_prefixes)
   script = src.strip(":") + "_disallowed_imports_script"
   _deps_rule(
@@ -101,6 +114,7 @@ def disallowed_imports_test(src, disallowed_list = [], disallowed_prefixes = [])
     src = src,
     disallowed_list = disallowed_list,
     disallowed_prefixes = disallowed_prefixes,
+    disallow_cdeps = disallow_cdeps,
   )
   native.sh_test(
     name = src.strip(":") + "_disallowed_imports_test",
