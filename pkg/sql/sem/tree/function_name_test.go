@@ -25,18 +25,25 @@ import (
 func TestResolveFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCases := []struct {
-		in, out string
-		err     string
-	}{
-		{`count`, `count`, ``},
-		{`pg_catalog.pg_typeof`, `pg_typeof`, ``},
 
-		{`foo`, ``, `unknown function: foo`},
-		{`""`, ``, `invalid function name: ""`},
+	searchPath := func() tree.SearchPath {
+		sp := sessiondata.MakeSearchPath([]string{"pg_catalog"})
+		return &sp
+	}()
+
+	testCases := []struct {
+		in, out          string
+		err              string
+		customSearchPath tree.SearchPath
+	}{
+		{in: `count`, out: `count`},
+		{in: `pg_catalog.pg_typeof`, out: `pg_typeof`},
+
+		{in: `foo`, err: `unknown function: foo`},
+		{in: `foo`, out: `count`, customSearchPath: &customResolver{SearchPath: searchPath}},
+		{in: `""`, err: `invalid function name: ""`},
 	}
 
-	searchPath := sessiondata.MakeSearchPath([]string{"pg_catalog"})
 	for _, tc := range testCases {
 		stmt, err := parser.ParseOne("SELECT " + tc.in + "(1)")
 		if err != nil {
@@ -47,7 +54,11 @@ func TestResolveFunction(t *testing.T) {
 			t.Fatalf("%s does not parse to a tree.FuncExpr", tc.in)
 		}
 		q := f.Func
-		_, err = q.Resolve(&searchPath)
+		sp := searchPath
+		if tc.customSearchPath != nil {
+			sp = tc.customSearchPath
+		}
+		_, err = q.Resolve(sp)
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
@@ -61,4 +72,22 @@ func TestResolveFunction(t *testing.T) {
 			t.Errorf("%s: expected %s, but found %s", tc.in, tc.out, out)
 		}
 	}
+}
+
+type customResolver struct {
+	tree.SearchPath
+}
+
+var _ tree.CustomFunctionDefinitionResolver = (*customResolver)(nil)
+
+// Resolve implements tree.CustomFunctionDefinitionResolver
+func (r customResolver) Resolve(name string) *tree.FunctionDefinition {
+	if name == "foo" {
+		name = "count"
+	}
+	fn, found := tree.FunDefs[name]
+	if found {
+		return fn
+	}
+	return nil
 }
