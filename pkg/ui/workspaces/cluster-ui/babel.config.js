@@ -34,7 +34,10 @@ const plugins = [
 
 const env = {
   test: {
-    plugins: ["@babel/plugin-transform-modules-commonjs"],
+    plugins: [
+      [ "@babel/plugin-transform-runtime", { absoluteRuntime: true } ],
+      "@babel/plugin-transform-modules-commonjs",
+    ],
   }
 }
 module.exports = { presets, plugins, env };
