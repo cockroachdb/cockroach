@@ -33,56 +33,18 @@ jobs:
       fail-fast: false
       matrix:
         language: [ 'go' ]
-        #was: language: [ 'cpp', 'go', 'javascript', 'python', 'ruby' ]
+        #language: [ 'cpp', 'go', 'javascript', 'python', 'ruby' ]
         # CodeQL supports [ 'cpp', 'csharp', 'go', 'java', 'javascript', 'python', 'ruby' ]
         # Learn more about CodeQL language support at https://git.io/codeql-language-support
 
     steps:
-    # Autobuilder was built with Autobuilder was built with go1.17.9, environment has go1.17.9
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: 1.17.9
-        
-    # GO env debugging
-    - name: go info
-      env:
-        ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
-      shell: bash
-      run: |          
-          echo $(go version) at $(which go)
-          echo go version: $(go version)
-          echo go env GOPATH: $(go env GOPATH) 
-          echo go env GOROOT: $(go env GOROOT) 
-          echo cache: $(ls $RUNNER_TOOL_CACHE/go)
-    
     - name: Checkout repository
       uses: actions/checkout@v3
-      with:
-        path: go/src/github.com/cockroachdb/cockroach
-
-
-    # Makefile:248: *** GOPATH is not set and could not be automatically determined.  Stop.    
-    - name: setup env
-      shell: bash
-      run: |
-        echo "GOPATH=${{ github.workspace }}/go" >> $GITHUB_ENV
-        # Restructure - need gopath to be root of workspace!
-        #echo "GOPATH=/home/runner/work/cockroach/go" >> $GITHUB_ENV        
-        
-        #Error: Command failed: go env GOPATH $GOPATH/go.mod exists but should not
-        #echo "GOPATH=${{ github.workspace }}" >> $GITHUB_ENV        
-        #** Current directory "/home/runner/work/cockroach/cockroach" is not within GOPATH "/home/runner/work/cockroach/cockroach/go".  Stop.  
-        #echo "GOPATH=${{ github.workspace }}/go" >> $GITHUB_ENV
-        # The `set-env` command is disabled. Please upgrade to using Environment Files or opt into unsecure command execution by setting the `ACTIONS_ALLOW_UNSECURE_COMMANDS` environment variable to `true`. For more information see: https://github.blog/changelog/2020-10-01-github-actions-deprecating-set-env-and-add-path-commands/
-        #echo "::set-env name=GOPATH::${{ github.workspace }}/go"
-        #echo "::add-path::${{ github.workspace }}/go/bin"                        
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v2
       with:
-        debug: true
         languages: ${{ matrix.language }}
         # If you wish to specify custom queries, you can do so here or in a config file.
         # By default, queries listed here will override any specified in a config file.
@@ -90,9 +52,10 @@ jobs:
         # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
     # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
-    # If this step fails, then you should remove it and run the build manually (see below)    
-    #- name: Autobuild
-    #  uses: github/codeql-action/autobuild@v2    
+    # If this step fails, then you should remove it and run the build manually (see below)
+    - if: matrix.language == 'cpp'
+      name: Autobuild
+      uses: github/codeql-action/autobuild@v2
 
     # ℹ️ Command-line programs to run using the OS shell.
     # 📚 https://git.io/JvXDl
@@ -104,6 +67,13 @@ jobs:
     #- run: |
     #   make bootstrap
     #   make release
+    
+    # Go Build Limit GOGC as per LGTM: https://lgtm.com/projects/g/cockroachdb/cockroach/logs/languages/lang:go
+    - if: matrix.language == 'go'        
+      name: Setup Go Environment
+      shell: bash
+      run: |
+        echo "GOGC=50" >> $GITHUB_ENV
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2
