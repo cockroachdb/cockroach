@@ -741,7 +741,7 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 				panic(err)
 			}
 
-			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
+			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool, "")
 
 			// Use an anonymous name because the column cannot be referenced
 			// in other expressions.
@@ -835,7 +835,7 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 
 			// Build synthesized PUT columns.
 			if putScope != nil {
-				texpr := putScope.resolveAndRequireType(expr, types.Bool)
+				texpr := putScope.resolveAndRequireType(expr, types.Bool, "")
 
 				// Use an anonymous name because the column cannot be referenced
 				// in other expressions.
@@ -848,7 +848,7 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 
 			// Build synthesized DEL columns.
 			if delScope != nil {
-				texpr := delScope.resolveAndRequireType(expr, types.Bool)
+				texpr := delScope.resolveAndRequireType(expr, types.Bool, "")
 
 				// Use an anonymous name because the column cannot be referenced
 				// in other expressions.

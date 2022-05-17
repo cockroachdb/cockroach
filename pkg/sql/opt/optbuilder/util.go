@@ -439,7 +439,7 @@ func (b *Builder) resolveAndBuildScalar(
 	b.semaCtx.Properties.Require(context.String(), flags)
 
 	inScope.context = context
-	texpr := inScope.resolveAndRequireType(expr, requiredType)
+	texpr := inScope.resolveAndRequireType(expr, requiredType, "")
 	return b.buildScalar(texpr, inScope, nil, nil, nil)
 }
 

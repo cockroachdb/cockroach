@@ -462,7 +462,7 @@ func (b *Builder) analyzeHaving(having *tree.Where, fromScope *scope) tree.Typed
 		exprKindHaving.String(), tree.RejectWindowApplications|tree.RejectGenerators,
 	)
 	fromScope.context = exprKindHaving
-	return fromScope.resolveAndRequireType(having.Expr, types.Bool)
+	return fromScope.resolveAndRequireType(having.Expr, types.Bool, "")
 }
 
 // buildHaving builds a set of memo groups that represent the given HAVING

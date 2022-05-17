@@ -692,7 +692,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 			panic(err)
 		}
 
-		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
+		texpr := tableScope.resolveAndRequireType(expr, types.Bool, "")
 		var condition opt.ScalarExpr
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			condition = b.buildScalar(texpr, tableScope, nil, nil, nil)
@@ -751,7 +751,7 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 		}
 
-		if texpr := tableScope.resolveAndRequireType(expr, tabCol.DatumType()); texpr != nil {
+		if texpr := tableScope.resolveAndRequireType(expr, tabCol.DatumType(), ""); texpr != nil {
 			colID := tabMeta.MetaID.ColumnID(i)
 			var scalar opt.ScalarExpr
 			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {

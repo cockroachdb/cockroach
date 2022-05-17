@@ -162,7 +162,7 @@ func (mb *mutationBuilder) uniqueColsUpdated(uniqueOrdinal cat.UniqueOrdinal) bo
 
 	if _, isPartial := uc.Predicate(); isPartial {
 		pred := mb.parseUniqueConstraintPredicateExpr(uniqueOrdinal)
-		typedPred := mb.fetchScope.resolveAndRequireType(pred, types.Bool)
+		typedPred := mb.fetchScope.resolveAndRequireType(pred, types.Bool, "")
 
 		var predCols opt.ColSet
 		mb.b.buildScalar(typedPred, mb.fetchScope, nil, nil, &predCols)
@@ -343,11 +343,11 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	if isPartial {
 		pred := h.mb.parseUniqueConstraintPredicateExpr(h.uniqueOrdinal)
 
-		typedPred := withScanScope.resolveAndRequireType(pred, types.Bool)
+		typedPred := withScanScope.resolveAndRequireType(pred, types.Bool, "")
 		withScanPred := h.mb.b.buildScalar(typedPred, withScanScope, nil, nil, nil)
 		semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(withScanPred))
 
-		typedPred = h.scanScope.resolveAndRequireType(pred, types.Bool)
+		typedPred = h.scanScope.resolveAndRequireType(pred, types.Bool, "")
 		scanPred := h.mb.b.buildScalar(typedPred, h.scanScope, nil, nil, nil)
 		semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(scanPred))
 	}
