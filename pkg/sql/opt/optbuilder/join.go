@@ -119,7 +119,7 @@ func (b *Builder) buildJoin(
 			)
 			outScope.context = exprKindOn
 			filter := b.buildScalar(
-				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, nil,
+				outScope.resolveAndRequireType(on.Expr, types.Bool, ""), outScope, nil, nil, nil,
 			)
 			filters = memo.FiltersExpr{b.factory.ConstructFiltersItem(filter)}
 		} else {

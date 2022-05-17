@@ -633,7 +633,7 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 		colName := scopeColName(tabCol.ColName()).WithMetadataName(
 			string(tabCol.ColName()) + "_" + mutationSuffix,
 		)
-		newCol, _ := pb.Add(colName, expr, tabCol.DatumType())
+		newCol, _ := pb.Add(colName, expr, tabCol.DatumType(), mutationSuffix)
 
 		// Remember id of newly synthesized column.
 		colIDs[i] = newCol
@@ -688,7 +688,7 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		colName := scopeColName(tabCol.ColName()).WithMetadataName(
 			string(tabCol.ColName()) + "_comp",
 		)
-		newCol, scalar := pb.Add(colName, expr, tabCol.DatumType())
+		newCol, scalar := pb.Add(colName, expr, tabCol.DatumType(), "")
 
 		if restrict && kind != cat.WriteOnly {
 			// Check if any of the columns referred to in the computed column
@@ -741,7 +741,7 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 				panic(err)
 			}
 
-			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
+			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool, "")
 
 			// Use an anonymous name because the column cannot be referenced
 			// in other expressions.
@@ -835,7 +835,7 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 
 			// Build synthesized PUT columns.
 			if putScope != nil {
-				texpr := putScope.resolveAndRequireType(expr, types.Bool)
+				texpr := putScope.resolveAndRequireType(expr, types.Bool, "")
 
 				// Use an anonymous name because the column cannot be referenced
 				// in other expressions.
@@ -848,7 +848,7 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 
 			// Build synthesized DEL columns.
 			if delScope != nil {
-				texpr := delScope.resolveAndRequireType(expr, types.Bool)
+				texpr := delScope.resolveAndRequireType(expr, types.Bool, "")
 
 				// Use an anonymous name because the column cannot be referenced
 				// in other expressions.

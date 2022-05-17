@@ -438,7 +438,7 @@ func (b *Builder) buildFilterCol(
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 	b.semaCtx.Properties.Require("FILTER", tree.RejectSpecial)
 
-	te := inScope.resolveAndRequireType(filter, types.Bool)
+	te := inScope.resolveAndRequireType(filter, types.Bool, "")
 
 	col := outScope.findExistingCol(te, false /* allowSideEffects */)
 	if col == nil {

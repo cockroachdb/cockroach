@@ -476,9 +476,11 @@ func (s *scope) resolveType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 // expression with no error). If the result type is types.Unknown, then
 // resolveType will wrap the expression in a type cast in order to produce the
 // desired type.
-func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.TypedExpr {
+func (s *scope) resolveAndRequireType(
+	expr tree.Expr, desired *types.T, mutSuffix string,
+) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
-	texpr, err := tree.TypeCheckAndRequire(s.builder.ctx, expr, s.builder.semaCtx, desired, s.context.String())
+	texpr, err := tree.TypeCheckAndRequire(s.builder.ctx, expr, s.builder.semaCtx, desired, s.context.String(), true, mutSuffix)
 	if err != nil {
 		panic(err)
 	}
@@ -1452,13 +1454,13 @@ func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
 	if startBound != nil && startBound.OffsetExpr != nil {
 		oldContext := s.context
 		s.context = exprKindWindowFrameStart
-		startBound.OffsetExpr = s.resolveAndRequireType(startBound.OffsetExpr, requiredType)
+		startBound.OffsetExpr = s.resolveAndRequireType(startBound.OffsetExpr, requiredType, "")
 		s.context = oldContext
 	}
 	if endBound != nil && endBound.OffsetExpr != nil {
 		oldContext := s.context
 		s.context = exprKindWindowFrameEnd
-		endBound.OffsetExpr = s.resolveAndRequireType(endBound.OffsetExpr, requiredType)
+		endBound.OffsetExpr = s.resolveAndRequireType(endBound.OffsetExpr, requiredType, "")
 		s.context = oldContext
 	}
 	return nil

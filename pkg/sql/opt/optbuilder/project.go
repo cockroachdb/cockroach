@@ -346,13 +346,13 @@ func makeProjectionBuilder(b *Builder, inScope *scope) projectionBuilder {
 // given expression is a just bare column reference, it returns that column's ID
 // and a nil scalar expression.
 func (pb *projectionBuilder) Add(
-	name scopeColumnName, expr tree.Expr, desiredType *types.T,
+	name scopeColumnName, expr tree.Expr, desiredType *types.T, mutSuffix string,
 ) (opt.ColumnID, opt.ScalarExpr) {
 	if pb.outScope == nil {
 		pb.outScope = pb.inScope.replace()
 		pb.outScope.appendColumnsFromScope(pb.inScope)
 	}
-	typedExpr := pb.inScope.resolveAndRequireType(expr, desiredType)
+	typedExpr := pb.inScope.resolveAndRequireType(expr, desiredType, mutSuffix)
 	scopeCol := pb.outScope.addColumn(name, typedExpr)
 	scalar := pb.b.buildScalar(typedExpr, pb.inScope, pb.outScope, scopeCol, nil)
 

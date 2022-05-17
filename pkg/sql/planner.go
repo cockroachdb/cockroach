@@ -614,7 +614,7 @@ func (p *planner) LookupTableByID(
 func (p *planner) TypeAsString(
 	ctx context.Context, e tree.Expr, op string,
 ) (func() (string, error), error) {
-	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.String, op)
+	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.String, op, false, "")
 	if err != nil {
 		return nil, err
 	}
@@ -635,7 +635,7 @@ func (p *planner) TypeAsString(
 func (p *planner) TypeAsStringOrNull(
 	ctx context.Context, e tree.Expr, op string,
 ) (func() (bool, string, error), error) {
-	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.String, op)
+	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.String, op, false, "")
 	if err != nil {
 		return nil, err
 	}
@@ -729,7 +729,7 @@ func (p *planner) TypeAsStringOpts(
 		if validate == KVStringOptRequireNoValue {
 			return nil, errors.Errorf("option %q does not take a value", k)
 		}
-		r, err := tree.TypeCheckAndRequire(ctx, opt.Value, &p.semaCtx, types.String, k)
+		r, err := tree.TypeCheckAndRequire(ctx, opt.Value, &p.semaCtx, types.String, k, false, "")
 		if err != nil {
 			return nil, err
 		}
@@ -765,7 +765,7 @@ func (p *planner) TypeAsStringArray(
 ) (func() ([]string, error), error) {
 	typedExprs := make([]tree.TypedExpr, len(exprs))
 	for i := range exprs {
-		typedE, err := tree.TypeCheckAndRequire(ctx, exprs[i], &p.semaCtx, types.String, op)
+		typedE, err := tree.TypeCheckAndRequire(ctx, exprs[i], &p.semaCtx, types.String, op, false, "")
 		if err != nil {
 			return nil, err
 		}

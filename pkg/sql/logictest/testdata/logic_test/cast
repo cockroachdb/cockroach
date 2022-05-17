@@ -1403,26 +1403,42 @@ select CASE WHEN false THEN 1::REGTYPE ELSE 2::REGPROCEDURE END;
 select CASE WHEN false THEN 1::REGTYPE ELSE 2::REGROLE END;
 
 
-# Test that default/on update expression differing from column type
+# Test that default/on update expression is allowed to differ from column type
 statement ok
 CREATE TABLE def_assn_cast (
-a INT4 DEFAULT 1.0::FLOAT4,
-b VARCHAR DEFAULT 'true'::BOOL,
-c NAME DEFAULT 'foo'::BPCHAR,
-d JSONB DEFAULT 'null'::CHAR,
+  id INT4,
+  a INT4 DEFAULT 1.0::FLOAT4,
+  b VARCHAR DEFAULT 'true'::BOOL,
+  c NAME DEFAULT 'foo'::BPCHAR,
+  d VARCHAR DEFAULT '{ "customer": "John Doe"}'::JSONB
 )
 
-statement error pq: could not parse . as type .: invalid . value
+# Ensure insertions are allowed
+statement ok
+INSERT INTO def_assn_cast(id) VALUES (1)
+
+query IITTT
+SELECT * from def_assn_cast
+----
+1  1  true  f  {"customer": "John Doe"}
+
+
+statement error pq: could not parse .* as type .*: invalid .* value
 CREATE TABLE fail_assn_cast (
-a BOOL DEFAULT 'foo'
+  a BOOL DEFAULT 'foo'
 )
 
-statement error pq: could not parse . as type .: invalid . value
+statement error pq: expected DEFAULT expression to have type .*, but .* has type .*
 CREATE TABLE fail_assn_cast (
-b JSONB DEFAULT 'null'::CHAR
+  a DATE DEFAULT 1.0::FLOAT4
 )
 
-statement error pq: expected DEFAULT expression to have type ., but . has type .
-CREATE TABLE def_assn_cast (
-a INT4 DEFAULT 1.0::BOOL
+statement error pq: expected DEFAULT expression to have type .*, but .* has type .*
+CREATE TABLE fail_assn_cast (
+  b JSONB DEFAULT 'null'::CHAR
+)
+
+statement error pq: expected DEFAULT expression to have type .*, but .* has type .*
+CREATE TABLE fail_assn_cast (
+  a INT4 DEFAULT 1.0::BOOL
 )

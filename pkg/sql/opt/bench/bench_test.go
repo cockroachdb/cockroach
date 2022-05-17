@@ -429,6 +429,7 @@ func newHarness(tb testing.TB, query benchQuery) *harness {
 			"", /* context */
 			&h.semaCtx,
 			volatility.Volatile,
+			false,
 		)
 		if err != nil {
 			tb.Fatalf("%v", err)

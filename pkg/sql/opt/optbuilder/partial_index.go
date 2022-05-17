@@ -214,5 +214,5 @@ func resolvePartialIndexPredicate(tableScope *scope, expr tree.Expr) tree.TypedE
 			panic(errors.AssertionFailedf("unexpected error during partial index predicate type resolution: %v", r))
 		}
 	}()
-	return tableScope.resolveAndRequireType(expr, types.Bool)
+	return tableScope.resolveAndRequireType(expr, types.Bool, "")
 }

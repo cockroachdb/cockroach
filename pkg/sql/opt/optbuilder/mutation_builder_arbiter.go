@@ -301,7 +301,7 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	// wraps the scan on the right side of the anti-join with the partial
 	// index predicate expression as the filter.
 	if pred != nil {
-		texpr := fetchScope.resolveAndRequireType(pred, types.Bool)
+		texpr := fetchScope.resolveAndRequireType(pred, types.Bool, "")
 		predScalar := mb.b.buildScalar(texpr, fetchScope, nil, nil, nil)
 		fetchScope.expr = mb.b.factory.ConstructSelect(
 			fetchScope.expr,
@@ -333,7 +333,7 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	// rows in the unique partial index. Therefore, the partial index
 	// predicate expression is added to the ON filters.
 	if pred != nil {
-		texpr := mb.outScope.resolveAndRequireType(pred, types.Bool)
+		texpr := mb.outScope.resolveAndRequireType(pred, types.Bool, "")
 		predScalar := mb.b.buildScalar(texpr, mb.outScope, nil, nil, nil)
 		on = append(on, mb.b.factory.ConstructFiltersItem(predScalar))
 	}
@@ -388,7 +388,7 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	// the scan on the right side of the left outer join with the partial index
 	// predicate expression as the filter.
 	if pred != nil {
-		texpr := mb.fetchScope.resolveAndRequireType(pred, types.Bool)
+		texpr := mb.fetchScope.resolveAndRequireType(pred, types.Bool, "")
 		predScalar := mb.b.buildScalar(texpr, mb.fetchScope, nil, nil, nil)
 		mb.fetchScope.expr = mb.b.factory.ConstructSelect(
 			mb.fetchScope.expr,
@@ -418,7 +418,7 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	// the unique partial index. Therefore, the partial index predicate
 	// expression is added to the ON filters.
 	if pred != nil {
-		texpr := mb.outScope.resolveAndRequireType(pred, types.Bool)
+		texpr := mb.outScope.resolveAndRequireType(pred, types.Bool, "")
 		predScalar := mb.b.buildScalar(texpr, mb.outScope, nil, nil, nil)
 		on = append(on, mb.b.factory.ConstructFiltersItem(predScalar))
 	}
@@ -523,7 +523,7 @@ func (mb *mutationBuilder) projectPartialArbiterDistinctColumn(
 		Left:  pred,
 		Right: tree.DNull,
 	}
-	texpr := insertScope.resolveAndRequireType(expr, types.Bool)
+	texpr := insertScope.resolveAndRequireType(expr, types.Bool, "")
 
 	// Use an anonymous name because the column cannot be referenced
 	// in other expressions.

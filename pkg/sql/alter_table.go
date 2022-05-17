@@ -1129,7 +1129,7 @@ func sanitizeColumnExpression(
 ) (tree.TypedExpr, string, error) {
 	colDatumType := col.GetType()
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		p.ctx, expr, colDatumType, opName, &p.p.semaCtx, volatility.Volatile,
+		p.ctx, expr, colDatumType, opName, &p.p.semaCtx, volatility.Volatile, false,
 	)
 	if err != nil {
 		return nil, "", pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
