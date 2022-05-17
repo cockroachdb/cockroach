@@ -60,9 +60,7 @@ func injectTableStats(tt *Table, statsExpr tree.Expr) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	typedExpr, err := tree.TypeCheckAndRequire(
-		ctx, statsExpr, &semaCtx, types.Jsonb, "INJECT STATISTICS",
-	)
+	typedExpr, err := tree.TypeCheckAndRequire(ctx, statsExpr, &semaCtx, types.Jsonb, "INJECT STATISTICS", false)
 	if err != nil {
 		panic(err)
 	}

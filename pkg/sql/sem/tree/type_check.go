@@ -274,14 +274,28 @@ func TypeCheck(
 // an identical manner to TypeCheck. It then asserts that the resulting TypedExpr
 // has the provided return type, returning both the typed expression and an error
 // if it does not.
+// Default/OnUpdate expr are allowed to take a different type than the
+// column if it can be assignment cast. If allowAssignmentCast is true
+// and mutSuffix is not nil we check if the cast is valid before
+// returning the error.
 func TypeCheckAndRequire(
-	ctx context.Context, expr Expr, semaCtx *SemaContext, required *types.T, op string,
+	ctx context.Context,
+	expr Expr,
+	semaCtx *SemaContext,
+	required *types.T,
+	op string,
+	allowAssignmentCast bool,
 ) (TypedExpr, error) {
 	typedExpr, err := TypeCheck(ctx, expr, semaCtx, required)
 	if err != nil {
 		return nil, err
 	}
 	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ.Family() == types.UnknownFamily) {
+		if allowAssignmentCast {
+			if ok := cast.ValidCast(typ, required, cast.ContextAssignment); ok {
+				return typedExpr, nil
+			}
+		}
 		return typedExpr, pgerror.Newf(
 			pgcode.DatatypeMismatch, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
