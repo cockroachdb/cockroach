@@ -49,7 +49,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 
 			ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 			cursorName := s.Name.String()
-			if cursor, _ := p.sqlCursors.getCursor(cursorName); cursor != nil {
+			if cursor := p.sqlCursors.getCursor(cursorName); cursor != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", cursorName)
 			}
 
@@ -118,9 +118,12 @@ var errBackwardScan = pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cursor 
 func (p *planner) FetchCursor(
 	_ context.Context, s *tree.CursorStmt, isMove bool,
 ) (planNode, error) {
-	cursor, err := p.sqlCursors.getCursor(s.Name.String())
-	if err != nil {
-		return nil, err
+	cursorName := s.Name.String()
+	cursor := p.sqlCursors.getCursor(cursorName)
+	if cursor == nil {
+		return nil, pgerror.Newf(
+			pgcode.InvalidCursorName, "cursor %q does not exist", cursorName,
+		)
 	}
 	if s.Count < 0 || s.FetchType == tree.FetchBackwardAll {
 		return nil, errBackwardScan
@@ -273,9 +276,9 @@ type sqlCursors interface {
 	// closeCursor closes the named cursor, returning an error if that cursor
 	// didn't exist in the set.
 	closeCursor(string) error
-	// getCursor returns the named cursor, returning an error if that cursor
+	// getCursor returns the named cursor, returning nil if that cursor
 	// didn't exist in the set.
-	getCursor(string) (*sqlCursor, error)
+	getCursor(string) *sqlCursor
 	// addCursor adds a new cursor with the given name to the set, returning an
 	// error if the cursor already existed in the set.
 	addCursor(string, *sqlCursor) error
@@ -305,12 +308,8 @@ func (c *cursorMap) closeCursor(s string) error {
 	return err
 }
 
-func (c *cursorMap) getCursor(s string) (*sqlCursor, error) {
-	cursor, ok := c.cursors[s]
-	if !ok {
-		return nil, pgerror.Newf(pgcode.InvalidCursorName, "cursor %q does not exist", s)
-	}
-	return cursor, nil
+func (c *cursorMap) getCursor(s string) *sqlCursor {
+	return c.cursors[s]
 }
 
 func (c *cursorMap) addCursor(s string, cursor *sqlCursor) error {
@@ -342,7 +341,7 @@ func (c connExCursorAccessor) closeCursor(s string) error {
 	return c.ex.extraTxnState.sqlCursors.closeCursor(s)
 }
 
-func (c connExCursorAccessor) getCursor(s string) (*sqlCursor, error) {
+func (c connExCursorAccessor) getCursor(s string) *sqlCursor {
 	return c.ex.extraTxnState.sqlCursors.getCursor(s)
 }
 
