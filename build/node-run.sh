@@ -38,6 +38,8 @@
 
 set -euo pipefail
 
+export NODE_OPTIONS="--max-old-space-size=32768"
+
 [[ "${1-}" ]] || { echo "usage: $0 [-C CWD] COMMAND [ARGS...]" >&2; exit 1; }
 
 while getopts "C:" opt; do
