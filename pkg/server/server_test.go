@@ -455,7 +455,7 @@ func TestSystemConfigGossip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// This has to be wrapped in a SucceedSoon because system migrations on the
+	// This has to be wrapped in a SucceedSoon because system upgrades on the
 	// testserver's startup can trigger system config updates without the key we
 	// wrote.
 	testutils.SucceedsSoon(t, func() error {

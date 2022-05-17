@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -96,6 +95,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -1207,7 +1207,7 @@ type ExecutorConfig struct {
 	InternalRowMetrics   *rowinfra.Metrics
 
 	TestingKnobs                         ExecutorTestingKnobs
-	MigrationTestingKnobs                *migration.TestingKnobs
+	UpgradeTestingKnobs                  *upgrade.TestingKnobs
 	PGWireTestingKnobs                   *PGWireTestingKnobs
 	SchemaChangerTestingKnobs            *SchemaChangerTestingKnobs
 	DeclarativeSchemaChangerTestingKnobs *scrun.TestingKnobs
@@ -1252,12 +1252,12 @@ type ExecutorConfig struct {
 	RangeFeedFactory *rangefeed.Factory
 
 	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
-	// version` but before executing it. It can carry out arbitrary migrations
+	// version` but before executing it. It can carry out arbitrary upgrades
 	// that allow us to eventually remove legacy code.
 	VersionUpgradeHook VersionUpgradeHook
 
-	// MigrationJobDeps is used to drive migrations.
-	MigrationJobDeps migration.JobDeps
+	// UpgradeJobDeps is used to drive upgrades.
+	UpgradeJobDeps upgrade.JobDeps
 
 	// IndexBackfiller is used to backfill indexes. It is another rather circular
 	// object which mostly just holds on to an ExecConfig.
@@ -1301,10 +1301,10 @@ type ExecutorConfig struct {
 	SystemTableIDResolver catalog.SystemTableIDResolver
 
 	// SpanConfigReconciler is used to drive the span config reconciliation job
-	// and related migrations.
+	// and related upgrades.
 	SpanConfigReconciler spanconfig.Reconciler
 
-	// SpanConfigSplitter is used during migrations to seed system.span_count with
+	// SpanConfigSplitter is used during upgrades to seed system.span_count with
 	// the right number of tenant spans.
 	SpanConfigSplitter spanconfig.Splitter
 
@@ -1331,8 +1331,8 @@ type ExecutorConfig struct {
 // UpdateVersionSystemSettingHook provides a callback that allows us
 // update the cluster version inside the system.settings table. This hook
 // is aimed at mainly updating tenant pods, which will currently skip over
-// the existing migration logic for bumping version numbers (this logic is
-// stubbed out for them). As a result there is a potential danger of migrations
+// the existing upgrade logic for bumping version numbers (this logic is
+// stubbed out for them). As a result there is a potential danger of upgrades
 // partially being completed without the version number being persisted to storage
 // for tenants. This hook allows the version number to bumped and saved at
 // each step.
@@ -1341,7 +1341,7 @@ type UpdateVersionSystemSettingHook func(
 	version clusterversion.ClusterVersion,
 ) error
 
-// VersionUpgradeHook is used to run migrations starting in v21.1.
+// VersionUpgradeHook is used to run upgrades starting in v21.1.
 type VersionUpgradeHook func(
 	ctx context.Context,
 	user username.SQLUsername,

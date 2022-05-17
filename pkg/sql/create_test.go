@@ -446,7 +446,7 @@ func TestAutoStatsTableSettingsDisallowedOnOldCluster(t *testing.T) {
 
 	sqlDB.ExpectErr(t, "pq: auto stats table settings are only available once the cluster is fully upgraded", "ALTER TABLE t2 SET (sql_stats_automatic_collection_enabled = true)")
 
-	// Run the migration.
+	// Run the upgrade.
 	sqlDB.Exec(t, "SET CLUSTER SETTING version = $1", clusterversion.ByKey(clusterversion.AutoStatsTableSettings).String())
 
 	sqlDB.Exec(t,

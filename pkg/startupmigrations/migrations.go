@@ -544,7 +544,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		log.Info(ctx, "trying to acquire lease")
 	}
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		lease, err = m.leaseManager.AcquireLease(ctx, m.codec.MigrationLeaseKey())
+		lease, err = m.leaseManager.AcquireLease(ctx, m.codec.StartupMigrationLeaseKey())
 		if err == nil {
 			break
 		}
@@ -668,7 +668,7 @@ func getCompletedMigrations(
 	if log.V(1) {
 		log.Info(ctx, "trying to get the list of completed migrations")
 	}
-	prefix := codec.MigrationKeyPrefix()
+	prefix := codec.StartupMigrationKeyPrefix()
 	keyvals, err := db.Scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get list of completed migrations")
@@ -681,7 +681,7 @@ func getCompletedMigrations(
 }
 
 func migrationKey(codec keys.SQLCodec, migration migrationDescriptor) roachpb.Key {
-	return append(codec.MigrationKeyPrefix(), roachpb.RKey(migration.name)...)
+	return append(codec.StartupMigrationKeyPrefix(), roachpb.RKey(migration.name)...)
 }
 
 func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {
