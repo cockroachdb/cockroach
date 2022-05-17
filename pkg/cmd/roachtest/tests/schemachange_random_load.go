@@ -47,6 +47,10 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// The schemachange workload is extremely noisy in 21.2, so we are going
+			// leave it disabled until the workload gets fully stabilized in then next
+			// release (via epic: CRDB-13725).
+			t.Skip("disabled in 21.2 since schemachange workload is not stable")
 			maxOps := 5000
 			concurrency := 20
 			if c.IsLocal() {
