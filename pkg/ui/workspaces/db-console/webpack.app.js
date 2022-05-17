@@ -74,7 +74,9 @@ module.exports = (env, argv) => {
       ],
       alias: {
         oss: path.resolve(__dirname),
+        ccl: path.resolve(__dirname, "ccl"),
         "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
+        "ccl/src/js/protos": "@cockroachlabs/crdb-protobuf-client-ccl",
       },
     },
 

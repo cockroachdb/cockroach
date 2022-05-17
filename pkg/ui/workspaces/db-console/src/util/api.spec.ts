@@ -484,8 +484,8 @@ describe("rest api", function() {
         .then(result => {
           assert.lengthOf(fetchMock.calls(healthUrl), 1);
           assert.deepEqual(
-            result,
-            new protos.cockroach.server.serverpb.HealthResponse(),
+            result.toJSON(),
+            new protos.cockroach.server.serverpb.HealthResponse().toJSON(),
           );
         });
     });
