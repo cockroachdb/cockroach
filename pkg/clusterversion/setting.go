@@ -25,7 +25,7 @@ const KeyVersionSetting = "version"
 
 // version represents the cluster's "active version". This is a cluster setting,
 // but a special one. It can only advance to higher and higher versions. The
-// setting can be used to see if migrations are to be considered enabled or
+// setting can be used to see if upgrades are to be considered enabled or
 // disabled through the `isActive()` method. All external usage of the cluster
 // settings takes place through a Handle and `Initialize()`.
 //

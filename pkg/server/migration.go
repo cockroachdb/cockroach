@@ -26,7 +26,7 @@ import (
 )
 
 // migrationServer is an implementation of the Migration service. The RPCs here
-// are used to power the migrations infrastructure in pkg/migrations.
+// are used to power the upgrades infrastructure in pkg/upgrades.
 type migrationServer struct {
 	server *Server
 
@@ -60,7 +60,7 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	}
 
 	// TODO(irfansharif): These errors are propagated all the way back to the
-	// user during improper version upgrades. Given the migrations
+	// user during improper version upgrades. Given the upgrades
 	// infrastructure is stepping through internal versions during major cluster
 	// version upgrades, and given we don't use negative internal versions (as
 	// suggested in #33578), it currently manifests (see

@@ -460,7 +460,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 // returns. If the job is resumed only on an older node, then the
 // reverted schema change will continue as it would have previously.
 //
-// TODO(ssd): Once we install a version gate and migration that drains
+// TODO(ssd): Once we install a version gate and upgrade that drains
 // in-flight schema changes and disallows any old-style index
 // backfills, we can remove this extra transaction since we will know
 // that any reverted DROP INDEX mutations will either have already

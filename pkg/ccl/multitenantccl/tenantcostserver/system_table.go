@@ -189,7 +189,7 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 				CurrentShareSum: float64(tree.MustBeDFloat(r[6])),
 			}
 			if consumption := r[7]; consumption != tree.DNull {
-				// total_consumption can be NULL because of a migration of the
+				// total_consumption can be NULL because of an upgrade of the
 				// tenant_usage table.
 				if err := protoutil.Unmarshal(
 					[]byte(tree.MustBeDBytes(consumption)), &tenant.Consumption,
@@ -512,7 +512,7 @@ func (h *sysTableHelper) checkInvariants() error {
 					return errors.Errorf("expected NULL column %d", j)
 				}
 				// We have an exception for total_consumption, which can be NULL because
-				// of a migration of the tenant_usage table.
+				// of an upgrade of the tenant_usage table.
 				if i != 7 {
 					return errors.Errorf("expected non-NULL column %d", j)
 				}

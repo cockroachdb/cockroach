@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
 // plannerJobExecContext is a wrapper to implement JobExecContext with a planner
@@ -64,7 +64,7 @@ func (e *plannerJobExecContext) ExecCfg() *ExecutorConfig        { return e.p.Ex
 func (e *plannerJobExecContext) DistSQLPlanner() *DistSQLPlanner { return e.p.DistSQLPlanner() }
 func (e *plannerJobExecContext) LeaseMgr() *lease.Manager        { return e.p.LeaseMgr() }
 func (e *plannerJobExecContext) User() username.SQLUsername      { return e.p.User() }
-func (e *plannerJobExecContext) MigrationJobDeps() migration.JobDeps {
+func (e *plannerJobExecContext) MigrationJobDeps() upgrade.JobDeps {
 	return e.p.MigrationJobDeps()
 }
 func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
@@ -102,7 +102,7 @@ type JobExecContext interface {
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
 	User() username.SQLUsername
-	MigrationJobDeps() migration.JobDeps
+	MigrationJobDeps() upgrade.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
 	Txn() *kv.Txn
 }

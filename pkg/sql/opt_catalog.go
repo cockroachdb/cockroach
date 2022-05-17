@@ -808,7 +808,7 @@ func newOptTable(
 
 	// Set up any registered system columns. However, we won't add the column
 	// in case a non-system column with the same name already exists in the table.
-	// This check is done for migration purposes. We need to avoid adding the
+	// This check is done for upgrade purposes. We need to avoid adding the
 	// system column if the table has a column with this name for some reason.
 	for _, sysCol := range ot.desc.SystemColumns() {
 		found, _ := desc.FindColumnWithName(sysCol.ColName())
