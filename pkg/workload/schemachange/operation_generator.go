@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2469,6 +2470,8 @@ const (
 	OpStmtDML opStmtType = 2
 )
 
+type opStmtQueryResultCallback func(rows pgx.Rows) error
+
 // opStmt a generated statement that is either DDL or DML, including the potential
 // set of execution errors this statement can generate.
 type opStmt struct {
@@ -2476,6 +2479,7 @@ type opStmt struct {
 	queryType           opStmtType
 	expectedExecErrors  errorCodeSet
 	potentialExecErrors errorCodeSet
+	queryResultCallback opStmtQueryResultCallback
 }
 
 func (s *opStmt) String() string {
@@ -2527,7 +2531,15 @@ func (og *operationGenerator) getErrorState(op *opStmt) string {
 // of the execution. Note: Commit time failures will be handled separately from
 // statement specific logic.
 func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenerator) error {
-	if _, err := tx.Exec(ctx, s.sql); err != nil {
+	var err error
+	var rows pgx.Rows
+	// Statement doesn't produce any result set that needs to be validated.
+	if s.queryResultCallback == nil {
+		_, err = tx.Exec(ctx, s.sql)
+	} else {
+		rows, err = tx.Query(ctx, s.sql)
+	}
+	if err != nil {
 		// If the error not an instance of pgconn.PgError, then it is unexpected.
 		pgErr := new(pgconn.PgError)
 		if !errors.As(err, &pgErr) {
@@ -2562,17 +2574,25 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 			errRunInTxnFatalSentinel,
 		)
 	}
+	// Next validate the result set.
+	if s.queryResultCallback != nil {
+		if err := s.queryResultCallback(rows); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *opStmt, err error) {
 	const MaxTablesForSelect = 3
+	const MaxColumnsForSelect = 16
+	const MaxRowsToConsume = 300000
 	// Select the number of target tables.
-	numTables := og.randIntn(MaxTablesForSelect-1) + 1
+	numTables := og.randIntn(MaxTablesForSelect) + 1
 	tableNames := make([]*tree.TableName, numTables)
 	colInfos := make([][]column, numTables)
 	allTableExists := true
-	expectedColumns := 0
+	totalColumns := 0
 	for idx := range tableNames {
 		tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
 		if err != nil {
@@ -2592,11 +2612,41 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 			return nil, err
 		}
 		colInfos[idx] = colInfo
-		expectedColumns += len(colInfo)
+		totalColumns += len(colInfo)
 	}
+	// Determine which columns to select.
+	selectColumns := strings.Builder{}
+	numColumnsToSelect := og.randIntn(MaxColumnsForSelect) + 1
+	if numColumnsToSelect > totalColumns {
+		numColumnsToSelect = totalColumns
+	}
+	// Randomly select our columns from the set of tables.
+	for colIdx := 0; colIdx < numColumnsToSelect; colIdx++ {
+		tableIdx := og.randIntn(len(colInfos))
+		// Skip over empty tables.
+		if len(colInfos[tableIdx]) == 0 {
+			colIdx--
+			continue
+		}
+		col := colInfos[tableIdx][og.randIntn(len(colInfos[tableIdx]))]
+		if colIdx != 0 {
+			selectColumns.WriteString(",")
+		}
+		selectColumns.WriteString(fmt.Sprintf("t%d.", tableIdx))
+		selectColumns.WriteString(col.name)
+		selectColumns.WriteString(" AS ")
+		selectColumns.WriteString(fmt.Sprintf("col%d", colIdx))
+	}
+	// No columns, so anything goes
+	if totalColumns == 0 {
+		selectColumns.WriteString("*")
+	}
+
 	// TODO(fqazi): Start injecting WHERE clauses, joins, and aggregations too
 	selectQuery := strings.Builder{}
-	selectQuery.WriteString("SELECT * FROM ")
+	selectQuery.WriteString("SELECT ")
+	selectQuery.WriteString(selectColumns.String())
+	selectQuery.WriteString(" FROM ")
 	for idx, tableName := range tableNames {
 		if idx != 0 {
 			selectQuery.WriteString(",")
@@ -2605,37 +2655,34 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 		selectQuery.WriteString(" AS ")
 		selectQuery.WriteString(fmt.Sprintf("t%d ", idx))
 	}
+	selectQuery.WriteString(fmt.Sprintf(" FETCH FIRST %d ROWS ONLY", MaxRowsToConsume))
 
-	// FIXME: Push into execution layer...
-	if allTableExists {
-		og.LogQueryResults(selectQuery.String(), "[CACHED]")
-		rows, err := tx.Query(ctx, selectQuery.String())
-		if err != nil {
-			return nil, err
-		}
+	// Setup a statement with the query and a call back to validate the result
+	// set.
+	stmt = makeOpStmt(OpStmtDML)
+	stmt.sql = selectQuery.String()
+	stmt.queryResultCallback = func(rows pgx.Rows) error {
+		// Only read rows from the select for up to a minute.
+		const MaxTimeForRead = time.Minute
+		startTime := time.Now()
 		defer rows.Close()
-
-		for rows.Next() {
+		for rows.Next() && time.Since(startTime) < MaxTimeForRead {
 			rawValues := rows.RawValues()
-
-			if len(rawValues) != expectedColumns {
-				panic("badness")
+			if len(rawValues) != numColumnsToSelect {
+				return errors.AssertionFailedf("query returned incorrect number of columns. "+
+					"Got: %d Expected:%d",
+					len(rawValues),
+					totalColumns)
 			}
-			/*if err != nil {
-				return nil, err
-			}*/
 		}
 		if err := rows.Err(); err != nil {
-			return nil, err
+			return err
 		}
-
-		// FIXME: Stupid hack..
-		return nil, ErrSchemaChangesDisallowedDueToPkSwap
+		return nil
 	}
-	// FIXME: Use the normal pattern
-	stmt = makeOpStmt(OpStmtDML)
-	stmt.expectedExecErrors.add(pgcode.UndefinedTable)
-	stmt.sql = selectQuery.String()
+	codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !allTableExists},
+	}.add(stmt.expectedExecErrors)
 	return stmt, nil
 }
 
