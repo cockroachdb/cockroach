@@ -56,6 +56,14 @@ type crdbSpan struct {
 	// tag's key to a user.
 	logTags *logtags.Buffer
 
+	// eventListeners is a list of registered EventListener's that are notified
+	// whenever a Structured event is recorded by the span and its children.
+	//
+	// Note, eventListeners are only written on span creation, subsequent
+	// operations on this slice are read-only allowing us to operate outside the
+	// span's mutex.
+	eventListeners []EventListener
+
 	// Locking rules:
 	// - If locking both a parent and a child, the parent must be locked first. In
 	// practice, children don't take the parent's lock.
@@ -124,10 +132,6 @@ type crdbSpanMu struct {
 	// lazyTags are tags whose values are only string-ified on demand. Each lazy
 	// tag is expected to implement either fmt.Stringer or LazyTag.
 	lazyTags []lazyTag
-
-	// eventListeners is a list of registered EventListener's that are notified
-	// whenever a Structured event is recorded by the span and its children.
-	eventListeners []EventListener
 }
 
 type lazyTag struct {
@@ -233,7 +237,6 @@ func (s *crdbSpan) finish() bool {
 			return false
 		}
 		s.mu.finished = true
-		s.mu.eventListeners = nil
 
 		if s.recordingType() != RecordingOff {
 			duration := timeutil.Since(s.startTime)
@@ -566,15 +569,35 @@ func (s *crdbSpan) getLazyTagLocked(key string) (interface{}, bool) {
 
 // notifyEventListeners recursively notifies all the EventListeners registered
 // with this span and any ancestor spans in the Recording, of a StructuredEvent.
+//
+// If s has a parent, then we notify the parent of the StructuredEvent outside
+// the child (our current receiver) lock. This is as per the lock ordering
+// convention between parents and children.
 func (s *crdbSpan) notifyEventListeners(item Structured) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.mu.recording.notifyParentOnStructuredEvent {
-		parent := s.mu.parent.Span.i.crdb
-		parent.notifyEventListeners(item)
+
+	// If s has been Finish()ed concurrently, there is nothing to do.
+	if s.mu.finished {
+		s.mu.Unlock()
+		return
 	}
 
-	for _, listener := range s.mu.eventListeners {
+	if s.mu.recording.notifyParentOnStructuredEvent {
+		parent := s.mu.parent.Span.i.crdb
+		// Take a reference of s' parent before releasing the mutex. This ensures
+		// that if the parent were to be Finish()ed concurrently then the span does
+		// not get reused until we release the reference.
+		parentRef := makeSpanRef(s.mu.parent.Span)
+		s.mu.Unlock()
+		parent.notifyEventListeners(item)
+		parentRef.release()
+	} else {
+		s.mu.Unlock()
+	}
+
+	// We can operate on s' eventListeners without holding the mutex because the
+	// slice is only written to once during span creation.
+	for _, listener := range s.eventListeners {
 		listener.Notify(item)
 	}
 }
@@ -960,7 +983,7 @@ func (s *crdbSpan) withLock(f func()) {
 // WithEventListeners(...) or the span has been configured to notify its parent
 // span on a StructuredEvent recording.
 func (s *crdbSpan) wantEventNotificationsLocked() bool {
-	return len(s.mu.eventListeners) != 0 || s.mu.recording.notifyParentOnStructuredEvent
+	return len(s.eventListeners) != 0 || s.mu.recording.notifyParentOnStructuredEvent
 }
 
 // setGoroutineID updates the span's goroutine ID.
