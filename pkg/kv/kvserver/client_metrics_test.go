@@ -132,7 +132,7 @@ func verifyStats(t *testing.T, tc *testcluster.TestCluster, storeIdxSlice ...int
 	}
 }
 
-func verifyRocksDBStats(t *testing.T, s *kvserver.Store) {
+func verifyStorageStats(t *testing.T, s *kvserver.Store) {
 	if err := s.ComputeMetrics(context.Background(), 0); err != nil {
 		t.Fatal(err)
 	}
@@ -146,8 +146,8 @@ func verifyRocksDBStats(t *testing.T, s *kvserver.Store) {
 		{m.RdbBlockCacheMisses, 0},
 		{m.RdbBlockCacheUsage, 0},
 		{m.RdbBlockCachePinnedUsage, 0},
-		{m.RdbBloomFilterPrefixChecked, 20},
-		{m.RdbBloomFilterPrefixUseful, 20},
+		{m.RdbBloomFilterPrefixChecked, 10},
+		{m.RdbBloomFilterPrefixUseful, 5},
 		{m.RdbMemtableTotalSize, 5000},
 		{m.RdbFlushes, 1},
 		{m.RdbCompactions, 0},
@@ -356,8 +356,8 @@ func TestStoreMetrics(t *testing.T) {
 	// Verify all stats on all stores after range is removed.
 	verifyStats(t, tc, 1, 2)
 
-	verifyRocksDBStats(t, tc.GetFirstStoreFromServer(t, 1))
-	verifyRocksDBStats(t, tc.GetFirstStoreFromServer(t, 2))
+	verifyStorageStats(t, tc.GetFirstStoreFromServer(t, 1))
+	verifyStorageStats(t, tc.GetFirstStoreFromServer(t, 2))
 }
 
 // TestStoreMaxBehindNanosOnlyTracksEpochBasedLeases ensures that the metric
