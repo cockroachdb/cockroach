@@ -232,6 +232,7 @@ yarn_install(
     yarn_lock = "//pkg/ui:yarn.lock",
     links = {
       "@cockroachlabs/crdb-protobuf-client": "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+      "@cockroachlabs/crdb-protobuf-client-ccl": "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
       "@cockroachlabs/cluster-ui": "//pkg/ui/workspaces/cluster-ui:cluster-ui",
     },
 )
