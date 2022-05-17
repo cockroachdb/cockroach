@@ -57,15 +57,26 @@ type ColumnDefDescs struct {
 // hash-sharded index or primary key.
 const MaxBucketAllowed = 2048
 
+// ExprContext is an enum type of possible expressions on a column
+// (e.g. 'DEFAULT' expression or 'ON UPDATE' expression).
+type ExprContext string
+
+const (
+	DefaultExpr  ExprContext = "DEFAULT"
+	OnUpdateExpr ExprContext = "ON UPDATE"
+)
+
 // ForEachTypedExpr iterates over each typed expression in this struct.
-func (cdd *ColumnDefDescs) ForEachTypedExpr(fn func(tree.TypedExpr) error) error {
+func (cdd *ColumnDefDescs) ForEachTypedExpr(
+	fn func(expr tree.TypedExpr, whichExpr ExprContext) error,
+) error {
 	if cdd.ColumnTableDef.HasDefaultExpr() {
-		if err := fn(cdd.DefaultExpr); err != nil {
+		if err := fn(cdd.DefaultExpr, DefaultExpr); err != nil {
 			return err
 		}
 	}
 	if cdd.ColumnTableDef.HasOnUpdateExpr() {
-		if err := fn(cdd.OnUpdateExpr); err != nil {
+		if err := fn(cdd.OnUpdateExpr, OnUpdateExpr); err != nil {
 			return err
 		}
 	}
