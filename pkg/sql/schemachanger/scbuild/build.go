@@ -125,6 +125,7 @@ type builderState struct {
 	evalCtx         *eval.Context
 	semaCtx         *tree.SemaContext
 	cr              CatalogReader
+	tr              TableReader
 	auth            AuthorizationAccessor
 	commentCache    CommentCache
 	createPartCCL   CreatePartitioningCCLCallback
@@ -164,6 +165,7 @@ func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentSt
 		evalCtx:         newEvalCtx(ctx, d),
 		semaCtx:         newSemaCtx(d),
 		cr:              d.CatalogReader(),
+		tr:              d.TableReader(),
 		auth:            d.AuthorizationAccessor(),
 		createPartCCL:   d.IndexPartitioningCCLCallback(),
 		output:          make([]elementState, 0, len(initial.Current)),

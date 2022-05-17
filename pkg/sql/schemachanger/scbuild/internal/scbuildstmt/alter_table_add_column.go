@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -23,8 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 func alterTableAddColumn(
@@ -43,17 +47,32 @@ func alterTableAddColumn(
 			if t.IfNotExists {
 				return
 			}
+			if col.IsSystemColumn {
+				panic(pgerror.Newf(pgcode.DuplicateColumn,
+					"column name %q conflicts with a system column name",
+					d.Name))
+			}
 			panic(sqlerrors.NewColumnAlreadyExistsError(string(d.Name), tn.Object()))
 		}
 	}
 	if d.IsSerial {
 		panic(scerrors.NotImplementedErrorf(d, "contains serial data type"))
 	}
+	if d.GeneratedIdentity.IsGeneratedAsIdentity {
+		panic(scerrors.NotImplementedErrorf(d, "contains generated identity type"))
+	}
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
 	}
+	{
+		tableElts := b.QueryByID(tbl.TableID)
+		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
+			panic(scerrors.NotImplementedErrorf(d,
+				"regional by row partitioning is not supported"))
+		}
+	}
 	// Some of the building for the index exists below but end-to-end support is
-	// not complete so we return an error.
+	// not complete, so return an error for new unique columns.
 	if d.Unique.IsUnique {
 		panic(scerrors.NotImplementedErrorf(d, "contains unique constraint"))
 	}
@@ -90,10 +109,39 @@ func alterTableAddColumn(
 	}
 	if desc.IsComputed() {
 		expr, typ := b.ComputedColumnExpression(tbl, d)
-		spec.colType.ComputeExpr = b.WrapExpression(expr)
+		spec.colType.ComputeExpr = b.WrapExpression(tbl.TableID, expr)
 		spec.colType.TypeT = typ
+		if desc.Virtual {
+			b.IncrementSchemaChangeAddColumnQualificationCounter("virtual")
+		} else {
+			b.IncrementSchemaChangeAddColumnQualificationCounter("computed")
+		}
+
 	} else {
 		spec.colType.TypeT = b.ResolveTypeRef(d.Type)
+		if spec.colType.TypeT.Type.UserDefined() {
+			typeID, err := typedesc.UserDefinedTypeOIDToID(spec.colType.TypeT.Type.Oid())
+			if err != nil {
+				panic(err)
+			}
+			_, _, tableNamespace := scpb.FindNamespace(b.QueryByID(tbl.TableID))
+			_, _, typeNamespace := scpb.FindNamespace(b.QueryByID(typeID))
+			if typeNamespace.DatabaseID != tableNamespace.DatabaseID {
+				typeName := tree.MakeTypeNameWithPrefix(b.NamePrefix(typeNamespace), typeNamespace.Name)
+				panic(pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cross database type references are not supported: %s",
+					typeName.String()))
+			}
+		}
+		// Block unsupported types.
+		switch spec.colType.Type.Oid() {
+		case oid.T_int2vector, oid.T_oidvector:
+			panic(pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"VECTOR column types are unsupported",
+			))
+		}
 	}
 	if d.HasColumnFamily() {
 		elts := b.QueryByID(tbl.TableID)
@@ -119,18 +167,31 @@ func alterTableAddColumn(
 		}
 	}
 	if desc.HasDefault() {
+		expression := b.WrapExpression(tbl.TableID, cdd.DefaultExpr)
+		// Sequence references inside expressions are unsupported, since these will
+		// hit errors during backfill.
+		if len(expression.UsesSequenceIDs) > 0 {
+			panic(scerrors.NotImplementedErrorf(t, "sequence default expression %s", cdd.DefaultExpr))
+		}
 		spec.def = &scpb.ColumnDefaultExpression{
 			TableID:    tbl.TableID,
 			ColumnID:   spec.col.ColumnID,
-			Expression: *b.WrapExpression(cdd.DefaultExpr),
+			Expression: *expression,
 		}
+		b.IncrementSchemaChangeAddColumnQualificationCounter("default_expr")
+	}
+	// We're checking to see if a user is trying add a non-nullable column without a default to a
+	// non-empty table by scanning the primary index span with a limit of 1 to see if any key exists.
+	if !desc.Nullable && !desc.HasDefault() && !desc.IsComputed() && !b.IsTableEmpty(tbl) {
+		panic(sqlerrors.NewNonNullViolationError(d.Name.String()))
 	}
 	if desc.HasOnUpdate() {
 		spec.onUpdate = &scpb.ColumnOnUpdateExpression{
 			TableID:    tbl.TableID,
 			ColumnID:   spec.col.ColumnID,
-			Expression: *b.WrapExpression(cdd.OnUpdateExpr),
+			Expression: *b.WrapExpression(tbl.TableID, cdd.OnUpdateExpr),
 		}
+		b.IncrementSchemaChangeAddColumnQualificationCounter("on_update")
 	}
 	// Add secondary indexes for this column.
 	if newPrimary := addColumn(b, spec); newPrimary != nil {
@@ -138,6 +199,12 @@ func alterTableAddColumn(
 			idx.ID = b.NextTableIndexID(tbl)
 			addSecondaryIndexTargetsForAddColumn(b, tbl, idx, newPrimary.SourceIndexID)
 		}
+	}
+	switch spec.colType.Type.Family() {
+	case types.EnumFamily:
+		b.IncrementEnumCounter(sqltelemetry.EnumInTable)
+	default:
+		b.IncrementSchemaChangeAddColumnTypeCounter(spec.colType.Type.TelemetryName())
 	}
 }
 

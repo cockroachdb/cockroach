@@ -4,6 +4,7 @@ load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 load(":gen.bzl", "batch_gen")
 
 go_library(
@@ -71,7 +72,6 @@ go_test(
         "app_stats_test.go",
         "batch_test.go",
         "data_test.go",
-        "dep_test.go",
         "errors_test.go",
         "index_usage_stats_test.go",
         "main_test.go",
@@ -90,7 +90,6 @@ go_test(
         "//pkg/cli/exit",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/zerofields",
         "//pkg/util",
         "//pkg/util/bitarray",
@@ -213,4 +212,9 @@ batch_gen(
         ":__pkg__",
         "//pkg/gen:__pkg__",
     ],
+)
+
+disallowed_imports_test(
+    "roachpb",
+    disallow_cdeps = True,
 )

@@ -774,7 +774,7 @@ CREATE TABLE default_err_test (foo text)
 statement ok
 INSERT INTO default_err_test VALUES ('foo'), ('bar'), ('baz')
 
-statement error some_msg
+statement error pgcode foo some_msg
 ALTER TABLE default_err_test ADD COLUMN id int DEFAULT crdb_internal.force_error('foo', 'some_msg')
 
 query T
@@ -1910,7 +1910,7 @@ SELECT count(usage_count)
 query I
 SELECT count(usage_count)
   FROM crdb_internal.feature_usage
- WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 4;
+ WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 1;
 ----
 1
 

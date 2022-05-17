@@ -76,7 +76,7 @@ export function makeActiveStatementsColumns(): ColumnDescriptor<
       name: "startTime",
       title: executionsTableTitles.startTime(execType),
       cell: (item: ActiveStatement) =>
-        item.start.format("MMM D, YYYY [at] h:mm a"),
+        item.start.format("MMM D, YYYY [at] H:mm"),
       sort: (item: ActiveStatement) => item.start.unix(),
     },
     {

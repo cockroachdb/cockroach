@@ -276,10 +276,12 @@ disallowed_imports_test(
     "tree",
     disallowed_list = [
         "//pkg/kv",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server",
         "//pkg/sql/sessiondata",
         "//pkg/storage",
+        "//pkg/util/log",
     ],
     disallowed_prefixes = [
         "pkg/sql/catalog",

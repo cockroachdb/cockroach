@@ -238,7 +238,7 @@ export class DatabaseTablePage extends React.Component<
       return "Last reset: Never";
     } else {
       return (
-        "Last reset: " + lastReset.format("MMM DD, YYYY [at] h:mm A [(UTC)]")
+        "Last reset: " + lastReset.format("MMM DD, YYYY [at] H:mm [(UTC)]")
       );
     }
   }
@@ -250,7 +250,7 @@ export class DatabaseTablePage extends React.Component<
       return "Never";
     }
     return indexStat.lastUsed.format(
-      `[Last ${indexStat.lastUsedType}:] MMM DD, YYYY [at] h:mm A`,
+      `[Last ${indexStat.lastUsedType}:] MMM DD, YYYY [at] H:mm`,
     );
   }
 
@@ -431,7 +431,7 @@ export class DatabaseTablePage extends React.Component<
                       <SummaryCardItem
                         label="Table Stats Last Updated"
                         value={this.props.details.statsLastUpdated.format(
-                          "MMM DD, YYYY [at] h:mm A [(UTC)]",
+                          "MMM DD, YYYY [at] H:mm [(UTC)]",
                         )}
                       />
                     )}

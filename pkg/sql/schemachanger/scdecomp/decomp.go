@@ -237,9 +237,6 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			return nil
 		})
 		for _, col := range tbl.AllColumns() {
-			if col.IsSystemColumn() {
-				continue
-			}
 			w.walkColumn(tbl, col)
 		}
 	}
@@ -327,6 +324,7 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOption(),
 		PgAttributeNum:                    col.GetPGAttributeNum(),
+		IsSystemColumn:                    col.IsSystemColumn(),
 	}
 	w.ev(maybeMutationStatus(col), column)
 	w.ev(scpb.Status_PUBLIC, &scpb.ColumnName{

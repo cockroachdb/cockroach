@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -88,7 +89,12 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		}
 		return nil, false, err
 	}
-	return &schemaChangePlanNode{plannedState: state}, true, nil
+	return &schemaChangePlanNode{
+		stmt:         stmt,
+		sql:          p.stmt.SQL,
+		lastState:    scs.state,
+		plannedState: state,
+	}, true, nil
 }
 
 // waitForDescriptorSchemaChanges polls the specified descriptor (in separate
@@ -159,15 +165,50 @@ func (p *planner) waitForDescriptorSchemaChanges(
 // schemaChangePlanNode is the planNode utilized by the new schema changer to
 // perform all schema changes, unified in the new schema changer.
 type schemaChangePlanNode struct {
+	sql  string
+	stmt tree.Statement
+	// lastState was the state observed so far while planning for the current
+	// transaction, for all the statements under it.
+	lastState scpb.CurrentState
 	// plannedState contains the state produced by the builder combining
 	// the nodes that existed preceding the current statement with the output of
-	// the built current statement.
+	// the built current statement. There maybe cases like CTE's, where we will
+	// need to re-plan if the lastState that the plannedState do not match, since
+	// we are executing DDL statements in an unexpected way.
 	plannedState scpb.CurrentState
 }
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
+
+	// Our current state does not match what was previously planned for, which means
+	// that potentially we are running CTE's with ALTER statements. So, we are going
+	// to re-plan the state to include the current statement since the statement
+	// phase was not executed.
+	if !reflect.DeepEqual(s.lastState.Current, scs.state.Current) {
+		deps := scdeps.NewBuilderDependencies(
+			p.ExecCfg().LogicalClusterID(),
+			p.ExecCfg().Codec,
+			p.Txn(),
+			p.Descriptors(),
+			NewSkippingCacheSchemaResolver,
+			p,
+			p,
+			p,
+			p.SessionData(),
+			p.ExecCfg().Settings,
+			scs.stmts,
+			p.ExecCfg().InternalExecutor,
+		)
+		state, err := scbuild.Build(params.ctx, deps, scs.state, s.stmt)
+		if err != nil {
+			return err
+		}
+		// Update with the re-planned state.
+		s.plannedState = state
+	}
+
 	runDeps := newSchemaChangerTxnRunDependencies(
 		p.SessionData(),
 		p.User(),
@@ -218,6 +259,8 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),
 		execCfg.DescMetadaUpdaterFactory,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
+		execCfg.StatsRefresher,
+		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		kvTrace,
 		schemaChangerJobID,
 		stmts,

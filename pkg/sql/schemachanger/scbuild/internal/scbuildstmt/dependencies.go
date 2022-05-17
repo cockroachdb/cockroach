@@ -129,6 +129,15 @@ type Telemetry interface {
 	// counter.
 	IncrementSchemaChangeDropCounter(counterType string)
 
+	// IncrementSchemaChangeAddColumnTypeCounter increments telemetry counters for
+	// different types added as columns.
+	IncrementSchemaChangeAddColumnTypeCounter(typeName string)
+
+	// IncrementSchemaChangeAddColumnQualificationCounter increments telemetry
+	// counters for different qualifications (default expressions) on a newly
+	// added column.
+	IncrementSchemaChangeAddColumnQualificationCounter(qualification string)
+
 	// IncrementUserDefinedSchemaCounter increments the selected user-defined
 	// schema telemetry counter.
 	IncrementUserDefinedSchemaCounter(counterType sqltelemetry.UserDefinedSchemaTelemetryType)
@@ -186,12 +195,15 @@ type TableHelpers interface {
 	ResolveTypeRef(typeref tree.ResolvableTypeReference) scpb.TypeT
 
 	// WrapExpression constructs an expression wrapper given an AST.
-	WrapExpression(expr tree.Expr) *scpb.Expression
+	WrapExpression(parentID catid.DescID, expr tree.Expr) *scpb.Expression
 
 	// ComputedColumnExpression returns a validated computed column expression
 	// and its type.
 	// TODO(postamar): make this more low-level instead of consuming an AST
 	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) (tree.Expr, scpb.TypeT)
+
+	// IsTableEmpty returns if the table is empty or not.
+	IsTableEmpty(tbl *scpb.Table) bool
 }
 
 // ElementResultSet wraps the results of an element query.

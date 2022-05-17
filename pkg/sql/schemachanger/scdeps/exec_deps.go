@@ -61,6 +61,8 @@ func NewExecutorDependencies(
 	clock scmutationexec.Clock,
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
 	eventLogger scexec.EventLogger,
+	statsRefresher scexec.StatsRefresher,
+	testingKnobs *scexec.TestingKnobs,
 	kvTrace bool,
 	schemaChangerJobID jobspb.JobID,
 	statements []string,
@@ -73,6 +75,7 @@ func NewExecutorDependencies(
 			jobRegistry:        jobRegistry,
 			indexValidator:     indexValidator,
 			eventLogger:        eventLogger,
+			statsRefresher:     statsRefresher,
 			schemaChangerJobID: schemaChangerJobID,
 			kvTrace:            kvTrace,
 		},
@@ -84,20 +87,23 @@ func NewExecutorDependencies(
 		user:                    user,
 		sessionData:             sessionData,
 		clock:                   clock,
+		testingKnobs:            testingKnobs,
 	}
 }
 
 type txnDeps struct {
-	txn                *kv.Txn
-	codec              keys.SQLCodec
-	descsCollection    *descs.Collection
-	jobRegistry        JobRegistry
-	createdJobs        []jobspb.JobID
-	indexValidator     scexec.IndexValidator
-	eventLogger        scexec.EventLogger
-	deletedDescriptors catalog.DescriptorIDSet
-	schemaChangerJobID jobspb.JobID
-	kvTrace            bool
+	txn                 *kv.Txn
+	codec               keys.SQLCodec
+	descsCollection     *descs.Collection
+	jobRegistry         JobRegistry
+	createdJobs         []jobspb.JobID
+	indexValidator      scexec.IndexValidator
+	statsRefresher      scexec.StatsRefresher
+	tableStatsToRefresh []descpb.ID
+	eventLogger         scexec.EventLogger
+	deletedDescriptors  catalog.DescriptorIDSet
+	schemaChangerJobID  jobspb.JobID
+	kvTrace             bool
 }
 
 func (d *txnDeps) UpdateSchemaChangeJob(
@@ -359,6 +365,7 @@ type execDeps struct {
 	statements              []string
 	user                    username.SQLUsername
 	sessionData             *sessiondata.SessionData
+	testingKnobs            *scexec.TestingKnobs
 }
 
 func (d *execDeps) Clock() scmutationexec.Clock {
@@ -422,6 +429,27 @@ type EventLoggerFactory = func(*kv.Txn) scexec.EventLogger
 // EventLogger implements scexec.Dependencies
 func (d *execDeps) EventLogger() scexec.EventLogger {
 	return d.eventLogger
+}
+
+// GetTestingKnobs implements scexec.Dependencies
+func (d *execDeps) GetTestingKnobs() *scexec.TestingKnobs {
+	return d.testingKnobs
+}
+
+// AddTableForStatsRefresh adds a table for stats refresh once we are finished
+// executing the current transaction.
+func (d *execDeps) AddTableForStatsRefresh(id descpb.ID) {
+	d.tableStatsToRefresh = append(d.tableStatsToRefresh, id)
+}
+
+// getTablesForStatsRefresh gets tables that need refresh for stats.
+func (d *execDeps) getTablesForStatsRefresh() []descpb.ID {
+	return d.tableStatsToRefresh
+}
+
+// StatsRefreshQueue implements scexec.Dependencies
+func (d *execDeps) StatsRefresher() scexec.StatsRefreshQueue {
+	return d
 }
 
 // NewNoOpBackfillTracker constructs a backfill tracker which does not do

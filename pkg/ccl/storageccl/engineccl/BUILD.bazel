@@ -7,7 +7,6 @@ go_library(
         "encrypted_fs.go",
         "pebble_key_manager.go",
     ],
-    cdeps = [],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl",
     visibility = ["//visibility:public"],
     deps = [

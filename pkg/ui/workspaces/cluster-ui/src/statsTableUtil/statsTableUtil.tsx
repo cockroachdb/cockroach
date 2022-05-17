@@ -838,8 +838,8 @@ export function formatAggregationIntervalColumn(
   aggregatedTs: number,
   interval: number,
 ): string {
-  const formatStr = "MMM D, h:mm A";
-  const formatStrWithoutDay = "h:mm A";
+  const formatStr = "MMM D, H:mm";
+  const formatStrWithoutDay = "H:mm";
   const start = moment.unix(aggregatedTs).utc();
   const end = moment.unix(aggregatedTs + interval).utc();
   const isSameDay = start.isSame(end, "day");

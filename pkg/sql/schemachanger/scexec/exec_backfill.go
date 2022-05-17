@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -233,7 +234,13 @@ func runBackfills(
 	progresses []BackfillProgress,
 	tables map[descpb.ID]catalog.TableDescriptor,
 ) error {
-
+	if deps.GetTestingKnobs() != nil &&
+		deps.GetTestingKnobs().RunBeforeBackfill != nil {
+		err := deps.GetTestingKnobs().RunBeforeBackfill()
+		if err != nil {
+			return err
+		}
+	}
 	stop := deps.PeriodicProgressFlusher().StartPeriodicUpdates(ctx, tracker)
 	defer func() { _ = stop() }()
 	bf := deps.IndexBackfiller()
@@ -245,7 +252,7 @@ func runBackfills(
 			ctx, deps.IndexSpanSplitter(), bf, *p, tracker, tables[p.TableID],
 		)
 	}); err != nil {
-		return err
+		return scerrors.SchemaChangerUserError(err)
 	}
 	if err := stop(); err != nil {
 		return err

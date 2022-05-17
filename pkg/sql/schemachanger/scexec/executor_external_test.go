@@ -76,6 +76,8 @@ func (ti testInfra) newExecDeps(
 		scdeps.NewConstantClock(timeutil.Now()),
 		noopMetadataUpdaterFactory{},
 		noopEventLogger{},
+		noopStatsReferesher{},
+		&scexec.TestingKnobs{},
 		kvTrace,
 		schemaChangerJobID,
 		nil, /* statements */
@@ -512,6 +514,18 @@ func (noopEventLogger) LogEvent(
 	return nil
 }
 
+func (noopEventLogger) LogEventForSchemaChange(
+	_ context.Context, _ descpb.ID, _ eventpb.EventPayload,
+) error {
+	return nil
+}
+
+type noopStatsReferesher struct{}
+
+func (noopStatsReferesher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
+
+}
+
 type noopMetadataUpdaterFactory struct {
 }
 
@@ -578,4 +592,5 @@ func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64)
 var _ scexec.Backfiller = noopBackfiller{}
 var _ scexec.IndexValidator = noopIndexValidator{}
 var _ scexec.EventLogger = noopEventLogger{}
+var _ scexec.StatsRefresher = noopStatsReferesher{}
 var _ scexec.DescriptorMetadataUpdater = noopMetadataUpdater{}

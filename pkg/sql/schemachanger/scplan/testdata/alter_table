@@ -6,9 +6,10 @@ CREATE TYPE defaultdb.footyp AS ENUM('a');
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j defaultdb.footyp;
 ----
-PreCommitPhase stage 1 of 1 with 9 MutationType ops
+PreCommitPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
@@ -18,19 +19,24 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
         PgAttributeNum: 2
         TableID: 104
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Column:
           columnId: 2
           pgAttributeNum: 2
           tableId: 104
-      Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
-      StatementTag: ALTER TABLE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       TargetStatus: 2
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: j
+      TableID: 104
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
@@ -124,7 +130,6 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
@@ -140,14 +145,28 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
       Name: foo_pkey
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       IndexID: 2
-      TableID: 104
-    *scop.SetColumnName
-      ColumnID: 2
-      Name: j
       TableID: 104
     *scop.MakeColumnPublic
       ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TableID: 104
+    *scop.RefreshStats
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -184,6 +203,14 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
         Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j defaultdb.footyp
       TableID: 104
     *scop.MakeIndexAbsent
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       IndexID: 1
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
@@ -202,9 +229,10 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
-PreCommitPhase stage 1 of 1 with 7 MutationType ops
+PreCommitPhase stage 1 of 1 with 8 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT] -> DELETE_ONLY
@@ -215,19 +243,24 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
         PgAttributeNum: 2
         TableID: 104
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Column:
           columnId: 2
           pgAttributeNum: 2
           tableId: 104
-      Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
-      StatementTag: ALTER TABLE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       TargetStatus: 2
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: j
+      TableID: 104
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
@@ -307,7 +340,6 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
@@ -323,14 +355,28 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
       Name: foo_pkey
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       IndexID: 2
-      TableID: 104
-    *scop.SetColumnName
-      ColumnID: 2
-      Name: j
       TableID: 104
     *scop.MakeColumnPublic
       ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TableID: 104
+    *scop.RefreshStats
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -359,6 +405,14 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
         Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       IndexID: 1
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
@@ -372,13 +426,15 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
-PreCommitPhase stage 1 of 1 with 11 MutationType ops
+PreCommitPhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
   ops:
@@ -388,19 +444,24 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
         PgAttributeNum: 2
         TableID: 104
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Column:
           columnId: 2
           pgAttributeNum: 2
           tableId: 104
-      Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
-      StatementTag: ALTER TABLE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       TargetStatus: 2
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: j
+      TableID: 104
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
@@ -423,20 +484,25 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
         PgAttributeNum: 3
         TableID: 104
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Column:
           columnId: 3
           pgAttributeNum: 3
           tableId: 104
-      Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT ‹456›
-      StatementTag: ALTER TABLE
-      TargetMetadata:
-        SourceElementID: 1
-        StatementID: 1
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT ‹456›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          StatementID: 1
+          SubWorkID: 1
       TargetStatus: 2
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: k
+      TableID: 104
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 3
@@ -496,10 +562,10 @@ PostCommitPhase stage 1 of 4 with 5 MutationType ops
       IndexID: 2
       TableID: 104
     *scop.MakeAddedColumnDeleteAndWriteOnly
-      ColumnID: 3
+      ColumnID: 2
       TableID: 104
     *scop.MakeAddedColumnDeleteAndWriteOnly
-      ColumnID: 2
+      ColumnID: 3
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -525,11 +591,9 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
       IndexID: 1
@@ -543,21 +607,42 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
       Name: foo_pkey
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       IndexID: 2
       TableID: 104
-    *scop.SetColumnName
-      ColumnID: 3
-      Name: k
-      TableID: 104
-    *scop.SetColumnName
+    *scop.MakeColumnPublic
       ColumnID: 2
-      Name: j
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TableID: 104
+    *scop.RefreshStats
       TableID: 104
     *scop.MakeColumnPublic
       ColumnID: 3
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT ‹456›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          StatementID: 1
+          SubWorkID: 1
       TableID: 104
-    *scop.MakeColumnPublic
-      ColumnID: 2
+    *scop.RefreshStats
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -586,6 +671,14 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
         Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       IndexID: 1
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
@@ -598,9 +691,10 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-PreCommitPhase stage 1 of 1 with 6 MutationType ops
+PreCommitPhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
@@ -610,20 +704,25 @@ PreCommitPhase stage 1 of 1 with 6 MutationType ops
         PgAttributeNum: 2
         TableID: 104
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Column:
           columnId: 2
           pgAttributeNum: 2
           tableId: 104
-      Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
-        STORED
-      StatementTag: ALTER TABLE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
+          STORED
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       TargetStatus: 2
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: a
+      TableID: 104
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
@@ -699,7 +798,6 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
@@ -715,14 +813,30 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
       Name: foo_pkey
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
+          STORED
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       IndexID: 2
-      TableID: 104
-    *scop.SetColumnName
-      ColumnID: 2
-      Name: a
       TableID: 104
     *scop.MakeColumnPublic
       ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
+          STORED
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TableID: 104
+    *scop.RefreshStats
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -751,6 +865,15 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
         Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN a INT8 AS (i + 1) STORED
       TableID: 104
     *scop.MakeIndexAbsent
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
+          STORED
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       IndexID: 1
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
@@ -769,12 +892,14 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
-PreCommitPhase stage 1 of 1 with 11 MutationType ops
+PreCommitPhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[Column:{DescID: 107, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[ColumnName:{DescID: 107, Name: b, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
@@ -784,19 +909,24 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
         PgAttributeNum: 2
         TableID: 104
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Column:
           columnId: 2
           pgAttributeNum: 2
           tableId: 104
-      Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
-      StatementTag: ALTER TABLE
-      TargetMetadata:
-        SourceElementID: 1
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       TargetStatus: 2
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: a
+      TableID: 104
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
@@ -826,20 +956,25 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
         PgAttributeNum: 3
         TableID: 107
     *scop.LogEvent
-      Authorization:
-        UserName: root
       Element:
         Column:
           columnId: 3
           pgAttributeNum: 3
           tableId: 107
-      Statement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
-      StatementTag: ALTER TABLE
-      TargetMetadata:
-        SourceElementID: 1
-        StatementID: 1
-        SubWorkID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          StatementID: 1
+          SubWorkID: 1
       TargetStatus: 2
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: b
+      TableID: 107
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 3
@@ -939,13 +1074,11 @@ PostCommitPhase stage 4 of 4 with 15 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 107, Name: bar_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 107, ColumnID: 3}, PUBLIC], WRITE_ONLY] -> PUBLIC
-    [[ColumnName:{DescID: 107, Name: b, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 107, Name: bar_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
@@ -972,24 +1105,54 @@ PostCommitPhase stage 4 of 4 with 15 MutationType ops
       Name: bar_pkey
       TableID: 107
     *scop.MakeAddedPrimaryIndexPublic
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       IndexID: 2
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          StatementID: 1
+          SubWorkID: 1
       IndexID: 2
       TableID: 107
-    *scop.SetColumnName
+    *scop.MakeColumnPublic
       ColumnID: 2
-      Name: a
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       TableID: 104
-    *scop.SetColumnName
+    *scop.RefreshStats
+      TableID: 104
+    *scop.MakeColumnPublic
       ColumnID: 3
-      Name: b
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          StatementID: 1
+          SubWorkID: 1
       TableID: 107
-    *scop.MakeColumnPublic
-      ColumnID: 2
-      TableID: 104
-    *scop.MakeColumnPublic
-      ColumnID: 3
+    *scop.RefreshStats
       TableID: 107
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -1027,6 +1190,14 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
         Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN a INT8
       TableID: 104
     *scop.MakeIndexAbsent
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
       IndexID: 1
       TableID: 104
     *scop.CreateGcJobForIndex
@@ -1036,6 +1207,15 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
         StatementID: 1
       TableID: 107
     *scop.MakeIndexAbsent
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          StatementID: 1
+          SubWorkID: 1
       IndexID: 1
       TableID: 107
     *scop.RemoveJobStateFromDescriptor

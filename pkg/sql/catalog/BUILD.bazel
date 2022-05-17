@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "catalog",
@@ -44,7 +45,6 @@ go_test(
     name = "catalog_test",
     size = "small",
     srcs = [
-        "dep_test.go",
         "descriptor_test.go",
         "table_col_map_test.go",
         "table_col_set_test.go",
@@ -57,12 +57,15 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",
-        "//pkg/testutils/buildutil",
         "//pkg/util",
-        "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
+)
+
+disallowed_imports_test(
+    "catalog",
+    disallow_cdeps = True,
 )

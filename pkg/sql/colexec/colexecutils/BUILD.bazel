@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "colexecutils",
@@ -38,7 +39,6 @@ go_test(
     srcs = [
         "bool_vec_to_sel_test.go",
         "cancel_checker_test.go",
-        "dep_test.go",
         "deselector_test.go",
         "main_test.go",
         "spilling_buffer_test.go",
@@ -60,7 +60,6 @@ go_test(
         "//pkg/sql/randgen",
         "//pkg/sql/sem/eval",
         "//pkg/sql/types",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/skip",
         "//pkg/util/cancelchecker",
@@ -71,5 +70,12 @@ go_test(
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    "colexecutils",
+    disallowed_prefixes = [
+        "pkg/sql/colexec/",
     ],
 )
