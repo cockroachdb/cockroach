@@ -83,9 +83,15 @@ build:crosslinuxs390xbase --config=cross
 # NB: This is consumed in `BUILD` files (see build/toolchains/BUILD.bazel).
 build:devdarwinx86_64 --platforms=//build/toolchains:darwin_x86_64
 build:devdarwinx86_64 --config=dev
-build:dev --stamp --workspace_status_command=./build/bazelutil/stamp.sh
+build:dev --config=simplestamp
 build:dev --action_env=PATH
 build:dev --host_action_env=PATH
+
+# --config=simplestamp configures the build to stamp the build with inferred
+# information about the configuration.
+# All `dev` builds will use this configuration; all `cross` builds will use a
+# more precise --workspace_status_command option.
+build:simplestamp --stamp --workspace_status_command=./build/bazelutil/stamp.sh
 
 try-import %workspace%/.bazelrc.user
 
