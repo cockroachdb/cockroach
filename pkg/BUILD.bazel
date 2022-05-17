@@ -341,6 +341,7 @@ ALL_TESTS = [
     "//pkg/sql/opt/testutils:testutils_test",
     "//pkg/sql/opt/xform:xform_test",
     "//pkg/sql/opt:opt_test",
+    "//pkg/sql/parser:parser_disallowed_imports_test",
     "//pkg/sql/parser:parser_test",
     "//pkg/sql/pgwire/hba:hba_test",
     "//pkg/sql/pgwire/identmap:identmap_test",
