@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -331,7 +331,7 @@ func (imt *IndexMergeTracker) UpdateMergeProgress(
 }
 
 func newPeriodicProgressFlusher(settings *cluster.Settings) scexec.PeriodicProgressFlusher {
-	return scdeps.NewPeriodicProgressFlusher(
+	return backfiller.NewPeriodicProgressFlusher(
 		func() time.Duration {
 			return backfill.IndexBackfillCheckpointInterval.Get(&settings.SV)
 		},
