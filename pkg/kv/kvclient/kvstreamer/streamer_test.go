@@ -12,6 +12,7 @@ package kvstreamer
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math"
 	"sync"
@@ -109,6 +110,15 @@ func TestStreamerLimitations(t *testing.T) {
 	})
 }
 
+// assertTableID verifies that the table specified by 'tableName' has the
+// provided value for TableID.
+func assertTableID(t *testing.T, db *gosql.DB, tableName string, tableID int) {
+	r := db.QueryRow(fmt.Sprintf("SELECT '%s'::regclass::oid", tableName))
+	var actualTableID int
+	require.NoError(t, r.Scan(&actualTableID))
+	require.Equal(t, tableID, actualTableID)
+}
+
 // TestStreamerBudgetErrorInEnqueue verifies the behavior of the Streamer in
 // Enqueue when its limit and/or root pool limit are exceeded. Additional tests
 // around the memory limit errors (when the responses exceed the limit) can be
@@ -125,6 +135,10 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	_, err := db.Exec("CREATE TABLE foo (pk_blob STRING PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute))")
 	require.NoError(t, err)
 
+	const tableID = 104
+	// Sanity check that the table 'foo' has the expected TableID.
+	assertTableID(t, db, "foo" /* tableName */, tableID)
+
 	// makeGetRequest returns a valid GetRequest that wants to lookup a key with
 	// value 'a' repeated keySize number of times in the primary index of table
 	// foo.
@@ -133,7 +147,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 		var get roachpb.GetRequest
 		var union roachpb.RequestUnion_Get
 		key := make([]byte, keySize+6)
-		key[0] = 240
+		key[0] = tableID + 136
 		key[1] = 137
 		key[2] = 18
 		for i := 0; i < keySize; i++ {
@@ -378,6 +392,10 @@ func TestStreamerEmptyScans(t *testing.T) {
 	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k), FAMILY (pk, k), FAMILY (blob))")
 	require.NoError(t, err)
 
+	const tableID = 104
+	// Sanity check that the table 't' has the expected TableID.
+	assertTableID(t, db, "t" /* tableName */, tableID)
+
 	// Split the table into 5 ranges and populate the range cache.
 	for pk := 1; pk < 5; pk++ {
 		_, err = db.Exec(fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES(%d)", pk))
@@ -392,7 +410,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 		var union roachpb.RequestUnion_Scan
 		makeKey := func(pk int) []byte {
 			// These numbers essentially make a key like '/t/primary/pk'.
-			return []byte{240, 137, byte(136 + pk)}
+			return []byte{tableID + 136, 137, byte(136 + pk)}
 		}
 		scan.Key = makeKey(start)
 		scan.EndKey = makeKey(end)
