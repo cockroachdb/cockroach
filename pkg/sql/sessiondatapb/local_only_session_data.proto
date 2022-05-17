@@ -271,6 +271,8 @@ message LocalOnlySessionData {
   // given probability. This should only be used in test scenarios and is very
   // much a non-production setting.
   double testing_optimizer_disable_rule_probability = 73;
+  // ScanPlaceholderFastPath controls whether we optimize placeholder scans.
+  bool scan_placeholder_fast_path = 74;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -273,6 +273,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled = false
 	notStale()
 
+	// Stale enable scan placeholder fast path.
+	evalCtx.SessionData().ScanPlaceholderFastPath = true
+	stale()
+	evalCtx.SessionData().ScanPlaceholderFastPath = false
+	notStale()
+
 	// Stale testing_optimizer_random_seed.
 	evalCtx.SessionData().TestingOptimizerRandomSeed = 100
 	stale()

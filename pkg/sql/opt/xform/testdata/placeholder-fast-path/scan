@@ -326,3 +326,8 @@ placeholder-scan t_dec
  ├── fd: ()-->(1,2)
  └── span
       └── $1
+
+placeholder-fast-path scan-placeholder-fast-path=false
+SELECT a, b FROM partial1 WHERE a = $1
+----
+no fast path
