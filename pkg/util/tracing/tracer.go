@@ -1013,6 +1013,7 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	// We'll zero-out the spanAllocHelper, though, to make all the elements
 	// available for GC.
 	c := sp.i.crdb
+	c.eventListeners = nil
 	// Nobody is supposed to have a reference to the span at this point, but let's
 	// take the lock anyway to protect against buggy clients accessing the span
 	// after Finish().
@@ -1020,7 +1021,6 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	c.mu.openChildren = nil
 	c.mu.recording.finishedChildren = nil
 	c.mu.tags = nil
-	c.mu.eventListeners = nil
 	c.mu.recording.logs.Discard()
 	c.mu.recording.structured.Discard()
 	c.mu.Unlock()
