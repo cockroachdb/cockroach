@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "parser",
@@ -144,4 +145,20 @@ exports_files(
         "help.awk",
     ],
     visibility = ["//visibility:public"],
+)
+
+disallowed_imports_test(
+    "parser",
+    disallowed_list = [
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/server",
+        "//pkg/sql/sessiondata",
+        "//pkg/storage",
+        "//pkg/util/log",
+    ],
+    disallowed_prefixes = [
+        "pkg/sql/catalog",
+    ],
 )

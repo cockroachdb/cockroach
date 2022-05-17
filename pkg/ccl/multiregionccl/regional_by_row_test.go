@@ -394,7 +394,12 @@ USE t;
 							if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
 								t.Fatal(err)
 							}
-
+							// Disable declarative schema changer for the add column, since
+							// the backfill callbacks required are not currently used (they
+							// need the MVCC compliant backfiller).
+							if _, err := sqlDB.Exec(`SET use_declarative_schema_changer='off'`); err != nil {
+								t.Fatal(err)
+							}
 							// We add the "cr" column, which can be used for REGIONAL BY ROW AS.
 							if _, err := sqlDB.Exec(`
 		ALTER TABLE t.test ADD COLUMN cr t.crdb_internal_region

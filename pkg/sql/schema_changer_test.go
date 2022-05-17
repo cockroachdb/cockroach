@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -3765,7 +3766,11 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
-
+	// Declarative schema changer does not use then new MVCC backfiller, so
+	// fall back for now.
+	if _, err := sqlDB.Exec("SET use_declarative_schema_changer='off'"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`
  CREATE DATABASE t;
  CREATE TABLE t.test (k INT8 PRIMARY KEY, v INT8, pi DECIMAL DEFAULT (DECIMAL '3.14'));
@@ -7730,8 +7735,10 @@ CREATE TABLE t.test (x INT);`,
 				return nil
 			}
 			params.Knobs = base.TestingKnobs{
+				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+					RunBeforeBackfill: waitFunc,
+				},
 				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-					RunBeforeBackfill:          waitFunc,
 					RunBeforeModifyRowLevelTTL: waitFunc,
 				},
 			}

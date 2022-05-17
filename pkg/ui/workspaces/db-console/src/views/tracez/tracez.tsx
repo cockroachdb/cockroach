@@ -44,7 +44,7 @@ import ISpanTag = cockroach.server.serverpb.ISpanTag;
 import SetTraceRecordingTypeRequest = cockroach.server.serverpb.SetTraceRecordingTypeRequest;
 import RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
 
-const TS_FORMAT = "MMMM Do YYYY, h:mm:ss a"; // January 28th 2022, 7:12:40 pm;
+const TS_FORMAT = "MMMM Do YYYY, H:mm:ss"; // January 28th 2022, 19:12:40;
 
 const tsToFormat = (ts: google.protobuf.ITimestamp) =>
   util.TimestampToMoment(ts).format(TS_FORMAT);

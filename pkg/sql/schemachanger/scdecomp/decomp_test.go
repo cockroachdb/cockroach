@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -29,7 +29,7 @@ func TestDecomposeToElements(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	newCluster := func(t *testing.T, knobs *scrun.TestingKnobs) (_ *gosql.DB, cleanup func()) {
+	newCluster := func(t *testing.T, knobs *scexec.TestingKnobs) (_ *gosql.DB, cleanup func()) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		return tc.ServerConn(0), func() { tc.Stopper().Stop(ctx) }
 	}

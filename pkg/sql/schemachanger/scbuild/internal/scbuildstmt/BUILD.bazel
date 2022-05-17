@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -46,5 +47,6 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
     ],
 )

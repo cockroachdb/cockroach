@@ -164,7 +164,7 @@ export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
   return `${(nanoseconds / Math.pow(1000, n)).toFixed(2)} ${scale}`;
 };
 
-export const DATE_FORMAT = "MMM DD, YYYY [at] h:mm A";
+export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
 
 export function RenderCount(yesCount: Long, totalCount: Long) {
   if (longToInt(yesCount) == 0) {

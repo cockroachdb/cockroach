@@ -81,7 +81,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1210,7 +1209,7 @@ type ExecutorConfig struct {
 	UpgradeTestingKnobs                  *upgrade.TestingKnobs
 	PGWireTestingKnobs                   *PGWireTestingKnobs
 	SchemaChangerTestingKnobs            *SchemaChangerTestingKnobs
-	DeclarativeSchemaChangerTestingKnobs *scrun.TestingKnobs
+	DeclarativeSchemaChangerTestingKnobs *scexec.TestingKnobs
 	TypeSchemaChangerTestingKnobs        *TypeSchemaChangerTestingKnobs
 	GCJobTestingKnobs                    *GCJobTestingKnobs
 	DistSQLRunTestingKnobs               *execinfra.TestingKnobs

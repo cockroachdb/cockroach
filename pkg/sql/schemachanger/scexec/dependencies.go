@@ -39,6 +39,8 @@ type Dependencies interface {
 	IndexSpanSplitter() IndexSpanSplitter
 	EventLogger() EventLogger
 	DescriptorMetadataUpdater(ctx context.Context) DescriptorMetadataUpdater
+	StatsRefresher() StatsRefreshQueue
+	GetTestingKnobs() *TestingKnobs
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
@@ -66,12 +68,17 @@ type Catalog interface {
 
 // EventLogger encapsulates the operations for emitting event log entries.
 type EventLogger interface {
-	// LogEvent writes to the eventlog.
+	// LogEvent writes to the event log.
 	LogEvent(
 		ctx context.Context,
 		descID descpb.ID,
 		details eventpb.CommonSQLEventDetails,
 		event eventpb.EventPayload,
+	) error
+
+	// LogEventForSchemaChange write a schema change event entry into the event log.
+	LogEventForSchemaChange(
+		ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
 	) error
 }
 
@@ -294,4 +301,17 @@ type DescriptorMetadataUpdaterFactory interface {
 	NewMetadataUpdater(
 		ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
 	) DescriptorMetadataUpdater
+}
+
+// StatsRefreshQueue queues table for stats refreshes.
+type StatsRefreshQueue interface {
+	// AddTableForStatsRefresh adds a table for a stats refresh.
+	AddTableForStatsRefresh(id descpb.ID)
+}
+
+// StatsRefresher responsible for refreshing table stats.
+type StatsRefresher interface {
+	// NotifyMutation notifies the stats refresher that a table needs its
+	// statistics updated.
+	NotifyMutation(table catalog.TableDescriptor, rowsAffected int)
 }

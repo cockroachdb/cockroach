@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Alert, DatePicker, Form, Input, Popover, TimePicker } from "antd";
 import moment, { Moment } from "moment";
 import classNames from "classnames/bind";
@@ -17,13 +17,12 @@ import { Button } from "src/button";
 import { Text, TextTypes } from "src/text";
 
 import styles from "./dateRange.module.scss";
-import { usePrevious } from "../util/hooks";
 
 const cx = classNames.bind(styles);
 
 function rangeToString(start: Moment, end: Moment): string {
-  const formatStr = "MMM D, h:mm A";
-  const formatStrSameDay = "h:mm A";
+  const formatStr = "MMM D, H:mm";
+  const formatStrSameDay = "H:mm";
 
   const isSameDay = start.isSame(end, "day");
   return `${start.utc().format(formatStr)} - ${end
@@ -47,7 +46,7 @@ export function DateRangeMenu({
   onCancel,
 }: DateRangeMenuProps): React.ReactElement {
   const dateFormat = "MMMM D, YYYY";
-  const timeFormat = "h:mm A [(UTC)]";
+  const timeFormat = "H:mm [(UTC)]";
   /**
    * Local startMoment and endMoment state are stored here so that users can change the time before clicking "Apply".
    * They are re-initialized to startInit and endInit by re-mounting this component. It is thus the responsibility of
@@ -125,7 +124,6 @@ export function DateRangeMenu({
         onChange={onChangeStart}
         suffixIcon={<span />}
         value={startMoment}
-        use12Hours
       />
       <div className={cx("divider")} />
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
@@ -145,7 +143,6 @@ export function DateRangeMenu({
         onChange={onChangeEnd}
         suffixIcon={<span />}
         value={endMoment}
-        use12Hours
       />
       {!isValid && (
         <Alert

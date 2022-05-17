@@ -130,16 +130,25 @@ func (b *builderState) CheckPrivilege(e scpb.Element, privilege privilege.Kind) 
 	b.checkPrivilege(screl.GetDescID(e), privilege)
 }
 
-func (b *builderState) checkPrivilege(id catid.DescID, privilege privilege.Kind) {
+func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 	b.ensureDescriptor(id)
 	c := b.descCache[id]
 	if c.hasOwnership {
 		return
 	}
-	err, found := c.privileges[privilege]
+	err, found := c.privileges[priv]
 	if !found {
-		err = b.auth.CheckPrivilege(b.ctx, c.desc, privilege)
-		c.privileges[privilege] = err
+		// Validate if this descriptor can be resolved under the current schema.
+		if c.desc.DescriptorType() != catalog.Schema &&
+			c.desc.DescriptorType() != catalog.Database {
+			scpb.ForEachSchemaParent(c.ers, func(current scpb.Status, target scpb.TargetStatus, e *scpb.SchemaParent) {
+				if current == scpb.Status_PUBLIC {
+					b.checkPrivilege(e.SchemaID, privilege.USAGE)
+				}
+			})
+		}
+		err = b.auth.CheckPrivilege(b.ctx, c.desc, priv)
+		c.privileges[priv] = err
 	}
 	if err != nil {
 		panic(err)
@@ -161,6 +170,9 @@ func (b *builderState) NextTableColumnID(table *scpb.Table) (ret catid.ColumnID)
 		ret = tbl.GetNextColumnID()
 	}
 	scpb.ForEachColumn(b, func(_ scpb.Status, _ scpb.TargetStatus, column *scpb.Column) {
+		if column.IsSystemColumn {
+			return
+		}
 		if column.TableID == table.TableID && column.ColumnID >= ret {
 			ret = column.ColumnID + 1
 		}
@@ -199,6 +211,14 @@ func (b *builderState) NextViewIndexID(view *scpb.View) (ret catid.IndexID) {
 		panic(errors.AssertionFailedf("expected materialized view: %s", screl.ElementString(view)))
 	}
 	return b.nextIndexID(view.ViewID)
+}
+
+func (b *builderState) IsTableEmpty(table *scpb.Table) bool {
+	// Scan the table for any rows, if they exist the lack of a default value
+	// should lead to an error.
+	elts := b.QueryByID(table.TableID)
+	_, _, index := scpb.FindPrimaryIndex(elts)
+	return b.tr.IsTableEmpty(b.ctx, table.TableID, index.IndexID)
 }
 
 func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
@@ -298,7 +318,15 @@ func newTypeT(t *types.T) scpb.TypeT {
 }
 
 // WrapExpression implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) WrapExpression(expr tree.Expr) *scpb.Expression {
+func (b *builderState) WrapExpression(parentID catid.DescID, expr tree.Expr) *scpb.Expression {
+	// We will serialize and reparse the expression, so that type information
+	// annotations are directly embedded inside, otherwise while parsing the
+	// expression table record implicit types will not be correctly detected
+	// by the TypeCollectorVisitor.
+	expr, err := parser.ParseExpr(tree.Serialize(expr))
+	if err != nil {
+		panic(err)
+	}
 	if expr == nil {
 		return nil
 	}
@@ -316,7 +344,25 @@ func (b *builderState) WrapExpression(expr tree.Expr) *scpb.Expression {
 				panic(err)
 			}
 			b.ensureDescriptor(id)
-			typ, err := catalog.AsTypeDescriptor(b.descCache[id].desc)
+			desc := b.descCache[id].desc
+			// Implicit record types will lead to table references, which will be
+			// disallowed.
+			if desc.DescriptorType() == catalog.Table {
+				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"cannot modify table record type %q", desc.GetName()))
+			}
+			// Validate that no cross DB type references will exist here.
+			// Determine the parent database ID, since cross database references are
+			// disallowed.
+			_, _, parentNamespace := scpb.FindNamespace(b.QueryByID(parentID))
+			if desc.GetParentID() != parentNamespace.DatabaseID {
+				typeName := tree.MakeTypeNameWithPrefix(b.descCache[id].prefix, desc.GetName())
+				panic(pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cross database type references are not supported: %s",
+					typeName.String()))
+			}
+			typ, err := catalog.AsTypeDescriptor(desc)
 			if err != nil {
 				panic(err)
 			}
@@ -386,7 +432,10 @@ func (b *builderState) ComputedColumnExpression(
 		b.semaCtx,
 	)
 	if err != nil {
-		panic(err)
+		// This may be referencing newly added columns, so cheat and return
+		// a not implemented error.
+		panic(errors.Wrapf(errors.WithSecondaryError(scerrors.NotImplementedError(d), err),
+			"computed column validation error"))
 	}
 	parsedExpr, err := parser.ParseExpr(expr)
 	if err != nil {
@@ -587,6 +636,8 @@ func (b *builderState) resolveRelation(
 	}
 	err, found := c.privileges[p.RequiredPrivilege]
 	if !found {
+		// Validate if this descriptor can be resolved under the current schema.
+		b.checkPrivilege(rel.GetParentSchemaID(), privilege.USAGE)
 		err = b.auth.CheckPrivilege(b.ctx, rel, p.RequiredPrivilege)
 		c.privileges[p.RequiredPrivilege] = err
 	}

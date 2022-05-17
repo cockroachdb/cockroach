@@ -1,4 +1,5 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "cockroach-oss_lib",
@@ -17,14 +18,11 @@ go_binary(
     visibility = ["//visibility:public"],
 )
 
-go_test(
-    name = "cockroach-oss_test",
-    size = "medium",
-    srcs = ["dep_test.go"],
-    embed = [":cockroach-oss_lib"],
-    tags = ["broken_in_bazel"],
-    deps = [
-        "//pkg/testutils/buildutil",
-        "//pkg/util/leaktest",
+disallowed_imports_test(
+    "cockroach-oss",
+    disallowed_list = [],
+    disallowed_prefixes = [
+        "pkg/ccl",
+        "pkg/ui/distccl",
     ],
 )

@@ -11,10 +11,34 @@ DROP VIEW defaultdb.v1
     columnId: 1
     pgAttributeNum: 1
     tableId: 105
+- [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 105
+- [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
+    tableId: 105
+- [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
+    tableId: 105
 - [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     name: name
+    tableId: 105
+- [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    name: tableoid
     tableId: 105
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -25,6 +49,26 @@ DROP VIEW defaultdb.v1
         oid: 1043
         visibleType: 7
         width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 105
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    embeddedTypeT:
+      type:
+        family: OidFamily
+        oid: 26
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 105
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    embeddedTypeT:
+      type:
+        family: DecimalFamily
+        oid: 1700
     isNullable: true
     isRelationBeingDropped: true
     tableId: 105
@@ -74,6 +118,20 @@ DROP VIEW defaultdb.v1 CASCADE
     columnId: 1
     pgAttributeNum: 1
     tableId: 105
+- [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 105
+- [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
+    tableId: 105
 - [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -83,6 +141,20 @@ DROP VIEW defaultdb.v1 CASCADE
   details:
     columnId: 2
     pgAttributeNum: 2
+    tableId: 106
+- [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 106
+- [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
     tableId: 106
 - [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -94,6 +166,20 @@ DROP VIEW defaultdb.v1 CASCADE
     columnId: 2
     pgAttributeNum: 2
     tableId: 107
+- [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 107
+- [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
+    tableId: 107
 - [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -103,6 +189,20 @@ DROP VIEW defaultdb.v1 CASCADE
   details:
     columnId: 2
     pgAttributeNum: 2
+    tableId: 108
+- [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 108
+- [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
     tableId: 108
 - [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -119,11 +219,40 @@ DROP VIEW defaultdb.v1 CASCADE
     columnId: 3
     pgAttributeNum: 3
     tableId: 111
+- [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967294e+09
+    tableId: 111
+- [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    isHidden: true
+    isSystemColumn: true
+    pgAttributeNum: 4.294967295e+09
+    tableId: 111
+- [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
+    tableId: 105
 - [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
     name: name
     tableId: 105
+- [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    name: tableoid
+    tableId: 105
+- [[ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
+    tableId: 106
 - [[ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -134,6 +263,16 @@ DROP VIEW defaultdb.v1 CASCADE
     columnId: 2
     name: n2
     tableId: 106
+- [[ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    name: tableoid
+    tableId: 106
+- [[ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
+    tableId: 107
 - [[ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
@@ -144,6 +283,16 @@ DROP VIEW defaultdb.v1 CASCADE
     columnId: 1
     name: name
     tableId: 107
+- [[ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    name: tableoid
+    tableId: 107
+- [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
+    tableId: 108
 - [[ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
@@ -154,6 +303,16 @@ DROP VIEW defaultdb.v1 CASCADE
     columnId: 1
     name: n2
     tableId: 108
+- [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    name: tableoid
+    tableId: 108
+- [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    name: crdb_internal_mvcc_timestamp
+    tableId: 111
 - [[ColumnName:{DescID: 111, Name: k, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -169,6 +328,11 @@ DROP VIEW defaultdb.v1 CASCADE
     columnId: 2
     name: n2
     tableId: 111
+- [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    name: tableoid
+    tableId: 111
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -178,6 +342,26 @@ DROP VIEW defaultdb.v1 CASCADE
         oid: 1043
         visibleType: 7
         width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 105
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    embeddedTypeT:
+      type:
+        family: OidFamily
+        oid: 26
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 105
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    embeddedTypeT:
+      type:
+        family: DecimalFamily
+        oid: 1700
     isNullable: true
     isRelationBeingDropped: true
     tableId: 105
@@ -205,6 +389,26 @@ DROP VIEW defaultdb.v1 CASCADE
     isNullable: true
     isRelationBeingDropped: true
     tableId: 106
+- [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    embeddedTypeT:
+      type:
+        family: OidFamily
+        oid: 26
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 106
+- [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    embeddedTypeT:
+      type:
+        family: DecimalFamily
+        oid: 1700
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 106
 - [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -229,6 +433,26 @@ DROP VIEW defaultdb.v1 CASCADE
     isNullable: true
     isRelationBeingDropped: true
     tableId: 107
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    embeddedTypeT:
+      type:
+        family: OidFamily
+        oid: 26
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 107
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    embeddedTypeT:
+      type:
+        family: DecimalFamily
+        oid: 1700
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 107
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -250,6 +474,26 @@ DROP VIEW defaultdb.v1 CASCADE
         oid: 1043
         visibleType: 7
         width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 108
+- [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    embeddedTypeT:
+      type:
+        family: OidFamily
+        oid: 26
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 108
+- [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    embeddedTypeT:
+      type:
+        family: DecimalFamily
+        oid: 1700
     isNullable: true
     isRelationBeingDropped: true
     tableId: 108
@@ -284,6 +528,26 @@ DROP VIEW defaultdb.v1 CASCADE
         oid: 1043
         visibleType: 7
         width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 111
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967294e+09
+    embeddedTypeT:
+      type:
+        family: OidFamily
+        oid: 26
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 111
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
+  details:
+    columnId: 4.294967295e+09
+    embeddedTypeT:
+      type:
+        family: DecimalFamily
+        oid: 1700
     isNullable: true
     isRelationBeingDropped: true
     tableId: 111

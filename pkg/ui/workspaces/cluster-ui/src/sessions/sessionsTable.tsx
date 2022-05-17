@@ -101,7 +101,7 @@ const StatementTableCell = (props: { session: ISession }) => {
 };
 
 function formatSessionStart(session: ISession): string {
-  const formatStr = "MMM DD, YYYY [at] h:mm A";
+  const formatStr = "MMM DD, YYYY [at] H:mm";
   const start = moment.unix(Number(session.start.seconds)).utc();
 
   return start.format(formatStr);
@@ -111,7 +111,7 @@ function formatStatementStart(session: ISession): string {
   if (session.active_queries.length == 0) {
     return "N/A";
   }
-  const formatStr = "MMM DD, YYYY [at] h:mm A";
+  const formatStr = "MMM DD, YYYY [at] H:mm";
   const start = moment
     .unix(Number(session.active_queries[0].start.seconds))
     .utc();

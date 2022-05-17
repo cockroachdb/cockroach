@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -244,6 +246,19 @@ func (d *buildDeps) MustGetSchemasForDatabase(
 	return schemas
 }
 
+// IsTableEmpty implements the scbuild.TableReader interface.
+func (d *buildDeps) IsTableEmpty(
+	ctx context.Context, id descpb.ID, primaryIndexID descpb.IndexID,
+) bool {
+	indexPrefix := rowenc.MakeIndexKeyPrefix(d.codec, id, primaryIndexID)
+	span := roachpb.Key(indexPrefix)
+	kvs, err := d.txn.Scan(ctx, span, span.PrefixEnd(), 1)
+	if err != nil {
+		panic(err)
+	}
+	return len(kvs) == 0
+}
+
 // CreatePartitioningCCL is the public hook point for the CCL-licensed
 // partitioning creation code.
 var CreatePartitioningCCL scbuild.CreatePartitioningCCLCallback
@@ -257,6 +272,11 @@ func (d *buildDeps) AuthorizationAccessor() scbuild.AuthorizationAccessor {
 
 // CatalogReader implements the scbuild.Dependencies interface.
 func (d *buildDeps) CatalogReader() scbuild.CatalogReader {
+	return d
+}
+
+// TableReader implements the scbuild.Dependencies interface.
+func (d *buildDeps) TableReader() scbuild.TableReader {
 	return d
 }
 
@@ -330,6 +350,16 @@ func (d *buildDeps) IncrementSchemaChangeAlterCounter(counterType string, extra 
 // interface.
 func (d *buildDeps) IncrementSchemaChangeDropCounter(counterType string) {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter(counterType))
+}
+
+// IncrementSchemaChangeAddColumnTypeCounter implements the scbuild.Dependencies
+func (d *buildDeps) IncrementSchemaChangeAddColumnTypeCounter(typeName string) {
+	telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(typeName))
+}
+
+// IncrementSchemaChangeAddColumnQualificationCounter implements the scbuild.Dependencies
+func (d *buildDeps) IncrementSchemaChangeAddColumnQualificationCounter(qualification string) {
+	telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter(qualification))
 }
 
 // IncrementUserDefinedSchemaCounter implements the scbuild.Dependencies

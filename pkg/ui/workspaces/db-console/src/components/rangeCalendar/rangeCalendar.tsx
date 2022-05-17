@@ -56,7 +56,7 @@ function isBelowMinDateRange(
 }
 
 export const RangeCalendar: React.FC<RangeCalendarProps> = ({
-  timeFormat = "h:mm A",
+  timeFormat = "H:mm",
   minTimeRange = [10, "minute"],
   onCancel = noop,
   onSubmit = noop,
@@ -140,7 +140,7 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
 
   const timePickerDefaultProps: TimePickerProps & RcTimePickerProps = {
     allowClear: false,
-    use12Hours: true,
+    use12Hours: false,
     inputReadOnly: true,
     format: timeFormat,
     className: cx("crl-time-picker"),

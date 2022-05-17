@@ -41,6 +41,9 @@ type Dependencies interface {
 	// CatalogReader returns a CatalogReader implementation.
 	CatalogReader() CatalogReader
 
+	// TableReader returns a TableReader implementation.
+	TableReader() TableReader
+
 	// AuthorizationAccessor returns an AuthorizationAccessor implementation.
 	AuthorizationAccessor() AuthorizationAccessor
 
@@ -135,6 +138,13 @@ type CatalogReader interface {
 	MustGetSchemasForDatabase(
 		ctx context.Context, database catalog.DatabaseDescriptor,
 	) map[descpb.ID]string
+}
+
+// TableReader implements functions for inspecting tables during the build phase,
+// checking their contents for example to determine if they are empty.
+type TableReader interface {
+	// IsTableEmpty returns if the table is empty.
+	IsTableEmpty(ctx context.Context, id descpb.ID, primaryIndexID descpb.IndexID) bool
 }
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
