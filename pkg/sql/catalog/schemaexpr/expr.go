@@ -345,7 +345,7 @@ func newNameResolver(
 // unresolved names replaced with IndexedVars.
 func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
 	var v NameResolutionVisitor
-	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData().SearchPath)
+	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper)
 }
 
 // addColumn adds a new column to the nameResolver so that it can be resolved in
