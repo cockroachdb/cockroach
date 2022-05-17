@@ -22,6 +22,7 @@
     "@cockroachlabs/crdb-protobuf-client-ccl": "link:./ccl/src/js",
     "@cockroachlabs/design-tokens": "0.4.5",
     "@cockroachlabs/icons": "0.3.0",
+    "@cockroachlabs/ui-components": "0.2.20",
     "analytics-node": "^3.5.0",
     "antd": "^3.25.2",
     "babel-polyfill": "^6.26.0",
@@ -138,8 +139,8 @@
     "minimist": "^1.2.0",
     "mocha": "^6.2.1",
     "nib": "^1.1.2",
-    "prettier": "^2.2.1",
     "pretty-format": "^27.3.1",
+    "prettier": "^1.19.1",
     "prop-types": "^15.5.10",
     "protobufjs": "6.8.6",
     "redux-saga-test-plan": "^4.0.0-beta.2",
@@ -195,8 +196,7 @@
     "lodash": "^4.17.20",
     "markdown-to-jsx": "~6.11.4",
     "node-fetch": "~2.6.1",
-    "serialize-javascript": "~3.1.0",
-    "yargs-parser": "~13.1.2"
+    "serialize-javascript": "~3.1.0"
   },
   "engines": {
     "node": ">=12",

@@ -93,7 +93,8 @@ module.exports = (env, argv) => {
   }
 
   const config = {
-    entry: [path.resolve(__dirname, "./src/index.tsx")],
+    context: __dirname,
+    entry: [ "./src/index.tsx"],
     output: {
       filename: "bundle.js",
       path: path.resolve(env.output || `../../dist${env.dist}`, "assets"),
@@ -106,7 +107,7 @@ module.exports = (env, argv) => {
       extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
       modules: modules,
       alias: {
-        oss: path.resolve(__dirname),
+        oss: __dirname,
         ccl: path.resolve(__dirname, "ccl"),
         "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
         "ccl/src/js/protos": "@cockroachlabs/crdb-protobuf-client-ccl",

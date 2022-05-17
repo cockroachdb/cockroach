@@ -136,17 +136,6 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	args = append(args, additionalBazelArgs...)
 
 	if cross == "" {
-		// run "yarn --check-files" before any bazel target that includes UI to ensure that node_modules dir is consistent
-		// see related issue: https://github.com/cockroachdb/cockroach/issues/70867
-		for _, arg := range args {
-			if arg == "--config=with_ui" {
-				logCommand("bazel", "run", "@nodejs//:yarn", "--", "--check-files", "--cwd", "pkg/ui", "--offline")
-				if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "run", "@nodejs//:yarn", "--", "--check-files", "--cwd", "pkg/ui", "--offline"); err != nil {
-					return err
-				}
-				break
-			}
-		}
 		logCommand("bazel", args...)
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err
@@ -174,7 +163,7 @@ func (d *dev) crossBuild(
 	script.WriteString(fmt.Sprintf("bazel %s\n", shellescape.QuoteCommand(bazelArgs)))
 	for _, arg := range bazelArgs {
 		if arg == "--config=with_ui" {
-			script.WriteString("bazel run @nodejs//:yarn -- --check-files --cwd pkg/ui --offline\n")
+			script.WriteString("bazel run @yarn//:yarn -- --check-files --cwd pkg/ui --offline\n")
 			break
 		}
 	}
