@@ -235,7 +235,7 @@ func (*DummyEvalPlanner) ExternalWriteFile(ctx context.Context, uri string, cont
 }
 
 // DecodeGist is part of the Planner interface.
-func (*DummyEvalPlanner) DecodeGist(gist string) ([]string, error) {
+func (*DummyEvalPlanner) DecodeGist(gist string, external bool) ([]string, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 

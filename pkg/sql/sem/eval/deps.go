@@ -213,7 +213,7 @@ type Planner interface {
 	ExternalWriteFile(ctx context.Context, uri string, content []byte) error
 
 	// DecodeGist exposes gist functionality to the builtin functions.
-	DecodeGist(gist string) ([]string, error)
+	DecodeGist(gist string, external bool) ([]string, error)
 
 	// SerializeSessionState serializes the variables in the current session
 	// and returns a state, in bytes form.

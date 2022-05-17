@@ -1043,6 +1043,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// defer is a catch-all in case some other return path is taken.
 	defer planner.curPlan.close(ctx)
 
+	// include gist in error reports
+	ctx = withPlanGist(ctx, planner.instrumentation.planGist.String())
+
 	if planner.autoCommit {
 		planner.curPlan.flags.Set(planFlagImplicitTxn)
 	}
