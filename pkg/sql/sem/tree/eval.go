@@ -14,7 +14,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
@@ -69,9 +68,8 @@ type UnaryOp struct {
 	types   TypeList
 	retType ReturnTyper
 
-	// counter, if non-nil, should be incremented every time the
-	// operator is type checked.
-	counter telemetry.Counter
+	// OnTypeCheck is called when the op is type checked.
+	OnTypeCheck func()
 }
 
 func (op *UnaryOp) params() TypeList {
@@ -224,9 +222,7 @@ type BinOp struct {
 	types   TypeList
 	retType ReturnTyper
 
-	// counter, if non-nil, should be incremented every time the
-	// operator is type checked.
-	counter telemetry.Counter
+	OnTypeCheck func()
 }
 
 func (op *BinOp) params() TypeList {
@@ -1289,9 +1285,7 @@ type CmpOp struct {
 	// Datum return type is a union between *DBool and dNull.
 	EvalOp BinaryEvalOp
 
-	// counter, if non-nil, should be incremented every time the
-	// operator is type checked.
-	counter telemetry.Counter
+	OnTypeCheck func()
 
 	// If NullableArgs is false, the operator returns NULL
 	// whenever either argument is NULL.

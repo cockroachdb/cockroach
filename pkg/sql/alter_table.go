@@ -98,7 +98,9 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 			tree.Name(tableDesc.GetName()), tree.Name(tableDesc.GetName()))
 	}
 
-	n.HoistAddColumnConstraints()
+	n.HoistAddColumnConstraints(func() {
+		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
+	})
 
 	// See if there's any "inject statistics" in the query and type check the
 	// expressions.
@@ -165,7 +167,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	}
 
 	for i, cmd := range n.n.Cmds {
-		telemetry.Inc(cmd.TelemetryCounter())
+		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", cmd.TelemetryName()))
 
 		if !n.tableDesc.HasPrimaryKey() && !isAlterCmdValidWithoutPrimaryKey(cmd) {
 			return errors.Newf("table %q does not have a primary key, cannot perform%s", n.tableDesc.Name, tree.AsString(cmd))

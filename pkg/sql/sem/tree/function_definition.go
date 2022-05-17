@@ -10,10 +10,7 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/lib/pq/oid"
-)
+import "github.com/lib/pq/oid"
 
 // FunctionDefinition implements a reference to the (possibly several)
 // overloads for a built-in function.
@@ -162,8 +159,6 @@ func NewFunctionDefinition(
 			// Builtins with a preferred overload are always ambiguous.
 			props.AmbiguousReturnType = true
 		}
-		// Produce separate telemetry for each overload.
-		def[i].counter = sqltelemetry.BuiltinCounter(name, def[i].Signature(false))
 
 		overloads[i] = &def[i]
 	}
