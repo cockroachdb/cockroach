@@ -102,7 +102,7 @@ func StmtDiagListOutstandingRequests(
 
 // TODO(yuzefovich): remove this in 22.2.
 func isAtLeast22dot1ClusterVersion(ctx context.Context, conn Conn) (bool, error) {
-	// Check whether the migration to add the conditional diagnostics columns to
+	// Check whether the upgrade to add the conditional diagnostics columns to
 	// the statement_diagnostics_requests system table has already been run.
 	row, err := conn.QueryRow(ctx, `
 SELECT

@@ -174,7 +174,7 @@ func (o terminateOnMigrationOption) apply(spec *ClusterSpec) {
 	spec.TerminateOnMigration = true
 }
 
-// TerminateOnMigration ensures VM is terminated in case GCE triggers a live migration.
+// TerminateOnMigration ensures VM is terminated in case GCE triggers a live upgrade.
 func TerminateOnMigration() Option {
 	return &terminateOnMigrationOption{}
 }

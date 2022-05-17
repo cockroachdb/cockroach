@@ -20,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/migration"
-	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -31,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -254,29 +254,29 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			Existing: existing,
 			TestingKnobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-				MigrationManager: &migration.TestingKnobs{
+				UpgradeManager: &upgrade.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
 						return []clusterversion.ClusterVersion{{Version: v1}, {Version: v2}}
 					},
-					RegistryOverride: func(cv clusterversion.ClusterVersion) (migration.Migration, bool) {
+					RegistryOverride: func(cv clusterversion.ClusterVersion) (upgrade.Migration, bool) {
 						switch cv.Version {
 						case v1:
-							return migration.NewTenantMigration("testing", clusterversion.ClusterVersion{
+							return upgrade.NewTenantMigration("testing", clusterversion.ClusterVersion{
 								Version: v1,
 							},
-								migrations.NoPrecondition,
+								upgrades.NoPrecondition,
 								func(
-									ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps, _ *jobs.Job,
+									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
 								) error {
 									return nil
 								}), true
 						case v2:
-							return migration.NewTenantMigration("testing next", clusterversion.ClusterVersion{
+							return upgrade.NewTenantMigration("testing next", clusterversion.ClusterVersion{
 								Version: v2,
 							},
-								migrations.NoPrecondition,
+								upgrades.NoPrecondition,
 								func(
-									ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps, _ *jobs.Job,
+									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
 								) error {
 									tenantStopperChannel <- struct{}{}
 									return nil
@@ -319,7 +319,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			clusterversion.TestingBinaryVersion.String())
 		// Ensure that the tenant still works.
 		initialTenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
-		// Upgrade the tenant cluster, but the migration will fail on v1.
+		// Upgrade the tenant cluster, but the upgrade will fail on v1.
 		initialTenantRunner.ExpectErr(t,
 			".*(database is closed|failed to connect|closed network connection)+",
 			"SET CLUSTER SETTING version = $1",
