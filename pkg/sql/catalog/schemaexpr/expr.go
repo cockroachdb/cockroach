@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -105,6 +106,7 @@ func DequalifyAndValidateExpr(
 		context,
 		semaCtx,
 		maxVolatility,
+		false, /*allowAssignmentCast*/
 	)
 
 	if err != nil {
@@ -295,7 +297,7 @@ func deserializeExprForFormatting(
 	// typedExpr.
 	if fmtFlags == tree.FmtPGCatalog {
 		sanitizedExpr, err := SanitizeVarFreeExpr(ctx, expr, typedExpr.ResolvedType(), "FORMAT", semaCtx,
-			volatility.Immutable)
+			volatility.Immutable, false /*allowAssignmentCast*/)
 		// If the expr has no variables and has Immutable, we can evaluate
 		// it and turn it into a constant.
 		if err == nil {
@@ -398,6 +400,7 @@ func SanitizeVarFreeExpr(
 	context string,
 	semaCtx *tree.SemaContext,
 	maxVolatility volatility.V,
+	allowAssignmentCast bool,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(expr) {
 		return nil, pgerror.Newf(pgcode.Syntax,
@@ -436,7 +439,12 @@ func SanitizeVarFreeExpr(
 	actualType := typedExpr.ResolvedType()
 	if !expectedType.Equivalent(actualType) && typedExpr != tree.DNull {
 		// The expression must match the column type exactly unless it is a constant
-		// NULL value.
+		// NULL value or assignment casts are allowed.
+		if allowAssignmentCast {
+			if ok := cast.ValidCast(actualType, expectedType, cast.ContextAssignment); ok {
+				return typedExpr, nil
+			}
+		}
 		return nil, fmt.Errorf("expected %s expression to have type %s, but '%s' has type %s",
 			context, expectedType, expr, actualType)
 	}
