@@ -5,7 +5,7 @@ load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 
 # TODO switch to protobufjs-cli when its published
 # https://github.com/protobufjs/protobuf.js/commit/da34f43ccd51ad97017e139f137521782f5ef119
-load("@npm//protobufjs:index.bzl", "pbjs", "pbts")
+load("@npm_protos//protobufjs:index.bzl", "pbjs", "pbts")
 load("@rules_proto//proto:defs.bzl", "ProtoInfo")
 
 # protobuf.js relies on these packages, but does not list them as dependencies
@@ -17,7 +17,7 @@ load("@rules_proto//proto:defs.bzl", "ProtoInfo")
 # Per Bazel semantics, all dependencies should be pre-declared.
 # Note, you'll also need to install all of these in your package.json!
 # (This should be fixed when we switch to protobufjs-cli)
-_PROTOBUFJS_CLI_DEPS = ["@npm//%s" % s for s in [
+_PROTOBUFJS_CLI_DEPS = ["@npm_protos//%s" % s for s in [
     "chalk",
     "escodegen",
     "espree",

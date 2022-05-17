@@ -500,6 +500,6 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 //     d.exec.CommandContextWithEnv(ctx, env, "bazel", argv)
 func buildBazelYarnArgv(argv ...string) []string {
 	return append([]string{
-		"run", "@nodejs//:yarn", "--",
+		"run", "@yarn//:yarn", "--",
 	}, argv...)
 }

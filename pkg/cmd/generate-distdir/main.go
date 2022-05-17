@@ -111,7 +111,7 @@ func getShasFromGoDownloadSdkCall(call *syntax.CallExpr, shas map[string]string)
 }
 
 func getShasFromNodeRepositoriesCall(call *syntax.CallExpr, shas map[string]string) error {
-	var nodeURLTmpl, yarnURLTmpl, nodeVersion, yarnVersion, yarnSha, yarnFilename string
+	var nodeURLTmpl, nodeVersion string
 	nodeBaseToHash := make(map[string]string)
 	for _, arg := range call.Args {
 		switch bx := arg.(type) {
@@ -151,7 +151,31 @@ func getShasFromNodeRepositoriesCall(call *syntax.CallExpr, shas map[string]stri
 				if err != nil {
 					return err
 				}
-			} else if kwarg == "yarn_repositories" {
+			}
+		}
+	}
+	if nodeURLTmpl == "" || nodeVersion == "" {
+		return fmt.Errorf("did not parse all needed data from node_repositories call")
+	}
+	for base, sha := range nodeBaseToHash {
+		shas[strings.ReplaceAll(strings.ReplaceAll(nodeURLTmpl, "{version}", nodeVersion), "{filename}", base)] = sha
+	}
+	return nil
+}
+
+func getShasFromYarnRepositoriesCall(call *syntax.CallExpr, shas map[string]string) error {
+	var yarnURLTmpl, yarnVersion, yarnSha, yarnFilename string
+	for _, arg := range call.Args {
+		switch bx := arg.(type) {
+		case *syntax.BinaryExpr:
+			if bx.Op != syntax.EQ {
+				return fmt.Errorf("unexpected binary expression Op %d", bx.Op)
+			}
+			kwarg, err := starlarkutil.ExpectIdent(bx.X)
+			if err != nil {
+				return err
+			}
+			if kwarg == "yarn_releases" {
 				switch d := bx.Y.(type) {
 				case *syntax.DictExpr:
 					if len(d.List) != 1 {
@@ -184,11 +208,8 @@ func getShasFromNodeRepositoriesCall(call *syntax.CallExpr, shas map[string]stri
 			}
 		}
 	}
-	if nodeURLTmpl == "" || yarnURLTmpl == "" || nodeVersion == "" || yarnVersion == "" || yarnSha == "" || yarnFilename == "" {
-		return fmt.Errorf("did not parse all needed data from node_repositories call")
-	}
-	for base, sha := range nodeBaseToHash {
-		shas[strings.ReplaceAll(strings.ReplaceAll(nodeURLTmpl, "{version}", nodeVersion), "{filename}", base)] = sha
+	if yarnURLTmpl == "" || yarnVersion == "" || yarnSha == "" || yarnFilename == "" {
+		return fmt.Errorf("did not parse all needed data from yarn_repositories call")
 	}
 	shas[strings.ReplaceAll(strings.ReplaceAll(yarnURLTmpl, "{version}", yarnVersion), "{filename}", yarnFilename)] = yarnSha
 	return nil
@@ -224,6 +245,11 @@ func getShasFromWorkspace(workspace string, shas map[string]string) error {
 				}
 				if fun == "node_repositories" {
 					if err := getShasFromNodeRepositoriesCall(x, shas); err != nil {
+						return err
+					}
+				}
+				if fun == "yarn_repositories" {
+					if err := getShasFromYarnRepositoriesCall(x, shas); err != nil {
 						return err
 					}
 				}
