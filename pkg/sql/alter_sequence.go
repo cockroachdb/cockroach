@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -65,9 +67,11 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("sequence"))
 	desc := n.seqDesc
 
-	oldMinValue := desc.SequenceOpts.MinValue
-	oldMaxValue := desc.SequenceOpts.MaxValue
-
+	if err := params.p.createdSequences.addCreatedSequence(desc.GetID()); err != nil {
+		return err
+	}
+	oldIncrement := desc.SequenceOpts.Increment
+	oldStart := desc.SequenceOpts.Start
 	existingType := types.Int
 	if desc.GetSequenceOpts().AsIntegerType != "" {
 		switch desc.GetSequenceOpts().AsIntegerType {
@@ -95,6 +99,7 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	}
 	opts := desc.SequenceOpts
 	seqValueKey := params.p.ExecCfg().Codec.SequenceKey(uint32(desc.ID))
+	currentSeqKey := params.p.ExecCfg().Codec.CurrentSequenceKey(uint32(desc.GetID()))
 
 	getSequenceValue := func() (int64, error) {
 		kv, err := params.p.txn.Get(params.ctx, seqValueKey)
@@ -113,34 +118,63 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	// value of the sequence must be restored to the original MinValue or MaxValue transactionally.
 	// The code below handles the second case.
 
-	// The sequence is decreasing and the minvalue is being decreased.
-	if opts.Increment < 0 && desc.SequenceOpts.MinValue < oldMinValue {
-		sequenceVal, err := getSequenceValue()
-		if err != nil {
-			return err
-		}
+	sequenceVal, err := getSequenceValue()
+	if err != nil {
+		return err
+	}
+	newSequenceVal := sequenceVal
+	// If the sequenceVal exceeded the old MinValue or MaxValue,
+	// we must set sequenceVal to the last valid one.
 
-		// If the sequence exceeded the old MinValue, it must be changed to start at the old MinValue.
-		if sequenceVal < oldMinValue {
-			err := params.p.txn.Put(params.ctx, seqValueKey, oldMinValue)
+	// I think we should set the current value to the newStartValue if there is
+	// a start param in alter_sequence_stmt, but in pg it needs RESTART.
+	// Now newStartValue has no effect on the current value before use RESTART.
+	// see: https://github.com/cockroachdb/cockroach/issues/74496
+	hasRestart := false
+	if hasRestart {
+		newSequenceVal = opts.Start - opts.Increment
+	} else {
+		// 1. Values is just init, when the sequence is altered
+		// before it has ever been used.
+		if sequenceVal == oldStart-oldIncrement {
+			newSequenceVal = oldStart - opts.Increment
+		} else {
+			// 2. The sequence is altered after it has ever been used.
+			currentVal, err := params.p.txn.Get(params.ctx, currentSeqKey)
+
 			if err != nil {
 				return err
 			}
-		}
-	} else if opts.Increment > 0 && desc.SequenceOpts.MaxValue > oldMaxValue {
-		sequenceVal, err := getSequenceValue()
-		if err != nil {
-			return err
-		}
-
-		if sequenceVal > oldMaxValue {
-			err := params.p.txn.Put(params.ctx, seqValueKey, oldMaxValue)
-			if err != nil {
-				return err
+			newSequenceVal = currentVal.ValueInt()
+			if newSequenceVal > opts.MaxValue {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"MAXVALUE (%d) cannot be made to be less than the current value (%d) ",
+					opts.MaxValue, newSequenceVal)
+			}
+			if newSequenceVal < opts.MinValue {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"MINVALUE (%d) cannot be made to be exceed than the current value (%d) ",
+					opts.MinValue, newSequenceVal)
 			}
 		}
 	}
-
+	if err := params.p.txn.Put(params.ctx, currentSeqKey, newSequenceVal); err != nil {
+		return err
+	}
+	if sequenceVal != newSequenceVal {
+		if err := params.p.txn.Put(params.ctx, seqValueKey, newSequenceVal); err != nil {
+			return err
+		}
+	}
+	// Clear out the cache and update the last value.
+	params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		m.initSequenceCache()
+		if sequenceVal != newSequenceVal {
+			m.RecordLatestSequenceVal(uint32(n.seqDesc.GetID()), newSequenceVal)
+		}
+	})
 	if err := params.p.writeSchemaChange(
 		params.ctx, n.seqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
