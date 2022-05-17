@@ -1,4 +1,4 @@
-create-type
+setup
 CREATE TYPE defaultdb.greeting AS ENUM('hello', 'hi')
 ----
 

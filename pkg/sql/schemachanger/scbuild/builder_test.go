@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -110,47 +109,21 @@ func run(
 	tdb *sqlutils.SQLRunner,
 	withDependencies func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuild.Dependencies)),
 ) string {
-	// TODO (Chengxiong): try to make this switch block to only have "setup" and
-	// "build" sections.
 	switch d.Cmd {
-	case "create-table", "create-view", "create-type", "create-sequence", "create-schema", "create-database":
-		stmts, err := parser.Parse(d.Input)
-		require.NoError(t, err)
-		require.Len(t, stmts, 1)
-		tableName := ""
-		switch node := stmts[0].AST.(type) {
-		case *tree.CreateTable:
-			tableName = node.Table.String()
-		case *tree.CreateSequence:
-			tableName = node.Name.String()
-		case *tree.CreateView:
-			tableName = node.Name.String()
-		case *tree.CreateType:
-			tableName = ""
-		case *tree.CreateSchema:
-			tableName = ""
-		case *tree.CreateDatabase:
-			tableName = ""
-		default:
-			t.Fatal("not a supported CREATE statement")
-		}
-		tdb.Exec(t, d.Input)
-
-		if len(tableName) > 0 {
-			var tableID descpb.ID
-			tdb.QueryRow(t, fmt.Sprintf(`SELECT '%s'::REGCLASS::INT`, tableName)).Scan(&tableID)
-			if tableID == 0 {
-				t.Fatalf("failed to read ID of new table %s", tableName)
-			}
-			t.Logf("created relation with id %d", tableID)
-		}
-
-		return ""
 	case "setup":
 		stmts, err := parser.Parse(d.Input)
 		require.NoError(t, err)
 		for _, stmt := range stmts {
+			tableName := sctestutils.TableNameFromStmt(stmt)
 			tdb.Exec(t, stmt.SQL)
+			if len(tableName) > 0 {
+				var tableID descpb.ID
+				tdb.QueryRow(t, fmt.Sprintf(`SELECT '%s'::REGCLASS::INT`, tableName)).Scan(&tableID)
+				if tableID == 0 {
+					t.Fatalf("failed to read ID of new table %s", tableName)
+				}
+				t.Logf("created relation with id %d", tableID)
+			}
 		}
 		return ""
 	case "build":
