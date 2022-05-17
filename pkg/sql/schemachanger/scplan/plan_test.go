@@ -56,48 +56,21 @@ func TestPlanDataDriven(t *testing.T) {
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
-			// TODO (Chengxiong): make this switch block to have only "build" and
-			// "ops/deps" sections.
 			switch d.Cmd {
-			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema", "create-index":
-				stmts, err := parser.Parse(d.Input)
-				require.NoError(t, err)
-				require.Len(t, stmts, 1)
-				tableName := ""
-				switch node := stmts[0].AST.(type) {
-				case *tree.CreateTable:
-					tableName = node.Table.String()
-				case *tree.CreateSequence:
-					tableName = node.Name.String()
-				case *tree.CreateView:
-					tableName = node.Name.String()
-				case *tree.CreateType:
-					tableName = ""
-				case *tree.CreateDatabase:
-					tableName = ""
-				case *tree.CreateSchema:
-					tableName = ""
-				case *tree.CreateIndex:
-					tableName = ""
-				default:
-					t.Fatal("not a CREATE TABLE/SEQUENCE/VIEW statement")
-				}
-				tdb.Exec(t, d.Input)
-
-				if len(tableName) > 0 {
-					var tableID descpb.ID
-					tdb.QueryRow(t, `SELECT $1::regclass::int`, tableName).Scan(&tableID)
-					if tableID == 0 {
-						t.Fatalf("failed to read ID of new table %s", tableName)
-					}
-					t.Logf("created relation with id %d", tableID)
-				}
-				return ""
 			case "setup":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				for _, stmt := range stmts {
+					tableName := sctestutils.TableNameFromStmt(stmt)
 					tdb.Exec(t, stmt.SQL)
+					if len(tableName) > 0 {
+						var tableID descpb.ID
+						tdb.QueryRow(t, `SELECT $1::regclass::int`, tableName).Scan(&tableID)
+						if tableID == 0 {
+							t.Fatalf("failed to read ID of new table %s", tableName)
+						}
+						t.Logf("created relation with id %d", tableID)
+					}
 				}
 				return ""
 			case "ops", "deps":

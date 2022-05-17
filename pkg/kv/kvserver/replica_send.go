@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
@@ -874,7 +875,10 @@ func (r *Replica) executeAdminBatch(
 
 	args := ba.Requests[0].GetInner()
 
-	ctx, sp := tracing.EnsureChildSpan(ctx, r.AmbientContext.Tracer, reflect.TypeOf(args).String())
+	sArg := reflect.TypeOf(args).String()
+	ctx = logtags.AddTag(ctx, sArg, "")
+
+	ctx, sp := tracing.EnsureChildSpan(ctx, r.AmbientContext.Tracer, sArg)
 	defer sp.Finish()
 
 	// Verify that the batch can be executed, which includes verifying that the

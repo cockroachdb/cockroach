@@ -78,7 +78,6 @@ go_test(
         "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
-        "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/testutils",

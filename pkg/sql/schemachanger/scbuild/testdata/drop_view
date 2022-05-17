@@ -1,9 +1,6 @@
-create-table
-CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256))
-----
-
-create-view
-CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
+setup
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256));
+CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1);
 ----
 
 build
@@ -61,24 +58,12 @@ DROP VIEW defaultdb.v1
     - 104
     viewId: 105
 
-create-view
-CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1)
-----
-
-create-view
+setup
+CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1);
 CREATE VIEW defaultdb.v3 AS (SELECT name, n1 FROM v1, v2);
-----
-
-create-view
 CREATE VIEW defaultdb.v4 AS (SELECT n2, n1 FROM v2);
-----
-
-create-type
-CREATE TYPE defaultdb.typ AS ENUM('a')
-----
-
-create-view
-CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb.v4)
+CREATE TYPE defaultdb.typ AS ENUM('a');
+CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb.v4);
 ----
 
 build
