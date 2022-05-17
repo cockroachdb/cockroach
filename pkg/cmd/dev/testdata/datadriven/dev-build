@@ -49,7 +49,6 @@ cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkou
 exec
 dev build -- --verbose_failures --sandbox_debug
 ----
-bazel run @nodejs//:yarn -- --check-files --cwd pkg/ui --offline
 bazel build //pkg/cmd/cockroach:cockroach --config=with_ui --verbose_failures --sandbox_debug
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
