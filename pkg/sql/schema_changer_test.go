@@ -6604,7 +6604,6 @@ SELECT job_id FROM crdb_internal.jobs
 // multiple queued schema changes works as expected.
 func TestCancelMultipleQueued(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 80782, "flaky test")
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -6631,11 +6630,15 @@ func TestCancelMultipleQueued(t *testing.T) {
 	const numIndexes = 10                      // number of indexes to add
 	jobIDs := make([]jobspb.JobID, numIndexes) // job IDs for the index additions
 	shouldCancel := make([]bool, numIndexes)
+	var numShouldCancel int
 	for i := 0; i < numIndexes; i++ {
 		idxName := "t_" + strconv.Itoa(i) + "_idx"
 		schemaChangeWaitGroup.Add(1)
 		i := i
-		shouldCancel[i] = rand.Float64() < .5
+		if should := rand.Float64() < .5; should {
+			shouldCancel[i] = true
+			numShouldCancel++
+		}
 		go func() {
 			defer schemaChangeWaitGroup.Done()
 			_, err := sqlDB.Exec("CREATE INDEX " + idxName + " ON db.t (j)")
@@ -6654,6 +6657,7 @@ SELECT job_id FROM crdb_internal.jobs
 		})
 	}
 	require.NoError(t, jobsErrGroup.Wait())
+
 	for i, id := range jobIDs {
 		if shouldCancel[i] {
 			tdb.Exec(t, "CANCEL JOB $1", id)
@@ -6680,21 +6684,14 @@ SELECT job_id FROM crdb_internal.jobs
 		} else {
 			require.Equal(t, jobs.StatusSucceeded, status)
 		}
-
-		if shouldCancel[i] {
-			tdb.Exec(t, "CANCEL JOB $1", id)
-		}
 	}
 
 	// Validate the job cancellation metrics.
-	rows := tdb.QueryStr(t, "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'job.%.canceled'")
-	if len(rows) != 1 ||
-		len(rows[0]) != 2 ||
-		rows[0][0] != "job.schema_change.canceled" {
-		require.Failf(t, "Unexpected result set", "Rows: %s", rows)
-	} else if val, err := strconv.ParseInt(rows[0][1], 10, 32); err != nil || val < 2 {
-		require.Failf(t, "Invalid integer or value", "Error: %s Val: %d", err, val)
-	}
+	tdb.CheckQueryResultsRetry(t, fmt.Sprintf(`
+SELECT COALESCE(max(usage_count), 0) >= %d
+  FROM crdb_internal.feature_usage
+ WHERE feature_name LIKE 'job.schema_change.canceled';
+`, numShouldCancel), [][]string{{"true"}})
 }
 
 // TestRollbackForeignKeyAddition tests that rolling back a schema change to add
