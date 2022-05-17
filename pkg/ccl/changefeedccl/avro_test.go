@@ -116,7 +116,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 		for colIdx, expr := range rowTuple {
 			col := tableDesc.PublicColumns()[colIdx]
 			typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-				ctx, expr, col.GetType(), "avro", &semaCtx, volatility.Stable)
+				ctx, expr, col.GetType(), "avro", &semaCtx, volatility.Stable, false /*allowAssignmentCast*/)
 			if err != nil {
 				return nil, err
 			}
