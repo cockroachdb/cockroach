@@ -672,7 +672,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	admissionHandle, err := func() (interface{}, error) {
 		c := r.store.cfg.KVAdmissionController
-		if c == nil || !enableRaftFollowerAdmissionControl || r.RangeID < 45 {
+		if r.store.StoreID() != 3 || c == nil || !enableRaftFollowerAdmissionControl || r.RangeID < 45 {
 			return nil, nil
 		}
 		return c.AdmitKVWork(ctx, roachpb.SystemTenantID, &ba)
