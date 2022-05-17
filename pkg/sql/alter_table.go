@@ -1198,7 +1198,8 @@ func updateSequenceDependencies(
 			tableDesc,
 			colDesc.ColumnDesc(),
 			typedExpr,
-			nil, /* backrefs */
+			nil,          /* backrefs */
+			colExpr.name, /* whichExpr */
 		)
 		if err != nil {
 			return err

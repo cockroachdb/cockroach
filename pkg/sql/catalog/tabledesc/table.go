@@ -58,14 +58,16 @@ type ColumnDefDescs struct {
 const MaxBucketAllowed = 2048
 
 // ForEachTypedExpr iterates over each typed expression in this struct.
-func (cdd *ColumnDefDescs) ForEachTypedExpr(fn func(tree.TypedExpr) error) error {
+func (cdd *ColumnDefDescs) ForEachTypedExpr(
+	fn func(expr tree.TypedExpr, whichExpr string) error,
+) error {
 	if cdd.ColumnTableDef.HasDefaultExpr() {
-		if err := fn(cdd.DefaultExpr); err != nil {
+		if err := fn(cdd.DefaultExpr, "DEFAULT"); err != nil {
 			return err
 		}
 	}
 	if cdd.ColumnTableDef.HasOnUpdateExpr() {
-		if err := fn(cdd.OnUpdateExpr); err != nil {
+		if err := fn(cdd.OnUpdateExpr, "ON UPDATE"); err != nil {
 			return err
 		}
 	}

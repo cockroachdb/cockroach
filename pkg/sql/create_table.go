@@ -2103,9 +2103,9 @@ func NewTableDesc(
 	for i := range n.Defs {
 		if _, ok := n.Defs[i].(*tree.ColumnTableDef); ok {
 			if cdd[i] != nil {
-				if err := cdd[i].ForEachTypedExpr(func(expr tree.TypedExpr) error {
+				if err := cdd[i].ForEachTypedExpr(func(expr tree.TypedExpr, whichExpr string) error {
 					changedSeqDescs, err := maybeAddSequenceDependencies(
-						ctx, st, vt, &desc, &desc.Columns[colIdx], expr, affected)
+						ctx, st, vt, &desc, &desc.Columns[colIdx], expr, affected, whichExpr)
 					if err != nil {
 						return err
 					}

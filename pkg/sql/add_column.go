@@ -164,9 +164,9 @@ func (p *planner) addColumnImpl(
 
 	// If the new column has a DEFAULT or an ON UPDATE expression that uses a
 	// sequence, add references between its descriptor and this column descriptor.
-	if err := cdd.ForEachTypedExpr(func(expr tree.TypedExpr) error {
+	if err := cdd.ForEachTypedExpr(func(expr tree.TypedExpr, whichExpr string) error {
 		changedSeqDescs, err := maybeAddSequenceDependencies(
-			params.ctx, params.ExecCfg().Settings, params.p, n.tableDesc, col, expr, nil,
+			params.ctx, params.ExecCfg().Settings, params.p, n.tableDesc, col, expr, nil, whichExpr,
 		)
 		if err != nil {
 			return err

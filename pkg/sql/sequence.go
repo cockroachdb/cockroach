@@ -780,6 +780,8 @@ func addSequenceOwner(
 // if the column has a DEFAULT expression that uses one or more sequences. (Usually just one,
 // e.g. `DEFAULT nextval('my_sequence')`.
 // The passed-in column descriptor is mutated, and the modified sequence descriptors are returned.
+// whichExpr, either 'DEFAULT' or "ON UPDATE", tells which expression `expr` is, so we can
+// correctly modify `col` (see issue #81333).
 func maybeAddSequenceDependencies(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -788,6 +790,7 @@ func maybeAddSequenceDependencies(
 	col *descpb.ColumnDescriptor,
 	expr tree.TypedExpr,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
+	whichExpr string,
 ) ([]*tabledesc.Mutable, error) {
 	seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
 	if err != nil {
@@ -869,7 +872,15 @@ func maybeAddSequenceDependencies(
 			return nil, err
 		}
 		s := tree.Serialize(newExpr)
-		col.DefaultExpr = &s
+		switch whichExpr {
+		case "DEFAULT":
+			col.DefaultExpr = &s
+		case "ON UPDATE":
+			col.OnUpdateExpr = &s
+		default:
+			return nil, pgerror.Newf(pgcode.Internal,
+				"whichExpr must be either 'DEFAULT' or 'ON UPDATE'. Got %v", whichExpr)
+		}
 	}
 
 	return seqDescs, nil
