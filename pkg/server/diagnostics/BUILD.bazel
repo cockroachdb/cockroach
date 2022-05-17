@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "diagnostics",
@@ -51,19 +52,17 @@ go_test(
     name = "diagnostics_test",
     size = "medium",
     srcs = [
-        "dep_test.go",
         "main_test.go",
         "update_checker_test.go",
     ],
-    embed = [":diagnostics"],
     tags = ["no-remote"],
     deps = [
+        ":diagnostics",
         "//pkg/base",
         "//pkg/build",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/diagutils",
         "//pkg/testutils/serverutils",
         "//pkg/util/cloudinfo",
@@ -71,4 +70,10 @@ go_test(
         "//pkg/util/log",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+disallowed_imports_test(
+    "diagnostics",
+    # TODO(#81378): This should be flipped to "true".
+    disallow_cdeps = False,
 )
