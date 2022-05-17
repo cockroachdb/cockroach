@@ -84,6 +84,7 @@ ALL_TESTS = [
     "//pkg/cmd/bazci:bazci_test",
     "//pkg/cmd/cmpconn:cmpconn_test",
     "//pkg/cmd/cockroach-oss:cockroach-oss_disallowed_imports_test",
+    "//pkg/cmd/dev:dev_disallowed_imports_test",
     "//pkg/cmd/dev:dev_test",
     "//pkg/cmd/docgen/extract:extract_test",
     "//pkg/cmd/docs-issue-generation:docs-issue-generation_test",
