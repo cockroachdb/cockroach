@@ -5060,9 +5060,14 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		if err != nil {
 			return err
 		}
-		maxDescID, err := maxDescIDKeyVal.Value.GetInt()
+		descIDCounter, err := maxDescIDKeyVal.Value.GetInt()
 		if err != nil {
 			return err
+		}
+		minID := descpb.ID(keys.MaxReservedDescID + 1)
+		maxID := descpb.ID(descIDCounter)
+		if minID >= maxID {
+			return nil
 		}
 		// Get all descriptors which will be used to determine
 		// which ones are missing.
@@ -5070,81 +5075,59 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		if err != nil {
 			return err
 		}
-		// Generate large batches of scans over the keyspace,
-		// so that we minimize scans. We will issue individual
-		// scans if there is data in a given descriptor range.
-		unusedDescSpan := roachpb.Span{}
-		descStart := 0
-		descEnd := 0
-		scanAndGenerateRows := func() error {
-			if unusedDescSpan.Key == nil {
-				return nil
-			}
-			b := kv.Batch{}
+		// shouldCheck returns true iff we expect no data to exist with that
+		// table ID prefix.
+		shouldCheck := func(id descpb.ID) bool {
+			return minID <= id && id < maxID && c.LookupDescriptorEntry(id) == nil
+		}
+		// hasData returns true iff there exists at least one row with a prefix for
+		// a table ID in [startID, endID[.
+		hasData := func(startID, endID descpb.ID) (found bool, _ error) {
+			startPrefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(startID))
+			endPrefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(endID - 1)).PrefixEnd()
+			var b kv.Batch
 			b.Header.MaxSpanRequestKeys = 1
-			scanRequest := roachpb.NewScan(unusedDescSpan.Key, unusedDescSpan.EndKey, false).(*roachpb.ScanRequest)
+			scanRequest := roachpb.NewScan(startPrefix, endPrefix, false).(*roachpb.ScanRequest)
 			scanRequest.ScanFormat = roachpb.BATCH_RESPONSE
 			b.AddRawRequest(scanRequest)
 			err = p.extendedEvalCtx.DB.Run(ctx, &b)
 			if err != nil {
-				return err
+				return false, err
 			}
-			// Check the descriptors inside this range for
-			// data.
 			res := b.RawResponse().Responses[0].GetScan()
-			if res.NumKeys > 0 {
-				b = kv.Batch{}
-				b.Header.MaxSpanRequestKeys = 1
-				for descID := descStart; descID <= descEnd; descID++ {
-					prefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(descID))
-					scanRequest := roachpb.NewScan(prefix, prefix.PrefixEnd(), false).(*roachpb.ScanRequest)
-					scanRequest.ScanFormat = roachpb.BATCH_RESPONSE
-					b.AddRawRequest(scanRequest)
-				}
-				err = p.extendedEvalCtx.DB.Run(ctx, &b)
-				if err != nil {
-					return err
-				}
-				for idx := range b.RawResponse().Responses {
-					res := b.RawResponse().Responses[idx].GetScan()
-					if res.NumKeys == 0 {
-						continue
-					}
-					// Add a row if any key came back
-					if err := addRow(tree.NewDInt(tree.DInt(idx + descStart))); err != nil {
-						return err
-					}
-				}
-			}
-			unusedDescSpan = roachpb.Span{}
-			descStart = 0
-			descEnd = 0
-			return nil
+			return res.NumKeys > 0, nil
 		}
-		// Loop over every possible non-reserved descriptor ID.
-		for id := uint32(keys.MaxReservedDescID + 1); id < uint32(maxDescID); id++ {
-			// Skip over descriptors that are known
-			if c.LookupDescriptorEntry(descpb.ID(id)) != nil {
-				err := scanAndGenerateRows()
-				if err != nil {
-					return err
-				}
+		// Loop through all allocated, non-reserved descriptor IDs.
+		for startID, endID := minID, minID; endID <= maxID; endID++ {
+			// Identify spans to check via discontinuities in shouldCheck.
+			if shouldCheck(endID) == shouldCheck(endID-1) {
 				continue
 			}
-			// Update our span range to include this
-			// descriptor.
-			prefix := p.extendedEvalCtx.Codec.TablePrefix(id)
-			if unusedDescSpan.Key == nil {
-				descStart = int(id)
-				unusedDescSpan.Key = prefix
+			// Handle span start.
+			if shouldCheck(endID) && !shouldCheck(endID-1) {
+				startID = endID
+				continue
 			}
-			descEnd = int(id)
-			unusedDescSpan.EndKey = prefix.PrefixEnd()
-
-		}
-		err = scanAndGenerateRows()
-		if err != nil {
-			return err
+			// Handle span end.
+			// Check that the span [startID, endID[ is empty.
+			if found, err := hasData(startID, endID); err != nil {
+				return err
+			} else if !found {
+				// This is the expected outcome.
+				continue
+			}
+			// If the span is unexpectedly not empty, refine the search by checking
+			// each individual descriptor ID in the span for data.
+			for id := startID; id < endID; id++ {
+				if found, err := hasData(id, id+1); err != nil {
+					return err
+				} else if !found {
+					continue
+				}
+				if err := addRow(tree.NewDInt(tree.DInt(id))); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	},
