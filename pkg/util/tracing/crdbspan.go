@@ -566,12 +566,18 @@ func (s *crdbSpan) getLazyTagLocked(key string) (interface{}, bool) {
 
 // notifyEventListeners recursively notifies all the EventListeners registered
 // with this span and any ancestor spans in the Recording, of a StructuredEvent.
+//
+// If s has a parent, then we notify the parent of the StructuredEvent outside
+// the child (our current receiver) lock. This is as per the lock ordering
+// convention between parents and children.
 func (s *crdbSpan) notifyEventListeners(item Structured) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.mu.recording.notifyParentOnStructuredEvent {
 		parent := s.mu.parent.Span.i.crdb
+		s.mu.Unlock()
 		parent.notifyEventListeners(item)
+		s.mu.Lock()
 	}
 
 	for _, listener := range s.mu.eventListeners {
