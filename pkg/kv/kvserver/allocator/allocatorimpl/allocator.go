@@ -1495,7 +1495,7 @@ func (a *Allocator) ValidLeaseTargets(
 ) []roachpb.ReplicaDescriptor {
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
 	for i := range existing {
-		if existing[i].GetType() != roachpb.VOTER_FULL {
+		if !existing[i].IsVoterNewConfig() {
 			continue
 		}
 		// If we're not allowed to include the current replica, remove it from
@@ -1574,6 +1574,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	// If there are any replicas that do match lease preferences, then we check if
 	// the existing leaseholder is one of them.
 	preferred := a.PreferredLeaseholders(conf, candidates)
+	preferred = excludeReplicasInNeedOfSnapshots(ctx, leaseRepl.RaftStatus(), preferred)
 	if len(preferred) == 0 {
 		return false
 	}
@@ -1661,7 +1662,12 @@ func (a *Allocator) TransferLeaseTarget(
 	case allocator.FollowTheWorkload:
 		// Try to pick a replica to transfer the lease to while also determining
 		// whether we actually should be transferring the lease. The transfer
-		// decision is only needed if we've been asked to check the source.
+		// decision is only needed if we've been asked to not exclude the current
+		// lease replica.
+		//
+		// TODO(aayush): Whenever `excludeLeaseRepl` is true, `followTheWorkload`
+		// falls back to `leaseCountConvergence`. Rationalize this or refactor this
+		// logic to be more clear.
 		transferDec, repl := a.shouldTransferLeaseForAccessLocality(
 			ctx, source, existing, stats, nil, candidateLeasesMean,
 		)
