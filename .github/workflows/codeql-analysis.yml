@@ -32,7 +32,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'cpp', 'go', 'javascript', 'python', 'ruby' ]
+        language: [ 'go' ]
+        #language: [ 'cpp', 'go', 'javascript', 'python', 'ruby' ]
         # CodeQL supports [ 'cpp', 'csharp', 'go', 'java', 'javascript', 'python', 'ruby' ]
         # Learn more about CodeQL language support at https://git.io/codeql-language-support
 
@@ -52,7 +53,8 @@ jobs:
 
     # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
     # If this step fails, then you should remove it and run the build manually (see below)
-    - name: Autobuild
+    - if: matrix.language == 'cpp'
+      name: Autobuild
       uses: github/codeql-action/autobuild@v2
 
     # ℹ️ Command-line programs to run using the OS shell.
@@ -65,6 +67,13 @@ jobs:
     #- run: |
     #   make bootstrap
     #   make release
+    
+    # Go Build Limit GOGC as per LGTM: https://lgtm.com/projects/g/cockroachdb/cockroach/logs/languages/lang:go
+    - if: matrix.language == 'go'        
+      name: Setup Go Environment
+      shell: bash
+      run: |
+        echo "GOGC=50" >> $GITHUB_ENV
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2
