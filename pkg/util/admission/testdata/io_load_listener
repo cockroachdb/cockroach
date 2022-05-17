@@ -6,14 +6,13 @@ init
 
 prep-admission-stats admitted=0
 ----
-{admittedCount:0 admittedWithBytesCount:0 admittedBytes:0 ingestedBytes:0 ingestedIntoL0Bytes:0}
+{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
 
-# Even though above the threshold, the first 60 ticks don't limit the tokens.
+# Even though above the threshold, the first 15 ticks don't limit the tokens.
 set-state l0-bytes=10000 l0-added=1000 l0-files=21 l0-sublevels=21
 ----
-admitted: 0, bytes: 10000, added-bytes: 1000,
-smoothed-removed: 0, smoothed-byte-tokens: 0, smoothed-bytes-unaccounted-per-work: 0,
-tokens: unlimited, tokens-allocated: 0
+0 ssts, 0 sub-levels, L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=0], compacted 0 B [≈0 B]; admitting all
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:1000 curL0Bytes:10000 smoothedIntL0CompactedBytes:0 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:0 totalNumByteTokens:9223372036854775807 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0 workByteAddition:0} aux:{shouldLog:false curL0NumFiles:0 curL0NumSublevels:0 intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:0 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0}}
 tick: 0, setAvailableIOTokens: unlimited
 tick: 1, setAvailableIOTokens: unlimited
 tick: 2, setAvailableIOTokens: unlimited
@@ -32,7 +31,7 @@ tick: 14, setAvailableIOTokens: unlimited
 
 prep-admission-stats admitted=10000
 ----
-{admittedCount:10000 admittedWithBytesCount:0 admittedBytes:0 ingestedBytes:0 ingestedIntoL0Bytes:0}
+{admittedCount:10000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
 
 # Delta added is 100,000. The l0-bytes are the same, so compactions removed
 # 100,000 bytes. Smoothed removed by compactions is 50,000. Each admitted is
@@ -40,9 +39,8 @@ prep-admission-stats admitted=10000
 # removed), but smoothing it drops the tokens to 12,500.
 set-state l0-bytes=10000 l0-added=101000 l0-files=21 l0-sublevels=21
 ----
-admitted: 10000, bytes: 10000, added-bytes: 101000,
-smoothed-removed: 50000, smoothed-byte-tokens: 12500, smoothed-bytes-unaccounted-per-work: 10,
-tokens: 12500, tokens-allocated: 0
+21 ssts, 21 sub-levels, L0 growth 98 KiB: 0 B acc-write + 0 B acc-ingest + 98 KiB unacc [≈10 B/req, n=10000], compacted 98 KiB [≈49 KiB]; admitting 12 KiB with L0 penalty: +10 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:10000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:101000 curL0Bytes:10000 smoothedIntL0CompactedBytes:50000 smoothedIntPerWorkUnaccountedL0Bytes:10 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:12500 totalNumByteTokens:12500 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:10} aux:{shouldLog:true curL0NumFiles:21 curL0NumSublevels:21 intL0AddedBytes:100000 intL0CompactedBytes:100000 intAdmittedCount:10000 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:100000 intPerWorkUnaccountedL0Bytes:10 l0BytesIngestFraction:0}}
 store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 10
 tick: 0, setAvailableIOTokens: 834
 tick: 1, setAvailableIOTokens: 834
@@ -62,14 +60,13 @@ tick: 14, setAvailableIOTokens: 824
 
 prep-admission-stats admitted=20000
 ----
-{admittedCount:20000 admittedWithBytesCount:0 admittedBytes:0 ingestedBytes:0 ingestedIntoL0Bytes:0}
+{admittedCount:20000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
 
 # Same delta as previous but smoothing bumps up the tokens to 25,000.
 set-state l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21
 ----
-admitted: 20000, bytes: 10000, added-bytes: 201000,
-smoothed-removed: 75000, smoothed-byte-tokens: 25000, smoothed-bytes-unaccounted-per-work: 10,
-tokens: 25000, tokens-allocated: 0
+21 ssts, 21 sub-levels, L0 growth 98 KiB: 0 B acc-write + 0 B acc-ingest + 98 KiB unacc [≈10 B/req, n=10000], compacted 98 KiB [≈73 KiB]; admitting 24 KiB with L0 penalty: +10 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:20000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:201000 curL0Bytes:10000 smoothedIntL0CompactedBytes:75000 smoothedIntPerWorkUnaccountedL0Bytes:10 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:25000 totalNumByteTokens:25000 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:10} aux:{shouldLog:true curL0NumFiles:21 curL0NumSublevels:21 intL0AddedBytes:100000 intL0CompactedBytes:100000 intAdmittedCount:10000 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:100000 intPerWorkUnaccountedL0Bytes:10 l0BytesIngestFraction:0}}
 store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 10
 tick: 0, setAvailableIOTokens: 1667
 tick: 1, setAvailableIOTokens: 1667
@@ -90,9 +87,8 @@ tick: 14, setAvailableIOTokens: 1662
 # No delta. This used to trigger an overflow bug.
 set-state l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21
 ----
-admitted: 20000, bytes: 10000, added-bytes: 201000,
-smoothed-removed: 37500, smoothed-byte-tokens: 21875, smoothed-bytes-unaccounted-per-work: 10,
-tokens: 21875, tokens-allocated: 0
+21 ssts, 21 sub-levels, L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈10 B/req, n=1], compacted 0 B [≈37 KiB]; admitting 21 KiB with L0 penalty: +10 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:20000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:201000 curL0Bytes:10000 smoothedIntL0CompactedBytes:37500 smoothedIntPerWorkUnaccountedL0Bytes:10 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:21875 totalNumByteTokens:21875 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:10} aux:{shouldLog:false curL0NumFiles:21 curL0NumSublevels:21 intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0}}
 store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 10
 tick: 0, setAvailableIOTokens: 1459
 tick: 1, setAvailableIOTokens: 1459
@@ -112,15 +108,14 @@ tick: 14, setAvailableIOTokens: 1449
 
 prep-admission-stats admitted=30000
 ----
-{admittedCount:30000 admittedWithBytesCount:0 admittedBytes:0 ingestedBytes:0 ingestedIntoL0Bytes:0}
+{admittedCount:30000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
 
 # l0-sublevels drops below threshold. We calculate the smoothed values, but
 # don't limit the tokens.
 set-state l0-bytes=10000 l0-added=501000 l0-files=21 l0-sublevels=20
 ----
-admitted: 30000, bytes: 10000, added-bytes: 501000,
-smoothed-removed: 168750, smoothed-byte-tokens: 160937, smoothed-bytes-unaccounted-per-work: 20,
-tokens: unlimited, tokens-allocated: 0
+21 ssts, 20 sub-levels, L0 growth 293 KiB: 0 B acc-write + 0 B acc-ingest + 293 KiB unacc [≈20 B/req, n=10000], compacted 293 KiB [≈165 KiB]; admitting all
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:30000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:501000 curL0Bytes:10000 smoothedIntL0CompactedBytes:168750 smoothedIntPerWorkUnaccountedL0Bytes:20 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:160937.5 totalNumByteTokens:9223372036854775807 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:20} aux:{shouldLog:true curL0NumFiles:21 curL0NumSublevels:20 intL0AddedBytes:300000 intL0CompactedBytes:300000 intAdmittedCount:10000 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:300000 intPerWorkUnaccountedL0Bytes:30 l0BytesIngestFraction:0}}
 store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 20
 tick: 0, setAvailableIOTokens: unlimited
 tick: 1, setAvailableIOTokens: unlimited
@@ -144,13 +139,12 @@ init
 
 prep-admission-stats admitted=0
 ----
-{admittedCount:0 admittedWithBytesCount:0 admittedBytes:0 ingestedBytes:0 ingestedIntoL0Bytes:0}
+{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
 
 set-state l0-bytes=1000 l0-added=1000 l0-files=21 l0-sublevels=21
 ----
-admitted: 0, bytes: 1000, added-bytes: 1000,
-smoothed-removed: 0, smoothed-byte-tokens: 0, smoothed-bytes-unaccounted-per-work: 0,
-tokens: unlimited, tokens-allocated: 0
+0 ssts, 0 sub-levels, L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=0], compacted 0 B [≈0 B]; admitting all
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:1000 curL0Bytes:1000 smoothedIntL0CompactedBytes:0 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:0 totalNumByteTokens:9223372036854775807 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0 workByteAddition:0} aux:{shouldLog:false curL0NumFiles:0 curL0NumSublevels:0 intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:0 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0}}
 tick: 0, setAvailableIOTokens: unlimited
 tick: 1, setAvailableIOTokens: unlimited
 tick: 2, setAvailableIOTokens: unlimited
@@ -172,13 +166,12 @@ tick: 14, setAvailableIOTokens: unlimited
 # accounted for.
 prep-admission-stats admitted=10 admitted-bytes=180000 ingested-bytes=50000 ingested-into-l0=20000
 ----
-{admittedCount:10 admittedWithBytesCount:0 admittedBytes:180000 ingestedBytes:50000 ingestedIntoL0Bytes:20000}
+{admittedCount:10 admittedWithBytesCount:0 admittedAccountedBytes:180000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000}
 
 set-state l0-bytes=1000 l0-added=201000 l0-files=21 l0-sublevels=21
 ----
-admitted: 10, bytes: 1000, added-bytes: 201000,
-smoothed-removed: 100000, smoothed-byte-tokens: 25000, smoothed-bytes-unaccounted-per-work: 5000,
-tokens: 25000, tokens-allocated: 0
+21 ssts, 21 sub-levels, L0 growth 195 KiB: 127 KiB acc-write + 20 KiB acc-ingest + 49 KiB unacc [≈4.9 KiB/req, n=10], compacted 195 KiB [≈98 KiB]; admitting 24 KiB with L0 penalty: +4.9 KiB/req, *0.45/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:10 admittedWithBytesCount:0 admittedAccountedBytes:180000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000} cumL0AddedBytes:201000 curL0Bytes:1000 smoothedIntL0CompactedBytes:100000 smoothedIntPerWorkUnaccountedL0Bytes:5000 smoothedIntIngestedAccountedL0BytesFraction:0.45 smoothedTotalNumByteTokens:25000 totalNumByteTokens:25000 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.45 workByteAddition:5000} aux:{shouldLog:true curL0NumFiles:21 curL0NumSublevels:21 intL0AddedBytes:200000 intL0CompactedBytes:200000 intAdmittedCount:10 intAdmittedBytes:180000 intIngestedBytes:50000 intIngestedAccountedL0Bytes:20000 intAccountedL0Bytes:150000 intUnaccountedL0Bytes:50000 intPerWorkUnaccountedL0Bytes:5000 l0BytesIngestFraction:0.4}}
 store-request-estimates: fractionOfIngestIntoL0: 0.45, workByteAddition: 5000
 tick: 0, setAvailableIOTokens: 1667
 tick: 1, setAvailableIOTokens: 1667
@@ -199,13 +192,12 @@ tick: 14, setAvailableIOTokens: 1662
 # L0 will see an addition of 20,000 bytes, all of which are accounted for.
 prep-admission-stats admitted=20 admitted-bytes=200000 ingested-bytes=50000 ingested-into-l0=20000
 ----
-{admittedCount:20 admittedWithBytesCount:0 admittedBytes:200000 ingestedBytes:50000 ingestedIntoL0Bytes:20000}
+{admittedCount:20 admittedWithBytesCount:0 admittedAccountedBytes:200000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000}
 
 set-state l0-bytes=1000 l0-added=221000 l0-files=21 l0-sublevels=21
 ----
-admitted: 20, bytes: 1000, added-bytes: 221000,
-smoothed-removed: 60000, smoothed-byte-tokens: 27500, smoothed-bytes-unaccounted-per-work: 2500,
-tokens: 27500, tokens-allocated: 0
+21 ssts, 21 sub-levels, L0 growth 20 KiB: 20 KiB acc-write + 0 B acc-ingest + 0 B unacc [≈2.4 KiB/req, n=10], compacted 20 KiB [≈59 KiB]; admitting 27 KiB with L0 penalty: +2.4 KiB/req, *0.45/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:20 admittedWithBytesCount:0 admittedAccountedBytes:200000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000} cumL0AddedBytes:221000 curL0Bytes:1000 smoothedIntL0CompactedBytes:60000 smoothedIntPerWorkUnaccountedL0Bytes:2500 smoothedIntIngestedAccountedL0BytesFraction:0.45 smoothedTotalNumByteTokens:27500 totalNumByteTokens:27500 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.45 workByteAddition:2500} aux:{shouldLog:true curL0NumFiles:21 curL0NumSublevels:21 intL0AddedBytes:20000 intL0CompactedBytes:20000 intAdmittedCount:10 intAdmittedBytes:20000 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:20000 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0}}
 store-request-estimates: fractionOfIngestIntoL0: 0.45, workByteAddition: 2500
 tick: 0, setAvailableIOTokens: 1834
 tick: 1, setAvailableIOTokens: 1834
@@ -227,13 +219,12 @@ tick: 14, setAvailableIOTokens: 1824
 # bytes to L0. We don't let unaccounted bytes become negative.
 prep-admission-stats admitted=30 admitted-bytes=300000 ingested-bytes=50000 ingested-into-l0=20000
 ----
-{admittedCount:30 admittedWithBytesCount:0 admittedBytes:300000 ingestedBytes:50000 ingestedIntoL0Bytes:20000}
+{admittedCount:30 admittedWithBytesCount:0 admittedAccountedBytes:300000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000}
 
 set-state l0-bytes=1000 l0-added=241000 l0-files=21 l0-sublevels=21
 ----
-admitted: 30, bytes: 1000, added-bytes: 241000,
-smoothed-removed: 40000, smoothed-byte-tokens: 23750, smoothed-bytes-unaccounted-per-work: 1250,
-tokens: 23750, tokens-allocated: 0
+21 ssts, 21 sub-levels, L0 growth 20 KiB: 98 KiB acc-write + 0 B acc-ingest + 0 B unacc [≈1.2 KiB/req, n=10], compacted 20 KiB [≈39 KiB]; admitting 23 KiB with L0 penalty: +1.2 KiB/req, *0.45/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:30 admittedWithBytesCount:0 admittedAccountedBytes:300000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000} cumL0AddedBytes:241000 curL0Bytes:1000 smoothedIntL0CompactedBytes:40000 smoothedIntPerWorkUnaccountedL0Bytes:1250 smoothedIntIngestedAccountedL0BytesFraction:0.45 smoothedTotalNumByteTokens:23750 totalNumByteTokens:23750 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.45 workByteAddition:1250} aux:{shouldLog:true curL0NumFiles:21 curL0NumSublevels:21 intL0AddedBytes:20000 intL0CompactedBytes:20000 intAdmittedCount:10 intAdmittedBytes:100000 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:100000 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0}}
 store-request-estimates: fractionOfIngestIntoL0: 0.45, workByteAddition: 1250
 tick: 0, setAvailableIOTokens: 1584
 tick: 1, setAvailableIOTokens: 1584

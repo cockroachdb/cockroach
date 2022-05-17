@@ -19,11 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 )
@@ -1552,18 +1554,20 @@ type storeAdmissionStats struct {
 	// admittedWithBytesCount.
 	//
 	// TODO(sumeer): if these are a mix of regular Batch writes and ingestion
-	// requests, i.e., admittedBytes > ingestedBytes, then the two kinds of
+	// requests, i.e., admittedAccountedBytes > ingestedAccountedBytes, then the two kinds of
 	// bytes are not actually comparable, since the Batch writes are
 	// uncompressed. We may need to fix this inaccuracy if it turns out to be an
 	// issue.
-	admittedBytes uint64
-	// Bytes mentioned at admission request time for the ingestion requests.
-	// INVARIANT: ingestedBytes <= admittedBytes
-	ingestedBytes uint64
-	// After execution of the ingestion requests, how many bytes were ingested
-	// into L0.
-	// INVARIANT: ingestedIntoL0Bytes <= ingestedBytes
-	ingestedIntoL0Bytes uint64
+	admittedAccountedBytes uint64
+	// Bytes mentioned at admission request time for the ingestion requests. Bytes
+	// in this field are also reflected in admittedAccountedBytes.
+	// INVARIANT: ingestedAccountedBytes <= admittedAccountedBytes
+	ingestedAccountedBytes uint64
+	// After execution of the ingestion requests, how many bytes were reported as
+	// ingested into L0. Bytes in this field are also reflected in admittedAccountedBytes.
+	//
+	// INVARIANT: ingestedAccountedL0Bytes <= ingestedAccountedBytes
+	ingestedAccountedL0Bytes uint64
 }
 
 // storeRequestEstimates are estimates that the storeRequester should use for
@@ -1589,6 +1593,32 @@ type storeRequester interface {
 	setStoreRequestEstimates(estimates storeRequestEstimates)
 }
 
+type ioLoadListenerState struct {
+	// Cumulative.
+	cumAdmissionStats storeAdmissionStats
+	// Cumulative.
+	cumL0AddedBytes uint64
+	// Gauge.
+	curL0Bytes int64
+
+	// Exponentially smoothed per interval values.
+
+	smoothedIntL0CompactedBytes          int64   // bytes leaving L0
+	smoothedIntPerWorkUnaccountedL0Bytes float64 // smoothed unaccounted L0 bytes per req
+	// Used to guess how much of an incoming ingestion will likely go to L0
+	// to inform the number of tokens to request. The actual number of tokens
+	// is determined when the work is done, as then the L0 fraction is known
+	// precisely.
+	smoothedIntIngestedAccountedL0BytesFraction float64 // '1.0' means: all ingested bytes went to L0
+	smoothedTotalNumByteTokens                  float64 // smoothed history of token bucket sizes
+
+	// totalNumByteTokens represents the tokens to give out until the next call to
+	// adjustTokens. They are parceled out in small intervals. tokensAllocated
+	// represents what has been given out.
+	totalNumByteTokens int64
+	tokensAllocated    int64
+}
+
 // ioLoadListener adjusts tokens in kvStoreTokenGranter for IO, specifically due to
 // overload caused by writes. IO uses tokens and not slots since work
 // completion is not an indicator that the "resource usage" has ceased -- it
@@ -1607,36 +1637,20 @@ type ioLoadListener struct {
 
 	// Stats used to compute interval stats.
 	statsInitialized bool
-	// Cumulative.
-	admissionStats storeAdmissionStats
-	// Gauge.
-	l0Bytes int64
-	// Cumulative.
-	l0AddedBytes uint64
-	// Exponentially smoothed per interval values.
-	smoothedBytesRemoved                 int64
-	smoothedPerWorkUnaccountedBytesAdded float64
-	smoothedFractionOfIngestIntoL0       float64
-	smoothedNumByteTokens                float64
-
-	// totalTokens represents the tokens to give out until the next call to
-	// adjustTokens. They are given out with smoothing -- tokensAllocated
-	// represents what has been given out. The units is bytes.
-	totalTokens     int64
-	tokensAllocated int64
+	adjustTokensResult
 }
 
 const unlimitedTokens = math.MaxInt64
 
 // Token changes are made at a coarse time granularity of 15s since
-// compactions can take ~10s to complete. The totalTokens to give out over
+// compactions can take ~10s to complete. The totalNumByteTokens to give out over
 // the 15s interval are given out in a smoothed manner, at 1s intervals.
 // This has similarities with the following kinds of token buckets:
 // - Zero replenishment rate and a burst value that is changed every 15s. We
 //   explicitly don't want a huge burst every 15s.
-// - A replenishment rate equal to totalTokens/15, with a burst capped at
-//   totalTokens/15. The only difference with the code here is that if
-//   totalTokens is small, the integer rounding effects are compensated for.
+// - A replenishment rate equal to totalNumByteTokens/15, with a burst capped at
+//   totalNumByteTokens/15. The only difference with the code here is that if
+//   totalNumByteTokens is small, the integer rounding effects are compensated for.
 //
 // In an experiment with extreme overload using KV0 with block size 64KB,
 // and 4096 clients, we observed the following states of L0 at 1min
@@ -1672,36 +1686,37 @@ const adjustmentInterval = 15
 func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, m *pebble.Metrics) {
 	if !io.statsInitialized {
 		io.statsInitialized = true
-		// Initialize cumulative stats.
-		io.admissionStats = io.kvRequester.getStoreAdmissionStats()
-		io.l0Bytes = m.Levels[0].Size
-		io.l0AddedBytes = m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested
-		// No initial limit, i.e, the first interval is unlimited.
-		io.totalTokens = unlimitedTokens
-		// Reasonable starting fraction until we see some ingests.
-		io.smoothedFractionOfIngestIntoL0 = 0.5
+		io.ioLoadListenerState = ioLoadListenerState{
+			cumAdmissionStats: io.kvRequester.getStoreAdmissionStats(),
+			cumL0AddedBytes:   m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
+			curL0Bytes:        m.Levels[0].Size,
+			// Reasonable starting fraction until we see some ingests.
+			smoothedIntIngestedAccountedL0BytesFraction: 0.5,
+			// No initial limit, i.e, the first interval is unlimited.
+			totalNumByteTokens: unlimitedTokens,
+		}
 		return
 	}
 	io.adjustTokens(ctx, m)
 }
 
-// allocateTokensTick gives out 1/adjustmentInterval of the totalTokens every
+// allocateTokensTick gives out 1/adjustmentInterval of the totalNumByteTokens every
 // 1s.
 func (io *ioLoadListener) allocateTokensTick() {
 	var toAllocate int64
 	// unlimitedTokens==MaxInt64, so avoid overflow in the rounding up
 	// calculation.
-	if io.totalTokens >= unlimitedTokens-(adjustmentInterval-1) {
-		toAllocate = io.totalTokens / adjustmentInterval
+	if io.totalNumByteTokens >= unlimitedTokens-(adjustmentInterval-1) {
+		toAllocate = io.totalNumByteTokens / adjustmentInterval
 	} else {
 		// Round up so that we don't accumulate tokens to give in a burst on the
 		// last tick.
-		toAllocate = (io.totalTokens + adjustmentInterval - 1) / adjustmentInterval
+		toAllocate = (io.totalNumByteTokens + adjustmentInterval - 1) / adjustmentInterval
 		if toAllocate < 0 {
 			panic(errors.AssertionFailedf("toAllocate is negative %d", toAllocate))
 		}
-		if toAllocate+io.tokensAllocated > io.totalTokens {
-			toAllocate = io.totalTokens - io.tokensAllocated
+		if toAllocate+io.tokensAllocated > io.totalNumByteTokens {
+			toAllocate = io.totalNumByteTokens - io.tokensAllocated
 		}
 	}
 	// INVARIANT: toAllocate >= 0.
@@ -1714,145 +1729,270 @@ func (io *ioLoadListener) allocateTokensTick() {
 	io.mu.kvGranter.setAvailableIOTokensLocked(toAllocate)
 }
 
-// adjustTokens computes a new value of totalTokens (and resets
+// adjustTokens computes a new value of totalNumByteTokens (and resets
 // tokensAllocated). The new value, when overloaded, is based on comparing how
 // many bytes are being moved out of L0 via compactions with the average
 // number of bytes being added to L0 per KV work. We want the former to be
 // (significantly) larger so that L0 returns to a healthy state.
 func (io *ioLoadListener) adjustTokens(ctx context.Context, m *pebble.Metrics) {
-	io.tokensAllocated = 0
-	// Grab the cumulative stats.
-	admissionStats := io.kvRequester.getStoreAdmissionStats()
-
-	l0Bytes := m.Levels[0].Size
-	l0AddedBytes := m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested
-	// Compute the stats for the interval.
-	bytesAdded := int64(l0AddedBytes) - int64(io.l0AddedBytes)
-	if bytesAdded < 0 {
-		// bytesAdded is a simple delta computation over individually cumulative
-		// stats, so should not be negative.
-		log.Warningf(ctx, "bytesAdded %d is negative", bytesAdded)
-		bytesAdded = 0
+	res := io.adjustTokensInner(ctx, io.ioLoadListenerState, io.kvRequester.getStoreAdmissionStats(), m.Levels[0],
+		L0FileCountOverloadThreshold.Get(&io.settings.SV), L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
+	)
+	io.adjustTokensResult = res
+	io.kvRequester.setStoreRequestEstimates(res.requestEstimates)
+	if res.aux.shouldLog {
+		log.Infof(logtags.AddTag(ctx, "s", io.storeID), "IO overload: %s", res)
 	}
-	// bytesRemoved are due to finished compactions.
-	bytesRemoved := io.l0Bytes + bytesAdded - l0Bytes
-	if bytesRemoved < 0 {
+}
+
+type adjustTokensAuxComputations struct {
+	shouldLog                        bool
+	curL0NumFiles, curL0NumSublevels int64
+
+	intL0AddedBytes     int64
+	intL0CompactedBytes int64
+
+	intAdmittedCount uint64
+
+	intAdmittedBytes, intIngestedBytes uint64
+	intIngestedAccountedL0Bytes        uint64
+	intAccountedL0Bytes                uint64
+	intUnaccountedL0Bytes              int64
+
+	intPerWorkUnaccountedL0Bytes float64
+	l0BytesIngestFraction        float64
+}
+
+func (*ioLoadListener) adjustTokensInner(
+	ctx context.Context,
+	prev ioLoadListenerState,
+	cumAdmissionStats storeAdmissionStats,
+	l0Metrics pebble.LevelMetrics,
+	threshNumFiles, threshNumSublevels int64,
+) adjustTokensResult {
+	curL0Bytes := l0Metrics.Size
+	cumL0AddedBytes := l0Metrics.BytesFlushed + l0Metrics.BytesIngested
+	// L0 growth over the last interval.
+	intL0AddedBytes := int64(cumL0AddedBytes) - int64(prev.cumL0AddedBytes)
+	if intL0AddedBytes < 0 {
+		// intL0AddedBytes is a simple delta computation over individually cumulative
+		// stats, so should not be negative.
+		log.Warningf(ctx, "intL0AddedBytes %d is negative", intL0AddedBytes)
+		intL0AddedBytes = 0
+	}
+	// intL0CompactedBytes are due to finished compactions.
+	intL0CompactedBytes := prev.curL0Bytes + intL0AddedBytes - curL0Bytes
+	if intL0CompactedBytes < 0 {
 		// Ignore potential inconsistencies across cumulative stats and current L0
 		// bytes (gauge).
-		bytesRemoved = 0
+		intL0CompactedBytes = 0
 	}
 	const alpha = 0.5
 	// Compaction scheduling can be uneven in prioritizing L0 for compactions,
 	// so smooth out what is being removed by compactions.
-	io.smoothedBytesRemoved =
-		int64(alpha*float64(bytesRemoved) + (1-alpha)*float64(io.smoothedBytesRemoved))
-	// Compute the deltas of the storeAdmissionStats
-	admittedDelta := admissionStats.admittedCount - io.admissionStats.admittedCount
-	admittedBytesDelta := admissionStats.admittedBytes - io.admissionStats.admittedBytes
-	ingestedBytesDelta := admissionStats.ingestedBytes - io.admissionStats.ingestedBytes
-	ingestedIntoL0BytesDelta :=
-		admissionStats.ingestedIntoL0Bytes - io.admissionStats.ingestedIntoL0Bytes
+	smoothedIntL0CompactedBytes := int64(alpha*float64(intL0CompactedBytes) + (1-alpha)*float64(prev.smoothedIntL0CompactedBytes))
+	// Compute the deltas of the storeAdmissionStats.
 
-	// Some part of what was admitted went into other levels. Exclude those.
-	accountedBytesIntoL0 := admittedBytesDelta - (ingestedBytesDelta - ingestedIntoL0BytesDelta)
-	// Bytes that were added to L0 based on LSM stats, but we don't know where
-	// they came from.
-	unaccountedBytesIntoL0 := bytesAdded - int64(accountedBytesIntoL0)
-	if unaccountedBytesIntoL0 < 0 {
-		// This could happen because of the different points in time the two stats
-		// a, b are collected, for which we are computing a-b. The compensation we
-		// do below is limited to exponential smoothing, which hopefully is good
-		// enough.
-		unaccountedBytesIntoL0 = 0
-	}
+	// intAdmittedCount is the number of requests admitted since the last token adjustment.
+	intAdmittedCount := cumAdmissionStats.admittedCount - prev.cumAdmissionStats.admittedCount
 	doLog := true
-	if admittedDelta == 0 {
-		admittedDelta = 1
+	if intAdmittedCount <= 0 {
+		intAdmittedCount = 1
 		// Admission control is likely disabled, given there was no KVWork
 		// admitted for 15s. And even if it is enabled, this is not an interesting
 		// situation.
 		doLog = false
 	}
-	// Distribute the unaccounted bytes across all admitted work.
-	// INVARIANT: perWorkUnaccountedBytes >= 0
-	perWorkUnaccountedBytes := float64(unaccountedBytesIntoL0) / float64(admittedDelta)
-	if admittedDelta > 1 && bytesAdded > 0 {
+
+	// intAdmittedBytes are the bytes admitted since the last token adjustment. This
+	// also includes any ingestions, i.e. intAdmittedBytes >= intIngestedAccountedBytes.
+	intAdmittedBytes := cumAdmissionStats.admittedAccountedBytes - prev.cumAdmissionStats.admittedAccountedBytes
+	// intIngestedAccountedBytes are the bytes ingested since the last token adjustment. Bytes
+	// tracked here are also tracked in intAdmittedBytes.
+	intIngestedAccountedBytes := cumAdmissionStats.ingestedAccountedBytes - prev.cumAdmissionStats.ingestedAccountedBytes
+	// intIngestedAccountedL0Bytes are the bytes ingested since the last token
+	// adjustment that requests reported as having been ingested into L0. Bytes
+	// tracked here are also tracked in intIngestedAccountedBytes.
+	intIngestedAccountedL0Bytes :=
+		cumAdmissionStats.ingestedAccountedL0Bytes - prev.cumAdmissionStats.ingestedAccountedL0Bytes
+
+	// intAccountedL0Bytes are the bytes that we expect to have entered L0 based
+	// on the requests tracked over the interval: the bytes ingested into L0 and
+	// all non-ingestion bytes (since regular writes flush to L0 before getting
+	// compacted down).
+	intAccountedL0Bytes := intIngestedAccountedL0Bytes + (intAdmittedBytes - intIngestedAccountedBytes)
+	// Bytes that were added to L0 based on LSM stats, but we don't know where
+	// they came from. The sum of the accounted and unaccounted L0 bytes is
+	// exactly the actual L0 growth observed over the interval.
+	intUnaccountedL0Bytes := intL0AddedBytes - int64(intAccountedL0Bytes)
+	if intUnaccountedL0Bytes < 0 {
+		// This could happen because of the different points in time the two stats
+		// a, b are collected, for which we are computing a-b. The compensation we
+		// do below is limited to exponential smoothing, which hopefully is good
+		// enough.
+		intUnaccountedL0Bytes = 0
+	}
+
+	// intPerWorkUnaccountedL0Bytes is the average unaccounted L0 bytes each request added
+	// since the last token adjustment round.
+	// INVARIANT: intPerWorkUnaccountedL0Bytes >= 0
+	intPerWorkUnaccountedL0Bytes := float64(intUnaccountedL0Bytes) / float64(intAdmittedCount)
+	var smoothedIntPerWorkUnaccountedL0Bytes float64
+	if intAdmittedCount > 1 && intL0AddedBytes > 0 {
 		// Track an exponentially smoothed estimate of unaccounted bytes added per
 		// work when there was some work actually admitted. Note we treat having
 		// admitted one item as the same as having admitted zero both because we
 		// clamp admitted to 1 and if we only admitted one thing, do we really
-		// want to use that for our estimate? The conjunction includes bytesAdded
-		// > 0 (and not just admittedDelta), since we have seen situation where no
-		// bytes were added and admittedDelta > 1. This can happen since the stats
+		// want to use that for our estimate? The conjunction includes intL0AddedBytes
+		// > 0 (and not just intAdmittedCount), since we have seen situation where no
+		// bytes were added and intAdmittedCount > 1. This can happen since the stats
 		// from Pebble and those from the requester are not synchronized, and in
 		// that case we don't want to include this sample in the smoothing.
-		if io.smoothedPerWorkUnaccountedBytesAdded == 0 {
-			io.smoothedPerWorkUnaccountedBytesAdded = perWorkUnaccountedBytes
+		if prev.smoothedIntPerWorkUnaccountedL0Bytes == 0 {
+			smoothedIntPerWorkUnaccountedL0Bytes = intPerWorkUnaccountedL0Bytes
 		} else {
-			io.smoothedPerWorkUnaccountedBytesAdded = alpha*perWorkUnaccountedBytes +
-				(1-alpha)*io.smoothedPerWorkUnaccountedBytesAdded
+			smoothedIntPerWorkUnaccountedL0Bytes = alpha*intPerWorkUnaccountedL0Bytes +
+				(1-alpha)*prev.smoothedIntPerWorkUnaccountedL0Bytes
 		}
+	} else {
+		// We've not had work flow through admission control, so we don't have any
+		// reasonable interval data to update our previous estimates. Keep the old
+		// smoothed value around, as it is likely more useful for future admission
+		// control computations than smoothing down to zero over time.
+		smoothedIntPerWorkUnaccountedL0Bytes = prev.smoothedIntPerWorkUnaccountedL0Bytes
 	}
-	var requestEstimates storeRequestEstimates
-	requestEstimates.workByteAddition = int64(io.smoothedPerWorkUnaccountedBytesAdded)
-	if requestEstimates.workByteAddition < 1 {
-		requestEstimates.workByteAddition = 1
-	}
-	if ingestedBytesDelta > 0 {
-		fractionOfIngestIntoL0 := float64(ingestedIntoL0BytesDelta) / float64(ingestedBytesDelta)
-		io.smoothedFractionOfIngestIntoL0 = alpha*fractionOfIngestIntoL0 +
-			(1-alpha)*io.smoothedFractionOfIngestIntoL0
-	}
-	// Else, no ingestion happened in this time interval, so don't update
-	// the estimate.
 
-	requestEstimates.fractionOfIngestIntoL0 = io.smoothedFractionOfIngestIntoL0
+	var intIngestedAccountedL0BytesFraction float64
+	var smoothedIntIngestedAccountedL0BytesFraction float64
+	if intIngestedAccountedBytes > 0 {
+		intIngestedAccountedL0BytesFraction = float64(intIngestedAccountedL0Bytes) / float64(intIngestedAccountedBytes)
+		smoothedIntIngestedAccountedL0BytesFraction = alpha*intIngestedAccountedL0BytesFraction +
+			(1-alpha)*prev.smoothedIntIngestedAccountedL0BytesFraction
+	} else {
+		// No ingestion happened in this time interval, so don't update the
+		// estimate. This makes the assumption that future ingestions will have
+		// around the same ratio (or at least that the same ratio is a decent
+		// starting point), which may be incorrect but is likely on average better
+		// than assuming zero as the future starting point, which would be the
+		// result of smoothing out with additional zeroes.
+		smoothedIntIngestedAccountedL0BytesFraction = prev.smoothedIntIngestedAccountedL0BytesFraction
+	}
 
 	// We constrain admission if the store is over the threshold.
-	if m.Levels[0].NumFiles > L0FileCountOverloadThreshold.Get(&io.settings.SV) ||
-		m.Levels[0].Sublevels > int32(L0SubLevelCountOverloadThreshold.Get(&io.settings.SV)) {
-		// Don't admit more byte work than we can remove via compactions. numTokens
+	var totalNumByteTokens int64
+	var smoothedTotalNumByteTokens float64
+	curL0NumFiles := l0Metrics.NumFiles
+	curL0NumSublevels := int64(l0Metrics.Sublevels)
+	if curL0NumFiles > threshNumFiles || curL0NumSublevels > threshNumSublevels {
+		// Don't admit more byte work than we can remove via compactions. totalNumByteTokens
 		// tracks our goal for admission.
-		numTokens := float64(io.smoothedBytesRemoved)
 		// Scale down since we want to get under the thresholds over time. This
 		// scaling could be adjusted based on how much above the threshold we are,
 		// but for now we just use a constant.
-		numTokens /= 2.0
+		fTotalNumByteTokens := float64(smoothedIntL0CompactedBytes / 2.0)
 		// Smooth it. This may seem peculiar since we are already using
-		// smoothedBytesRemoved, but the else clause below uses a different
-		// computation so we also want the history of smoothedNumByteTokens.
-		io.smoothedNumByteTokens = alpha*numTokens + (1-alpha)*io.smoothedNumByteTokens
-		if float64(math.MaxInt64) < io.smoothedNumByteTokens {
+		// smoothedIntL0CompactedBytes, but the else clause below uses a different
+		// computation so we also want the history of smoothedTotalNumByteTokens.
+		smoothedTotalNumByteTokens = alpha*fTotalNumByteTokens + (1-alpha)*prev.smoothedTotalNumByteTokens
+		if float64(math.MaxInt64) < smoothedTotalNumByteTokens {
 			// Avoid overflow. This should not really happen.
-			io.totalTokens = math.MaxInt64
+			totalNumByteTokens = math.MaxInt64
 		} else {
-			io.totalTokens = int64(io.smoothedNumByteTokens)
-		}
-		if doLog {
-			log.Infof(ctx,
-				"IO overload on store %d (files %d, sub-levels %d): num-admitted: %d, bytes: added %d, "+
-					"removed (%d, %d), accounted-into-l0 %d, ingested-into-l0 %d, tokens (%f, %d), "+
-					"per-work-estimates: fraction-into-L0 %.2f, byte-size %d",
-				io.storeID, m.Levels[0].NumFiles, m.Levels[0].Sublevels, admittedDelta, bytesAdded,
-				bytesRemoved, io.smoothedBytesRemoved, accountedBytesIntoL0, ingestedIntoL0BytesDelta,
-				numTokens, io.totalTokens, io.smoothedFractionOfIngestIntoL0,
-				int64(io.smoothedPerWorkUnaccountedBytesAdded))
+			totalNumByteTokens = int64(smoothedTotalNumByteTokens)
 		}
 	} else {
-		// Under the threshold. Maintain a smoothedNumTokens based on what was
+		// Under the threshold. Maintain a smoothedTotalNumByteTokens based on what was
 		// removed, so that when we go over the threshold we have some history.
 		// This is also useful when we temporarily dip below the threshold --
 		// we've seen extreme situations with alternating 15s intervals of above
 		// and below the threshold.
-		numTokens := bytesRemoved
-		io.smoothedNumByteTokens = alpha*float64(numTokens) + (1-alpha)*io.smoothedNumByteTokens
-		io.totalTokens = unlimitedTokens
+		numTokens := intL0CompactedBytes
+		smoothedTotalNumByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedTotalNumByteTokens
+		totalNumByteTokens = unlimitedTokens
 	}
 	// Install the latest cumulative stats.
-	io.admissionStats = admissionStats
-	io.l0Bytes = l0Bytes
-	io.l0AddedBytes = l0AddedBytes
-	io.kvRequester.setStoreRequestEstimates(requestEstimates)
+	return adjustTokensResult{
+		ioLoadListenerState: ioLoadListenerState{
+			cumAdmissionStats:                           cumAdmissionStats,
+			cumL0AddedBytes:                             cumL0AddedBytes,
+			curL0Bytes:                                  curL0Bytes,
+			smoothedIntL0CompactedBytes:                 smoothedIntL0CompactedBytes,
+			smoothedIntPerWorkUnaccountedL0Bytes:        smoothedIntPerWorkUnaccountedL0Bytes,
+			smoothedIntIngestedAccountedL0BytesFraction: smoothedIntIngestedAccountedL0BytesFraction,
+			smoothedTotalNumByteTokens:                  smoothedTotalNumByteTokens,
+			totalNumByteTokens:                          totalNumByteTokens,
+			tokensAllocated:                             0,
+		},
+		requestEstimates: storeRequestEstimates{
+			workByteAddition:       max(1, int64(smoothedIntPerWorkUnaccountedL0Bytes)),
+			fractionOfIngestIntoL0: smoothedIntIngestedAccountedL0BytesFraction,
+		},
+		aux: adjustTokensAuxComputations{
+			shouldLog:                    doLog,
+			curL0NumFiles:                curL0NumFiles,
+			curL0NumSublevels:            curL0NumSublevels,
+			intL0AddedBytes:              intL0AddedBytes,
+			intL0CompactedBytes:          intL0CompactedBytes,
+			intAdmittedCount:             intAdmittedCount,
+			intAdmittedBytes:             intAdmittedBytes,
+			intIngestedBytes:             intIngestedAccountedBytes,
+			intIngestedAccountedL0Bytes:  intIngestedAccountedL0Bytes,
+			intAccountedL0Bytes:          intAccountedL0Bytes,
+			intUnaccountedL0Bytes:        intUnaccountedL0Bytes,
+			intPerWorkUnaccountedL0Bytes: intPerWorkUnaccountedL0Bytes,
+			l0BytesIngestFraction:        intIngestedAccountedL0BytesFraction,
+		},
+	}
+}
+
+type adjustTokensResult struct {
+	ioLoadListenerState
+	requestEstimates storeRequestEstimates
+	aux              adjustTokensAuxComputations
+}
+
+func max(i, j int64) int64 {
+	if i < j {
+		return j
+	}
+	return i
+}
+
+func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
+	ib := humanizeutil.IBytes
+	// NB: "≈" indicates smoothed quantities.
+	p.Printf("%d ssts, %d sub-levels, ", res.aux.curL0NumFiles, res.aux.curL0NumSublevels)
+	p.Printf("L0 growth %s: ", ib(res.aux.intL0AddedBytes))
+	// Writes to L0 that we expected because requests asked admission control for them.
+	// This is the "happy path".
+	p.Printf("%s acc-write + ", ib(int64(res.aux.intAccountedL0Bytes-res.aux.intIngestedAccountedL0Bytes)))
+	// Ingestion bytes that we expected to go to L0 based on the ingestion fraction
+	// when the respective ingestions were admitted.
+	p.Printf("%s acc-ingest + ", ib(int64(res.aux.intIngestedAccountedL0Bytes)))
+	// The unhappy case - extra bytes that showed up in L0 but we didn't account
+	// for them with any request. If this is large, traffic patterns possibly changed
+	// recently.
+	p.Printf("%s unacc [≈%s/req, n=%d], ",
+		ib(res.aux.intUnaccountedL0Bytes), ib(int64(res.smoothedIntPerWorkUnaccountedL0Bytes)), res.aux.intAdmittedCount)
+	// How much got compacted out of L0 recently.
+	p.Printf("compacted %s [≈%s]; ", ib(res.aux.intL0CompactedBytes), ib(res.smoothedIntL0CompactedBytes))
+
+	p.Printf("admitting ")
+	if n := res.ioLoadListenerState.totalNumByteTokens; n < unlimitedTokens {
+		p.Printf("%s", ib(n))
+		if n := res.ioLoadListenerState.tokensAllocated; 0 < n && n < unlimitedTokens/adjustmentInterval {
+			p.Printf("(used %s)", ib(n))
+		}
+		p.Printf(" with L0 penalty: +%s/req, *%.2f/ingest",
+			ib(res.requestEstimates.workByteAddition), res.requestEstimates.fractionOfIngestIntoL0,
+		)
+	} else {
+		p.SafeString("all")
+	}
+}
+
+func (res adjustTokensResult) String() string {
+	return redact.StringWithoutMarkers(res)
 }
 
 var _ cpuOverloadIndicator = &sqlNodeCPUOverloadIndicator{}
