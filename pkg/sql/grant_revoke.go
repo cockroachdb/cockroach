@@ -188,6 +188,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 		if len(n.desiredprivs) > 0 {
 			grantPresent, allPresent := false, false
+			var sequencePrivilegesNoOp privilege.List
 			for _, priv := range n.desiredprivs {
 				// Only allow granting/revoking privileges that the requesting
 				// user themselves have on the descriptor.
@@ -196,6 +197,19 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				}
 				grantPresent = grantPresent || priv == privilege.GRANT
 				allPresent = allPresent || priv == privilege.ALL
+
+				if n.grantOn == privilege.Sequence {
+					switch priv {
+					case privilege.ALL,
+						privilege.USAGE,
+						privilege.UPDATE,
+						privilege.SELECT,
+						privilege.DROP,
+						privilege.GRANT:
+					default:
+						sequencePrivilegesNoOp = append(sequencePrivilegesNoOp, priv)
+					}
+				}
 			}
 			privileges := descriptor.GetPrivileges()
 
@@ -240,6 +254,16 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 					errors.WithHint(
 						pgnotice.Newf("%s", noticeMessage),
 						"please use WITH GRANT OPTION",
+					),
+				)
+			}
+
+			if len(sequencePrivilegesNoOp) > 0 {
+				params.p.BufferClientNotice(
+					ctx,
+					pgnotice.Newf(
+						"some privileges have no effect on sequences: %s",
+						sequencePrivilegesNoOp.SortedNames(),
 					),
 				)
 			}
@@ -374,6 +398,9 @@ func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privi
 	case targets.Databases != nil:
 		incIAMFunc(sqltelemetry.OnDatabase)
 		return privilege.Database
+	case targets.AllSequencesInSchema:
+		incIAMFunc(sqltelemetry.OnAllSequencesInSchema)
+		return privilege.Sequence
 	case targets.AllTablesInSchema:
 		incIAMFunc(sqltelemetry.OnAllTablesInSchema)
 		return privilege.Table
@@ -384,6 +411,10 @@ func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privi
 		incIAMFunc(sqltelemetry.OnType)
 		return privilege.Type
 	default:
+		if targets.Tables.IsSequence {
+			incIAMFunc(sqltelemetry.OnSequence)
+			return privilege.Sequence
+		}
 		incIAMFunc(sqltelemetry.OnTable)
 		return privilege.Table
 	}

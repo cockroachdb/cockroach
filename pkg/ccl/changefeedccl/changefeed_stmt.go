@@ -348,7 +348,7 @@ func createChangefeedJobRecord(
 
 	tableOnlyTargetList := tree.TargetList{}
 	for _, t := range changefeedStmt.Targets {
-		tableOnlyTargetList.Tables = append(tableOnlyTargetList.Tables, t.TableName)
+		tableOnlyTargetList.Tables.TablePatterns = append(tableOnlyTargetList.Tables.TablePatterns, t.TableName)
 	}
 
 	// This grabs table descriptors once to get their ids.
@@ -569,7 +569,7 @@ func getTableDescriptors(
 		return nil, errors.Errorf(`CHANGEFEED cannot target %s`,
 			tree.AsString(targets))
 	}
-	for _, t := range targets.Tables {
+	for _, t := range targets.Tables.TablePatterns {
 		p, err := t.NormalizeTablePattern()
 		if err != nil {
 			return nil, err
