@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
@@ -258,6 +259,7 @@ func replicaUnavailableError(
 	replDesc roachpb.ReplicaDescriptor,
 	lm liveness.IsLiveMap,
 	rs *raft.Status,
+	closedTS hlc.Timestamp,
 ) error {
 	nonLiveRepls := roachpb.MakeReplicaSet(nil)
 	for _, rDesc := range desc.Replicas().Descriptors() {
@@ -278,16 +280,18 @@ func replicaUnavailableError(
 	var _ redact.SafeFormatter = desc
 	var _ redact.SafeFormatter = replDesc
 
-	if len(nonLiveRepls.AsProto()) > 0 {
-		err = errors.Wrapf(err, "replicas on non-live nodes: %v (lost quorum: %t)", nonLiveRepls, !canMakeProgress)
+	var buf redact.StringBuilder
+	if !canMakeProgress {
+		buf.Printf("lost quorum (down: %v); ", nonLiveRepls)
 	}
-
-	err = errors.Wrapf(
-		err,
-		"raft status: %+v", redact.Safe(rs), // raft status contains no PII
+	buf.Printf(
+		"closed timestamp: %s (%s); raft status: %+v",
+		closedTS,
+		redact.Safe(timeutil.Unix(0, closedTS.WallTime).UTC().Format("2006-01-02 15:04:05")),
+		redact.Safe(rs), /* raft status contains no PII */
 	)
 
-	return roachpb.NewReplicaUnavailableError(err, desc, replDesc)
+	return roachpb.NewReplicaUnavailableError(errors.Wrapf(err, "%s", buf), desc, replDesc)
 }
 
 func (r *Replica) replicaUnavailableError(err error) error {
@@ -295,5 +299,6 @@ func (r *Replica) replicaUnavailableError(err error) error {
 	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
 
 	isLiveMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
-	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.RaftStatus())
+	ct := r.GetClosedTimestamp(context.Background())
+	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.RaftStatus(), ct)
 }
