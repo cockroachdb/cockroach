@@ -158,10 +158,24 @@ func doCreateSequence(
 	// Initialize the sequence value.
 	seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(id))
 	b := &kv.Batch{}
+
+	startVal := desc.SequenceOpts.Start
+	for _, option := range opts {
+		if option.Name == tree.SeqOptRestart {
+			// If the RESTART option is present, it overrides the START WITH option.
+			if option.IntVal != nil {
+				startVal = *option.IntVal
+			}
+		}
+	}
+
+	startVal = startVal - desc.SequenceOpts.Increment
+
 	if err := p.createdSequences.addCreatedSequence(id); err != nil {
 		return nil, err
 	}
-	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
+	b.Inc(seqValueKey, startVal)
+
 	if err := p.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}

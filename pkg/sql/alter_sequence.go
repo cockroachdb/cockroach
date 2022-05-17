@@ -140,6 +140,29 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 			}
 		}
 	}
+	var restartVal *int64
+	for _, option := range n.n.Options {
+		if option.Name == tree.SeqOptRestart {
+			// If the RESTART option is present but without a value, then use the
+			// START WITH value.
+			if option.IntVal != nil {
+				restartVal = option.IntVal
+			} else {
+				restartVal = &opts.Start
+			}
+		}
+	}
+	if restartVal != nil {
+		// Using RESTART on a sequence should always cause the operation to run
+		// in the current transaction. This is achieved by treating the sequence
+		// as if it were just created.
+		if err := params.p.createdSequences.addCreatedSequence(desc.ID); err != nil {
+			return err
+		}
+		if err := params.p.SetSequenceValueByID(params.ctx, uint32(desc.ID), *restartVal, false); err != nil {
+			return err
+		}
+	}
 
 	if err := params.p.writeSchemaChange(
 		params.ctx, n.seqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
