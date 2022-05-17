@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
 )
 
 // rangeCounter implements scdeps.RangeCounter
@@ -26,14 +26,14 @@ type rangeCounter struct {
 }
 
 // NewRangeCounter constructs a new RangeCounter.
-func NewRangeCounter(db *kv.DB, dsp *sql.DistSQLPlanner) scdeps.RangeCounter {
+func NewRangeCounter(db *kv.DB, dsp *sql.DistSQLPlanner) backfiller.RangeCounter {
 	return &rangeCounter{
 		db:  db,
 		dsp: dsp,
 	}
 }
 
-var _ scdeps.RangeCounter = (*rangeCounter)(nil)
+var _ backfiller.RangeCounter = (*rangeCounter)(nil)
 
 func (r rangeCounter) NumRangesInSpanContainedBy(
 	ctx context.Context, span roachpb.Span, containedBy []roachpb.Span,

@@ -82,7 +82,7 @@ func NewExecutorDependencies(
 		},
 		backfiller:              backfiller,
 		merger:                  merger,
-		backfillTracker:         backfillTracker,
+		backfillerTracker:       backfillTracker,
 		commentUpdaterFactory:   commentUpdaterFactory,
 		periodicProgressFlusher: backfillFlusher,
 		statements:              statements,
@@ -363,7 +363,7 @@ type execDeps struct {
 	commentUpdaterFactory   scexec.DescriptorMetadataUpdaterFactory
 	backfiller              scexec.Backfiller
 	merger                  scexec.Merger
-	backfillTracker         scexec.BackfillerTracker
+	backfillerTracker       scexec.BackfillerTracker
 	periodicProgressFlusher scexec.PeriodicProgressFlusher
 	statements              []string
 	user                    username.SQLUsername
@@ -394,7 +394,7 @@ func (d *execDeps) IndexMerger() scexec.Merger {
 
 // BackfillProgressTracker implements the scexec.Dependencies interface.
 func (d *execDeps) BackfillProgressTracker() scexec.BackfillerTracker {
-	return d.backfillTracker
+	return d.backfillerTracker
 }
 
 // PeriodicProgressFlusher implements the scexec.Dependencies interface.

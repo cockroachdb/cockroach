@@ -1,13 +1,11 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "scdeps",
     srcs = [
-        "backfiller_tracker.go",
         "build_deps.go",
         "exec_deps.go",
         "index_validator.go",
-        "periodic_progress_flusher.go",
         "run_deps.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps",
@@ -23,7 +21,6 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql/backfill",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catpb",
@@ -34,6 +31,7 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scexec/backfiller",
         "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scrun",
         "//pkg/sql/sem/eval",
@@ -43,36 +41,10 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",
-        "//pkg/util",
         "//pkg/util/log",
-        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
-        "@org_golang_x_sync//errgroup",
-    ],
-)
-
-go_test(
-    name = "scdeps_test",
-    srcs = [
-        "backfiller_tracker_test.go",
-        "periodic_progress_flusher_test.go",
-    ],
-    embed = [":scdeps"],
-    deps = [
-        "//pkg/keys",
-        "//pkg/roachpb",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/schemachanger/scexec",
-        "//pkg/testutils",
-        "//pkg/util/hlc",
-        "//pkg/util/leaktest",
-        "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_stretchr_testify//assert",
-        "@com_github_stretchr_testify//require",
     ],
 )
