@@ -31,8 +31,8 @@ export type Selected = {
   dateEnd?: string;
   timeStart?: string;
   timeEnd?: string;
-  title?: string;
-  timeLabel?: string;
+  key: "Custom" | string;
+  timeLabel: string;
   timeWindow: TimeWindow;
 };
 
@@ -149,7 +149,7 @@ const RangeSelect = ({
               {options.map(option => (
                 <OptionButton
                   key={option.label}
-                  isSelected={selected.title === option.value}
+                  isSelected={selected.key === option.value}
                   option={option}
                   onClick={handleOptionButtonOnClick}
                 />
@@ -176,8 +176,8 @@ const RangeSelect = ({
               <div>
                 <TimeLabel>{selected.timeLabel}</TimeLabel>
                 <span className={cx("Select-value-label", "title")}>
-                  {selected.title !== "Custom" ? (
-                    selected.title
+                  {selected.key !== "Custom" ? (
+                    selected.key
                   ) : (
                     <>
                       {selected.dateStart}{" "}
