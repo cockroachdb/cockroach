@@ -65,11 +65,6 @@ func TestNoLinkForbidden(t *testing.T) {
 		[]string{
 			"testing",  // defines flags
 			"go/build", // probably not something we want in the main binary
-			"github.com/cockroachdb/cockroach/pkg/security/securitytest", // contains certificates
-			"github.com/cockroachdb/cockroach/pkg/sql/randgen",           // meant for testing code only
-		},
-		[]string{
-			"github.com/cockroachdb/cockroach/pkg/testutils", // meant for testing code only
 		},
 		// The errors library uses go/build to determine
 		// the list of source directories (used to strip the source prefix
