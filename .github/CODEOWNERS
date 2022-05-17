@@ -151,7 +151,7 @@
 /pkg/ccl/cmdccl/stub-schema-registry/ @cockroachdb/cdc-prs
 /pkg/ccl/gssapiccl/          @cockroachdb/server-prs
 /pkg/ccl/kvccl/              @cockroachdb/kv-noreview
-/pkg/ccl/migrationccl/       @cockroachdb/kv-prs-noreview
+/pkg/ccl/upgradeccl/       @cockroachdb/kv-prs-noreview
 /pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 /pkg/ccl/multiregionccl/     @cockroachdb/multiregion
 /pkg/ccl/multitenantccl/     @cockroachdb/unowned
@@ -243,7 +243,7 @@
 /pkg/keysbase/               @cockroachdb/kv-prs
 # Don't ping KV on updates to reserved descriptor IDs and such.
 /pkg/keys/constants.go       @cockroachdb/kv-prs-noreview
-/pkg/migration/              @cockroachdb/kv-prs-noreview @cockroachdb/sql-schema
+/pkg/upgrade/                @cockroachdb/kv-prs-noreview @cockroachdb/sql-schema
 /pkg/multitenant             @cockroachdb/unowned
 /pkg/release/                @cockroachdb/dev-inf
 /pkg/roachpb/.gitattributes  @cockroachdb/dev-inf

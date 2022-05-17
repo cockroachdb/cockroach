@@ -68,7 +68,7 @@ func MakeTestingSimpleTableDescriptor(
 	var sc catalog.SchemaDescriptor
 	if !st.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) && parentSchemaID == keys.PublicSchemaIDForBackup {
 		// If we're not on version PublicSchemasWithDescriptors, continue to
-		// use a synthetic public schema, the migration when we update to
+		// use a synthetic public schema, the upgrade when we update to
 		// PublicSchemasWithDescriptors will handle creating the explicit public
 		// schema.
 		sc = schemadesc.GetPublicSchema()

@@ -87,7 +87,7 @@ func TestIndexBackfiller(t *testing.T) {
 				<-moveToBackfill
 			},
 		},
-		// Disable backfill migrations, we still need the jobs table migration.
+		// Disable backfill upgrades, we still need the jobs table upgrade.
 		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},

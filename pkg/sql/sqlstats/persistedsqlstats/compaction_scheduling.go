@@ -34,7 +34,7 @@ var ErrDuplicatedSchedules = errors.New("creating multiple sql stats compaction 
 
 // CreateSQLStatsCompactionScheduleIfNotYetExist registers SQL Stats compaction job with the
 // scheduled job subsystem so the compaction job can be run periodically. This
-// is done during the cluster startup migration.
+// is done during the cluster startup upgrade.
 func CreateSQLStatsCompactionScheduleIfNotYetExist(
 	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, st *cluster.Settings,
 ) (*jobs.ScheduledJob, error) {

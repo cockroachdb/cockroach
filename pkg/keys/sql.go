@@ -163,15 +163,16 @@ func (e sqlEncoder) ZoneKey(id uint32) roachpb.Key {
 	return MakeFamilyKey(k, uint32(ZonesTableConfigColumnID))
 }
 
-// MigrationKeyPrefix returns the key prefix to store all migration details.
-func (e sqlEncoder) MigrationKeyPrefix() roachpb.Key {
-	return append(e.TenantPrefix(), MigrationPrefix...)
+// StartupMigrationKeyPrefix returns the key prefix to store all startup
+// migration details.
+func (e sqlEncoder) StartupMigrationKeyPrefix() roachpb.Key {
+	return append(e.TenantPrefix(), StartupMigrationPrefix...)
 }
 
-// MigrationLeaseKey returns the key that nodes must take a lease on in order to
-// run system migrations on the cluster.
-func (e sqlEncoder) MigrationLeaseKey() roachpb.Key {
-	return append(e.TenantPrefix(), MigrationLease...)
+// StartupMigrationLeaseKey returns the key that nodes must take a lease on in
+// order to run startup migration upgrades on the cluster.
+func (e sqlEncoder) StartupMigrationLeaseKey() roachpb.Key {
+	return append(e.TenantPrefix(), StartupMigrationLease...)
 }
 
 // unexpected to avoid colliding with sqlEncoder.tenantPrefix.

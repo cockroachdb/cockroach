@@ -2863,7 +2863,7 @@ func (s *adminServer) enqueueRangeLocal(
 	// should stop sending "gc" in v22.2. When removing, confirm that the
 	// associated TODO in index.tsx was addressed in the previous release.
 	//
-	// Explanation of migration:
+	// Explanation of upgrade:
 	// - v22.1 will understand "gc" and "mvccGC" on the server. Its client will
 	//   continue to send "gc" to interop with v21.2 servers.
 	// - v22.2's client will send "mvccGC" but will still have to understand "gc"

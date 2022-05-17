@@ -96,7 +96,7 @@ func (f *fakeDB) Scan(
 	if f.scanErr != nil {
 		return nil, f.scanErr
 	}
-	min := f.codec.MigrationKeyPrefix()
+	min := f.codec.StartupMigrationKeyPrefix()
 	max := min.PrefixEnd()
 	if !bytes.Equal(begin.(roachpb.Key), min) {
 		return nil, errors.Errorf("expected begin key %q, got %q", min, begin)

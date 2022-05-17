@@ -45,6 +45,6 @@
 // each location that clusters may be deployed into. Each NIC that is
 // created will be bound to a common subnet. All of the managed VNets
 // are peered together. This allows arbitrary connectivity between
-// roachprod-managed clusters (e.g. to test cluster migration
+// roachprod-managed clusters (e.g. to test cluster upgrade
 // strategies).
 package azure
