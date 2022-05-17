@@ -19,12 +19,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -130,7 +132,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 	return rows, nil
 }
 
-func parseAvroSchema(j string) (*avroDataRecord, error) {
+func parseAvroSchema(t *testing.T, j string) (*avroDataRecord, error) {
 	var s avroDataRecord
 	if err := json.Unmarshal([]byte(j), &s); err != nil {
 		return nil, err
@@ -162,7 +164,10 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 	tableDesc.Families = []descpb.ColumnFamilyDescriptor{
 		{ID: primary, Name: "primary", ColumnIDs: columnIDs, ColumnNames: columnNames},
 	}
-	return tableToAvroSchema(tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+	return tableToAvroSchema(
+		cdcevent.TestingMakeEventRow(
+			tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), nil, false,
+		), "", string(changefeedbase.OptVirtualColumnsOmitted))
 }
 
 func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, error) {
@@ -385,10 +390,12 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.schema))
 			require.NoError(t, err)
-			origSchema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+			origSchema, err := tableToAvroSchema(
+				cdcevent.TestingMakeEventRow(tableDesc, nil, false),
+				avroSchemaNoSuffix, "")
 			require.NoError(t, err)
 			jsonSchema := origSchema.codec.Schema()
-			roundtrippedSchema, err := parseAvroSchema(jsonSchema)
+			roundtrippedSchema, err := parseAvroSchema(t, jsonSchema)
 			require.NoError(t, err)
 			// It would require some work, but we could also check that the
 			// roundtrippedSchema can be used to recreate the original `CREATE
@@ -397,7 +404,8 @@ func TestAvroSchema(t *testing.T) {
 			rows, err := parseValues(tableDesc, `VALUES `+test.values)
 			require.NoError(t, err)
 
-			for _, row := range rows {
+			for _, encDatums := range rows {
+				row := cdcevent.TestingMakeEventRow(tableDesc, encDatums, false)
 				evalCtx := &eval.Context{
 					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 				}
@@ -405,15 +413,15 @@ func TestAvroSchema(t *testing.T) {
 				require.NoError(t, err)
 				roundtripped, err := roundtrippedSchema.rowFromTextual(serialized)
 				require.NoError(t, err)
-				require.Equal(t, 0, row[1].Datum.Compare(evalCtx, roundtripped[1].Datum),
-					`%s != %s`, row[1].Datum, roundtripped[1].Datum)
+				require.Equal(t, 0, encDatums[1].Datum.Compare(evalCtx, roundtripped[1].Datum),
+					`%s != %s`, encDatums[1].Datum, roundtripped[1].Datum)
 
-				serialized, err = origSchema.BinaryFromRow(nil, row)
+				serialized, err = origSchema.BinaryFromRow(nil, row.ForEachColumn())
 				require.NoError(t, err)
 				roundtripped, err = roundtrippedSchema.RowFromBinary(serialized)
 				require.NoError(t, err)
-				require.Equal(t, 0, row[1].Datum.Compare(evalCtx, roundtripped[1].Datum),
-					`%s != %s`, row[1].Datum, roundtripped[1].Datum)
+				require.Equal(t, 0, encDatums[1].Datum.Compare(evalCtx, roundtripped[1].Datum),
+					`%s != %s`, encDatums[1].Datum, roundtripped[1].Datum)
 			}
 		})
 	}
@@ -421,14 +429,16 @@ func TestAvroSchema(t *testing.T) {
 	t.Run("escaping", func(t *testing.T) {
 		tableDesc, err := parseTableDesc(`CREATE TABLE "☃" (🍦 INT PRIMARY KEY)`)
 		require.NoError(t, err)
-		tableSchema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+		tableSchema, err := tableToAvroSchema(
+			cdcevent.TestingMakeEventRow(tableDesc, nil, false), avroSchemaNoSuffix, "")
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+
 				`{"type":["null","long"],"name":"_u0001f366_","default":null,`+
 				`"__crdb__":"🍦 INT8 NOT NULL"}]}`,
 			tableSchema.codec.Schema())
-		indexSchema, err := indexToAvroSchema(tableDesc, tableDesc.GetPrimaryIndex(), tableDesc.GetName(), "")
+		indexSchema, err := primaryIndexToAvroSchema(
+			cdcevent.TestingMakeEventRow(tableDesc, nil, false), tableDesc.GetName(), "")
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+
@@ -477,7 +487,9 @@ func TestAvroSchema(t *testing.T) {
 			colType := typ.SQLString()
 			tableDesc, err := parseTableDesc(`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + colType + `)`)
 			require.NoError(t, err)
-			field, err := columnToAvroSchema(tableDesc.PublicColumns()[1])
+			field, err := columnToAvroSchema(
+				cdcevent.ResultColumn{ResultColumn: colinfo.ResultColumn{Typ: tableDesc.PublicColumns()[1].GetType()}},
+			)
 			require.NoError(t, err)
 			schema, err := json.Marshal(field.SchemaType)
 			require.NoError(t, err)
@@ -625,12 +637,14 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(
 				`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + test.sqlType + `)`)
 			require.NoError(t, err)
-			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
+			encDatums, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
-			schema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+			row := cdcevent.TestingMakeEventRow(tableDesc, encDatums[0], false)
+			schema, err := tableToAvroSchema(
+				row, avroSchemaNoSuffix, "")
 			require.NoError(t, err)
-			textual, err := schema.textualFromRow(rows[0])
+			textual, err := schema.textualFromRow(row)
 			require.NoError(t, err)
 			// Trim the outermost {}.
 			value := string(textual[1 : len(textual)-1])
@@ -675,12 +689,13 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(
 				`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + test.sqlType + `)`)
 			require.NoError(t, err)
-			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
+			encDatums, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
-			schema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+			row := cdcevent.TestingMakeEventRow(tableDesc, encDatums[0], false)
+			schema, err := tableToAvroSchema(row, avroSchemaNoSuffix, "")
 			require.NoError(t, err)
-			textual, err := schema.textualFromRow(rows[0])
+			textual, err := schema.textualFromRow(row)
 			require.NoError(t, err)
 			// Trim the outermost {}.
 			value := string(textual[1 : len(textual)-1])
@@ -781,12 +796,14 @@ func TestAvroMigration(t *testing.T) {
 			writerDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.writerSchema))
 			require.NoError(t, err)
-			writerSchema, err := tableToAvroSchema(writerDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+			writerSchema, err := tableToAvroSchema(
+				cdcevent.TestingMakeEventRow(writerDesc, nil, false), avroSchemaNoSuffix, "")
 			require.NoError(t, err)
 			readerDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.readerSchema))
 			require.NoError(t, err)
-			readerSchema, err := tableToAvroSchema(readerDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
+			readerSchema, err := tableToAvroSchema(
+				cdcevent.TestingMakeEventRow(readerDesc, nil, false), avroSchemaNoSuffix, "")
 			require.NoError(t, err)
 
 			writerRows, err := parseValues(writerDesc, `VALUES `+test.writerValues)
@@ -795,12 +812,12 @@ func TestAvroMigration(t *testing.T) {
 			require.NoError(t, err)
 
 			for i := range writerRows {
-				writerRow, expectedRow := writerRows[i], expectedRows[i]
-				encoded, err := writerSchema.BinaryFromRow(nil, writerRow)
+				writerEvent := cdcevent.TestingMakeEventRow(writerDesc, writerRows[i], false)
+				encoded, err := writerSchema.BinaryFromRow(nil, writerEvent.ForEachColumn())
 				require.NoError(t, err)
 				row, err := rowFromBinaryEvolved(encoded, writerSchema, readerSchema)
 				require.NoError(t, err)
-				require.Equal(t, expectedRow, row)
+				require.Equal(t, expectedRows[i], row)
 			}
 		})
 	}
@@ -863,14 +880,15 @@ func benchmarkEncodeType(b *testing.B, typ *types.T, encRow rowenc.EncDatumRow) 
 	tableDesc, err := parseTableDesc(
 		fmt.Sprintf(`CREATE TABLE bench_table (bench_field %s)`, typ.SQLString()))
 	require.NoError(b, err)
-	schema, err := tableToAvroSchema(tableDesc, primary, "suffix", "namespace", string(changefeedbase.OptVirtualColumnsOmitted))
+	row := cdcevent.TestingMakeEventRow(tableDesc, encRow, false)
+	schema, err := tableToAvroSchema(row, "suffix", "namespace")
 	require.NoError(b, err)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := schema.BinaryFromRow(nil, encRow)
+		_, err := schema.BinaryFromRow(nil, row.ForEachColumn())
 		require.NoError(b, err)
 	}
 }

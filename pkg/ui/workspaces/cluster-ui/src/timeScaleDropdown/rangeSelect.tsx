@@ -119,31 +119,46 @@ const RangeSelect = ({
   };
 
   const menu = (
-    <div
-      className={cx("range-selector", `${custom ? "__custom" : "__options"}`)}
-    >
-      {custom ? (
-        <div className={cx("custom-menu")}>
-          <DateRangeMenu
-            startInit={selected.timeWindow.start}
-            endInit={selected.timeWindow.end}
-            onSubmit={onChangeDate}
-            onCancel={() => setCustom(false)}
-          />
-        </div>
-      ) : (
-        <div className={cx("_quick-view")}>
-          {options.map(option => (
-            <OptionButton
-              key={option.label}
-              isSelected={selected.title === option.value}
-              option={option}
-              onClick={handleOptionButtonOnClick}
-            />
-          ))}
+    <>
+      {/**
+       * isVisible is used here to trigger a remount of DateRangeMenu and re-initialize the time in the custom menu. See
+       *  comments on DateRangeMenu.
+       * It is needed because passing isVisible to <Dropdown> merely causes a css change in visibility, and does not
+       *  re-mount the component.
+       * The coupling of setting isVisible to true with the need to re-initialize the time relies on the implicit
+       *  assumption that the dropdown is always in a closed state after a user-induced time change.
+       */
+      isVisible && (
+        <div
+          className={cx(
+            "range-selector",
+            `${custom ? "__custom" : "__options"}`,
+          )}
+        >
+          {custom ? (
+            <div className={cx("custom-menu")}>
+              <DateRangeMenu
+                startInit={selected.timeWindow.start}
+                endInit={selected.timeWindow.end}
+                onSubmit={onChangeDate}
+                onCancel={() => setCustom(false)}
+              />
+            </div>
+          ) : (
+            <div className={cx("_quick-view")}>
+              {options.map(option => (
+                <OptionButton
+                  key={option.label}
+                  isSelected={selected.title === option.value}
+                  option={option}
+                  onClick={handleOptionButtonOnClick}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </>
   );
 
   return (

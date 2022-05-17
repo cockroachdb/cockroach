@@ -48,30 +48,31 @@ export function DateRangeMenu({
 }: DateRangeMenuProps): React.ReactElement {
   const dateFormat = "MMMM D, YYYY";
   const timeFormat = "h:mm A [(UTC)]";
+  /**
+   * Local startMoment and endMoment state are stored here so that users can change the time before clicking "Apply".
+   * They are re-initialized to startInit and endInit by re-mounting this component. It is thus the responsibility of
+   *  consuming parent components to re-mount this component when the time needs to be re-initialized (e.g., after any
+   *  user action changes the selected time).
+   *
+   * This re-initialization is done by re-mounting instead of a useEffect because when one of the preset, non-custom
+   *  "Past ___ time" options is selected, the parent components <TimeScaleDropdown> -> <RangeSelect> pass startInit
+   *  and endInit to this component as derived from calling now(). now() called on every <TimeScaleDropdown> render.
+   * startInit and endInit props will thus change over time through no input of the user when a non-custom, "Past ___ time"
+   *  option is selected. This can cause a bug where, as startInit updates over time, the time picker selection reverts
+   *  to this updated time in the middle of while the user is attempting to change the selection. One can imagine a
+   *  situation where the users goes to modify the start time, and in the meantime the end time changes.
+   *
+   * It would be ideal if consuming parent components could pass startInit and endInit that only changed onuser input.
+   * However, this is difficult on Statement and Transaction pgaes because polling is done through an implicit throttle
+   *  on CachedDataReducer, and the "actual" time is thus not available.
+   *
+   * Going with preferring a stale initial time over one that updates too aggressively, the responsibility is thus on
+   *  the parent component to re-initialize this.
+   */
   const [startMoment, setStartMoment] = useState<Moment>(
     startInit || moment.utc(),
   );
   const [endMoment, setEndMoment] = useState<Moment>(endInit || moment.utc());
-  const prevStartInit = usePrevious(startInit);
-  const prevEndInit = usePrevious(endInit);
-
-  useEffect(() => {
-    // .unix() is needed compare the actual time value instead of referential equality of the Moment object.
-    // Otherwise, triggering `setStartMoment` unnecessarily can cause a bug where the selection jumps back to the
-    // currently selected time while the user is in the middle of making a different selection.
-    if (startInit?.unix() != prevStartInit?.unix()) {
-      setStartMoment(startInit);
-    }
-  }, [startInit, prevStartInit]);
-
-  useEffect(() => {
-    // .unix() is needed compare the actual time value instead of referential equality of the Moment object.
-    // Otherwise, triggering `setEndMoment` unnecessarily can cause a bug where the selection jumps back to the
-    // currently selected time while the user is in the middle of making a different selection.
-    if (endInit?.unix() != prevEndInit?.unix()) {
-      setEndMoment(endInit);
-    }
-  }, [endInit, prevEndInit]);
 
   const onChangeStart = (m?: Moment) => {
     m && setStartMoment(m);

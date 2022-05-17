@@ -14,10 +14,9 @@ import (
 	gojson "encoding/json"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -34,21 +33,8 @@ type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue, topicInValue bool
 
 	targets                 []jobspb.ChangefeedTargetSpecification
-	alloc                   tree.DatumAlloc
 	buf                     bytes.Buffer
 	virtualColumnVisibility string
-
-	// columnMapCache caches the TableColMap for the latest version of the
-	// table descriptor thus far seen. It avoids the need to recompute the
-	// map per row, which, prior to the change introducing this cache, could
-	// amount for 10% of row processing time.
-	columnMapCache map[descpb.ID]*tableColumnMapCacheEntry
-}
-
-// tableColumnMapCacheEntry stores a TableColMap for a given descriptor version.
-type tableColumnMapCacheEntry struct {
-	version descpb.DescriptorVersion
-	catalog.TableColMap
 }
 
 var _ Encoder = &jsonEncoder{}
@@ -61,7 +47,6 @@ func makeJSONEncoder(
 		keyOnly:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeKeyOnly,
 		wrapped:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
 		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
-		columnMapCache:          map[descpb.ID]*tableColumnMapCacheEntry{},
 	}
 	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
 	_, e.mvccTimestampField = opts[changefeedbase.OptMVCCTimestamps]
@@ -84,7 +69,7 @@ func makeJSONEncoder(
 }
 
 // EncodeKey implements the Encoder interface.
-func (e *jsonEncoder) EncodeKey(_ context.Context, row encodeRow) ([]byte, error) {
+func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) ([]byte, error) {
 	jsonEntries, err := e.encodeKeyRaw(row)
 	if err != nil {
 		return nil, err
@@ -98,101 +83,54 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row encodeRow) ([]byte, error
 	return e.buf.Bytes(), nil
 }
 
-func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
-	colIdxByID := e.getTableColMap(row.tableDesc)
-	primaryIndex := row.tableDesc.GetPrimaryIndex()
-	jsonEntries := make([]interface{}, primaryIndex.NumKeyColumns())
-	for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
-		colID := primaryIndex.GetKeyColumnID(i)
-		idx, ok := colIdxByID.Get(colID)
-		if !ok {
-			return nil, errors.Errorf(`unknown column id: %d`, colID)
-		}
-		datum, col := row.datums[idx], row.tableDesc.PublicColumns()[idx]
-		if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
-			return nil, err
-		}
-		var err error
-		jsonEntries[i], err = tree.AsJSON(
-			datum.Datum,
-			sessiondatapb.DataConversionConfig{},
-			time.UTC,
-		)
+func (e *jsonEncoder) encodeKeyRaw(row cdcevent.Row) ([]interface{}, error) {
+	var jsonEntries []interface{}
+	if err := row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
 		if err != nil {
-			return nil, err
+			return err
 		}
+		jsonEntries = append(jsonEntries, j)
+		return nil
+	}); err != nil {
+		return nil, err
 	}
+
 	return jsonEntries, nil
 }
 
-// EncodeValue implements the Encoder interface.
-func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, error) {
-	if e.keyOnly || (!e.wrapped && row.deleted) {
+func rowAsGoNative(row cdcevent.Row) (map[string]interface{}, error) {
+	if !row.HasValues() || row.IsDeleted() {
 		return nil, nil
 	}
 
-	var after map[string]interface{}
-	if !row.deleted {
-		family, err := row.tableDesc.FindFamilyByID(row.familyID)
-		if err != nil {
-			return nil, err
-		}
-		include := make(map[descpb.ColumnID]struct{}, len(family.ColumnIDs))
-		var yes struct{}
-		for _, colID := range family.ColumnIDs {
-			include[colID] = yes
-		}
-		after = make(map[string]interface{})
-		for i, col := range row.tableDesc.PublicColumns() {
-			_, inFamily := include[col.GetID()]
-			virtual := col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
-			if inFamily || virtual {
-				datum := row.datums[i]
-				if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
-					return nil, err
-				}
-				after[col.GetName()], err = tree.AsJSON(
-					datum.Datum,
-					sessiondatapb.DataConversionConfig{},
-					time.UTC,
-				)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
+	result := make(map[string]interface{})
+	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) (err error) {
+		result[col.Name], err = tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+		return err
+	}); err != nil {
+		return nil, err
 	}
 
-	var before map[string]interface{}
-	if row.prevDatums != nil && !row.prevDeleted {
-		family, err := row.prevTableDesc.FindFamilyByID(row.prevFamilyID)
-		if err != nil {
-			return nil, err
-		}
-		include := make(map[descpb.ColumnID]struct{})
-		var yes struct{}
-		for _, colID := range family.ColumnIDs {
-			include[colID] = yes
-		}
-		before = make(map[string]interface{})
-		for i, col := range row.prevTableDesc.PublicColumns() {
-			_, inFamily := include[col.GetID()]
-			virtual := col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
-			if inFamily || virtual {
-				datum := row.prevDatums[i]
-				if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
-					return nil, err
-				}
-				before[col.GetName()], err = tree.AsJSON(
-					datum.Datum,
-					sessiondatapb.DataConversionConfig{},
-					time.UTC,
-				)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
+	return result, nil
+}
+
+// EncodeValue implements the Encoder interface.
+func (e *jsonEncoder) EncodeValue(
+	ctx context.Context, evCtx eventContext, updatedRow cdcevent.Row, prevRow cdcevent.Row,
+) ([]byte, error) {
+	if e.keyOnly || (!e.wrapped && updatedRow.IsDeleted()) {
+		return nil, nil
+	}
+
+	after, err := rowAsGoNative(updatedRow)
+	if err != nil {
+		return nil, err
+	}
+
+	before, err := rowAsGoNative(prevRow)
+	if err != nil {
+		return nil, err
 	}
 
 	var jsonEntries map[string]interface{}
@@ -210,14 +148,14 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 			}
 		}
 		if e.keyInValue {
-			keyEntries, err := e.encodeKeyRaw(row)
+			keyEntries, err := e.encodeKeyRaw(updatedRow)
 			if err != nil {
 				return nil, err
 			}
 			jsonEntries[`key`] = keyEntries
 		}
 		if e.topicInValue {
-			jsonEntries[`topic`] = row.topic
+			jsonEntries[`topic`] = evCtx.topic
 		}
 	} else {
 		jsonEntries = after
@@ -232,10 +170,10 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 			jsonEntries[jsonMetaSentinel] = meta
 		}
 		if e.updatedField {
-			meta[`updated`] = row.updated.AsOfSystemTime()
+			meta[`updated`] = evCtx.updated.AsOfSystemTime()
 		}
 		if e.mvccTimestampField {
-			meta[`mvcc_timestamp`] = row.mvccTimestamp.AsOfSystemTime()
+			meta[`mvcc_timestamp`] = evCtx.mvcc.AsOfSystemTime()
 		}
 	}
 
@@ -264,27 +202,4 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 		}
 	}
 	return gojson.Marshal(jsonEntries)
-}
-
-// getTableColMap gets the TableColMap for the provided table descriptor,
-// optionally consulting its cache.
-func (e *jsonEncoder) getTableColMap(desc catalog.TableDescriptor) catalog.TableColMap {
-	ce, exists := e.columnMapCache[desc.GetID()]
-	if exists {
-		switch {
-		case ce.version == desc.GetVersion():
-			return ce.TableColMap
-		case ce.version > desc.GetVersion():
-			return catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
-		default:
-			// Construct a new entry.
-			delete(e.columnMapCache, desc.GetID())
-		}
-	}
-	ce = &tableColumnMapCacheEntry{
-		version:     desc.GetVersion(),
-		TableColMap: catalog.ColumnIDToOrdinalMap(desc.PublicColumns()),
-	}
-	e.columnMapCache[desc.GetID()] = ce
-	return ce.TableColMap
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -152,7 +153,7 @@ func topic(name string) *tableDescriptorTopic {
 		TableID:           tableDesc.GetID(),
 		StatementTimeName: name,
 	}
-	return &tableDescriptorTopic{tableDesc: tableDesc, spec: spec}
+	return &tableDescriptorTopic{Metadata: makeMetadata(tableDesc), spec: spec}
 }
 
 const noTopicPrefix = ""
@@ -384,8 +385,14 @@ func BenchmarkEmitRow(b *testing.B) {
 
 type testEncoder struct{}
 
-func (testEncoder) EncodeKey(context.Context, encodeRow) ([]byte, error)   { panic(`unimplemented`) }
-func (testEncoder) EncodeValue(context.Context, encodeRow) ([]byte, error) { panic(`unimplemented`) }
+func (testEncoder) EncodeKey(context.Context, cdcevent.Row) ([]byte, error) {
+	panic(`unimplemented`)
+}
+func (testEncoder) EncodeValue(
+	context.Context, eventContext, cdcevent.Row, cdcevent.Row,
+) ([]byte, error) {
+	panic(`unimplemented`)
+}
 func (testEncoder) EncodeResolvedTimestamp(
 	_ context.Context, _ string, ts hlc.Timestamp,
 ) ([]byte, error) {
@@ -404,7 +411,7 @@ func TestSQLSink(t *testing.T) {
 			TableID:           td.GetID(),
 			StatementTimeName: name,
 		}
-		return &tableDescriptorTopic{tableDesc: td, spec: spec}
+		return &tableDescriptorTopic{Metadata: makeMetadata(td), spec: spec}
 	}
 
 	ctx := context.Background()
