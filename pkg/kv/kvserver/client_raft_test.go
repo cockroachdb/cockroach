@@ -4253,15 +4253,13 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 		log.Errorf(ctx, "expected raft group to be uninitialized")
 	}
 	// Send an increment and verify that initializes the Raft group.
-	_, pErr := kv.SendWrapped(ctx,
-		followerStore.TestSender(), incrementArgs(splitKey, 1))
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	//
+	// NB: We don't know who has the lease, so we ignore any errors (i.e.
+	// NotLeaseHolderError). We only care that it initializes the Raft group.
+	_, pErr := kv.SendWrapped(ctx, followerStore.TestSender(), incrementArgs(splitKey, 1))
+	_ = pErr // appease returncheck linter
 
-	if !repl.IsRaftGroupInitialized() {
-		t.Fatal("expected raft group to be initialized")
-	}
+	require.True(t, repl.IsRaftGroupInitialized(), "expected raft group to be initialized")
 }
 
 // TestFailedConfChange verifies correct behavior after a configuration change
