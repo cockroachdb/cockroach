@@ -81,7 +81,7 @@ func NewReplicaSlice(
 		}
 	}
 	canReceiveLease := func(rDesc roachpb.ReplicaDescriptor) bool {
-		if err := roachpb.CheckCanReceiveLease(rDesc, desc); err != nil {
+		if err := roachpb.CheckCanReceiveLease(rDesc, desc.Replicas()); err != nil {
 			return false
 		}
 		return true

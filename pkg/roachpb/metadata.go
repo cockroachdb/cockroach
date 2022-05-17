@@ -316,15 +316,10 @@ func (r *RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescript
 	return ReplicaDescriptor{}, false
 }
 
-// GetReplicaDescriptorByID returns the replica which matches the specified store
-// ID.
+// GetReplicaDescriptorByID returns the replica which matches the specified
+// replica ID.
 func (r *RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
-	for _, repDesc := range r.Replicas().Descriptors() {
-		if repDesc.ReplicaID == replicaID {
-			return repDesc, true
-		}
-	}
-	return ReplicaDescriptor{}, false
+	return r.Replicas().GetReplicaDescriptorByID(replicaID)
 }
 
 // ContainsVoterIncoming returns true if the descriptor contains a VOTER_INCOMING replica.
@@ -468,6 +463,17 @@ func (r ReplicaDescriptor) GetType() ReplicaType {
 
 // SafeValue implements the redact.SafeValue interface.
 func (r ReplicaType) SafeValue() {}
+
+// GetReplicaDescriptorByID returns the replica which matches the specified
+// replica ID.
+func (r ReplicaSet) GetReplicaDescriptorByID(id ReplicaID) (repDesc ReplicaDescriptor, found bool) {
+	for i := range r.wrapped {
+		if r.wrapped[i].ReplicaID == id {
+			return r.wrapped[i], true
+		}
+	}
+	return ReplicaDescriptor{}, false
+}
 
 // IsVoterOldConfig returns true if the replica is a voter in the outgoing
 // config (or, simply is a voter if the range is not in a joint-config state).
