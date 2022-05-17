@@ -944,3 +944,46 @@ CREATE TABLE t22 (a int) WITH (sql_stats_automatic_collection_fraction_stale_row
 
 statement error pq: invalid integer value for sql_stats_automatic_collection_min_stale_rows: cannot be set to a negative value: -1
 CREATE TABLE t22 (a int) WITH (sql_stats_automatic_collection_min_stale_rows = -1)
+
+subtest sequence_is_referenced_by_ID
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS s
+
+statement ok
+DROP TABLE IF EXISTS tbl
+
+statement ok
+CREATE TABLE tbl (i INT PRIMARY KEY, j INT NOT NULL ON UPDATE nextval('s'), FAMILY f1 (i, j))
+
+query TT
+SHOW CREATE TABLE tbl
+----
+tbl  CREATE TABLE public.tbl (
+     i INT8 NOT NULL,
+     j INT8 NOT NULL ON UPDATE nextval('public.s'::REGCLASS),
+     CONSTRAINT tbl_pkey PRIMARY KEY (i ASC),
+     FAMILY f1 (i, j)
+)
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS s1
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS s2
+
+statement ok
+DROP TABLE IF EXISTS tbl
+
+statement ok
+CREATE TABLE tbl (i INT PRIMARY KEY, j INT NOT NULL DEFAULT nextval('s1') ON UPDATE nextval('s2'), FAMILY f1 (i, j))
+
+query TT
+SHOW CREATE TABLE tbl
+----
+tbl  CREATE TABLE public.tbl (
+     i INT8 NOT NULL,
+     j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
+     CONSTRAINT tbl_pkey PRIMARY KEY (i ASC),
+     FAMILY f1 (i, j)
+)
