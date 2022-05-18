@@ -5707,6 +5707,14 @@ SELECT ST_AsText(ST_SnapToGrid(ST_MinimumBoundingCircle(ST_GeomFromText('POINT(0
 ----
 POINT (0 0)
 
+statement error st_minimumboundingcircle\(\): value out of range: overflow
+SELECT st_astext(st_minimumboundingcircle(
+  st_makepoint(
+    (-0.23349138300862382)::FLOAT8,
+    (-1.0):::FLOAT8::FLOAT8 ^ (0.7478831141483115:::FLOAT8 - (0))::FLOAT8
+  )
+)) AS regression_81277
+
 query T
 SELECT ST_AsText(ST_SnapToGrid(ST_MinimumBoundingCircle(ST_GeomFromText('GEOMETRYCOLLECTION (LINESTRING(55 75,125 150), POINT(20 80))'), 4), 0.001));
 ----
