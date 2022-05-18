@@ -62,6 +62,7 @@
     "@babel/preset-react": "^7.7.4",
     "@babel/runtime": "7.14.6",
     "@cockroachlabs/eslint-config": "^0.1.11",
+    "@reduxjs/toolkit": "1.6.0",
     "@storybook/react": "^6.1.21",
     "@testing-library/dom": "^8.11.1",
     "@testing-library/react": "^12.1.0",
