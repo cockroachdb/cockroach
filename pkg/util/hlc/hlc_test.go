@@ -51,7 +51,7 @@ func ExampleNewClock() {
 	// Update the state of the hybrid clock.
 	s := c.Now()
 	time.Sleep(50 * time.Nanosecond)
-	t := Timestamp{WallTime: UnixNano()}
+	t := Timestamp{WallTime: timeutil.Now().UnixNano()}
 	// The sanity checks below will usually never be triggered.
 
 	if s.Less(t) || !t.Less(s) {
@@ -373,13 +373,13 @@ func TestHybridManualClock(t *testing.T) {
 	// the hybrid value. Since we cant pull a value off both clocks at the same
 	// time, we use two LessOrEqual comparisons with reverse order, to establish
 	// that the values are roughly equal.
-	require.LessOrEqual(t, c.Now().WallTime, UnixNano())
-	require.LessOrEqual(t, UnixNano(), c.Now().WallTime)
+	require.LessOrEqual(t, c.Now().WallTime, timeutil.Now().UnixNano())
+	require.LessOrEqual(t, timeutil.Now().UnixNano(), c.Now().WallTime)
 
 	inc := time.Second.Nanoseconds()
 	m.Increment(inc)
-	require.LessOrEqual(t, c.Now().WallTime, UnixNano()+inc)
-	require.LessOrEqual(t, UnixNano()+inc, c.Now().WallTime)
+	require.LessOrEqual(t, c.Now().WallTime, timeutil.Now().UnixNano()+inc)
+	require.LessOrEqual(t, timeutil.Now().UnixNano()+inc, c.Now().WallTime)
 }
 
 // TestHybridManualClockPause test the Pause() functionality of the
@@ -399,7 +399,7 @@ func TestHybridManualClockPause(t *testing.T) {
 	m.Increment(inc)
 	require.Equal(t, now+inc, c.Now().WallTime)
 	m.Resume()
-	trueNow := UnixNano()
+	trueNow := timeutil.Now().UnixNano()
 	require.LessOrEqual(t, trueNow+inc, c.Now().WallTime)
 	time.Sleep(10 * time.Millisecond)
 	require.Less(t, trueNow+inc, c.Now().WallTime)
