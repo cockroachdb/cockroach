@@ -18,7 +18,6 @@ import (
 	"io"
 	"io/fs"
 	"io/ioutil"
-	"math/rand"
 	"net"
 	"net/url"
 	"os"
@@ -62,10 +61,18 @@ var (
 	// alias for `--cloud=local` and remove this variable.
 	local bool
 
-	cockroach                 string
-	libraryFilePaths          []string
-	cloud                                  = spec.GCE
-	encrypt                   encryptValue = "false"
+	cockroach        string
+	libraryFilePaths []string
+	cloud            = spec.GCE
+	// encryptionProbability controls when encryption-at-rest is enabled
+	// in a cluster for tests that have opted-in to metamorphic
+	// encryption (EncryptionMetamorphic).
+	//
+	// Tests that have opted-in to metamorphic encryption will run with
+	// encryption enabled by default (probability 1). In order to run
+	// them with encryption disabled (perhaps to reproduce a test
+	// failure), roachtest can be invoked with --metamorphic-encryption-probability=0
+	encryptionProbability     float64
 	instanceType              string
 	localSSDArg               bool
 	workload                  string
@@ -87,39 +94,9 @@ var (
 	disableIssue     bool
 )
 
-type encryptValue string
-
-func (v *encryptValue) String() string {
-	return string(*v)
-}
-
-func (v *encryptValue) Set(s string) error {
-	if s == "random" {
-		*v = encryptValue(s)
-		return nil
-	}
-	t, err := strconv.ParseBool(s)
-	if err != nil {
-		return err
-	}
-	*v = encryptValue(fmt.Sprint(t))
-	return nil
-}
-
-func (v *encryptValue) asBool() bool {
-	if *v == "random" {
-		return rand.Intn(2) == 0
-	}
-	t, err := strconv.ParseBool(string(*v))
-	if err != nil {
-		return false
-	}
-	return t
-}
-
-func (v *encryptValue) Type() string {
-	return "string"
-}
+const (
+	defaultEncryptionProbability = 1
+)
 
 type errBinaryOrLibraryNotFound struct {
 	binary string

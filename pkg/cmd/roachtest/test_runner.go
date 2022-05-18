@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -453,6 +454,9 @@ func (r *testRunner) runWorker(
 			l.PrintfCtx(ctx, "Worker exiting with canceled ctx. Not destroying cluster.")
 		}
 	}()
+
+	prng, _ := randutil.NewPseudoRand()
+
 	// Loop until there's no more work in the pool, we get interrupted, or an
 	// error occurs.
 	for {
@@ -598,13 +602,17 @@ func (r *testRunner) runWorker(
 			c.status("running test")
 			c.setTest(t)
 
-			// Populate encryption at rest from the --encrypt flag.
-			encAtRest := encrypt.asBool()
-			if encrypt.String() == "random" && !t.Spec().(*registry.TestSpec).EncryptAtRandom {
-				// In random mode, enable enc-at-rest only if tests opted into it.
-				encAtRest = false
+			switch t.Spec().(*registry.TestSpec).EncryptionSupport {
+			case registry.EncryptionAlwaysEnabled:
+				c.encAtRest = true
+			case registry.EncryptionAlwaysDisabled:
+				c.encAtRest = false
+			case registry.EncryptionMetamorphic:
+				// when tests opted-in to metamorphic testing, encryption will
+				// be enabled according to the probability passed to
+				// --metamorphic-encryption-probability
+				c.encAtRest = prng.Float64() < encryptionProbability
 			}
-			c.encAtRest = encAtRest
 
 			wStatus.SetCluster(c)
 			wStatus.SetTest(t, testToRun)

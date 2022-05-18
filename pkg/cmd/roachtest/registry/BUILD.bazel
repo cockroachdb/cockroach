@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "registry",
     srcs = [
+        "encryption.go",
         "filter.go",
         "owners.go",
         "registry_interface.go",
