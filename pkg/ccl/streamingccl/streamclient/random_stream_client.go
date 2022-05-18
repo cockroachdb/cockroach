@@ -304,6 +304,8 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 		tableID,
 		fmt.Sprintf(RandomStreamSchemaPlaceholder, tableName),
 		catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+		nil,
+		nil,
 	)
 	if err != nil {
 		return nil, nil, err

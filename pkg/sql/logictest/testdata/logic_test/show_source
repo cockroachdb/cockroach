@@ -37,6 +37,7 @@ client_min_messages                                   notice
 cost_scans_with_default_col_size                      off
 database                                              test
 datestyle                                             ISO, MDY
+datestyle_enabled                                     on
 default_int_size                                      8
 default_table_access_method                           heap
 default_tablespace                                    ·
@@ -67,7 +68,7 @@ experimental_enable_auto_rehoming                     off
 experimental_enable_implicit_column_partitioning      off
 experimental_enable_temp_tables                       off
 experimental_enable_unique_without_index_constraints  off
-extra_float_digits                                    1
+extra_float_digits                                    0
 force_savepoint_restart                               off
 foreign_key_cascades_limit                            10000
 idle_in_session_timeout                               0
@@ -77,6 +78,7 @@ index_recommendations_enabled                         off
 inject_retry_errors_enabled                           off
 integer_datetimes                                     on
 intervalstyle                                         postgres
+intervalstyle_enabled                                 on
 is_superuser                                          on
 join_reader_ordering_strategy_batch_size              10 KiB
 large_full_scan_rows                                  1000
@@ -100,7 +102,6 @@ optimizer_use_multicol_stats                          on
 override_multi_region_zone_config                     off
 parallelize_multi_key_lookup_joins_enabled            off
 password_encryption                                   scram-sha-256
-pg_trgm.similarity_threshold                          0.3
 prefer_lookup_joins_for_fks                           off
 propagate_input_ordering                              off
 reorder_joins_limit                                   8
@@ -121,9 +122,7 @@ statement_timeout                                     0
 stub_catalog_tables                                   on
 synchronize_seqscans                                  on
 synchronous_commit                                    on
-testing_optimizer_cost_perturbation                   0
-testing_optimizer_disable_rule_probability            0
-testing_optimizer_random_seed                         0
+testing_optimizer_random_cost_seed                    0
 testing_vectorize_inject_panics                       off
 timezone                                              UTC
 tracing                                               off
@@ -135,7 +134,6 @@ transaction_rows_read_log                             0
 transaction_rows_written_err                          0
 transaction_rows_written_log                          0
 transaction_status                                    NoTxn
-unconstrained_non_covering_index_scan_enabled         off
 use_declarative_schema_changer                        on
 vectorize                                             on
 xmloption                                             content
@@ -199,7 +197,9 @@ query TTTTTB colnames,rowsort
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+system         public       descriptor  admin    GRANT           true
 system         public       descriptor  admin    SELECT          true
+system         public       descriptor  root     GRANT           true
 system         public       descriptor  root     SELECT          true
 
 query TTBITTBB colnames
@@ -236,92 +236,93 @@ query TT colnames
 SELECT * FROM [SHOW SEQUENCES FROM system]
 ----
 sequence_schema  sequence_name
+public           role_id_seq
 
 query TTTTT colnames,rowsort
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system]
 ----
-schema_name  table_name                       type   owner  locality
-public       descriptor                       table  NULL   NULL
-public       span_configurations              table  NULL   NULL
-public       sqlliveness                      table  NULL   NULL
-public       statement_diagnostics_requests   table  NULL   NULL
-public       role_options                     table  NULL   NULL
-public       protected_ts_records             table  NULL   NULL
-public       replication_critical_localities  table  NULL   NULL
-public       comments                         table  NULL   NULL
-public       locations                        table  NULL   NULL
-public       table_statistics                 table  NULL   NULL
-public       jobs                             table  NULL   NULL
-public       ui                               table  NULL   NULL
-public       scheduled_jobs                   table  NULL   NULL
-public       statement_bundle_chunks          table  NULL   NULL
-public       reports_meta                     table  NULL   NULL
-public       replication_stats                table  NULL   NULL
-public       web_sessions                     table  NULL   NULL
-public       rangelog                         table  NULL   NULL
-public       eventlog                         table  NULL   NULL
-public       tenants                          table  NULL   NULL
-public       settings                         table  NULL   NULL
-public       zones                            table  NULL   NULL
-public       users                            table  NULL   NULL
-public       privileges                       table  NULL   NULL
-public       database_role_settings           table  NULL   NULL
-public       statement_statistics             table  NULL   NULL
-public       statement_diagnostics            table  NULL   NULL
-public       protected_ts_meta                table  NULL   NULL
-public       replication_constraint_stats     table  NULL   NULL
-public       role_members                     table  NULL   NULL
-public       tenant_settings                  table  NULL   NULL
-public       sql_instances                    table  NULL   NULL
-public       tenant_usage                     table  NULL   NULL
-public       transaction_statistics           table  NULL   NULL
-public       join_tokens                      table  NULL   NULL
-public       migrations                       table  NULL   NULL
-public       namespace                        table  NULL   NULL
-public       lease                            table  NULL   NULL
+schema_name  table_name                       type      owner  locality
+public       descriptor                       table     NULL   NULL
+public       tenant_settings                  table     NULL   NULL
+public       role_id_seq                      sequence  NULL   NULL
+public       span_configurations              table     NULL   NULL
+public       sql_instances                    table     NULL   NULL
+public       tenant_usage                     table     NULL   NULL
+public       database_role_settings           table     NULL   NULL
+public       transaction_statistics           table     NULL   NULL
+public       statement_statistics             table     NULL   NULL
+public       join_tokens                      table     NULL   NULL
+public       migrations                       table     NULL   NULL
+public       sqlliveness                      table     NULL   NULL
+public       scheduled_jobs                   table     NULL   NULL
+public       statement_diagnostics            table     NULL   NULL
+public       statement_diagnostics_requests   table     NULL   NULL
+public       statement_bundle_chunks          table     NULL   NULL
+public       role_options                     table     NULL   NULL
+public       protected_ts_records             table     NULL   NULL
+public       protected_ts_meta                table     NULL   NULL
+public       namespace                        table     NULL   NULL
+public       reports_meta                     table     NULL   NULL
+public       replication_stats                table     NULL   NULL
+public       replication_critical_localities  table     NULL   NULL
+public       replication_constraint_stats     table     NULL   NULL
+public       comments                         table     NULL   NULL
+public       role_members                     table     NULL   NULL
+public       locations                        table     NULL   NULL
+public       table_statistics                 table     NULL   NULL
+public       web_sessions                     table     NULL   NULL
+public       jobs                             table     NULL   NULL
+public       ui                               table     NULL   NULL
+public       rangelog                         table     NULL   NULL
+public       eventlog                         table     NULL   NULL
+public       lease                            table     NULL   NULL
+public       tenants                          table     NULL   NULL
+public       settings                         table     NULL   NULL
+public       zones                            table     NULL   NULL
+public       users                            table     NULL   NULL
 
 query TTTTTT colnames,rowsort
 SELECT schema_name, table_name, type, owner, locality, comment FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
-schema_name  table_name                       type   owner  locality  comment
-public       database_role_settings           table  NULL   NULL      ·
-public       privileges                       table  NULL   NULL      ·
-public       statement_statistics             table  NULL   NULL      ·
-public       statement_diagnostics            table  NULL   NULL      ·
-public       protected_ts_meta                table  NULL   NULL      ·
-public       replication_constraint_stats     table  NULL   NULL      ·
-public       role_members                     table  NULL   NULL      ·
-public       reports_meta                     table  NULL   NULL      ·
-public       replication_stats                table  NULL   NULL      ·
-public       scheduled_jobs                   table  NULL   NULL      ·
-public       eventlog                         table  NULL   NULL      ·
-public       tenants                          table  NULL   NULL      ·
-public       settings                         table  NULL   NULL      ·
-public       zones                            table  NULL   NULL      ·
-public       users                            table  NULL   NULL      ·
-public       web_sessions                     table  NULL   NULL      ·
-public       rangelog                         table  NULL   NULL      ·
-public       statement_bundle_chunks          table  NULL   NULL      ·
-public       table_statistics                 table  NULL   NULL      ·
-public       span_configurations              table  NULL   NULL      ·
-public       locations                        table  NULL   NULL      ·
-public       jobs                             table  NULL   NULL      ·
-public       ui                               table  NULL   NULL      ·
-public       descriptor                       table  NULL   NULL      ·
-public       statement_diagnostics_requests   table  NULL   NULL      ·
-public       role_options                     table  NULL   NULL      ·
-public       protected_ts_records             table  NULL   NULL      ·
-public       replication_critical_localities  table  NULL   NULL      ·
-public       sqlliveness                      table  NULL   NULL      ·
-public       comments                         table  NULL   NULL      ·
-public       lease                            table  NULL   NULL      ·
-public       tenant_settings                  table  NULL   NULL      ·
-public       join_tokens                      table  NULL   NULL      ·
-public       tenant_usage                     table  NULL   NULL      ·
-public       namespace                        table  NULL   NULL      ·
-public       sql_instances                    table  NULL   NULL      ·
-public       transaction_statistics           table  NULL   NULL      ·
-public       migrations                       table  NULL   NULL      ·
+schema_name  table_name                       type      owner  locality  comment
+public       descriptor                       table     NULL   NULL      ·
+public       tenant_settings                  table     NULL   NULL      ·
+public       role_id_seq                      sequence  NULL   NULL      ·
+public       span_configurations              table     NULL   NULL      ·
+public       sql_instances                    table     NULL   NULL      ·
+public       tenant_usage                     table     NULL   NULL      ·
+public       database_role_settings           table     NULL   NULL      ·
+public       transaction_statistics           table     NULL   NULL      ·
+public       statement_statistics             table     NULL   NULL      ·
+public       join_tokens                      table     NULL   NULL      ·
+public       migrations                       table     NULL   NULL      ·
+public       sqlliveness                      table     NULL   NULL      ·
+public       scheduled_jobs                   table     NULL   NULL      ·
+public       statement_diagnostics            table     NULL   NULL      ·
+public       statement_diagnostics_requests   table     NULL   NULL      ·
+public       statement_bundle_chunks          table     NULL   NULL      ·
+public       role_options                     table     NULL   NULL      ·
+public       protected_ts_records             table     NULL   NULL      ·
+public       protected_ts_meta                table     NULL   NULL      ·
+public       namespace                        table     NULL   NULL      ·
+public       reports_meta                     table     NULL   NULL      ·
+public       replication_stats                table     NULL   NULL      ·
+public       replication_critical_localities  table     NULL   NULL      ·
+public       replication_constraint_stats     table     NULL   NULL      ·
+public       comments                         table     NULL   NULL      ·
+public       role_members                     table     NULL   NULL      ·
+public       locations                        table     NULL   NULL      ·
+public       table_statistics                 table     NULL   NULL      ·
+public       web_sessions                     table     NULL   NULL      ·
+public       jobs                             table     NULL   NULL      ·
+public       ui                               table     NULL   NULL      ·
+public       rangelog                         table     NULL   NULL      ·
+public       eventlog                         table     NULL   NULL      ·
+public       lease                            table     NULL   NULL      ·
+public       tenants                          table     NULL   NULL      ·
+public       settings                         table     NULL   NULL      ·
+public       zones                            table     NULL   NULL      ·
+public       users                            table     NULL   NULL      ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries

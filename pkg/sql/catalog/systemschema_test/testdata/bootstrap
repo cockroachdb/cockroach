@@ -8,14 +8,18 @@ CREATE TABLE public.descriptor (
 	FAMILY "primary" (id),
 	FAMILY fam_2_descriptor (descriptor)
 );
+CREATE SEQUENCE public.role_id_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 100;
 CREATE TABLE public.users (
 	username STRING NOT NULL,
 	"hashedPassword" BYTES NULL,
 	"isRole" BOOL NOT NULL DEFAULT false,
+	user_id OID NOT NULL DEFAULT oid(nextval('public.role_id_seq'::REGCLASS)),
 	CONSTRAINT "primary" PRIMARY KEY (username ASC),
+	INDEX users_user_id_idx (user_id ASC),
 	FAMILY "primary" (username),
 	FAMILY "fam_2_hashedPassword" ("hashedPassword"),
-	FAMILY "fam_3_isRole" ("isRole")
+	FAMILY "fam_3_isRole" ("isRole"),
+	FAMILY fam_4_user_id (user_id)
 );
 CREATE TABLE public.zones (
 	id INT8 NOT NULL,

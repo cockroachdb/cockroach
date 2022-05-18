@@ -67,6 +67,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for system.replication_critical_localities... writing output: debug/system.replication_critical_localities.txt... done
 [cluster] retrieving SQL data for system.replication_stats... writing output: debug/system.replication_stats.txt... done
 [cluster] retrieving SQL data for system.reports_meta... writing output: debug/system.reports_meta.txt... done
+[cluster] retrieving SQL data for system.role_id_seq... writing output: debug/system.role_id_seq.txt... done
 [cluster] retrieving SQL data for system.role_members... writing output: debug/system.role_members.txt... done
 [cluster] retrieving SQL data for system.role_options... writing output: debug/system.role_options.txt... done
 [cluster] retrieving SQL data for system.scheduled_jobs... writing output: debug/system.scheduled_jobs.txt... done

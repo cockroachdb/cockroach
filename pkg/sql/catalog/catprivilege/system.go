@@ -65,6 +65,7 @@ var (
 		catconstants.TenantSettingsTableName,
 		catconstants.SpanCountTableName,
 		catconstants.SystemPrivilegeTableName,
+		catconstants.RoleIDSequenceName,
 	}
 
 	systemSuperuserPrivileges = func() map[descpb.NameInfo]privilege.List {

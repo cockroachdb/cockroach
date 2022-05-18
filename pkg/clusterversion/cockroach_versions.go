@@ -387,6 +387,13 @@ const (
 	// system.sql_instances table.
 	AlterSystemSQLInstancesAddLocality
 
+	// RoleIDSequence is the version where the system.role_id_sequence exists.
+	RoleIDSequence
+
+	// SystemUsersUserIDMigration is the version where the system.users table has
+	// a user id column.
+	SystemUsersUserIDMigration
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -687,7 +694,14 @@ var versionsSingleton = keyedVersions{
 		Key:     AlterSystemSQLInstancesAddLocality,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 26},
 	},
-
+	{
+		Key:     RoleIDSequence,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 28},
+	},
+	{
+		Key:     SystemUsersUserIDMigration,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 30},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

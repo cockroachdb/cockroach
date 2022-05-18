@@ -13,6 +13,7 @@ mutations discard
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
 
@@ -34,6 +35,7 @@ upsert /Table/10{6-7}                      range default
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
 /Table/10{6-7}                             range default
@@ -52,6 +54,7 @@ upsert /Table/10{6-7}                      num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
 /Table/10{6-7}                             num_replicas=7 num_voters=5
@@ -75,6 +78,7 @@ upsert /Table/10{6/1/3-7}                  num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
 /Table/106{-/1/1}                          num_replicas=7 num_voters=5
@@ -98,6 +102,7 @@ upsert /Table/10{6/1/5-7}                  num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
 /Table/106{-/1/1}                          num_replicas=7 num_voters=5
@@ -135,6 +140,7 @@ upsert /Table/10{6/2-7}                    num_replicas=7 num_voters=5
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
 /Table/106{-/1}                            num_replicas=7 num_voters=5
@@ -170,6 +176,7 @@ upsert /Table/10{6/2-7}                    num_replicas=7
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
 /Table/106{-/1}                            num_replicas=7
@@ -199,5 +206,6 @@ delete /Table/10{6/2-7}
 state offset=47
 ----
 ...
+/Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)

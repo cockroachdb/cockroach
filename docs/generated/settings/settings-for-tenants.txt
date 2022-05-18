@@ -239,7 +239,6 @@ sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of state
 sql.metrics.max_mem_txn_fingerprints	integer	100000	the maximum number of transaction fingerprints stored in memory
 sql.metrics.statement_details.dump_to_logs	boolean	false	dump collected statement statistics to node logs when periodically cleared
 sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics
-sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID
 sql.metrics.statement_details.plan_collection.enabled	boolean	true	periodically save a logical plan for each fingerprint
 sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected
 sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.
@@ -274,7 +273,7 @@ sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit for all TT
 sql.ttl.default_range_concurrency	integer	1	default amount of ranges to process at once during a TTL delete
 sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job
 sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled
-sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored
+sql.ttl.range_batch_size	integer	100	amount of ranges to fetch at a time for a table during the TTL job
 timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.
@@ -283,4 +282,4 @@ trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
-version	version	22.1-26	set the active cluster version in the format '<major>.<minor>'
+version	version	22.1-12	set the active cluster version in the format '<major>.<minor>'
