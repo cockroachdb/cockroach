@@ -350,6 +350,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.SystemExternalConnectionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
 	},
+	systemschema.RoleIDSequence.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 func rekeySystemTable(
