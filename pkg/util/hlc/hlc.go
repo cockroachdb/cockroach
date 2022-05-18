@@ -40,13 +40,9 @@ import (
 // clock.
 // The data structure is thread safe and thus can safely
 // be shared by multiple goroutines.
-//
-// See NewClock for details.
 type Clock struct {
-	// wallClock or nanosFn are used to read the current clock. Only one of the
-	// two is set. They shouldn't be used directly; physicalNanos() unifies them.
+	// wallClock is used to read the current clock.
 	wallClock WallClock
-	nanosFn   func() int64
 
 	// The maximal offset of the HLC's wall time from the underlying physical
 	// clock. A well-chosen value is large enough to ignore a reasonable amount
@@ -260,28 +256,6 @@ func UnixNano() int64 {
 	return timeutil.Now().UnixNano()
 }
 
-// NewClock creates a new hybrid logical clock associated with the given
-// physical clock. The logical ts is initialized to zero.
-//
-// The physical clock is typically given by the wall time of the local machine
-// in unix epoch nanoseconds, using hlc.UnixNano. This is not a requirement.
-//
-// A value of 0 for maxOffset means that clock skew checking, if performed on
-// this clock by RemoteClockMonitor, is disabled.
-func NewClock(physicalClock func() int64, maxOffset time.Duration) *Clock {
-	return &Clock{
-		nanosFn:   physicalClock,
-		maxOffset: maxOffset,
-	}
-}
-
-func (c *Clock) physicalNanos() int64 {
-	if c.wallClock != nil {
-		return c.wallClock.Now().UnixNano()
-	}
-	return c.nanosFn()
-}
-
 // toleratedForwardClockJump is the tolerated forward jump. Jumps greater
 // than the returned value will cause if panic if forward clock jump check is
 // enabled
@@ -367,7 +341,7 @@ func (c *Clock) MaxOffset() time.Duration {
 // also checks for backwards and forwards jumps, as configured.
 func (c *Clock) getPhysicalClockAndCheck(ctx context.Context) int64 {
 	oldTime := atomic.LoadInt64(&c.lastPhysicalTime)
-	newTime := c.physicalNanos()
+	newTime := c.wallClock.Now().UnixNano()
 	lastPhysTime := oldTime
 	// Try to update c.lastPhysicalTime. When multiple updaters race, we want the
 	// highest clock reading to win, so keep retrying while we interleave with
@@ -466,7 +440,7 @@ func (c *Clock) enforceWallTimeWithinBoundLocked() {
 // higher clock signals received through Update(). If you want to take them into
 // consideration, use c.Now().GoTime().
 func (c *Clock) PhysicalNow() int64 {
-	return c.physicalNanos()
+	return c.wallClock.Now().UnixNano()
 }
 
 // PhysicalTime returns a time.Time struct using the local wall time.
@@ -477,7 +451,7 @@ func (c *Clock) PhysicalTime() time.Time {
 	if c.wallClock != nil {
 		return c.wallClock.Now()
 	}
-	return timeutil.Unix(0, c.physicalNanos())
+	return timeutil.Unix(0, c.wallClock.Now().UnixNano())
 }
 
 // Update takes a hybrid timestamp, usually originating from an event

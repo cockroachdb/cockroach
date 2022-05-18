@@ -106,16 +106,25 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 		// data every time it's called, but that's a little unsatisfying. Instead,
 		// wait for each batch to come out of the feed before advancing the
 		// timestamp.
-		var feedTimeIdx int
-		feedClock := hlc.NewClock(func() int64 {
-			if feedTimeIdx < len(timestamps) {
-				feedTimeIdx++
-				return timestamps[feedTimeIdx-1].UnixNano()
-			}
-			return timeutil.Now().UnixNano()
-		}, time.Nanosecond)
+		feedClock := hlc.NewClockWithTimeSource(&mockClock{ts: timestamps}, time.Nanosecond /* maxOffset */)
 		runBench(b, feedClock)
 	})
+}
+
+type mockClock struct {
+	ts      []time.Time
+	nextIdx int
+}
+
+var _ hlc.WallClock = &mockClock{}
+
+// Now implements the hlc.WallClock interface.
+func (m *mockClock) Now() time.Time {
+	if m.nextIdx < len(m.ts) {
+		m.nextIdx++
+		return m.ts[m.nextIdx-1]
+	}
+	return timeutil.Now()
 }
 
 type benchSink struct {
