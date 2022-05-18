@@ -40,8 +40,6 @@ import (
 // clock.
 // The data structure is thread safe and thus can safely
 // be shared by multiple goroutines.
-//
-// See NewClock for details.
 type Clock struct {
 	// timeSource or nanosFn are used to read the current clock. Only one of the
 	// two is set. They shouldn't be used directly; physicalNanos() unifies them.
@@ -257,21 +255,6 @@ func NewClockWithTimeSource(timeSource NowSource, maxOffset time.Duration) *Cloc
 // c := hlc.NewClockWithSystemTimeSource( ... /* maxOffset */).
 func UnixNano() int64 {
 	return timeutil.Now().UnixNano()
-}
-
-// NewClock creates a new hybrid logical clock associated with the given
-// physical clock. The logical ts is initialized to zero.
-//
-// The physical clock is typically given by the wall time of the local machine
-// in unix epoch nanoseconds, using hlc.UnixNano. This is not a requirement.
-//
-// A value of 0 for maxOffset means that clock skew checking, if performed on
-// this clock by RemoteClockMonitor, is disabled.
-func NewClock(physicalClock func() int64, maxOffset time.Duration) *Clock {
-	return &Clock{
-		nanosFn:   physicalClock,
-		maxOffset: maxOffset,
-	}
 }
 
 func (c *Clock) physicalNanos() int64 {
