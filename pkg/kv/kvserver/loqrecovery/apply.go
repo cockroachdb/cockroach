@@ -140,7 +140,7 @@ func PrepareUpdateReplicas(
 func applyReplicaUpdate(
 	ctx context.Context, readWriter storage.ReadWriter, update loqrecoverypb.ReplicaUpdate,
 ) (PrepareReplicaReport, error) {
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
 	report := PrepareReplicaReport{
 		Replica: update.NewReplica,
 	}
