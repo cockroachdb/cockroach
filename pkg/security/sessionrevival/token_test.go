@@ -29,7 +29,7 @@ func timestampProto(t *testing.T, ts time.Time) *pbtypes.Timestamp {
 }
 
 func TestValidatePayloadContents(t *testing.T) {
-	now := timeutil.Now().Add(-1 * time.Second)
+	now := timeutil.NowNoMono().Add(-1 * time.Second)
 	username := username.MakeSQLUsernameFromPreNormalizedString("testuser")
 	testCases := []struct {
 		description string
