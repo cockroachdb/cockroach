@@ -442,9 +442,10 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 	{
 		irrelevantTTL := 24 * time.Hour * 365
 		ms, valSize := initialMS(), 1<<10
+		mc := hlc.NewManualClock(ms.LastUpdateNanos)
 		txn := newTransaction(
 			"txn", roachpb.Key("key"), roachpb.NormalUserPriority,
-			hlc.NewClock(func() int64 { return ms.LastUpdateNanos }, time.Millisecond))
+			hlc.NewClockWithTimeSource(mc, time.Millisecond /* maxOffset */))
 
 		// Write 1000 distinct 1kb intents at the initial timestamp. This means that
 		// the average intent age is just the time elapsed from now, and this is roughly
