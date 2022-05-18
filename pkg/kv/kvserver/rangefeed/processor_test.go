@@ -149,7 +149,7 @@ func newTestProcessorWithTxnPusher(
 	}
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		TxnPusher:            txnPusher,
 		PushTxnsInterval:     pushTxnInterval,
@@ -544,7 +544,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,
 		PushTxnsAge:          pushTxnAge,
@@ -612,7 +612,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,
 		PushTxnsAge:          pushTxnAge,
@@ -1092,7 +1092,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,
 		PushTxnsAge:          pushTxnAge,
@@ -1180,7 +1180,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,
 		PushTxnsAge:          pushTxnAge,
@@ -1257,7 +1257,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,
 		PushTxnsAge:          pushTxnAge,
@@ -1424,7 +1424,7 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,
 		PushTxnsAge:          pushTxnAge,

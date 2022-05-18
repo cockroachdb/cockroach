@@ -37,7 +37,7 @@ func TestReadSummaryApplyForR1(t *testing.T) {
 
 	baseTS := hlc.Timestamp{WallTime: 123}
 	manual := hlc.NewManualClock(baseTS.WallTime)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
 	tc := tscache.New(clock)
 
 	r1desc := roachpb.RangeDescriptor{
@@ -76,7 +76,7 @@ func TestReadSummaryCollectForR1(t *testing.T) {
 
 	baseTS := hlc.Timestamp{WallTime: 123}
 	manual := hlc.NewManualClock(baseTS.WallTime)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
 	tc := tscache.New(clock)
 
 	r1desc := roachpb.RangeDescriptor{
