@@ -1110,6 +1110,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// TODO(yuzefovich): introduce ternary PlanDistribution into queryMeta.
 	queryMeta.isDistributed = distributePlan.WillDistribute()
 	progAtomic := &queryMeta.progressAtomic
+	flags := planner.curPlan.flags
+	queryMeta.isFullScan = flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
 	ex.mu.Unlock()
 
 	// We need to set the "exec done" flag early because
@@ -2018,6 +2020,7 @@ func (ex *connExecutor) addActiveQuery(
 		rawStmt:       rawStmt,
 		phase:         preparing,
 		isDistributed: false,
+		isFullScan:    false,
 		ctxCancel:     cancelFun,
 		hidden:        hidden,
 	}

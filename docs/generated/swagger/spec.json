@@ -628,6 +628,11 @@
           "type": "boolean",
           "x-go-name": "IsDistributed"
         },
+        "is_full_scan": {
+          "description": "True if the query contains a full table or index scan. Note that this\nfield is only valid if the query is in the EXECUTING phase.",
+          "type": "boolean",
+          "x-go-name": "IsFullScan"
+        },
         "phase": {
           "$ref": "#/definitions/ActiveQuery_Phase"
         },

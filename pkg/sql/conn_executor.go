@@ -3052,6 +3052,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 
 	var activeTxnInfo *serverpb.TxnInfo
 	txn := ex.state.mu.txn
+
 	if txn != nil {
 		id := txn.ID()
 		activeTxnInfo = &serverpb.TxnInfo{
@@ -3108,6 +3109,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			IsDistributed:  query.isDistributed,
 			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
 			Progress:       float32(progress),
+			IsFullScan:     query.isFullScan,
 		})
 	}
 	lastActiveQuery := ""

@@ -896,6 +896,11 @@ message ActiveQuery {
 
   // A summarized version of the sql query.
   string sql_summary = 9;
+
+  // True if the query contains a full table or index scan. Note that this
+  // field is only valid if the query is in the EXECUTING phase.
+  bool is_full_scan = 10;
+
 }
 
 // Request object for ListSessions and ListLocalSessions.
@@ -955,6 +960,7 @@ message Session {
   // Timestamp of session's end.
   google.protobuf.Timestamp end = 15
       [ (gogoproto.nullable) = true, (gogoproto.stdtime) = true ];
+
 }
 
 // An error wrapper object for ListSessionsResponse.
