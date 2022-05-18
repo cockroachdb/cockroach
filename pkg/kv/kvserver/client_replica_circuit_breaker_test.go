@@ -740,7 +740,7 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 			RaftConfig: raftCfg,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource:          manualClock.UnixNano,
+					WallClock:            manualClock,
 					StickyEngineRegistry: reg,
 				},
 				Store: storeKnobs,

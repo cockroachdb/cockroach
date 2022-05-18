@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // TestingKnobs groups testing knobs for the Server.
@@ -88,9 +89,9 @@ type TestingKnobs struct {
 	// When supplied to a TestCluster, StickyEngineIDs will be associated auto-
 	// matically to the StoreSpecs used.
 	StickyEngineRegistry StickyInMemEnginesRegistry
-	// Clock Source used to an inject a custom clock for testing the server. It is
+	// WallClock is used to inject a custom clock for testing the server. It is
 	// typically either an hlc.HybridManualClock or hlc.ManualClock.
-	ClockSource func() int64
+	WallClock hlc.WallClock
 
 	// ImportTimeseriesFile, if set, is a file created via `DumpRaw` that written
 	// back to the KV layer upon server start.

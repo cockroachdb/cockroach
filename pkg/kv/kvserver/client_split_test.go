@@ -2511,7 +2511,7 @@ func TestUnsplittableRange(t *testing.T) {
 				SplitQueuePurgatoryChan: splitQueuePurgatoryChan,
 			},
 			Server: &server.TestingKnobs{
-				ClockSource:                     manualClock.UnixNano,
+				WallClock:                       manualClock,
 				DefaultZoneConfigOverride:       &zoneConfig,
 				DefaultSystemZoneConfigOverride: &zoneSystemConfig,
 			},
@@ -2718,7 +2718,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},

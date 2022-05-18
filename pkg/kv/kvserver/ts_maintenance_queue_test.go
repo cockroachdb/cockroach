@@ -108,7 +108,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				ClockSource: manual.UnixNano,
+				WallClock: manual,
 			},
 			Store: &kvserver.StoreTestingKnobs{
 				DisableScanner:      true,
