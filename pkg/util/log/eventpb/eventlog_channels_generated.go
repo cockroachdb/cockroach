@@ -92,6 +92,9 @@ func (m *CommentOnDatabase) LoggingChannel() logpb.Channel { return logpb.Channe
 func (m *CommentOnIndex) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *CommentOnSchema) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *CommentOnTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
