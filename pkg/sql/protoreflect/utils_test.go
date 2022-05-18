@@ -88,7 +88,7 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 				TraceID: 123,
 				Tags:    map[string]string{"one": "1", "two": "2", "three": "3"},
 				StructuredRecords: []tracingpb.StructuredRecord{{
-					Time:    timeutil.Now(),
+					Time:    timeutil.NowNoMono(),
 					Payload: makeAny(t, &descpb.ColumnDescriptor{Name: "bogus stats"})}},
 			},
 		},
