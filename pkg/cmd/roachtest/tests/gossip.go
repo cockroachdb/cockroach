@@ -357,9 +357,7 @@ func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster
 	settings := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 
-	startOpts := option.DefaultStartOpts()
-	startOpts.RoachprodOpts.EncryptedStores = false
-	c.Start(ctx, t.L(), startOpts, settings)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
@@ -468,7 +466,7 @@ SELECT count(replicas)
 	// incoming gossip info in order to determine where range 1 is.
 	settings = install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
-	c.Start(ctx, t.L(), startOpts, settings, c.Range(2, c.Spec().NodeCount))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(2, c.Spec().NodeCount))
 
 	// We need to override DB connection creation to use the correct port for
 	// node 1. This is more complicated than it should be and a limitation of the

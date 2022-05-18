@@ -81,7 +81,6 @@ func registerKV(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachprodOpts.EncryptedStores = opts.encryption
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
 		db := c.Conn(ctx, t.L(), 1)
@@ -262,6 +261,10 @@ func registerKV(r registry.Registry) {
 		if opts.owner != "" {
 			owner = opts.owner
 		}
+		encryption := registry.EncryptionAlwaysDisabled
+		if opts.encryption {
+			encryption = registry.EncryptionAlwaysEnabled
+		}
 		r.Add(registry.TestSpec{
 			Name:    strings.Join(nameParts, "/"),
 			Owner:   owner,
@@ -269,7 +272,8 @@ func registerKV(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
-			Tags: opts.tags,
+			Tags:              opts.tags,
+			EncryptionSupport: encryption,
 		})
 	}
 }

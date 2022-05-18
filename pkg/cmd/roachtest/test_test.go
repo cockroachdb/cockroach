@@ -188,21 +188,21 @@ func TestRunnerRun(t *testing.T) {
 }
 
 func TestRunnerEncryptionAtRest(t *testing.T) {
-	// Verify that if a test opts into EncryptAtRandom, it will (eventually) get
-	// a cluster that has encryption at rest enabled.
+	// Verify that if a test opts into EncryptionMetamorphic, it will
+	// (eventually) get a cluster that has encryption at rest enabled.
 	{
-		prev := encrypt.String()
-		require.NoError(t, encrypt.Set("random")) // --encrypt=random
+		prevProb := encryptionProbability
+		encryptionProbability = 0.5 // --metamorphic-encrypt-probability=0.5
 		defer func() {
-			require.NoError(t, encrypt.Set(prev))
+			encryptionProbability = prevProb
 		}()
 	}
 	r := mkReg(t)
 	var sawEncrypted int32 // atomic
 	r.Add(registry.TestSpec{
-		Name:            "enc-random",
-		Owner:           OwnerUnitTest,
-		EncryptAtRandom: true,
+		Name:              "enc-random",
+		Owner:             OwnerUnitTest,
+		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			encAtRest := c.(*clusterImpl).encAtRest
 			t.L().Printf("encryption-at-rest=%t", encAtRest)
@@ -221,9 +221,8 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 			rt.copt, testOpts{}, rt.lopt, nil, // clusterAllocator
 		))
 		if atomic.LoadInt32(&sawEncrypted) == 0 {
-			// NB: since it's a 50% chance, hitting this reliably over 10k trials
-			// has probability (0.5)^10000 which is for all intents and purposes
-			// one, even taking any stressing we might ever do into account.
+			// NB: since it's a 50% chance, the probability of *not* hitting
+			// this branch over 10k runs is 1 - (0.5)^10000 which is essentially 1.
 			continue
 		}
 		t.Logf("done after %d iterations", i+1)

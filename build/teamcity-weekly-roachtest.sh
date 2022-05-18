@@ -57,7 +57,7 @@ timeout -s INT $((7800*60)) bin/roachtest run \
   --workload "$PWD/bin/workload" \
   --artifacts "$artifacts" \
   --parallelism 5 \
-  --encrypt=random \
+  --metamorphic-encryption-probability=0.5 \
   --teamcity || exit_status=$?
 
 if [[ ${exit_status} -eq 10 ]]; then
