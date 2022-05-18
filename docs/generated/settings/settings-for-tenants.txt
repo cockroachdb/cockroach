@@ -265,9 +265,9 @@ sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed qu
 sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects
 sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up
 sql.trace.log_statement_execute	boolean	false	set to true to enable logging of executed statements
-sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing. Note that enabling this may have a non-trivial negative performance impact.
-sql.trace.stmt.enable_threshold	duration	0s	duration beyond which all statements are traced (set to 0 to disable). This applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold.
-sql.trace.txn.enable_threshold	duration	0s	duration beyond which all transactions are traced (set to 0 to disable). This setting is coarser grained thansql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries).
+sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing; note that enabling this may have a non-trivial negative performance impact
+sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace recorded (set to 0 to disable); note that enabling this may have a non-trivial negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold
+sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace recorded (set to 0 to disable); note that enabling this may have a non-trivial negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)
 sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job
 sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.
 sql.ttl.default_range_concurrency	integer	1	default amount of ranges to process at once during a TTL delete
