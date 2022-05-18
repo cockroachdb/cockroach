@@ -102,13 +102,19 @@ func TestWatchPods(t *testing.T) {
 	}
 	require.True(t, tds.AddPod(tenantID, runningPod))
 	pod := <-podWatcher
-	require.Equal(t, runningPod, pod)
+	requirePodsEqual := func(t *testing.T, pod1, pod2 *tenant.Pod) {
+		p1, p2 := *pod1, *pod2
+		p1.StateTimestamp = timeutil.StripMono(p1.StateTimestamp)
+		p2.StateTimestamp = timeutil.StripMono(p2.StateTimestamp)
+		require.Equal(t, p1, p2)
+	}
+	requirePodsEqual(t, runningPod, pod)
 
 	// Directory cache should have already been updated.
 	pods, err := dir.TryLookupTenantPods(ctx, tenantID)
 	require.NoError(t, err)
 	require.Len(t, pods, 1)
-	require.Equal(t, runningPod, pods[0])
+	requirePodsEqual(t, runningPod, pods[0])
 
 	// Drain the pod.
 	require.True(t, tds.DrainPod(tenantID, runningPod.Addr))
@@ -152,7 +158,7 @@ func TestWatchPods(t *testing.T) {
 	// Put the same pod back to running.
 	require.True(t, tds.AddPod(tenantID, runningPod))
 	pod = <-podWatcher
-	require.Equal(t, runningPod, pod)
+	requirePodsEqual(t, runningPod, pod)
 
 	// Directory cache should be updated with the RUNNING pod.
 	pods, err = dir.TryLookupTenantPods(ctx, tenantID)

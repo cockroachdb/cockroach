@@ -1671,7 +1671,9 @@ func TestAdminAPIJobs(t *testing.T) {
 			if e, a := expected, resIDs; !reflect.DeepEqual(e, a) {
 				t.Errorf("%d: expected job IDs %v, but got %v", i, e, a)
 			}
-			require.Equal(t, now.Add(-retentionTime), res.EarliestRetainedTime)
+			// We don't use require.Equal() because timestamps don't necessarily
+			// compare == due to only one of them having a monotonic clock reading.
+			require.True(t, now.Add(-retentionTime).Equal(res.EarliestRetainedTime))
 		}
 	})
 }
