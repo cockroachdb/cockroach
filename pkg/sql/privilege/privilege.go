@@ -90,13 +90,14 @@ var isDescriptorBacked = map[ObjectType]bool{
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges    = List{ALL, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
-	ReadData         = List{SELECT}
-	ReadWriteData    = List{SELECT, INSERT, DELETE, UPDATE}
-	DBPrivileges     = List{ALL, CONNECT, CREATE, DROP, ZONECONFIG}
-	TablePrivileges  = List{ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
-	SchemaPrivileges = List{ALL, CREATE, USAGE}
-	TypePrivileges   = List{ALL, USAGE}
+	AllPrivileges         = List{ALL, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
+	ReadData              = List{SELECT}
+	ReadWriteData         = List{SELECT, INSERT, DELETE, UPDATE}
+	ReadWriteSequenceData = List{SELECT, UPDATE, USAGE}
+	DBPrivileges          = List{ALL, CONNECT, CREATE, DROP, ZONECONFIG}
+	TablePrivileges       = List{ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	SchemaPrivileges      = List{ALL, CREATE, USAGE}
+	TypePrivileges        = List{ALL, USAGE}
 	// SequencePrivileges is appended with TablePrivileges as well. This is because
 	// before v22.2 we treated Sequences the same as Tables. This is to avoid making
 	// certain privileges unavailable after upgrade migration.
