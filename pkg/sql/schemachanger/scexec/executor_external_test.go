@@ -208,7 +208,7 @@ CREATE TABLE db.t (
 			}),
 			ops: func() []scop.Op {
 				return []scop.Op{
-					&scop.MakeAddedIndexDeleteOnly{
+					&scop.MakeAddedTempIndexDeleteOnly{
 						Index: scpb.Index{
 							TableID:             table.ID,
 							IndexID:             indexToAdd.ID,

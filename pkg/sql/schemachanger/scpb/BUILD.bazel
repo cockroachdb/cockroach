@@ -7,6 +7,7 @@ go_library(
     srcs = [
         "constants.go",
         "state.go",
+        "transient.go",
         ":gen-elements-interface",  # keep
     ],
     embed = [":scpb_go_proto"],

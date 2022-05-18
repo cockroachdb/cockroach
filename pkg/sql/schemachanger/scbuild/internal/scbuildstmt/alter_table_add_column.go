@@ -12,6 +12,7 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -255,10 +256,38 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 		}
 	})
 	if freshlyAdded != nil {
+		var tempIndex *scpb.TemporaryIndex
+		scpb.ForEachTemporaryIndex(b.QueryByID(spec.tbl.TableID), func(
+			status scpb.Status, ts scpb.TargetStatus, e *scpb.TemporaryIndex,
+		) {
+			if ts != scpb.Transient {
+				return
+			}
+			if e.IndexID == freshlyAdded.TemporaryIndexID {
+				if tempIndex != nil {
+					panic(errors.AssertionFailedf(
+						"multiple temporary index elements exist with index id %d for table %d",
+						freshlyAdded.TemporaryIndexID, e.TableID,
+					))
+				}
+				tempIndex = e
+			}
+		})
+		if tempIndex == nil {
+			panic(errors.AssertionFailedf(
+				"failed to find temporary index element for new primary index id %d for table %d",
+				freshlyAdded.IndexID, freshlyAdded.TableID,
+			))
+		}
 		// Exceptionally, we can edit the element directly here, by virtue of it
 		// currently being in the ABSENT state we know that it was introduced as a
 		// PUBLIC target by the current statement.
 		freshlyAdded.StoringColumnIDs = append(freshlyAdded.StoringColumnIDs, spec.col.ColumnID)
+		tempIndex.StoringColumnIDs = append(tempIndex.StoringColumnIDs, spec.col.ColumnID)
+		if colinfo.CanHaveCompositeKeyEncoding(spec.colType.Type) {
+			freshlyAdded.CompositeColumnIDs = append(freshlyAdded.CompositeColumnIDs, spec.col.ColumnID)
+			tempIndex.CompositeColumnIDs = append(tempIndex.CompositeColumnIDs, spec.col.ColumnID)
+		}
 		return freshlyAdded
 	}
 	// Otherwise, create a new primary index target and swap it with the existing
@@ -292,6 +321,10 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 	replacement.IndexID = b.NextTableIndexID(spec.tbl)
 	replacement.SourceIndexID = existing.IndexID
 	replacement.StoringColumnIDs = append(replacement.StoringColumnIDs, spec.col.ColumnID)
+	replacement.TemporaryIndexID = replacement.IndexID + 1
+	if colinfo.CanHaveCompositeKeyEncoding(spec.colType.Type) {
+		replacement.CompositeColumnIDs = append(replacement.CompositeColumnIDs, spec.col.ColumnID)
+	}
 	b.Add(replacement)
 	if existingName != nil {
 		updatedName := protoutil.Clone(existingName).(*scpb.IndexName)
@@ -303,6 +336,20 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 		updatedPartitioning.IndexID = replacement.IndexID
 		b.Add(updatedPartitioning)
 	}
+
+	temp := &scpb.TemporaryIndex{
+		Index:                    protoutil.Clone(replacement).(*scpb.PrimaryIndex).Index,
+		IsUsingSecondaryEncoding: false,
+	}
+	temp.TemporaryIndexID = 0
+	temp.IndexID = b.NextTableIndexID(spec.tbl)
+	b.AddTransient(temp)
+	if existingPartitioning != nil {
+		updatedPartitioning := protoutil.Clone(existingPartitioning).(*scpb.IndexPartitioning)
+		updatedPartitioning.IndexID = temp.IndexID
+		b.Add(updatedPartitioning)
+	}
+
 	return replacement
 }
 
