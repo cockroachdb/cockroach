@@ -174,7 +174,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock = hlc.NewClockWithTimeSource(clockSrc, time.Duration(cfg.MaxOffset))
 	} else if cfg.TestingKnobs.Server != nil &&
 		cfg.TestingKnobs.Server.(*TestingKnobs).ClockSource != nil {
-		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).ClockSource,
+		clock = hlc.NewClockWithTimeSource(cfg.TestingKnobs.Server.(*TestingKnobs).ClockSource,
 			time.Duration(cfg.MaxOffset))
 	} else {
 		clock = hlc.NewClockWithSystemTimeSource(time.Duration(cfg.MaxOffset))

@@ -680,7 +680,7 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
-							ClockSource: manual.UnixNano,
+							ClockSource: manual,
 						},
 						Store: &kvserver.StoreTestingKnobs{
 							// This test suspends the merge txn right before it can apply the

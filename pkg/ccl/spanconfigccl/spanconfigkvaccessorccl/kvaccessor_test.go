@@ -40,7 +40,7 @@ func TestCommitTSIntervals(t *testing.T) {
 	ts, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				ClockSource: manual.UnixNano,
+				ClockSource: manual,
 			},
 			SpanConfig: &spanconfig.TestingKnobs{
 				KVAccessorPostCommitDeadlineSetInterceptor: func(txn *kv.Txn) {

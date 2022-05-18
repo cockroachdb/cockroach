@@ -455,7 +455,7 @@ func TestFailedReplicaChange(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						ClockSource: manualClock,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -866,7 +866,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						ClockSource: manualClock,
 					},
 				},
 			},
@@ -1963,7 +1963,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyEngineRegistry: stickyEngineRegistry,
-					ClockSource:          manualClock.UnixNano,
+					ClockSource:          manualClock,
 				},
 			},
 			RaftConfig: base.RaftConfig{
@@ -2072,7 +2072,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyEngineRegistry: stickyEngineRegistry,
-					ClockSource:          manualClock.UnixNano,
+					ClockSource:          manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// We're gonna want to validate the state of the store before and
@@ -3273,7 +3273,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyEngineRegistry: stickyEngineRegistry,
-					ClockSource:          manualClock.UnixNano,
+					ClockSource:          manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Newly-started stores (including the "rogue" one) should not GC
@@ -3885,7 +3885,7 @@ func TestRemovedReplicaError(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						ClockSource: manualClock,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						// Disable the replica GC queues. This verifies that the replica is

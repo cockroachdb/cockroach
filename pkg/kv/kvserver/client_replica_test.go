@@ -88,7 +88,7 @@ func TestReplicaClockUpdates(t *testing.T) {
 			serverArgs[i] = base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manuals[i].UnixNano,
+						ClockSource: manuals[i],
 					},
 				},
 			}
@@ -157,7 +157,7 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				ClockSource: manual.UnixNano,
+				ClockSource: manual,
 			},
 		},
 	})
@@ -269,7 +269,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				ClockSource: manual.UnixNano,
+				ClockSource: manual,
 			},
 			Store: &kvserver.StoreTestingKnobs{
 				// Splits can cause our chosen key to end up on a range other than range 1,
@@ -439,7 +439,7 @@ func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
 		srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource: manual.UnixNano,
+					ClockSource: manual,
 				},
 			},
 		})
@@ -557,7 +557,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 		serverArgs[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource: manuals[i].UnixNano,
+					ClockSource: manuals[i],
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
@@ -764,7 +764,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 		serverArgs[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource: manuals[i].UnixNano,
+					ClockSource: manuals[i],
 				},
 			},
 		}
@@ -918,7 +918,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 		serverArgs[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource: manuals[i].UnixNano,
+					ClockSource: manuals[i],
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter:          requestFilter,
@@ -1233,7 +1233,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 						LeaseTransferBlockedOnExtensionEvent: leaseTransferBlockedOnExtensionEvent,
 					},
 					Server: &server.TestingKnobs{
-						ClockSource: l.manualClock.UnixNano,
+						ClockSource: l.manualClock,
 					},
 				},
 			},
@@ -1686,7 +1686,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 		serverArgs[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource: manuals[i].UnixNano,
+					ClockSource: manuals[i],
 				},
 			},
 		}
@@ -1793,7 +1793,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 						},
 					},
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						ClockSource: manualClock,
 					},
 				},
 			},
@@ -1890,7 +1890,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource:          manual.UnixNano,
+						ClockSource:          manual,
 						StickyEngineRegistry: stickyEngineRegistry,
 					},
 					Store: &kvserver.StoreTestingKnobs{
@@ -2605,7 +2605,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						ClockSource: manualClock,
 					},
 				},
 			},
@@ -4095,7 +4095,7 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 				AllowLeaseRequestProposalsWhenNotLeader: true,
 			},
 			Server: &server.TestingKnobs{
-				ClockSource: manual.UnixNano,
+				ClockSource: manual,
 			},
 		}},
 	})
