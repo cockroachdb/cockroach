@@ -15,21 +15,22 @@ package hlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/errors"
 )
 
-// ClockSource contains the handle of the clock device as well as the
-// clock id.
-type ClockSource struct {
+// PTPClock reads the time from a ptp device. Only implemented on Linux.
+type PTPClock struct{}
+
+var _ WallClock = PTPClock{}
+
+// MakePTPClock us not used on platforms other than Linux
+func MakePTPClock(_ context.Context, _ string) (PTPClock, error) {
+	return PTPClock{}, errors.New("clock device not supported on this platform")
 }
 
-// UnixNano is not used on platforms other than Linux
-func (p ClockSource) UnixNano() int64 {
+// Now implements the hlc.WallClock interface.
+func (p PTPClock) Now() time.Time {
 	panic(errors.New("clock device not supported on this platform"))
-}
-
-// MakeClockSource us not used on platforms other than Linux
-func MakeClockSource(_ context.Context, _ string) (ClockSource, error) {
-	return ClockSource{}, errors.New("clock device not supported on this platform")
 }
