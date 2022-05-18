@@ -584,7 +584,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					storage.CacheSize(cfg.CacheSize),
 					storage.MaxSize(sizeInBytes),
 					storage.EncryptionAtRest(spec.EncryptionOptions),
-					storage.DisableFilesystemMiddlewareTODO,
 					storage.Settings(cfg.Settings))
 				if err != nil {
 					return Engines{}, err

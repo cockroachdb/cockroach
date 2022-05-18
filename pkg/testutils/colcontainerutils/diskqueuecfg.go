@@ -47,7 +47,7 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg
 		loc,
 		storage.ForTesting,
 		storage.CacheSize(0),
-		storage.DisableFilesystemMiddlewareTODO)
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
