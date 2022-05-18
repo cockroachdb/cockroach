@@ -1404,7 +1404,7 @@ Replicas in this state will fail-fast all inbound requests.
 	// Replica circuit breaker.
 	metaReplicaCircuitBreakerCumTripped = metric.Metadata{
 		Name:        "kv.replica_circuit_breaker.num_tripped_events",
-		Help:        `Number of times the per-Replica circuit breakers tripped since process start.`,
+		Help:        `The number of circuit breaker events occurred per second across all nodes since the process started.`,
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
