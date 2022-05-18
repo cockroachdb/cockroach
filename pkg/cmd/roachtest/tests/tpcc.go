@@ -321,11 +321,11 @@ func registerTPCC(r registry.Registry) {
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
 		// running with the max supported warehouses.
-		Name:            "tpcc/headroom/" + headroomSpec.String(),
-		Owner:           registry.OwnerKV,
-		Tags:            []string{`default`, `release_qualification`},
-		Cluster:         headroomSpec,
-		EncryptAtRandom: true,
+		Name:              "tpcc/headroom/" + headroomSpec.String(),
+		Owner:             registry.OwnerKV,
+		Tags:              []string{`default`, `release_qualification`},
+		Cluster:           headroomSpec,
+		EncryptionSupport: registry.EncryptionAllowed,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
@@ -349,9 +349,9 @@ func registerTPCC(r registry.Registry) {
 		Owner: registry.OwnerKV,
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.
-		Tags:            []string{`default`},
-		Cluster:         mixedHeadroomSpec,
-		EncryptAtRandom: true,
+		Tags:              []string{`default`},
+		Cluster:           mixedHeadroomSpec,
+		EncryptionSupport: registry.EncryptionAllowed,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			crdbNodes := c.Range(1, 4)
 			workloadNode := c.Node(5)
@@ -428,10 +428,10 @@ func registerTPCC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "tpcc-nowait/nodes=3/w=1",
-		Owner:           registry.OwnerKV,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		EncryptAtRandom: true,
+		Name:              "tpcc-nowait/nodes=3/w=1",
+		Owner:             registry.OwnerKV,
+		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
+		EncryptionSupport: registry.EncryptionAllowed,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   1,
@@ -448,8 +448,8 @@ func registerTPCC(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
 		// Give the test a generous extra 10 hours to load the dataset and
 		// slowly ramp up the load.
-		Timeout:         4*24*time.Hour + 10*time.Hour,
-		EncryptAtRandom: true,
+		Timeout:           4*24*time.Hour + 10*time.Hour,
+		EncryptionSupport: registry.EncryptionAllowed,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			warehouses := 1000
 			runTPCC(ctx, t, c, tpccOptions{
@@ -566,8 +566,8 @@ func registerTPCC(r registry.Registry) {
 				Name:  tc.name,
 				Owner: registry.OwnerMultiRegion,
 				// Add an extra node which serves as the workload nodes.
-				Cluster:         r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
-				EncryptAtRandom: true,
+				Cluster:           r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
+				EncryptionSupport: registry.EncryptionAllowed,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					t.Status(tc.desc)
 					duration := 90 * time.Minute
@@ -648,10 +648,10 @@ func registerTPCC(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:            "tpcc/w=100/nodes=3/chaos=true",
-		Owner:           registry.OwnerKV,
-		Cluster:         r.MakeClusterSpec(4),
-		EncryptAtRandom: true,
+		Name:              "tpcc/w=100/nodes=3/chaos=true",
+		Owner:             registry.OwnerKV,
+		Cluster:           r.MakeClusterSpec(4),
+		EncryptionSupport: registry.EncryptionAllowed,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
@@ -676,11 +676,11 @@ func registerTPCC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "tpcc/interleaved/nodes=3/cpu=16/w=500",
-		Owner:           registry.OwnerSQLQueries,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Timeout:         6 * time.Hour,
-		EncryptAtRandom: true,
+		Name:              "tpcc/interleaved/nodes=3/cpu=16/w=500",
+		Owner:             registry.OwnerSQLQueries,
+		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
+		Timeout:           6 * time.Hour,
+		EncryptionSupport: registry.EncryptionAllowed,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			skip.WithIssue(t, 53886)
 			runTPCC(ctx, t, c, tpccOptions{
@@ -926,7 +926,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		Tags:    b.Tags,
 		// NB: intentionally not enabling encryption-at-rest to produce
 		// consistent results.
-		EncryptAtRandom: false,
+		EncryptionSupport: registry.EncryptionDisabled,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},

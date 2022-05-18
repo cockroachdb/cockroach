@@ -388,11 +388,11 @@ func registerRestore(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:            testName,
-			Owner:           registry.OwnerBulkIO,
-			Cluster:         r.MakeClusterSpec(item.nodes, clusterOpts...),
-			Timeout:         item.timeout,
-			EncryptAtRandom: true,
+			Name:              testName,
+			Owner:             registry.OwnerBulkIO,
+			Cluster:           r.MakeClusterSpec(item.nodes, clusterOpts...),
+			Timeout:           item.timeout,
+			EncryptionSupport: registry.EncryptionAllowed,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())

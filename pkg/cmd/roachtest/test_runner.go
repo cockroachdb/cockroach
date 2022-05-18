@@ -453,6 +453,9 @@ func (r *testRunner) runWorker(
 			l.PrintfCtx(ctx, "Worker exiting with canceled ctx. Not destroying cluster.")
 		}
 	}()
+
+	random := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+
 	// Loop until there's no more work in the pool, we get interrupted, or an
 	// error occurs.
 	for {
@@ -599,13 +602,22 @@ func (r *testRunner) runWorker(
 			c.status("running test")
 			c.setTest(t)
 
-			// Populate encryption at rest from the --encrypt flag.
-			encAtRest := encrypt.asBool()
-			if encrypt.String() == "random" && !t.Spec().(*registry.TestSpec).EncryptAtRandom {
-				// In random mode, enable enc-at-rest only if tests opted into it.
-				encAtRest = false
+			// Populate encryption at rest based on a combination of the
+			// test's requirements and the value of the --encrypt flag.
+			switch t.Spec().(*registry.TestSpec).EncryptionSupport {
+			case registry.EncryptionAllowed:
+				if encrypt == encryptRandom {
+					// 50% chance of enabling encryption in random mode for
+					// tests that support it
+					c.encAtRest = random.Intn(2) == 0
+				} else {
+					c.encAtRest = true // auto mode: default to encryption enabled
+				}
+			case registry.EncryptionRequired:
+				c.encAtRest = true
+			case registry.EncryptionDisabled:
+				c.encAtRest = false
 			}
-			c.encAtRest = encAtRest
 
 			wStatus.SetCluster(c)
 			wStatus.SetTest(t, testToRun)

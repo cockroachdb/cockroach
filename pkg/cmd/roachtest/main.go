@@ -132,9 +132,10 @@ func main() {
 		&cockroach, "cockroach", "", "path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
 		&workload, "workload", "", "path to workload binary to use")
-	f := rootCmd.PersistentFlags().VarPF(
-		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
-	f.NoOptDefVal = "true"
+	rootCmd.PersistentFlags().StringVar(
+		&encrypt, "encrypt", encryptAuto,
+		"auto (all tests that support encryption will have it turned on); or random "+
+			"(tests that support encryption will have it randomly enabled)")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   `version`,

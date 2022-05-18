@@ -29,9 +29,7 @@ func registerEncryption(r registry.Registry) {
 	runEncryption := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		nodes := c.Spec().NodeCount
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
-		startOpts := option.DefaultStartOpts()
-		startOpts.RoachprodOpts.EncryptedStores = true
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 		// Check that /_status/stores/local endpoint has encryption status.
 		adminAddrs, err := c.InternalAdminUIAddr(ctx, t.L(), c.Range(1, nodes))
@@ -51,7 +49,7 @@ func registerEncryption(r registry.Registry) {
 		}
 
 		// Restart node with encryption turned on to verify old key works.
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 		testCLIGenKey := func(size int) error {
 			// Generate encryption store key through `./cockroach gen encryption-key -s=size aes-size.key`.
@@ -86,10 +84,11 @@ func registerEncryption(r registry.Registry) {
 
 	for _, n := range []int{1} {
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("encryption/nodes=%d", n),
-			Skip:    "Blocked on #79265.",
-			Owner:   registry.OwnerStorage,
-			Cluster: r.MakeClusterSpec(n),
+			Name:              fmt.Sprintf("encryption/nodes=%d", n),
+			EncryptionSupport: registry.EncryptionRequired,
+			Skip:              "Blocked on #79265.",
+			Owner:             registry.OwnerStorage,
+			Cluster:           r.MakeClusterSpec(n),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEncryption(ctx, t, c)
 			},
