@@ -1187,7 +1187,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	cargs.ServerArgs = base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				ClockSource: manualClock.UnixNano,
+				ClockSource: manualClock,
 			},
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
@@ -1345,7 +1345,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 	cargs.ServerArgs = base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				ClockSource: manualClock.UnixNano,
+				ClockSource: manualClock,
 			},
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
