@@ -123,7 +123,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			cArgs.EvalCtx = (&MockEvalCtx{
 				ClusterSettings: cluster.MakeTestingClusterSettings(),
 				Desc:            &desc,
-				Clock:           hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+				Clock:           hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 				Stats:           stats,
 			}).EvalContext()
 			cArgs.Args = &roachpb.ClearRangeRequest{
@@ -186,7 +186,7 @@ func TestCmdClearRangeDeadline(t *testing.T) {
 	}
 
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
 
 	args := roachpb.ClearRangeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},

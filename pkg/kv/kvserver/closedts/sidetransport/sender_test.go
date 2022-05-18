@@ -107,7 +107,7 @@ func (c *mockConn) getState() connState                { return connState{} }
 func newMockSender(connFactory connFactory) (*Sender, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	st := cluster.MakeTestingClusterSettings()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	s := newSenderWithConnFactory(stopper, st, clock, connFactory)
 	s.nodeID = 1 // usually set in (*Sender).Run
 	return s, stopper
@@ -335,7 +335,7 @@ func newMockSideTransportGRPCServerWithOpts(
 		return nil, err
 	}
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	grpcServer := rpc.NewServer(rpc.NewInsecureTestingContext(ctx, clock, stopper))
 	ctpb.RegisterSideTransportServer(grpcServer, receiver)
 	go func() {

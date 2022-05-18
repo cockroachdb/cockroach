@@ -135,7 +135,7 @@ func TestCmdRevertRange(t *testing.T) {
 				EndKey:   roachpb.RKey(endKey),
 			}
 			cArgs := CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsC, MaxSpanRequestKeys: 2}}
-			evalCtx := &MockEvalCtx{Desc: &desc, Clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), Stats: stats}
+			evalCtx := &MockEvalCtx{Desc: &desc, Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */), Stats: stats}
 			cArgs.EvalCtx = evalCtx.EvalContext()
 			afterStats := getStats(t, eng)
 			for _, tc := range []struct {
@@ -215,7 +215,7 @@ func TestCmdRevertRange(t *testing.T) {
 
 			cArgs.Header.Timestamp = tsD
 			// Re-set EvalCtx to pick up revised stats.
-			cArgs.EvalCtx = (&MockEvalCtx{Desc: &desc, Clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), Stats: stats}).EvalContext()
+			cArgs.EvalCtx = (&MockEvalCtx{Desc: &desc, Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond), Stats: stats}).EvalContext( /* maxOffset */ )
 			for _, tc := range []struct {
 				name        string
 				ts          hlc.Timestamp

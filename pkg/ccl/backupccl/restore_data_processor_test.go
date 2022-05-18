@@ -184,7 +184,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		sstFile := &storage.MemFile{}
 		sst := storage.MakeBackupSSTWriter(ctx, cs, sstFile)
 		defer sst.Close()
-		ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
+		ts := hlc.NewClockWithSystemTimeSource(time.Nanosecond).Now( /* maxOffset */ )
 		value := roachpb.MakeValueFromString("bar")
 		for _, idx := range offsets {
 			key := keySlice[idx]

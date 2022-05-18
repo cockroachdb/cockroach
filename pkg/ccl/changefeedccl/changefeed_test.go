@@ -1833,7 +1833,7 @@ func fetchDescVersionModificationTime(
 		StartTime:     hlc.Timestamp{},
 		ReturnSST:     true,
 	}
-	clock := hlc.NewClock(hlc.UnixNano, time.Minute)
+	clock := hlc.NewClockWithSystemTimeSource(time.Minute /* maxOffset */)
 	hh := roachpb.Header{Timestamp: clock.Now()}
 	res, pErr := kv.SendWrappedWith(context.Background(),
 		f.Server().DB().NonTransactionalSender(), hh, req)
