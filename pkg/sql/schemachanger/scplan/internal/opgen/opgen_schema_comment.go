@@ -26,8 +26,9 @@ func init() {
 						Comment:  this.Comment,
 					}
 				}),
-				// TODO(Chengxiong): add schema event log (need to add proto for schema
-				// comment)
+				emit(func(this *scpb.SchemaComment, md *targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
+				}),
 			),
 		),
 		toAbsent(

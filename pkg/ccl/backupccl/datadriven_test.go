@@ -235,6 +235,9 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //   + expect-error-ignore: expects the query to return an error, but we will
 //   ignore it.
 //
+//   + ignore-notice: does not print out the notice that is buffered during
+//   query execution.
+//
 // - "query-sql [server=<name>] [user=<name>]"
 //   Executes the input SQL query and print the results.
 //
@@ -378,6 +381,10 @@ func TestDataDriven(t *testing.T) {
 				d.Input = strings.ReplaceAll(d.Input, "http://COCKROACH_TEST_HTTP_SERVER/", httpAddr)
 				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
 				ret := ds.noticeBuffer
+
+				if d.HasArg("ignore-notice") {
+					ret = nil
+				}
 
 				// Check if we are expecting a pausepoint error.
 				if d.HasArg("expect-pausepoint") {
