@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -580,6 +581,11 @@ func TestRangeCount(t *testing.T) {
 			}
 			m[tableName] = tblResp.RangeCount
 		}
+		// Hardcode the single range used by the role_id_seq, the above
+		// request does not return sequences.
+		// TODO(richardjcai): Maybe update the request to return
+		// sequences as well?
+		m[fmt.Sprintf("public.%s", catconstants.RoleIDSequenceName)] = 1
 		return m
 	}
 
@@ -968,8 +974,8 @@ func TestAdminAPIUsers(t *testing.T) {
 
 	// Create sample users.
 	query := `
-INSERT INTO system.users (username, "hashedPassword")
-VALUES ('adminUser', 'abc'), ('bob', 'xyz')`
+INSERT INTO system.users (username, "hashedPassword", user_id)
+VALUES ('adminUser', 'abc', 200), ('bob', 'xyz', 201)`
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}

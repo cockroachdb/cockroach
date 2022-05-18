@@ -331,6 +331,14 @@ const (
 	AlterSystemSQLInstancesAddLocality
 	// SystemExternalConnectionsTable adds system.external_connections table.
 	SystemExternalConnectionsTable
+	// RoleIDSequence is the version where the system.role_id_sequence exists.
+	RoleIDSequence
+	// AddSystemUserIDColumn is the version where the system.users table has
+	// a user_id column for writes only.
+	AddSystemUserIDColumn
+	// UsersHaveIDs is the version where all users in the system.users table
+	// have ids.
+	UsersHaveIDs
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -572,7 +580,18 @@ var versionsSingleton = keyedVersions{
 		Key:     SystemExternalConnectionsTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 30},
 	},
-
+	{
+		Key:     RoleIDSequence,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 32},
+	},
+	{
+		Key:     AddSystemUserIDColumn,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 34},
+	},
+	{
+		Key:     UsersHaveIDs,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 36},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

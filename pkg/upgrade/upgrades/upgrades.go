@@ -140,6 +140,27 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		systemExternalConnectionsTableMigration,
 	),
+	upgrade.NewTenantUpgrade("Add system.role_id_sequence",
+		toCV(clusterversion.RoleIDSequence),
+		NoPrecondition,
+		roleIDSequenceMigration,
+	),
+	// Add user_id column, the column will not be backfilled.
+	// However, new users created from this point forward will be created
+	// with an ID. We cannot start using the IDs in this version
+	// as old users are not backfilled. The key here is that we have a cut
+	// off point where we know which users need to be backfilled and no
+	// more users can be created without ids.
+	upgrade.NewTenantUpgrade("Alter system.users to include user_id column",
+		toCV(clusterversion.AddSystemUserIDColumn),
+		NoPrecondition,
+		alterSystemUsersAddUserIDColumn,
+	),
+	upgrade.NewTenantUpgrade("backfill users with ids and add an index on the id column",
+		toCV(clusterversion.UsersHaveIDs),
+		NoPrecondition,
+		backfillSystemUsersIDColumnAndAddIndex,
+	),
 }
 
 func init() {
