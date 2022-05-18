@@ -780,7 +780,7 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 func addRootUser(ctx context.Context, r runner) error {
 	// Upsert the root user into the table. We intentionally override any existing entry.
 	const upsertRootStmt = `
-	        UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)
+	        UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ($1, '', false,  1)
 	        `
 	return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, username.RootUser)
 }
@@ -788,7 +788,7 @@ func addRootUser(ctx context.Context, r runner) error {
 func addAdminRole(ctx context.Context, r runner) error {
 	// Upsert the admin role into the table. We intentionally override any existing entry.
 	const upsertAdminStmt = `
-          UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
+          UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ($1, '', true,  2)
           `
 	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, username.AdminRole)
 }

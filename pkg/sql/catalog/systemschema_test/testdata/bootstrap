@@ -12,8 +12,10 @@ CREATE TABLE public.users (
 	username STRING NOT NULL,
 	"hashedPassword" BYTES NULL,
 	"isRole" BOOL NOT NULL DEFAULT false,
+	user_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username ASC),
-	FAMILY "primary" (username),
+	UNIQUE INDEX users_user_id_idx (user_id ASC),
+	FAMILY "primary" (username, user_id),
 	FAMILY "fam_2_hashedPassword" ("hashedPassword"),
 	FAMILY "fam_3_isRole" ("isRole")
 );
@@ -357,6 +359,7 @@ CREATE TABLE public.span_configurations (
 	CONSTRAINT "primary" PRIMARY KEY (start_key ASC),
 	CONSTRAINT check_bounds CHECK (start_key < end_key)
 );
+CREATE SEQUENCE public.role_id_seq MINVALUE 100 MAXVALUE 2147483647 INCREMENT 1 START 100;
 CREATE TABLE public.tenant_settings (
 	tenant_id INT8 NOT NULL,
 	name STRING NOT NULL,
