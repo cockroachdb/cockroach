@@ -1262,6 +1262,7 @@ unreserved_keyword ::=
 	| 'TEXT'
 	| 'TIES'
 	| 'TRACE'
+	| 'TRACING'
 	| 'TRANSACTION'
 	| 'TRANSACTIONS'
 	| 'TRANSFER'
