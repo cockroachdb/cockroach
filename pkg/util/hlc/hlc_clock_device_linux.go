@@ -32,7 +32,7 @@ import (
 // clock id.
 // The PTPTimeSource implements the hlc.NowSource interface, so it can be used
 // as the time source for an hlc.Clock:
-// hlc.NewClockWithTimeSource(MakePTPTimeSource(...), ...).
+// hlc.NewClock(MakePTPTimeSource(...), ...).
 type PTPTimeSource struct {
 	// clockDevice is not used after the device is open but is here to prevent the GC
 	// from closing the device and invalidating the clockDeviceID.

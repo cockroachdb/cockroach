@@ -502,7 +502,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	mc := hlc.NewManualClock(1)
-	clock := hlc.NewClockWithTimeSource(mc, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
 	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -548,7 +548,7 @@ func TestAnchoringErrorNoTrigger(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	mc := hlc.NewManualClock(1)
-	clock := hlc.NewClockWithTimeSource(mc, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
 	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -573,7 +573,7 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 		ts10 := hlc.Timestamp{WallTime: 10}
 		ts20 := hlc.Timestamp{WallTime: 20}
 		mc := hlc.NewManualClock(1)
-		clock := hlc.NewClockWithTimeSource(mc, time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
 		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
 			_ context.Context, ba roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -686,7 +686,7 @@ func TestTxnNegotiateAndSendWithDeadline(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			mc := hlc.NewManualClock(1)
-			clock := hlc.NewClockWithTimeSource(mc, time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
 			txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
 				_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -744,7 +744,7 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 		ts10 := hlc.Timestamp{WallTime: 10}
 		ts20 := hlc.Timestamp{WallTime: 20}
 		mc := hlc.NewManualClock(1)
-		clock := hlc.NewClockWithTimeSource(mc, time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
 		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
 			_ context.Context, ba roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {

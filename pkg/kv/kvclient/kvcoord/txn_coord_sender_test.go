@@ -848,7 +848,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			stopper := stop.NewStopper()
 
 			manual := hlc.NewManualClock(origTS.WallTime)
-			clock := hlc.NewClockWithTimeSource(manual, 20*time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClock(manual, 20*time.Nanosecond /* maxOffset */)
 
 			var senderFn kv.SenderFunc = func(
 				_ context.Context, ba roachpb.BatchRequest,
@@ -988,7 +988,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	var expectedLockSpans []roachpb.Span
 
@@ -2252,7 +2252,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2318,7 +2318,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2462,7 +2462,7 @@ func TestAnchorKey(t *testing.T) {
 
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -2826,7 +2826,7 @@ func TestTxnManualRefresh(t *testing.T) {
 	run := func(t *testing.T, tc testCase) {
 		stopper := stop.NewStopper()
 		manual := hlc.NewManualClock(123)
-		clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
 

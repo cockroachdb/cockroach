@@ -216,7 +216,7 @@ var storeIDAlloc roachpb.StoreID
 func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	ls := newStores(log.MakeTestingAmbientCtxWithNewTracer(), cfg.Clock)
 
 	// Create two stores with ranges we care about.
