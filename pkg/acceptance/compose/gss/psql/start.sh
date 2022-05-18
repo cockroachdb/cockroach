@@ -12,6 +12,7 @@ echo "Creating a k5s token..."
 echo psql | kinit tester@MY.EX
 
 echo "Preparing SQL user ahead of test"
+chown -R $USER /certs
 env \
     PGSSLKEY=/certs/client.root.key \
     PGSSLCERT=/certs/client.root.crt \
