@@ -508,9 +508,10 @@ func TestAvroSchema(t *testing.T) {
 	// The avro golden strings are in the textual format defined in the spec.
 	t.Run("value_goldens", func(t *testing.T) {
 		goldens := []struct {
-			sqlType string
-			sql     string
-			avro    string
+			sqlType     string
+			sql         string
+			avro        string
+			numRawBytes int
 		}{
 			{sqlType: `INT`, sql: `NULL`, avro: `null`},
 			{sqlType: `INT`,
@@ -631,6 +632,26 @@ func TestAvroSchema(t *testing.T) {
 			{sqlType: `switch`, // User-defined enum with values "open", "closed"
 				sql:  `'open'`,
 				avro: `{"string":"open"}`},
+
+			// The following test cases document the way goavro encodes and decodes
+			// the "bytes" type. We'll need to keep this behavior as the default to
+			// avoid any breaking changes.
+			{sqlType: `BYTES`,
+				sql:         `b'\xff'`,
+				avro:        `{"bytes":"\u00FF"}`,
+				numRawBytes: 1},
+			{sqlType: `BYTES`,
+				sql:         `'a'`,
+				avro:        `{"bytes":"a"}`,
+				numRawBytes: 1},
+			{sqlType: `BYTES`,
+				sql:         `b'\001\002\003\004\005\006\007\010\011\012\013'`,
+				avro:        `{"bytes":"\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000B"}`,
+				numRawBytes: 11},
+			{sqlType: `BYTES`,
+				sql:         `''`,
+				avro:        `{"bytes":""}`,
+				numRawBytes: 0},
 		}
 
 		for _, test := range goldens {
@@ -645,6 +666,12 @@ func TestAvroSchema(t *testing.T) {
 				row, avroSchemaNoSuffix, "")
 			require.NoError(t, err)
 			textual, err := schema.textualFromRow(row)
+			if test.numRawBytes > 0 {
+				overhead := 4
+				binary, err := schema.BinaryFromRow(make([]byte, 0, test.numRawBytes+20), row.ForEachColumn())
+				require.NoError(t, err)
+				require.Equal(t, test.numRawBytes, len(binary)-overhead)
+			}
 			require.NoError(t, err)
 			// Trim the outermost {}.
 			value := string(textual[1 : len(textual)-1])
