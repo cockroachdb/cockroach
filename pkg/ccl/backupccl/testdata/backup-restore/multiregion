@@ -92,11 +92,9 @@ exec-sql
 DROP DATABASE no_region_db_2;
 ----
 
-exec-sql
+exec-sql ignore-notice
 SET CLUSTER SETTING sql.defaults.primary_region = 'non-existent-region';
 ----
-NOTICE: setting global default sql.defaults.primary_region is not recommended
-HINT: use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: https://www.cockroachlabs.com/docs/v22.1/alter-role.html#set-default-session-variable-values-for-a-role
 
 exec-sql
 RESTORE DATABASE no_region_db FROM LATEST IN 'nodelocal://1/no_region_database_backup/';
@@ -106,11 +104,9 @@ HINT: valid regions: eu-central-1, eu-north-1
 --
 set the default PRIMARY REGION to a region that exists (see SHOW REGIONS FROM CLUSTER) then using SET CLUSTER SETTING sql.defaults.primary_region = 'region'
 
-exec-sql
+exec-sql ignore-notice
 SET CLUSTER SETTING sql.defaults.primary_region = 'eu-central-1';
 ----
-NOTICE: setting global default sql.defaults.primary_region is not recommended
-HINT: use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: https://www.cockroachlabs.com/docs/v22.1/alter-role.html#set-default-session-variable-values-for-a-role
 
 exec-sql
 RESTORE DATABASE no_region_db FROM LATEST IN 'nodelocal://1/no_region_database_backup/';
@@ -147,11 +143,9 @@ BACKUP DATABASE eu_central_db INTO 'nodelocal://1/eu_central_database_backup/';
 new-server name=s4 share-io-dir=s1 allow-implicit-access localities=eu-central-1,eu-north-1
 ----
 
-exec-sql
+exec-sql ignore-notice
 SET CLUSTER SETTING sql.defaults.primary_region = 'eu-north-1';
 ----
-NOTICE: setting global default sql.defaults.primary_region is not recommended
-HINT: use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: https://www.cockroachlabs.com/docs/v22.1/alter-role.html#set-default-session-variable-values-for-a-role
 
 exec-sql
 RESTORE FROM LATEST IN 'nodelocal://1/no_region_cluster_backup/';
