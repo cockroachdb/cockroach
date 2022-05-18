@@ -560,7 +560,7 @@ func TestReplicaClosedTimestamp(t *testing.T) {
 			r.lai = test.sidetransportLAI
 			var tc testContext
 			tc.manualClock = hlc.NewManualClock(123) // required by StartWithStoreConfig
-			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+			cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.DontCloseTimestamps = true
 			cfg.ClosedTimestampReceiver = &r
 			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -653,7 +653,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			// Create a single range.
 			var tc testContext
 			tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
-			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+			cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.DontCloseTimestamps = true
 			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -692,7 +692,7 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 	// Create a single range.
 	var tc testContext
 	tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DontCloseTimestamps = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -954,7 +954,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				// Create a single range.
 				var tc testContext
 				tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
-				cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+				cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 				cfg.TestingKnobs.DontCloseTimestamps = true
 				tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -1131,7 +1131,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 			// Create a single range.
 			var tc testContext
 			tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
-			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, 100*time.Nanosecond))
+			cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.DontCloseTimestamps = true
 			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 

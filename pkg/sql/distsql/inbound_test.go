@@ -70,7 +70,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 		flowinfra.NewFlowScheduler(log.MakeTestingAmbientCtxWithNewTracer(), stopper, st),
 	)
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 
 	// We're going to serve multiple node IDs with that one context. Disable node ID checks.

@@ -184,7 +184,7 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 
 func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.TestData) string {
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond*100)
+	clock := hlc.NewClockWithSystemTimeSource(time.Millisecond * 100 /* maxOffset */)
 
 	// Close existing stores in case we have multiple use cases within a data file.
 	e.cleanupStores()
@@ -246,7 +246,7 @@ func buildReplicaDescriptorFromTestData(
 	raftpb.HardState,
 	[]enginepb.MVCCMetadata,
 ) {
-	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond*100)
+	clock := hlc.NewClockWithSystemTimeSource(time.Millisecond * 100 /* maxOffset */)
 
 	startKey := parsePrettyKey(t, replica.StartKey)
 	endKey := parsePrettyKey(t, replica.EndKey)

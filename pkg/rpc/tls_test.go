@@ -66,7 +66,7 @@ func TestClientSSLSettings(t *testing.T) {
 			defer stopper.Stop(ctx)
 			rpcContext := NewContext(ctx, ContextOptions{
 				TenantID: roachpb.SystemTenantID,
-				Clock:    hlc.NewClock(hlc.UnixNano, 1),
+				Clock:    hlc.NewClockWithSystemTimeSource(1 /* maxOffset */),
 				Stopper:  stopper,
 				Settings: cluster.MakeTestingClusterSettings(),
 				Config:   cfg,
@@ -124,7 +124,7 @@ func TestServerSSLSettings(t *testing.T) {
 			defer stopper.Stop(ctx)
 			rpcContext := NewContext(ctx, ContextOptions{
 				TenantID: roachpb.SystemTenantID,
-				Clock:    hlc.NewClock(hlc.UnixNano, 1),
+				Clock:    hlc.NewClockWithSystemTimeSource(1 /* maxOffset */),
 				Stopper:  stopper,
 				Settings: cluster.MakeTestingClusterSettings(),
 				Config:   cfg,

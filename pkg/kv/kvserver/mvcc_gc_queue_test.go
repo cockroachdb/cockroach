@@ -702,7 +702,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	ctx := context.Background()
 
 	manual := hlc.NewManualClock(123)
-	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	tsc := TestStoreConfig(hlc.NewClockWithTimeSource(manual, time.Nanosecond) /* maxOffset */)
 	manual.Set(3 * 24 * time.Hour.Nanoseconds())
 
 	testTime := manual.UnixNano() + 2*time.Hour.Nanoseconds()
@@ -847,7 +847,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	txns := map[string]roachpb.Transaction{}
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
-		txnClock := hlc.NewClock(hlc.NewManualClock(test.orig).UnixNano, time.Nanosecond)
+		txnClock := hlc.NewClockWithTimeSource(hlc.NewManualClock(test.orig), time.Nanosecond /* maxOffset */)
 		txn := newTransaction("txn1", baseKey, 1, txnClock)
 		txn.Status = test.status
 		txn.LockSpans = testIntents
@@ -1103,7 +1103,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 
 	var gcRequests int32
 	manual := hlc.NewManualClock(123)
-	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	tsc := TestStoreConfig(hlc.NewClockWithTimeSource(manual, time.Nanosecond) /* maxOffset */)
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GCRequest); ok {

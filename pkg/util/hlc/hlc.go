@@ -255,7 +255,7 @@ func NewClockWithTimeSource(wallClock WallClock, maxOffset time.Duration) *Clock
 
 // UnixNano returns the local machine's physical nanosecond
 // unix epoch timestamp as a convenience to create a HLC via
-// c := hlc.NewClock(hlc.UnixNano, ...).
+// c := hlc.NewClockWithSystemTimeSource( ... /* maxOffset */).
 func UnixNano() int64 {
 	return timeutil.Now().UnixNano()
 }

@@ -208,7 +208,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	q1.SetDisabled(true)
 	q2.SetDisabled(true)
 	mc := hlc.NewManualClock(123)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(mc, time.Nanosecond /* maxOffset */)
 	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, 0, ranges)
 	s.AddQueues(q1, q2)
 	s.stopper = stop.NewStopper()
@@ -261,7 +261,7 @@ func TestScannerTiming(t *testing.T) {
 			ranges := newTestRangeSet(count, t)
 			q := &testQueue{}
 			mc := hlc.NewManualClock(123)
-			clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+			clock := hlc.NewClockWithTimeSource(mc, time.Nanosecond /* maxOffset */)
 			s := newReplicaScanner(makeAmbCtx(), clock, duration, 0, 0, ranges)
 			s.AddQueues(q)
 			s.stopper = stop.NewStopper()
@@ -345,7 +345,7 @@ func TestScannerDisabled(t *testing.T) {
 	ranges := newTestRangeSet(count, t)
 	q := &testQueue{}
 	mc := hlc.NewManualClock(123)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(mc, time.Nanosecond /* maxOffset */)
 	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, 0, ranges)
 	s.AddQueues(q)
 	s.stopper = stop.NewStopper()
@@ -410,7 +410,7 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	ranges := newTestRangeSet(0, t)
 	q := &testQueue{}
 	mc := hlc.NewManualClock(123)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(mc, time.Nanosecond /* maxOffset */)
 	s := newReplicaScanner(makeAmbCtx(), clock, time.Hour, 0, 0, ranges)
 	s.AddQueues(q)
 	s.stopper = stop.NewStopper()

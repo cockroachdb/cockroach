@@ -117,7 +117,7 @@ func setupLockTableWaiterTest() (
 	w := &lockTableWaiterImpl{
 		nodeDesc: &roachpb.NodeDescriptor{NodeID: 1},
 		st:       st,
-		clock:    hlc.NewClock(manual.UnixNano, time.Nanosecond),
+		clock:    hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */),
 		stopper:  stop.NewStopper(),
 		ir:       ir,
 		lt:       &mockLockTable{},
