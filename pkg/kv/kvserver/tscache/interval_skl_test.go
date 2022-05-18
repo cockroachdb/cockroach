@@ -860,7 +860,7 @@ func TestIntervalSklFill2(t *testing.T) {
 // by the floor timestamp.
 func TestIntervalSklMinRetentionWindow(t *testing.T) {
 	manual := hlc.NewManualClock(200)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	const minRet = 500
 	s := newIntervalSkl(clock, minRet, makeSklMetrics())
@@ -914,7 +914,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 // to carry the synthtic flag, if necessary.
 func TestIntervalSklRotateWithSyntheticTimestamps(t *testing.T) {
 	manual := hlc.NewManualClock(200)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	const minRet = 500
 	s := newIntervalSkl(clock, minRet, makeSklMetrics())
@@ -1213,7 +1213,7 @@ func assertRatchet(t *testing.T, before, after cacheValue) {
 // we detect this scenario early and panic.
 func TestIntervalSklMaxEncodedSize(t *testing.T) {
 	manual := hlc.NewManualClock(200)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	ts := clock.Now()
 	val := makeVal(ts, "1")

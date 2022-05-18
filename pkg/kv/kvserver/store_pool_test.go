@@ -32,7 +32,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	ctx := context.Background()
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, sp, _ := storepool.CreateTestStorePool(ctx,
@@ -164,7 +164,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	stopper, _, _, sp, _ := storepool.CreateTestStorePool(ctx,
 		storepool.TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */

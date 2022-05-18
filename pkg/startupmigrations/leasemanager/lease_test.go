@@ -41,7 +41,7 @@ func TestAcquireAndRelease(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	lm := leasemanager.New(db, clock, leasemanager.Options{ClientID: clientID1})
 
 	l, err := lm.AcquireLease(ctx, leaseKey)
@@ -72,7 +72,7 @@ func TestReacquireLease(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	lm := leasemanager.New(db, clock, leasemanager.Options{ClientID: clientID1})
 
 	if _, err := lm.AcquireLease(ctx, leaseKey); err != nil {
@@ -99,7 +99,7 @@ func TestExtendLease(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	lm := leasemanager.New(db, clock, leasemanager.Options{ClientID: clientID1})
 
 	l, err := lm.AcquireLease(ctx, leaseKey)
@@ -139,9 +139,9 @@ func TestLeasesMultipleClients(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	manual1 := hlc.NewManualClock(123)
-	clock1 := hlc.NewClockWithTimeSource(manual1, time.Nanosecond /* maxOffset */)
+	clock1 := hlc.NewClock(manual1, time.Nanosecond /* maxOffset */)
 	manual2 := hlc.NewManualClock(123)
-	clock2 := hlc.NewClockWithTimeSource(manual2, time.Nanosecond /* maxOffset */)
+	clock2 := hlc.NewClock(manual2, time.Nanosecond /* maxOffset */)
 	lm1 := leasemanager.New(db, clock1, leasemanager.Options{ClientID: clientID1})
 	lm2 := leasemanager.New(db, clock2, leasemanager.Options{ClientID: clientID2})
 

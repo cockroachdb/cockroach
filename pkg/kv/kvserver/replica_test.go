@@ -158,7 +158,7 @@ func (tc *testContext) Clock() *hlc.Clock {
 func (tc *testContext) Start(ctx context.Context, t testing.TB, stopper *stop.Stopper) {
 	tc.manualClock = hlc.NewManualClock(123)
 	cfg := TestStoreConfig(
-		hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+		hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	// testContext tests like to move the manual clock around and assume that they can write at past
 	// timestamps.
 	cfg.TestingKnobs.DontCloseTimestamps = true
@@ -551,7 +551,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -634,7 +634,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "transferSucceeds", func(t *testing.T, transferSucceeds bool) {
 		manual := hlc.NewManualClock(123)
-		clock := hlc.NewClockWithTimeSource(manual, 100*time.Millisecond /* maxOffset */)
+		clock := hlc.NewClock(manual, 100*time.Millisecond /* maxOffset */)
 		tc := testContext{manualClock: manual}
 		tsc := TestStoreConfig(clock)
 		var leaseAcquisitionTrap atomic.Value
@@ -792,7 +792,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -927,7 +927,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 
 	tc.manualClock = hlc.NewManualClock(123)
-	tsc := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tsc.TestingKnobs.TestingApplyFilter = applyFilter
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
@@ -1005,7 +1005,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -1167,7 +1167,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	// Use the TestingBinaryMinSupportedVersion for bootstrap because we won't
 	// gossip the system config once the current version is finalized.
@@ -1275,7 +1275,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	// Disable raft log truncation which confuses this test.
 	cfg.TestingKnobs.DisableRaftLogQueue = true
@@ -1371,7 +1371,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -2143,7 +2143,7 @@ func TestLeaseConcurrent(t *testing.T) {
 		wg.Add(num)
 
 		tc := testContext{manualClock: hlc.NewManualClock(123)}
-		cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+		cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 		// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
 		// refreshes so that our lease proposal does not risk being rejected
 		// with an AmbiguousResultError.
@@ -2997,7 +2997,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DontPushOnWriteIntentError = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -3081,7 +3081,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DontPushOnWriteIntentError = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -5602,7 +5602,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DontRetryPushTxnFailures = true
 	cfg.TestingKnobs.DontRecoverIndeterminateCommits = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -6871,7 +6871,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 
 	manual := hlc.NewManualClock(123)
 	tc := testContext{manualClock: manual}
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.TestingProposalFilter = proposeFn
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -11543,7 +11543,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 
 	manual := hlc.NewManualClock(123)
 	tc := testContext{manualClock: manual}
-	tsc := TestStoreConfig(hlc.NewClockWithTimeSource(manual, time.Nanosecond) /* maxOffset */)
+	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	tsc.TestingKnobs.DisableGCQueue = true
 	tsc.TestingKnobs.DontRetryPushTxnFailures = true
 	tsc.TestingKnobs.DontRecoverIndeterminateCommits = true
@@ -13195,7 +13195,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.manualClock = hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	// Set the RaftMaxCommittedSizePerReady so that only a single raft entry is
 	// applied at a time, which makes it easier to line up the timing of reproposals.
 	cfg.RaftMaxCommittedSizePerReady = 1

@@ -186,7 +186,7 @@ func TestCmdClearRangeDeadline(t *testing.T) {
 	}
 
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	args := roachpb.ClearRangeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},

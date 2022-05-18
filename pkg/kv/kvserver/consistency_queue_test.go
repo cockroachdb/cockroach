@@ -51,7 +51,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	manualClock := hlc.NewManualClock(timeutil.Now().UnixNano())
-	clock := hlc.NewClockWithTimeSource(manualClock, 10 /* maxOffset */)
+	clock := hlc.NewClock(manualClock, 10 /* maxOffset */)
 	interval := time.Second * 5
 	live := true
 	testStart := clock.Now()

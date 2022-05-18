@@ -143,7 +143,7 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	manual := hlc.NewManualClock(100)
 	st := cluster.MakeTestingClusterSettings()
-	recorder := NewMetricsRecorder(hlc.NewClockWithTimeSource(manual, time.Nanosecond), nil, nil, nil, st /* maxOffset */)
+	recorder := NewMetricsRecorder(hlc.NewClock(manual, time.Nanosecond), nil, nil, nil, st /* maxOffset */)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")

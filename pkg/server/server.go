@@ -171,10 +171,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "instantiating clock source")
 		}
-		clock = hlc.NewClockWithTimeSource(ptpClock, time.Duration(cfg.MaxOffset))
+		clock = hlc.NewClock(ptpClock, time.Duration(cfg.MaxOffset))
 	} else if cfg.TestingKnobs.Server != nil &&
 		cfg.TestingKnobs.Server.(*TestingKnobs).WallClock != nil {
-		clock = hlc.NewClockWithTimeSource(cfg.TestingKnobs.Server.(*TestingKnobs).WallClock,
+		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).WallClock,
 			time.Duration(cfg.MaxOffset))
 	} else {
 		clock = hlc.NewClockWithSystemTimeSource(time.Duration(cfg.MaxOffset))

@@ -1134,7 +1134,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 				defer batch.Close()
 
 				manual := hlc.NewManualClock(123)
-				clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+				clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 				desc := roachpb.RangeDescriptor{
 					RangeID:  99,
 					StartKey: roachpb.RKey("a"),

@@ -42,7 +42,7 @@ func forEachCacheImpl(
 	for _, constr := range cacheImplConstrs {
 		const baseTS = 100
 		manual := hlc.NewManualClock(baseTS)
-		clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 		tc := constr(clock)
 		tcName := reflect.TypeOf(tc).Elem().Name()
@@ -652,7 +652,7 @@ func identicalAndRatcheted(
 
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	tc := New(clock)
 
 	for i := 0; i < b.N; i++ {

@@ -633,7 +633,7 @@ func newCluster() *cluster {
 		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},
 		st:        clustersettings.MakeTestingClusterSettings(),
 		manual:    manual,
-		clock:     hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */),
+		clock:     hlc.NewClock(manual, time.Nanosecond /* maxOffset */),
 
 		txnsByName:      make(map[string]*roachpb.Transaction),
 		requestsByName:  make(map[string]concurrency.Request),

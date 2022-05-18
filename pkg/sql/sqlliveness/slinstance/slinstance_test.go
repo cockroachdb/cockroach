@@ -35,7 +35,7 @@ func TestSQLInstance(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	mClock := hlc.NewManualClock(hlc.UnixNano())
-	clock := hlc.NewClockWithTimeSource(mClock, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(mClock, time.Nanosecond /* maxOffset */)
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
 		clusterversion.TestingBinaryMinSupportedVersion,

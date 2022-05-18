@@ -1112,7 +1112,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), false),
 			} {
 				manual := hlc.NewManualClock(ts[0].WallTime + 1)
-				clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+				clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 				ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 					AmbientCtx:         s.AmbientCtx(),
 					Settings:           cluster.MakeTestingClusterSettings(),

@@ -104,7 +104,7 @@ type WallClock interface {
 // is manually controlled.
 //
 // ManualClock implements WallClock, so it can be used with
-// NewClockWithTimeSource(NewManualClock(...),...).
+// NewClock(NewManualClock(...),...).
 //
 // ManualClock is thread safe.
 type ManualClock struct {
@@ -148,7 +148,7 @@ func (m *ManualClock) Set(nanos int64) {
 // into the future or paused.
 //
 // ManualClock implements WallClock, so it can be used with
-// NewClockWithTimeSource(NewHybridManualClock(),...).
+// NewClock(NewHybridManualClock(),...).
 //
 // HybridManualClock is thread safe.
 type HybridManualClock struct {
@@ -228,21 +228,20 @@ func (m *HybridManualClock) Resume() {
 }
 
 // NewClockWithSystemTimeSource creates a Clock that reads the system time. This
-// is equivalent to NewClockWithTimeSource(timeutil.SystemTimeSource,
-// maxOffset).
+// is equivalent to NewClock(timeutil.SystemTimeSource, maxOffset).
 //
 // A value of 0 for maxOffset means that clock skew checking, if performed on
 // this clock by RemoteClockMonitor, is disabled.
 func NewClockWithSystemTimeSource(maxOffset time.Duration) *Clock {
-	return NewClockWithTimeSource(timeutil.DefaultTimeSource{}, maxOffset)
+	return NewClock(timeutil.DefaultTimeSource{}, maxOffset)
 }
 
-// NewClockWithTimeSource returns a Clock configured to use a specified time
-// source.
+// NewClock returns a Clock configured to use a specified time source. Use
+// NewClockWithSystemTimeSource to use the system clock.
 //
 // A value of 0 for maxOffset means that clock skew checking, if performed on
 // this clock by RemoteClockMonitor, is disabled.
-func NewClockWithTimeSource(wallClock WallClock, maxOffset time.Duration) *Clock {
+func NewClock(wallClock WallClock, maxOffset time.Duration) *Clock {
 	return &Clock{
 		wallClock: wallClock,
 		maxOffset: maxOffset,

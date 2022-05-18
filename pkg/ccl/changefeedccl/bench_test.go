@@ -106,7 +106,7 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 		// data every time it's called, but that's a little unsatisfying. Instead,
 		// wait for each batch to come out of the feed before advancing the
 		// timestamp.
-		feedClock := hlc.NewClockWithTimeSource(&mockClock{ts: timestamps}, time.Nanosecond /* maxOffset */)
+		feedClock := hlc.NewClock(&mockClock{ts: timestamps}, time.Nanosecond /* maxOffset */)
 		runBench(b, feedClock)
 	})
 }

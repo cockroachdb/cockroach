@@ -112,7 +112,7 @@ func (ltc *LocalTestCluster) Stopper() *stop.Stopper {
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFactory InitFactoryFn) {
 	manualClock := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manualClock, 50*time.Millisecond /* maxOffset */)
+	clock := hlc.NewClock(manualClock, 50*time.Millisecond /* maxOffset */)
 	cfg := kvserver.TestStoreConfig(clock)
 	tr := cfg.AmbientCtx.Tracer
 	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
