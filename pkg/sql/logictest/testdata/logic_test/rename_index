@@ -169,3 +169,19 @@ SELECT DISTINCT index_name FROM [SHOW INDEXES FROM users]
 pk
 ufo
 bar
+
+# Regression test for #81211
+statement ok
+CREATE TABLE t1(a int);
+
+statement ok
+BEGIN;
+
+statement ok
+CREATE INDEX i1 ON t1(a);
+
+statement ok
+ALTER INDEX i1 RENAME TO i2;
+
+statement ok
+COMMIT;
