@@ -7,7 +7,7 @@ RUN GO111MODULE=off go get -d -t -tags gss_compose
 RUN GO111MODULE=off go test -v -c -tags gss_compose -o gss.test
 
 # Copy the test binary to an image with psql and krb installed.
-FROM postgres:11
+FROM postgres:11.15
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
