@@ -186,8 +186,8 @@ func (p *planner) incrementSequenceUsingCache(
 		// This sequence has exceeded its bounds after performing this increment.
 		if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
 			// If the sequence exceeded its bounds prior to the increment, then return an error.
-			if (seqOpts.Increment > 0 && endValue-seqOpts.Increment*cacheSize >= seqOpts.MaxValue) ||
-				(seqOpts.Increment < 0 && endValue-seqOpts.Increment*cacheSize <= seqOpts.MinValue) {
+			if (seqOpts.Increment > 0 && endValue-seqOpts.Increment*(cacheSize-1) > seqOpts.MaxValue) ||
+				(seqOpts.Increment < 0 && endValue-seqOpts.Increment*(cacheSize-1) < seqOpts.MinValue) {
 				return 0, 0, 0, boundsExceededError(descriptor)
 			}
 			// Otherwise, values between the limit and the value prior to incrementing can be cached.
