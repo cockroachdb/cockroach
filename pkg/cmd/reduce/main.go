@@ -58,6 +58,9 @@ var (
 	tlp             = flags.Bool("tlp", false, "last two non-empty lines in file are equivalent queries returning different results")
 )
 
+// TODO(michae2): Add -costfuzz mode which is aware that the last three
+// statements are two identical queries separated by a setting change.
+
 const description = `
 The reduce utility attempts to simplify SQL that produces an error in
 CockroachDB. The problematic SQL, specified via -file flag, is

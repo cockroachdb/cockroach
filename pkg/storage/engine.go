@@ -927,7 +927,7 @@ func ScanIntents(
 }
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.
-func WriteSyncNoop(ctx context.Context, eng Engine) error {
+func WriteSyncNoop(eng Engine) error {
 	batch := eng.NewBatch()
 	defer batch.Close()
 
