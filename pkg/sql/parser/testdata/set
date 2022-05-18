@@ -579,3 +579,11 @@ SHOW "a.b.c" -- normalized!
 SHOW "a.b.c" -- fully parenthesized
 SHOW "a.b.c" -- literals removed
 SHOW "a.b.c" -- identifiers removed
+
+error
+SET LOCAL tracing = 'off'
+----
+at or near "EOF": syntax error: cannot set "tracing"  in this context
+DETAIL: source SQL:
+SET LOCAL tracing = 'off'
+                         ^

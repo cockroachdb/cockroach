@@ -321,3 +321,11 @@ ALTER ROLE ALL IN DATABASE d SET application_name = 'app' -- normalized!
 ALTER ROLE ALL IN DATABASE d SET application_name = ('app') -- fully parenthesized
 ALTER ROLE ALL IN DATABASE d SET application_name = '_' -- literals removed
 ALTER ROLE ALL IN DATABASE _ SET application_name = 'app' -- identifiers removed
+
+error
+ALTER USER foo SET tracing = 'off'
+----
+at or near "EOF": syntax error: cannot set "tracing"  in this context
+DETAIL: source SQL:
+ALTER USER foo SET tracing = 'off'
+                                  ^

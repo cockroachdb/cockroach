@@ -764,8 +764,8 @@ func (u *sqlSymUnion) abbreviatedRevoke() tree.AbbreviatedRevoke {
 func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPrivilegesTargetObject {
   return u.val.(tree.AlterDefaultPrivilegesTargetObject)
 }
-func (u *sqlSymUnion) setVar() *tree.SetVar {
-    return u.val.(*tree.SetVar)
+func (u *sqlSymUnion) setClause() tree.SetClause {
+    return u.val.(tree.SetClause)
 }
 func (u *sqlSymUnion) cursorSensitivity() tree.CursorSensitivity {
     return u.val.(tree.CursorSensitivity)
@@ -952,7 +952,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <tree.Statement> alter_range_stmt
 %type <tree.Statement> alter_partition_stmt
 %type <tree.Statement> alter_role_stmt
-%type <*tree.SetVar> set_or_reset_clause
+%type <tree.SetClause> set_or_reset_clause
 %type <tree.Statement> alter_type_stmt
 %type <tree.Statement> alter_schema_stmt
 %type <tree.Statement> alter_unsupported_stmt
@@ -1794,11 +1794,16 @@ alter_database_set_stmt:
   ALTER DATABASE database_name set_or_reset_clause
   {
     /* SKIP DOC */
+    s := $4.setClause()
+    setVar, err := s.GetSetVar()
+    if err != nil {
+    	return setErr(sqllex, err)
+    }
     $$.val = &tree.AlterRoleSet{
       AllRoles: true,
       DatabaseName: tree.Name($3),
       IsRole: true,
-      SetOrReset: $4.setVar(),
+      SetOrReset: setVar,
     }
   }
 
@@ -5097,7 +5102,11 @@ set_session_stmt:
 set_local_stmt:
   SET LOCAL set_rest
   {
-    ret := $3.setVar()
+		s := $3.setClause()
+		ret, err := s.GetSetVar()
+		if err != nil {
+			return setErr(sqllex, err)
+		}
     ret.Local = true
     $$.val = ret
   }
@@ -8183,19 +8192,39 @@ alter_role_stmt:
 }
 | ALTER role_or_group_or_user role_spec opt_in_database set_or_reset_clause
   {
-    $$.val = &tree.AlterRoleSet{RoleName: $3.roleSpec(), DatabaseName: tree.Name($4), IsRole: $2.bool(), SetOrReset: $5.setVar()}
+		s := $5.setClause()
+		setVar, err := s.GetSetVar()
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+    $$.val = &tree.AlterRoleSet{RoleName: $3.roleSpec(), DatabaseName: tree.Name($4), IsRole: $2.bool(), SetOrReset: setVar}
   }
 | ALTER role_or_group_or_user IF EXISTS role_spec opt_in_database set_or_reset_clause
   {
-    $$.val = &tree.AlterRoleSet{RoleName: $5.roleSpec(), IfExists: true, DatabaseName: tree.Name($6), IsRole: $2.bool(), SetOrReset: $7.setVar()}
+		s := $7.setClause()
+		setVar, err := s.GetSetVar()
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+    $$.val = &tree.AlterRoleSet{RoleName: $5.roleSpec(), IfExists: true, DatabaseName: tree.Name($6), IsRole: $2.bool(), SetOrReset: setVar}
   }
 | ALTER ROLE_ALL ALL opt_in_database set_or_reset_clause
   {
-    $$.val = &tree.AlterRoleSet{AllRoles: true, DatabaseName: tree.Name($4), IsRole: true, SetOrReset: $5.setVar()}
+		s := $5.setClause()
+		setVar, err := s.GetSetVar()
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+    $$.val = &tree.AlterRoleSet{AllRoles: true, DatabaseName: tree.Name($4), IsRole: true, SetOrReset: setVar}
   }
 | ALTER USER_ALL ALL opt_in_database set_or_reset_clause
   {
-    $$.val = &tree.AlterRoleSet{AllRoles: true, DatabaseName: tree.Name($4), IsRole: false, SetOrReset: $5.setVar()}
+		s := $5.setClause()
+		setVar, err := s.GetSetVar()
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+    $$.val = &tree.AlterRoleSet{AllRoles: true, DatabaseName: tree.Name($4), IsRole: false, SetOrReset: setVar}
   }
 | ALTER role_or_group_or_user error // SHOW HELP: ALTER ROLE
 
@@ -8212,7 +8241,7 @@ opt_in_database:
 set_or_reset_clause:
   SET set_rest
   {
-    $$.val = $2.setVar()
+    $$.val = $2.setClause()
   }
 | RESET_ALL ALL
   {

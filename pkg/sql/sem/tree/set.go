@@ -19,6 +19,24 @@
 
 package tree
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+)
+
+// SetClause is a helper interface used by the parser. The grammar uses the
+// same rule for both SetVar and SetTracing AST nodes. This interface is
+// only implemented by those two nodes.
+type SetClause interface {
+	// GetSetVar returns the SetVar clause that represents this interface. If
+	// that isn't possible, a syntax error is returned. This is needed because
+	// some statements embed a SetVar node (e.g. AlterRoleSet).
+	GetSetVar() (*SetVar, error)
+}
+
+var _ SetClause = (*SetVar)(nil)
+var _ SetClause = (*SetTracing)(nil)
+
 // SetVar represents a SET or RESET statement.
 type SetVar struct {
 	Name     string
@@ -26,6 +44,11 @@ type SetVar struct {
 	Values   Exprs
 	Reset    bool
 	ResetAll bool
+}
+
+// GetSetVar implements the SetClause interface.
+func (node *SetVar) GetSetVar() (*SetVar, error) {
+	return node, nil
 }
 
 // Format implements the NodeFormatter interface.
@@ -126,6 +149,11 @@ func (node *SetSessionCharacteristics) Format(ctx *FmtCtx) {
 // SetTracing represents a SET TRACING statement.
 type SetTracing struct {
 	Values Exprs
+}
+
+// GetSetVar implements the SetClause interface.
+func (node *SetTracing) GetSetVar() (*SetVar, error) {
+	return nil, pgerror.Newf(pgcode.Syntax, "cannot set \"tracing\"  in this context")
 }
 
 // Format implements the NodeFormatter interface.
