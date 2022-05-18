@@ -546,3 +546,7 @@ query T
 SHOW custom_option.session_setting
 ----
 def
+
+# Regression test for the special "tracing" variable.
+query error parameter \"tracing\" cannot be changed
+SET LOCAL tracing = 'off'
