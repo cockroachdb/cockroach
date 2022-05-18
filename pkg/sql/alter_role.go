@@ -374,7 +374,9 @@ func (p *planner) processSetOrResetClause(
 	// default settings are stored per-database.
 	// The "role" setting can't be configured here, since we are already
 	// that role.
-	case "database", "role":
+	// The "tracing" setting is handled specially in the grammar, so we skip it
+	// here since it doesn't make sense to set as a default anyway.
+	case "database", "role", "tracing":
 		return unknown, "", sessionVar{}, nil, newCannotChangeParameterError(varName)
 	}
 	_, sVar, err = getSessionVar(varName, false /* missingOk */)

@@ -80,7 +80,7 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 	*lval = l.tokens[l.lastPos]
 
 	switch lval.id {
-	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON, TENANT:
+	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON, TENANT, SET:
 		nextID := int32(0)
 		if l.lastPos+1 < len(l.tokens) {
 			nextID = l.tokens[l.lastPos+1].id
@@ -149,6 +149,16 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			switch nextID {
 			case ALL:
 				lval.id = TENANT_ALL
+			}
+		case SET:
+			switch nextID {
+			case TRACING:
+				lval.id = SET_TRACING
+			case SESSION:
+				switch secondID {
+				case TRACING:
+					lval.id = SET_TRACING
+				}
 			}
 		}
 	}

@@ -927,7 +927,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 // - TENANT_ALL is used to differentiate `ALTER TENANT <id>` from
 // `ALTER TENANT ALL`.
 %token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL
-%token USER_ALL ON_LA TENANT_ALL
+%token USER_ALL ON_LA TENANT_ALL SET_TRACING
 
 %union {
   id    int32
@@ -5070,7 +5070,19 @@ set_exprs_internal:
 // %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION, SET LOCAL
 // WEBDOCS/set-vars.html
 set_session_stmt:
-  SET SESSION set_rest_more
+  SET_TRACING TRACING to_or_eq var_list
+	{
+    /* SKIP DOC */
+    // We need to recognize the "set tracing" specially here using syntax lookahead.
+    $$.val = &tree.SetTracing{Values: $4.exprs()}
+	}
+| SET_TRACING SESSION TRACING to_or_eq var_list
+	{
+    /* SKIP DOC */
+    // We need to recognize the "set tracing" specially here using syntax lookahead.
+    $$.val = &tree.SetTracing{Values: $5.exprs()}
+	}
+| SET SESSION set_rest_more
   {
     $$.val = $3.stmt()
   }
@@ -5131,14 +5143,7 @@ set_transaction_stmt:
 generic_set:
   var_name to_or_eq var_list
   {
-    // We need to recognize the "set tracing" specially here; couldn't make "set
-    // tracing" a different grammar rule because of ambiguity.
-    varName := $1.strs()
-    if len(varName) == 1 && varName[0] == "tracing" {
-      $$.val = &tree.SetTracing{Values: $3.exprs()}
-    } else {
-      $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
-    }
+    $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
   }
 
 set_rest:
@@ -8209,9 +8214,18 @@ opt_in_database:
     $$ = ""
   }
 
+// This rule is used when SET is used as a clause in another statement,
+// like ALTER ROLE ... SET.
 set_or_reset_clause:
   SET set_rest
   {
+    $$.val = $2.setVar()
+  }
+| SET_TRACING set_rest
+  {
+    /* SKIP DOC */
+    // We need to recognize the "set tracing" specially here since we do a
+    // syntax lookahead and use a different token.
     $$.val = $2.setVar()
   }
 | RESET_ALL ALL
@@ -14330,6 +14344,7 @@ unreserved_keyword:
 | TEXT
 | TIES
 | TRACE
+| TRACING
 | TRANSACTION
 | TRANSACTIONS
 | TRANSFER
