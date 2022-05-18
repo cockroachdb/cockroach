@@ -153,7 +153,7 @@ tc_start_block "Tag docker image as latest"
 # latest unstable release
 # https://github.com/cockroachdb/cockroach/issues/41067
 # https://github.com/cockroachdb/cockroach/issues/48309
-if [[ -n "${PUBLISH_LATEST}" ]]; then
+if [[ -n "${PUBLISH_LATEST}" || -n "${PRE_RELEASE}" ]]; then
   docker push "${dockerhub_repository}:latest"
 else
   echo "The ${dockerhub_repository}:latest docker image tag was _not_ pushed."
@@ -170,7 +170,7 @@ images=(
 if [[ -z "$PRE_RELEASE" ]]; then
   images+=("${dockerhub_repository}:latest-${release_branch}")
 fi
-if [[ -n "${PUBLISH_LATEST}" ]]; then
+if [[ -n "${PUBLISH_LATEST}" || -n "${PRE_RELEASE}" ]]; then
   images+=("${dockerhub_repository}:latest")
 fi
 
