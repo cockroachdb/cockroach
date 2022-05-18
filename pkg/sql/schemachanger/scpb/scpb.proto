@@ -26,14 +26,13 @@ message Target {
 enum Status {
   UNKNOWN = 0;
 
-  // Target states are ABSENT, PUBLIC or TRANSIENT.
+  // Target states are ABSENT, PUBLIC or TRANSIENT_ABSENT.
   // These are the desired final end states of a schema change.
-  //
   ABSENT = 1;
   PUBLIC = 2;
-  // TRANSIENT is like PUBLIC except the element is not expected to
-  // persist once the schema change involving it is complete.
-  TRANSIENT = 3;
+  // TRANSIENT_ABSENT is like ABSENT->TRANSIENT_ABSENT; the element is not
+  // persisted once the schema change involving it is complete.
+  TRANSIENT_ABSENT = 3;
 
   // Intermediate states on the descriptor dropping path.
   TXN_DROPPED = 4;
@@ -49,6 +48,10 @@ enum Status {
   MERGE_ONLY = 10;
   BACKFILLED = 11;
   BACKFILL_ONLY = 12;
+
+  // Intermediate states on the transient index dropping path
+  TRANSIENT_DELETE_ONLY = 13;
+  TRANSIENT_WRITE_ONLY = 14;
 }
 
 // TargetMetadata refers to the metadata for individual elements, where

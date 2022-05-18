@@ -23,9 +23,11 @@ type MutationOp interface {
 // MutationVisitor is a visitor for MutationOp operations.
 type MutationVisitor interface {
 	NotImplemented(context.Context, NotImplemented) error
-	MakeAddedIndexDeleteOnly(context.Context, MakeAddedIndexDeleteOnly) error
+	MakeAddedIndexDeleteOnly(context.Context, MakeAddedTempIndexDeleteOnly) error
+	MakeAddedIndexBackfilling(context.Context, MakeAddedIndexBackfilling) error
 	SetAddedIndexPartialPredicate(context.Context, SetAddedIndexPartialPredicate) error
 	MakeAddedIndexDeleteAndWriteOnly(context.Context, MakeAddedIndexDeleteAndWriteOnly) error
+	MakeBackfillingIndexDeleteOnly(context.Context, MakeBackfillingIndexDeleteOnly) error
 	MakeAddedSecondaryIndexPublic(context.Context, MakeAddedSecondaryIndexPublic) error
 	MakeAddedPrimaryIndexPublic(context.Context, MakeAddedPrimaryIndexPublic) error
 	MakeDroppedPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedPrimaryIndexDeleteAndWriteOnly) error
@@ -95,8 +97,13 @@ func (op NotImplemented) Visit(ctx context.Context, v MutationVisitor) error {
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeAddedIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+func (op MakeAddedTempIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeAddedIndexDeleteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeAddedIndexBackfilling) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAddedIndexBackfilling(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -110,6 +117,11 @@ func (op MakeAddedIndexDeleteAndWriteOnly) Visit(ctx context.Context, v Mutation
 }
 
 // Visit is part of the MutationOp interface.
+func (op MakeBackfillingIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeBackfillingIndexDeleteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op MakeAddedSecondaryIndexPublic) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeAddedSecondaryIndexPublic(ctx, op)
 }
@@ -120,7 +132,9 @@ func (op MakeAddedPrimaryIndexPublic) Visit(ctx context.Context, v MutationVisit
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(
+	ctx context.Context, v MutationVisitor,
+) error {
 	return v.MakeDroppedPrimaryIndexDeleteAndWriteOnly(ctx, op)
 }
 
@@ -160,7 +174,9 @@ func (op MakeAddedColumnDeleteAndWriteOnly) Visit(ctx context.Context, v Mutatio
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+func (op MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) Visit(
+	ctx context.Context, v MutationVisitor,
+) error {
 	return v.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(ctx, op)
 }
 

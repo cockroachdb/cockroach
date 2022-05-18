@@ -102,19 +102,13 @@ func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic
 	if err != nil {
 		return err
 	}
-	mut, err := m.removeMutation(
-		tbl,
-		MakeColumnIDMutationSelector(op.ColumnID),
-		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
-		op.TargetMetadata,
-		eventpb.CommonSQLEventDetails{
-			DescriptorID:    uint32(tbl.GetID()),
-			Statement:       redact.RedactableString(op.Statement),
-			Tag:             op.StatementTag,
-			ApplicationName: op.Authorization.AppName,
-			User:            op.Authorization.UserName,
-		},
-	)
+	mut, err := m.removeMutation(tbl, MakeColumnIDMutationSelector(op.ColumnID), op.TargetMetadata, eventpb.CommonSQLEventDetails{
+		DescriptorID:    uint32(tbl.GetID()),
+		Statement:       redact.RedactableString(op.Statement),
+		Tag:             op.StatementTag,
+		ApplicationName: op.Authorization.AppName,
+		User:            op.Authorization.UserName,
+	}, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
 	if err != nil {
 		return err
 	}
@@ -187,19 +181,13 @@ func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent
 	if err != nil {
 		return err
 	}
-	mut, err := m.removeMutation(
-		tbl,
-		MakeColumnIDMutationSelector(op.ColumnID),
-		descpb.DescriptorMutation_DELETE_ONLY,
-		op.TargetMetadata,
-		eventpb.CommonSQLEventDetails{
-			DescriptorID:    uint32(tbl.GetID()),
-			Statement:       redact.RedactableString(op.Statement),
-			Tag:             op.StatementTag,
-			ApplicationName: op.Authorization.AppName,
-			User:            op.Authorization.UserName,
-		},
-	)
+	mut, err := m.removeMutation(tbl, MakeColumnIDMutationSelector(op.ColumnID), op.TargetMetadata, eventpb.CommonSQLEventDetails{
+		DescriptorID:    uint32(tbl.GetID()),
+		Statement:       redact.RedactableString(op.Statement),
+		Tag:             op.StatementTag,
+		ApplicationName: op.Authorization.AppName,
+		User:            op.Authorization.UserName,
+	}, descpb.DescriptorMutation_DELETE_ONLY)
 	if err != nil {
 		return err
 	}
