@@ -52,7 +52,7 @@ timeout -s INT $((7800*60)) bin/roachtest run \
   --artifacts "/artifacts/${artifacts_subdir}" \
   --artifacts-literal="${artifacts}" \
   --parallelism 5 \
-  --encrypt=random \
+  --metamorphic-encryption-probability=0.5 \
   --teamcity || exit_status=$?
 
 if [[ ${exit_status} -eq 10 ]]; then
