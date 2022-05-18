@@ -54,11 +54,11 @@ const (
 	// The gap between floatNaNDesc and bytesMarker was left for
 	// compatibility reasons.
 	bytesMarker          byte = 0x12
-	bytesDescMarker      byte = bytesMarker + 1
-	timeMarker           byte = bytesDescMarker + 1
-	durationBigNegMarker byte = timeMarker + 1 // Only used for durations < MinInt64 nanos.
-	durationMarker       byte = durationBigNegMarker + 1
-	durationBigPosMarker byte = durationMarker + 1 // Only used for durations > MaxInt64 nanos.
+	bytesDescMarker           = bytesMarker + 1
+	timeMarker                = bytesDescMarker + 1
+	durationBigNegMarker      = timeMarker + 1 // Only used for durations < MinInt64 nanos.
+	durationMarker            = durationBigNegMarker + 1
+	durationBigPosMarker      = durationMarker + 1 // Only used for durations > MaxInt64 nanos.
 
 	decimalNaN              = durationBigPosMarker + 1 // 24
 	decimalNegativeInfinity = decimalNaN + 1
@@ -469,6 +469,31 @@ func EncLenUvarintDescending(v uint64) int {
 		return 1
 	}
 	return 2 + highestByteIndex(v)
+}
+
+// GetUvarintLen is similar to DecodeUvarintAscending except that it returns the
+// length of the prefix that encodes a uint64 value in bytes without actually
+// decoding the value. An error is returned if b does not contain a valid
+// encoding of an unsigned int datum.
+func GetUvarintLen(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, errors.Errorf("insufficient bytes to decode uvarint value")
+	}
+	length := int(b[0]) - intZero
+	if length <= intSmall {
+		return 1, nil
+	}
+	length -= intSmall
+	if length < 0 || length > 8 {
+		return 0, errors.Errorf("invalid uvarint length of %d", length)
+	} else if len(b) <= length {
+		// Note: we use <= for comparison here as opposed to the < in
+		// DecodeUvarintAscending because in the latter the first byte for the
+		// uvarint is removed as part of decoding. We need to account for the first
+		// byte when assessing the size.
+		return 0, errors.Errorf("insufficient bytes to decode uvarint value: %q", b)
+	}
+	return 1 + length, nil
 }
 
 // DecodeUvarintAscending decodes a uint64 encoded uint64 from the input
