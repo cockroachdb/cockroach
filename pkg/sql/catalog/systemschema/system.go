@@ -55,14 +55,17 @@ CREATE TABLE system.descriptor (
   CONSTRAINT "primary" PRIMARY KEY (id)
 );`
 
+	// UsersTableSchema represents the system.users table.
 	UsersTableSchema = `
 CREATE TABLE system.users (
-  username         STRING,
-  "hashedPassword" BYTES,
+  username         STRING NOT NULL,
+  "hashedPassword" BYTES NULL,
   "isRole"         BOOL NOT NULL DEFAULT false,
-  CONSTRAINT "primary" PRIMARY KEY (username)
+  user_id          OID NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (username),
+  UNIQUE INDEX users_user_id_idx (user_id ASC),
+  FAMILY "primary" (username, user_id)
 );`
-
 	RoleOptionsTableSchema = `
 CREATE TABLE system.role_options (
 	username STRING NOT NULL,
@@ -101,6 +104,11 @@ CREATE TABLE system.tenants (
 	CONSTRAINT "primary" PRIMARY KEY (id),
 	FAMILY "primary" (id, active, info)
 );`
+
+	// RoleIDSequenceSchema starts at 100 so we have reserved IDs for special
+	// roles such as root and admin.
+	RoleIDSequenceSchema = `
+CREATE SEQUENCE system.role_id_seq START 100 MINVALUE 100 MAXVALUE 2147483647;`
 )
 
 // These system tables are not part of the system config.
@@ -758,8 +766,6 @@ func systemTable(
 		NextMutationID:          1,
 		NextConstraintID:        1,
 	}
-	tbl.PrimaryIndex.ConstraintID = tbl.NextConstraintID
-	tbl.NextConstraintID++
 	for _, col := range columns {
 		if tbl.NextColumnID <= col.ID {
 			tbl.NextColumnID = col.ID + 1
@@ -775,11 +781,16 @@ func systemTable(
 			tbl.NextIndexID = idx.ID + 1
 		}
 		// Only assigned constraint IDs to unique non-primary indexes.
-		if idx.Unique && i > 1 {
+		if idx.Unique && i >= 1 {
 			tbl.Indexes[i-1].ConstraintID = tbl.NextConstraintID
 			tbl.NextConstraintID++
 		}
 	}
+
+	// When creating tables normally, unique index constraint ids are
+	// assigned before the primary index.
+	tbl.PrimaryIndex.ConstraintID = tbl.NextConstraintID
+	tbl.NextConstraintID++
 	return tbl
 }
 
@@ -900,13 +911,24 @@ var (
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "hashedPassword", ID: 2, Type: types.Bytes, Nullable: true},
 				{Name: "isRole", ID: 3, Type: types.Bool, DefaultExpr: &falseBoolString},
+				{Name: "user_id", ID: 4, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
-				{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
+				{Name: "primary", ID: 0, ColumnNames: []string{"username", "user_id"}, ColumnIDs: []descpb.ColumnID{1, 4}, DefaultColumnID: 4},
 				{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
 				{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
 			},
 			pk("username"),
+			descpb.IndexDescriptor{
+				Name:                "users_user_id_idx",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"user_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
 		))
 
 	// ZonesTable is the descriptor for the zones table.
@@ -990,6 +1012,51 @@ var (
 				Start:     1,
 				CacheSize: 1,
 			}
+			tbl.NextColumnID = 0
+			tbl.NextFamilyID = 0
+			tbl.NextIndexID = 0
+			tbl.NextMutationID = 0
+			// Sequences never exposed their internal constraints,
+			// so all IDs will be left at zero. CREATE SEQUENCE has
+			// the same behaviour.
+			tbl.NextConstraintID = 0
+			tbl.PrimaryIndex.ConstraintID = 0
+		},
+	)
+
+	// RoleIDSequence is the descriptor for the role id sequence.
+	RoleIDSequence = registerSystemTable(
+		RoleIDSequenceSchema,
+		systemTable(
+			catconstants.RoleIDSequenceName,
+			keys.RoleIDSequenceID,
+			[]descpb.ColumnDescriptor{
+				{Name: tabledesc.SequenceColumnName, ID: tabledesc.SequenceColumnID, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{{
+				Name:            "primary",
+				ID:              keys.SequenceColumnFamilyID,
+				ColumnNames:     []string{tabledesc.SequenceColumnName},
+				ColumnIDs:       []descpb.ColumnID{tabledesc.SequenceColumnID},
+				DefaultColumnID: tabledesc.SequenceColumnID,
+			}},
+			descpb.IndexDescriptor{
+				ID:                  keys.SequenceIndexID,
+				Name:                tabledesc.LegacyPrimaryKeyIndexName,
+				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			opts := &descpb.TableDescriptor_SequenceOpts{
+				Increment: 1,
+				MinValue:  100,
+				MaxValue:  math.MaxInt32,
+				Start:     100,
+				CacheSize: 1,
+			}
+			tbl.SequenceOpts = opts
 			tbl.NextColumnID = 0
 			tbl.NextFamilyID = 0
 			tbl.NextIndexID = 0

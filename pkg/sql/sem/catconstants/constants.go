@@ -83,6 +83,7 @@ const (
 	SpanCountTableName                     SystemTableName = "span_count"
 	SystemPrivilegeTableName               SystemTableName = "privileges"
 	SystemExternalConnectionsTableName     SystemTableName = "external_connections"
+	RoleIDSequenceName                     SystemTableName = "role_id_seq"
 )
 
 // Oid for virtual database and table.

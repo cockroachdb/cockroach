@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,9 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -48,10 +52,10 @@ func TestInitialKeys(t *testing.T) {
 		var nonDescKeys int
 		if systemTenant {
 			codec = keys.SystemSQLCodec
-			nonDescKeys = 10
+			nonDescKeys = 11
 		} else {
 			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
-			nonDescKeys = 3
+			nonDescKeys = 4
 		}
 
 		ms := bootstrap.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
@@ -68,6 +72,8 @@ func TestInitialKeys(t *testing.T) {
 			descpb.ID(1000 /* suitably large descriptor ID */),
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
 			catpb.NewBasePrivilegeDescriptor(username.NodeUserName()),
+			nil,
+			nil,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -166,6 +172,14 @@ func TestSystemTableLiterals(t *testing.T) {
 		pkg    catalog.TableDescriptor
 	}
 
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	s := tc.Servers[0]
+
 	testcases := make(map[string]testcase)
 	for schema, desc := range systemschema.SystemTableDescriptors {
 		if _, alreadyExists := testcases[desc.GetName()]; alreadyExists {
@@ -177,38 +191,46 @@ func TestSystemTableLiterals(t *testing.T) {
 		}
 	}
 
-	const expectedNumberOfSystemTables = 41
+	const expectedNumberOfSystemTables = 42
 	require.Equal(t, expectedNumberOfSystemTables, len(testcases))
+
+	runTest := func(name string, test testcase) {
+		privs := *test.pkg.GetPrivileges()
+		desc := test.pkg
+		// Allocate an ID to dynamically allocated system tables.
+		if desc.GetID() == 0 {
+			mut := desc.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
+			mut.ID = keys.MaxReservedDescID + 1
+			desc = mut.ImmutableCopy().(catalog.TableDescriptor)
+		}
+		leaseManager := s.LeaseManager().(*lease.Manager)
+		collection := descs.MakeTestCollection(ctx, leaseManager)
+
+		gen, err := sql.CreateTestTableDescriptor(
+			context.Background(),
+			keys.SystemDatabaseID,
+			desc.GetID(),
+			test.schema,
+			&privs,
+			s.DB().NewTxn(ctx, "create-test-table-desc"),
+			&collection,
+		)
+		if err != nil {
+			t.Fatalf("test: %+v, err: %v", test, err)
+		}
+		require.NoError(t, descbuilder.ValidateSelf(gen, clusterversion.TestingClusterVersion))
+
+		if desc.TableDesc().Equal(gen.TableDesc()) {
+			return
+		}
+		diff := strings.Join(pretty.Diff(desc.TableDesc(), gen.TableDesc()), "\n")
+		t.Errorf("%s table descriptor generated from CREATE TABLE statement does not match "+
+			"hardcoded table descriptor:\n%s", desc.GetName(), diff)
+	}
 
 	for name, test := range testcases {
 		t.Run(name, func(t *testing.T) {
-			privs := *test.pkg.GetPrivileges()
-			desc := test.pkg
-			// Allocate an ID to dynamically allocated system tables.
-			if desc.GetID() == 0 {
-				mut := desc.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
-				mut.ID = keys.MaxReservedDescID + 1
-				desc = mut.ImmutableCopy().(catalog.TableDescriptor)
-			}
-
-			gen, err := sql.CreateTestTableDescriptor(
-				context.Background(),
-				keys.SystemDatabaseID,
-				desc.GetID(),
-				test.schema,
-				&privs,
-			)
-			if err != nil {
-				t.Fatalf("test: %+v, err: %v", test, err)
-			}
-			require.NoError(t, descbuilder.ValidateSelf(gen, clusterversion.TestingClusterVersion))
-
-			if desc.TableDesc().Equal(gen.TableDesc()) {
-				return
-			}
-			diff := strings.Join(pretty.Diff(desc.TableDesc(), gen.TableDesc()), "\n")
-			t.Errorf("%s table descriptor generated from CREATE TABLE statement does not match "+
-				"hardcoded table descriptor:\n%s", desc.GetName(), diff)
+			runTest(name, test)
 		})
 	}
 }

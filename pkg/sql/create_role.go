@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -150,14 +152,22 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	// TODO(richardjcai): move hashedPassword column to system.role_options.
+	stmt := fmt.Sprintf("INSERT INTO %s VALUES ($1, $2, $3)", sessioninit.UsersTableName)
+	args := append(make([]interface{}, 0, 4), n.roleName, hashedPassword, n.isRole)
+	if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.AddSystemUserIDColumn) {
+		stmt = fmt.Sprintf("INSERT INTO %s VALUES ($1, $2, $3, $4)", sessioninit.UsersTableName)
+		roleID, err := descidgen.GenerateUniqueRoleID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
+		if err != nil {
+			return err
+		}
+		args = append(args, roleID)
+	}
 	rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
 		params.p.txn,
-		fmt.Sprintf("insert into %s values ($1, $2, $3)", sessioninit.UsersTableName),
-		n.roleName,
-		hashedPassword,
-		n.isRole,
+		stmt,
+		args...,
 	)
 
 	if err != nil {

@@ -83,3 +83,23 @@ func PeekNextUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (
 	}
 	return descpb.ID(v.ValueInt()), nil
 }
+
+// GenerateUniqueRoleID returns the next available Role ID and increments
+// the counter. The incrementing is non-transactional, and the counter could be
+// incremented multiple times because of retries.
+func GenerateUniqueRoleID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (int64, error) {
+	return IncrementUniqueRoleID(ctx, db, codec, 1)
+}
+
+// IncrementUniqueRoleID returns the next available Role ID and increments
+// the counter by inc. The incrementing is non-transactional, and the counter
+// could be incremented multiple times because of retries.
+func IncrementUniqueRoleID(
+	ctx context.Context, db *kv.DB, codec keys.SQLCodec, inc int64,
+) (int64, error) {
+	newVal, err := kv.IncrementValRetryable(ctx, db, codec.SequenceKey(keys.RoleIDSequenceID), inc)
+	if err != nil {
+		return 0, err
+	}
+	return newVal - inc, nil
+}
