@@ -113,6 +113,7 @@ func (s *SerialUnorderedSynchronizer) Close() error {
 	}
 	if s.span != nil {
 		s.span.Finish()
+		s.span = nil
 	}
 	return nil
 }
