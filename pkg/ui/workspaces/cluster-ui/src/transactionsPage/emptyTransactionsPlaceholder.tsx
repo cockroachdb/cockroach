@@ -21,7 +21,7 @@ import { commonStyles } from "src/common";
 
 const footer = (
   <Anchor href={transactionsTable} target="_blank">
-    Learn more about statements
+    Learn more about transactions
   </Anchor>
 );
 
