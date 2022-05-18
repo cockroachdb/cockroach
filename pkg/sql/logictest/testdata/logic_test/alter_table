@@ -2486,3 +2486,25 @@ CREATE TABLE public.t5 (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
 ) WITH (sql_stats_automatic_collection_min_stale_rows = 1234, sql_stats_automatic_collection_fraction_stale_rows = 0.15)
+
+subtest add_volatile_unique_column_81448
+
+statement ok
+create table t81448 (a int primary key);
+insert into t81448 values (1), (2), (3)
+
+statement ok
+alter table t81448 add column b float8 unique default (random())
+
+statement ok
+create table t81448_b as select b from t81448@t_pkey;
+
+# Make sure the rows in the index are the same as the rows in the table.
+
+query I
+select (select count(*) from t81448@t81448_b_key bk inner join t81448_b cp on (cp.b = bk.b))
+----
+3
+
+statement ok
+drop table t81448, t81448_b
