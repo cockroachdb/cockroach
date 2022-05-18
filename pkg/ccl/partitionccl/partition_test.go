@@ -49,10 +49,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
@@ -151,7 +151,7 @@ func (pt *partitioningTest) parse() error {
 		st := cluster.MakeTestingClusterSettings()
 		parentID, tableID := descpb.ID(bootstrap.TestingUserDescID(0)), descpb.ID(bootstrap.TestingUserDescID(1))
 		mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
-			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, hlc.UnixNano())
+			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, timeutil.Now().UnixNano())
 		if err != nil {
 			return err
 		}

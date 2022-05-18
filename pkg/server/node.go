@@ -330,7 +330,7 @@ func bootstrapCluster(
 			if err := kvserver.WriteInitialClusterData(
 				ctx, eng, initialValues,
 				bootstrapVersion.Version, len(engines), splits,
-				hlc.UnixNano(), storeKnobs,
+				timeutil.Now().UnixNano(), storeKnobs,
 			); err != nil {
 				return nil, err
 			}
