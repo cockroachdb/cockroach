@@ -366,6 +366,13 @@ const (
 	// keys at the Pebble layer.
 	EnablePebbleFormatVersionRangeKeys
 
+	// RoleIDSequence is the version where the system.role_id_sequence exists.
+	RoleIDSequence
+
+	// SystemUsersUserIDMigration is the version where the system.users table has
+	// a user id column.
+	SystemUsersUserIDMigration
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -637,6 +644,14 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnablePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 8},
+	},
+	{
+		Key:     RoleIDSequence,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
+	},
+	{
+		Key:     SystemUsersUserIDMigration,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
 	},
 
 	// *************************************************

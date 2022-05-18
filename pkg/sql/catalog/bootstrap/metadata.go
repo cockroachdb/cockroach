@@ -175,6 +175,21 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			add(catalogkeys.MakeSchemaNameKey(ms.codec, desc.GetID(), tree.PublicSchema), publicSchemaValue)
 		}
 
+		// Set initial sequence values.
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if ok {
+			if tbl.IsSequence() {
+				{
+					// We already initialized the DescIDSequence value.
+					if tbl.GetID() != keys.DescIDSequenceID {
+						value := roachpb.Value{}
+						value.SetInt(tbl.GetSequenceOpts().Start)
+						add(ms.codec.SequenceKey(uint32(tbl.GetID())), value)
+					}
+				}
+			}
+		}
+
 		// Create descriptor metadata key.
 		descValue := roachpb.Value{}
 		if err := descValue.SetProto(desc.DescriptorProto()); err != nil {
@@ -322,6 +337,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 
 	target.AddDescriptorForSystemTenant(systemschema.TenantSettingsTable)
 	target.AddDescriptorForNonSystemTenant(systemschema.SpanCountTable)
+
+	// Tables introduced in 22.2.
+	target.AddDescriptor(systemschema.RoleIDSequence)
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.

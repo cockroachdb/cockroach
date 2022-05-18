@@ -537,11 +537,12 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SHOW DATABASE", []preparedQueryTest{
 			baseTest.Results("defaultdb"),
 		}},
-		{"SHOW COLUMNS FROM system.users", []preparedQueryTest{
+		{sql: "SHOW COLUMNS FROM system.users", ptest: []preparedQueryTest{
 			baseTest.
-				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary}", false).
+				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false).
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{primary}", false).
-				Results("isRole", "BOOL", false, false, "", "{primary}", false),
+				Results("isRole", "BOOL", false, false, "", "{primary}", false).
+				Results("user_id", "OID", false, "oid(nextval('system.public.role_id_seq'::REGCLASS))", "", "{primary,users_user_id_idx}", false),
 		}},
 		{"SELECT database_name, owner FROM [SHOW DATABASES]", []preparedQueryTest{
 			baseTest.Results("d", username.RootUser).
@@ -564,10 +565,13 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false).
 				Results("users", "primary", false, 2, "hashedPassword", "N/A", true, false).
-				Results("users", "primary", false, 3, "isRole", "N/A", true, false),
+				Results("users", "primary", false, 3, "isRole", "N/A", true, false).
+				Results("users", "primary", false, 4, "user_id", "N/A", true, false).
+				Results("users", "users_user_id_idx", true, 1, "user_id", "ASC", false, false).
+				Results("users", "users_user_id_idx", true, 2, "username", "ASC", false, true),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
-			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(36),
+			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(37),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
 			baseTest.Results("crdb_internal", gosql.NullString{}).Others(4),

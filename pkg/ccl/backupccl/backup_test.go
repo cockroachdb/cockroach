@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -1034,7 +1035,7 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 
 	// At the time this test was written, these were the only system tables that
 	// were reasonable for a user to backup and restore into another cluster.
-	tables := []string{"locations", "role_members", "users", "zones"}
+	tables := []string{"locations", "role_members", "users", "zones", "role_id_seq"}
 	tableSpec := "system." + strings.Join(tables, ", system.")
 
 	// Take a consistent fingerprint of the original tables.
@@ -1042,6 +1043,9 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 	expectedFingerprints := map[string][][]string{}
 	err := crdb.ExecuteTx(ctx, conn, nil /* txopts */, func(tx *gosql.Tx) error {
 		for _, table := range tables {
+			if table == "role_id_seq" {
+				continue
+			}
 			rows, err := conn.Query("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system." + table)
 			if err != nil {
 				return err
@@ -1067,6 +1071,9 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 
 	// Verify the fingerprints match.
 	for _, table := range tables {
+		if table == "role_id_seq" {
+			continue
+		}
 		a := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system_new."+table)
 		if e := expectedFingerprints[table]; !reflect.DeepEqual(e, a) {
 			t.Fatalf("fingerprints between system.%[1]s and system_new.%[1]s did not match:%s\n",
@@ -9388,6 +9395,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 78963)
 
 	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
@@ -9415,7 +9423,7 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 
 		// Role 'app_role' and user 'app' will be added, and 'app' is granted with 'app_role'
 		// User test will remain untouched with no role granted
-		sqlDBRestore.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
+		sqlDBRestore.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\" FROM system.users", [][]string{
 			{"admin", "", "true"},
 			{"app", "NULL", "false"},
 			{"app_role", "NULL", "true"},
@@ -9449,7 +9457,7 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 	t.Run("restore-from-backup-with-no-system-role-members", func(t *testing.T) {
 		sqlDBRestore1.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/3")
 
-		sqlDBRestore1.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
+		sqlDBRestore1.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\" FROM system.users", [][]string{
 			{"admin", "", "true"},
 			{"app", "NULL", "false"},
 			{"app_role", "NULL", "true"},
@@ -9457,7 +9465,7 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"test", "NULL", "false"},
 			{"test_role", "NULL", "true"},
 		})
-		sqlDBRestore1.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
+		sqlDBRestore1.CheckQueryResults(t, "SELECT \"role\", \"member\", \"isAdmin\" FROM system.role_members", [][]string{
 			{"admin", "root", "true"},
 		})
 		sqlDBRestore1.CheckQueryResults(t, "SHOW USERS", [][]string{
@@ -10026,6 +10034,17 @@ func TestBackupLatestInBaseDirectory(t *testing.T) {
 	r, err := store.ReadFile(ctx, latestFileName)
 	require.NoError(t, err)
 	r.Close(ctx)
+
+	// Drop the system.role_seq_id so that we can perform the migration.
+	sqlDB.Exec(t, `INSERT INTO system.users VALUES ('node', '', false, 0)`)
+	sqlDB.Exec(t, `GRANT node TO root`)
+	sqlDB.Exec(t, `DROP SEQUENCE system.role_id_seq`)
+	sqlDB.Exec(t, `REVOKE node FROM root`)
+
+	err = tc.Servers[0].DB().Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.RoleIDSequenceID))
+	require.NoError(t, err)
+	err = tc.Servers[0].DB().Del(ctx, keys.SystemSQLCodec.SequenceKey(uint32(keys.RoleIDSequenceID)))
+	require.NoError(t, err)
 
 	// Close the channel so that the cluster version is upgraded.
 	close(disableUpgradeCh)

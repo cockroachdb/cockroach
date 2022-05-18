@@ -12,43 +12,44 @@ skipif config 3node-tenant
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] ORDER BY 2
 ----
-public  comments                         table  NULL  NULL
-public  database_role_settings           table  NULL  NULL
-public  descriptor                       table  NULL  NULL
-public  eventlog                         table  NULL  NULL
-public  jobs                             table  NULL  NULL
-public  join_tokens                      table  NULL  NULL
-public  lease                            table  NULL  NULL
-public  locations                        table  NULL  NULL
-public  migrations                       table  NULL  NULL
-public  namespace                        table  NULL  NULL
-public  protected_ts_meta                table  NULL  NULL
-public  protected_ts_records             table  NULL  NULL
-public  rangelog                         table  NULL  NULL
-public  replication_constraint_stats     table  NULL  NULL
-public  replication_critical_localities  table  NULL  NULL
-public  replication_stats                table  NULL  NULL
-public  reports_meta                     table  NULL  NULL
-public  role_members                     table  NULL  NULL
-public  role_options                     table  NULL  NULL
-public  scheduled_jobs                   table  NULL  NULL
-public  settings                         table  NULL  NULL
-public  span_configurations              table  NULL  NULL
-public  sql_instances                    table  NULL  NULL
-public  sqlliveness                      table  NULL  NULL
-public  statement_bundle_chunks          table  NULL  NULL
-public  statement_diagnostics            table  NULL  NULL
-public  statement_diagnostics_requests   table  NULL  NULL
-public  statement_statistics             table  NULL  NULL
-public  table_statistics                 table  NULL  NULL
-public  tenant_settings                  table  NULL  NULL
-public  tenant_usage                     table  NULL  NULL
-public  tenants                          table  NULL  NULL
-public  transaction_statistics           table  NULL  NULL
-public  ui                               table  NULL  NULL
-public  users                            table  NULL  NULL
-public  web_sessions                     table  NULL  NULL
-public  zones                            table  NULL  NULL
+public  comments                         table     NULL  NULL
+public  database_role_settings           table     NULL  NULL
+public  descriptor                       table     NULL  NULL
+public  eventlog                         table     NULL  NULL
+public  jobs                             table     NULL  NULL
+public  join_tokens                      table     NULL  NULL
+public  lease                            table     NULL  NULL
+public  locations                        table     NULL  NULL
+public  migrations                       table     NULL  NULL
+public  namespace                        table     NULL  NULL
+public  protected_ts_meta                table     NULL  NULL
+public  protected_ts_records             table     NULL  NULL
+public  rangelog                         table     NULL  NULL
+public  replication_constraint_stats     table     NULL  NULL
+public  replication_critical_localities  table     NULL  NULL
+public  replication_stats                table     NULL  NULL
+public  reports_meta                     table     NULL  NULL
+public  role_id_seq                      sequence  NULL  NULL
+public  role_members                     table     NULL  NULL
+public  role_options                     table     NULL  NULL
+public  scheduled_jobs                   table     NULL  NULL
+public  settings                         table     NULL  NULL
+public  span_configurations              table     NULL  NULL
+public  sql_instances                    table     NULL  NULL
+public  sqlliveness                      table     NULL  NULL
+public  statement_bundle_chunks          table     NULL  NULL
+public  statement_diagnostics            table     NULL  NULL
+public  statement_diagnostics_requests   table     NULL  NULL
+public  statement_statistics             table     NULL  NULL
+public  table_statistics                 table     NULL  NULL
+public  tenant_settings                  table     NULL  NULL
+public  tenant_usage                     table     NULL  NULL
+public  tenants                          table     NULL  NULL
+public  transaction_statistics           table     NULL  NULL
+public  ui                               table     NULL  NULL
+public  users                            table     NULL  NULL
+public  web_sessions                     table     NULL  NULL
+public  zones                            table     NULL  NULL
 
 onlyif config 3node-tenant
 query TTTTT
@@ -72,6 +73,7 @@ public  replication_constraint_stats     table     NULL  NULL
 public  replication_critical_localities  table     NULL  NULL
 public  replication_stats                table     NULL  NULL
 public  reports_meta                     table     NULL  NULL
+public  role_id_seq                      sequence  NULL  NULL
 public  role_members                     table     NULL  NULL
 public  role_options                     table     NULL  NULL
 public  scheduled_jobs                   table     NULL  NULL
@@ -134,6 +136,7 @@ SELECT id FROM system.descriptor
 45
 46
 47
+48
 50
 100
 101
@@ -181,6 +184,7 @@ SELECT id FROM system.descriptor
 43
 44
 46
+48
 50
 100
 101
@@ -216,9 +220,10 @@ descriptor  BYTES  true   NULL  ·  {primary}  false
 query TTBTTTB
 SHOW COLUMNS FROM system.users
 ----
-username        STRING  false  NULL   ·  {primary}  false
-hashedPassword  BYTES   true   NULL   ·  {primary}  false
-isRole          BOOL    false  false  ·  {primary}  false
+username        STRING  false  NULL                                                 ·  {primary,users_user_id_idx}  false
+hashedPassword  BYTES   true   NULL                                                 ·  {primary}                    false
+isRole          BOOL    false  false                                                ·  {primary}                    false
+user_id         OID     false  oid(nextval('system.public.role_id_seq'::REGCLASS))  ·  {primary,users_user_id_idx}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.zones
@@ -453,6 +458,16 @@ system  public  reports_meta                     root    GRANT   true
 system  public  reports_meta                     root    INSERT  true
 system  public  reports_meta                     root    SELECT  true
 system  public  reports_meta                     root    UPDATE  true
+system  public  role_id_seq                      admin   DELETE  true
+system  public  role_id_seq                      admin   GRANT   true
+system  public  role_id_seq                      admin   INSERT  true
+system  public  role_id_seq                      admin   SELECT  true
+system  public  role_id_seq                      admin   UPDATE  true
+system  public  role_id_seq                      root    DELETE  true
+system  public  role_id_seq                      root    GRANT   true
+system  public  role_id_seq                      root    INSERT  true
+system  public  role_id_seq                      root    SELECT  true
+system  public  role_id_seq                      root    UPDATE  true
 system  public  role_members                     admin   DELETE  true
 system  public  role_members                     admin   GRANT   true
 system  public  role_members                     admin   INSERT  true
@@ -791,6 +806,16 @@ system  public  reports_meta                     root    GRANT   true
 system  public  reports_meta                     root    INSERT  true
 system  public  reports_meta                     root    SELECT  true
 system  public  reports_meta                     root    UPDATE  true
+system  public  role_id_seq                      admin   DELETE  true
+system  public  role_id_seq                      admin   GRANT   true
+system  public  role_id_seq                      admin   INSERT  true
+system  public  role_id_seq                      admin   SELECT  true
+system  public  role_id_seq                      admin   UPDATE  true
+system  public  role_id_seq                      root    DELETE  true
+system  public  role_id_seq                      root    GRANT   true
+system  public  role_id_seq                      root    INSERT  true
+system  public  role_id_seq                      root    SELECT  true
+system  public  role_id_seq                      root    UPDATE  true
 system  public  role_members                     admin   DELETE  true
 system  public  role_members                     admin   GRANT   true
 system  public  role_members                     admin   INSERT  true

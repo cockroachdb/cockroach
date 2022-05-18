@@ -143,6 +143,16 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		seedSpanCountTableMigration,
 	),
+	upgrade.NewTenantUpgrade("Add system.role_id_sequence",
+		toCV(clusterversion.RoleIDSequence),
+		NoPrecondition,
+		roleIDSequenceMigration,
+	),
+	upgrade.NewTenantUpgrade("Alter system.users to include user_id",
+		toCV(clusterversion.SystemUsersUserIDMigration),
+		NoPrecondition,
+		alterSystemUsersAddUserIDColumn,
+	),
 }
 
 func init() {

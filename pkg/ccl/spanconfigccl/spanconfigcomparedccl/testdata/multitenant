@@ -18,6 +18,7 @@ initialize tenant=11
 configs version=current offset=43
 ----
 ...
+/Table/48                                  database system (host)
 /Table/50                                  database system (host)
 /Tenant/10                                 database system (tenant)
 /Tenant/11                                 database system (tenant)

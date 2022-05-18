@@ -573,6 +573,7 @@ func TestRangeCount(t *testing.T) {
 		}
 
 		sysDBMap["public.descriptor"] = 1
+		sysDBMap["public.role_id_seq"] = 1
 	}
 	var systemTableRangeCount int64
 	for _, n := range sysDBMap {

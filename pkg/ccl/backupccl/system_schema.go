@@ -402,6 +402,10 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.SpanCountTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.RoleIDSequence.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            roleIDSequenceCustomRestoreFunc,
+	},
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that
@@ -463,4 +467,13 @@ func getSystemTablesToRestoreBeforeData() map[string]struct{} {
 	}
 
 	return systemTablesToRestoreBeforeData
+}
+
+func roleIDSequenceCustomRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	return nil
 }
