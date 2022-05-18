@@ -34,10 +34,7 @@ module.exports = (env, argv) => {
     },
 
     resolve: {
-      modules: [
-        path.resolve("../../node_modules"),
-        path.resolve(__dirname, "node_modules"),
-      ],
+      modules: [ "node_modules" ],
     },
 
     module: {
