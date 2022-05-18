@@ -51,3 +51,56 @@ I210816 21:25:47.681152 1 util/log/file_sync_buffer.go:238 ⋮ [config]   line f
 crdb-v2
 
 subtest end
+
+subtest detect_json_format
+
+log
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860392000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"file created at: 2022/03/18 20:26:59"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860400000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"running on machine: ‹crlMBP-C02ZF7LYLVDLMjg5.local›"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860405000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"binary: CockroachDB CCL v22.1.0-alpha.3-328-gd4e3d21328 (x86_64-apple-darwin21.4.0, built 2022/03/18 19:09:39, go1.17.6)"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860410000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"arguments: [‹./cockroach› ‹start-single-node› ‹--insecure› ‹--log-config-file› ‹logconfig-json.yaml›]"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860418000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"log format (utf8=✓): json"}
+----
+json
+
+subtest end
+
+subtest detect_json_compact_format
+
+log
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860392000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"file created at: 2022/03/18 20:26:59"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860400000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"running on machine: ‹crlMBP-C02ZF7LYLVDLMjg5.local›"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860405000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"binary: CockroachDB CCL v22.1.0-alpha.3-328-gd4e3d21328 (x86_64-apple-darwin21.4.0, built 2022/03/18 19:09:39, go1.17.6)"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860410000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"arguments: [‹./cockroach› ‹start-single-node› ‹--insecure› ‹--log-config-file› ‹logconfig-json.yaml›]"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860418000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"log format (utf8=✓): json-compact"}
+----
+json-compact
+
+subtest end
+
+subtest detect_json_fluent_format
+
+log
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860392000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"file created at: 2022/03/18 20:26:59"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860400000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"running on machine: ‹crlMBP-C02ZF7LYLVDLMjg5.local›"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860405000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"binary: CockroachDB CCL v22.1.0-alpha.3-328-gd4e3d21328 (x86_64-apple-darwin21.4.0, built 2022/03/18 19:09:39, go1.17.6)"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860410000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"arguments: [‹./cockroach› ‹start-single-node› ‹--insecure› ‹--log-config-file› ‹logconfig-json.yaml›]"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860418000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"log format (utf8=✓): json-fluent"}
+----
+json-fluent
+
+subtest end
+
+
+subtest detect_json_fluent_compact_format
+
+log
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860392000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"file created at: 2022/03/18 20:26:59"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860400000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"running on machine: ‹crlMBP-C02ZF7LYLVDLMjg5.local›"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860405000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"binary: CockroachDB CCL v22.1.0-alpha.3-328-gd4e3d21328 (x86_64-apple-darwin21.4.0, built 2022/03/18 19:09:39, go1.17.6)"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860410000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"arguments: [‹./cockroach› ‹start-single-node› ‹--insecure› ‹--log-config-file› ‹logconfig-json.yaml›]"}
+{"tag":"cockroach.unknown","header":1,"timestamp":"1647635219.860418000","version":"v22.1.0-alpha.3-328-gd4e3d21328","goroutine":1,"file":"util/log/file_sync_buffer.go","line":238,"redactable":1,"tags":{"config":""},"message":"log format (utf8=✓): json-fluent-compact"}
+----
+json-fluent-compact
+
+subtest end

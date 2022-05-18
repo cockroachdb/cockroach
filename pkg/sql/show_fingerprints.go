@@ -91,15 +91,21 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 
 	cols := make([]string, 0, len(n.tableDesc.PublicColumns()))
 	addColumn := func(col catalog.Column) {
+		var colNameOrExpr string
+		if col.IsExpressionIndexColumn() {
+			colNameOrExpr = fmt.Sprintf("(%s)", col.GetComputeExpr())
+		} else {
+			name := col.GetName()
+			colNameOrExpr = tree.NameStringP(&name)
+		}
 		// TODO(dan): This is known to be a flawed way to fingerprint. Any datum
 		// with the same string representation is fingerprinted the same, even
 		// if they're different types.
-		name := col.GetName()
 		switch col.GetType().Family() {
 		case types.BytesFamily:
-			cols = append(cols, fmt.Sprintf("%s:::bytes", tree.NameStringP(&name)))
+			cols = append(cols, fmt.Sprintf("%s:::bytes", colNameOrExpr))
 		default:
-			cols = append(cols, fmt.Sprintf("%s::string::bytes", tree.NameStringP(&name)))
+			cols = append(cols, fmt.Sprintf("%s::string::bytes", colNameOrExpr))
 		}
 	}
 

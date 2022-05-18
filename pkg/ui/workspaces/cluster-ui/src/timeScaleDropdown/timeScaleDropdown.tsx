@@ -37,6 +37,7 @@ export interface TimeScaleDropdownProps {
     curTimeScale: TimeScale,
     timeWindow: TimeWindow,
   ) => TimeScale;
+  hasCustomOption?: boolean;
 }
 
 export const getTimeLabel = (
@@ -125,6 +126,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   options = defaultTimeScaleOptions,
   setTimeScale,
   adjustTimeScaleOnChange,
+  hasCustomOption = true,
 }): React.ReactElement => {
   const end = currentScale.fixedWindowEnd
     ? moment.utc(currentScale.fixedWindowEnd)
@@ -220,13 +222,15 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
       label: key,
       timeLabel: getTimeLabel(null, value.windowSize),
     }));
-    optionsList.push({
-      value: "Custom",
-      label: "Custom",
-      timeLabel: "--",
-    });
+    if (hasCustomOption) {
+      optionsList.push({
+        value: "Custom",
+        label: "Custom",
+        timeLabel: "--",
+      });
+    }
     return optionsList;
-  }, [options]);
+  }, [options, hasCustomOption]);
 
   const setDateRange = ([start, end]: [moment.Moment, moment.Moment]) => {
     const seconds = moment.duration(moment.utc(end).diff(start)).asSeconds();
