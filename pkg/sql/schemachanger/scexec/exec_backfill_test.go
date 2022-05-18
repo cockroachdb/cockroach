@@ -79,7 +79,7 @@ func TestExecBackfiller(t *testing.T) {
 				keySuffixColumnIDs = append(keySuffixColumnIDs, id)
 			}
 		}
-		require.NoError(t, mut.DeprecatedAddIndexMutation(&descpb.IndexDescriptor{
+		require.NoError(t, mut.AddIndexMutation(&descpb.IndexDescriptor{
 			Name:                        name,
 			ID:                          id,
 			Version:                     descpb.LatestIndexDescriptorVersion,
@@ -91,7 +91,7 @@ func TestExecBackfiller(t *testing.T) {
 			CreatedExplicitly:           true,
 			EncodingType:                descpb.SecondaryIndexEncoding,
 			UseDeletePreservingEncoding: isTempIndex,
-		}, descpb.DescriptorMutation_ADD))
+		}, descpb.DescriptorMutation_ADD, descpb.DescriptorMutation_BACKFILLING))
 		idx, err := mut.FindIndexWithName(name)
 		require.NoError(t, err)
 		return idx

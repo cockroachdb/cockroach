@@ -22,68 +22,92 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-func (m *visitor) MakeAddedIndexDeleteOnly(
-	ctx context.Context, op scop.MakeAddedIndexDeleteOnly,
+func (m *visitor) MakeAddedIndexBackfilling(
+	ctx context.Context, op scop.MakeAddedIndexBackfilling,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.Index.TableID)
+	return addNewIndexMutation(
+		ctx, m, op.Index, op.IsSecondaryIndex, op.IsDeletePreserving,
+		descpb.DescriptorMutation_BACKFILLING,
+	)
+}
+
+func (m *visitor) MakeAddedTempIndexDeleteOnly(
+	ctx context.Context, op scop.MakeAddedTempIndexDeleteOnly,
+) error {
+	const isDeletePreserving = true // temp indexes are always delete preserving
+	return addNewIndexMutation(
+		ctx, m, op.Index, op.IsSecondaryIndex, isDeletePreserving,
+		descpb.DescriptorMutation_DELETE_ONLY,
+	)
+}
+
+func addNewIndexMutation(
+	ctx context.Context,
+	m *visitor,
+	opIndex scpb.Index,
+	isSecondary bool,
+	isDeletePreserving bool,
+	state descpb.DescriptorMutation_State,
+) error {
+	tbl, err := m.checkOutTable(ctx, opIndex.TableID)
 	if err != nil {
 		return err
 	}
 	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
 	// or what-not.
-	if op.Index.IndexID >= tbl.NextIndexID {
-		tbl.NextIndexID = op.Index.IndexID + 1
+	if opIndex.IndexID >= tbl.NextIndexID {
+		tbl.NextIndexID = opIndex.IndexID + 1
 	}
 	// Resolve column names
-	colNames, err := columnNamesFromIDs(tbl, op.Index.KeyColumnIDs)
+	colNames, err := columnNamesFromIDs(tbl, opIndex.KeyColumnIDs)
 	if err != nil {
 		return err
 	}
-	storeColNames, err := columnNamesFromIDs(tbl, op.Index.StoringColumnIDs)
+	storeColNames, err := columnNamesFromIDs(tbl, opIndex.StoringColumnIDs)
 	if err != nil {
 		return err
 	}
-	colDirs := make([]descpb.IndexDescriptor_Direction, len(op.Index.KeyColumnIDs))
-	for i, dir := range op.Index.KeyColumnDirections {
+	colDirs := make([]descpb.IndexDescriptor_Direction, len(opIndex.KeyColumnIDs))
+	for i, dir := range opIndex.KeyColumnDirections {
 		if dir == scpb.Index_DESC {
 			colDirs[i] = descpb.IndexDescriptor_DESC
 		}
 	}
 	// Set up the index descriptor type.
 	indexType := descpb.IndexDescriptor_FORWARD
-	if op.Index.IsInverted {
+	if opIndex.IsInverted {
 		indexType = descpb.IndexDescriptor_INVERTED
 	}
 	// Set up the encoding type.
 	encodingType := descpb.PrimaryIndexEncoding
 	indexVersion := descpb.LatestIndexDescriptorVersion
-	if op.IsSecondaryIndex {
+	if isSecondary {
 		encodingType = descpb.SecondaryIndexEncoding
 	}
 	// Create an index descriptor from the operation.
 	idx := &descpb.IndexDescriptor{
-		ID:                          op.Index.IndexID,
-		Name:                        tabledesc.IndexNamePlaceholder(op.Index.IndexID),
-		Unique:                      op.Index.IsUnique,
+		ID:                          opIndex.IndexID,
+		Name:                        tabledesc.IndexNamePlaceholder(opIndex.IndexID),
+		Unique:                      opIndex.IsUnique,
 		Version:                     indexVersion,
 		KeyColumnNames:              colNames,
-		KeyColumnIDs:                op.Index.KeyColumnIDs,
-		StoreColumnIDs:              op.Index.StoringColumnIDs,
+		KeyColumnIDs:                opIndex.KeyColumnIDs,
+		StoreColumnIDs:              opIndex.StoringColumnIDs,
 		StoreColumnNames:            storeColNames,
 		KeyColumnDirections:         colDirs,
 		Type:                        indexType,
-		KeySuffixColumnIDs:          op.Index.KeySuffixColumnIDs,
-		CompositeColumnIDs:          op.Index.CompositeColumnIDs,
+		KeySuffixColumnIDs:          opIndex.KeySuffixColumnIDs,
+		CompositeColumnIDs:          opIndex.CompositeColumnIDs,
 		CreatedExplicitly:           true,
 		EncodingType:                encodingType,
 		ConstraintID:                tbl.GetNextConstraintID(),
-		UseDeletePreservingEncoding: op.IsDeletePreserving,
+		UseDeletePreservingEncoding: isDeletePreserving,
 	}
-	if op.Index.Sharding != nil {
-		idx.Sharded = *op.Index.Sharding
+	if opIndex.Sharding != nil {
+		idx.Sharded = *opIndex.Sharding
 	}
 	tbl.NextConstraintID++
-	return enqueueAddIndexMutation(tbl, idx)
+	return enqueueAddIndexMutation(tbl, idx, state)
 }
 
 func (m *visitor) SetAddedIndexPartialPredicate(
@@ -100,6 +124,21 @@ func (m *visitor) SetAddedIndexPartialPredicate(
 	idx := mut.AsIndex().IndexDesc()
 	idx.Predicate = string(op.Expr)
 	return nil
+}
+
+func (m *visitor) MakeBackfillingIndexDeleteOnly(
+	ctx context.Context, op scop.MakeBackfillingIndexDeleteOnly,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	return mutationStateChange(
+		tbl,
+		MakeIndexIDMutationSelector(op.IndexID),
+		descpb.DescriptorMutation_BACKFILLING,
+		descpb.DescriptorMutation_DELETE_ONLY,
+	)
 }
 
 func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
@@ -129,19 +168,13 @@ func (m *visitor) MakeAddedPrimaryIndexPublic(
 		return err
 	}
 	indexDesc := index.IndexDescDeepCopy()
-	if _, err := m.removeMutation(
-		tbl,
-		MakeIndexIDMutationSelector(op.IndexID),
-		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
-		op.TargetMetadata,
-		eventpb.CommonSQLEventDetails{
-			DescriptorID:    uint32(tbl.GetID()),
-			Statement:       redact.RedactableString(op.Statement),
-			Tag:             op.StatementTag,
-			ApplicationName: op.Authorization.AppName,
-			User:            op.Authorization.UserName,
-		},
-	); err != nil {
+	if _, err := m.removeMutation(tbl, MakeIndexIDMutationSelector(op.IndexID), op.TargetMetadata, eventpb.CommonSQLEventDetails{
+		DescriptorID:    uint32(tbl.GetID()),
+		Statement:       redact.RedactableString(op.Statement),
+		Tag:             op.StatementTag,
+		ApplicationName: op.Authorization.AppName,
+		User:            op.Authorization.UserName,
+	}, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY); err != nil {
 		return err
 	}
 	tbl.PrimaryIndex = indexDesc
@@ -243,19 +276,14 @@ func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) 
 	if err != nil {
 		return err
 	}
-	_, err = m.removeMutation(
-		tbl,
-		MakeIndexIDMutationSelector(op.IndexID),
-		descpb.DescriptorMutation_DELETE_ONLY,
-		op.TargetMetadata,
-		eventpb.CommonSQLEventDetails{
-			DescriptorID:    uint32(tbl.GetID()),
-			Statement:       redact.RedactableString(op.Statement),
-			Tag:             op.StatementTag,
-			ApplicationName: op.Authorization.AppName,
-			User:            op.Authorization.UserName,
-		},
-	)
+	_, err = m.removeMutation(tbl, MakeIndexIDMutationSelector(op.IndexID), op.TargetMetadata, eventpb.CommonSQLEventDetails{
+		DescriptorID:    uint32(tbl.GetID()),
+		Statement:       redact.RedactableString(op.Statement),
+		Tag:             op.StatementTag,
+		ApplicationName: op.Authorization.AppName,
+		User:            op.Authorization.UserName,
+	}, descpb.DescriptorMutation_DELETE_ONLY,
+		descpb.DescriptorMutation_BACKFILLING)
 	return err
 }
 

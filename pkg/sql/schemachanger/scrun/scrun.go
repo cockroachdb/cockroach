@@ -127,7 +127,7 @@ func RunSchemaChangesInJob(
 			}
 			return executeStage(ctx, knobs, td, sc, i, sc.Stages[i])
 		}); err != nil {
-			if knobs.OnPostCommitError != nil {
+			if knobs != nil && knobs.OnPostCommitError != nil {
 				return knobs.OnPostCommitError(sc, i, err)
 			}
 			return err

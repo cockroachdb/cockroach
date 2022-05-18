@@ -31,7 +31,7 @@ func TestOpGen(t *testing.T) {
 	for _, i := range fieldIndexes {
 		field := elementProtoType.Field(i)
 		t.Run(field.Name, func(t *testing.T) {
-			var adds, drops []target
+			var adds, drops, transients []target
 			for _, tg := range opRegistry.targets {
 				if reflect.ValueOf(tg.e).Type() == field.Type {
 					switch tg.status {
@@ -39,10 +39,12 @@ func TestOpGen(t *testing.T) {
 						adds = append(adds, tg)
 					case scpb.Status_ABSENT:
 						drops = append(drops, tg)
+					case scpb.Status_TRANSIENT_ABSENT:
+						transients = append(transients, tg)
 					}
 				}
 			}
-			if len(adds) != 1 {
+			if len(adds) != 1 && len(transients) != 1 {
 				t.Errorf("expected one registered adding spec for %s, instead found %d", field.Name, len(adds))
 			}
 			if len(drops) != 1 {

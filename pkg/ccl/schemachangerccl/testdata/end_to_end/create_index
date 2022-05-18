@@ -1,18 +1,21 @@
 setup
-CREATE TABLE t (k INT PRIMARY KEY, v STRING NOT NULL);
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name VARCHAR(256), money INT)
 ----
 ...
-+object {100 101 t} -> 104
++object {100 101 t1} -> 104
 
 test
-CREATE INDEX idx1 ON t (v);
+CREATE INDEX id1
+  ON defaultdb.t1 (id, name)
+  STORING (money)
+  PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
 checking for feature: CREATE INDEX
 begin transaction #1
 # begin StatementPhase
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 4 MutationType ops
+## PreCommitPhase stage 1 of 1 with 6 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -23,18 +26,25 @@ upsert descriptor #104
   +    currentStatuses:
   +    - BACKFILL_ONLY
   +    - ABSENT
+  +    - PUBLIC
   +    - DELETE_ONLY
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›)
-  +        statement: CREATE INDEX idx1 ON t (v)
+  +        redactedStatement: CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›,
+  +          ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES
+  +          IN (‹1›))
+  +        statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION
+  +          BY LIST (id) (PARTITION p1 VALUES IN (1))
   +        statementTag: CREATE INDEX
   +    revertible: true
   +    targetRanks:
   +    - 0
   +    - 1
   +    - 2
+  +    - 3
+  +    - 4
   +    targets:
   +    - elementProto:
   +        secondaryIndex:
@@ -42,11 +52,13 @@ upsert descriptor #104
   +            indexId: 2
   +            keyColumnDirections:
   +            - ASC
+  +            - ASC
   +            keyColumnIds:
-  +            - 2
-  +            keySuffixColumnIds:
   +            - 1
+  +            - 2
   +            sourceIndexId: 1
+  +            storingColumnIds:
+  +            - 3
   +            tableId: 104
   +            temporaryIndexId: 3
   +      metadata:
@@ -56,7 +68,22 @@ upsert descriptor #104
   +    - elementProto:
   +        indexName:
   +          indexId: 2
-  +          name: idx1
+  +          name: id1
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexPartitioning:
+  +          indexId: 2
+  +          partitioning:
+  +            list:
+  +            - name: p1
+  +              subpartitioning: {}
+  +              values:
+  +              - AwI=
+  +            numColumns: 1
   +          tableId: 104
   +      metadata:
   +        sourceElementId: 1
@@ -68,17 +95,34 @@ upsert descriptor #104
   +            indexId: 3
   +            keyColumnDirections:
   +            - ASC
+  +            - ASC
   +            keyColumnIds:
-  +            - 2
-  +            keySuffixColumnIds:
   +            - 1
+  +            - 2
   +            sourceIndexId: 1
+  +            storingColumnIds:
+  +            - 3
   +            tableId: 104
   +          isUsingSecondaryEncoding: true
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: TRANSIENT_ABSENT
+  +    - elementProto:
+  +        indexPartitioning:
+  +          indexId: 3
+  +          partitioning:
+  +            list:
+  +            - name: p1
+  +              subpartitioning: {}
+  +              values:
+  +              - AwI=
+  +            numColumns: 1
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -95,16 +139,26 @@ upsert descriptor #104
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
+  +      - ASC
   +      keyColumnIds:
+  +      - 1
   +      - 2
   +      keyColumnNames:
-  +      - v
-  +      keySuffixColumnIds:
-  +      - 1
+  +      - id
+  +      - name
   +      name: crdb_internal_index_2_name_placeholder
-  +      partitioning: {}
+  +      partitioning:
+  +        list:
+  +        - name: p1
+  +          subpartitioning: {}
+  +          values:
+  +          - AwI=
+  +        numColumns: 1
   +      sharded: {}
-  +      storeColumnNames: []
+  +      storeColumnIds:
+  +      - 3
+  +      storeColumnNames:
+  +      - money
   +      version: 4
   +    mutationId: 1
   +    state: BACKFILLING
@@ -118,22 +172,32 @@ upsert descriptor #104
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
+  +      - ASC
   +      keyColumnIds:
+  +      - 1
   +      - 2
   +      keyColumnNames:
-  +      - v
-  +      keySuffixColumnIds:
-  +      - 1
+  +      - id
+  +      - name
   +      name: crdb_internal_index_3_name_placeholder
-  +      partitioning: {}
+  +      partitioning:
+  +        list:
+  +        - name: p1
+  +          subpartitioning: {}
+  +          values:
+  +          - AwI=
+  +        numColumns: 1
   +      sharded: {}
-  +      storeColumnNames: []
+  +      storeColumnIds:
+  +      - 3
+  +      storeColumnNames:
+  +      - money
   +      useDeletePreservingEncoding: true
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
-     name: t
-     nextColumnId: 3
+     name: t1
+     nextColumnId: 4
   -  nextConstraintId: 2
   +  nextConstraintId: 4
      nextFamilyId: 1
@@ -146,7 +210,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-create job #1 (non-cancelable: false): "CREATE INDEX idx1 ON defaultdb.public.t (v)"
+create job #1 (non-cancelable: false): "CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))"
   descriptor IDs: [104]
 # end PreCommitPhase
 commit transaction #1
@@ -158,19 +222,19 @@ begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 3 MutationType ops
 upsert descriptor #104
   ...
-       - BACKFILL_ONLY
        - ABSENT
+       - PUBLIC
   -    - DELETE_ONLY
   +    - WRITE_ONLY
+       - PUBLIC
        jobId: "1"
-       relevantStatements:
   ...
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: DELETE_AND_WRITE_ONLY
-     name: t
-     nextColumnId: 3
+     name: t1
+     nextColumnId: 4
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -191,7 +255,7 @@ upsert descriptor #104
   -    - BACKFILL_ONLY
   +    - DELETE_ONLY
        - ABSENT
-       - WRITE_ONLY
+       - PUBLIC
   ...
          version: 4
        mutationId: 1
@@ -215,7 +279,7 @@ upsert descriptor #104
   -    - DELETE_ONLY
   +    - MERGE_ONLY
        - ABSENT
-       - WRITE_ONLY
+       - PUBLIC
   ...
          version: 4
        mutationId: 1
@@ -246,12 +310,13 @@ upsert descriptor #104
        currentStatuses:
   -    - MERGE_ONLY
   -    - ABSENT
+       - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
        - WRITE_ONLY
-       jobId: "1"
+       - PUBLIC
   ...
-           statement: CREATE INDEX idx1 ON t (v)
+             BY LIST (id) (PARTITION p1 VALUES IN (1))
            statementTag: CREATE INDEX
   -    revertible: true
        targetRanks:
@@ -268,16 +333,26 @@ upsert descriptor #104
   +    interleave: {}
   +    keyColumnDirections:
   +    - ASC
+  +    - ASC
   +    keyColumnIds:
+  +    - 1
   +    - 2
   +    keyColumnNames:
-  +    - v
-  +    keySuffixColumnIds:
-  +    - 1
-  +    name: idx1
-  +    partitioning: {}
+  +    - id
+  +    - name
+  +    name: id1
+  +    partitioning:
+  +      list:
+  +      - name: p1
+  +        subpartitioning: {}
+  +        values:
+  +        - AwI=
+  +      numColumns: 1
   +    sharded: {}
-  +    storeColumnNames: []
+  +    storeColumnIds:
+  +    - 3
+  +    storeColumnNames:
+  +    - money
   +    version: 4
      modificationTime: {}
      mutations:
@@ -291,16 +366,26 @@ upsert descriptor #104
   -      interleave: {}
   -      keyColumnDirections:
   -      - ASC
+  -      - ASC
   -      keyColumnIds:
+  -      - 1
   -      - 2
   -      keyColumnNames:
-  -      - v
-  -      keySuffixColumnIds:
-  -      - 1
+  -      - id
+  -      - name
   -      name: crdb_internal_index_2_name_placeholder
-  -      partitioning: {}
+  -      partitioning:
+  -        list:
+  -        - name: p1
+  -          subpartitioning: {}
+  -          values:
+  -          - AwI=
+  -        numColumns: 1
   -      sharded: {}
-  -      storeColumnNames: []
+  -      storeColumnIds:
+  -      - 3
+  -      storeColumnNames:
+  -      - money
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
@@ -324,15 +409,15 @@ upsert descriptor #104
        - PUBLIC
   -    - WRITE_ONLY
   +    - TRANSIENT_DELETE_ONLY
+       - PUBLIC
        jobId: "1"
-       relevantStatements:
   ...
          version: 4
        mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
   +    state: DELETE_ONLY
-     name: t
-     nextColumnId: 3
+     name: t1
+     nextColumnId: 4
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -352,17 +437,24 @@ upsert descriptor #104
   -    currentStatuses:
   -    - PUBLIC
   -    - PUBLIC
+  -    - PUBLIC
   -    - TRANSIENT_DELETE_ONLY
+  -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›)
-  -        statement: CREATE INDEX idx1 ON t (v)
+  -        redactedStatement: CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›,
+  -          ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES
+  -          IN (‹1›))
+  -        statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION
+  -          BY LIST (id) (PARTITION p1 VALUES IN (1))
   -        statementTag: CREATE INDEX
   -    targetRanks:
   -    - 0
   -    - 1
   -    - 2
+  -    - 3
+  -    - 4
   -    targets:
   -    - elementProto:
   -        secondaryIndex:
@@ -370,11 +462,13 @@ upsert descriptor #104
   -            indexId: 2
   -            keyColumnDirections:
   -            - ASC
+  -            - ASC
   -            keyColumnIds:
-  -            - 2
-  -            keySuffixColumnIds:
   -            - 1
+  -            - 2
   -            sourceIndexId: 1
+  -            storingColumnIds:
+  -            - 3
   -            tableId: 104
   -            temporaryIndexId: 3
   -      metadata:
@@ -384,7 +478,22 @@ upsert descriptor #104
   -    - elementProto:
   -        indexName:
   -          indexId: 2
-  -          name: idx1
+  -          name: id1
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexPartitioning:
+  -          indexId: 2
+  -          partitioning:
+  -            list:
+  -            - name: p1
+  -              subpartitioning: {}
+  -              values:
+  -              - AwI=
+  -            numColumns: 1
   -          tableId: 104
   -      metadata:
   -        sourceElementId: 1
@@ -396,17 +505,34 @@ upsert descriptor #104
   -            indexId: 3
   -            keyColumnDirections:
   -            - ASC
+  -            - ASC
   -            keyColumnIds:
-  -            - 2
-  -            keySuffixColumnIds:
   -            - 1
+  -            - 2
   -            sourceIndexId: 1
+  -            storingColumnIds:
+  -            - 3
   -            tableId: 104
   -          isUsingSecondaryEncoding: true
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: TRANSIENT_ABSENT
+  -    - elementProto:
+  -        indexPartitioning:
+  -          indexId: 3
+  -          partitioning:
+  -            list:
+  -            - name: p1
+  -              subpartitioning: {}
+  -              values:
+  -              - AwI=
+  -            numColumns: 1
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -423,23 +549,33 @@ upsert descriptor #104
   -      interleave: {}
   -      keyColumnDirections:
   -      - ASC
+  -      - ASC
   -      keyColumnIds:
+  -      - 1
   -      - 2
   -      keyColumnNames:
-  -      - v
-  -      keySuffixColumnIds:
-  -      - 1
+  -      - id
+  -      - name
   -      name: crdb_internal_index_3_name_placeholder
-  -      partitioning: {}
+  -      partitioning:
+  -        list:
+  -        - name: p1
+  -          subpartitioning: {}
+  -          values:
+  -          - AwI=
+  -        numColumns: 1
   -      sharded: {}
-  -      storeColumnNames: []
+  -      storeColumnIds:
+  -      - 3
+  -      storeColumnNames:
+  -      - money
   -      useDeletePreservingEncoding: true
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []
-     name: t
-     nextColumnId: 3
+     name: t1
+     nextColumnId: 4
   ...
        time: {}
      unexposedParentSchemaId: 101

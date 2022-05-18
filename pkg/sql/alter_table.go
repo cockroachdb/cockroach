@@ -308,7 +308,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 							"index %q being dropped, try again later", d.Name)
 					}
 				}
-				if err := n.tableDesc.AddIndexMutation(params.ctx, &idx, descpb.DescriptorMutation_ADD, params.p.ExecCfg().Settings); err != nil {
+				if err := n.tableDesc.AddIndexMutationMaybeWithTempIndex(
+					params.ctx, &idx, descpb.DescriptorMutation_ADD, params.p.ExecCfg().Settings,
+				); err != nil {
 					return err
 				}
 

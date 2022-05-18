@@ -62,6 +62,9 @@ const (
 	ReferencedDescID
 	// Comment is the comment metadata on descriptors.
 	Comment
+	// TemporaryIndexID is the index ID of the temporary index being populated
+	// during this index's backfill.
+	TemporaryIndexID
 
 	// TargetStatus is the target status of an element.
 	TargetStatus
@@ -128,11 +131,13 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
+		rel.EntityAttr(TemporaryIndexID, "TemporaryIndexID"),
 	),
 	rel.EntityMapping(t((*scpb.SecondaryIndex)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
+		rel.EntityAttr(TemporaryIndexID, "TemporaryIndexID"),
 	),
 	rel.EntityMapping(t((*scpb.TemporaryIndex)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

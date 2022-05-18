@@ -27,6 +27,7 @@ import (
 )
 
 func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
+
 	schema := b.mem.Metadata().Schema(ct.Schema)
 	if !ct.Syntax.As() {
 		root, err := b.factory.ConstructCreateTable(schema, ct.Syntax)
