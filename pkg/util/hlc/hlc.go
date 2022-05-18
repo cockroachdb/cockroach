@@ -185,7 +185,7 @@ func (m *HybridManualClock) UnixNano() int64 {
 	if nanosAtPause > 0 {
 		return nanos + nanosAtPause
 	}
-	return nanos + UnixNano()
+	return nanos + timeutil.Now().UnixNano()
 }
 
 // Increment increments the hybrid manual clock's timestamp.
@@ -201,7 +201,7 @@ func (m *HybridManualClock) Increment(nanos int64) {
 func (m *HybridManualClock) Forward(tsNanos int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	now := UnixNano()
+	now := timeutil.Now().UnixNano()
 	if tsNanos < now {
 		return
 	}
@@ -215,7 +215,7 @@ func (m *HybridManualClock) Forward(tsNanos int64) {
 // the clock to tick. Increment can still be used, though.
 func (m *HybridManualClock) Pause() {
 	m.mu.Lock()
-	m.mu.nanosAtPause = UnixNano()
+	m.mu.nanosAtPause = timeutil.Now().UnixNano()
 	m.mu.Unlock()
 }
 
