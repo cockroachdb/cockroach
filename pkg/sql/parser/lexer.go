@@ -80,30 +80,34 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 	*lval = l.tokens[l.lastPos]
 
 	switch lval.id {
-	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON:
-		nextID := int32(0)
+	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON, SET:
+		nextToken := sqlSymType{}
 		if l.lastPos+1 < len(l.tokens) {
-			nextID = l.tokens[l.lastPos+1].id
+			nextToken = l.tokens[l.lastPos+1]
 		}
-		secondID := int32(0)
+		secondToken := sqlSymType{}
 		if l.lastPos+2 < len(l.tokens) {
-			secondID = l.tokens[l.lastPos+2].id
+			secondToken = l.tokens[l.lastPos+2]
+		}
+		thirdToken := sqlSymType{}
+		if l.lastPos+3 < len(l.tokens) {
+			thirdToken = l.tokens[l.lastPos+3]
 		}
 
 		// If you update these cases, update lex.lookaheadKeywords.
 		switch lval.id {
 		case AS:
-			switch nextID {
+			switch nextToken.id {
 			case OF:
 				lval.id = AS_LA
 			}
 		case NOT:
-			switch nextID {
+			switch nextToken.id {
 			case BETWEEN, IN, LIKE, ILIKE, SIMILAR:
 				lval.id = NOT_LA
 			}
 		case GENERATED:
-			switch nextID {
+			switch nextToken.id {
 			case ALWAYS:
 				lval.id = GENERATED_ALWAYS
 			case BY:
@@ -111,38 +115,54 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			}
 
 		case WITH:
-			switch nextID {
+			switch nextToken.id {
 			case TIME, ORDINALITY:
 				lval.id = WITH_LA
 			}
 		case NULLS:
-			switch nextID {
+			switch nextToken.id {
 			case FIRST, LAST:
 				lval.id = NULLS_LA
 			}
 		case RESET:
-			switch nextID {
+			switch nextToken.id {
 			case ALL:
 				lval.id = RESET_ALL
 			}
 		case ROLE:
-			switch nextID {
+			switch nextToken.id {
 			case ALL:
 				lval.id = ROLE_ALL
 			}
 		case USER:
-			switch nextID {
+			switch nextToken.id {
 			case ALL:
 				lval.id = USER_ALL
 			}
 		case ON:
-			switch nextID {
+			switch nextToken.id {
 			case DELETE:
 				lval.id = ON_LA
 			case UPDATE:
-				switch secondID {
+				switch secondToken.id {
 				case NO, RESTRICT, CASCADE, SET:
 					lval.id = ON_LA
+				}
+			}
+		case SET:
+			switch nextToken.id {
+			case TRACING:
+				// Do not use the lookahead rule for `SET tracing.custom ...`
+				if secondToken.str != "." {
+					lval.id = SET_TRACING
+				}
+			case SESSION:
+				switch secondToken.id {
+				case TRACING:
+					// Do not use the lookahead rule for `SET SESSION tracing.custom ...`
+					if thirdToken.str != "." {
+						lval.id = SET_TRACING
+					}
 				}
 			}
 		}
