@@ -411,7 +411,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},
@@ -624,7 +624,7 @@ func TestLeaseholderRelocate(t *testing.T) {
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource:          manualClock.UnixNano,
+					WallClock:            manualClock,
 					StickyEngineRegistry: stickyRegistry,
 				},
 			},
@@ -758,7 +758,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource:               manualClock.UnixNano,
+					WallClock:                 manualClock,
 					DefaultZoneConfigOverride: &zcfg,
 					StickyEngineRegistry:      stickyRegistry,
 				},
@@ -918,7 +918,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource:               manualClock.UnixNano,
+					WallClock:                 manualClock,
 					DefaultZoneConfigOverride: &zcfg,
 					StickyEngineRegistry:      stickyRegistry,
 				},
