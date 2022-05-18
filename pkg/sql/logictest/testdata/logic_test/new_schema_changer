@@ -38,13 +38,21 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │   │   └── • SameStagePrecedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
 │       │   │         rule: "column named right before column becomes public"
 │       │   │
-│       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
-│       │       │ ABSENT → DELETE_ONLY
+│       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}
+│       │       │ ABSENT → BACKFILL_ONLY
 │       │       │
 │       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │             rule: "column existence precedes index existence"
 │       │
-│       └── • 7 Mutation operations
+│       ├── • 1 element transitioning toward TRANSIENT_ABSENT
+│       │   │
+│       │   └── • TemporaryIndex:{DescID: 106, IndexID: 3}
+│       │       │ ABSENT → DELETE_ONLY
+│       │       │
+│       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │             rule: "column existence precedes temporary index existence"
+│       │
+│       └── • 8 Mutation operations
 │           │
 │           ├── • MakeAddedColumnDeleteOnly
 │           │     Column:
@@ -84,7 +92,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           │           oid: 20
 │           │           width: 64
 │           │
-│           ├── • MakeAddedIndexDeleteOnly
+│           ├── • MakeAddedIndexBackfilling
 │           │     Index:
 │           │       ConstraintID: 1
 │           │       IndexID: 2
@@ -97,6 +105,22 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           │       StoringColumnIDs:
 │           │       - 2
 │           │       TableID: 106
+│           │       TemporaryIndexID: 3
+│           │
+│           ├── • MakeAddedIndexDeleteOnly
+│           │     Index:
+│           │       ConstraintID: 1
+│           │       IndexID: 3
+│           │       IsUnique: true
+│           │       KeyColumnDirections:
+│           │       - 0
+│           │       KeyColumnIDs:
+│           │       - 1
+│           │       SourceIndexID: 1
+│           │       StoringColumnIDs:
+│           │       - 2
+│           │       TableID: 106
+│           │     IsDeletePreserving: true
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 106
@@ -108,7 +132,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │                 DescriptorIDs:
 │                 - 106
 │                 JobID: 1
-│                 RunningStatus: PostCommitPhase stage 1 of 4 with 2 MutationType ops pending
+│                 RunningStatus: PostCommitPhase stage 1 of 7 with 2 MutationType ops pending
 │                 Statements:
 │                 - statement: ALTER TABLE foo ADD COLUMN j INT8
 │                   redactedstatement: ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8
@@ -116,27 +140,26 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │
 ├── • PostCommitPhase
 │   │
-│   ├── • Stage 1 of 4 in PostCommitPhase
+│   ├── • Stage 1 of 7 in PostCommitPhase
 │   │   │
-│   │   ├── • 2 elements transitioning toward PUBLIC
+│   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • Column:{DescID: 106, ColumnID: 2}
-│   │   │   │   │ DELETE_ONLY → WRITE_ONLY
-│   │   │   │   │
-│   │   │   │   └── • Precedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
-│   │   │   │         rule: "column depends on primary index"
+│   │   │   └── • Column:{DescID: 106, ColumnID: 2}
+│   │   │         DELETE_ONLY → WRITE_ONLY
+│   │   │
+│   │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
+│   │   │   └── • TemporaryIndex:{DescID: 106, IndexID: 3}
 │   │   │         DELETE_ONLY → WRITE_ONLY
 │   │   │
 │   │   └── • 4 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
-│   │       │     IndexID: 2
-│   │       │     TableID: 106
-│   │       │
 │   │       ├── • MakeAddedColumnDeleteAndWriteOnly
 │   │       │     ColumnID: 2
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       │     IndexID: 3
 │   │       │     TableID: 106
 │   │       │
 │   │       ├── • SetJobStateOnDescriptor
@@ -144,14 +167,17 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 2 of 4 with 1 BackfillType op pending
+│   │             RunningStatus: PostCommitPhase stage 2 of 7 with 1 BackfillType op pending
 │   │
-│   ├── • Stage 2 of 4 in PostCommitPhase
+│   ├── • Stage 2 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
-│   │   │         WRITE_ONLY → BACKFILLED
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}
+│   │   │       │ BACKFILL_ONLY → BACKFILLED
+│   │   │       │
+│   │   │       └── • Precedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3}
+│   │   │             rule: "temp index is WRITE_ONLY before backfill"
 │   │   │
 │   │   └── • 1 Backfill operation
 │   │       │
@@ -160,12 +186,66 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │   │             SourceIndexID: 1
 │   │             TableID: 106
 │   │
-│   ├── • Stage 3 of 4 in PostCommitPhase
+│   ├── • Stage 3 of 7 in PostCommitPhase
 │   │   │
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
-│   │   │         BACKFILLED → VALIDATED
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}
+│   │   │         BACKFILLED → DELETE_ONLY
+│   │   │
+│   │   └── • 3 Mutation operations
+│   │       │
+│   │       ├── • MakeBackfillingIndexDeleteOnly
+│   │       │     IndexID: 2
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 106
+│   │       │
+│   │       └── • UpdateSchemaChangerJob
+│   │             JobID: 1
+│   │             RunningStatus: PostCommitPhase stage 4 of 7 with 1 MutationType op pending
+│   │
+│   ├── • Stage 4 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}
+│   │   │         DELETE_ONLY → MERGE_ONLY
+│   │   │
+│   │   └── • 3 Mutation operations
+│   │       │
+│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       │     IndexID: 2
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 106
+│   │       │
+│   │       └── • UpdateSchemaChangerJob
+│   │             JobID: 1
+│   │             RunningStatus: PostCommitPhase stage 5 of 7 with 1 BackfillType op pending
+│   │
+│   ├── • Stage 5 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}
+│   │   │         MERGE_ONLY → MERGED
+│   │   │
+│   │   └── • 1 Backfill operation
+│   │       │
+│   │       └── • MergeIndex
+│   │             BackfilledIndexID: 2
+│   │             TableID: 106
+│   │             TemporaryIndexID: 3
+│   │
+│   ├── • Stage 6 of 7 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}
+│   │   │         MERGED → VALIDATED
 │   │   │
 │   │   └── • 1 Validation operation
 │   │       │
@@ -173,7 +253,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │   │             IndexID: 2
 │   │             TableID: 106
 │   │
-│   └── • Stage 4 of 4 in PostCommitPhase
+│   └── • Stage 7 of 7 in PostCommitPhase
 │       │
 │       ├── • 2 elements transitioning toward ABSENT
 │       │   │
@@ -191,10 +271,10 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
 │       │   │   │ WRITE_ONLY → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
+│       │   │   └── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}
 │       │   │         rule: "column depends on primary index"
 │       │   │
-│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}
 │       │   │   │ VALIDATED → PUBLIC
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
@@ -206,7 +286,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │   └── • IndexName:{DescID: 106, Name: foo_pkey, IndexID: 2}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1}
+│       │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}
 │       │             rule: "index existence precedes index dependents"
 │       │
 │       └── • 8 Mutation operations
@@ -258,7 +338,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           └── • UpdateSchemaChangerJob
 │                 IsNonCancelable: true
 │                 JobID: 1
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 1 MutationType op pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops pending
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -269,7 +349,16 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
     │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
     │   │         VALIDATED → DELETE_ONLY
     │   │
-    │   └── • 3 Mutation operations
+    │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
+    │   │   │
+    │   │   └── • TemporaryIndex:{DescID: 106, IndexID: 3}
+    │   │         WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │
+    │   └── • 4 Mutation operations
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 3
+    │       │     TableID: 106
     │       │
     │       ├── • MakeDroppedIndexDeleteOnly
     │       │     IndexID: 1
@@ -281,7 +370,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
@@ -293,7 +382,12 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
         │       └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: foo_pkey, IndexID: 1}
         │             rule: "dependents removed before index"
         │
-        └── • 4 Mutation operations
+        ├── • 1 element transitioning toward TRANSIENT_ABSENT
+        │   │
+        │   └── • TemporaryIndex:{DescID: 106, IndexID: 3}
+        │         TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
+        │
+        └── • 6 Mutation operations
             │
             ├── • CreateGcJobForIndex
             │     IndexID: 1
@@ -313,6 +407,14 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
             │     IndexID: 1
             │     TableID: 106
             │
+            ├── • CreateGcJobForIndex
+            │     IndexID: 3
+            │     TableID: 106
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 3
+            │     TableID: 106
+            │
             ├── • RemoveJobStateFromDescriptor
             │     DescriptorID: 106
             │     JobID: 1
@@ -321,6 +423,8 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
+
+
 
 
 
@@ -1457,6 +1561,7 @@ CREATE TABLE public.trewrite (
 )
 
 subtest create-index
+
 statement ok
 CREATE TABLE tIndex (
   a INT PRIMARY KEY,

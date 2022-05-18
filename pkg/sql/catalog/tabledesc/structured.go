@@ -1914,7 +1914,7 @@ func (desc *Mutable) AddCheckMutation(
 		},
 		Direction: direction,
 	}
-	desc.addMutation(m)
+	desc.addIndexMutationMaybeWithTempIndex(m)
 }
 
 // AddForeignKeyMutation adds a foreign key constraint mutation to desc.Mutations.
@@ -1931,7 +1931,7 @@ func (desc *Mutable) AddForeignKeyMutation(
 		},
 		Direction: direction,
 	}
-	desc.addMutation(m)
+	desc.addIndexMutationMaybeWithTempIndex(m)
 }
 
 // AddUniqueWithoutIndexMutation adds a unique without index constraint mutation
@@ -1949,7 +1949,7 @@ func (desc *Mutable) AddUniqueWithoutIndexMutation(
 		},
 		Direction: direction,
 	}
-	desc.addMutation(m)
+	desc.addIndexMutationMaybeWithTempIndex(m)
 }
 
 // MakeNotNullCheckConstraint creates a dummy check constraint equivalent to a
@@ -2018,7 +2018,7 @@ func (desc *Mutable) AddNotNullMutation(
 		},
 		Direction: direction,
 	}
-	desc.addMutation(m)
+	desc.addIndexMutationMaybeWithTempIndex(m)
 }
 
 // AddModifyRowLevelTTLMutation adds a row-level TTL mutation to descs.Mutations.
@@ -2029,7 +2029,7 @@ func (desc *Mutable) AddModifyRowLevelTTLMutation(
 		Descriptor_: &descpb.DescriptorMutation_ModifyRowLevelTTL{ModifyRowLevelTTL: ttl},
 		Direction:   direction,
 	}
-	desc.addMutation(m)
+	desc.addIndexMutationMaybeWithTempIndex(m)
 }
 
 // AddColumnMutation adds a column mutation to desc.Mutations. Callers must take
@@ -2042,7 +2042,7 @@ func (desc *Mutable) AddColumnMutation(
 		Descriptor_: &descpb.DescriptorMutation_Column{Column: c},
 		Direction:   direction,
 	}
-	desc.addMutation(m)
+	desc.addIndexMutationMaybeWithTempIndex(m)
 }
 
 // AddDropIndexMutation adds a a dropping index mutation for the given
@@ -2055,19 +2055,26 @@ func (desc *Mutable) AddDropIndexMutation(idx *descpb.IndexDescriptor) error {
 		Descriptor_: &descpb.DescriptorMutation_Index{Index: idx},
 		Direction:   descpb.DescriptorMutation_DROP,
 	}
-	desc.addMutation(m)
+	desc.addIndexMutationMaybeWithTempIndex(m)
 	return nil
 }
 
-// AddIndexMutation adds an index mutation to desc.Mutations.
-func (desc *Mutable) AddIndexMutation(
+// AddIndexMutationMaybeWithTempIndex adds an index mutation to desc.Mutations
+// for the provided index, and, if the MVCC-compliant backfill protocol is not
+// disabled, also synthesize and add the temp index mutation.
+func (desc *Mutable) AddIndexMutationMaybeWithTempIndex(
 	ctx context.Context,
 	idx *descpb.IndexDescriptor,
 	direction descpb.DescriptorMutation_Direction,
 	settings *cluster.Settings,
 ) error {
-	if !settings.Version.IsActive(ctx, clusterversion.MVCCIndexBackfiller) || !UseMVCCCompliantIndexCreation.Get(&settings.SV) {
-		return desc.DeprecatedAddIndexMutation(idx, direction)
+	// Maybe use the old index backfill protocol to add an index.
+	if direction == descpb.DescriptorMutation_ADD &&
+		(!settings.Version.IsActive(ctx, clusterversion.MVCCIndexBackfiller) ||
+			!UseMVCCCompliantIndexCreation.Get(&settings.SV)) {
+		return desc.AddIndexMutation(
+			idx, direction, descpb.DescriptorMutation_DELETE_ONLY,
+		)
 	}
 
 	if err := desc.checkValidIndex(idx); err != nil {
@@ -2077,24 +2084,41 @@ func (desc *Mutable) AddIndexMutation(
 		Descriptor_: &descpb.DescriptorMutation_Index{Index: idx},
 		Direction:   direction,
 	}
-	desc.addMutation(m)
+	desc.addIndexMutationMaybeWithTempIndex(m)
 	return nil
 }
 
-// DeprecatedAddIndexMutation adds an index mutation to desc.Mutations that
-// assumes that the first state an added index should be placed into
-// is DELETE_ONLY rather than BACKFILLING.
-func (desc *Mutable) DeprecatedAddIndexMutation(
-	idx *descpb.IndexDescriptor, direction descpb.DescriptorMutation_Direction,
+// AddIndexMutation adds an index mutation to desc.Mutations that
+// with the provided initial state.
+func (desc *Mutable) AddIndexMutation(
+	idx *descpb.IndexDescriptor,
+	direction descpb.DescriptorMutation_Direction,
+	state descpb.DescriptorMutation_State,
 ) error {
 	if err := desc.checkValidIndex(idx); err != nil {
 		return err
 	}
-	m := descpb.DescriptorMutation{
+	stateIsValid := func() bool {
+		switch direction {
+		case descpb.DescriptorMutation_ADD:
+			return state == descpb.DescriptorMutation_BACKFILLING ||
+				state == descpb.DescriptorMutation_DELETE_ONLY
+		case descpb.DescriptorMutation_DROP:
+			return state == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+		default:
+			return false
+		}
+	}
+	if !stateIsValid() {
+		return errors.AssertionFailedf(
+			"unexpected initial state %v for %v index mutation",
+			state, direction,
+		)
+	}
+	desc.addMutation(descpb.DescriptorMutation{
 		Descriptor_: &descpb.DescriptorMutation_Index{Index: idx},
 		Direction:   direction,
-	}
-	desc.deprecatedAddMutation(m)
+	}, state)
 	return nil
 }
 
@@ -2114,33 +2138,30 @@ func (desc *Mutable) checkValidIndex(idx *descpb.IndexDescriptor) error {
 
 // AddPrimaryKeySwapMutation adds a PrimaryKeySwap mutation to the table descriptor.
 func (desc *Mutable) AddPrimaryKeySwapMutation(swap *descpb.PrimaryKeySwap) {
-	m := descpb.DescriptorMutation{
+	desc.addMutation(descpb.DescriptorMutation{
 		Descriptor_: &descpb.DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: swap},
 		Direction:   descpb.DescriptorMutation_ADD,
-	}
-	desc.addMutation(m)
+	}, descpb.DescriptorMutation_DELETE_ONLY)
 }
 
 // AddMaterializedViewRefreshMutation adds a MaterializedViewRefreshMutation to
 // the table descriptor.
 func (desc *Mutable) AddMaterializedViewRefreshMutation(refresh *descpb.MaterializedViewRefresh) {
-	m := descpb.DescriptorMutation{
+	desc.addMutation(descpb.DescriptorMutation{
 		Descriptor_: &descpb.DescriptorMutation_MaterializedViewRefresh{MaterializedViewRefresh: refresh},
 		Direction:   descpb.DescriptorMutation_ADD,
-	}
-	desc.addMutation(m)
+	}, descpb.DescriptorMutation_DELETE_ONLY)
 }
 
 // AddComputedColumnSwapMutation adds a ComputedColumnSwap mutation to the table descriptor.
 func (desc *Mutable) AddComputedColumnSwapMutation(swap *descpb.ComputedColumnSwap) {
-	m := descpb.DescriptorMutation{
+	desc.addMutation(descpb.DescriptorMutation{
 		Descriptor_: &descpb.DescriptorMutation_ComputedColumnSwap{ComputedColumnSwap: swap},
 		Direction:   descpb.DescriptorMutation_ADD,
-	}
-	desc.addMutation(m)
+	}, descpb.DescriptorMutation_DELETE_ONLY)
 }
 
-func (desc *Mutable) addMutation(m descpb.DescriptorMutation) {
+func (desc *Mutable) addIndexMutationMaybeWithTempIndex(m descpb.DescriptorMutation) {
 	switch m.Direction {
 	case descpb.DescriptorMutation_ADD:
 		switch m.Descriptor_.(type) {
@@ -2175,15 +2196,12 @@ func (desc *Mutable) addMutation(m descpb.DescriptorMutation) {
 	}
 }
 
-// deprecatedAddMutation assumes that new indexes are added in the
+// addMutation assumes that new indexes are added in the
 // DELETE_ONLY state.
-func (desc *Mutable) deprecatedAddMutation(m descpb.DescriptorMutation) {
-	switch m.Direction {
-	case descpb.DescriptorMutation_ADD:
-		m.State = descpb.DescriptorMutation_DELETE_ONLY
-	case descpb.DescriptorMutation_DROP:
-		m.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-	}
+func (desc *Mutable) addMutation(
+	m descpb.DescriptorMutation, state descpb.DescriptorMutation_State,
+) {
+	m.State = state
 	desc.addMutationWithNextID(m)
 }
 

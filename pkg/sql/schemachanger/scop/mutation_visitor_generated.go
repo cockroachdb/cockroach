@@ -24,8 +24,10 @@ type MutationOp interface {
 type MutationVisitor interface {
 	NotImplemented(context.Context, NotImplemented) error
 	MakeAddedIndexDeleteOnly(context.Context, MakeAddedIndexDeleteOnly) error
+	MakeAddedIndexBackfilling(context.Context, MakeAddedIndexBackfilling) error
 	SetAddedIndexPartialPredicate(context.Context, SetAddedIndexPartialPredicate) error
 	MakeAddedIndexDeleteAndWriteOnly(context.Context, MakeAddedIndexDeleteAndWriteOnly) error
+	MakeBackfillingIndexDeleteOnly(context.Context, MakeBackfillingIndexDeleteOnly) error
 	MakeAddedSecondaryIndexPublic(context.Context, MakeAddedSecondaryIndexPublic) error
 	MakeAddedPrimaryIndexPublic(context.Context, MakeAddedPrimaryIndexPublic) error
 	MakeDroppedPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedPrimaryIndexDeleteAndWriteOnly) error
@@ -100,6 +102,11 @@ func (op MakeAddedIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor)
 }
 
 // Visit is part of the MutationOp interface.
+func (op MakeAddedIndexBackfilling) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAddedIndexBackfilling(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op SetAddedIndexPartialPredicate) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.SetAddedIndexPartialPredicate(ctx, op)
 }
@@ -107,6 +114,11 @@ func (op SetAddedIndexPartialPredicate) Visit(ctx context.Context, v MutationVis
 // Visit is part of the MutationOp interface.
 func (op MakeAddedIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeAddedIndexDeleteAndWriteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeBackfillingIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeBackfillingIndexDeleteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

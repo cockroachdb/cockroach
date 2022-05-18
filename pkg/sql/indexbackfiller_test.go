@@ -268,7 +268,7 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 				}
 				mut.NextIndexID++
 				mut.NextConstraintID++
-				require.NoError(t, mut.AddIndexMutation(ctx,
+				require.NoError(t, mut.AddIndexMutationMaybeWithTempIndex(ctx,
 					&indexToBackfill, descpb.DescriptorMutation_ADD, settings,
 				))
 				require.NoError(t, mut.AllocateIDs(context.Background(), settings.Version.ActiveVersion(ctx)))
@@ -354,7 +354,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 				}
 				mut.NextIndexID++
 				mut.NextConstraintID++
-				require.NoError(t, mut.AddIndexMutation(ctx,
+				require.NoError(t, mut.AddIndexMutationMaybeWithTempIndex(ctx,
 					&indexToBackfill, descpb.DescriptorMutation_ADD, settings,
 				))
 				require.NoError(t, mut.AllocateIDs(context.Background(), settings.Version.ActiveVersion(ctx)))
