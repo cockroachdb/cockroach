@@ -557,7 +557,7 @@ func TestRestoreFromFullClusterBackup(t *testing.T) {
 
 	t.Run("system tables", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE temp_sys`)
-		sqlDB.Exec(t, `RESTORE system.users FROM $1 WITH into_db='temp_sys'`, localFoo)
+		sqlDB.Exec(t, `RESTORE system.users, system.role_id_seq FROM $1 WITH into_db='temp_sys'`, localFoo)
 		sqlDB.CheckQueryResults(t, "SELECT * FROM temp_sys.users", sqlDB.QueryStr(t, "SELECT * FROM system.users"))
 	})
 }
@@ -642,6 +642,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"database_role_settings"},
 				{"external_connections"},
 				{"locations"},
+				{"role_id_seq"},
 				{"role_members"},
 				{"role_options"},
 				{"scheduled_jobs"},
@@ -733,6 +734,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"database_role_settings"},
 				{"external_connections"},
 				{"locations"},
+				{"role_id_seq"},
 				{"role_members"},
 				{"role_options"},
 				{"scheduled_jobs"},

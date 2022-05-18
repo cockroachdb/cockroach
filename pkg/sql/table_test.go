@@ -189,7 +189,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY, b " + d.sqlType + ")"
 		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
-			catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()))
+			catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()), nil, nil)
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -319,7 +319,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (" + d.sql + ")"
 		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
-			catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()))
+			catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()), nil, nil)
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
@@ -393,7 +393,7 @@ func TestMakeTableDescUniqueConstraints(t *testing.T) {
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (" + d.sql + ")"
 		schema, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
-			catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()))
+			catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()), nil, nil)
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
@@ -412,7 +412,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	s := "CREATE TABLE foo.test (a INT, b INT, CONSTRAINT c UNIQUE (b))"
 	ctx := context.Background()
 	desc, err := CreateTestTableDescriptor(ctx, 1, 100, s,
-		catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()))
+		catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

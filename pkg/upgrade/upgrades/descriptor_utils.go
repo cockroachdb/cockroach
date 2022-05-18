@@ -46,18 +46,17 @@ func CreateSystemTableInTxn(
 	// have dynamically allocated IDs. This method supports that, but also continues
 	// to support adding fixed ID system table descriptors.
 	tKey := catalogkeys.EncodeNameKey(codec, desc)
-
+	// If we're going to allocate an ID, make sure the table does not exist.
+	got, err := txn.Get(ctx, tKey)
+	if err != nil {
+		return descpb.InvalidID, false, err
+	}
+	if got.Value.IsPresent() {
+		return descpb.InvalidID, false, nil
+	}
 	// If this descriptor doesn't have an ID, which happens for dynamic
 	// system tables, we need to allocate it an ID.
 	if desc.GetID() == descpb.InvalidID {
-		// If we're going to allocate an ID, make sure the table does not exist.
-		got, err := txn.Get(ctx, tKey)
-		if err != nil {
-			return descpb.InvalidID, false, err
-		}
-		if got.Value.IsPresent() {
-			return descpb.InvalidID, false, nil
-		}
 		id, err := descidgen.GenerateUniqueDescID(ctx, db, codec)
 		if err != nil {
 			return descpb.InvalidID, false, err
@@ -70,6 +69,9 @@ func CreateSystemTableInTxn(
 	b := txn.NewBatch()
 	b.CPut(tKey, desc.GetID(), nil)
 	b.CPut(catalogkeys.MakeDescMetadataKey(codec, desc.GetID()), desc.DescriptorProto(), nil)
+	if desc.IsSequence() {
+		b.InitPut(codec.SequenceKey(uint32(desc.GetID())), desc.GetSequenceOpts().Start, false /* failOnTombstones */)
+	}
 	if err := txn.Run(ctx, b); err != nil {
 		return descpb.InvalidID, false, err
 	}
