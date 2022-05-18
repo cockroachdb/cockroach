@@ -127,7 +127,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	rttc.nodeRPCContext = rpc.NewContext(ctx, rpc.ContextOptions{
 		TenantID: roachpb.SystemTenantID,
 		Config:   testutils.NewNodeTestBaseContext(),
-		Clock:    hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Clock:    hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Stopper:  rttc.stopper,
 		Settings: cluster.MakeTestingClusterSettings(),
 	})

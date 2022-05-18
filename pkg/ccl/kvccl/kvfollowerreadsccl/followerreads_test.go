@@ -84,7 +84,7 @@ func TestCanSendToFollower(t *testing.T) {
 	skip.UnderDeadlock(t, "test is flaky under deadlock+stress")
 
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset)
+	clock := hlc.NewClockWithSystemTimeSource(base.DefaultMaxClockOffset /* maxOffset */)
 	stale := clock.Now().Add(2*expectedFollowerReadOffset.Nanoseconds(), 0)
 	current := clock.Now()
 	future := clock.Now().Add(2*clock.MaxOffset().Nanoseconds(), 0)
@@ -379,7 +379,7 @@ func TestOracle(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset)
+	clock := hlc.NewClockWithSystemTimeSource(base.DefaultMaxClockOffset /* maxOffset */)
 	stale := clock.Now().Add(2*expectedFollowerReadOffset.Nanoseconds(), 0)
 	current := clock.Now()
 	future := clock.Now().Add(2*clock.MaxOffset().Nanoseconds(), 0)

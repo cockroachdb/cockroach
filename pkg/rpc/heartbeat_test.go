@@ -46,7 +46,7 @@ func TestRemoteOffsetString(t *testing.T) {
 func TestHeartbeatReply(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
@@ -111,7 +111,7 @@ func (mhs *ManualHeartbeatService) Ping(
 func TestManualHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
@@ -170,7 +170,7 @@ func TestClockOffsetMismatch(t *testing.T) {
 
 	ctx := context.Background()
 
-	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
+	clock := hlc.NewClockWithSystemTimeSource(250 * time.Millisecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	hs := &HeartbeatService{
 		clock:              clock,
@@ -215,7 +215,7 @@ func TestClusterIDCompare(t *testing.T) {
 	}
 
 	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
@@ -259,7 +259,7 @@ func TestNodeIDCompare(t *testing.T) {
 	}
 
 	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
@@ -294,7 +294,7 @@ func TestNodeIDCompare(t *testing.T) {
 func TestTenantVersionCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
 		clusterversion.TestingBinaryMinSupportedVersion,
