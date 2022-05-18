@@ -224,6 +224,10 @@ func (c *SyncedCluster) newSession(node Node) (session, error) {
 // When running roachprod stop without other flags, the signal is 9 (SIGKILL)
 // and wait is true.
 func (c *SyncedCluster) Stop(ctx context.Context, l *logger.Logger, sig int, wait bool) error {
+	if sig == 9 {
+		// `kill -9` without wait is never what a caller wants. See #77334.
+		wait = true
+	}
 	display := fmt.Sprintf("%s: stopping", c.Name)
 	if wait {
 		display += " and waiting"
