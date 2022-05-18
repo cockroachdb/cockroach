@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -181,7 +182,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	ctx := context.Background()
 	cs := cluster.MakeTestingClusterSettings()
 	writeSST := func(t *testing.T, offsets []int) string {
-		path := strconv.FormatInt(hlc.UnixNano(), 10)
+		path := strconv.FormatInt(timeutil.Now().UnixNano(), 10)
 
 		sstFile := &storage.MemFile{}
 		sst := storage.MakeBackupSSTWriter(ctx, cs, sstFile)
