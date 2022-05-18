@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -32,6 +33,16 @@ func TestComposeFlyway(t *testing.T) {
 }
 
 func testCompose(t *testing.T, path string, exitCodeFrom string) {
+	uid := os.Getuid()
+	err := os.Setenv("UID", strconv.Itoa(uid))
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	gid := os.Getgid()
+	err = os.Setenv("GID", strconv.Itoa(gid))
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
 	cmd := exec.Command(
 		"docker-compose",
 		"--no-ansi",
