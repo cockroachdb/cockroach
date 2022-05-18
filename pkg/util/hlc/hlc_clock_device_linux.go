@@ -32,7 +32,7 @@ import (
 // clock id.
 // The PTPClock implements the hlc.WallClock interface, so it can be used
 // as the time source for an hlc.Clock:
-// hlc.NewClockWithTimeSource(MakePTPClock(...), ...).
+// hlc.NewClock(MakePTPClock(...), ...).
 type PTPClock struct {
 	// clockDevice is not used after the device is open but is here to prevent the GC
 	// from closing the device and invalidating the clockDeviceID.

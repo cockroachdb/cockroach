@@ -5237,7 +5237,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 		return localities[nodeID]
 	}
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	// Set up four different load distributions. Record a bunch of requests to
 	// the unknown node 99 in evenlyBalanced to verify that requests from
