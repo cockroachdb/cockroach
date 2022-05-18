@@ -43,7 +43,10 @@ import (
 //
 // See NewClock for details.
 type Clock struct {
-	physicalClock func() int64
+	// timeSource or nanosFn are used to read the current clock. Only one of the
+	// two is set. They shouldn't be used directly; physicalNanos() unifies them.
+	timeSource NowSource
+	nanosFn    func() int64
 
 	// The maximal offset of the HLC's wall time from the underlying physical
 	// clock. A well-chosen value is large enough to ignore a reasonable amount
@@ -93,12 +96,24 @@ type Clock struct {
 	}
 }
 
+// NowSource models a physical clock.
+type NowSource interface {
+	Now() time.Time
+}
+
 // ManualClock is a convenience type to facilitate
 // creating a hybrid logical clock whose physical clock
-// is manually controlled. ManualClock is thread safe.
+// is manually controlled.
+//
+// ManualClock implements NowSource, so it can be used with
+// NewClockWithTimeSource(NewManualClock(...),...).
+//
+// ManualClock is thread safe.
 type ManualClock struct {
 	nanos int64
 }
+
+var _ NowSource = &ManualClock{}
 
 // NewManualClock returns a new instance, initialized with
 // specified timestamp.
@@ -107,6 +122,11 @@ func NewManualClock(nanos int64) *ManualClock {
 		panic("zero clock is forbidden")
 	}
 	return &ManualClock{nanos: nanos}
+}
+
+// Now implements the NowSource interface.
+func (m *ManualClock) Now() time.Time {
+	return timeutil.Unix(0, m.UnixNano())
 }
 
 // UnixNano returns the underlying manual clock's timestamp.
@@ -127,7 +147,12 @@ func (m *ManualClock) Set(nanos int64) {
 // HybridManualClock is a convenience type to facilitate
 // creating a hybrid logical clock whose physical clock
 // ticks with the wall clock, but that can be moved arbitrarily
-// into the future or paused. HybridManualClock is thread safe.
+// into the future or paused.
+//
+// ManualClock implements NowSource, so it can be used with
+// NewClockWithTimeSource(NewHybridManualClock(),...).
+//
+// HybridManualClock is thread safe.
 type HybridManualClock struct {
 	mu struct {
 		syncutil.RWMutex
@@ -144,6 +169,13 @@ type HybridManualClock struct {
 // specified timestamp.
 func NewHybridManualClock() *HybridManualClock {
 	return &HybridManualClock{}
+}
+
+var _ NowSource = &HybridManualClock{}
+
+// Now implements the NowSource interface.
+func (m *HybridManualClock) Now() time.Time {
+	return timeutil.Unix(0, m.UnixNano())
 }
 
 // UnixNano returns the underlying hybrid manual clock's timestamp.
@@ -197,6 +229,28 @@ func (m *HybridManualClock) Resume() {
 	m.mu.Unlock()
 }
 
+// NewClockWithSystemTimeSource creates a Clock that reads the system time. This
+// is equivalent to NewClockWithTimeSource(timeutil.SystemTimeSource,
+// maxOffset).
+//
+// A value of 0 for maxOffset means that clock skew checking, if performed on
+// this clock by RemoteClockMonitor, is disabled.
+func NewClockWithSystemTimeSource(maxOffset time.Duration) *Clock {
+	return NewClockWithTimeSource(timeutil.SystemTimeSource, maxOffset)
+}
+
+// NewClockWithTimeSource returns a Clock configured to use a specified time
+// source.
+//
+// A value of 0 for maxOffset means that clock skew checking, if performed on
+// this clock by RemoteClockMonitor, is disabled.
+func NewClockWithTimeSource(timeSource NowSource, maxOffset time.Duration) *Clock {
+	return &Clock{
+		timeSource: timeSource,
+		maxOffset:  maxOffset,
+	}
+}
+
 // UnixNano returns the local machine's physical nanosecond
 // unix epoch timestamp as a convenience to create a HLC via
 // c := hlc.NewClock(hlc.UnixNano, ...).
@@ -214,9 +268,16 @@ func UnixNano() int64 {
 // this clock by RemoteClockMonitor, is disabled.
 func NewClock(physicalClock func() int64, maxOffset time.Duration) *Clock {
 	return &Clock{
-		physicalClock: physicalClock,
-		maxOffset:     maxOffset,
+		nanosFn:   physicalClock,
+		maxOffset: maxOffset,
 	}
+}
+
+func (c *Clock) physicalNanos() int64 {
+	if c.timeSource != nil {
+		return c.timeSource.Now().UnixNano()
+	}
+	return c.nanosFn()
 }
 
 // toleratedForwardClockJump is the tolerated forward jump. Jumps greater
@@ -304,7 +365,7 @@ func (c *Clock) MaxOffset() time.Duration {
 // also checks for backwards and forwards jumps, as configured.
 func (c *Clock) getPhysicalClockAndCheck(ctx context.Context) int64 {
 	oldTime := atomic.LoadInt64(&c.lastPhysicalTime)
-	newTime := c.physicalClock()
+	newTime := c.physicalNanos()
 	lastPhysTime := oldTime
 	// Try to update c.lastPhysicalTime. When multiple updaters race, we want the
 	// highest clock reading to win, so keep retrying while we interleave with
@@ -403,12 +464,18 @@ func (c *Clock) enforceWallTimeWithinBoundLocked() {
 // higher clock signals received through Update(). If you want to take them into
 // consideration, use c.Now().GoTime().
 func (c *Clock) PhysicalNow() int64 {
-	return c.physicalClock()
+	return c.physicalNanos()
 }
 
 // PhysicalTime returns a time.Time struct using the local wall time.
 func (c *Clock) PhysicalTime() time.Time {
-	return timeutil.Unix(0, c.PhysicalNow())
+	// NOTE: We don't go through c.physicalNanos() if c.timeSource is set in order
+	// to preserve the monotonic clock reading that the timeSource might provide
+	// inside its instants.
+	if c.timeSource != nil {
+		return c.timeSource.Now()
+	}
+	return timeutil.Unix(0, c.physicalNanos())
 }
 
 // Update takes a hybrid timestamp, usually originating from an event

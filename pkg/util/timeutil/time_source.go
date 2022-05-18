@@ -54,8 +54,13 @@ type TickerI interface {
 	Ch() <-chan time.Time
 }
 
-// DefaultTimeSource is a TimeSource using the system clock.
+// DefaultTimeSource is a TimeSource using the system clock. Use
+// SystemTimeSource for a singleton.
 type DefaultTimeSource struct{}
+
+// SystemTimeSource is an instance of DefaultTimeSource that can be used as a
+// singleton.
+var SystemTimeSource = DefaultTimeSource{}
 
 var _ TimeSource = DefaultTimeSource{}
 

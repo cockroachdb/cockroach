@@ -385,7 +385,7 @@ func makeTenantSQLServerArgs(
 	// https://github.com/cockroachdb/cockroach/issues/47898
 	baseCfg.ClusterName = kvClusterName
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Duration(baseCfg.MaxOffset))
+	clock := hlc.NewClockWithSystemTimeSource(time.Duration(baseCfg.MaxOffset))
 
 	registry := metric.NewRegistry()
 
