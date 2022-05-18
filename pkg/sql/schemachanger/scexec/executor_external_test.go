@@ -186,7 +186,8 @@ CREATE TABLE db.t (
 		KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 			descpb.IndexDescriptor_ASC,
 		},
-		ConstraintID: 3,
+		ConstraintID:                3,
+		UseDeletePreservingEncoding: true,
 	}
 	for _, tc := range []testCase{
 		{
@@ -208,7 +209,7 @@ CREATE TABLE db.t (
 			}),
 			ops: func() []scop.Op {
 				return []scop.Op{
-					&scop.MakeAddedIndexDeleteOnly{
+					&scop.MakeAddedTempIndexDeleteOnly{
 						Index: scpb.Index{
 							TableID:             table.ID,
 							IndexID:             indexToAdd.ID,

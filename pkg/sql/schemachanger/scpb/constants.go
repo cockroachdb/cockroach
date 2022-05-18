@@ -38,7 +38,7 @@ const (
 	// to the schema change, so this target status is used to ensure it comes into
 	// existence before disappearing again. Otherwise, an element whose current
 	// and target statuses are both ABSENT won't experience any state transitions.
-	Transient TargetStatus = TargetStatus(Status_TRANSIENT)
+	Transient TargetStatus = TargetStatus(Status_TRANSIENT_ABSENT)
 )
 
 // Status returns the TargetStatus as a Status.
@@ -53,7 +53,7 @@ func AsTargetStatus(s Status) TargetStatus {
 		return ToAbsent
 	case Status_PUBLIC:
 		return ToPublic
-	case Status_TRANSIENT:
+	case Status_TRANSIENT_ABSENT:
 		return Transient
 	default:
 		return InvalidTarget

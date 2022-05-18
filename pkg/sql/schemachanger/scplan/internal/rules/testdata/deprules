@@ -391,6 +391,31 @@ deprules
     - $from-target[TargetStatus] = PUBLIC
     - $to[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexComment']
     - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = BACKFILL_ONLY
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[IndexID] = $IndexID-join-var
+    - $to[IndexID] = $IndexID-join-var
+    - $from[DescID] = $var-to-tell-rel-from-is-an-element
+    - $to[DescID] = $var-to-tell-rel-to-is-an-element
+- name: partitioning set right after temp index existence
+  from: from-node
+  kind: SameStagePrecedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.TemporaryIndex'
+    - $from-target[TargetStatus] = TRANSIENT_ABSENT
+    - $to[Type] = '*scpb.IndexPartitioning'
+    - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = DELETE_ONLY
     - $to-node[CurrentStatus] = PUBLIC
     - $from-target[Type] = '*scpb.Target'
@@ -416,7 +441,7 @@ deprules
     - $from-target[TargetStatus] = PUBLIC
     - $to[Type] = '*scpb.SecondaryIndexPartial'
     - $to-target[TargetStatus] = PUBLIC
-    - $from-node[CurrentStatus] = DELETE_ONLY
+    - $from-node[CurrentStatus] = BACKFILL_ONLY
     - $to-node[CurrentStatus] = PUBLIC
     - $from-target[Type] = '*scpb.Target'
     - $from-target[Element] = $from
@@ -532,6 +557,29 @@ deprules
     - $to[IndexID] = $IndexID-join-var
     - $from[DescID] = $var-to-tell-rel-from-is-an-element
     - $to[DescID] = $var-to-tell-rel-to-is-an-element
+- name: temp index is WRITE_ONLY before backfill
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.TemporaryIndex'
+    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $from[DescID] = $desc-id
+    - $to[DescID] = $desc-id
+    - $to[TemporaryIndexID] = $temp-index-id
+    - $from[IndexID] = $temp-index-id
+    - $from-target[TargetStatus] = TRANSIENT_ABSENT
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = WRITE_ONLY
+    - $to-node[CurrentStatus] = BACKFILLED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
 - name: column name set right after column existence
   from: from-node
   kind: SameStagePrecedence
@@ -818,7 +866,7 @@ deprules
     - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $to-target[TargetStatus] = PUBLIC
     - $from-node[CurrentStatus] = DELETE_ONLY
-    - $to-node[CurrentStatus] = DELETE_ONLY
+    - $to-node[CurrentStatus] = BACKFILL_ONLY
     - $from-target[Type] = '*scpb.Target'
     - $from-target[Element] = $from
     - $from-node[Type] = '*screl.Node'
@@ -832,6 +880,28 @@ deprules
     - $from[DescID] = $var-to-tell-rel-from-is-an-element
     - $to[DescID] = $var-to-tell-rel-to-is-an-element
     - column-featured-in-index(*scpb.Column, scpb.Element)($from, $to)
+- name: column existence precedes temporary index existence
+  from: column-node
+  kind: Precedence
+  to: index-node
+  query:
+    - $index[Type] = '*scpb.TemporaryIndex'
+    - $column[Type] = '*scpb.Column'
+    - $column[DescID] = $table-id
+    - $index[DescID] = $table-id
+    - $index-target[TargetStatus] = TRANSIENT_ABSENT
+    - $column-target[TargetStatus] = PUBLIC
+    - $column-node[CurrentStatus] = DELETE_ONLY
+    - $index-node[CurrentStatus] = DELETE_ONLY
+    - column-featured-in-index(*scpb.Column, scpb.Element)($column, $index)
+    - $column-target[Type] = '*scpb.Target'
+    - $column-target[Element] = $column
+    - $column-node[Type] = '*screl.Node'
+    - $column-node[Target] = $column-target
+    - $index-target[Type] = '*scpb.Target'
+    - $index-target[Element] = $index
+    - $index-node[Type] = '*screl.Node'
+    - $index-node[Target] = $index-target
 - name: ensure columns are in increasing order
   from: laterColumn-node
   kind: SameStagePrecedence

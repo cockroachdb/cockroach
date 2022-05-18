@@ -1420,7 +1420,7 @@ SELECT table_catalog, table_name, version
  WHERE table_catalog != 'system' AND version > 1 AND table_schema = 'public' ORDER BY 1,2
 ----
 table_catalog  table_name  version
-other_db       xyz         8
+other_db       xyz         10
 
 user testuser
 
@@ -1430,7 +1430,7 @@ query TTTTTI colnames
 SELECT * FROM other_db.information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public'
 ----
 table_catalog  table_schema  table_name  table_type  is_insertable_into  version
-other_db       public        xyz         BASE TABLE  YES                 8
+other_db       public        xyz         BASE TABLE  YES                 10
 other_db       public        abc         VIEW        NO                  1
 
 
@@ -1447,7 +1447,7 @@ SELECT * FROM other_db.information_schema.tables WHERE table_catalog = 'other_db
 ----
 table_catalog  table_schema  table_name  table_type  is_insertable_into  version
 other_db       public        abc         VIEW        NO                  2
-other_db       public        xyz         BASE TABLE  YES                 8
+other_db       public        xyz         BASE TABLE  YES                 10
 
 user root
 
