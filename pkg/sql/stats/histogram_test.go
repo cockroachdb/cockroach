@@ -244,6 +244,12 @@ func TestEquiDepthHistogram(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if h.Version != histVersion {
+				t.Errorf("Invalid histogram version %d expected %d", h.Version, histVersion)
+			}
+			if (h.Buckets == nil) != (tc.buckets == nil) {
+				t.Fatalf("Invalid bucket == nil: %v, expected %v", h.Buckets == nil, tc.buckets == nil)
+			}
 			if len(h.Buckets) != len(tc.buckets) {
 				t.Fatalf("Invalid number of buckets %d, expected %d", len(h.Buckets), len(tc.buckets))
 			}

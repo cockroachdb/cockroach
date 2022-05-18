@@ -86,7 +86,9 @@ func EquiDepthHistogram(
 ) (HistogramData, []cat.HistogramBucket, error) {
 	numSamples := len(samples)
 	if numSamples == 0 {
-		return HistogramData{ColumnType: colType}, nil, nil
+		return HistogramData{
+			ColumnType: colType, Buckets: make([]HistogramData_Bucket, 0), Version: histVersion,
+		}, nil, nil
 	}
 	if maxBuckets < 2 {
 		return HistogramData{}, nil, errors.Errorf("histogram requires at least two buckets")
