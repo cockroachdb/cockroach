@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/errors"
 )
 
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
@@ -239,6 +238,38 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 	//
 	// Notice how we 'skip' all the europe-west2 rows with seq_num < 100.
 	//
+	// If there are multiple partitioning columns, the optimizer may be unable to
+	// generate a constraint for the in between filters, even if the partition
+	// filters are themselves constrained.
+	//
+	// Consider the following index and its partition:
+	//
+	// CREATE INDEX orders_by_seq_num
+	//     ON orders (region ASC, zone DESC, seq_num, id)
+	//     STORING (total)
+	//     PARTITION BY LIST (region, zone)
+	//         (
+	//             PARTITION us_east1_a VALUES IN ('us-east1', 'zone-a'),
+	//             PARTITION us_east1_b VALUES IN ('us-east1', 'zone-b'),
+	//             PARTITION europe_west2_a VALUES IN ('europe-west2', 'zone-a')
+	//             PARTITION europe_west2_b VALUES IN ('europe-west2', 'zone-b')
+	//         )
+	//
+	// The constraint generated for the query:
+	//   SELECT sum(total) FROM orders WHERE seq_num >= 100 AND seq_num < 200
+	// is:
+	//   [/'europe-west2'/'zone-a'/100 - /'europe-west2'/'zone-a'/199]
+	//   [/'europe-west2'/'zone-b'/100 - /'europe-west2'/'zone-b'/199]
+	//   [/'us-east1'/'zone-a'/100 - /'us-east1'/'zone-a'/199]
+	//   [/'us-east1'/'zone-b'/100 - /'us-east1'/'zone-b'/199]
+	//
+	// However, since region and zone are in ascending and descending order,
+	// respectively, the optimizer is currently unable to represent a span with
+	// columns in opposing directions and drops the last two fields from the span.
+	// This yields an unconstrained span.
+	//
+	// TODO(#81456): Add support for constrained in between filters when columns
+	// are in opposing order to fix the above problem.
 	var inBetweenFilters memo.FiltersExpr
 
 	indexColumns := tabMeta.IndexKeyColumns(index.Ordinal())
@@ -268,7 +299,12 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 			index.Ordinal(),
 		)
 		if !ok {
-			panic(errors.AssertionFailedf("in-between filters didn't yield a constraint"))
+			// If there are multiple partitioning columns on the index with different
+			// orders, then we may not find a constraint even though the partition
+			// filters were constrained.
+			// TODO(#81456): Add support for constraints on multiple partitioning
+			// columns.
+			return nil, nil, nil, false
 		}
 
 		combinedConstraint.UnionWith(c.e.evalCtx, inBetweenConstraint)
@@ -406,7 +442,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
 		newScanPrivate.SetConstraint(c.e.evalCtx, combinedConstraint)
 		// Record whether we were able to use partitions to constrain the scan.
-		newScanPrivate.PartitionConstrainedScan = (len(partitionFilters) > 0)
+		newScanPrivate.PartitionConstrainedScan = len(partitionFilters) > 0
 
 		// If the alternate index includes the set of needed columns, then
 		// construct a new Scan operator using that index.
