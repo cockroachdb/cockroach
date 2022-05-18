@@ -189,10 +189,12 @@ var secondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 // if they are not output.
 var traceTxnThreshold = settings.RegisterDurationSetting(
 	"sql.trace.txn.enable_threshold",
-	"duration beyond which all transactions are traced (set to 0 to "+
-		"disable). This setting is coarser grained than"+
-		"sql.trace.stmt.enable_threshold because it applies to all statements "+
-		"within a transaction as well as client communication (e.g. retries).", 0,
+	"enables tracing on all transactions; transactions open for longer than "+
+		"this duration will have their trace logged (set to 0 to disable); "+
+		"note that enabling this may have a negative performance impact; "+
+		"this setting is coarser-grained than sql.trace.stmt.enable_threshold "+
+		"because it applies to all statements within a transaction as well as "+
+		"client communication (e.g. retries)", 0,
 ).WithPublic()
 
 // traceStmtThreshold is identical to traceTxnThreshold except it applies to
@@ -201,9 +203,11 @@ var traceTxnThreshold = settings.RegisterDurationSetting(
 // round trips to client).
 var traceStmtThreshold = settings.RegisterDurationSetting(
 	"sql.trace.stmt.enable_threshold",
-	"duration beyond which all statements are traced (set to 0 to disable). "+
-		"This applies to individual statements within a transaction and is therefore "+
-		"finer-grained than sql.trace.txn.enable_threshold.",
+	"enables tracing on all statements; statements executing for longer than "+
+		"this duration will have their trace logged (set to 0 to disable); "+
+		"note that enabling this may have a negative performance impact; "+
+		"this setting applies to individual statements within a transaction and "+
+		"is therefore finer-grained than sql.trace.txn.enable_threshold",
 	0,
 ).WithPublic()
 
@@ -213,8 +217,8 @@ var traceStmtThreshold = settings.RegisterDurationSetting(
 // which may be a privacy concern.
 var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
 	"sql.trace.session_eventlog.enabled",
-	"set to true to enable session tracing. "+
-		"Note that enabling this may have a non-trivial negative performance impact.",
+	"set to true to enable session tracing; "+
+		"note that enabling this may have a negative performance impact",
 	false,
 ).WithPublic()
 
