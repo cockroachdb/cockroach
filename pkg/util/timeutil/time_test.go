@@ -15,8 +15,10 @@ import (
 	"math/rand"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUnixMicros(t *testing.T) {
@@ -69,4 +71,44 @@ func TestUnixMicrosRounding(t *testing.T) {
 func TestReplaceLibPQTimePrefix(t *testing.T) {
 	assert.Equal(t, "1970-02-02 11:00", ReplaceLibPQTimePrefix("1970-02-02 11:00"))
 	assert.Equal(t, "1970-01-01 11:00", ReplaceLibPQTimePrefix("0000-01-01 11:00"))
+}
+
+// Test that consecutive timeutil.Now() calls don't return the same instant. We
+// have tests that rely on all durations being measurable.
+func TestTimeIncreasing(t *testing.T) {
+	a := Now()
+	b := Now()
+	require.NotEqual(t, a, b)
+	require.NotZero(t, b.Sub(a))
+}
+
+func init() {
+	// We run our tests with the env var TZ="", which means UTC, in order to make
+	// the timezone predictable. This is not how we run in production, though. For
+	// this package, let's brutally pretend we're somewhere else by changing the
+	// locale, in order to make the testing more general. In particular, without
+	// this, TestTimeIsUTC(), which tests that the timeutil library converts
+	// timestamps to UTC, would pass regardless of our code because of the testing
+	// environment. We need to do this in a package init because otherwise the
+	// update races with the runtime reading it.
+	loc, err := LoadLocation("Africa/Cairo")
+	if err != nil {
+		panic(err)
+	}
+	time.Local = loc
+}
+
+// Test that Now() returns times in UTC. We've made a decision that this is a
+// good policy across the cluster so that all the timestamps print uniformly
+// across different nodes, and also because we were afraid that timestamps leak
+// into SQL Datums, and there the timestamp matters.
+func TestTimeIsUTC(t *testing.T) {
+	require.Equal(t, time.UTC, Now().Location())
+	require.Equal(t, time.UTC, Unix(1, 1).Location())
+}
+
+// Test that the unsafe cast we do in timeutil.Now() to set the time to UTC
+// appears to be sane.
+func TestTimeUnsafeUTCCast(t *testing.T) {
+	require.Equal(t, unsafe.Sizeof(time.Time{}), unsafe.Sizeof(timeLayout{}))
 }
