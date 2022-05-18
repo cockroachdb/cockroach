@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
@@ -67,6 +68,16 @@ func testCompose(t *testing.T, path string, exitCodeFrom string) {
 		}
 	} else {
 		path = filepath.Join(composeDir, path)
+	}
+	uid := os.Getuid()
+	err := os.Setenv("UID", strconv.Itoa(uid))
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	gid := os.Getgid()
+	err = os.Setenv("GID", strconv.Itoa(gid))
+	if err != nil {
+		t.Fatalf(err.Error())
 	}
 	cmd := exec.Command(
 		"docker-compose",
