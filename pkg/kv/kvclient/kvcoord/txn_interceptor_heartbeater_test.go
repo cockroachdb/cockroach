@@ -36,7 +36,7 @@ func makeMockTxnHeartbeater(
 	th.init(
 		log.MakeTestingAmbientCtxWithNewTracer(),
 		stop.NewStopper(),
-		hlc.NewClockWithTimeSource(manual, time.Nanosecond),
+		hlc.NewClock(manual, time.Nanosecond),
 		new(TxnMetrics),
 		1*time.Millisecond,
 		mockGatekeeper,

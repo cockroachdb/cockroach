@@ -183,7 +183,7 @@ func TestLockTableBasic(t *testing.T) {
 		var requestsByName map[string]Request
 		var guardsByReqName map[string]lockTableGuard
 		manualClock := hlc.NewManualClock(123)
-		clock := hlc.NewClockWithTimeSource(manualClock, 0 /* maxOffset */)
+		clock := hlc.NewClock(manualClock, 0 /* maxOffset */)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-lock-table":
