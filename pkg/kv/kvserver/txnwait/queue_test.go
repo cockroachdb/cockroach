@@ -170,7 +170,7 @@ func makeConfig(s kv.SenderFunc, stopper *stop.Stopper) Config {
 		StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax,
 	}
 	manual := hlc.NewManualClock(123)
-	cfg.Clock = hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	cfg.Clock = hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
 	cfg.Stopper = stopper
 	cfg.Metrics = NewMetrics(time.Minute)
 	if s != nil {

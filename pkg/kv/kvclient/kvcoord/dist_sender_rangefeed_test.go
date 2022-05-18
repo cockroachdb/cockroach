@@ -53,7 +53,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 		{codes.Unauthenticated, false},   // this node is not part of cluster; abort
 	} {
 		t.Run(spec.errorCode.String(), func(t *testing.T) {
-			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			stopper := stop.NewStopper()
