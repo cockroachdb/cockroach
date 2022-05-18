@@ -669,7 +669,9 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
-	if err := n.tableDesc.AddIndexMutation(params.ctx, indexDesc, descpb.DescriptorMutation_ADD, params.p.ExecCfg().Settings); err != nil {
+	if err := n.tableDesc.AddIndexMutationMaybeWithTempIndex(
+		params.ctx, indexDesc, descpb.DescriptorMutation_ADD, params.p.ExecCfg().Settings,
+	); err != nil {
 		return err
 	}
 	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)

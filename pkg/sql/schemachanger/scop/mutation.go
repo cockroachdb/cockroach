@@ -42,9 +42,17 @@ type NotImplemented struct {
 	ElementType string
 }
 
-// MakeAddedIndexDeleteOnly adds a non-existent primary index to the
-// table.
-type MakeAddedIndexDeleteOnly struct {
+// MakeAddedTempIndexDeleteOnly adds a non-existent index to the
+// table in the DELETE_ONLY state.
+type MakeAddedTempIndexDeleteOnly struct {
+	mutationOp
+	Index            scpb.Index
+	IsSecondaryIndex bool
+}
+
+// MakeAddedIndexBackfilling adds a non-existent index to the
+// table in the BACKFILLING state.
+type MakeAddedIndexBackfilling struct {
 	mutationOp
 	Index              scpb.Index
 	IsSecondaryIndex   bool
@@ -63,6 +71,14 @@ type SetAddedIndexPartialPredicate struct {
 // MakeAddedIndexDeleteAndWriteOnly transitions an index addition mutation from
 // DELETE_ONLY to DELETE_AND_WRITE_ONLY.
 type MakeAddedIndexDeleteAndWriteOnly struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}
+
+// MakeBackfillingIndexDeleteOnly transitions an index addition mutation from
+// BACKFILLING to DELETE_ONLY.
+type MakeBackfillingIndexDeleteOnly struct {
 	mutationOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
