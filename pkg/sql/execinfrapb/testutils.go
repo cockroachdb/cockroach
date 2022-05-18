@@ -37,7 +37,7 @@ func newInsecureRPCContext(ctx context.Context, stopper *stop.Stopper) *rpc.Cont
 			TenantID: roachpb.SystemTenantID,
 			NodeID:   nc,
 			Config:   &base.Config{Insecure: true},
-			Clock:    hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+			Clock:    hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 			Stopper:  stopper,
 			Settings: cluster.MakeTestingClusterSettings(),
 		})

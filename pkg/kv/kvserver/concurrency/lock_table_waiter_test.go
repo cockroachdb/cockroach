@@ -935,7 +935,7 @@ func TestContentionEventTracer(t *testing.T) {
 	tr := tracing.NewTracer()
 	ctx, sp := tr.StartSpanCtx(context.Background(), "foo", tracing.WithRecording(tracing.RecordingVerbose))
 	defer sp.Finish()
-	clock := hlc.NewClock(hlc.UnixNano, 0 /* maxOffset */)
+	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
 
 	var events []*roachpb.ContentionEvent
 

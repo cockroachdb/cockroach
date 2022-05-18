@@ -177,7 +177,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).ClockSource,
 			time.Duration(cfg.MaxOffset))
 	} else {
-		clock = hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
+		clock = hlc.NewClockWithSystemTimeSource(time.Duration(cfg.MaxOffset))
 	}
 	registry := metric.NewRegistry()
 	ruleRegistry := metric.NewRuleRegistry()
