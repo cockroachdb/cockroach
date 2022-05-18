@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -414,26 +413,13 @@ type muBoundAccount struct {
 
 // IndexBackfiller is capable of backfilling all the added index.
 type IndexBackfiller struct {
+	indexBackfillerCols
+
 	added []catalog.Index
-	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
-	colIdxMap catalog.TableColMap
 
 	types   []*types.T
 	rowVals tree.Datums
 	evalCtx *eval.Context
-
-	// cols are all of the writable (PUBLIC and DELETE_AND_WRITE_ONLY) columns in
-	// the descriptor.
-	cols []catalog.Column
-
-	// addedCols are the columns in DELETE_AND_WRITE_ONLY being added as part of
-	// this index which are not computed.
-	addedCols []catalog.Column
-
-	// computedCols are the columns in this index which are computed and do
-	// not have concrete values in the source index. This is virtual computed
-	// columns and stored computed columns which are non-public.
-	computedCols []catalog.Column
 
 	// Map of columns which need to be evaluated to their expressions.
 	colExprs map[descpb.ColumnID]tree.TypedExpr
@@ -446,10 +432,6 @@ type IndexBackfiller struct {
 	// It is a field of IndexBackfiller to avoid allocating a slice for each row
 	// backfilled.
 	indexesToEncode []catalog.Index
-
-	// valNeededForCol contains the indexes (into cols) of all columns that we
-	// need to fetch values for.
-	valNeededForCol util.FastIntSet
 
 	alloc tree.DatumAlloc
 
@@ -478,11 +460,14 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
 ) error {
-	// Initialize ib.cols and ib.colIdxMap.
-	ib.initCols(desc)
 
 	// Initialize ib.added.
-	ib.valNeededForCol = ib.initIndexes(desc)
+	ib.initIndexes(desc)
+
+	// Initialize ib.cols and ib.colIdxMap.
+	if err := ib.initCols(desc); err != nil {
+		return err
+	}
 
 	predicates, colExprs, referencedColumns, err := constructExprs(
 		ctx, desc, ib.added, ib.cols, ib.addedCols, ib.computedCols, evalCtx, semaCtx,
@@ -614,11 +599,14 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
 ) error {
-	// Initialize ib.cols and ib.colIdxMap.
-	ib.initCols(desc)
 
 	// Initialize ib.added.
-	ib.valNeededForCol = ib.initIndexes(desc)
+	ib.initIndexes(desc)
+
+	// Initialize ib.indexBackfillerCols.
+	if err := ib.initCols(desc); err != nil {
+		return err
+	}
 
 	evalCtx := flowCtx.NewEvalCtx()
 	var predicates map[descpb.IndexID]tree.TypedExpr
@@ -689,35 +677,17 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
 // populates the cols and colIdxMap fields.
-func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) {
-	ib.cols = make([]catalog.Column, 0, len(desc.DeletableColumns()))
-	for _, column := range desc.DeletableColumns() {
-		if column.Public() {
-			if column.IsComputed() && column.IsVirtual() {
-				ib.computedCols = append(ib.computedCols, column)
-			}
-		} else if column.Adding() && column.WriteAndDeleteOnly() {
-			// If there are ongoing mutations, add columns that are being added and in
-			// the DELETE_AND_WRITE_ONLY state.
-			if column.IsComputed() {
-				ib.computedCols = append(ib.computedCols, column)
-			} else {
-				ib.addedCols = append(ib.addedCols, column)
-			}
-		} else {
-			continue
-		}
-		// Create a map of each column's ID to its ordinal.
-		ib.colIdxMap.Set(column.GetID(), len(ib.cols))
-		ib.cols = append(ib.cols, column)
-	}
+func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) (err error) {
+	ib.indexBackfillerCols, err = makeIndexBackfillColumns(
+		desc.DeletableColumns(), desc.GetPrimaryIndex(), ib.added,
+	)
+	return err
 }
 
 // initIndexes is a helper to populate index metadata of an IndexBackfiller. It
 // populates the added field. It returns a set of column ordinals that must be
 // fetched in order to backfill the added indexes.
-func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIntSet {
-	var valNeededForCol util.FastIntSet
+func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) {
 	mutations := desc.AllMutations()
 	mutationID := mutations[0].MutationID()
 
@@ -729,29 +699,9 @@ func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIn
 		}
 		if IndexMutationFilter(m) {
 			idx := m.AsIndex()
-			colIDs := idx.CollectKeyColumnIDs()
-			if idx.GetEncodingType() == descpb.PrimaryIndexEncoding {
-				for _, col := range ib.cols {
-					if !col.IsVirtual() {
-						colIDs.Add(col.GetID())
-					}
-				}
-			} else {
-				colIDs.UnionWith(idx.CollectSecondaryStoredColumnIDs())
-				colIDs.UnionWith(idx.CollectKeySuffixColumnIDs())
-			}
-
 			ib.added = append(ib.added, idx)
-			for i := range ib.cols {
-				id := ib.cols[i].GetID()
-				if colIDs.Contains(id) && i < len(desc.PublicColumns()) && !ib.cols[i].IsVirtual() {
-					valNeededForCol.Add(i)
-				}
-			}
 		}
 	}
-
-	return valNeededForCol
 }
 
 // init completes the initialization of an IndexBackfiller.
