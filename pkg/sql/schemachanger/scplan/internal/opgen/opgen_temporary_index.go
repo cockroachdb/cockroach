@@ -18,7 +18,7 @@ import (
 
 func init() {
 	opRegistry.register((*scpb.TemporaryIndex)(nil),
-		toPublic(
+		toTransientAbsent(
 			scpb.Status_ABSENT,
 			to(scpb.Status_DELETE_ONLY,
 				minPhase(scop.PreCommitPhase),
@@ -39,11 +39,9 @@ func init() {
 					}
 				}),
 			),
-			to(scpb.Status_PUBLIC),
 		),
 		toAbsent(
-			scpb.Status_PUBLIC,
-			equiv(scpb.Status_WRITE_ONLY),
+			scpb.Status_WRITE_ONLY,
 			to(scpb.Status_DELETE_ONLY,
 				revertible(false),
 				emit(func(this *scpb.TemporaryIndex) scop.Op {
@@ -65,8 +63,7 @@ func init() {
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}
-				}),
-			),
+				})),
 		),
 	)
 }

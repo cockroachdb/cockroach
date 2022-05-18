@@ -1,0 +1,21 @@
+statement ok
+CREATE TABLE my_spatial_table (k INT PRIMARY KEY);
+CREATE TABLE other_table (k INT PRIMARY KEY);
+INSERT INTO other_table VALUES (1), (2)
+
+statement ok
+SELECT
+  k,
+  AddGeometryColumn ('my_spatial_table','geom1',4326,'POINT',2),
+  AddGeometryColumn ('my_spatial_table','geom2',4326,'POINT',2)
+FROM other_table
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
+----
+CREATE TABLE public.my_spatial_table (
+   k INT8 NOT NULL,
+   geom1 GEOMETRY(POINT,4326) NULL,
+   geom2 GEOMETRY(POINT,4326) NULL,
+   CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
+)

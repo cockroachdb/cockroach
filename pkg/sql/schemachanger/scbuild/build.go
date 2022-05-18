@@ -252,6 +252,10 @@ func (b buildCtx) Add(element scpb.Element) {
 	b.Ensure(scpb.Status_UNKNOWN, scpb.ToPublic, element, b.TargetMetadata())
 }
 
+func (b buildCtx) AddTransient(element scpb.Element) {
+	b.Ensure(scpb.Status_UNKNOWN, scpb.Transient, element, b.TargetMetadata())
+}
+
 // Drop implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) Drop(element scpb.Element) {
 	b.Ensure(scpb.Status_UNKNOWN, scpb.ToAbsent, element, b.TargetMetadata())

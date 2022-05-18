@@ -172,7 +172,10 @@ func (b *Tracker) GetMergeProgress(
 ) (scexec.MergeProgress, error) {
 	p, ok := b.getTableIndexMergeProgress(m)
 	if !ok {
-		return scexec.MergeProgress{Merge: m}, nil
+		return scexec.MergeProgress{
+			Merge:          m,
+			CompletedSpans: make([][]roachpb.Span, len(m.SourceIndexIDs)),
+		}, nil
 	}
 	if err := p.matches(m); err != nil {
 		return scexec.MergeProgress{Merge: m}, err

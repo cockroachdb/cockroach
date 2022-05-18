@@ -265,7 +265,8 @@ func TestBackfillerTracker(t *testing.T) {
 			pr, err := tr.GetMergeProgress(ctx, m)
 			require.NoError(t, err)
 			require.EqualValues(t, scexec.MergeProgress{
-				Merge: m,
+				Merge:          m,
+				CompletedSpans: [][]roachpb.Span{nil},
 			}, pr)
 		})
 		t.Run("GetMergeProgress with wrong indexes fails", func(t *testing.T) {
