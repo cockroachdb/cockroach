@@ -14,11 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -35,7 +37,12 @@ import (
 // Will fail on complex tables where that operation requires e.g. looking up
 // other tables.
 func CreateTestTableDescriptor(
-	ctx context.Context, parentID, id descpb.ID, schema string, privileges *catpb.PrivilegeDescriptor,
+	ctx context.Context,
+	parentID, id descpb.ID,
+	schema string,
+	privileges *catpb.PrivilegeDescriptor,
+	txn *kv.Txn,
+	collection *descs.Collection,
 ) (*tabledesc.Mutable, error) {
 	st := cluster.MakeTestingClusterSettings()
 	stmt, err := parser.ParseOne(schema)
@@ -44,13 +51,18 @@ func CreateTestTableDescriptor(
 	}
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := eval.MakeTestingEvalContext(st)
+	sessionData := &sessiondata.SessionData{
+		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+			EnableUniqueWithoutIndexConstraints: true,
+		},
+	}
 	switch n := stmt.AST.(type) {
 	case *tree.CreateTable:
 		db := dbdesc.NewInitial(parentID, "test", username.RootUserName())
 		desc, err := NewTableDesc(
 			ctx,
 			nil, /* txn */
-			nil, /* vs */
+			NewSkippingCacheSchemaResolver(collection, sessiondata.NewStack(sessionData), txn, nil),
 			st,
 			n,
 			db,
@@ -59,14 +71,10 @@ func CreateTestTableDescriptor(
 			nil,             /* regionConfig */
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
-			nil, /* affected */
+			make(map[descpb.ID]*tabledesc.Mutable),
 			&semaCtx,
 			&evalCtx,
-			&sessiondata.SessionData{
-				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-					EnableUniqueWithoutIndexConstraints: true,
-				},
-			}, /* sessionData */
+			sessionData,
 			tree.PersistencePermanent,
 		)
 		return desc, err

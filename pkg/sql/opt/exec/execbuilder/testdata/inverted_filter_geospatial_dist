@@ -250,7 +250,7 @@ query ITTTI colnames,rowsort
 SELECT range_id, start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE geo_table]
 ----
 range_id  start_key  end_key  replicas  lease_holder
-51        NULL       NULL     {2}       2
+52        NULL       NULL     {2}       2
 
 # We should see a distributed execution (though need to retry to purge possibly
 # stale dist sender caches).

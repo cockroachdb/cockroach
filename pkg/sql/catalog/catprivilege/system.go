@@ -73,6 +73,9 @@ var (
 	// TODO(adityamaru,dt): Remove once we fix the handling of dynamic system
 	// table IDs during restore.
 	RestoreCopySystemTablePrefix = "crdb_internal_copy"
+	readWriteSystemSequences     = []catconstants.SystemTableName{
+		catconstants.RoleIDSequenceName,
+	}
 
 	systemSuperuserPrivileges = func() map[descpb.NameInfo]privilege.List {
 		m := make(map[descpb.NameInfo]privilege.List)
@@ -87,6 +90,10 @@ var (
 		for _, r := range readSystemTables {
 			tableKey.Name = string(r)
 			m[tableKey] = privilege.ReadData
+		}
+		for _, r := range readWriteSystemSequences {
+			tableKey.Name = string(r)
+			m[tableKey] = privilege.ReadWriteSequenceData
 		}
 		m[descpb.NameInfo{Name: catconstants.SystemDatabaseName}] = privilege.List{privilege.CONNECT}
 		return m

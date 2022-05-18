@@ -102,7 +102,7 @@ subtest user_has_null_hashed_password_column
 # handled empty hashedPassword values. See #48769.
 
 sql
-INSERT INTO system.users (username, "hashedPassword") VALUES ('nopassword', NULL)
+INSERT INTO system.users (username, "hashedPassword", user_id) VALUES ('nopassword', NULL, 4)
 ----
 ok
 

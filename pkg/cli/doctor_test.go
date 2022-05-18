@@ -31,7 +31,7 @@ func TestDoctorCluster(t *testing.T) {
 		"CREATE TABLE to_drop (id INT)",
 		"DROP TABLE to_drop",
 		"CREATE TABLE foo (id INT)",
-		"INSERT INTO system.users VALUES ('node', NULL, true)",
+		"INSERT INTO system.users VALUES ('node', NULL, true, 3)",
 		"GRANT node TO root",
 		"DELETE FROM system.namespace WHERE name = 'foo'",
 	}, ";\n"),

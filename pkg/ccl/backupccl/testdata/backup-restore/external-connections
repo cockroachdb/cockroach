@@ -37,6 +37,7 @@ public schema full
 public schema full
 public schema full
 public schema full
+role_id_seq table full
 role_members table full
 role_options table full
 scheduled_jobs table full

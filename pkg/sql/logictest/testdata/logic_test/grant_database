@@ -22,7 +22,7 @@ statement error pq: user or role "test-user" does not exist
 GRANT ALL ON DATABASE a TO readwrite, "test-user"
 
 statement ok
-INSERT INTO system.users VALUES('test-user','');
+INSERT INTO system.users VALUES('test-user','',false,3);
 
 statement ok
 GRANT ALL PRIVILEGES ON DATABASE a TO readwrite, "test-user" WITH GRANT OPTION

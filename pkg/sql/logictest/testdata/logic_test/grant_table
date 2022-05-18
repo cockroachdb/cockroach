@@ -913,6 +913,12 @@ system         public        span_configurations              root     DELETE   
 system         public        span_configurations              root     INSERT          true
 system         public        span_configurations              root     SELECT          true
 system         public        span_configurations              root     UPDATE          true
+system         public        role_id_seq                      admin    SELECT          true
+system         public        role_id_seq                      admin    UPDATE          true
+system         public        role_id_seq                      admin    USAGE           true
+system         public        role_id_seq                      root     SELECT          true
+system         public        role_id_seq                      root     UPDATE          true
+system         public        role_id_seq                      root     USAGE           true
 system         public        tenant_settings                  admin    DELETE          true
 system         public        tenant_settings                  admin    INSERT          true
 system         public        tenant_settings                  admin    SELECT          true
@@ -1351,6 +1357,9 @@ system         public       reports_meta                     root     DELETE    
 system         public       reports_meta                     root     INSERT          true
 system         public       reports_meta                     root     SELECT          true
 system         public       reports_meta                     root     UPDATE          true
+system         public       role_id_seq                      root     SELECT          true
+system         public       role_id_seq                      root     UPDATE          true
+system         public       role_id_seq                      root     USAGE           true
 system         public       role_members                     root     DELETE          true
 system         public       role_members                     root     INSERT          true
 system         public       role_members                     root     SELECT          true
@@ -1536,7 +1545,7 @@ a              public       t           admin    ALL             true
 a              public       t           root     ALL             true
 
 statement ok
-INSERT INTO system.users VALUES('test-user','');
+INSERT INTO system.users VALUES('test-user','',false,200);
 
 statement ok
 GRANT ALL ON t TO readwrite, "test-user"

@@ -54,6 +54,8 @@ func TestPlanDiagramTableReaderWrapColumns(t *testing.T) {
 		  z INT
 		)`,
 		catpb.NewBasePrivilegeDescriptor(username.NodeUserName()),
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
