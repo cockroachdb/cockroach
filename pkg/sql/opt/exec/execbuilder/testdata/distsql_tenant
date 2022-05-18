@@ -1,0 +1,36 @@
+# LogicTest: 3node-tenant
+# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants allow-multi-region-abstractions-for-secondary-tenants
+
+statement ok
+CREATE TABLE tbl1 (a INT PRIMARY KEY, b INT)
+
+query T
+EXPLAIN SELECT * FROM tbl1 WHERE a < 3 OR (a > 7 AND a < 9) OR a > 14
+----
+distribution: full
+vectorized: true
+·
+• scan
+  missing stats
+  table: tbl1@tbl1_pkey
+  spans: [ - /2] [/8 - /8] [/15 - ]
+
+statement ok
+CREATE TABLE tbl2 (k INT PRIMARY KEY, v INT, w INT, x INT,
+   FAMILY fam_0 (k),
+   FAMILY fam_1 (x),
+   FAMILY fam_2 (v, w)
+)
+
+# This should be a local query, even though it uses two spans due to the column
+# family configuration.
+query T
+EXPLAIN SELECT v, w FROM tbl2 WHERE k = 23
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: tbl2@tbl2_pkey
+  spans: [/23 - /23]
