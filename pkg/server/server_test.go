@@ -627,7 +627,7 @@ func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
 
 			const maxOffset = 500 * time.Millisecond
 			m := hlc.NewManualClock(test.clockStartTime)
-			c := hlc.NewClockWithTimeSource(m, maxOffset /* maxOffset */)
+			c := hlc.NewClock(m, maxOffset /* maxOffset */)
 
 			sleepUntilFn := func(ctx context.Context, t hlc.Timestamp) error {
 				delta := t.WallTime - c.Now().WallTime
@@ -703,7 +703,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			a := assert.New(t)
 			m := hlc.NewManualClock(int64(1))
-			c := hlc.NewClockWithTimeSource(m, time.Nanosecond /* maxOffset */)
+			c := hlc.NewClock(m, time.Nanosecond /* maxOffset */)
 
 			var persistErr error
 			var persistedUpperBound int64

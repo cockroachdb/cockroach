@@ -24,7 +24,7 @@ import (
 func TestTreeImplEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 
@@ -51,7 +51,7 @@ func TestTreeImplEviction(t *testing.T) {
 func TestTreeImplNoEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClockWithTimeSource(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 
