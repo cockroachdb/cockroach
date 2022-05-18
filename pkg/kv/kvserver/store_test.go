@@ -259,7 +259,7 @@ func createTestStore(
 	ctx context.Context, t testing.TB, opts testStoreOpts, stopper *stop.Stopper,
 ) (*Store, *hlc.ManualClock) {
 	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	store := createTestStoreWithConfig(ctx, t, stopper, opts, &cfg)
 	return store, manual
 }
@@ -917,7 +917,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 	for _, test := range testCases {
 		func() {
 			manual := hlc.NewManualClock(123)
-			cfg := TestStoreConfig(hlc.NewClockWithTimeSource(manual, time.Nanosecond) /* maxOffset */)
+			cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 				func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
@@ -1276,7 +1276,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(manual, 1000*time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(manual, 1000*time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
@@ -2236,7 +2236,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 
 	var resolveCount int32
 	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClockWithTimeSource(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
