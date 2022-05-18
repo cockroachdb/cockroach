@@ -414,6 +414,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.SystemExternalConnectionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
 	},
+	systemschema.RoleIDSequence.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that

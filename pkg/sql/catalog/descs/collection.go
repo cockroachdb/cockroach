@@ -434,3 +434,13 @@ func (tc *Collection) AddDeletedDescriptor(id descpb.ID) {
 func (tc *Collection) SetSession(session sqlliveness.Session) {
 	tc.sqlLivenessSession = session
 }
+
+// MakeTestCollection makes a Collection that can be used for tests.
+func MakeTestCollection(ctx context.Context, leaseManager *lease.Manager) Collection {
+	settings := cluster.MakeTestingClusterSettings()
+	return Collection{
+		settings: settings,
+		version:  settings.Version.ActiveVersion(ctx),
+		leased:   makeLeasedDescriptors(leaseManager),
+	}
+}
