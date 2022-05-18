@@ -27,7 +27,7 @@ import (
 
 func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
 	ac := log.MakeTestingAmbientCtxWithNewTracer()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	stopper := stop.NewStopper()
 	db := kv.NewDB(ac, kv.NonTransactionalFactoryFunc(func(
 		ctx context.Context, ba roachpb.BatchRequest,

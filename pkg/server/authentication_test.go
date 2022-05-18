@@ -96,7 +96,7 @@ func TestSSLEnforcement(t *testing.T) {
 		return rpc.NewContext(ctx, rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
 			Config:   cfg,
-			Clock:    hlc.NewClock(hlc.UnixNano, 1),
+			Clock:    hlc.NewClockWithSystemTimeSource(1 /* maxOffset */),
 			Stopper:  s.Stopper(),
 			Settings: s.ClusterSettings(),
 		})
