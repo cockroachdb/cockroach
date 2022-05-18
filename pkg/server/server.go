@@ -167,11 +167,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	var clock *hlc.Clock
 	if cfg.ClockDevicePath != "" {
-		clockSrc, err := hlc.MakeClockSource(context.Background(), cfg.ClockDevicePath)
+		clockSrc, err := hlc.MakePTPTimeSource(context.Background(), cfg.ClockDevicePath)
 		if err != nil {
 			return nil, errors.Wrap(err, "instantiating clock source")
 		}
-		clock = hlc.NewClock(clockSrc.UnixNano, time.Duration(cfg.MaxOffset))
+		clock = hlc.NewClockWithTimeSource(clockSrc, time.Duration(cfg.MaxOffset))
 	} else if cfg.TestingKnobs.Server != nil &&
 		cfg.TestingKnobs.Server.(*TestingKnobs).ClockSource != nil {
 		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).ClockSource,

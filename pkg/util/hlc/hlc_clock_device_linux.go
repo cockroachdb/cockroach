@@ -21,23 +21,30 @@ import "C"
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// ClockSource contains the handle of the clock device as well as the
+// PTPTimeSource contains the handle of the clock device as well as the
 // clock id.
-type ClockSource struct {
+// The PTPTimeSource implements the hlc.NowSource interface, so it can be used
+// as the time source for an hlc.Clock:
+// hlc.NewClockWithTimeSource(MakePTPTimeSource(...), ...).
+type PTPTimeSource struct {
 	// clockDevice is not used after the device is open but is here to prevent the GC
 	// from closing the device and invalidating the clockDeviceID.
 	clockDevice   *os.File
 	clockDeviceID uintptr
 }
 
-// MakeClockSource creates a new ClockSource for the given device path.
-func MakeClockSource(ctx context.Context, clockDevicePath string) (ClockSource, error) {
-	var result ClockSource
+var _ NowSource = PTPTimeSource{}
+
+// MakePTPTimeSource creates a new PTPTimeSource for the given device path.
+func MakePTPTimeSource(ctx context.Context, clockDevicePath string) (PTPTimeSource, error) {
+	var result PTPTimeSource
 	var err error
 	result.clockDevice, err = os.Open(clockDevicePath)
 	if err != nil {
@@ -66,15 +73,13 @@ func MakeClockSource(ctx context.Context, clockDevicePath string) (ClockSource, 
 	return result, nil
 }
 
-// UnixNano returns the clock device's physical nanosecond
-// unix epoch timestamp as a convenience to create a HLC via
-// c := hlc.NewClock(dev.UnixNano, ...).
-func (p ClockSource) UnixNano() int64 {
+// Now implements the hlc.NowSource interface.
+func (p PTPTimeSource) Now() time.Time {
 	var ts C.struct_timespec
 	_, err := C.clock_gettime(C.clockid_t(p.clockDeviceID), &ts)
 	if err != nil {
 		panic(err)
 	}
 
-	return int64(ts.tv_sec)*1e9 + int64(ts.tv_nsec)
+	return timeutil.Unix(int64(ts.tv_sec)*1e9, int64(ts.tv_nsec))
 }
