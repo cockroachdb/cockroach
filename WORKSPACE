@@ -203,6 +203,9 @@ go_register_toolchains(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 ###################################
 
 # Install rules_nodejs dependencies
+
+# bazel_skylib handled above.
+# rules_nodejs handled above.
 load("@build_bazel_rules_nodejs//:repositories.bzl", "build_bazel_rules_nodejs_dependencies")
 build_bazel_rules_nodejs_dependencies()
 
