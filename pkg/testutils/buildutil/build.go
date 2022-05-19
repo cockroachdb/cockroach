@@ -31,6 +31,9 @@ func short(in string) string {
 // is listed in the allowlist.
 // If GOPATH isn't set, it is an indication that the source is not available and
 // the test is skipped.
+//
+// WARNING: VerifyNoImports doesn't really work (see #74119) due apparently to
+// bitrot. New uses should use the Bazel macro disallowed_imports_test instead.
 func VerifyNoImports(
 	t testing.TB,
 	pkgPath string,
