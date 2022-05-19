@@ -89,8 +89,8 @@ SHOW GRANTS ON t6
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t6          admin      ALL             true
 test           public       t6          root       ALL             true
-test           public       t6          testuser   ALL             true
-test           public       t6          testuser2  ALL             true
+test           public       t6          testuser   ALL             false
+test           public       t6          testuser2  ALL             false
 
 # Revoking from the target role should not affect the default privileges
 # defined on ALL ROLES.
@@ -106,8 +106,8 @@ SHOW GRANTS ON t7
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t7          admin      ALL             true
 test           public       t7          root       ALL             true
-test           public       t7          testuser   ALL             true
-test           public       t7          testuser2  ALL             true
+test           public       t7          testuser   ALL             false
+test           public       t7          testuser2  ALL             false
 
 user testuser
 
@@ -133,8 +133,8 @@ SHOW GRANTS ON SCHEMA s
 database_name  schema_name  grantee    privilege_type  is_grantable
 test           s            admin      ALL             true
 test           s            root       ALL             true
-test           s            testuser   ALL             true
-test           s            testuser2  ALL             true
+test           s            testuser   ALL             false
+test           s            testuser2  ALL             false
 
 statement ok
 CREATE SEQUENCE seq
@@ -145,8 +145,8 @@ SHOW GRANTS ON seq
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       seq         admin      ALL             true
 test           public       seq         root       ALL             true
-test           public       seq         testuser   ALL             true
-test           public       seq         testuser2  ALL             true
+test           public       seq         testuser   ALL             false
+test           public       seq         testuser2  ALL             false
 
 statement ok
 CREATE TYPE typ AS ENUM()
@@ -158,5 +158,5 @@ database_name  schema_name  type_name  grantee    privilege_type  is_grantable
 test           public       typ        admin      ALL             true
 test           public       typ        public     USAGE           false
 test           public       typ        root       ALL             true
-test           public       typ        testuser   ALL             true
-test           public       typ        testuser2  ALL             true
+test           public       typ        testuser   ALL             false
+test           public       typ        testuser2  ALL             false

@@ -4595,7 +4595,7 @@ func TestRestoredPrivileges(t *testing.T) {
 	// Explicitly don't restore grants when just restoring a database since we
 	// cannot ensure that the same users exist in the restoring cluster.
 	data2Grants := sqlDB.QueryStr(t, `SHOW GRANTS ON DATABASE data2`)
-	sqlDB.Exec(t, `GRANT CONNECT, CREATE, DROP, GRANT, ZONECONFIG ON DATABASE data2 TO someone`)
+	sqlDB.Exec(t, `GRANT CONNECT, CREATE, DROP, ZONECONFIG ON DATABASE data2 TO someone`)
 
 	withGrants := sqlDB.QueryStr(t, `SHOW GRANTS ON data.bank`)
 

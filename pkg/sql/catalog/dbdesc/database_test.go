@@ -351,7 +351,7 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			privilegeDesc:        catpb.PrivilegeDescriptor{},
 			defaultPrivilegeDesc: catpb.DefaultPrivilegeDescriptor{},
 			privileges: privilege.List{
-				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.GRANT, privilege.ZONECONFIG,
+				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.ZONECONFIG,
 			},
 			incompatiblePrivileges: privilege.List{},
 			shouldChange:           false,
@@ -384,7 +384,7 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			privilegeDesc:        catpb.PrivilegeDescriptor{},
 			defaultPrivilegeDesc: catpb.DefaultPrivilegeDescriptor{},
 			privileges: privilege.List{
-				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.GRANT, privilege.ZONECONFIG,
+				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.ZONECONFIG,
 			},
 			incompatiblePrivileges: privilege.List{},
 			shouldChange:           false,

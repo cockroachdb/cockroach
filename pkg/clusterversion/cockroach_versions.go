@@ -370,6 +370,9 @@ const (
 	// on strings.
 	TrigramInvertedIndexes
 
+	// RemoveGrantPrivilege is the last step to migrate from the GRANT privilege to WITH GRANT OPTION.
+	RemoveGrantPrivilege
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -645,6 +648,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TrigramInvertedIndexes,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
+	},
+	{
+		Key:     RemoveGrantPrivilege,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
 	},
 
 	// *************************************************

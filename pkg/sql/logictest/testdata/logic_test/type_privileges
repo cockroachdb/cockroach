@@ -91,9 +91,6 @@ GRANT ZONECONFIG ON type TEST to testuser
 # ALL, and GRANT should be grantable to enums.
 
 statement ok
-GRANT GRANT ON type TEST to testuser
-
-statement ok
 GRANT ALL ON type TEST to testuser
 
 # Grant ownership to testuser to allow testuser to drop and alter the type.

@@ -65,7 +65,7 @@ database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t3          admin      ALL             true
 test           public       t3          root       ALL             true
 test           public       t3          testuser   ALL             false
-test           public       t3          testuser2  ALL             true
+test           public       t3          testuser2  ALL             false
 
 # Revoke default privileges in schema.
 statement ok
@@ -104,7 +104,7 @@ database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t5          admin      ALL             true
 test           public       t5          root       ALL             true
 test           public       t5          testuser   ALL             false
-test           public       t5          testuser2  ALL             true
+test           public       t5          testuser2  ALL             false
 
 query TTTTTB colnames
 SHOW GRANTS ON s.t6
@@ -113,7 +113,7 @@ database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           s            t6          admin      ALL             true
 test           s            t6          root       ALL             true
 test           s            t6          testuser   ALL             false
-test           s            t6          testuser2  ALL             true
+test           s            t6          testuser2  ALL             false
 
 # In schema for all roles.
 user root

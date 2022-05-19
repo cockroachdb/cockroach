@@ -236,8 +236,8 @@ SHOW GRANTS ON t7
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 d              public       t7          admin      ALL             true
 d              public       t7          root       ALL             true
-d              public       t7          testuser   ALL             true
-d              public       t7          testuser2  ALL             true
+d              public       t7          testuser   ALL             false
+d              public       t7          testuser2  ALL             false
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM testuser, testuser2
@@ -251,20 +251,18 @@ SHOW GRANTS ON t8
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 d              public       t8          admin      ALL             true
 d              public       t8          root       ALL             true
-d              public       t8          testuser   CREATE          true
-d              public       t8          testuser   DELETE          true
-d              public       t8          testuser   DROP            true
-d              public       t8          testuser   GRANT           true
-d              public       t8          testuser   INSERT          true
-d              public       t8          testuser   UPDATE          true
-d              public       t8          testuser   ZONECONFIG      true
-d              public       t8          testuser2  CREATE          true
-d              public       t8          testuser2  DELETE          true
-d              public       t8          testuser2  DROP            true
-d              public       t8          testuser2  GRANT           true
-d              public       t8          testuser2  INSERT          true
-d              public       t8          testuser2  UPDATE          true
-d              public       t8          testuser2  ZONECONFIG      true
+d              public       t8          testuser   CREATE          false
+d              public       t8          testuser   DELETE          false
+d              public       t8          testuser   DROP            false
+d              public       t8          testuser   INSERT          false
+d              public       t8          testuser   UPDATE          false
+d              public       t8          testuser   ZONECONFIG      false
+d              public       t8          testuser2  CREATE          false
+d              public       t8          testuser2  DELETE          false
+d              public       t8          testuser2  DROP            false
+d              public       t8          testuser2  INSERT          false
+d              public       t8          testuser2  UPDATE          false
+d              public       t8          testuser2  ZONECONFIG      false
 
 # Ensure you can only ALTER DEFAULT PRIVILEGES for a role you're a part of.
 user testuser2

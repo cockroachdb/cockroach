@@ -734,7 +734,7 @@ SHOW GRANTS ON DATABASE db2
 ----
 database_name  grantee   privilege_type  is_grantable
 db2            admin     ALL             true
-db2            newgroup  ALL             true
+db2            newgroup  ALL             false
 db2            public    CONNECT         false
 db2            root      ALL             true
 
@@ -1162,13 +1162,13 @@ statement ok
 CREATE TABLE privatedb.privatetable (k int)
 
 statement ok
-GRANT GRANT,CONNECT ON DATABASE publicdb TO public
+GRANT CONNECT ON DATABASE publicdb TO public
 
 statement ok
-GRANT GRANT,SELECT ON publicdb.publictable TO public
+GRANT SELECT ON publicdb.publictable TO public
 
 statement ok
-GRANT GRANT,SELECT ON privatedb.publictable TO public
+GRANT SELECT ON privatedb.publictable TO public
 
 user testuser
 

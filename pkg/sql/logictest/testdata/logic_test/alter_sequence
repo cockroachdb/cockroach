@@ -286,4 +286,3 @@ CREATE SEQUENCE restart_max_err_seqas MAXVALUE 100
 
 statement error RESTART value \(1000\) cannot be greater than MAXVALUE \(100\)
 ALTER SEQUENCE restart_max_err_seqas RESTART 1000
-

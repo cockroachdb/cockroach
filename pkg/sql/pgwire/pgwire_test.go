@@ -551,12 +551,10 @@ func TestPGPreparedQuery(t *testing.T) {
 		}},
 		{"SHOW GRANTS ON system.users", []preparedQueryTest{
 			baseTest.Results("system", "public", "users", username.AdminRole, "DELETE", true).
-				Results("system", "public", "users", username.AdminRole, "GRANT", true).
 				Results("system", "public", "users", username.AdminRole, "INSERT", true).
 				Results("system", "public", "users", username.AdminRole, "SELECT", true).
 				Results("system", "public", "users", username.AdminRole, "UPDATE", true).
 				Results("system", "public", "users", username.RootUser, "DELETE", true).
-				Results("system", "public", "users", username.RootUser, "GRANT", true).
 				Results("system", "public", "users", username.RootUser, "INSERT", true).
 				Results("system", "public", "users", username.RootUser, "SELECT", true).
 				Results("system", "public", "users", username.RootUser, "UPDATE", true),

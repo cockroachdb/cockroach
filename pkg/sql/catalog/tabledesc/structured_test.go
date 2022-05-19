@@ -366,6 +366,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnNames:      []string{"foo", "bar"},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				},
+				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
 			},
 			upgraded: &descpb.TableDescriptor{
 				FormatVersion:    descpb.InterleavedFormatVersion,
@@ -532,6 +533,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Version:             descpb.EmptyArraysInInvertedIndexesVersion,
 					},
 				},
+				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
 			},
 			upgraded: &descpb.TableDescriptor{
 				FormatVersion:    descpb.InterleavedFormatVersion,
