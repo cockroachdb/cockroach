@@ -29,7 +29,7 @@ http_archive(
 http_archive(
     name = "build_bazel_rules_nodejs",
     sha256 = "e328cb2c9401be495fa7d79c306f5ee3040e8a03b2ebb79b022e15ca03770096",
-    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/5.4.2/rules_nodejs-5.4.2.tar.gz"],
+    urls = [ "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-5.4.2.tar.gz" ],
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
