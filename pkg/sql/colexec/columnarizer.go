@@ -262,10 +262,7 @@ func (c *Columnarizer) Next() coldata.Batch {
 	return c.batch
 }
 
-var (
-	_ colexecop.DrainableOperator = &Columnarizer{}
-	_ colexecop.Closer            = &Columnarizer{}
-)
+var _ colexecop.DrainableClosableOperator = &Columnarizer{}
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
 func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {

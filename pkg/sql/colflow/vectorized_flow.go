@@ -767,6 +767,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				ctx, flowCtx, colexecargs.OpWithMetaInfo{
 					Root:            op,
 					MetadataSources: colexecop.MetadataSources{op},
+					ToClose:         colexecop.Closers{op},
 				}, outputTyps, stream, factory, nil, /* getStats */
 			); err != nil {
 				return err
@@ -776,8 +777,8 @@ func (s *vectorizedFlowCreator) setupRouter(
 			opWithMetaInfo := colexecargs.OpWithMetaInfo{
 				Root:            op,
 				MetadataSources: colexecop.MetadataSources{op},
-				// ToClose will be closed by the hash router.
-				ToClose: nil,
+				// input.ToClose will be closed by the hash router.
+				ToClose: colexecop.Closers{op},
 			}
 			if s.recordingStats {
 				mons := []*mon.BytesMonitor{hashRouterMemMonitor, diskMon}
