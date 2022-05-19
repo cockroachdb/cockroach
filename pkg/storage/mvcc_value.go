@@ -12,7 +12,6 @@ package storage
 
 import (
 	"encoding/binary"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -279,11 +278,11 @@ func decodeExtendedMVCCValue(buf []byte) (MVCCValue, error) {
 
 func init() {
 	// Inject the format dependency into the enginepb package.
-	enginepb.FormatBytesAsValue = func(v []byte) string {
+	enginepb.FormatBytesAsValue = func(v []byte) redact.RedactableString {
 		val, err := DecodeMVCCValue(v)
 		if err != nil {
-			return fmt.Sprintf("err=%v", err)
+			return redact.Sprintf("err=%v", err)
 		}
-		return val.String()
+		return redact.Sprint(val.String())
 	}
 }
