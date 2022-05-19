@@ -27,6 +27,12 @@ http_archive(
 
 # Like the above, but for nodeJS.
 http_archive(
+    name = "rules_nodejs",
+    sha256 = "26766278d815a6e2c43d2f6c9c72fde3fec8729e84138ffa4dabee47edc7702a",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-core-5.4.2.tar.gz"],
+)
+
+http_archive(
     name = "build_bazel_rules_nodejs",
     sha256 = "e328cb2c9401be495fa7d79c306f5ee3040e8a03b2ebb79b022e15ca03770096",
     urls = [ "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-5.4.2.tar.gz" ],
