@@ -254,7 +254,7 @@ yarn_install(
     ],
     data = [
       "//pkg/ui:.yarnrc",
-      "@yarn_cache//:protos.seed",
+      "@yarn_cache//:.seed",
     ],
     package_path = "/",
     package_json = "//pkg/ui/workspaces/db-console/src/js:package.json",
@@ -270,7 +270,7 @@ yarn_install(
     ],
     data = [
       "//pkg/ui:.yarnrc",
-      "@yarn_cache//:db_console.seed",
+      "@yarn_cache//:.seed",
     ],
     package_json = "//pkg/ui/workspaces/db-console:package.json",
     yarn_lock = "//pkg/ui/workspaces/db-console:yarn.lock",
@@ -291,7 +291,7 @@ yarn_install(
     ],
     data = [
       "//pkg/ui:.yarnrc",
-      "@yarn_cache//:cluster_ui.seed",
+      "@yarn_cache//:.seed",
     ],
     package_json = "//pkg/ui/workspaces/cluster-ui:package.json",
     strict_visibility = False,
