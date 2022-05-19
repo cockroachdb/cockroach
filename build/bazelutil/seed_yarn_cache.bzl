@@ -48,16 +48,14 @@ def _seed_yarn_cache_impl(rctx):
         if res.return_code != 0:
             fail("Unable to seed yarn cache: " + res.stderr)
 
-        rctx.file(
-            key + ".seed",
-            content = "",
-            executable = False,
-        )
-
-
+    rctx.file(
+        ".seed",
+        content = "",
+        executable = False,
+    )
     rctx.file(
         "BUILD.bazel",
-        content = """exports_files(["protos.seed", "cluster_ui.seed", "db_console.seed"])""",
+        content = """exports_files([".seed"])""",
         executable = False,
     )
 
