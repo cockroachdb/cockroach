@@ -355,15 +355,15 @@ SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
 ----
 query_id  txn_id  node_id  session_id user_name  start  query  client_address  application_name  distributed  phase  full_scan
 
-query TITTTTIII colnames
+query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
-query TITTTTIII colnames
+query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
-id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
 query ITTTTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0

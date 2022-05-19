@@ -1526,6 +1526,10 @@
           "type": "boolean",
           "x-go-name": "IsHistorical"
         },
+        "last_auto_retry_reason": {
+          "type": "string",
+          "x-go-name": "LastAutoRetryReason"
+        },
         "max_alloc_bytes": {
           "description": "High water mark of allocated bytes in the txn memory monitor.",
           "type": "integer",

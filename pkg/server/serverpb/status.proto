@@ -858,6 +858,8 @@ message TxnInfo {
   string priority = 13;
 
   string quality_of_service = 14;
+
+  string last_auto_retry_reason = 15;
 }
 
 // ActiveQuery represents a query in flight on some Session.
