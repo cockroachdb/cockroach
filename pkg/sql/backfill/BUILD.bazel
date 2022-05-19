@@ -1,9 +1,10 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "backfill",
     srcs = [
         "backfill.go",
+        "index_backfiller_cols.go",
         "mvcc_index_merger.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/backfill",
@@ -38,5 +39,16 @@ go_library(
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "backfill_test",
+    srcs = ["index_backfiller_cols_test.go"],
+    embed = [":backfill"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "@com_github_stretchr_testify//require",
     ],
 )

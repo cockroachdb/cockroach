@@ -53,6 +53,7 @@ export const TimeFrameControls = ({
             onClick={handleChangeArrow(ArrowDirection.LEFT)}
             disabled={left}
             className={cx("_action", left ? "disabled" : "active")}
+            aria-label={"previous timeframe"}
           >
             <CaretLeft className={cx("icon")} />
           </Button>
@@ -67,6 +68,7 @@ export const TimeFrameControls = ({
             onClick={handleChangeArrow(ArrowDirection.RIGHT)}
             disabled={right}
             className={cx("_action", right ? "disabled" : "active")}
+            aria-label={"next timeframe"}
           >
             <CaretRight className={cx("icon")} />
           </Button>

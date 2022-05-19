@@ -200,6 +200,8 @@ nodejs_test(
         ".eslintrc.json",
         "src",
         "@npm//@cockroachlabs/eslint-config",
+        "@npm//@testing-library/react",
+        "@npm//@testing-library/user-event",
         "@npm//@typescript-eslint/eslint-plugin",
         "@npm//@typescript-eslint/parser",
         "@npm//eslint",
@@ -231,6 +233,8 @@ tsc_test(
     ]) + [
         "tsconfig.json",
         "tsconfig.linting.json",
+        "@npm//@testing-library/react",
+        "@npm//@testing-library/user-event",
         "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
         "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
     ],
@@ -259,6 +263,8 @@ JEST_DEPS = DEPENDENCIES + [
     "jest.config.js",
     "tsconfig.json",
     "src",
+    "@npm//@testing-library/react",
+    "@npm//@testing-library/user-event",
     "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
     "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
 ]
