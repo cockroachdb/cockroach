@@ -31,7 +31,7 @@ import (
 var rubyPGTestFailureRegex = regexp.MustCompile(`^rspec ./.*# .*`)
 var testFailureFilenameRegexp = regexp.MustCompile("^rspec .*.rb.*([0-9]|]) # ")
 var testSummaryRegexp = regexp.MustCompile("^([0-9]+) examples, [0-9]+ failures")
-var rubyPGVersion = "v1.2.3"
+var rubyPGVersion = "v1.3.5"
 
 // This test runs Ruby PG's full test suite against a single cockroach node.
 func registerRubyPG(r registry.Registry) {

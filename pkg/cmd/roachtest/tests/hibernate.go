@@ -23,7 +23,7 @@ import (
 )
 
 var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedHibernateTag = "5.4.30"
+var supportedHibernateTag = "5.6.9"
 
 type hibernateOptions struct {
 	testName string

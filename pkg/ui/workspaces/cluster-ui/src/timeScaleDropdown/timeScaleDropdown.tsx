@@ -12,14 +12,16 @@ import React, { useMemo } from "react";
 import moment from "moment";
 import classNames from "classnames/bind";
 import {
-  TimeRangeTitle,
   TimeScale,
   TimeWindow,
   ArrowDirection,
   TimeScaleOptions,
 } from "./timeScaleTypes";
 import TimeFrameControls from "./timeFrameControls";
-import RangeSelect, { RangeOption } from "./rangeSelect";
+import RangeSelect, {
+  RangeOption,
+  Selected as RangeSelectSelected,
+} from "./rangeSelect";
 import { defaultTimeScaleOptions, findClosestTimeScale } from "./utils";
 
 import styles from "./timeScale.module.scss";
@@ -68,10 +70,16 @@ export const getTimeLabel = (
   }
 };
 
-export const getTimeRangeTitle = (
+export const formatRangeSelectSelected = (
   currentWindow: TimeWindow,
   currentScale: TimeScale,
-): TimeRangeTitle => {
+): RangeSelectSelected => {
+  const selected = {
+    timeLabel: getTimeLabel(currentWindow),
+    timeWindow: currentWindow,
+    key: currentScale.key,
+  };
+
   if (currentScale.key === "Custom") {
     const start = currentWindow.start.utc();
     const end = currentWindow.end.utc();
@@ -80,20 +88,14 @@ export const getTimeRangeTitle = (
 
     const omitDayFormat = endDayIsToday && startEndOnSameDay;
     return {
+      ...selected,
       dateStart: omitDayFormat ? "" : start.format(dateFormat),
       dateEnd: omitDayFormat || startEndOnSameDay ? "" : end.format(dateFormat),
       timeStart: moment.utc(start).format(timeFormat),
       timeEnd: moment.utc(end).format(timeFormat),
-      title: "Custom",
-      timeLabel: getTimeLabel(currentWindow),
-      timeWindow: currentWindow,
     };
   } else {
-    return {
-      title: currentScale.key,
-      timeLabel: getTimeLabel(currentWindow),
-      timeWindow: currentWindow,
-    };
+    return selected;
   }
 };
 
@@ -249,9 +251,9 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   return (
     <div className={cx("timescale")}>
       <RangeSelect
-        selected={getTimeRangeTitle(currentWindow, currentScale)}
         onChange={onOptionSelect}
         changeDate={setDateRange}
+        selected={formatRangeSelectSelected(currentWindow, currentScale)}
         options={timeScaleOptions}
       />
       <TimeFrameControls
