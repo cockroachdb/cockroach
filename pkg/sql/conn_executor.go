@@ -3053,6 +3053,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	var activeTxnInfo *serverpb.TxnInfo
 	txn := ex.state.mu.txn
 
+	var autoRetryReasonStr string
+
+	if ex.extraTxnState.autoRetryReason != nil {
+		autoRetryReasonStr = ex.extraTxnState.autoRetryReason.Error()
+	}
+
 	if txn != nil {
 		id := txn.ID()
 		activeTxnInfo = &serverpb.TxnInfo{
@@ -3069,6 +3075,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			ReadOnly:              ex.state.readOnly,
 			Priority:              ex.state.priority.String(),
 			QualityOfService:      sessiondatapb.ToQoSLevelString(txn.AdmissionHeader().Priority),
+			LastAutoRetryReason:   autoRetryReasonStr,
 		}
 	}
 

@@ -1615,15 +1615,16 @@ CREATE TABLE crdb_internal.session_variables (
 
 const txnsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
-  id UUID,                 -- the unique ID of the transaction
-  node_id INT,             -- the ID of the node running the transaction
-  session_id STRING,       -- the ID of the session
-  start TIMESTAMP,         -- the start time of the transaction
-  txn_string STRING,       -- the string representation of the transcation
-  application_name STRING, -- the name of the application as per SET application_name
-  num_stmts INT,           -- the number of statements executed so far
-  num_retries INT,         -- the number of times the transaction was restarted
-  num_auto_retries INT     -- the number of times the transaction was automatically restarted
+  id UUID,                         -- the unique ID of the transaction
+  node_id INT,                     -- the ID of the node running the transaction
+  session_id STRING,               -- the ID of the session
+  start TIMESTAMP,                 -- the start time of the transaction
+  txn_string STRING,               -- the string representation of the transcation
+  application_name STRING,         -- the name of the application as per SET application_name
+  num_stmts INT,                   -- the number of statements executed so far
+  num_retries INT,                 -- the number of times the transaction was restarted
+  num_auto_retries INT,            -- the number of times the transaction was automatically restarted
+  last_auto_retry_reason STRING    -- the error causing the last automatic retry for this txn
 )`
 
 var crdbInternalLocalTxnsTable = virtualSchemaTable{
@@ -1684,6 +1685,7 @@ func populateTransactionsTable(
 				tree.NewDInt(tree.DInt(txn.NumStatementsExecuted)),
 				tree.NewDInt(tree.DInt(txn.NumRetries)),
 				tree.NewDInt(tree.DInt(txn.NumAutoRetries)),
+				tree.NewDString(txn.LastAutoRetryReason),
 			); err != nil {
 				return err
 			}
@@ -1704,6 +1706,7 @@ func populateTransactionsTable(
 				tree.DNull,                             // NumStatementsExecuted
 				tree.DNull,                             // NumRetries
 				tree.DNull,                             // NumAutoRetries
+				tree.DNull,                             // LastAutoRetryReason
 			); err != nil {
 				return err
 			}
