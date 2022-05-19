@@ -15,7 +15,7 @@ SHOW GRANTS ON DATABASE a
 database_name  grantee    privilege_type  is_grantable
 a              admin      ALL             true
 a              public     CONNECT         false
-a              readwrite  ALL             true
+a              readwrite  ALL             false
 a              root       ALL             true
 
 # Show that by default GRANT is restricted to the current database
@@ -666,332 +666,258 @@ test           pg_extension  spatial_ref_sys                  public   SELECT   
 a              pg_extension  geography_columns                public   SELECT          false
 a              pg_extension  geometry_columns                 public   SELECT          false
 a              pg_extension  spatial_ref_sys                  public   SELECT          false
-system         public        descriptor                       admin    GRANT           true
 system         public        descriptor                       admin    SELECT          true
-system         public        descriptor                       root     GRANT           true
 system         public        descriptor                       root     SELECT          true
 system         public        users                            admin    DELETE          true
-system         public        users                            admin    GRANT           true
 system         public        users                            admin    INSERT          true
 system         public        users                            admin    SELECT          true
 system         public        users                            admin    UPDATE          true
 system         public        users                            root     DELETE          true
-system         public        users                            root     GRANT           true
 system         public        users                            root     INSERT          true
 system         public        users                            root     SELECT          true
 system         public        users                            root     UPDATE          true
 system         public        zones                            admin    DELETE          true
-system         public        zones                            admin    GRANT           true
 system         public        zones                            admin    INSERT          true
 system         public        zones                            admin    SELECT          true
 system         public        zones                            admin    UPDATE          true
 system         public        zones                            root     DELETE          true
-system         public        zones                            root     GRANT           true
 system         public        zones                            root     INSERT          true
 system         public        zones                            root     SELECT          true
 system         public        zones                            root     UPDATE          true
 system         public        settings                         admin    DELETE          true
-system         public        settings                         admin    GRANT           true
 system         public        settings                         admin    INSERT          true
 system         public        settings                         admin    SELECT          true
 system         public        settings                         admin    UPDATE          true
 system         public        settings                         root     DELETE          true
-system         public        settings                         root     GRANT           true
 system         public        settings                         root     INSERT          true
 system         public        settings                         root     SELECT          true
 system         public        settings                         root     UPDATE          true
-system         public        tenants                          admin    GRANT           true
 system         public        tenants                          admin    SELECT          true
-system         public        tenants                          root     GRANT           true
 system         public        tenants                          root     SELECT          true
 system         public        lease                            admin    DELETE          true
-system         public        lease                            admin    GRANT           true
 system         public        lease                            admin    INSERT          true
 system         public        lease                            admin    SELECT          true
 system         public        lease                            admin    UPDATE          true
 system         public        lease                            root     DELETE          true
-system         public        lease                            root     GRANT           true
 system         public        lease                            root     INSERT          true
 system         public        lease                            root     SELECT          true
 system         public        lease                            root     UPDATE          true
 system         public        eventlog                         admin    DELETE          true
-system         public        eventlog                         admin    GRANT           true
 system         public        eventlog                         admin    INSERT          true
 system         public        eventlog                         admin    SELECT          true
 system         public        eventlog                         admin    UPDATE          true
 system         public        eventlog                         root     DELETE          true
-system         public        eventlog                         root     GRANT           true
 system         public        eventlog                         root     INSERT          true
 system         public        eventlog                         root     SELECT          true
 system         public        eventlog                         root     UPDATE          true
 system         public        rangelog                         admin    DELETE          true
-system         public        rangelog                         admin    GRANT           true
 system         public        rangelog                         admin    INSERT          true
 system         public        rangelog                         admin    SELECT          true
 system         public        rangelog                         admin    UPDATE          true
 system         public        rangelog                         root     DELETE          true
-system         public        rangelog                         root     GRANT           true
 system         public        rangelog                         root     INSERT          true
 system         public        rangelog                         root     SELECT          true
 system         public        rangelog                         root     UPDATE          true
 system         public        ui                               admin    DELETE          true
-system         public        ui                               admin    GRANT           true
 system         public        ui                               admin    INSERT          true
 system         public        ui                               admin    SELECT          true
 system         public        ui                               admin    UPDATE          true
 system         public        ui                               root     DELETE          true
-system         public        ui                               root     GRANT           true
 system         public        ui                               root     INSERT          true
 system         public        ui                               root     SELECT          true
 system         public        ui                               root     UPDATE          true
 system         public        jobs                             admin    DELETE          true
-system         public        jobs                             admin    GRANT           true
 system         public        jobs                             admin    INSERT          true
 system         public        jobs                             admin    SELECT          true
 system         public        jobs                             admin    UPDATE          true
 system         public        jobs                             root     DELETE          true
-system         public        jobs                             root     GRANT           true
 system         public        jobs                             root     INSERT          true
 system         public        jobs                             root     SELECT          true
 system         public        jobs                             root     UPDATE          true
 system         public        web_sessions                     admin    DELETE          true
-system         public        web_sessions                     admin    GRANT           true
 system         public        web_sessions                     admin    INSERT          true
 system         public        web_sessions                     admin    SELECT          true
 system         public        web_sessions                     admin    UPDATE          true
 system         public        web_sessions                     root     DELETE          true
-system         public        web_sessions                     root     GRANT           true
 system         public        web_sessions                     root     INSERT          true
 system         public        web_sessions                     root     SELECT          true
 system         public        web_sessions                     root     UPDATE          true
 system         public        table_statistics                 admin    DELETE          true
-system         public        table_statistics                 admin    GRANT           true
 system         public        table_statistics                 admin    INSERT          true
 system         public        table_statistics                 admin    SELECT          true
 system         public        table_statistics                 admin    UPDATE          true
 system         public        table_statistics                 root     DELETE          true
-system         public        table_statistics                 root     GRANT           true
 system         public        table_statistics                 root     INSERT          true
 system         public        table_statistics                 root     SELECT          true
 system         public        table_statistics                 root     UPDATE          true
 system         public        locations                        admin    DELETE          true
-system         public        locations                        admin    GRANT           true
 system         public        locations                        admin    INSERT          true
 system         public        locations                        admin    SELECT          true
 system         public        locations                        admin    UPDATE          true
 system         public        locations                        root     DELETE          true
-system         public        locations                        root     GRANT           true
 system         public        locations                        root     INSERT          true
 system         public        locations                        root     SELECT          true
 system         public        locations                        root     UPDATE          true
 system         public        role_members                     admin    DELETE          true
-system         public        role_members                     admin    GRANT           true
 system         public        role_members                     admin    INSERT          true
 system         public        role_members                     admin    SELECT          true
 system         public        role_members                     admin    UPDATE          true
 system         public        role_members                     root     DELETE          true
-system         public        role_members                     root     GRANT           true
 system         public        role_members                     root     INSERT          true
 system         public        role_members                     root     SELECT          true
 system         public        role_members                     root     UPDATE          true
 system         public        comments                         admin    DELETE          true
-system         public        comments                         admin    GRANT           true
 system         public        comments                         admin    INSERT          true
 system         public        comments                         admin    SELECT          true
 system         public        comments                         admin    UPDATE          true
 system         public        comments                         public   SELECT          false
 system         public        comments                         root     DELETE          true
-system         public        comments                         root     GRANT           true
 system         public        comments                         root     INSERT          true
 system         public        comments                         root     SELECT          true
 system         public        comments                         root     UPDATE          true
 system         public        replication_constraint_stats     admin    DELETE          true
-system         public        replication_constraint_stats     admin    GRANT           true
 system         public        replication_constraint_stats     admin    INSERT          true
 system         public        replication_constraint_stats     admin    SELECT          true
 system         public        replication_constraint_stats     admin    UPDATE          true
 system         public        replication_constraint_stats     root     DELETE          true
-system         public        replication_constraint_stats     root     GRANT           true
 system         public        replication_constraint_stats     root     INSERT          true
 system         public        replication_constraint_stats     root     SELECT          true
 system         public        replication_constraint_stats     root     UPDATE          true
 system         public        replication_critical_localities  admin    DELETE          true
-system         public        replication_critical_localities  admin    GRANT           true
 system         public        replication_critical_localities  admin    INSERT          true
 system         public        replication_critical_localities  admin    SELECT          true
 system         public        replication_critical_localities  admin    UPDATE          true
 system         public        replication_critical_localities  root     DELETE          true
-system         public        replication_critical_localities  root     GRANT           true
 system         public        replication_critical_localities  root     INSERT          true
 system         public        replication_critical_localities  root     SELECT          true
 system         public        replication_critical_localities  root     UPDATE          true
 system         public        replication_stats                admin    DELETE          true
-system         public        replication_stats                admin    GRANT           true
 system         public        replication_stats                admin    INSERT          true
 system         public        replication_stats                admin    SELECT          true
 system         public        replication_stats                admin    UPDATE          true
 system         public        replication_stats                root     DELETE          true
-system         public        replication_stats                root     GRANT           true
 system         public        replication_stats                root     INSERT          true
 system         public        replication_stats                root     SELECT          true
 system         public        replication_stats                root     UPDATE          true
 system         public        reports_meta                     admin    DELETE          true
-system         public        reports_meta                     admin    GRANT           true
 system         public        reports_meta                     admin    INSERT          true
 system         public        reports_meta                     admin    SELECT          true
 system         public        reports_meta                     admin    UPDATE          true
 system         public        reports_meta                     root     DELETE          true
-system         public        reports_meta                     root     GRANT           true
 system         public        reports_meta                     root     INSERT          true
 system         public        reports_meta                     root     SELECT          true
 system         public        reports_meta                     root     UPDATE          true
-system         public        namespace                        admin    GRANT           true
 system         public        namespace                        admin    SELECT          true
-system         public        namespace                        root     GRANT           true
 system         public        namespace                        root     SELECT          true
-system         public        protected_ts_meta                admin    GRANT           true
 system         public        protected_ts_meta                admin    SELECT          true
-system         public        protected_ts_meta                root     GRANT           true
 system         public        protected_ts_meta                root     SELECT          true
-system         public        protected_ts_records             admin    GRANT           true
 system         public        protected_ts_records             admin    SELECT          true
-system         public        protected_ts_records             root     GRANT           true
 system         public        protected_ts_records             root     SELECT          true
 system         public        role_options                     admin    DELETE          true
-system         public        role_options                     admin    GRANT           true
 system         public        role_options                     admin    INSERT          true
 system         public        role_options                     admin    SELECT          true
 system         public        role_options                     admin    UPDATE          true
 system         public        role_options                     root     DELETE          true
-system         public        role_options                     root     GRANT           true
 system         public        role_options                     root     INSERT          true
 system         public        role_options                     root     SELECT          true
 system         public        role_options                     root     UPDATE          true
 system         public        statement_bundle_chunks          admin    DELETE          true
-system         public        statement_bundle_chunks          admin    GRANT           true
 system         public        statement_bundle_chunks          admin    INSERT          true
 system         public        statement_bundle_chunks          admin    SELECT          true
 system         public        statement_bundle_chunks          admin    UPDATE          true
 system         public        statement_bundle_chunks          root     DELETE          true
-system         public        statement_bundle_chunks          root     GRANT           true
 system         public        statement_bundle_chunks          root     INSERT          true
 system         public        statement_bundle_chunks          root     SELECT          true
 system         public        statement_bundle_chunks          root     UPDATE          true
 system         public        statement_diagnostics_requests   admin    DELETE          true
-system         public        statement_diagnostics_requests   admin    GRANT           true
 system         public        statement_diagnostics_requests   admin    INSERT          true
 system         public        statement_diagnostics_requests   admin    SELECT          true
 system         public        statement_diagnostics_requests   admin    UPDATE          true
 system         public        statement_diagnostics_requests   root     DELETE          true
-system         public        statement_diagnostics_requests   root     GRANT           true
 system         public        statement_diagnostics_requests   root     INSERT          true
 system         public        statement_diagnostics_requests   root     SELECT          true
 system         public        statement_diagnostics_requests   root     UPDATE          true
 system         public        statement_diagnostics            admin    DELETE          true
-system         public        statement_diagnostics            admin    GRANT           true
 system         public        statement_diagnostics            admin    INSERT          true
 system         public        statement_diagnostics            admin    SELECT          true
 system         public        statement_diagnostics            admin    UPDATE          true
 system         public        statement_diagnostics            root     DELETE          true
-system         public        statement_diagnostics            root     GRANT           true
 system         public        statement_diagnostics            root     INSERT          true
 system         public        statement_diagnostics            root     SELECT          true
 system         public        statement_diagnostics            root     UPDATE          true
 system         public        scheduled_jobs                   admin    DELETE          true
-system         public        scheduled_jobs                   admin    GRANT           true
 system         public        scheduled_jobs                   admin    INSERT          true
 system         public        scheduled_jobs                   admin    SELECT          true
 system         public        scheduled_jobs                   admin    UPDATE          true
 system         public        scheduled_jobs                   root     DELETE          true
-system         public        scheduled_jobs                   root     GRANT           true
 system         public        scheduled_jobs                   root     INSERT          true
 system         public        scheduled_jobs                   root     SELECT          true
 system         public        scheduled_jobs                   root     UPDATE          true
 system         public        sqlliveness                      admin    DELETE          true
-system         public        sqlliveness                      admin    GRANT           true
 system         public        sqlliveness                      admin    INSERT          true
 system         public        sqlliveness                      admin    SELECT          true
 system         public        sqlliveness                      admin    UPDATE          true
 system         public        sqlliveness                      root     DELETE          true
-system         public        sqlliveness                      root     GRANT           true
 system         public        sqlliveness                      root     INSERT          true
 system         public        sqlliveness                      root     SELECT          true
 system         public        sqlliveness                      root     UPDATE          true
 system         public        migrations                       admin    DELETE          true
-system         public        migrations                       admin    GRANT           true
 system         public        migrations                       admin    INSERT          true
 system         public        migrations                       admin    SELECT          true
 system         public        migrations                       admin    UPDATE          true
 system         public        migrations                       root     DELETE          true
-system         public        migrations                       root     GRANT           true
 system         public        migrations                       root     INSERT          true
 system         public        migrations                       root     SELECT          true
 system         public        migrations                       root     UPDATE          true
 system         public        join_tokens                      admin    DELETE          true
-system         public        join_tokens                      admin    GRANT           true
 system         public        join_tokens                      admin    INSERT          true
 system         public        join_tokens                      admin    SELECT          true
 system         public        join_tokens                      admin    UPDATE          true
 system         public        join_tokens                      root     DELETE          true
-system         public        join_tokens                      root     GRANT           true
 system         public        join_tokens                      root     INSERT          true
 system         public        join_tokens                      root     SELECT          true
 system         public        join_tokens                      root     UPDATE          true
-system         public        statement_statistics             admin    GRANT           true
 system         public        statement_statistics             admin    SELECT          true
-system         public        statement_statistics             root     GRANT           true
 system         public        statement_statistics             root     SELECT          true
-system         public        transaction_statistics           admin    GRANT           true
 system         public        transaction_statistics           admin    SELECT          true
-system         public        transaction_statistics           root     GRANT           true
 system         public        transaction_statistics           root     SELECT          true
 system         public        database_role_settings           admin    DELETE          true
-system         public        database_role_settings           admin    GRANT           true
 system         public        database_role_settings           admin    INSERT          true
 system         public        database_role_settings           admin    SELECT          true
 system         public        database_role_settings           admin    UPDATE          true
 system         public        database_role_settings           root     DELETE          true
-system         public        database_role_settings           root     GRANT           true
 system         public        database_role_settings           root     INSERT          true
 system         public        database_role_settings           root     SELECT          true
 system         public        database_role_settings           root     UPDATE          true
 system         public        tenant_usage                     admin    DELETE          true
-system         public        tenant_usage                     admin    GRANT           true
 system         public        tenant_usage                     admin    INSERT          true
 system         public        tenant_usage                     admin    SELECT          true
 system         public        tenant_usage                     admin    UPDATE          true
 system         public        tenant_usage                     root     DELETE          true
-system         public        tenant_usage                     root     GRANT           true
 system         public        tenant_usage                     root     INSERT          true
 system         public        tenant_usage                     root     SELECT          true
 system         public        tenant_usage                     root     UPDATE          true
 system         public        sql_instances                    admin    DELETE          true
-system         public        sql_instances                    admin    GRANT           true
 system         public        sql_instances                    admin    INSERT          true
 system         public        sql_instances                    admin    SELECT          true
 system         public        sql_instances                    admin    UPDATE          true
 system         public        sql_instances                    root     DELETE          true
-system         public        sql_instances                    root     GRANT           true
 system         public        sql_instances                    root     INSERT          true
 system         public        sql_instances                    root     SELECT          true
 system         public        sql_instances                    root     UPDATE          true
 system         public        span_configurations              admin    DELETE          true
-system         public        span_configurations              admin    GRANT           true
 system         public        span_configurations              admin    INSERT          true
 system         public        span_configurations              admin    SELECT          true
 system         public        span_configurations              admin    UPDATE          true
 system         public        span_configurations              root     DELETE          true
-system         public        span_configurations              root     GRANT           true
 system         public        span_configurations              root     INSERT          true
 system         public        span_configurations              root     SELECT          true
 system         public        span_configurations              root     UPDATE          true
 system         public        tenant_settings                  admin    DELETE          true
-system         public        tenant_settings                  admin    GRANT           true
 system         public        tenant_settings                  admin    INSERT          true
 system         public        tenant_settings                  admin    SELECT          true
 system         public        tenant_settings                  admin    UPDATE          true
 system         public        tenant_settings                  root     DELETE          true
-system         public        tenant_settings                  root     GRANT           true
 system         public        tenant_settings                  root     INSERT          true
 system         public        tenant_settings                  root     SELECT          true
 system         public        tenant_settings                  root     UPDATE          true
@@ -1346,166 +1272,129 @@ system         pg_catalog   varchar[]                        root     ALL       
 system         pg_catalog   void                             root     ALL             false
 system         public       NULL                             root     ALL             true
 system         public       comments                         root     DELETE          true
-system         public       comments                         root     GRANT           true
 system         public       comments                         root     INSERT          true
 system         public       comments                         root     SELECT          true
 system         public       comments                         root     UPDATE          true
 system         public       database_role_settings           root     DELETE          true
-system         public       database_role_settings           root     GRANT           true
 system         public       database_role_settings           root     INSERT          true
 system         public       database_role_settings           root     SELECT          true
 system         public       database_role_settings           root     UPDATE          true
-system         public       descriptor                       root     GRANT           true
 system         public       descriptor                       root     SELECT          true
 system         public       eventlog                         root     DELETE          true
-system         public       eventlog                         root     GRANT           true
 system         public       eventlog                         root     INSERT          true
 system         public       eventlog                         root     SELECT          true
 system         public       eventlog                         root     UPDATE          true
 system         public       jobs                             root     DELETE          true
-system         public       jobs                             root     GRANT           true
 system         public       jobs                             root     INSERT          true
 system         public       jobs                             root     SELECT          true
 system         public       jobs                             root     UPDATE          true
 system         public       join_tokens                      root     DELETE          true
-system         public       join_tokens                      root     GRANT           true
 system         public       join_tokens                      root     INSERT          true
 system         public       join_tokens                      root     SELECT          true
 system         public       join_tokens                      root     UPDATE          true
 system         public       lease                            root     DELETE          true
-system         public       lease                            root     GRANT           true
 system         public       lease                            root     INSERT          true
 system         public       lease                            root     SELECT          true
 system         public       lease                            root     UPDATE          true
 system         public       locations                        root     DELETE          true
-system         public       locations                        root     GRANT           true
 system         public       locations                        root     INSERT          true
 system         public       locations                        root     SELECT          true
 system         public       locations                        root     UPDATE          true
 system         public       migrations                       root     DELETE          true
-system         public       migrations                       root     GRANT           true
 system         public       migrations                       root     INSERT          true
 system         public       migrations                       root     SELECT          true
 system         public       migrations                       root     UPDATE          true
-system         public       namespace                        root     GRANT           true
 system         public       namespace                        root     SELECT          true
-system         public       protected_ts_meta                root     GRANT           true
 system         public       protected_ts_meta                root     SELECT          true
-system         public       protected_ts_records             root     GRANT           true
 system         public       protected_ts_records             root     SELECT          true
 system         public       rangelog                         root     DELETE          true
-system         public       rangelog                         root     GRANT           true
 system         public       rangelog                         root     INSERT          true
 system         public       rangelog                         root     SELECT          true
 system         public       rangelog                         root     UPDATE          true
 system         public       replication_constraint_stats     root     DELETE          true
-system         public       replication_constraint_stats     root     GRANT           true
 system         public       replication_constraint_stats     root     INSERT          true
 system         public       replication_constraint_stats     root     SELECT          true
 system         public       replication_constraint_stats     root     UPDATE          true
 system         public       replication_critical_localities  root     DELETE          true
-system         public       replication_critical_localities  root     GRANT           true
 system         public       replication_critical_localities  root     INSERT          true
 system         public       replication_critical_localities  root     SELECT          true
 system         public       replication_critical_localities  root     UPDATE          true
 system         public       replication_stats                root     DELETE          true
-system         public       replication_stats                root     GRANT           true
 system         public       replication_stats                root     INSERT          true
 system         public       replication_stats                root     SELECT          true
 system         public       replication_stats                root     UPDATE          true
 system         public       reports_meta                     root     DELETE          true
-system         public       reports_meta                     root     GRANT           true
 system         public       reports_meta                     root     INSERT          true
 system         public       reports_meta                     root     SELECT          true
 system         public       reports_meta                     root     UPDATE          true
 system         public       role_members                     root     DELETE          true
-system         public       role_members                     root     GRANT           true
 system         public       role_members                     root     INSERT          true
 system         public       role_members                     root     SELECT          true
 system         public       role_members                     root     UPDATE          true
 system         public       role_options                     root     DELETE          true
-system         public       role_options                     root     GRANT           true
 system         public       role_options                     root     INSERT          true
 system         public       role_options                     root     SELECT          true
 system         public       role_options                     root     UPDATE          true
 system         public       scheduled_jobs                   root     DELETE          true
-system         public       scheduled_jobs                   root     GRANT           true
 system         public       scheduled_jobs                   root     INSERT          true
 system         public       scheduled_jobs                   root     SELECT          true
 system         public       scheduled_jobs                   root     UPDATE          true
 system         public       settings                         root     DELETE          true
-system         public       settings                         root     GRANT           true
 system         public       settings                         root     INSERT          true
 system         public       settings                         root     SELECT          true
 system         public       settings                         root     UPDATE          true
 system         public       span_configurations              root     DELETE          true
-system         public       span_configurations              root     GRANT           true
 system         public       span_configurations              root     INSERT          true
 system         public       span_configurations              root     SELECT          true
 system         public       span_configurations              root     UPDATE          true
 system         public       sql_instances                    root     DELETE          true
-system         public       sql_instances                    root     GRANT           true
 system         public       sql_instances                    root     INSERT          true
 system         public       sql_instances                    root     SELECT          true
 system         public       sql_instances                    root     UPDATE          true
 system         public       sqlliveness                      root     DELETE          true
-system         public       sqlliveness                      root     GRANT           true
 system         public       sqlliveness                      root     INSERT          true
 system         public       sqlliveness                      root     SELECT          true
 system         public       sqlliveness                      root     UPDATE          true
 system         public       statement_bundle_chunks          root     DELETE          true
-system         public       statement_bundle_chunks          root     GRANT           true
 system         public       statement_bundle_chunks          root     INSERT          true
 system         public       statement_bundle_chunks          root     SELECT          true
 system         public       statement_bundle_chunks          root     UPDATE          true
 system         public       statement_diagnostics            root     DELETE          true
-system         public       statement_diagnostics            root     GRANT           true
 system         public       statement_diagnostics            root     INSERT          true
 system         public       statement_diagnostics            root     SELECT          true
 system         public       statement_diagnostics            root     UPDATE          true
 system         public       statement_diagnostics_requests   root     DELETE          true
-system         public       statement_diagnostics_requests   root     GRANT           true
 system         public       statement_diagnostics_requests   root     INSERT          true
 system         public       statement_diagnostics_requests   root     SELECT          true
 system         public       statement_diagnostics_requests   root     UPDATE          true
-system         public       statement_statistics             root     GRANT           true
 system         public       statement_statistics             root     SELECT          true
 system         public       table_statistics                 root     DELETE          true
-system         public       table_statistics                 root     GRANT           true
 system         public       table_statistics                 root     INSERT          true
 system         public       table_statistics                 root     SELECT          true
 system         public       table_statistics                 root     UPDATE          true
 system         public       tenant_settings                  root     DELETE          true
-system         public       tenant_settings                  root     GRANT           true
 system         public       tenant_settings                  root     INSERT          true
 system         public       tenant_settings                  root     SELECT          true
 system         public       tenant_settings                  root     UPDATE          true
 system         public       tenant_usage                     root     DELETE          true
-system         public       tenant_usage                     root     GRANT           true
 system         public       tenant_usage                     root     INSERT          true
 system         public       tenant_usage                     root     SELECT          true
 system         public       tenant_usage                     root     UPDATE          true
-system         public       tenants                          root     GRANT           true
 system         public       tenants                          root     SELECT          true
-system         public       transaction_statistics           root     GRANT           true
 system         public       transaction_statistics           root     SELECT          true
 system         public       ui                               root     DELETE          true
-system         public       ui                               root     GRANT           true
 system         public       ui                               root     INSERT          true
 system         public       ui                               root     SELECT          true
 system         public       ui                               root     UPDATE          true
 system         public       users                            root     DELETE          true
-system         public       users                            root     GRANT           true
 system         public       users                            root     INSERT          true
 system         public       users                            root     SELECT          true
 system         public       users                            root     UPDATE          true
 system         public       web_sessions                     root     DELETE          true
-system         public       web_sessions                     root     GRANT           true
 system         public       web_sessions                     root     INSERT          true
 system         public       web_sessions                     root     SELECT          true
 system         public       web_sessions                     root     UPDATE          true
 system         public       zones                            root     DELETE          true
-system         public       zones                            root     GRANT           true
 system         public       zones                            root     INSERT          true
 system         public       zones                            root     SELECT          true
 system         public       zones                            root     UPDATE          true
@@ -1632,15 +1521,15 @@ query TTTTTB
 SHOW GRANTS ON t
 ----
 a  public  t  admin      ALL  true
-a  public  t  readwrite  ALL  true
+a  public  t  readwrite  ALL  false
 a  public  t  root       ALL  true
-a  public  t  test-user  ALL  true
+a  public  t  test-user  ALL  false
 
 query TTTTTB
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a  public  t  readwrite  ALL  true
-a  public  t  test-user  ALL  true
+a  public  t  readwrite  ALL  false
+a  public  t  test-user  ALL  false
 
 statement ok
 REVOKE INSERT,DELETE ON t FROM "test-user",readwrite
@@ -1649,35 +1538,31 @@ query TTTTTB
 SHOW GRANTS ON t
 ----
 a  public  t  admin      ALL         true
-a  public  t  readwrite  CREATE      true
-a  public  t  readwrite  DROP        true
-a  public  t  readwrite  GRANT       true
-a  public  t  readwrite  SELECT      true
-a  public  t  readwrite  UPDATE      true
-a  public  t  readwrite  ZONECONFIG  true
+a  public  t  readwrite  CREATE      false
+a  public  t  readwrite  DROP        false
+a  public  t  readwrite  SELECT      false
+a  public  t  readwrite  UPDATE      false
+a  public  t  readwrite  ZONECONFIG  false
 a  public  t  root       ALL         true
-a  public  t  test-user  CREATE      true
-a  public  t  test-user  DROP        true
-a  public  t  test-user  GRANT       true
-a  public  t  test-user  SELECT      true
-a  public  t  test-user  UPDATE      true
-a  public  t  test-user  ZONECONFIG  true
+a  public  t  test-user  CREATE      false
+a  public  t  test-user  DROP        false
+a  public  t  test-user  SELECT      false
+a  public  t  test-user  UPDATE      false
+a  public  t  test-user  ZONECONFIG  false
 
 query TTTTTB
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a  public  t  readwrite  CREATE      true
-a  public  t  readwrite  DROP        true
-a  public  t  readwrite  GRANT       true
-a  public  t  readwrite  SELECT      true
-a  public  t  readwrite  UPDATE      true
-a  public  t  readwrite  ZONECONFIG  true
-a  public  t  test-user  CREATE      true
-a  public  t  test-user  DROP        true
-a  public  t  test-user  GRANT       true
-a  public  t  test-user  SELECT      true
-a  public  t  test-user  UPDATE      true
-a  public  t  test-user  ZONECONFIG  true
+a  public  t  readwrite  CREATE      false
+a  public  t  readwrite  DROP        false
+a  public  t  readwrite  SELECT      false
+a  public  t  readwrite  UPDATE      false
+a  public  t  readwrite  ZONECONFIG  false
+a  public  t  test-user  CREATE      false
+a  public  t  test-user  DROP        false
+a  public  t  test-user  SELECT      false
+a  public  t  test-user  UPDATE      false
+a  public  t  test-user  ZONECONFIG  false
 
 statement ok
 REVOKE SELECT ON t FROM "test-user"
@@ -1686,33 +1571,29 @@ query TTTTTB
 SHOW GRANTS ON t
 ----
 a  public  t  admin      ALL         true
-a  public  t  readwrite  CREATE      true
-a  public  t  readwrite  DROP        true
-a  public  t  readwrite  GRANT       true
-a  public  t  readwrite  SELECT      true
-a  public  t  readwrite  UPDATE      true
-a  public  t  readwrite  ZONECONFIG  true
+a  public  t  readwrite  CREATE      false
+a  public  t  readwrite  DROP        false
+a  public  t  readwrite  SELECT      false
+a  public  t  readwrite  UPDATE      false
+a  public  t  readwrite  ZONECONFIG  false
 a  public  t  root       ALL         true
-a  public  t  test-user  CREATE      true
-a  public  t  test-user  DROP        true
-a  public  t  test-user  GRANT       true
-a  public  t  test-user  UPDATE      true
-a  public  t  test-user  ZONECONFIG  true
+a  public  t  test-user  CREATE      false
+a  public  t  test-user  DROP        false
+a  public  t  test-user  UPDATE      false
+a  public  t  test-user  ZONECONFIG  false
 
 query TTTTTB
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a  public  t  readwrite  CREATE      true
-a  public  t  readwrite  DROP        true
-a  public  t  readwrite  GRANT       true
-a  public  t  readwrite  SELECT      true
-a  public  t  readwrite  UPDATE      true
-a  public  t  readwrite  ZONECONFIG  true
-a  public  t  test-user  CREATE      true
-a  public  t  test-user  DROP        true
-a  public  t  test-user  GRANT       true
-a  public  t  test-user  UPDATE      true
-a  public  t  test-user  ZONECONFIG  true
+a  public  t  readwrite  CREATE      false
+a  public  t  readwrite  DROP        false
+a  public  t  readwrite  SELECT      false
+a  public  t  readwrite  UPDATE      false
+a  public  t  readwrite  ZONECONFIG  false
+a  public  t  test-user  CREATE      false
+a  public  t  test-user  DROP        false
+a  public  t  test-user  UPDATE      false
+a  public  t  test-user  ZONECONFIG  false
 
 statement ok
 REVOKE ALL ON t FROM readwrite,"test-user"
@@ -1753,15 +1634,15 @@ query TTTTTB
 SHOW GRANTS ON v
 ----
 a  public  v  admin      ALL  true
-a  public  v  readwrite  ALL  true
+a  public  v  readwrite  ALL  false
 a  public  v  root       ALL  true
-a  public  v  test-user  ALL  true
+a  public  v  test-user  ALL  false
 
 query TTTTTB
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-a  public  v  readwrite  ALL  true
-a  public  v  test-user  ALL  true
+a  public  v  readwrite  ALL  false
+a  public  v  test-user  ALL  false
 
 statement ok
 REVOKE INSERT,DELETE ON v FROM "test-user",readwrite
@@ -1770,35 +1651,31 @@ query TTTTTB
 SHOW GRANTS ON v
 ----
 a  public  v  admin      ALL         true
-a  public  v  readwrite  CREATE      true
-a  public  v  readwrite  DROP        true
-a  public  v  readwrite  GRANT       true
-a  public  v  readwrite  SELECT      true
-a  public  v  readwrite  UPDATE      true
-a  public  v  readwrite  ZONECONFIG  true
+a  public  v  readwrite  CREATE      false
+a  public  v  readwrite  DROP        false
+a  public  v  readwrite  SELECT      false
+a  public  v  readwrite  UPDATE      false
+a  public  v  readwrite  ZONECONFIG  false
 a  public  v  root       ALL         true
-a  public  v  test-user  CREATE      true
-a  public  v  test-user  DROP        true
-a  public  v  test-user  GRANT       true
-a  public  v  test-user  SELECT      true
-a  public  v  test-user  UPDATE      true
-a  public  v  test-user  ZONECONFIG  true
+a  public  v  test-user  CREATE      false
+a  public  v  test-user  DROP        false
+a  public  v  test-user  SELECT      false
+a  public  v  test-user  UPDATE      false
+a  public  v  test-user  ZONECONFIG  false
 
 query TTTTTB
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-a  public  v  readwrite  CREATE      true
-a  public  v  readwrite  DROP        true
-a  public  v  readwrite  GRANT       true
-a  public  v  readwrite  SELECT      true
-a  public  v  readwrite  UPDATE      true
-a  public  v  readwrite  ZONECONFIG  true
-a  public  v  test-user  CREATE      true
-a  public  v  test-user  DROP        true
-a  public  v  test-user  GRANT       true
-a  public  v  test-user  SELECT      true
-a  public  v  test-user  UPDATE      true
-a  public  v  test-user  ZONECONFIG  true
+a  public  v  readwrite  CREATE      false
+a  public  v  readwrite  DROP        false
+a  public  v  readwrite  SELECT      false
+a  public  v  readwrite  UPDATE      false
+a  public  v  readwrite  ZONECONFIG  false
+a  public  v  test-user  CREATE      false
+a  public  v  test-user  DROP        false
+a  public  v  test-user  SELECT      false
+a  public  v  test-user  UPDATE      false
+a  public  v  test-user  ZONECONFIG  false
 
 statement ok
 REVOKE SELECT ON v FROM "test-user"
@@ -1807,49 +1684,43 @@ query TTTTTB
 SHOW GRANTS ON v
 ----
 a  public  v  admin      ALL         true
-a  public  v  readwrite  CREATE      true
-a  public  v  readwrite  DROP        true
-a  public  v  readwrite  GRANT       true
-a  public  v  readwrite  SELECT      true
-a  public  v  readwrite  UPDATE      true
-a  public  v  readwrite  ZONECONFIG  true
+a  public  v  readwrite  CREATE      false
+a  public  v  readwrite  DROP        false
+a  public  v  readwrite  SELECT      false
+a  public  v  readwrite  UPDATE      false
+a  public  v  readwrite  ZONECONFIG  false
 a  public  v  root       ALL         true
-a  public  v  test-user  CREATE      true
-a  public  v  test-user  DROP        true
-a  public  v  test-user  GRANT       true
-a  public  v  test-user  UPDATE      true
-a  public  v  test-user  ZONECONFIG  true
+a  public  v  test-user  CREATE      false
+a  public  v  test-user  DROP        false
+a  public  v  test-user  UPDATE      false
+a  public  v  test-user  ZONECONFIG  false
 
 query TTTTTB
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-a  public  v  readwrite  CREATE      true
-a  public  v  readwrite  DROP        true
-a  public  v  readwrite  GRANT       true
-a  public  v  readwrite  SELECT      true
-a  public  v  readwrite  UPDATE      true
-a  public  v  readwrite  ZONECONFIG  true
-a  public  v  test-user  CREATE      true
-a  public  v  test-user  DROP        true
-a  public  v  test-user  GRANT       true
-a  public  v  test-user  UPDATE      true
-a  public  v  test-user  ZONECONFIG  true
+a  public  v  readwrite  CREATE      false
+a  public  v  readwrite  DROP        false
+a  public  v  readwrite  SELECT      false
+a  public  v  readwrite  UPDATE      false
+a  public  v  readwrite  ZONECONFIG  false
+a  public  v  test-user  CREATE      false
+a  public  v  test-user  DROP        false
+a  public  v  test-user  UPDATE      false
+a  public  v  test-user  ZONECONFIG  false
 
 query TTTTTB
 SHOW GRANTS FOR readwrite, "test-user"
 ----
-a  NULL    NULL  readwrite  ALL         true
-a  public  v     readwrite  CREATE      true
-a  public  v     readwrite  DROP        true
-a  public  v     readwrite  GRANT       true
-a  public  v     readwrite  SELECT      true
-a  public  v     readwrite  UPDATE      true
-a  public  v     readwrite  ZONECONFIG  true
-a  public  v     test-user  CREATE      true
-a  public  v     test-user  DROP        true
-a  public  v     test-user  GRANT       true
-a  public  v     test-user  UPDATE      true
-a  public  v     test-user  ZONECONFIG  true
+a  NULL    NULL  readwrite  ALL         false
+a  public  v     readwrite  CREATE      false
+a  public  v     readwrite  DROP        false
+a  public  v     readwrite  SELECT      false
+a  public  v     readwrite  UPDATE      false
+a  public  v     readwrite  ZONECONFIG  false
+a  public  v     test-user  CREATE      false
+a  public  v     test-user  DROP        false
+a  public  v     test-user  UPDATE      false
+a  public  v     test-user  ZONECONFIG  false
 
 statement ok
 REVOKE ALL ON v FROM readwrite,"test-user"
@@ -1867,7 +1738,7 @@ SHOW GRANTS ON v FOR readwrite, "test-user"
 query TTTTTB
 SHOW GRANTS FOR readwrite, "test-user"
 ----
-a  NULL  NULL  readwrite  ALL  true
+a  NULL  NULL  readwrite  ALL  false
 
 # Verify that the DB privileges have not changed.
 query TTTB colnames
@@ -1876,7 +1747,7 @@ SHOW GRANTS ON DATABASE a
 database_name  grantee    privilege_type  is_grantable
 a              admin      ALL             true
 a              public     CONNECT         false
-a              readwrite  ALL             true
+a              readwrite  ALL             false
 a              root       ALL             true
 
 
@@ -1931,10 +1802,10 @@ SHOW GRANTS ON *
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 b              public       t           admin    ALL             true
 b              public       t           root     ALL             true
-b              public       t           vanilli  ALL             true
+b              public       t           vanilli  ALL             false
 b              public       t2          admin    ALL             true
 b              public       t2          root     ALL             true
-b              public       t2          vanilli  ALL             true
+b              public       t2          vanilli  ALL             false
 
 
 # Multiple targets.
@@ -1949,12 +1820,12 @@ SHOW GRANTS ON b.*
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 b              public       t           admin    ALL             true
-b              public       t           millie   ALL             true
+b              public       t           millie   ALL             false
 b              public       t           root     ALL             true
-b              public       t           vanilli  ALL             true
+b              public       t           vanilli  ALL             false
 b              public       t2          admin    ALL             true
 b              public       t2          root     ALL             true
-b              public       t2          vanilli  ALL             true
+b              public       t2          vanilli  ALL             false
 
 query TTTTTB colnames
 SHOW GRANTS ON a.*, b.*
@@ -1965,19 +1836,19 @@ a              public       t           root     ALL             true
 a              public       v           admin    ALL             true
 a              public       v           root     ALL             true
 b              public       t           admin    ALL             true
-b              public       t           millie   ALL             true
+b              public       t           millie   ALL             false
 b              public       t           root     ALL             true
-b              public       t           vanilli  ALL             true
+b              public       t           vanilli  ALL             false
 b              public       t2          admin    ALL             true
 b              public       t2          root     ALL             true
-b              public       t2          vanilli  ALL             true
+b              public       t2          vanilli  ALL             false
 
 query TTTTTB colnames
 SHOW GRANTS ON c.t
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 c              public       t           admin    ALL             true
-c              public       t           millie   ALL             true
+c              public       t           millie   ALL             false
 c              public       t           root     ALL             true
 
 statement ok
@@ -1988,7 +1859,7 @@ SHOW GRANTS ON b.*
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 b              public       t           admin    ALL             true
-b              public       t           millie   ALL             true
+b              public       t           millie   ALL             false
 b              public       t           root     ALL             true
 b              public       t2          admin    ALL             true
 b              public       t2          root     ALL             true
@@ -2006,7 +1877,7 @@ SHOW GRANTS ON empty.*, b.*
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 b              public       t           admin    ALL             true
-b              public       t           millie   ALL             true
+b              public       t           millie   ALL             false
 b              public       t           root     ALL             true
 b              public       t2          admin    ALL             true
 b              public       t2          root     ALL             true

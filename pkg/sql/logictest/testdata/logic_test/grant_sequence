@@ -38,7 +38,7 @@ statement ok
 SET ROLE root
 
 statement ok
-GRANT ALL ON SEQUENCE a TO readwrite
+GRANT ALL ON SEQUENCE a TO readwrite WITH GRANT OPTION
 
 query TTTTTB colnames
 SHOW GRANTS ON SEQUENCE a
@@ -59,7 +59,6 @@ test           public       a           admin      ALL             true
 test           public       a           readwrite  CREATE          true
 test           public       a           readwrite  DELETE          true
 test           public       a           readwrite  DROP            true
-test           public       a           readwrite  GRANT           true
 test           public       a           readwrite  INSERT          true
 test           public       a           readwrite  SELECT          true
 test           public       a           readwrite  USAGE           true
@@ -91,10 +90,8 @@ statement ok
 SET ROLE root
 
 query T noticetrace
-GRANT CREATE, DROP, USAGE ON SEQUENCE a TO readwrite
+GRANT CREATE, DROP, USAGE, UPDATE ON SEQUENCE a TO readwrite WITH GRANT OPTION
 ----
-NOTICE: grant options were automatically applied but this behavior is deprecated
-HINT: please use WITH GRANT OPTION
 NOTICE: some privileges have no effect on sequences: [CREATE]
 
 query TTTTTTTT
@@ -103,7 +100,6 @@ SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 NULL  readwrite  test  public  a  CREATE      YES  NO
 NULL  readwrite  test  public  a  DELETE      YES  NO
 NULL  readwrite  test  public  a  DROP        YES  NO
-NULL  readwrite  test  public  a  GRANT       YES  NO
 NULL  readwrite  test  public  a  INSERT      YES  NO
 NULL  readwrite  test  public  a  SELECT      YES  YES
 NULL  readwrite  test  public  a  UPDATE      YES  NO
@@ -117,7 +113,6 @@ query TTTTTTTT
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
 NULL  readwrite  test  public  a  DELETE      YES  NO
-NULL  readwrite  test  public  a  GRANT       YES  NO
 NULL  readwrite  test  public  a  INSERT      YES  NO
 NULL  readwrite  test  public  a  UPDATE      YES  NO
 NULL  readwrite  test  public  a  USAGE       YES  NO
@@ -127,7 +122,7 @@ statement ok
 CREATE SEQUENCE b START 1 INCREMENT BY 2
 
 statement ok
-GRANT ALL ON ALL SEQUENCES IN SCHEMA test.public TO readwrite;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA test.public TO readwrite WITH GRANT OPTION;
 
 query TTTTTTTT
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
@@ -144,7 +139,6 @@ SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 NULL  readwrite  test  public  a  CREATE      YES  NO
 NULL  readwrite  test  public  a  DELETE      YES  NO
 NULL  readwrite  test  public  a  DROP        YES  NO
-NULL  readwrite  test  public  a  GRANT       YES  NO
 NULL  readwrite  test  public  a  INSERT      YES  NO
 NULL  readwrite  test  public  a  UPDATE      YES  NO
 NULL  readwrite  test  public  a  USAGE       YES  NO
@@ -152,7 +146,6 @@ NULL  readwrite  test  public  a  ZONECONFIG  YES  NO
 NULL  readwrite  test  public  b  CREATE      YES  NO
 NULL  readwrite  test  public  b  DELETE      YES  NO
 NULL  readwrite  test  public  b  DROP        YES  NO
-NULL  readwrite  test  public  b  GRANT       YES  NO
 NULL  readwrite  test  public  b  INSERT      YES  NO
 NULL  readwrite  test  public  b  UPDATE      YES  NO
 NULL  readwrite  test  public  b  USAGE       YES  NO
@@ -212,7 +205,7 @@ statement ok
 SET ROLE root
 
 statement ok
-GRANT GRANT ON SEQUENCE to_drop_seq TO user1
+GRANT DROP ON SEQUENCE to_drop_seq TO user1 WITH GRANT OPTION
 
 statement ok
 SET ROLE user1
