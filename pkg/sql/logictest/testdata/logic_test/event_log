@@ -1,3 +1,7 @@
+# Legacy schema changer is also skipped because mutation IDs throughout log
+# entries will differ.
+# LogicTest: !local-legacy-schema-changer
+
 # For some reason, some of the queries produce non-deterministic results if
 # distsql_workmem value is randomized, so we'll override it to the production
 # value.
