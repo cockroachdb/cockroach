@@ -62,9 +62,16 @@ go_test(
 )
 
 disallowed_imports_test(
-    "dev",
-    [
-        "@com_github_cockroachdb_errors//:errors",
+    "dev_lib",
+    allowlist = [
+        "//pkg/build/util",
+        "//pkg/cmd/dev/io/exec",
+        "//pkg/cmd/dev/io/os",
+        "@com_github_alessio_shellescape//:shellescape",
+        "@com_github_google_shlex//:shlex",
+        "@com_github_irfansharif_recorder//:recorder",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_pflag//:pflag",
     ],
     disallow_cdeps = True,
 )
