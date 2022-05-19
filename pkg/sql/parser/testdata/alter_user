@@ -321,3 +321,11 @@ ALTER ROLE ALL IN DATABASE d SET application_name = 'app' -- normalized!
 ALTER ROLE ALL IN DATABASE d SET application_name = ('app') -- fully parenthesized
 ALTER ROLE ALL IN DATABASE d SET application_name = '_' -- literals removed
 ALTER ROLE ALL IN DATABASE _ SET application_name = 'app' -- identifiers removed
+
+parse
+ALTER USER foo SET tracing = 'off'
+----
+ALTER USER foo SET tracing = 'off'
+ALTER USER foo SET tracing = ('off') -- fully parenthesized
+ALTER USER foo SET tracing = '_' -- literals removed
+ALTER USER _ SET tracing = 'off' -- identifiers removed
