@@ -361,6 +361,7 @@ ALL_TESTS = [
     "//pkg/sql/privilege:privilege_test",
     "//pkg/sql/protoreflect:protoreflect_test",
     "//pkg/sql/querycache:querycache_test",
+    "//pkg/sql/queryvalidator:queryvalidator_test",
     "//pkg/sql/randgen:randgen_test",
     "//pkg/sql/row:row_test",
     "//pkg/sql/rowcontainer:rowcontainer_test",

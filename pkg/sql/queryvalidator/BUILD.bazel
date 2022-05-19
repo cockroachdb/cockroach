@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "queryvalidator",
+    srcs = ["query_validator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/queryvalidator",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/cast",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+    ],
+)
+
+go_test(
+    name = "queryvalidator_test",
+    srcs = [
+        "main_test.go",
+        "query_validator_test.go",
+    ],
+    deps = [
+        ":queryvalidator",
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/sql/types",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

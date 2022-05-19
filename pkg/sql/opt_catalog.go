@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -2445,4 +2446,20 @@ func mapGeneratedAsIdentityType(inType catpb.GeneratedAsIdentityType) cat.Genera
 		catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT: cat.GeneratedByDefaultAsIdentity,
 	}
 	return mapGeneratedAsIdentityType[inType]
+}
+
+// NewOptCatalog is only a convenience for tests to get a cat.Catalog.
+func NewOptCatalog(p interface{}) cat.Catalog {
+	return &optCatalog{
+		planner:     p.(*planner),
+		dataSources: make(map[catalog.TableDescriptor]cat.DataSource),
+	}
+}
+
+// NewNormFactory is only a convenience for tests to get a norm.Factory.
+func NewNormFactory(p interface{}) *norm.Factory {
+	planner := p.(*planner)
+	opc := &planner.optPlanningCtx
+	opc.reset()
+	return opc.optimizer.Factory()
 }
