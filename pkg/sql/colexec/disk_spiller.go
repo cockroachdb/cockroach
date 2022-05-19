@@ -239,8 +239,17 @@ func (d *diskSpillerBase) Close(ctx context.Context) error {
 		return nil
 	}
 	var retErr error
+	for _, input := range d.inputs {
+		if c, ok := input.(colexecop.Closer); ok {
+			if err := c.Close(ctx); err != nil {
+				retErr = err
+			}
+		}
+	}
 	if c, ok := d.inMemoryOp.(colexecop.Closer); ok {
-		retErr = c.Close(ctx)
+		if err := c.Close(ctx); err != nil {
+			retErr = err
+		}
 	}
 	if c, ok := d.diskBackedOp.(colexecop.Closer); ok {
 		if err := c.Close(ctx); err != nil {

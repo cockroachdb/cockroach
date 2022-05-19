@@ -143,7 +143,9 @@ type BufferingInMemoryOperator interface {
 type Closer interface {
 	// Close releases the resources associated with this Closer. If this Closer
 	// is an Operator, the implementation of Close must be safe to execute even
-	// if Operator.Init wasn't called.
+	// if Operator.Init wasn't called. Multiple calls to Close() are allowed,
+	// and most of the implementations should make all calls except for the
+	// first one no-ops.
 	//
 	// Unless the Closer derives its own context with a separate tracing span,
 	// the argument context rather than the one from Init() must be used
