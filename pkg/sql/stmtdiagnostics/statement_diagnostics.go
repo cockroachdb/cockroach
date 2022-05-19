@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -195,11 +194,6 @@ func (r *Registry) poll(ctx context.Context) {
 	}
 }
 
-// TODO(yuzefovich): remove this in 22.2.
-func (r *Registry) isMinExecutionLatencySupported(ctx context.Context) bool {
-	return r.st.Version.IsActive(ctx, clusterversion.AlterSystemStmtDiagReqs)
-}
-
 // RequestID is the ID of a diagnostics request, corresponding to the id
 // column in statement_diagnostics_requests.
 // A zero ID is invalid.
@@ -285,29 +279,19 @@ func (r *Registry) insertRequestInternal(
 		return 0, err
 	}
 
-	if !r.isMinExecutionLatencySupported(ctx) {
-		if minExecutionLatency != 0 || expiresAfter != 0 {
-			return 0, errors.New(
-				"conditional statement diagnostics are only supported " +
-					"after 22.1 version migrations have completed",
-			)
-		}
-	}
-
 	var reqID RequestID
 	var expiresAt time.Time
 	err = r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Check if there's already a pending request for this fingerprint.
-		var extraConditions string
-		if r.isMinExecutionLatencySupported(ctx) {
-			extraConditions = " AND (expires_at IS NULL OR expires_at > now())"
-		}
 		row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-pending", txn,
 			sessiondata.InternalExecutorOverride{
 				User: username.RootUserName(),
 			},
-			fmt.Sprintf("SELECT count(1) FROM system.statement_diagnostics_requests "+
-				"WHERE completed = false AND statement_fingerprint = $1%s", extraConditions),
+			`SELECT count(1) FROM system.statement_diagnostics_requests
+				WHERE
+					completed = false AND
+					statement_fingerprint = $1 AND
+					(expires_at IS NULL OR expires_at > now())`,
 			stmtFingerprint)
 		if err != nil {
 			return err
@@ -384,14 +368,6 @@ func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
 	g, err := r.gossip.OptionalErr(48274)
 	if err != nil {
 		return err
-	}
-
-	if !r.isMinExecutionLatencySupported(ctx) {
-		// If conditional diagnostics are not supported for this cluster yet,
-		// then we cannot cancel the request.
-		return errors.New(
-			"statement diagnostics can only be canceled after 22.1 version migrations have completed",
-		)
 	}
 
 	row, err := r.ie.QueryRowEx(ctx, "stmt-diag-cancel-request", nil, /* txn */
@@ -636,25 +612,20 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
-	isMinExecutionLatencySupported := r.isMinExecutionLatencySupported(ctx)
 	// Loop until we run the query without straddling an epoch increment.
 	for {
 		r.mu.Lock()
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
-		var extraColumns string
-		var extraConditions string
-		if isMinExecutionLatencySupported {
-			extraColumns = ", min_execution_latency, expires_at"
-			extraConditions = " AND (expires_at IS NULL OR expires_at > now())"
-		}
 		it, err := r.ie.QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
 				User: username.RootUserName(),
 			},
-			fmt.Sprintf("SELECT id, statement_fingerprint%s FROM system.statement_diagnostics_requests "+
-				"WHERE completed = false%s", extraColumns, extraConditions))
+			`SELECT id, statement_fingerprint, min_execution_latency, expires_at
+				FROM system.statement_diagnostics_requests
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+		)
 		if err != nil {
 			return err
 		}
@@ -686,13 +657,11 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		stmtFingerprint := string(*row[1].(*tree.DString))
 		var minExecutionLatency time.Duration
 		var expiresAt time.Time
-		if isMinExecutionLatencySupported {
-			if minExecLatency, ok := row[2].(*tree.DInterval); ok {
-				minExecutionLatency = time.Duration(minExecLatency.Nanos())
-			}
-			if e, ok := row[3].(*tree.DTimestampTZ); ok {
-				expiresAt = e.Time
-			}
+		if minExecLatency, ok := row[2].(*tree.DInterval); ok {
+			minExecutionLatency = time.Duration(minExecLatency.Nanos())
+		}
+		if e, ok := row[3].(*tree.DTimestampTZ); ok {
+			expiresAt = e.Time
 		}
 		ids.Add(int(id))
 		r.addRequestInternalLocked(ctx, id, stmtFingerprint, minExecutionLatency, expiresAt)
