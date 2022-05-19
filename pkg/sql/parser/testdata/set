@@ -579,3 +579,11 @@ SHOW "a.b.c" -- normalized!
 SHOW "a.b.c" -- fully parenthesized
 SHOW "a.b.c" -- literals removed
 SHOW "a.b.c" -- identifiers removed
+
+parse
+SET LOCAL tracing = 'off'
+----
+SET LOCAL tracing = 'off'
+SET LOCAL tracing = ('off') -- fully parenthesized
+SET LOCAL tracing = '_' -- literals removed
+SET LOCAL tracing = 'off' -- identifiers removed

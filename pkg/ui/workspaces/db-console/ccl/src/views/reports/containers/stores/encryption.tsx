@@ -12,6 +12,7 @@ import Long from "long";
 import moment from "moment";
 
 import * as protos from "src/js/protos";
+import * as protosccl from "@cockroachlabs/crdb-protobuf-client-ccl";
 import { EncryptionStatusProps } from "oss/src/views/reports/containers/stores/encryption";
 import { Bytes } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
@@ -52,11 +53,11 @@ export default class EncryptionStatus {
   }
 
   renderStoreKey(
-    key: protos.cockroach.ccl.storageccl.engineccl.enginepbccl.IKeyInfo,
+    key: protosccl.cockroach.ccl.storageccl.engineccl.enginepbccl.IKeyInfo,
   ) {
     // Get the enum name from its value (eg: "AES128_CTR" for 1).
     const encryptionType =
-      protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType[
+      protosccl.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType[
         key.encryption_type
       ];
     const createdAt = moment
@@ -74,11 +75,11 @@ export default class EncryptionStatus {
   }
 
   renderDataKey(
-    key: protos.cockroach.ccl.storageccl.engineccl.enginepbccl.IKeyInfo,
+    key: protosccl.cockroach.ccl.storageccl.engineccl.enginepbccl.IKeyInfo,
   ) {
     // Get the enum name from its value (eg: "AES128_CTR" for 1).
     const encryptionType =
-      protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType[
+      protosccl.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType[
         key.encryption_type
       ];
     const createdAt = moment
@@ -149,7 +150,7 @@ export default class EncryptionStatus {
 
     // Attempt to decode protobuf.
     try {
-      decodedStatus = protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(
+      decodedStatus = protosccl.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(
         rawStatus,
       );
     } catch (e) {

@@ -60,7 +60,10 @@ const TimeScaleDropdownWithSearchParams = (
       // Find the closest time scale just by window size.
       // And temporarily assume the end is "now" with fixedWindowEnd=false.
       const timeScale: TimeScale = {
-        ...findClosestTimeScale(defaultTimeScaleOptions, seconds),
+        ...findClosestTimeScale(
+          props.options || defaultTimeScaleOptions,
+          seconds,
+        ),
         windowSize: moment.duration(end.diff(start)),
         fixedWindowEnd: false,
       };

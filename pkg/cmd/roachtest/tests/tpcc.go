@@ -614,6 +614,21 @@ func registerTPCC(r registry.Registry) {
 							if err != nil {
 								return tpccChaosEventProcessor{}, err
 							}
+							// We see a slow trickle of errors after a server has been force shutdown due
+							// to queries before the shutdown not fully completing. You can inspect this
+							// by looking at the workload logs and corresponding the errors with the
+							// prometheus graphs.
+							// The errors seen can be of the form:
+							// * ERROR: inbox communication error: rpc error: code = Canceled
+							//   desc = context canceled (SQLSTATE 58C01)
+							// Setting this allows some errors to occur.
+							allowedErrorsMultiplier := 5
+							if tc.survivalGoal == "region" {
+								// REGION failures last a bit longer after a region has gone down.
+								allowedErrorsMultiplier *= 20
+							}
+							maxErrorsDuringUptime := warehousesPerRegion * tpcc.NumWorkersPerWarehouse * allowedErrorsMultiplier
+
 							return tpccChaosEventProcessor{
 								workloadInstances: workloadInstances,
 								workloadNodeIP:    prometheusNodeIP[0],
@@ -624,17 +639,9 @@ func registerTPCC(r registry.Registry) {
 									"orderStatus",
 									"stockLevel",
 								},
-								ch:         chaosEventCh,
-								promClient: promv1.NewAPI(client),
-								// We see a slow trickle of errors after a server has been force shutdown due
-								// to queries before the shutdown not fully completing. You can inspect this
-								// by looking at the workload logs and corresponding the errors with the
-								// prometheus graphs.
-								// The errors seen can be be of the form:
-								// * ERROR: inbox communication error: rpc error: code = Canceled
-								//   desc = context canceled (SQLSTATE 58C01)
-								// Setting this allows some errors to occur.
-								maxErrorsDuringUptime: warehousesPerRegion * tpcc.NumWorkersPerWarehouse,
+								ch:                    chaosEventCh,
+								promClient:            promv1.NewAPI(client),
+								maxErrorsDuringUptime: maxErrorsDuringUptime,
 								// "delivery" does not trigger often.
 								allowZeroSuccessDuringUptime: true,
 							}, nil

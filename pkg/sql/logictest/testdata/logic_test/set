@@ -749,6 +749,11 @@ SELECT name FROM pg_catalog.pg_settings WHERE name LIKE 'custom_option.%'
 ----
 
 query T
+SHOW tracing
+----
+off
+
+query T
 SHOW tracing.custom
 ----
 ijk

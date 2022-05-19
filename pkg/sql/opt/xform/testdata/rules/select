@@ -9330,3 +9330,51 @@ project
            │    └── s:4
            └── const-agg [as=b:5, outer=(5)]
                 └── b:5
+
+# Reproduction of #80820.
+exec-ddl
+CREATE TABLE table80820 (
+    col0
+        INT8 NOT NULL,
+    col1
+        INT8 NOT NULL,
+    col2
+        INT8 NOT NULL,
+    col3
+        BYTES NOT NULL,
+    col4
+        CHAR NOT NULL,
+    INDEX (col0 DESC, col1, col2)
+        PARTITION BY LIST (col0, col1)
+            (
+                PARTITION one VALUES IN ((1, 10)),
+                PARTITION two VALUES IN ((2, 20))
+            ),
+    INDEX (col3, col4 DESC, col2)
+        PARTITION BY LIST (col3, col4)
+            (
+                PARTITION one VALUES IN (('\xab', 'A')),
+                PARTITION two VALUES IN (('\xcd', 'C'))
+            )
+)
+----
+
+opt
+SELECT col0, col1, col2 FROM table80820 WHERE col2 < 4
+----
+select
+ ├── columns: col0:1!null col1:2!null col2:3!null
+ ├── scan table80820@table80820_col0_col1_col2_idx
+ │    └── columns: col0:1!null col1:2!null col2:3!null
+ └── filters
+      └── col2:3 < 4 [outer=(3), constraints=(/3: (/NULL - /3]; tight)]
+
+opt
+SELECT col3, col4, col2 FROM table80820 WHERE col2 < 4
+----
+select
+ ├── columns: col3:4!null col4:5!null col2:3!null
+ ├── scan table80820@table80820_col3_col4_col2_idx
+ │    └── columns: col2:3!null col3:4!null col4:5!null
+ └── filters
+      └── col2:3 < 4 [outer=(3), constraints=(/3: (/NULL - /3]; tight)]

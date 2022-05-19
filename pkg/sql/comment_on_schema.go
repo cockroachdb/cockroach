@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnSchemaNode struct {
@@ -93,7 +94,19 @@ func (n *commentOnSchemaNode) startExec(params runParams) error {
 		}
 	}
 
-	return nil
+	scComment := ""
+	if n.n.Comment != nil {
+		scComment = *n.n.Comment
+	}
+
+	return params.p.logEvent(
+		params.ctx,
+		n.schemaDesc.GetID(),
+		&eventpb.CommentOnSchema{
+			SchemaName:  n.n.Name.String(),
+			Comment:     scComment,
+			NullComment: n.n.Comment == nil,
+		})
 }
 
 func (n *commentOnSchemaNode) Next(runParams) (bool, error) { return false, nil }
