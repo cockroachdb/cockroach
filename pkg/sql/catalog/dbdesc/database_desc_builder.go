@@ -94,9 +94,7 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() error {
 		descpb.InvalidID,
 		privilege.Database,
 		ddb.maybeModified.GetName())
-	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(ddb.maybeModified.Privileges)
-
-	if privsChanged || addedGrantOptions || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
+	if privsChanged || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
 		ddb.changes.Add(catalog.UpgradedPrivileges)
 	}
 	if maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified) {

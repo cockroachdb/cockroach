@@ -31,9 +31,6 @@ statement ok
 CREATE TABLE t (a INT, b INT);
 
 statement ok
-GRANT GRANT ON t TO bar;
-
-statement ok
 GRANT DELETE ON t TO bar;
 
 statement ok
@@ -44,9 +41,6 @@ GRANT SELECT ON seq TO bar;
 
 statement ok
 GRANT SELECT ON seq TO testuser;
-
-statement ok
-GRANT GRANT ON seq TO testuser;
 
 
 ## has_any_column_privilege
@@ -778,9 +772,36 @@ SELECT has_sequence_privilege('seq', 'USAGE WITH GRANT OPTION'),
        has_sequence_privilege('seq', 'SELECT WITH GRANT OPTION'),
        has_sequence_privilege('seq', 'UPDATE WITH GRANT OPTION')
 ----
-true  true  false
+false  false  false
 
 user root
+
+# incorrectly unable to grant USAGE on sequence
+# should be statement ok
+# see https://github.com/cockroachdb/cockroach/issues/82414
+statement error pgcode 0LP01 invalid privilege type USAGE for table
+GRANT USAGE, SELECT, UPDATE ON seq TO testuser WITH GRANT OPTION
+
+# should be "true  true  true"
+query BBB
+SELECT has_sequence_privilege('testuser', 'seq', 'USAGE WITH GRANT OPTION'),
+       has_sequence_privilege('testuser', 'seq', 'SELECT WITH GRANT OPTION'),
+       has_sequence_privilege('testuser', 'seq', 'UPDATE WITH GRANT OPTION')
+----
+false  false  false
+
+# incorrectly grants USAGE (should only have SELECT AND UPDATE)
+# see https://github.com/cockroachdb/cockroach/issues/82414
+statement ok
+GRANT SELECT, UPDATE ON seq TO testuser WITH GRANT OPTION
+
+# should be "false  true  true"
+query BBB
+SELECT has_sequence_privilege('testuser', 'seq', 'USAGE WITH GRANT OPTION'),
+       has_sequence_privilege('testuser', 'seq', 'SELECT WITH GRANT OPTION'),
+       has_sequence_privilege('testuser', 'seq', 'UPDATE WITH GRANT OPTION')
+----
+true  true  true
 
 query error pgcode 42704 role 'no_user' does not exist
 SELECT has_sequence_privilege('no_user', 'seq', 'SELECT')
@@ -983,7 +1004,7 @@ SELECT has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION'),
        has_table_privilege('bar', 't', 'RULE WITH GRANT OPTION')
 ----
-false  false  false  true  true  false  false  false  true  false  false
+false  false  false  false  false  false  false  false  false  false  false
 
 
 ## has_tablespace_privilege

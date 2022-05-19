@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
-// grantOptionMigration iterates through every descriptor and sets a user's grant option bits
+// removeGrantMigration iterates through every descriptor and sets a user's grant option bits
 // equal to its privilege bits if it holds the "GRANT" privilege.
-func grantOptionMigration(
+func removeGrantMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
 ) error {
 	return runPostDeserializationChangesOnAllDescriptors(ctx, d)
