@@ -588,6 +588,14 @@ func (n *createTableNode) startExec(params runParams) error {
 				if err := tw.row(params.ctx, rowBuffer, pm, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
 					return err
 				}
+
+				// Once the batch has grown far enough we should flush is periodically,
+				// since otherwise we can have monster batches that exceed the request
+				// size limit.
+				if ti.currentBatchSize >= ti.maxBatchSize ||
+					ti.b.ApproximateMutationBytes() >= ti.maxBatchByteSize {
+					ti.flushAndStartNewBatch(params.ctx)
+				}
 			}
 			return nil
 		}()
