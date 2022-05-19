@@ -166,8 +166,10 @@ func registerTypeORM(r registry.Registry) {
 		rawResults := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResults)
 		if err != nil {
-			if strings.Contains(rawResults, "1 failing") &&
-				strings.Contains(rawResults, "Error: Cannot find connection better-sqlite3 because its not defined in any orm configuration files.") {
+			txnRetryErrCount := strings.Count(rawResults, "restart transaction")
+			if strings.Contains(rawResults, "1 failing") && txnRetryErrCount == 1 {
+				err = nil
+			} else if strings.Contains(rawResults, "2 failing") && txnRetryErrCount == 2 {
 				err = nil
 			}
 			if err != nil {
