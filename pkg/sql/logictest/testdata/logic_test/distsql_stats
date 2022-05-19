@@ -1351,7 +1351,7 @@ statement ok
 ANALYZE system.locations
 
 # EXPLAIN output should indicate stats collected on system.locations.
-query T
+query T retry
 SELECT * FROM [EXPLAIN SELECT * FROM system.locations] OFFSET 2
 ----
 ·
