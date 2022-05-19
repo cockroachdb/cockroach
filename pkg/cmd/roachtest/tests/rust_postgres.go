@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
+const rustPostgresSupportedTag = "postgres-v0.19.3"
+
 func registerRustPostgres(r registry.Registry) {
 	runRustPostgres := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if c.IsLocal() {
@@ -58,10 +60,14 @@ func registerRustPostgres(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := c.RunE(
+		if err := repeatGitCloneE(
 			ctx,
+			t,
+			c,
+			"https://github.com/sfackler/rust-postgres.git",
+			"/mnt/data1/rust-postgres",
+			rustPostgresSupportedTag,
 			node,
-			"cd /mnt/data1 && git clone https://github.com/sfackler/rust-postgres.git",
 		); err != nil {
 			t.Fatal(err)
 		}
