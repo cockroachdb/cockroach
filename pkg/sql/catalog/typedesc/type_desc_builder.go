@@ -73,8 +73,7 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() error {
 		privilege.Type,
 		tdb.maybeModified.GetName(),
 	)
-	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(tdb.maybeModified.Privileges)
-	if fixedPrivileges || addedGrantOptions {
+	if fixedPrivileges {
 		tdb.changes.Add(catalog.UpgradedPrivileges)
 	}
 	return nil

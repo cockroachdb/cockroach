@@ -366,6 +366,9 @@ const (
 	// keys at the Pebble layer.
 	EnablePebbleFormatVersionRangeKeys
 
+	// RemoveGrantPrivilege is the last step to migrate from the GRANT privilege to WITH GRANT OPTION.
+	RemoveGrantPrivilege
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -637,6 +640,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnablePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 8},
+	},
+	{
+		Key:     EnablePebbleFormatVersionRangeKeys,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
 	},
 
 	// *************************************************

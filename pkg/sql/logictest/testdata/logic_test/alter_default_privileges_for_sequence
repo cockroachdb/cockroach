@@ -56,8 +56,8 @@ SHOW GRANTS ON s
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       s           admin      ALL             true
 test           public       s           root       ALL             true
-test           public       s           testuser   ALL             true
-test           public       s           testuser2  ALL             true
+test           public       s           testuser   ALL             false
+test           public       s           testuser2  ALL             false
 
 # Sequence DEFAULT PRIVILEGES should be separate from tables.
 statement ok
@@ -83,22 +83,20 @@ SHOW GRANTS ON s2
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       s2          admin      ALL             true
 test           public       s2          root       ALL             true
-test           public       s2          testuser   CREATE          true
-test           public       s2          testuser   DELETE          true
-test           public       s2          testuser   DROP            true
-test           public       s2          testuser   GRANT           true
-test           public       s2          testuser   INSERT          true
-test           public       s2          testuser   UPDATE          true
-test           public       s2          testuser   USAGE           true
-test           public       s2          testuser   ZONECONFIG      true
-test           public       s2          testuser2  CREATE          true
-test           public       s2          testuser2  DELETE          true
-test           public       s2          testuser2  DROP            true
-test           public       s2          testuser2  GRANT           true
-test           public       s2          testuser2  INSERT          true
-test           public       s2          testuser2  UPDATE          true
-test           public       s2          testuser2  USAGE           true
-test           public       s2          testuser2  ZONECONFIG      true
+test           public       s2          testuser   CREATE          false
+test           public       s2          testuser   DELETE          false
+test           public       s2          testuser   DROP            false
+test           public       s2          testuser   INSERT          false
+test           public       s2          testuser   UPDATE          false
+test           public       s2          testuser   USAGE           false
+test           public       s2          testuser   ZONECONFIG      false
+test           public       s2          testuser2  CREATE          false
+test           public       s2          testuser2  DELETE          false
+test           public       s2          testuser2  DROP            false
+test           public       s2          testuser2  INSERT          false
+test           public       s2          testuser2  UPDATE          false
+test           public       s2          testuser2  USAGE           false
+test           public       s2          testuser2  ZONECONFIG      false
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SEQUENCES FROM testuser, testuser2
