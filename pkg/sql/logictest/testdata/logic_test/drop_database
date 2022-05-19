@@ -38,6 +38,7 @@ postgres   root  NULL  {}  NULL
 system     node  NULL  {}  NULL
 test       root  NULL  {}  NULL
 
+skipif config local-legacy-schema-changer
 query TT
 SELECT job_type, status FROM [SHOW JOBS] WHERE user_name = 'root'
 ----
@@ -218,6 +219,7 @@ CREATE TABLE constraint_db.t2 (
 statement ok
 DROP DATABASE constraint_db CASCADE
 
+skipif config local-legacy-schema-changer
 query TTT
 WITH cte AS (
   SELECT job_type, description, status
