@@ -133,6 +133,13 @@ ts_project(
     out_dir = "dist/types",
     root_dir = "src",
     tsconfig = "tsconfig.json",
+    # Don't check for a "correct" .compilerOptions.rootDirs in tsconfig.json.
+    # That check looks for relative paths to each platform-specific bazel-out/
+    # directory, which would allow the TypeScript compiler to find types from
+    # the output directory. Since our packages are linked together during
+    # yarn_install() and dependencies are installed in workspace-local
+    # node_modules directories (outside the Bazel sandbox!), validation isn't
+    # necessary.
     validate = False,
     deps = [
         "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
