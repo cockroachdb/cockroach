@@ -94,14 +94,8 @@ func TestExternalDistinct(t *testing.T) {
 				monitors = append(monitors, newMonitors...)
 				return distinct, err
 			})
-			if tc.errorOnDup == "" || tc.noError {
-				// We don't check that all FDs were released if an error is
-				// expected to be returned because our utility closeIfCloser()
-				// doesn't handle multiple closers (which is always the case for
-				// the external distinct).
-				for i, sem := range semsToCheck {
-					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
-				}
+			for i, sem := range semsToCheck {
+				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
 		}
 	}
