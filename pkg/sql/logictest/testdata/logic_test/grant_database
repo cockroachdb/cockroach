@@ -25,7 +25,7 @@ statement ok
 INSERT INTO system.users VALUES('test-user','');
 
 statement ok
-GRANT ALL PRIVILEGES ON DATABASE a TO readwrite, "test-user"
+GRANT ALL PRIVILEGES ON DATABASE a TO readwrite, "test-user" WITH GRANT OPTION
 
 statement error syntax error
 GRANT SELECT,ALL ON DATABASE a TO readwrite
@@ -58,12 +58,10 @@ a  admin      ALL         true
 a  public     CONNECT     false
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
-a  readwrite  GRANT       true
 a  readwrite  ZONECONFIG  true
 a  root       ALL         true
 a  test-user  CREATE      true
 a  test-user  DROP        true
-a  test-user  GRANT       true
 a  test-user  ZONECONFIG  true
 
 query TTTB
@@ -71,11 +69,9 @@ SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
-a  readwrite  GRANT       true
 a  readwrite  ZONECONFIG  true
 a  test-user  CREATE      true
 a  test-user  DROP        true
-a  test-user  GRANT       true
 a  test-user  ZONECONFIG  true
 
 statement ok
@@ -88,11 +84,9 @@ a  admin      ALL         true
 a  public     CONNECT     false
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
-a  readwrite  GRANT       true
 a  readwrite  ZONECONFIG  true
 a  root       ALL         true
 a  test-user  DROP        true
-a  test-user  GRANT       true
 a  test-user  ZONECONFIG  true
 
 statement ok
@@ -103,7 +97,6 @@ SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
-a  readwrite  GRANT       true
 a  readwrite  ZONECONFIG  true
 
 statement ok

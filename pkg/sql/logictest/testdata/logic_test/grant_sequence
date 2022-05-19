@@ -38,7 +38,7 @@ statement ok
 SET ROLE root
 
 statement ok
-GRANT ALL ON SEQUENCE a TO readwrite
+GRANT ALL ON SEQUENCE a TO readwrite WITH GRANT OPTION
 
 query TTTTTB colnames
 SHOW GRANTS ON SEQUENCE a
@@ -59,7 +59,6 @@ test           public       a           admin      ALL             true
 test           public       a           readwrite  CREATE          true
 test           public       a           readwrite  DELETE          true
 test           public       a           readwrite  DROP            true
-test           public       a           readwrite  GRANT           true
 test           public       a           readwrite  INSERT          true
 test           public       a           readwrite  SELECT          true
 test           public       a           readwrite  USAGE           true
@@ -93,8 +92,6 @@ SET ROLE root
 query T noticetrace
 GRANT CREATE, DROP, USAGE ON SEQUENCE a TO readwrite
 ----
-NOTICE: grant options were automatically applied but this behavior is deprecated
-HINT: please use WITH GRANT OPTION
 NOTICE: some privileges have no effect on sequences: [CREATE]
 
 query TTTTTTTT
@@ -103,10 +100,9 @@ SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 NULL  readwrite  test  public  a  CREATE      YES  NO
 NULL  readwrite  test  public  a  DELETE      YES  NO
 NULL  readwrite  test  public  a  DROP        YES  NO
-NULL  readwrite  test  public  a  GRANT       YES  NO
 NULL  readwrite  test  public  a  INSERT      YES  NO
 NULL  readwrite  test  public  a  SELECT      YES  YES
-NULL  readwrite  test  public  a  UPDATE      YES  NO
+NULL  readwrite  test  public  a  UPDATE      NO   NO
 NULL  readwrite  test  public  a  USAGE       YES  NO
 NULL  readwrite  test  public  a  ZONECONFIG  YES  NO
 
@@ -117,9 +113,8 @@ query TTTTTTTT
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
 NULL  readwrite  test  public  a  DELETE      YES  NO
-NULL  readwrite  test  public  a  GRANT       YES  NO
 NULL  readwrite  test  public  a  INSERT      YES  NO
-NULL  readwrite  test  public  a  UPDATE      YES  NO
+NULL  readwrite  test  public  a  UPDATE      NO   NO
 NULL  readwrite  test  public  a  USAGE       YES  NO
 NULL  readwrite  test  public  a  ZONECONFIG  YES  NO
 
@@ -132,8 +127,8 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA test.public TO readwrite;
 query TTTTTTTT
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
-NULL  readwrite  test  public  a  ALL  YES  NO
-NULL  readwrite  test  public  b  ALL  YES  NO
+NULL  readwrite  test  public  a  ALL  NO  NO
+NULL  readwrite  test  public  b  ALL  NO  NO
 
 statement ok
 REVOKE SELECT ON ALL SEQUENCES IN SCHEMA test.public FROM readwrite;
@@ -141,22 +136,20 @@ REVOKE SELECT ON ALL SEQUENCES IN SCHEMA test.public FROM readwrite;
 query TTTTTTTT
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
-NULL  readwrite  test  public  a  CREATE      YES  NO
+NULL  readwrite  test  public  a  CREATE      NO   NO
 NULL  readwrite  test  public  a  DELETE      YES  NO
-NULL  readwrite  test  public  a  DROP        YES  NO
-NULL  readwrite  test  public  a  GRANT       YES  NO
+NULL  readwrite  test  public  a  DROP        NO   NO
 NULL  readwrite  test  public  a  INSERT      YES  NO
-NULL  readwrite  test  public  a  UPDATE      YES  NO
+NULL  readwrite  test  public  a  UPDATE      NO   NO
 NULL  readwrite  test  public  a  USAGE       YES  NO
 NULL  readwrite  test  public  a  ZONECONFIG  YES  NO
-NULL  readwrite  test  public  b  CREATE      YES  NO
-NULL  readwrite  test  public  b  DELETE      YES  NO
-NULL  readwrite  test  public  b  DROP        YES  NO
-NULL  readwrite  test  public  b  GRANT       YES  NO
-NULL  readwrite  test  public  b  INSERT      YES  NO
-NULL  readwrite  test  public  b  UPDATE      YES  NO
-NULL  readwrite  test  public  b  USAGE       YES  NO
-NULL  readwrite  test  public  b  ZONECONFIG  YES  NO
+NULL  readwrite  test  public  b  CREATE      NO   NO
+NULL  readwrite  test  public  b  DELETE      NO   NO
+NULL  readwrite  test  public  b  DROP        NO   NO
+NULL  readwrite  test  public  b  INSERT      NO   NO
+NULL  readwrite  test  public  b  UPDATE      NO   NO
+NULL  readwrite  test  public  b  USAGE       NO   NO
+NULL  readwrite  test  public  b  ZONECONFIG  NO   NO
 
 subtest grant_drop_on_sequences
 
@@ -212,7 +205,7 @@ statement ok
 SET ROLE root
 
 statement ok
-GRANT GRANT ON SEQUENCE to_drop_seq TO user1
+GRANT DROP ON SEQUENCE to_drop_seq TO user1 WITH GRANT OPTION
 
 statement ok
 SET ROLE user1
