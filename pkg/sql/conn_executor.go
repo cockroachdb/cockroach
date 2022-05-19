@@ -922,7 +922,7 @@ func (s *Server) newConnExecutor(
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	if descsCollection != nil {
-		ex.extraTxnState.descsCollectionInConnEx.descCollection = *descsCollection
+		ex.extraTxnState.descsCollectionInConnEx.descCollection = descsCollection
 		ex.extraTxnState.descsCollectionInConnEx.skipRelease = true
 	} else {
 		ex.extraTxnState.descsCollectionInConnEx.descCollection = s.cfg.CollectionFactory.MakeCollection(
@@ -1174,7 +1174,7 @@ type HasAdminRoleCache struct {
 
 type descsCollectionInConnEx struct {
 	// descCollection collects descriptors used by the current transaction.
-	descCollection descs.Collection
+	descCollection *descs.Collection
 	// skipRelease marks if the collection should be released when closing this
 	// conn executor. It should be set true when the descCollection is passed
 	// from a parent planner.
@@ -2696,7 +2696,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,
-		Descs:                  &ex.extraTxnState.descsCollectionInConnEx.descCollection,
+		Descs:                  ex.extraTxnState.descsCollectionInConnEx.descCollection,
 		TxnModesSetter:         ex,
 		Jobs:                   &ex.extraTxnState.jobs,
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
@@ -3210,7 +3210,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		ex.planner.User(),
 		ex.server.cfg,
 		ex.planner.txn,
-		&ex.extraTxnState.descsCollectionInConnEx.descCollection,
+		ex.extraTxnState.descsCollectionInConnEx.descCollection,
 		ex.planner.EvalContext(),
 		ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		scs.jobID,

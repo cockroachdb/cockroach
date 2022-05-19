@@ -839,7 +839,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 
 	if err := descs.CheckSpanCountLimit(
 		ctx,
-		&ex.extraTxnState.descsCollectionInConnEx.descCollection,
+		ex.extraTxnState.descsCollectionInConnEx.descCollection,
 		ex.server.cfg.SpanConfigSplitter,
 		ex.server.cfg.SpanConfigLimiter,
 		ex.state.mu.txn,
@@ -851,7 +851,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		ctx,
 		ex.server.cfg.Clock,
 		ex.server.cfg.InternalExecutor,
-		&ex.extraTxnState.descsCollectionInConnEx.descCollection,
+		ex.extraTxnState.descsCollectionInConnEx.descCollection,
 		ex.state.mu.txn,
 		inRetryBackoff,
 	)

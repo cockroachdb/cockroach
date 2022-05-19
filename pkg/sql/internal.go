@@ -792,6 +792,15 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
+
+	// TODO(janexing): for debugging, should be removed
+	//if txn != nil && ie.extraTxnState != nil {
+	//	if ie.extraTxnState.descCollection != nil {
+	//		fmt.Println("touched:", opName)
+	//		fmt.Printf("&wg:%p\n", &wg)
+	//	}
+	//}
+
 	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))

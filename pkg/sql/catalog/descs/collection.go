@@ -50,8 +50,8 @@ func makeCollection(
 	virtualSchemas catalog.VirtualSchemas,
 	temporarySchemaProvider TemporarySchemaProvider,
 	monitor *mon.BytesMonitor,
-) Collection {
-	return Collection{
+) *Collection {
+	return &Collection{
 		settings:       settings,
 		version:        settings.Version.ActiveVersion(ctx),
 		hydratedTables: hydratedTables,

@@ -731,7 +731,7 @@ func (sc *SchemaChanger) validateConstraints(
 				ie := makeSessionBoundInternalExecutorFromProtoUnderPlanner(
 					sc.execCfg.InternalExecutorProto,
 					evalCtx.SessionData(),
-					extraTxnStateUnderPlanner{descCollection: evalCtx.Descs},
+					extraTxnStateUnderPlanner{descCollection: collection},
 				)
 
 				if c.IsCheck() {

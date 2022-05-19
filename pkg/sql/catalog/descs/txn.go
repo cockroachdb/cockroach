@@ -76,7 +76,7 @@ func (cf *CollectionFactory) Txn(
 	for {
 		var modifiedDescriptors []lease.IDVersion
 		var deletedDescs catalog.DescriptorIDSet
-		var descsCol Collection
+		var descsCol *Collection
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			modifiedDescriptors = nil
 			deletedDescs = catalog.DescriptorIDSet{}
@@ -91,7 +91,7 @@ func (cf *CollectionFactory) Txn(
 					return err
 				}
 			}
-			if err := f(ctx, txn, &descsCol); err != nil {
+			if err := f(ctx, txn, descsCol); err != nil {
 				return err
 			}
 
@@ -101,12 +101,12 @@ func (cf *CollectionFactory) Txn(
 			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
 
 			if err := CheckSpanCountLimit(
-				ctx, &descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
+				ctx, descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
 			); err != nil {
 				return err
 			}
 			retryErr, err := CheckTwoVersionInvariant(
-				ctx, db.Clock(), ie, &descsCol, txn, nil /* onRetryBackoff */)
+				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
 			if retryErr {
 				return errTwoVersionInvariantViolated
 			}
