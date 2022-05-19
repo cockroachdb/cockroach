@@ -566,6 +566,9 @@ type testClusterConfig struct {
 	// backupRestoreProbability will periodically backup the cluster and restore
 	// it's state to a new cluster at random points during a logic test.
 	backupRestoreProbability float64
+	// disableDeclarativeSchemaChanger will disable the declarative schema changer
+	// for logictest.
+	disableDeclarativeSchemaChanger bool
 }
 
 const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
@@ -733,7 +736,13 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "local",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
+	},
+	{
+		name:                            "local-legacy-schema-changer",
+		numNodes:                        1,
+		overrideDistSQLMode:             "off",
+		disableDeclarativeSchemaChanger: true,
+		overrideAutoStats:               "false",
 	},
 	{
 		name:                "local-vec-off",
@@ -1920,6 +1929,15 @@ func (t *logicTest) newCluster(
 			if _, err := conn.Exec(
 				"SET CLUSTER SETTING sql.defaults.vectorize = $1::string", cfg.overrideVectorize,
 			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// We support disabling the declarative schema changer, so that no regressions
+		// occur in the legacy schema changer.
+		if cfg.disableDeclarativeSchemaChanger {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'"); err != nil {
 				t.Fatal(err)
 			}
 		}
