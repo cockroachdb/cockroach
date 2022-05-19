@@ -39,7 +39,7 @@ func NewExternalHashAggregator(
 	diskAcc *mon.BoundAccount,
 	outputUnlimitedAllocator *colmem.Allocator,
 	maxOutputBatchMemSize int64,
-) colexecop.Operator {
+) (colexecop.Operator, colexecop.Closer) {
 	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecop.ResettableOperator {
 		newAggArgs := *newAggArgs
 		newAggArgs.Input = partitionedInputs[0]
@@ -83,11 +83,11 @@ func NewExternalHashAggregator(
 	outputOrdering := args.Spec.Core.Aggregator.OutputOrdering
 	if len(outputOrdering.Columns) == 0 {
 		// No particular output ordering is required.
-		return eha
+		return eha, eha
 	}
 	// TODO(yuzefovich): the fact that we're planning an additional external
 	// sort isn't accounted for when considering the number file descriptors to
 	// acquire. Not urgent, but it should be fixed.
 	maxNumberActivePartitions := calculateMaxNumberActivePartitions(flowCtx, args, ehaNumRequiredActivePartitions)
-	return createDiskBackedSorter(eha, newAggArgs.OutputTypes, outputOrdering.Columns, maxNumberActivePartitions)
+	return createDiskBackedSorter(eha, newAggArgs.OutputTypes, outputOrdering.Columns, maxNumberActivePartitions), eha
 }

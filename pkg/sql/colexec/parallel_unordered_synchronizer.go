@@ -111,8 +111,7 @@ type ParallelUnorderedSynchronizer struct {
 	bufferedMeta []execinfrapb.ProducerMetadata
 }
 
-var _ colexecop.DrainableOperator = &ParallelUnorderedSynchronizer{}
-var _ colexecop.ClosableOperator = &ParallelUnorderedSynchronizer{}
+var _ colexecop.DrainableClosableOperator = &ParallelUnorderedSynchronizer{}
 
 // ChildCount implements the execopnode.OpNode interface.
 func (s *ParallelUnorderedSynchronizer) ChildCount(verbose bool) int {

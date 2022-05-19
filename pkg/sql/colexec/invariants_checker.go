@@ -32,11 +32,10 @@ type invariantsChecker struct {
 	metadataSource colexecop.MetadataSource
 }
 
-var _ colexecop.DrainableOperator = &invariantsChecker{}
-var _ colexecop.ClosableOperator = &invariantsChecker{}
+var _ colexecop.DrainableClosableOperator = &invariantsChecker{}
 
 // NewInvariantsChecker creates a new invariantsChecker.
-func NewInvariantsChecker(input colexecop.Operator) colexecop.DrainableOperator {
+func NewInvariantsChecker(input colexecop.Operator) colexecop.DrainableClosableOperator {
 	if !buildutil.CrdbTestBuild {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"an invariantsChecker is attempted to be created in non-test build",

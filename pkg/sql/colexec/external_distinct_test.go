@@ -67,9 +67,9 @@ func TestExternalDistinct(t *testing.T) {
 			var semsToCheck []semaphore.Semaphore
 			var outputOrdering execinfrapb.Ordering
 			verifier := colexectestutils.UnorderedVerifier
-			// Check that the external distinct and the disk-backed sort
-			// were added as Closers.
-			numExpectedClosers := 2
+			// Check that the disk spiller, the external distinct, and the
+			// disk-backed sort were added as Closers.
+			numExpectedClosers := 3
 			if tc.isOrderedOnDistinctCols {
 				outputOrdering = convertDistinctColsToOrdering(tc.distinctCols)
 				verifier = colexectestutils.OrderedVerifier
@@ -190,9 +190,9 @@ func TestExternalDistinctSpilling(t *testing.T) {
 				&monitorRegistry,
 			)
 			require.NoError(t, err)
-			// Check that the external distinct and the disk-backed sort
-			// were added as Closers.
-			numExpectedClosers := 2
+			// Check that the disk spiller, the external distinct, and the
+			// disk-backed sort were added as Closers.
+			numExpectedClosers := 3
 			require.Equal(t, numExpectedClosers, len(closers))
 			numRuns++
 			return distinct, nil
