@@ -234,8 +234,8 @@ tsc_test(
     name = "typecheck",
     data = glob(
         [
-          "src/**/*.ts",
-          "src/**/*.tsx",
+            "src/**/*.ts",
+            "src/**/*.tsx",
         ],
         exclude = [
             "src/**/*.stories.tsx",
