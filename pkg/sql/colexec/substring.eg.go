@@ -100,40 +100,41 @@ func (s *substringInt64Int16Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int64()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int16()
+	bytesVec := batch.ColVec(s.argumentCols[0])
+	bytesCol := bytesVec.Bytes()
+	bytesNulls := bytesVec.Nulls()
+	startVec := batch.ColVec(s.argumentCols[1])
+	startCol := startVec.Int64()
+	startNulls := startVec.Nulls()
+	lengthVec := batch.ColVec(s.argumentCols[2])
+	lengthCol := lengthVec.Int16()
+	lengthNulls := lengthVec.Nulls()
 	outputVec := batch.ColVec(s.outputIdx)
 	outputCol := outputVec.Bytes()
+	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
-			// is nil.
+			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]
 				}
 
-				// The substring operator does not support nulls. If any of the arguments
-				// are NULL, we output NULL.
-				isNull := false
-				for _, col := range s.argumentCols {
-					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-						isNull = true
-						break
+				if argsMaybeHaveNulls {
+					// The substring operator does not support nulls. If any of
+					// the arguments are NULL, we output NULL.
+					if bytesNulls.NullAt(rowIdx) || startNulls.NullAt(rowIdx) || lengthNulls.NullAt(rowIdx) {
+						outputNulls.SetNull(rowIdx)
+						continue
 					}
 				}
-				if isNull {
-					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-					continue
-				}
 
-				bytes := bytesVec.Get(rowIdx)
+				bytes := bytesCol.Get(rowIdx)
 				// Substring startCharIdx is 1 indexed.
-				startCharIdx := int(startVec[rowIdx]) - 1
-				length := int(lengthVec[rowIdx])
+				startCharIdx := int(startCol[rowIdx]) - 1
+				length := int(lengthCol[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
@@ -200,40 +201,41 @@ func (s *substringInt64Int32Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int64()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int32()
+	bytesVec := batch.ColVec(s.argumentCols[0])
+	bytesCol := bytesVec.Bytes()
+	bytesNulls := bytesVec.Nulls()
+	startVec := batch.ColVec(s.argumentCols[1])
+	startCol := startVec.Int64()
+	startNulls := startVec.Nulls()
+	lengthVec := batch.ColVec(s.argumentCols[2])
+	lengthCol := lengthVec.Int32()
+	lengthNulls := lengthVec.Nulls()
 	outputVec := batch.ColVec(s.outputIdx)
 	outputCol := outputVec.Bytes()
+	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
-			// is nil.
+			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]
 				}
 
-				// The substring operator does not support nulls. If any of the arguments
-				// are NULL, we output NULL.
-				isNull := false
-				for _, col := range s.argumentCols {
-					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-						isNull = true
-						break
+				if argsMaybeHaveNulls {
+					// The substring operator does not support nulls. If any of
+					// the arguments are NULL, we output NULL.
+					if bytesNulls.NullAt(rowIdx) || startNulls.NullAt(rowIdx) || lengthNulls.NullAt(rowIdx) {
+						outputNulls.SetNull(rowIdx)
+						continue
 					}
 				}
-				if isNull {
-					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-					continue
-				}
 
-				bytes := bytesVec.Get(rowIdx)
+				bytes := bytesCol.Get(rowIdx)
 				// Substring startCharIdx is 1 indexed.
-				startCharIdx := int(startVec[rowIdx]) - 1
-				length := int(lengthVec[rowIdx])
+				startCharIdx := int(startCol[rowIdx]) - 1
+				length := int(lengthCol[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
@@ -300,40 +302,41 @@ func (s *substringInt64Int64Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int64()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
+	bytesVec := batch.ColVec(s.argumentCols[0])
+	bytesCol := bytesVec.Bytes()
+	bytesNulls := bytesVec.Nulls()
+	startVec := batch.ColVec(s.argumentCols[1])
+	startCol := startVec.Int64()
+	startNulls := startVec.Nulls()
+	lengthVec := batch.ColVec(s.argumentCols[2])
+	lengthCol := lengthVec.Int64()
+	lengthNulls := lengthVec.Nulls()
 	outputVec := batch.ColVec(s.outputIdx)
 	outputCol := outputVec.Bytes()
+	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
-			// is nil.
+			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]
 				}
 
-				// The substring operator does not support nulls. If any of the arguments
-				// are NULL, we output NULL.
-				isNull := false
-				for _, col := range s.argumentCols {
-					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-						isNull = true
-						break
+				if argsMaybeHaveNulls {
+					// The substring operator does not support nulls. If any of
+					// the arguments are NULL, we output NULL.
+					if bytesNulls.NullAt(rowIdx) || startNulls.NullAt(rowIdx) || lengthNulls.NullAt(rowIdx) {
+						outputNulls.SetNull(rowIdx)
+						continue
 					}
 				}
-				if isNull {
-					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-					continue
-				}
 
-				bytes := bytesVec.Get(rowIdx)
+				bytes := bytesCol.Get(rowIdx)
 				// Substring startCharIdx is 1 indexed.
-				startCharIdx := int(startVec[rowIdx]) - 1
-				length := int(lengthVec[rowIdx])
+				startCharIdx := int(startCol[rowIdx]) - 1
+				length := int(lengthCol[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
@@ -400,40 +403,41 @@ func (s *substringInt16Int16Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int16()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int16()
+	bytesVec := batch.ColVec(s.argumentCols[0])
+	bytesCol := bytesVec.Bytes()
+	bytesNulls := bytesVec.Nulls()
+	startVec := batch.ColVec(s.argumentCols[1])
+	startCol := startVec.Int16()
+	startNulls := startVec.Nulls()
+	lengthVec := batch.ColVec(s.argumentCols[2])
+	lengthCol := lengthVec.Int16()
+	lengthNulls := lengthVec.Nulls()
 	outputVec := batch.ColVec(s.outputIdx)
 	outputCol := outputVec.Bytes()
+	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
-			// is nil.
+			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]
 				}
 
-				// The substring operator does not support nulls. If any of the arguments
-				// are NULL, we output NULL.
-				isNull := false
-				for _, col := range s.argumentCols {
-					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-						isNull = true
-						break
+				if argsMaybeHaveNulls {
+					// The substring operator does not support nulls. If any of
+					// the arguments are NULL, we output NULL.
+					if bytesNulls.NullAt(rowIdx) || startNulls.NullAt(rowIdx) || lengthNulls.NullAt(rowIdx) {
+						outputNulls.SetNull(rowIdx)
+						continue
 					}
 				}
-				if isNull {
-					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-					continue
-				}
 
-				bytes := bytesVec.Get(rowIdx)
+				bytes := bytesCol.Get(rowIdx)
 				// Substring startCharIdx is 1 indexed.
-				startCharIdx := int(startVec[rowIdx]) - 1
-				length := int(lengthVec[rowIdx])
+				startCharIdx := int(startCol[rowIdx]) - 1
+				length := int(lengthCol[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
@@ -500,40 +504,41 @@ func (s *substringInt16Int32Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int16()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int32()
+	bytesVec := batch.ColVec(s.argumentCols[0])
+	bytesCol := bytesVec.Bytes()
+	bytesNulls := bytesVec.Nulls()
+	startVec := batch.ColVec(s.argumentCols[1])
+	startCol := startVec.Int16()
+	startNulls := startVec.Nulls()
+	lengthVec := batch.ColVec(s.argumentCols[2])
+	lengthCol := lengthVec.Int32()
+	lengthNulls := lengthVec.Nulls()
 	outputVec := batch.ColVec(s.outputIdx)
 	outputCol := outputVec.Bytes()
+	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
-			// is nil.
+			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]
 				}
 
-				// The substring operator does not support nulls. If any of the arguments
-				// are NULL, we output NULL.
-				isNull := false
-				for _, col := range s.argumentCols {
-					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-						isNull = true
-						break
+				if argsMaybeHaveNulls {
+					// The substring operator does not support nulls. If any of
+					// the arguments are NULL, we output NULL.
+					if bytesNulls.NullAt(rowIdx) || startNulls.NullAt(rowIdx) || lengthNulls.NullAt(rowIdx) {
+						outputNulls.SetNull(rowIdx)
+						continue
 					}
 				}
-				if isNull {
-					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-					continue
-				}
 
-				bytes := bytesVec.Get(rowIdx)
+				bytes := bytesCol.Get(rowIdx)
 				// Substring startCharIdx is 1 indexed.
-				startCharIdx := int(startVec[rowIdx]) - 1
-				length := int(lengthVec[rowIdx])
+				startCharIdx := int(startCol[rowIdx]) - 1
+				length := int(lengthCol[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
@@ -600,40 +605,41 @@ func (s *substringInt16Int64Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int16()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
+	bytesVec := batch.ColVec(s.argumentCols[0])
+	bytesCol := bytesVec.Bytes()
+	bytesNulls := bytesVec.Nulls()
+	startVec := batch.ColVec(s.argumentCols[1])
+	startCol := startVec.Int16()
+	startNulls := startVec.Nulls()
+	lengthVec := batch.ColVec(s.argumentCols[2])
+	lengthCol := lengthVec.Int64()
+	lengthNulls := lengthVec.Nulls()
 	outputVec := batch.ColVec(s.outputIdx)
 	outputCol := outputVec.Bytes()
+	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
-			// is nil.
+			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]
 				}
 
-				// The substring operator does not support nulls. If any of the arguments
-				// are NULL, we output NULL.
-				isNull := false
-				for _, col := range s.argumentCols {
-					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-						isNull = true
-						break
+				if argsMaybeHaveNulls {
+					// The substring operator does not support nulls. If any of
+					// the arguments are NULL, we output NULL.
+					if bytesNulls.NullAt(rowIdx) || startNulls.NullAt(rowIdx) || lengthNulls.NullAt(rowIdx) {
+						outputNulls.SetNull(rowIdx)
+						continue
 					}
 				}
-				if isNull {
-					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-					continue
-				}
 
-				bytes := bytesVec.Get(rowIdx)
+				bytes := bytesCol.Get(rowIdx)
 				// Substring startCharIdx is 1 indexed.
-				startCharIdx := int(startVec[rowIdx]) - 1
-				length := int(lengthVec[rowIdx])
+				startCharIdx := int(startCol[rowIdx]) - 1
+				length := int(lengthCol[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
@@ -700,40 +706,41 @@ func (s *substringInt32Int16Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int32()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int16()
+	bytesVec := batch.ColVec(s.argumentCols[0])
+	bytesCol := bytesVec.Bytes()
+	bytesNulls := bytesVec.Nulls()
+	startVec := batch.ColVec(s.argumentCols[1])
+	startCol := startVec.Int32()
+	startNulls := startVec.Nulls()
+	lengthVec := batch.ColVec(s.argumentCols[2])
+	lengthCol := lengthVec.Int16()
+	lengthNulls := lengthVec.Nulls()
 	outputVec := batch.ColVec(s.outputIdx)
 	outputCol := outputVec.Bytes()
+	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
-			// is nil.
+			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]
 				}
 
-				// The substring operator does not support nulls. If any of the arguments
-				// are NULL, we output NULL.
-				isNull := false
-				for _, col := range s.argumentCols {
-					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-						isNull = true
-						break
+				if argsMaybeHaveNulls {
+					// The substring operator does not support nulls. If any of
+					// the arguments are NULL, we output NULL.
+					if bytesNulls.NullAt(rowIdx) || startNulls.NullAt(rowIdx) || lengthNulls.NullAt(rowIdx) {
+						outputNulls.SetNull(rowIdx)
+						continue
 					}
 				}
-				if isNull {
-					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-					continue
-				}
 
-				bytes := bytesVec.Get(rowIdx)
+				bytes := bytesCol.Get(rowIdx)
 				// Substring startCharIdx is 1 indexed.
-				startCharIdx := int(startVec[rowIdx]) - 1
-				length := int(lengthVec[rowIdx])
+				startCharIdx := int(startCol[rowIdx]) - 1
+				length := int(lengthCol[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
@@ -800,40 +807,41 @@ func (s *substringInt32Int32Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int32()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int32()
+	bytesVec := batch.ColVec(s.argumentCols[0])
+	bytesCol := bytesVec.Bytes()
+	bytesNulls := bytesVec.Nulls()
+	startVec := batch.ColVec(s.argumentCols[1])
+	startCol := startVec.Int32()
+	startNulls := startVec.Nulls()
+	lengthVec := batch.ColVec(s.argumentCols[2])
+	lengthCol := lengthVec.Int32()
+	lengthNulls := lengthVec.Nulls()
 	outputVec := batch.ColVec(s.outputIdx)
 	outputCol := outputVec.Bytes()
+	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
-			// is nil.
+			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]
 				}
 
-				// The substring operator does not support nulls. If any of the arguments
-				// are NULL, we output NULL.
-				isNull := false
-				for _, col := range s.argumentCols {
-					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-						isNull = true
-						break
+				if argsMaybeHaveNulls {
+					// The substring operator does not support nulls. If any of
+					// the arguments are NULL, we output NULL.
+					if bytesNulls.NullAt(rowIdx) || startNulls.NullAt(rowIdx) || lengthNulls.NullAt(rowIdx) {
+						outputNulls.SetNull(rowIdx)
+						continue
 					}
 				}
-				if isNull {
-					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-					continue
-				}
 
-				bytes := bytesVec.Get(rowIdx)
+				bytes := bytesCol.Get(rowIdx)
 				// Substring startCharIdx is 1 indexed.
-				startCharIdx := int(startVec[rowIdx]) - 1
-				length := int(lengthVec[rowIdx])
+				startCharIdx := int(startCol[rowIdx]) - 1
+				length := int(lengthCol[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
@@ -900,40 +908,41 @@ func (s *substringInt32Int64Operator) Next() coldata.Batch {
 	}
 
 	sel := batch.Selection()
-	bytesVec := batch.ColVec(s.argumentCols[0]).Bytes()
-	startVec := batch.ColVec(s.argumentCols[1]).Int32()
-	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
+	bytesVec := batch.ColVec(s.argumentCols[0])
+	bytesCol := bytesVec.Bytes()
+	bytesNulls := bytesVec.Nulls()
+	startVec := batch.ColVec(s.argumentCols[1])
+	startCol := startVec.Int32()
+	startNulls := startVec.Nulls()
+	lengthVec := batch.ColVec(s.argumentCols[2])
+	lengthCol := lengthVec.Int64()
+	lengthNulls := lengthVec.Nulls()
 	outputVec := batch.ColVec(s.outputIdx)
 	outputCol := outputVec.Bytes()
+	outputNulls := outputVec.Nulls()
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
-			// is nil.
+			argsMaybeHaveNulls := bytesNulls.MaybeHasNulls() || startNulls.MaybeHasNulls() || lengthNulls.MaybeHasNulls()
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]
 				}
 
-				// The substring operator does not support nulls. If any of the arguments
-				// are NULL, we output NULL.
-				isNull := false
-				for _, col := range s.argumentCols {
-					if batch.ColVec(col).Nulls().NullAt(rowIdx) {
-						isNull = true
-						break
+				if argsMaybeHaveNulls {
+					// The substring operator does not support nulls. If any of
+					// the arguments are NULL, we output NULL.
+					if bytesNulls.NullAt(rowIdx) || startNulls.NullAt(rowIdx) || lengthNulls.NullAt(rowIdx) {
+						outputNulls.SetNull(rowIdx)
+						continue
 					}
 				}
-				if isNull {
-					batch.ColVec(s.outputIdx).Nulls().SetNull(rowIdx)
-					continue
-				}
 
-				bytes := bytesVec.Get(rowIdx)
+				bytes := bytesCol.Get(rowIdx)
 				// Substring startCharIdx is 1 indexed.
-				startCharIdx := int(startVec[rowIdx]) - 1
-				length := int(lengthVec[rowIdx])
+				startCharIdx := int(startCol[rowIdx]) - 1
+				length := int(lengthCol[rowIdx])
 				if length < 0 {
 					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
