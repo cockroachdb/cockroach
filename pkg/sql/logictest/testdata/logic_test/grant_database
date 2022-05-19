@@ -38,15 +38,15 @@ SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL      true
 a  public     CONNECT  false
-a  readwrite  ALL      true
+a  readwrite  ALL      false
 a  root       ALL      true
-a  test-user  ALL      true
+a  test-user  ALL      false
 
 query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  readwrite  ALL  true
-a  test-user  ALL  true
+a  readwrite  ALL  false
+a  test-user  ALL  false
 
 statement ok
 REVOKE CONNECT ON DATABASE a FROM "test-user",readwrite
@@ -56,27 +56,23 @@ SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL         true
 a  public     CONNECT     false
-a  readwrite  CREATE      true
-a  readwrite  DROP        true
-a  readwrite  GRANT       true
-a  readwrite  ZONECONFIG  true
+a  readwrite  CREATE      false
+a  readwrite  DROP        false
+a  readwrite  ZONECONFIG  false
 a  root       ALL         true
-a  test-user  CREATE      true
-a  test-user  DROP        true
-a  test-user  GRANT       true
-a  test-user  ZONECONFIG  true
+a  test-user  CREATE      false
+a  test-user  DROP        false
+a  test-user  ZONECONFIG  false
 
 query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  readwrite  CREATE      true
-a  readwrite  DROP        true
-a  readwrite  GRANT       true
-a  readwrite  ZONECONFIG  true
-a  test-user  CREATE      true
-a  test-user  DROP        true
-a  test-user  GRANT       true
-a  test-user  ZONECONFIG  true
+a  readwrite  CREATE      false
+a  readwrite  DROP        false
+a  readwrite  ZONECONFIG  false
+a  test-user  CREATE      false
+a  test-user  DROP        false
+a  test-user  ZONECONFIG  false
 
 statement ok
 REVOKE CREATE ON DATABASE a FROM "test-user"
@@ -86,14 +82,12 @@ SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL         true
 a  public     CONNECT     false
-a  readwrite  CREATE      true
-a  readwrite  DROP        true
-a  readwrite  GRANT       true
-a  readwrite  ZONECONFIG  true
+a  readwrite  CREATE      false
+a  readwrite  DROP        false
+a  readwrite  ZONECONFIG  false
 a  root       ALL         true
-a  test-user  DROP        true
-a  test-user  GRANT       true
-a  test-user  ZONECONFIG  true
+a  test-user  DROP        false
+a  test-user  ZONECONFIG  false
 
 statement ok
 REVOKE ALL PRIVILEGES ON DATABASE a FROM "test-user"
@@ -101,10 +95,9 @@ REVOKE ALL PRIVILEGES ON DATABASE a FROM "test-user"
 query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  readwrite  CREATE      true
-a  readwrite  DROP        true
-a  readwrite  GRANT       true
-a  readwrite  ZONECONFIG  true
+a  readwrite  CREATE      false
+a  readwrite  DROP        false
+a  readwrite  ZONECONFIG  false
 
 statement ok
 REVOKE ALL ON DATABASE a FROM readwrite,"test-user"

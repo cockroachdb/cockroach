@@ -83,7 +83,6 @@ func (d *immutable) grantOrRevokeDefaultPrivilegesHelper(
 	privList privilege.List,
 	withGrantOption bool,
 	isGrant bool,
-	deprecateGrant bool,
 ) {
 	defaultPrivileges := defaultPrivilegesForRole.DefaultPrivilegesPerObject[targetObject]
 	// expandPrivileges turns flags on the DefaultPrivilegesForRole representing
@@ -100,10 +99,6 @@ func (d *immutable) grantOrRevokeDefaultPrivilegesHelper(
 		defaultPrivileges.Revoke(grantee, privList, targetObject.ToPrivilegeObjectType(), withGrantOption)
 	}
 
-	if deprecateGrant {
-		defaultPrivileges.GrantPrivilegeToGrantOptions(grantee, isGrant)
-	}
-
 	if d.IsDatabaseDefaultPrivilege() {
 		foldPrivileges(defaultPrivilegesForRole, role, &defaultPrivileges, targetObject)
 	}
@@ -117,11 +112,10 @@ func (d *Mutable) GrantDefaultPrivileges(
 	grantees []username.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	withGrantOption bool,
-	deprecateGrant bool,
 ) {
 	defaultPrivilegesForRole := d.defaultPrivilegeDescriptor.FindOrCreateUser(role)
 	for _, grantee := range grantees {
-		d.grantOrRevokeDefaultPrivilegesHelper(defaultPrivilegesForRole, role, targetObject, grantee, privileges, withGrantOption, true /* isGrant */, deprecateGrant)
+		d.grantOrRevokeDefaultPrivilegesHelper(defaultPrivilegesForRole, role, targetObject, grantee, privileges, withGrantOption, true /* isGrant */)
 	}
 }
 
@@ -132,11 +126,10 @@ func (d *Mutable) RevokeDefaultPrivileges(
 	grantees []username.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	grantOptionFor bool,
-	deprecateGrant bool,
 ) {
 	defaultPrivilegesForRole := d.defaultPrivilegeDescriptor.FindOrCreateUser(role)
 	for _, grantee := range grantees {
-		d.grantOrRevokeDefaultPrivilegesHelper(defaultPrivilegesForRole, role, targetObject, grantee, privileges, grantOptionFor, false /* isGrant */, deprecateGrant)
+		d.grantOrRevokeDefaultPrivilegesHelper(defaultPrivilegesForRole, role, targetObject, grantee, privileges, grantOptionFor, false /* isGrant */)
 	}
 
 	defaultPrivilegesPerObject := defaultPrivilegesForRole.DefaultPrivilegesPerObject

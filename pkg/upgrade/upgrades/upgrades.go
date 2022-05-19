@@ -92,12 +92,6 @@ var upgrades = []upgrade.Upgrade{
 		ensureSpanConfigSubscription,
 	),
 	upgrade.NewTenantUpgrade(
-		"track grant options on users and enable granting/revoking with them",
-		toCV(clusterversion.ValidateGrantOption),
-		NoPrecondition,
-		grantOptionMigration,
-	),
-	upgrade.NewTenantUpgrade(
 		"delete comments that belong to dropped indexes",
 		toCV(clusterversion.DeleteCommentsWithDroppedIndexes),
 		NoPrecondition,

@@ -19,7 +19,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -990,13 +989,6 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 			func(db catalog.DatabaseDescriptor) error {
 				dbNameStr := tree.NewDString(db.GetName())
 				pgCatalogStr := tree.NewDString("pg_catalog")
-				populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
-				var isGrantable tree.Datum
-				if populateGrantOption {
-					isGrantable = noString
-				} else {
-					isGrantable = tree.DNull
-				}
 				// Generate one for each existing type.
 				for _, typ := range types.OidToType {
 					typeNameStr := tree.NewDString(typ.Name())
@@ -1007,7 +999,7 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 							pgCatalogStr, // type_schema
 							typeNameStr,  // type_name
 							it.kind,      // privilege_type
-							isGrantable,  // is_grantable
+							noString,     // is_grantable
 						); err != nil {
 							return err
 						}
@@ -1024,19 +1016,13 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
-							var isGrantable tree.Datum
-							if populateGrantOption {
-								isGrantable = yesOrNoDatum(priv.GrantOption)
-							} else {
-								isGrantable = tree.DNull
-							}
 							if err := addRow(
 								userNameStr,                         // grantee
 								dbNameStr,                           // type_catalog
 								scNameStr,                           // type_schema
 								typeNameStr,                         // type_name
 								tree.NewDString(priv.Kind.String()), // privilege_type
-								isGrantable,                         // is_grantable
+								yesOrNoDatum(priv.GrantOption),      // is_grantable
 							); err != nil {
 								return err
 							}
@@ -1062,22 +1048,15 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 					scNameStr := tree.NewDString(sc.GetName())
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
-					populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
-							var isGrantable tree.Datum
-							if populateGrantOption {
-								isGrantable = yesOrNoDatum(priv.GrantOption)
-							} else {
-								isGrantable = tree.DNull
-							}
 							if err := addRow(
 								userNameStr,                         // grantee
 								dbNameStr,                           // table_catalog
 								scNameStr,                           // table_schema
 								tree.NewDString(priv.Kind.String()), // privilege_type
-								isGrantable,                         // is_grantable
+								yesOrNoDatum(priv.GrantOption),      // is_grantable
 							); err != nil {
 								return err
 							}
@@ -1363,24 +1342,15 @@ func populateTablePrivileges(
 			tbNameStr := tree.NewDString(table.GetName())
 			// TODO(knz): This should filter for the current user, see
 			// https://github.com/cockroachdb/cockroach/issues/35572
-			populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
-
 			var tableType privilege.ObjectType
 			if table.IsSequence() {
 				tableType = privilege.Sequence
 			} else {
 				tableType = privilege.Table
 			}
-
 			for _, u := range table.GetPrivileges().Show(tableType) {
 				granteeNameStr := tree.NewDString(u.User.Normalized())
 				for _, priv := range u.Privileges {
-					var isGrantable tree.Datum
-					if populateGrantOption {
-						isGrantable = yesOrNoDatum(priv.GrantOption)
-					} else {
-						isGrantable = tree.DNull
-					}
 					if err := addRow(
 						tree.DNull,                          // grantor
 						granteeNameStr,                      // grantee
@@ -1388,7 +1358,7 @@ func populateTablePrivileges(
 						scNameStr,                           // table_schema
 						tbNameStr,                           // table_name
 						tree.NewDString(priv.Kind.String()), // privilege_type
-						isGrantable,                         // is_grantable
+						yesOrNoDatum(priv.GrantOption),      // is_grantable
 						yesOrNoDatum(priv.Kind == privilege.SELECT), // with_hierarchy
 					); err != nil {
 						return err

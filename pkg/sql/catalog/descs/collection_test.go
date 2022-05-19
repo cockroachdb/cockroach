@@ -559,15 +559,11 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		// Remove the grant option, this will ensure we get some
-		// post-deserialization changes. These grant options should always exist
-		// for admin and root.
+		// Set version lower than minimum to force post-deserialization change
 		b := txn.NewBatch()
 		for _, d := range descs {
 			p := d.GetPrivileges()
-			for i := range p.Users {
-				p.Users[i].WithGrantOption = 0
-			}
+			p.SetVersion(catpb.Version21_2 - 1)
 			if err := col.WriteDescToBatch(ctx, false, d, b); err != nil {
 				return err
 			}
