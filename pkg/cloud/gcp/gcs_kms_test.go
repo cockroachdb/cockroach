@@ -10,6 +10,7 @@
 package gcp
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"os"
@@ -28,88 +29,89 @@ func TestEncryptDecryptGCS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	q := make(url.Values)
-	expect := map[string]string{
-		"CREDENTIALS":                    CredentialsParam,
-		"GOOGLE_APPLICATION_CREDENTIALS": "GOOGLE_APPLICATION_CREDENTIALS",
-	}
-	for env, param := range expect {
-		v := os.Getenv(env)
-		if v == "" {
-			skip.IgnoreLintf(t, "%s env var must be set", env)
-		}
-		q.Add(param, v)
-	}
 
 	// The KeyID for GCS is the following format:
 	// projects/{project name}/locations/{key region}/keyRings/{keyring name}/cryptoKeys/{key name}
-	// It can be specified as the following:
-	// - GCS_KEY_ID
-	// - GCS_KEY_NAME
-	for _, id := range []string{"GCS_KEY_ID", "GCS_KEY_NAME"} {
-		// Get GCS Key identifier from env variable.
-		keyID := os.Getenv(id)
-		if keyID == "" {
-			skip.IgnoreLint(t, fmt.Sprintf("%s env var must be set", id))
+	//
+	// Get GCS Key identifier from env variable.
+	keyID := os.Getenv("GOOGLE_KMS_KEY_NAME")
+	if keyID == "" {
+		skip.IgnoreLint(t, "GOOGLE_KMS_KEY_NAME env var must be set")
+	}
+
+	t.Run("auth-empty-no-cred", func(t *testing.T) {
+		// Set AUTH to specified but don't provide CREDENTIALS params.
+		params := make(url.Values)
+		params.Add(cloud.AuthParam, cloud.AuthParamSpecified)
+
+		uri := fmt.Sprintf("gs:///%s?%s", keyID, params.Encode())
+
+		_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
+		require.EqualError(t, err, fmt.Sprintf(
+			`%s is set to '%s', but %s is not set`,
+			cloud.AuthParam,
+			cloud.AuthParamSpecified,
+			CredentialsParam,
+		))
+	})
+
+	t.Run("auth-implicit", func(t *testing.T) {
+		if !isImplicitAuthConfigured() {
+			skip.IgnoreLint(t, "implicit auth is not configured")
 		}
 
-		t.Run(fmt.Sprintf("auth-empty-no-cred-%s", id), func(t *testing.T) {
-			// Set AUTH to specified but don't provide CREDENTIALS params.
-			params := make(url.Values)
-			params.Add(cloud.AuthParam, cloud.AuthParamSpecified)
+		// Set the AUTH to implicit.
+		params := make(url.Values)
+		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 
-			uri := fmt.Sprintf("gs:///%s?%s", keyID, params.Encode())
-
-			_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
-			require.EqualError(t, err, fmt.Sprintf(
-				`%s is set to '%s', but %s is not set`,
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
-				CredentialsParam,
-			))
+		uri := fmt.Sprintf("gs:///%s?%s", keyID, params.Encode())
+		cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+			Settings:         cluster.NoSettings,
+			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
+	})
 
-		t.Run(fmt.Sprintf("auth-implicit-%s", id), func(t *testing.T) {
-			// Set the AUTH params.
-			params := make(url.Values)
-			params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	t.Run("auth-specified", func(t *testing.T) {
+		// Fetch the base64 encoded JSON credentials.
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
+		if credentials == "" {
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
+		q.Set(CredentialsParam, url.QueryEscape(encoded))
 
-			uri := fmt.Sprintf("gs:///%s?%s", keyID, params.Encode())
-			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
-				Settings:         cluster.NoSettings,
-				ExternalIOConfig: &base.ExternalIODirConfig{},
-			})
+		// Set AUTH to specified.
+		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+
+		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
+		cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+			Settings:         cluster.NoSettings,
+			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
-
-		t.Run(fmt.Sprintf("auth-specified-%s", id), func(t *testing.T) {
-			// Set AUTH to specified.
-			q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
-			uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
-
-			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
-				Settings:         cluster.NoSettings,
-				ExternalIOConfig: &base.ExternalIODirConfig{},
-			})
-		})
-	}
+	})
 }
 
 func TestGCSKMSDisallowImplicitCredentials(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	if !isImplicitAuthConfigured() {
+		skip.IgnoreLint(t, "implicit auth is not configured")
+	}
+
 	q := make(url.Values)
 
 	// Set AUTH to implicit.
 	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
-	for _, id := range []string{"GCS_KEY_ID", "GCS_KEY_NAME"} {
-		keyID := os.Getenv(id)
-		if keyID == "" {
-			skip.IgnoreLint(t, "%s env var must be set", id)
-		}
-		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
-		_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{
-			Settings:         cluster.NoSettings,
-			ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
-		require.True(t, testutils.IsError(err,
-			"implicit credentials disallowed for gcs due to --external-io-implicit-credentials flag"),
-		)
+	keyID := os.Getenv("GOOGLE_KMS_KEY_NAME")
+	if keyID == "" {
+		skip.IgnoreLint(t, "GOOGLE_KMS_KEY_NAME env var must be set")
 	}
+
+	uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
+	_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{
+		Settings:         cluster.NoSettings,
+		ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
+	require.True(t, testutils.IsError(err,
+		"implicit credentials disallowed for gcs due to --external-io-implicit-credentials flag"),
+	)
 }

@@ -44,7 +44,7 @@ func Centroid(g geo.Geometry) (geo.Geometry, error) {
 
 // MinimumBoundingCircle returns minimum bounding circle of an EWKB
 func MinimumBoundingCircle(g geo.Geometry) (geo.Geometry, geo.Geometry, float64, error) {
-	if BoundingBoxHasInfiniteCoordinates(g) {
+	if BoundingBoxHasInfiniteCoordinates(g) || BoundingBoxHasNaNCoordinates(g) {
 		return geo.Geometry{}, geo.Geometry{}, 0, pgerror.Newf(pgcode.InvalidParameterValue, "value out of range: overflow")
 	}
 

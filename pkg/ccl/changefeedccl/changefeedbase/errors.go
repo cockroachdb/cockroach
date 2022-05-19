@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/errors"
 )
 
@@ -116,7 +117,7 @@ func IsRetryableError(err error) bool {
 		return true
 	}
 
-	return joberror.IsDistSQLRetryableError(err)
+	return (joberror.IsDistSQLRetryableError(err) || flowinfra.IsNoInboundStreamConnectionError(err))
 }
 
 // MaybeStripRetryableErrorMarker performs some minimal attempt to clean the
