@@ -341,13 +341,11 @@ func (t TxnMeta) SafeFormat(w redact.SafePrinter, _ rune) {
 }
 
 // FormatBytesAsKey is injected by module roachpb as dependency upon initialization.
-// TODO(sarkesian): Make this explicitly redactable.  See #70288
-var FormatBytesAsKey = func(k []byte) string {
-	return string(k)
+var FormatBytesAsKey = func(k []byte) redact.RedactableString {
+	return redact.Sprint(string(k))
 }
 
 // FormatBytesAsValue is injected by module roachpb as dependency upon initialization.
-// TODO(sarkesian): Make this explicitly redactable.  See #70288
-var FormatBytesAsValue = func(v []byte) string {
-	return string(v)
+var FormatBytesAsValue = func(v []byte) redact.RedactableString {
+	return redact.Sprint(string(v))
 }

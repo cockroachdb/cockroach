@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormatMVCCMetadata(t *testing.T) {
@@ -104,4 +105,15 @@ func TestTxnSeqIsIgnored(t *testing.T) {
 			assert.False(t, enginepb.TxnSeqIsIgnored(notIgn, tc.list))
 		}
 	}
+}
+
+func TestFormatBytesAsKeyAndValue(t *testing.T) {
+	// Injected by roachpb
+	require.Equal(t, string(enginepb.FormatBytesAsKey([]byte("foo"))), "‹\"foo\"›")
+	require.Equal(t, string(enginepb.FormatBytesAsKey([]byte("foo")).Redact()), "‹×›")
+
+	// Injected by storage
+	encodedIntVal := []byte{0x0, 0x0, 0x0, 0x0, 0x1, 0xf}
+	require.Equal(t, string(enginepb.FormatBytesAsValue(encodedIntVal)), "‹/INT/-8›")
+	require.Equal(t, string(enginepb.FormatBytesAsValue(encodedIntVal).Redact()), "‹×›")
 }
