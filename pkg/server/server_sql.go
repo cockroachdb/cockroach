@@ -1200,22 +1200,9 @@ func (s *SQLServer) preStart(
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
-
-	migrationsExecutor := sql.MakeInternalExecutor(
-		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
-	migrationsExecutor.SetSessionData(
-		&sessiondata.SessionData{
-			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-				// Migrations need an executor with query distribution turned off. This is
-				// because the node crashes if upgrades fail to execute, and query
-				// distribution introduces more moving parts. Local execution is more
-				// robust; for example, the DistSender has retries if it can't connect to
-				// another node, but DistSQL doesn't. Also see #44101 for why DistSQL is
-				// particularly fragile immediately after a node is started (i.e. the
-				// present situation).
-				DistSQLMode: sessiondatapb.DistSQLOff,
-			},
-		})
+	migrationsExecutor := sql.MakeInternalExecutorEx(
+		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings,
+		sessiondata.InternalExecutorOverride{DistSQLMode: sessiondatapb.DistSQLOff})
 	startupMigrationsMgr := startupmigrations.NewManager(
 		stopper,
 		s.execCfg.DB,

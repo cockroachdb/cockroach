@@ -149,23 +149,14 @@ func TestInternalFullTableScan(t *testing.T) {
 		"pq: query `SELECT * FROM t` contains a full table/index scan which is explicitly disallowed",
 		err.Error())
 
-	ie := sql.MakeInternalExecutor(
+	ie := sql.MakeInternalExecutorEx(
 		ctx,
 		s.(*server.TestServer).Server.PGServer().SQLServer,
 		sql.MemoryMetrics{},
 		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+		sessiondata.NoSessionDataOverride,
 	)
-	ie.SetSessionData(
-		&sessiondata.SessionData{
-			SessionData: sessiondatapb.SessionData{
-				Database:  "db",
-				UserProto: username.RootUserName().EncodeProto(),
-			},
-			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-				DisallowFullTableScans: true,
-			},
-			SequenceState: &sessiondata.SequenceState{},
-		})
+	ie.SessionData().DisallowFullTableScans = true
 
 	// Internal queries that perform full table scans shouldn't fail because of
 	// the setting above.

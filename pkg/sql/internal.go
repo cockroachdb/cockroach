@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -116,14 +117,54 @@ func MakeInternalExecutor(
 	}
 }
 
+// MakeInternalExecutor creates an InternalExecutor.
+func MakeInternalExecutorEx(
+	ctx context.Context,
+	s *Server,
+	memMetrics MemoryMetrics,
+	settings *cluster.Settings,
+	override sessiondata.InternalExecutorOverride,
+) InternalExecutor {
+	ie := MakeInternalExecutor(ctx, s, memMetrics, settings)
+	sd := ie.newSessionData(ctx)
+	ie.sessionDataStack = sessiondata.NewStack(sd)
+	applyOverrides(override, sd)
+	return ie
+}
+
 // SetSessionData binds the session variables that will be used by queries
 // performed through this executor from now on. This creates a new session stack.
-// It is recommended to use SetSessionDataStack.
+// It is recommended to use InternalExecutorOverride.
 //
-// SetSessionData cannot be called concurrently with query execution.
+// SetSessionData cannot be called concurrently with query execution.  Sessions
+// created with this will no get the defaults set correctly, don't use this.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
 	ie.s.populateMinimalSessionData(sessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
+}
+
+// this is only used in testing, how do I keep it that way?
+func (ie *InternalExecutor) SessionData() *sessiondata.SessionData {
+	return ie.sessionDataStack.Top()
+}
+
+func (ie *InternalExecutor) newSessionData(ctx context.Context) *sessiondata.SessionData {
+	sd := ie.s.newSessionData(SessionArgs{})
+	sds := sessiondata.NewStack(sd)
+	if true { //TODO remove testing switch
+		sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, SessionDefaults{})
+		if err := sdMutIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
+			return resetSessionVars(ctx, m)
+		}); err != nil {
+			log.Errorf(ctx, "error setting up internal session: %s", err)
+			// best effort, we're gonna ignore error
+		}
+		// Internal streamingCommandResult doesn't handle notices.
+		sd.NoticeDisplaySeverity = 0 //=pgnotice.DisplaySeverityError
+		// TestDistSQLFlowsVirtualTables hangs w/o this, distsql is optin for internal executors for now.
+		sd.DistSQLMode = sessiondatapb.DistSQLOff
+	}
+	return sd
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -637,10 +678,9 @@ func (ie *InternalExecutor) execInternal(
 
 	var sd *sessiondata.SessionData
 	if ie.sessionDataStack != nil {
-		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
 		sd = ie.sessionDataStack.Top().Clone()
 	} else {
-		sd = ie.s.newSessionData(SessionArgs{})
+		sd = ie.newSessionData(ctx)
 	}
 	applyOverrides(sessionDataOverride, sd)
 	sd.Internal = true

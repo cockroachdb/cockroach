@@ -34,6 +34,9 @@ type InternalExecutorOverride struct {
 	// used as long as that value has a QoSLevel defined
 	// (see QoSLevel.ValidateInternal).
 	QualityOfService *sessiondatapb.QoSLevel
+	// DistSQLMode allows some internal executors to customize distsql mode, ie
+	// use local only for updates.
+	DistSQLMode sessiondatapb.DistSQLExecMode
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
