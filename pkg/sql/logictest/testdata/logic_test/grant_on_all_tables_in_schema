@@ -94,3 +94,21 @@ query TTTTT colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  relation_name  grantee  privilege_type
+
+# Verify that the database name is resolved correctly if specified.
+statement ok
+CREATE DATABASE otherdb
+
+statement ok
+CREATE TABLE otherdb.public.tbl (a int)
+
+statement ok
+GRANT SELECT ON ALL TABLES IN SCHEMA otherdb.public TO testuser
+
+query TTTTTB colnames
+SHOW GRANTS ON TABLE otherdb.public.tbl
+----
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+otherdb        public       tbl         admin     ALL             true
+otherdb        public       tbl         root      ALL             true
+otherdb        public       tbl         testuser  SELECT          false

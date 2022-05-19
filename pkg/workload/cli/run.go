@@ -321,7 +321,12 @@ func runInitImpl(
 	lc := strings.ToLower(*dataLoader)
 	if lc == "auto" {
 		lc = "insert"
-		if workload.SupportsFixtures(gen) {
+		// Even if it does support fixtures, the CRDB cluster needs to know the
+		// workload. This can only be expected if the workload is public-facing.
+		// For example, at the time of writing, neither roachmart and ledger are
+		// public-facing, but both support fixtures. However, returning true here
+		// would result in "pq: unknown generator: roachmart" from the cluster.
+		if workload.SupportsFixtures(gen) && gen.Meta().PublicFacing {
 			lc = "import"
 		}
 	}

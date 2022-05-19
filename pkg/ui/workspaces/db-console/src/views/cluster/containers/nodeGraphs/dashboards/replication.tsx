@@ -218,7 +218,7 @@ export default function(props: GraphDashboardProps) {
             name="cr.store.kv.replica_circuit_breaker.num_tripped_events"
             title={nodeDisplayName(nodesSummary, nid)}
             sources={storeIDsForNode(nodesSummary, nid)}
-            downsampler={TimeSeriesQueryAggregator.MAX}
+            nonNegativeRate
           />
         ))}
       </Axis>

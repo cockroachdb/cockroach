@@ -657,10 +657,24 @@ ALTER TABLE delivery DROP COLUMN "item"
 statement ok
 DROP INDEX products@products_upc_key CASCADE
 
+skipif config local-legacy-schema-changer
 statement error "products" is referenced by foreign key from table "customer reviews"
 DROP TABLE products
 
+# Legacy schema changer orders dependent fks differently, but
+# semantically the same error.
+onlyif config local-legacy-schema-changer
+statement error "products" is referenced by foreign key from table "orders"
+DROP TABLE products
+
+skipif config local-legacy-schema-changer
 statement error referenced by foreign key from table "customer reviews"
+DROP TABLE products RESTRICT
+
+# Legacy schema changer orders dependent fks differently, but
+# semantically the same error.
+onlyif config local-legacy-schema-changer
+statement error "products" is referenced by foreign key from table "orders"
 DROP TABLE products RESTRICT
 
 statement error referenced by foreign key from table "customer reviews"
@@ -1003,6 +1017,7 @@ statement ok
 DROP TABLE a
 
 # Check proper GC job description formatting when removing FK back-references when dropping a table (#59221).
+skipif config local-legacy-schema-changer
 query TT
 SELECT job_type, description FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND
  description LIKE 'GC for DROP TABLE test.public.a';

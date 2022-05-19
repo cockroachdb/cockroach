@@ -1,6 +1,8 @@
 # 3node-tenant is blocked from running this file because of the absence of
-# the tenant table for tenants.
-# LogicTest: !3node-tenant
+# the tenant table for tenants. Legacy schema changer is also skipped, because
+# some of the queries relating internal state will be impacted in terms of
+# descriptor versions, etc..
+# LogicTest: !3node-tenant !local-legacy-schema-changer
 
 # Verify information_schema database handles mutation statements correctly.
 
