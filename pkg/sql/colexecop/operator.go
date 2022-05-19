@@ -53,10 +53,10 @@ type Operator interface {
 	execopnode.OpNode
 }
 
-// DrainableOperator is an operator that also implements DrainMeta. Next and
-// DrainMeta may not be called concurrently.
-type DrainableOperator interface {
-	Operator
+// DrainableClosableOperator is a ClosableOperator that also implements
+// DrainMeta. Next, DrainMeta, and Close may not be called concurrently.
+type DrainableClosableOperator interface {
+	ClosableOperator
 	MetadataSource
 }
 

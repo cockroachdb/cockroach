@@ -144,7 +144,7 @@ func (o *routerOutputOp) Child(nth int, verbose bool) execopnode.OpNode {
 	return nil
 }
 
-var _ colexecop.Operator = &routerOutputOp{}
+var _ colexecop.DrainableClosableOperator = &routerOutputOp{}
 
 type routerOutputOpTestingKnobs struct {
 	// blockedThreshold is the number of buffered values above which we consider
@@ -280,6 +280,12 @@ func (o *routerOutputOp) DrainMeta() []execinfrapb.ProducerMetadata {
 	o.closeLocked(o.Ctx)
 	o.mu.Unlock()
 	return o.drainCoordinator.drainMeta()
+}
+
+func (o *routerOutputOp) Close(ctx context.Context) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.mu.data.Close(ctx)
 }
 
 func (o *routerOutputOp) initWithHashRouter(r *HashRouter) {
@@ -468,9 +474,9 @@ func NewHashRouter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
-) (*HashRouter, []colexecop.DrainableOperator) {
+) (*HashRouter, []colexecop.DrainableClosableOperator) {
 	outputs := make([]routerOutput, len(unlimitedAllocators))
-	outputsAsOps := make([]colexecop.DrainableOperator, len(unlimitedAllocators))
+	outputsAsOps := make([]colexecop.DrainableClosableOperator, len(unlimitedAllocators))
 	// unblockEventsChan is buffered to 2*numOutputs as we don't want the outputs
 	// writing to it to block.
 	// Unblock events only happen after a corresponding block event. Since these

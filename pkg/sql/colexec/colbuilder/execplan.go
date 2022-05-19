@@ -943,7 +943,7 @@ func NewColOperator(
 							newAggArgs.Allocator = colmem.NewAllocator(ctx, ehaMemAccount, factory)
 							newAggArgs.MemAccount = ehaMemAccount
 							newAggArgs.Input = input
-							return colexecdisk.NewExternalHashAggregator(
+							eha, toClose := colexecdisk.NewExternalHashAggregator(
 								flowCtx,
 								args,
 								&newAggArgs,
@@ -957,6 +957,8 @@ func NewColOperator(
 								outputUnlimitedAllocator,
 								maxOutputBatchMemSize,
 							)
+							result.ToClose = append(result.ToClose, toClose)
+							return eha
 						},
 						args.TestingKnobs.SpillingCallbackFn,
 					)
@@ -1006,7 +1008,7 @@ func NewColOperator(
 						unlimitedAllocator := colmem.NewAllocator(
 							ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, edOpName, spec.ProcessorID), factory,
 						)
-						return colexecdisk.NewExternalDistinct(
+						ed, toClose := colexecdisk.NewExternalDistinct(
 							unlimitedAllocator,
 							flowCtx,
 							args,
@@ -1016,6 +1018,8 @@ func NewColOperator(
 							inMemoryUnorderedDistinct,
 							diskAccount,
 						)
+						result.ToClose = append(result.ToClose, toClose)
+						return ed
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
@@ -1106,7 +1110,7 @@ func NewColOperator(
 								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, opName, factory),
 								diskAccount,
 							)
-							result.ToClose = append(result.ToClose, ehj.(colexecop.Closer))
+							result.ToClose = append(result.ToClose, ehj)
 							return ehj
 						},
 						args.TestingKnobs.SpillingCallbackFn,
@@ -1419,7 +1423,9 @@ func NewColOperator(
 						}
 						result.Root = colexecwindow.NewWindowAggregatorOperator(
 							windowArgs, aggType, wf.Frame, &wf.Ordering, argIdxs,
-							aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
+							aggArgs.OutputTypes[0], aggFnsAlloc,
+						)
+						result.ToClose = append(result.ToClose, toClose...)
 						returnType = aggArgs.OutputTypes[0]
 					}
 				} else {
