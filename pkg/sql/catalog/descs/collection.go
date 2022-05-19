@@ -173,6 +173,11 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 	tc.sqlLivenessSession = nil
 }
 
+// ResetSyntheticDescriptors clear all syntheticDescriptors.
+func (tc *Collection) ResetSyntheticDescriptors() {
+	tc.synthetic.reset()
+}
+
 // ReleaseAll releases all state currently held by the Collection.
 // ReleaseAll calls ReleaseLeases.
 func (tc *Collection) ReleaseAll(ctx context.Context) {

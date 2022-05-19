@@ -1662,6 +1662,8 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 
 	if !ex.extraTxnState.descsCollectionInConnEx.skipRelease {
 		ex.extraTxnState.descsCollectionInConnEx.descCollection.ReleaseAll(ctx)
+	} else {
+		ex.extraTxnState.descsCollectionInConnEx.descCollection.ResetSyntheticDescriptors()
 	}
 
 	// Close all portals.

@@ -126,7 +126,7 @@ type InternalExecutor struct {
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
-// the provided closure and resets them afterward. Used for queries/statements
+// provided closure and resets them afterward. Used for queries/statements
 // that need to use in-memory synthetic descriptors different from descriptors
 // written to disk. These descriptors override all other descriptors on the
 // immutable resolution path.
