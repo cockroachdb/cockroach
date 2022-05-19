@@ -31,9 +31,9 @@ var formatParsers = map[string]string{
 	"crdb-v2":             "v2",
 	"crdb-v2-tty":         "v2",
 	"json":                "json",
-	"json-compact":        "json",
+	"json-compact":        "json-compact",
 	"json-fluent":         "json",
-	"json-fluent-compact": "json",
+	"json-fluent-compact": "json-compact",
 }
 
 var formatters = func() map[string]logFormatter {
