@@ -858,6 +858,9 @@ message TxnInfo {
   string priority = 13;
 
   string quality_of_service = 14;
+
+  // Error message describing the cause for the txn's last automatic retry.
+  string last_auto_retry_reason = 15;
 }
 
 // ActiveQuery represents a query in flight on some Session.
@@ -960,7 +963,6 @@ message Session {
   // Timestamp of session's end.
   google.protobuf.Timestamp end = 15
       [ (gogoproto.nullable) = true, (gogoproto.stdtime) = true ];
-
 }
 
 // An error wrapper object for ListSessionsResponse.
