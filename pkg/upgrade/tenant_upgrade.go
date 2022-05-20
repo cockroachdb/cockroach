@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/logtags"
 )
@@ -43,7 +44,10 @@ type TenantDeps struct {
 		Default roachpb.SpanConfig
 	}
 
-	TestingKnobs *TestingKnobs
+	TestingKnobs              *TestingKnobs
+	SchemaResolverConstructor func( // A constructor that returns a schema resolver for `descriptors` in `currDb`.
+		txn *kv.Txn, descriptors *descs.Collection, currDb string,
+	) (resolver.SchemaResolver, func(), error)
 }
 
 // TenantUpgradeFunc is used to perform sql-level upgrades. It may be run from
