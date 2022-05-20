@@ -907,7 +907,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ieFactory,
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
-		sql.NewFakeSessionData,
+		sql.NewInternalSessionData,
 	)
 
 	execCfg.DescMetadaUpdaterFactory = descmetadata.NewMetadataUpdaterFactory(

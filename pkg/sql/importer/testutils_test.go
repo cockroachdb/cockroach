@@ -17,7 +17,6 @@ import (
 	"math"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -96,11 +94,6 @@ func descForTable(
 }
 
 var testEvalCtx = &eval.Context{
-	SessionDataStack: sessiondata.NewStack(
-		&sessiondata.SessionData{
-			Location: time.UTC,
-		},
-	),
 	StmtTimestamp: timeutil.Unix(100000000, 0),
 	Settings:      cluster.MakeTestingClusterSettings(),
 	Codec:         keys.SystemSQLCodec,

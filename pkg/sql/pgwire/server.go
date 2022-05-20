@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -846,7 +847,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	}
 
 	// Load the client-provided session parameters.
-	var sArgs sql.SessionArgs
+	var sArgs sessiondata.SessionArgs
 	if sArgs, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf,
 		conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get()); err != nil {
 		return s.sendErr(ctx, conn, err)
@@ -934,15 +935,15 @@ func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebas
 }
 
 // parseClientProvidedSessionParameters reads the incoming k/v pairs
-// in the startup message into a sql.SessionArgs struct.
+// in the startup message into a sessiondata.SessionArgs struct.
 func parseClientProvidedSessionParameters(
 	ctx context.Context,
 	sv *settings.Values,
 	buf *pgwirebase.ReadBuffer,
 	origRemoteAddr net.Addr,
 	trustClientProvidedRemoteAddr bool,
-) (sql.SessionArgs, error) {
-	args := sql.SessionArgs{
+) (sessiondata.SessionArgs, error) {
+	args := sessiondata.SessionArgs{
 		SessionDefaults:             make(map[string]string),
 		CustomOptionSessionDefaults: make(map[string]string),
 		RemoteAddr:                  origRemoteAddr,
@@ -953,7 +954,7 @@ func parseClientProvidedSessionParameters(
 		// Read a key-value pair from the client.
 		key, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.Wrap(
+			return sessiondata.SessionArgs{}, pgerror.Wrap(
 				err, pgcode.ProtocolViolation,
 				"error reading option key",
 			)
@@ -964,7 +965,7 @@ func parseClientProvidedSessionParameters(
 		}
 		value, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.Wrapf(
+			return sessiondata.SessionArgs{}, pgerror.Wrapf(
 				err, pgcode.ProtocolViolation,
 				"error reading option value for key %q", key,
 			)
@@ -988,7 +989,7 @@ func parseClientProvidedSessionParameters(
 		case "crdb:session_revival_token_base64":
 			token, err := base64.StdEncoding.DecodeString(value)
 			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrapf(
+				return sessiondata.SessionArgs{}, pgerror.Wrapf(
 					err, pgcode.ProtocolViolation,
 					"%s", key,
 				)
@@ -997,39 +998,39 @@ func parseClientProvidedSessionParameters(
 
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
-				return sql.SessionArgs{}, errors.WithSecondaryError(
+				return sessiondata.SessionArgs{}, errors.WithSecondaryError(
 					pgerror.Newf(pgcode.ProtocolViolation,
 						"error parsing results_buffer_size option value '%s' as bytes", value), err)
 			}
 			if args.ConnResultsBufferSize < 0 {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+				return sessiondata.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
 					"results_buffer_size option value '%s' cannot be negative", value)
 			}
 			foundBufferSize = true
 
 		case "crdb:remote_addr":
 			if !trustClientProvidedRemoteAddr {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+				return sessiondata.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
 					"server not configured to accept remote address override (requested: %q)", value)
 			}
 
 			hostS, portS, err := net.SplitHostPort(value)
 			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrap(
+				return sessiondata.SessionArgs{}, pgerror.Wrap(
 					err, pgcode.ProtocolViolation,
 					"invalid address format",
 				)
 			}
 			port, err := strconv.Atoi(portS)
 			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrap(
+				return sessiondata.SessionArgs{}, pgerror.Wrap(
 					err, pgcode.ProtocolViolation,
 					"remote port is not numeric",
 				)
 			}
 			ip := net.ParseIP(hostS)
 			if ip == nil {
-				return sql.SessionArgs{}, pgerror.New(pgcode.ProtocolViolation,
+				return sessiondata.SessionArgs{}, pgerror.New(pgcode.ProtocolViolation,
 					"remote address is not numeric")
 			}
 			args.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
@@ -1037,18 +1038,18 @@ func parseClientProvidedSessionParameters(
 		case "options":
 			opts, err := parseOptions(value)
 			if err != nil {
-				return sql.SessionArgs{}, err
+				return sessiondata.SessionArgs{}, err
 			}
 			for _, opt := range opts {
 				err = loadParameter(ctx, opt.key, opt.value, &args)
 				if err != nil {
-					return sql.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
+					return sessiondata.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
 				}
 			}
 		default:
 			err = loadParameter(ctx, key, value, &args)
 			if err != nil {
-				return sql.SessionArgs{}, err
+				return sessiondata.SessionArgs{}, err
 			}
 		}
 	}
@@ -1078,7 +1079,7 @@ func parseClientProvidedSessionParameters(
 	return args, nil
 }
 
-func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs) error {
+func loadParameter(ctx context.Context, key, value string, args *sessiondata.SessionArgs) error {
 	key = strings.ToLower(key)
 	exists, configurable := sql.IsSessionVariableConfigurable(key)
 

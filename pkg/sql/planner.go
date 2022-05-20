@@ -372,7 +372,7 @@ func newInternalPlanner(
 	smi := &sessionDataMutatorIterator{
 		sds: sds,
 		sessionDataMutatorBase: sessionDataMutatorBase{
-			defaults: SessionDefaults(map[string]string{
+			defaults: sessiondata.SessionDefaults(map[string]string{
 				"application_name": "crdb-internal",
 				"database":         "system",
 			}),

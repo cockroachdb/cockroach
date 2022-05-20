@@ -537,29 +537,29 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	metrics := makeServerMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, timeutil.Now(), nil)
+	pgwireConn := newConn(conn, sessiondata.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, timeutil.Now(), nil)
 	return pgwireConn, nil
 }
 
 // getSessionArgs blocks until a client connects and returns the connection
 // together with session arguments or an error.
-func getSessionArgs(ln net.Listener, trustRemoteAddr bool) (net.Conn, sql.SessionArgs, error) {
+func getSessionArgs(ln net.Listener, trustRemoteAddr bool) (net.Conn, sessiondata.SessionArgs, error) {
 	conn, err := ln.Accept()
 	if err != nil {
-		return nil, sql.SessionArgs{}, err
+		return nil, sessiondata.SessionArgs{}, err
 	}
 
 	buf := pgwirebase.MakeReadBuffer()
 	_, err = buf.ReadUntypedMsg(conn)
 	if err != nil {
-		return nil, sql.SessionArgs{}, err
+		return nil, sessiondata.SessionArgs{}, err
 	}
 	version, err := buf.GetUint32()
 	if err != nil {
-		return nil, sql.SessionArgs{}, err
+		return nil, sessiondata.SessionArgs{}, err
 	}
 	if version != version30 {
-		return nil, sql.SessionArgs{}, errors.Errorf("unexpected protocol version: %d", version)
+		return nil, sessiondata.SessionArgs{}, errors.Errorf("unexpected protocol version: %d", version)
 	}
 
 	args, err := parseClientProvidedSessionParameters(
@@ -1070,7 +1070,7 @@ func TestMaliciousInputs(t *testing.T) {
 				r,
 				// ConnResultsBufferSize - really small so that it overflows
 				// when we produce a few results.
-				sql.SessionArgs{ConnResultsBufferSize: 10},
+				sessiondata.SessionArgs{ConnResultsBufferSize: 10},
 				&metrics,
 				timeutil.Now(),
 				nil,
@@ -1343,12 +1343,12 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 	testCases := []struct {
 		desc   string
 		query  string
-		assert func(t *testing.T, args sql.SessionArgs, err error)
+		assert func(t *testing.T, args sessiondata.SessionArgs, err error)
 	}{
 		{
 			desc:  "user is set from query",
 			query: "user=root",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "root", args.User.Normalized())
 			},
@@ -1356,7 +1356,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "user is ignored in options",
 			query: "user=root&options=-c%20user=test_user_from_options",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "root", args.User.Normalized())
 				_, ok := args.SessionDefaults["user"]
@@ -1366,7 +1366,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "results_buffer_size is not configurable from options",
 			query: "user=root&options=-c%20results_buffer_size=42",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.Error(t, err)
 				require.Regexp(t, "options: parameter \"results_buffer_size\" cannot be changed", err)
 			},
@@ -1374,7 +1374,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "crdb:remote_addr is ignored in options",
 			query: "user=root&options=-c%20crdb%3Aremote_addr=2.3.4.5%3A5432",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.NotEqual(t, "2.3.4.5:5432", args.RemoteAddr.String())
 			},
@@ -1382,7 +1382,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "more keys than values in options error",
 			query: "user=root&options=-c%20search_path==public,test,default",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.Error(t, err)
 				require.Regexp(t, "option \"search_path==public,test,default\" is invalid, check '='", err)
 			},
@@ -1390,7 +1390,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "more values than keys in options error",
 			query: "user=root&options=-c%20search_path",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.Error(t, err)
 				require.Regexp(t, "option \"search_path\" is invalid, check '='", err)
 			},
@@ -1398,7 +1398,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "success parsing encoded options",
 			query: "user=root&options=-c%20search_path%3ddefault%2Ctest",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "default,test", args.SessionDefaults["search_path"])
 			},
@@ -1406,7 +1406,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "success parsing options with no space after '-c'",
 			query: "user=root&options=-csearch_path=default,test -coptimizer_use_multicol_stats=true",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "default,test", args.SessionDefaults["search_path"])
 				require.Equal(t, "true", args.SessionDefaults["optimizer_use_multicol_stats"])
@@ -1415,7 +1415,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "success parsing options with a tab (%09) separating the options",
 			query: "user=root&options=-csearch_path=default,test%09-coptimizer_use_multicol_stats=true",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "default,test", args.SessionDefaults["search_path"])
 				require.Equal(t, "true", args.SessionDefaults["optimizer_use_multicol_stats"])
@@ -1424,7 +1424,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "error when no leading '-c'",
 			query: "user=root&options=search_path=default",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.Error(t, err)
 				require.Regexp(t, "option \"search_path=default\" is invalid, must have prefix '-c' or '--'", err)
 			},
@@ -1432,7 +1432,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "'-c' with no leading space belongs to prev value",
 			query: "user=root&options=-c search_path=default-c",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "default-c", args.SessionDefaults["search_path"])
 			},
@@ -1440,7 +1440,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "fail to parse '-c' with no leading space",
 			query: "user=root&options=-c search_path=default-c optimizer_use_multicol_stats=true",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.Error(t, err)
 				require.Regexp(t, "option \"optimizer_use_multicol_stats=true\" is invalid, must have prefix '-c' or '--'", err)
 			},
@@ -1448,7 +1448,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "parse multiple options successfully",
 			query: "user=root&options=-c%20search_path=default,test%20-c%20optimizer_use_multicol_stats=true",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "default,test", args.SessionDefaults["search_path"])
 				require.Equal(t, "true", args.SessionDefaults["optimizer_use_multicol_stats"])
@@ -1457,7 +1457,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "success parsing option with space in value",
 			query: "user=root&options=-c default_transaction_isolation=READ\\ UNCOMMITTED",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "READ UNCOMMITTED", args.SessionDefaults["default_transaction_isolation"])
 			},
@@ -1465,7 +1465,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "remote_addr missing port",
 			query: "user=root&crdb:remote_addr=5.4.3.2",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.Error(t, err)
 				require.Regexp(t, "invalid address format: address 5.4.3.2: missing port in address", err)
 			},
@@ -1473,7 +1473,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "remote_addr port must be numeric",
 			query: "user=root&crdb:remote_addr=5.4.3.2:port",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.Error(t, err)
 				require.Regexp(t, "remote port is not numeric", err)
 			},
@@ -1481,7 +1481,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "remote_addr host must be numeric",
 			query: "user=root&crdb:remote_addr=ip:5432",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.Error(t, err)
 				require.Regexp(t, "remote address is not numeric", err)
 			},
@@ -1489,7 +1489,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "success setting remote address from query",
 			query: "user=root&crdb:remote_addr=2.3.4.5:5432",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "2.3.4.5:5432", args.RemoteAddr.String())
 			},
@@ -1497,7 +1497,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "normalize to lower case in options parameter",
 			query: "user=root&options=-c DateStyle=YMD,ISO",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "YMD,ISO", args.SessionDefaults["datestyle"])
 			},
@@ -1505,7 +1505,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		{
 			desc:  "normalize to lower case in query parameters",
 			query: "user=root&DateStyle=ISO,YMD",
-			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+			assert: func(t *testing.T, args sessiondata.SessionArgs, err error) {
 				require.NoError(t, err)
 				require.Equal(t, "ISO,YMD", args.SessionDefaults["datestyle"])
 			},

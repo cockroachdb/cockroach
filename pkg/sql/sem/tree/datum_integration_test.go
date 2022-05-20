@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -886,11 +885,7 @@ func TestDTimeTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := &eval.Context{
-		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
-			Location: time.UTC,
-		}),
-	}
+	ctx := &eval.Context{}
 
 	maxTime, depOnCtx, err := tree.ParseDTimeTZ(ctx, "24:00:00-1559", time.Microsecond)
 	require.NoError(t, err)
@@ -1022,11 +1017,7 @@ func TestDTimeTZPrev(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	rng, _ := randutil.NewTestRand()
-	evalCtx := &eval.Context{
-		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
-			Location: time.UTC,
-		}),
-	}
+	evalCtx := &eval.Context{}
 
 	// Check a few specific values.
 	closeToMidnight, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "23:59:59.865326-03:15:29", time.Microsecond)
@@ -1097,11 +1088,7 @@ func TestDTimeTZNext(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	rng, _ := randutil.NewTestRand()
-	evalCtx := &eval.Context{
-		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
-			Location: time.UTC,
-		}),
-	}
+	evalCtx := &eval.Context{}
 
 	// Check a few specific values.
 	closeToMidnight, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "00:00:00.865326+03:15:29", time.Microsecond)

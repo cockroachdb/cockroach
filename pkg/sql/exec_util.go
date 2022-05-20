@@ -17,7 +17,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"net"
 	"net/url"
 	"reflect"
 	"regexp"
@@ -1922,27 +1921,6 @@ func (q *queryMeta) getStatement() (tree.Statement, error) {
 	return parsed.AST, nil
 }
 
-// SessionDefaults mirrors fields in Session, for restoring default
-// configuration values in SET ... TO DEFAULT (or RESET ...) statements.
-type SessionDefaults map[string]string
-
-// SessionArgs contains arguments for serving a client connection.
-type SessionArgs struct {
-	User                        username.SQLUsername
-	IsSuperuser                 bool
-	SessionDefaults             SessionDefaults
-	CustomOptionSessionDefaults SessionDefaults
-	// RemoteAddr is the client's address. This is nil iff this is an internal
-	// client.
-	RemoteAddr            net.Addr
-	ConnResultsBufferSize int64
-	// SessionRevivalToken may contain a token generated from a different session
-	// that can be used to authenticate this session. If it is set, all other
-	// authentication is skipped. Once the token is used to authenticate, this
-	// value should be zeroed out.
-	SessionRevivalToken []byte
-}
-
 // SessionRegistry stores a set of all sessions on this node.
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
@@ -2748,7 +2726,7 @@ var bufferableParamStatusUpdates = func() []bufferableParamStatusUpdate {
 // sessionDataMutatorBase contains elements in a sessionDataMutator
 // which is the same across all SessionData elements in the sessiondata.Stack.
 type sessionDataMutatorBase struct {
-	defaults SessionDefaults
+	defaults sessiondata.SessionDefaults
 	settings *cluster.Settings
 }
 

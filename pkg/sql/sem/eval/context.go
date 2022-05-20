@@ -265,11 +265,10 @@ func MakeTestingEvalContext(st *cluster.Settings) Context {
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) Context {
 	ctx := Context{
-		Codec:            keys.SystemSQLCodec,
-		Txn:              &kv.Txn{},
-		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
-		Settings:         st,
-		NodeID:           base.TestingIDContainer,
+		Codec:    keys.SystemSQLCodec,
+		Txn:      &kv.Txn{},
+		Settings: st,
+		NodeID:   base.TestingIDContainer,
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor

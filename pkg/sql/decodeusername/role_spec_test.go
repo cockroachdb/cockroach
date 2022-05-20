@@ -55,7 +55,7 @@ func TestRoleSpecValidation(t *testing.T) {
 	for _, tc := range testCases {
 		roleSpec := tree.RoleSpec{RoleSpecType: tree.RoleName, Name: tc.username}
 		normalized, err := FromRoleSpec(
-			&sessiondata.SessionData{}, username.PurposeCreation, roleSpec,
+			sessiondata.NewSessionData(), username.PurposeCreation, roleSpec,
 		)
 		if !testutils.IsError(err, tc.err) {
 			t.Errorf("%q: expected %q, got %v", tc.username, tc.err, err)

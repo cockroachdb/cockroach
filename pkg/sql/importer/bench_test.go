@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -95,8 +94,7 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 			wc := importer.NewWorkloadKVConverter(
 				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh, db)
 			evalCtx := &eval.Context{
-				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
-				Codec:            keys.SystemSQLCodec,
+				Codec: keys.SystemSQLCodec,
 			}
 			semaCtx := tree.MakeSemaContext()
 			return wc.Worker(ctx, evalCtx, &semaCtx)

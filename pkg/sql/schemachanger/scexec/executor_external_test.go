@@ -64,7 +64,7 @@ func (ti testInfra) newExecDeps(
 	const schemaChangerJobID = 1
 	return scdeps.NewExecutorDependencies(
 		ti.lm.Codec(),
-		&sessiondata.SessionData{},
+		sessiondata.NewSessionData(),
 		txn,
 		username.RootUserName(),
 		descsCollection,

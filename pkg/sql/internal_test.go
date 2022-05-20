@@ -313,19 +313,14 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	}
 
 	expDB := "foo"
-	ie := sql.MakeInternalExecutor(
+	ie := sql.MakeInternalExecutorEx(
 		ctx,
 		s.(*server.TestServer).Server.PGServer().SQLServer,
 		sql.MemoryMetrics{},
 		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
-	)
-	ie.SetSessionData(
-		&sessiondata.SessionData{
-			SessionData: sessiondatapb.SessionData{
-				Database:  expDB,
-				UserProto: username.RootUserName().EncodeProto(),
-			},
-			SequenceState: &sessiondata.SequenceState{},
+		sessiondata.InternalExecutorOverride{
+			Database: expDB,
+			User:     username.RootUserName(),
 		})
 
 	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
@@ -381,21 +376,17 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
 
-		ie := sql.MakeInternalExecutor(
+		ie := sql.MakeInternalExecutorEx(
 			context.Background(),
 			s.(*server.TestServer).Server.PGServer().SQLServer,
 			sql.MemoryMetrics{},
 			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
-		)
-		ie.SetSessionData(
-			&sessiondata.SessionData{
-				SessionData: sessiondatapb.SessionData{
-					UserProto:       username.RootUserName().EncodeProto(),
-					Database:        "defaultdb",
-					ApplicationName: "appname_findme",
-				},
-				SequenceState: &sessiondata.SequenceState{},
+			sessiondata.InternalExecutorOverride{
+				User:            username.RootUserName(),
+				Database:        "defaultdb",
+				ApplicationName: "appname_findme",
 			})
+
 		testInternalExecutorAppNameInitialization(
 			t, sem,
 			"appname_findme", // app name in SHOW

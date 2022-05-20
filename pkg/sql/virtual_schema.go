@@ -186,10 +186,10 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		nil,       /* regionConfig */
 		startTime, /* creationTime */
 		catpb.NewVirtualTablePrivilegeDescriptor(),
-		nil,                        /* affected */
-		nil,                        /* semaCtx */
-		nil,                        /* evalCtx */
-		&sessiondata.SessionData{}, /* sessionData */
+		nil,                          /* affected */
+		nil,                          /* semaCtx */
+		nil,                          /* evalCtx */
+		sessiondata.NewSessionData(), /* sessionData */
 		tree.PersistencePermanent,
 	)
 	if err != nil {

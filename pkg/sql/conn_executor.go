@@ -647,13 +647,13 @@ func (s *Server) GetExecutorConfig() *ExecutorConfig {
 //   contribute to.
 func (s *Server) SetupConn(
 	ctx context.Context,
-	args SessionArgs,
+	args sessiondata.SessionArgs,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 	onDefaultIntSizeChange func(newSize int32),
 ) (ConnectionHandler, error) {
-	sd := s.newSessionData(args)
+	sd := sessiondata.NewSessionDataEx(args)
 	sds := sessiondata.NewStack(sd)
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
@@ -757,32 +757,8 @@ func (s *Server) GetLocalIndexStatistics() *idxusage.LocalIndexUsageStats {
 	return s.indexUsageStats
 }
 
-// newSessionData a SessionData that can be passed to newConnExecutor.
-func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
-	sd := &sessiondata.SessionData{
-		SessionData: sessiondatapb.SessionData{
-			UserProto: args.User.EncodeProto(),
-		},
-		LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
-			RemoteAddr: args.RemoteAddr,
-		},
-		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-			ResultsBufferSize: args.ConnResultsBufferSize,
-			IsSuperuser:       args.IsSuperuser,
-		},
-	}
-	if len(args.CustomOptionSessionDefaults) > 0 {
-		sd.CustomOptions = make(map[string]string)
-		for k, v := range args.CustomOptionSessionDefaults {
-			sd.CustomOptions[k] = v
-		}
-	}
-	s.populateMinimalSessionData(sd)
-	return sd
-}
-
 func (s *Server) makeSessionDataMutatorIterator(
-	sds *sessiondata.Stack, defaults SessionDefaults,
+	sds *sessiondata.Stack, defaults sessiondata.SessionDefaults,
 ) *sessionDataMutatorIterator {
 	return &sessionDataMutatorIterator{
 		sds: sds,
@@ -791,20 +767,6 @@ func (s *Server) makeSessionDataMutatorIterator(
 			settings: s.cfg.Settings,
 		},
 		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
-	}
-}
-
-// populateMinimalSessionData populates sd with some minimal values needed for
-// not crashing. Fields of sd that are already set are not overwritten.
-func (s *Server) populateMinimalSessionData(sd *sessiondata.SessionData) {
-	if sd.SequenceState == nil {
-		sd.SequenceState = sessiondata.NewSequenceState()
-	}
-	if sd.Location == nil {
-		sd.Location = time.UTC
-	}
-	if len(sd.SearchPath.GetPathArray()) == 0 {
-		sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User())
 	}
 }
 

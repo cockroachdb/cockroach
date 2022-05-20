@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -117,7 +118,8 @@ func MakeInternalExecutor(
 	}
 }
 
-// MakeInternalExecutor creates an InternalExecutor.
+// MakeInternalExecutorEx creates an InternalExecutor and initializes the session stack
+// applying the specified overrides.
 func MakeInternalExecutorEx(
 	ctx context.Context,
 	s *Server,
@@ -139,7 +141,6 @@ func MakeInternalExecutorEx(
 // SetSessionData cannot be called concurrently with query execution.  Sessions
 // created with this will no get the defaults set correctly, don't use this.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
-	ie.s.populateMinimalSessionData(sessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
 }
 
@@ -149,10 +150,10 @@ func (ie *InternalExecutor) SessionData() *sessiondata.SessionData {
 }
 
 func (ie *InternalExecutor) newSessionData(ctx context.Context) *sessiondata.SessionData {
-	sd := ie.s.newSessionData(SessionArgs{})
+	sd := sessiondata.NewSessionData()
 	sds := sessiondata.NewStack(sd)
 	if true { //TODO remove testing switch
-		sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, SessionDefaults{})
+		sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, sessiondata.SessionDefaults{})
 		if err := sdMutIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
 			return resetSessionVars(ctx, m)
 		}); err != nil {
@@ -164,6 +165,32 @@ func (ie *InternalExecutor) newSessionData(ctx context.Context) *sessiondata.Ses
 		// TestDistSQLFlowsVirtualTables hangs w/o this, distsql is optin for internal executors for now.
 		sd.DistSQLMode = sessiondatapb.DistSQLOff
 	}
+	return sd
+}
+
+// NewInternalSessionData returns a session data for use in internal queries
+// that are not run on behalf of a user session, such as those run during the
+// steps of background jobs and schema changes.
+func NewInternalSessionData(sv *settings.Values) *sessiondata.SessionData {
+	sd := sessiondata.NewSessionData()
+	sp := sessiondata.DefaultSearchPathForUser(username.NodeUserName())
+	applyOverrides(sessiondata.InternalExecutorOverride{
+		// The database is not supposed to be needed in schema changes, as there
+		// shouldn't be unqualified identifiers in backfills, and the pure functions
+		// that need it should have already been evaluated.
+		//
+		// TODO(andrei): find a way to assert that this field is indeed not used.
+		// And in fact it is used by `current_schemas()`, which, although is a pure
+		// function, takes arguments which might be impure (so it can't always be
+		// pre-evaluated).
+		Database:    "",
+		User:        username.NodeUserName(),
+		DistSQLMode: sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
+		SearchPath:  &sp,
+	}, sd)
+	sd.Internal = true
+	sd.VectorizeMode = sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv))
+
 	return sd
 }
 

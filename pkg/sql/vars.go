@@ -2357,7 +2357,7 @@ func CheckSessionVariableValueValid(
 	fakeSessionMutator := sessionDataMutator{
 		data: &sessiondata.SessionData{},
 		sessionDataMutatorBase: sessionDataMutatorBase{
-			defaults: SessionDefaults(map[string]string{}),
+			defaults: sessiondata.SessionDefaults(map[string]string{}),
 			settings: settings,
 		},
 		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},

@@ -269,7 +269,7 @@ func TestIndexForDisplay(t *testing.T) {
 		},
 	}
 
-	sd := &sessiondata.SessionData{}
+	sd := sessiondata.NewSessionData()
 	for testIdx, tc := range testData {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
 			got, err := indexForDisplay(

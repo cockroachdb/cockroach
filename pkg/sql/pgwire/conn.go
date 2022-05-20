@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -62,7 +63,7 @@ import (
 type conn struct {
 	conn net.Conn
 
-	sessionArgs sql.SessionArgs
+	sessionArgs sessiondata.SessionArgs
 	metrics     *ServerMetrics
 
 	// startTime is the time when the connection attempt was first received
@@ -154,7 +155,7 @@ type conn struct {
 func (s *Server) serveConn(
 	ctx context.Context,
 	netConn net.Conn,
-	sArgs sql.SessionArgs,
+	sArgs sessiondata.SessionArgs,
 	reserved mon.BoundAccount,
 	connStart time.Time,
 	authOpt authOptions,
@@ -182,7 +183,7 @@ var alwaysLogAuthActivity = envutil.EnvOrDefaultBool("COCKROACH_ALWAYS_LOG_AUTHN
 
 func newConn(
 	netConn net.Conn,
-	sArgs sql.SessionArgs,
+	sArgs sessiondata.SessionArgs,
 	metrics *ServerMetrics,
 	connStart time.Time,
 	sv *settings.Values,

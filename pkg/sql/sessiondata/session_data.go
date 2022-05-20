@@ -305,3 +305,73 @@ func (s *Stack) PopAll() {
 func (s *Stack) Elems() []*SessionData {
 	return s.stack
 }
+
+// SessionDefaults mirrors fields in Session, for restoring default
+// configuration values in SET ... TO DEFAULT (or RESET ...) statements.
+type SessionDefaults map[string]string
+
+// SessionArgs contains arguments for serving a client connection.
+type SessionArgs struct {
+	User                        username.SQLUsername
+	IsSuperuser                 bool
+	SessionDefaults             SessionDefaults
+	CustomOptionSessionDefaults SessionDefaults
+	// RemoteAddr is the client's address. This is nil iff this is an internal
+	// client.
+	RemoteAddr            net.Addr
+	ConnResultsBufferSize int64
+	// SessionRevivalToken may contain a token generated from a different session
+	// that can be used to authenticate this session. If it is set, all other
+	// authentication is skipped. Once the token is used to authenticate, this
+	// value should be zeroed out.
+	SessionRevivalToken []byte
+}
+
+var NoArgs = SessionArgs{}
+
+// NewSessionData a SessionData that can be passed to newConnExecutor. This
+// is a minimally populated session that has mostly go defaults and doesn't
+// have sessionVar defaults.
+func NewSessionData() *SessionData {
+	return NewSessionDataEx(NoArgs)
+}
+
+// NewSessionDataEx creates a SessionData that can be passed to
+// newConnExecutor. This is a minimally populated session that has mostly go
+// defaults and doesn't have sessionVar defaults.
+func NewSessionDataEx(args SessionArgs) *SessionData {
+	sd := &SessionData{
+		SessionData: sessiondatapb.SessionData{
+			UserProto: args.User.EncodeProto(),
+		},
+		LocalUnmigratableSessionData: LocalUnmigratableSessionData{
+			RemoteAddr: args.RemoteAddr,
+		},
+		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+			ResultsBufferSize: args.ConnResultsBufferSize,
+			IsSuperuser:       args.IsSuperuser,
+		},
+	}
+	if len(args.CustomOptionSessionDefaults) > 0 {
+		sd.CustomOptions = make(map[string]string)
+		for k, v := range args.CustomOptionSessionDefaults {
+			sd.CustomOptions[k] = v
+		}
+	}
+	populateMinimalSessionData(sd)
+	return sd
+}
+
+// populateMinimalSessionData populates sd with some minimal values needed for
+// not crashing. Fields of sd that are already set are not overwritten.
+func populateMinimalSessionData(sd *SessionData) {
+	if sd.SequenceState == nil {
+		sd.SequenceState = NewSequenceState()
+	}
+	if sd.Location == nil {
+		sd.Location = time.UTC
+	}
+	if len(sd.SearchPath.GetPathArray()) == 0 {
+		sd.SearchPath = DefaultSearchPathForUser(sd.User())
+	}
+}

@@ -296,7 +296,7 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 			len(expectedIdx), idxNames(expectedIdx), len(gotIdx), idxNames(gotIdx),
 		)
 	}
-	sd := &sessiondata.SessionData{}
+	sd := sessiondata.NewSessionData()
 	for i := range expected.Indexes {
 		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext()
