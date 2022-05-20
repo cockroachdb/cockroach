@@ -47,7 +47,7 @@ git tag "${build_name}"
 tc_end_block "Tag the release"
 
 tc_start_block "Compile and publish S3 artifacts"
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILD_BRANCH=$build_name -e bucket=$bucket" run_bazel << 'EOF'
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e bucket=$bucket" run_bazel << 'EOF'
 bazel build --config ci //pkg/cmd/publish-provisional-artifacts
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
 $BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release -bucket "$bucket"
