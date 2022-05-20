@@ -38,7 +38,7 @@ type TenantSideCostController interface {
 }
 
 // ExternalUsage contains information about usage that is not tracked through
-// TenantSideKVInterceptor.
+// TenantSideKVInterceptor or TenantSideExternalIORecorder.
 type ExternalUsage struct {
 	// CPUSecs is the cumulative CPU usage in seconds for the SQL instance.
 	CPUSecs float64
@@ -66,23 +66,21 @@ type NextLiveInstanceIDFn func(ctx context.Context) base.SQLInstanceID
 //
 // The TenantSideInterceptor is installed in the DistSender.
 type TenantSideKVInterceptor interface {
-	// OnRequestWait accounts for portion of the cost that can be determined
-	// upfront. It can block to delay the request as needed, depending on the
-	// current allowed rate of resource usage.
+	// OnRequestWait blocks for as long as the rate limiter is in debt. Note that
+	// actual costs are only accounted for by the OnResponseWait method.
 	//
 	// If the context (or a parent context) was created using
 	// WithTenantCostControlExemption, the method is a no-op.
-	OnRequestWait(ctx context.Context, info tenantcostmodel.RequestInfo) error
+	OnRequestWait(ctx context.Context) error
 
-	// OnResponse accounts for the portion of the cost that can only be determined
-	// after-the-fact. It does not block, but it can push the rate limiting into
-	// "debt", causing future requests to be blocked.
+	// OnResponseWait blocks until the rate limiter has enough capacity to allow
+	// the given request and response to be accounted for.
 	//
 	// If the context (or a parent context) was created using
 	// WithTenantCostControlExemption, the method is a no-op.
-	OnResponse(
+	OnResponseWait(
 		ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
-	)
+	) error
 }
 
 // WithTenantCostControlExemption generates a child context which will cause the
@@ -98,40 +96,28 @@ func HasTenantCostControlExemption(ctx context.Context) bool {
 	return ctx.Value(exemptCtxValue) != nil
 }
 
-// TenantSideExternalIORecorder accounts for resources consumed when
-// writing or reading to external services such as an external storage
-// provider.
+// ExternalIOUsage specifies the amount of external I/O that has been consumed.
+type ExternalIOUsage struct {
+	IngressBytes int64
+	EgressBytes  int64
+}
+
+// TenantSideExternalIORecorder accounts for resources consumed when writing or
+// reading to/from external services such as an external storage provider.
 type TenantSideExternalIORecorder interface {
-	// ExternalIOWriteWait waits for the RUs necessary to write the given number
-	// of bytes to an external service. Callers should call ExternaIOWriteSuccess
-	// or ExternalIOWriteFailure in the future to record the actual number of
-	// bytes written.
+	// OnExternalIOWait blocks until the rate limiter has enough capacity to allow
+	// the external I/O operation. It returns an error if the wait is canceled.
 	//
 	// If the context (or a parent context) was created using
 	// WithTenantCostControlExemption, the method is a no-op.
-	ExternalIOWriteWait(ctx context.Context, bytes int64) error
+	OnExternalIOWait(ctx context.Context, usage ExternalIOUsage) error
 
-	// ExternalIOWriteFailure returns RUs to the pool in the case of a Write that
-	// failed and wrote fewer bytes than expected. The RUs for the used number of
-	// bytes is recorded, the RUs for the unused bytes are returned to the pool.
+	// OnExternalIO reports ingress/egress that has occurred, without any
+	// blocking.
 	//
 	// If the context (or a parent context) was created using
 	// WithTenantCostControlExemption, the method is a no-op.
-	ExternalIOWriteFailure(ctx context.Context, used int64, returned int64)
-
-	// ExternalIOWriteSuccess records the usage of RUs associated with a write of
-	// the given size. This function does not wait.
-	//
-	// If the context (or a parent context) was created using
-	// WithTenantCostControlExemption, the method is a no-op.
-	ExternalIOWriteSuccess(ctx context.Context, bytes int64)
-
-	// ExternalIOReadWait records the number of bytes read from an external
-	// service, waiting for RUs if necessary.
-	//
-	// If the context (or a parent context) was created using
-	// WithTenantCostControlExemption, the method is a no-op.
-	ExternalIOReadWait(ctx context.Context, bytes int64) error
+	OnExternalIO(ctx context.Context, usage ExternalIOUsage)
 }
 
 type exemptCtxValueType struct{}

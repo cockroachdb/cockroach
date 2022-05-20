@@ -33,6 +33,7 @@ go_library(
 go_test(
     name = "tenantcostclient_test",
     srcs = [
+        "limiter_test.go",
         "main_test.go",
         "tenant_side_test.go",
         "token_bucket_test.go",

@@ -32,7 +32,7 @@ const (
 	// (successful) request to the global token bucket.
 	TokenBucketResponseProcessed
 
-	// WaitingRUAccountedInCallback indicates that we have accounted for a new
-	// request's waiting RUs inside an OnWaitStart callback.
-	WaitingRUAccountedInCallback
+	// TokenBucketResponseError indicates that a request to the global token
+	// bucket has failed.
+	TokenBucketResponseError
 )

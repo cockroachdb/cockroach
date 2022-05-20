@@ -10,9 +10,8 @@ package tenantcostclient
 
 import (
 	"context"
-	"math"
+	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
@@ -21,149 +20,243 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// limiter is used to rate-limit KV requests according to a local token bucket.
+// limiter is used to rate-limit KV and external I/O operations according to a
+// local token bucket.
 //
-// The Wait() method is called when a KV request requires RUs. The other methods
-// are used to adjust/reconfigure/replenish the local token bucket.
+// Operations call the Wait() method in order to block until there are
+// sufficient tokens in the bucket. Since operation cost is not known until it
+// has completed (e.g. because cost should be zero if operation errors), Wait is
+// only called with a non-zero cost after completion. However, the KV operations
+// also call Wait before starting, with a zero cost. This prevents new
+// operations from proceeding if the token bucket has fallen into debt.
+//
+// Besides RU usage from KV and external I/O calls, the controller tracks CPU
+// and egress network usage (i.e. pgwire egress) in the SQL layer. These costs
+// are updated every second and removed from the bucket via the RemoveRU method.
+//
+// limiter's methods are thread-safe.
 type limiter struct {
-	timeSource timeutil.TimeSource
-	testInstr  TestInstrumentation
-	tb         tokenBucket
-	qp         *quotapool.AbstractPool
+	// notifyCh gets a (non-blocking) send when available RUs falls below the
+	// notifyThreshold.
+	notifyCh chan struct{}
 
-	// Total (rounded) RU needed for all currently waiting requests (or requests
-	// that are in the process of being fulfilled).
-	// Only accessed using atomics.
-	waitingRU int64
+	// Access to these fields is protected by the quota pool lock. Only access
+	// them in the scope of the abstract pool's Update method or within the
+	// wait request's Acquire method.
+	qp struct {
+		*quotapool.AbstractPool
+
+		// tb is the underlying local token bucket controlled by the quota pool.
+		tb tokenBucket
+
+		// notifyThreshold is the RU level below which a notification should be
+		// sent to notifyCh. A threshold <= 0 disables notifications.
+		notifyThreshold tenantcostmodel.RU
+
+		// waitingRU is the total (rounded) RU needed for all currently waiting
+		// requests (or requests that are in the process of being fulfilled).
+		waitingRU tenantcostmodel.RU
+	}
 }
 
-// Initial settings for the local token bucket. They are used only until the
-// first TokenBucket request returns. We allow immediate use of the initial RUs
-// (we essentially borrow them and pay them back in the first TokenBucket
-// request). The intention is to avoid any throttling during start-up in normal
-// circumstances.
-const initialRUs = 10000
-const initialRate = 100
-
-func (l *limiter) Init(
-	timeSource timeutil.TimeSource, testInstr TestInstrumentation, notifyChan chan struct{},
-) {
-	*l = limiter{
-		timeSource: timeSource,
-		testInstr:  testInstr,
-	}
-
-	l.tb.Init(timeSource.Now(), notifyChan, initialRate, initialRUs)
+func (l *limiter) Init(timeSource timeutil.TimeSource, notifyCh chan struct{}) {
+	*l = limiter{notifyCh: notifyCh}
 
 	onWaitStartFn := func(ctx context.Context, poolName string, r quotapool.Request) {
-		req := r.(*waitRequest)
-		// Account for the RUs, unless we already did in waitRequest.Acquire.
-		// This is necessary because Acquire is only called for the head of the
-		// queue.
-		if !req.waitingRUAccounted {
-			req.waitingRUAccounted = true
-			atomic.AddInt64(&l.waitingRU, req.neededCeil())
-			if l.testInstr != nil {
-				l.testInstr.Event(l.timeSource.Now(), WaitingRUAccountedInCallback)
-			}
-		}
+		// Add to the waiting RU total if this request has not already been added
+		// to it in Acquire.
+		l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {
+			l.maybeAddWaitingRULocked(r.(*waitRequest))
+			return false
+		})
 	}
 
 	onWaitFinishFn := func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) {
+		// Remove any waiting RUs that were not fulfilled by Acquire due to
+		// context cancellation.
+		l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {
+			l.maybeRemoveWaitingRULocked(r.(*waitRequest))
+			return false
+		})
+
 		// Log a trace event for requests that waited for a long time.
 		if waitDuration := timeSource.Since(start); waitDuration > time.Second {
 			log.VEventf(ctx, 1, "request waited for RUs for %s", waitDuration.String())
 		}
 	}
 
-	l.qp = quotapool.New(
+	l.qp.AbstractPool = quotapool.New(
 		"tenant-side-limiter", l,
 		quotapool.WithTimeSource(timeSource),
 		quotapool.OnWaitStart(onWaitStartFn),
 		quotapool.OnWaitFinish(onWaitFinishFn),
 	)
+
+	l.qp.tb.Init(timeSource.Now())
 }
 
 func (l *limiter) Close() {
 	l.qp.Close("shutting down")
 }
 
-// Wait removes the needed RUs from the bucket, waiting as necessary until it is
-// possible.
+// AvailableRU returns the current number of available RUs. This can be negative
+// if the token bucket is in debt, or we have pending waiting requests.
+func (l *limiter) AvailableRU(now time.Time) tenantcostmodel.RU {
+	var result tenantcostmodel.RU
+	l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {
+		result = l.availableRULocked(now)
+		return false
+	})
+	return result
+}
+
+// Wait blocks until the token bucket has the needed number of tokens available.
+// Wait is called once a KV or External I/O operation has completed and is ready
+// to be accounted for. It's also called before a KV operation starts, in order
+// to block if the token bucket is in debt.
 func (l *limiter) Wait(ctx context.Context, needed tenantcostmodel.RU) error {
 	r := newWaitRequest(needed)
 	defer putWaitRequest(r)
-
 	return l.qp.Acquire(ctx, r)
 }
 
-// RemoveTokens removes tokens from the bucket.
-//
-// Tokens are removed when consumption has occurred without Wait(), like
-// accounting for CPU usage or for the number of read bytes.
-func (l *limiter) RemoveTokens(now time.Time, delta tenantcostmodel.RU) {
+// RemoveRU removes tokens from the bucket immediately, potentially putting it
+// into debt.
+func (l *limiter) RemoveRU(now time.Time, amount tenantcostmodel.RU) {
 	l.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
-		l.tb.RemoveTokens(now, delta)
+		l.qp.tb.RemoveTokens(now, amount)
+		l.maybeNotifyLocked(now)
+
 		// Don't notify the head of the queue; this change can only delay the time
 		// it can go through.
 		return false
 	})
 }
 
-// AddTokens add tokens to the bucket.
-//
-// Tokens are added when we consumed token in advance of an operation
-// but then that operation failed or consumed fewer resources than
-// expected.
-func (l *limiter) AddTokens(now time.Time, delta tenantcostmodel.RU) {
-	l.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
-		l.tb.AddTokens(now, delta)
-		// Notify the head of the queue; the new tokens might
-		// allow the request to go through earlier.
-		return true
-	})
+// limiterReconfigureArgs is used to update the limiter's configuration.
+type limiterReconfigureArgs struct {
+	// NewTokens is the number of tokens that should be added to the token bucket.
+	NewTokens tenantcostmodel.RU
+
+	// NewRate is the new token fill rate for the bucket.
+	NewRate tenantcostmodel.RU
+
+	// NotifyThreshold is the AvailableRU level below which a low RU notification
+	// will be sent.
+	NotifyThreshold tenantcostmodel.RU
 }
 
 // Reconfigure is used to call tokenBucket.Reconfigure under the pool's lock.
-func (l *limiter) Reconfigure(now time.Time, args tokenBucketReconfigureArgs) {
+func (l *limiter) Reconfigure(now time.Time, cfg limiterReconfigureArgs) {
 	l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {
-		l.tb.Reconfigure(now, args)
-		// Notify the head of the queue; the new configuration might allow that
+		// If we already produced a notification that wasn't processed, drain it.
+		select {
+		case <-l.notifyCh:
+		default:
+		}
+		l.qp.notifyThreshold = cfg.NotifyThreshold
+
+		l.qp.tb.Reconfigure(now, tokenBucketReconfigureArgs{
+			NewTokens: cfg.NewTokens,
+			NewRate:   cfg.NewRate,
+		})
+		l.maybeNotifyLocked(now)
+
+		// Notify the head of the queue; the new configuration might allow a
 		// request to go through earlier.
 		return true
 	})
 }
 
-// AvailableTokens returns the current number of available RUs. This can be
-// negative if we accumulated debt or we have waiting requests.
-func (l *limiter) AvailableTokens(now time.Time) tenantcostmodel.RU {
-	var result tenantcostmodel.RU
-	l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {
-		result = l.tb.AvailableTokens(now)
-		return false
-	})
-	// Subtract the RUs for currently waiting requests.
-	result -= tenantcostmodel.RU(atomic.LoadInt64(&l.waitingRU))
-	return result
-}
-
-// SetupNotification is used to call tokenBucket.SetupNotification under the
-// pool's lock.
+// SetupNotification sets a new low RU notification threshold and triggers the
+// notification if available RUs are lower than the new threshold.
 func (l *limiter) SetupNotification(now time.Time, threshold tenantcostmodel.RU) {
 	l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {
-		l.tb.SetupNotification(now, threshold)
-		// We return true so that if there is a request waiting, TryToFulfill gets
-		// called again which may produce a notification.
-		return true
+		l.qp.notifyThreshold = threshold
+		l.maybeNotifyLocked(now)
+		return false
 	})
 }
 
-// waitRequest is used to wait for adequate resources in the tokenBucket.
+func (l *limiter) String(now time.Time) string {
+	var s string
+	l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {
+		s = l.qp.tb.String(now)
+		if l.qp.waitingRU > 0 {
+			s += fmt.Sprintf(" (%.2f waiting RU)", l.qp.waitingRU)
+		}
+		return false
+	})
+	return s
+}
+
+// availableRULocked returns the current number of available RUs. This can be
+// negative if we have accumulated debt or we have waiting requests.
+// NOTE: This must be called under the scope of the quota pool lock.
+func (l *limiter) availableRULocked(now time.Time) tenantcostmodel.RU {
+	available := l.qp.tb.AvailableTokens(now)
+
+	// Subtract any waiting RU.
+	available -= l.qp.waitingRU
+	return available
+}
+
+// notifyLocked sends a non-blocking notification on lowRUNotify (unless there
+// is already a notification pending in the channel), and disables further
+// notifications (until the next Reconfigure or SetupNotification).
+// NOTE: This must be called under the scope of the quota pool lock.
+func (l *limiter) notifyLocked() {
+	l.qp.notifyThreshold = 0
+	select {
+	case l.notifyCh <- struct{}{}:
+	default:
+	}
+}
+
+// maybeNotifyLocked checks if it's time to send the notification and if so,
+// performs the notification.
+// NOTE: This must be called under the scope of the quota pool lock.
+func (l *limiter) maybeNotifyLocked(now time.Time) {
+	if l.qp.notifyThreshold > 0 {
+		available := l.availableRULocked(now)
+		if available < l.qp.notifyThreshold {
+			l.notifyLocked()
+		}
+	}
+}
+
+// maybeAddWaitingRULocked increases "waitingRU" by the total RUs needed by the
+// given request. It can be called multiple times, but should only increase
+// waitingRU the first time.
+// NOTE: This must be called under the scope of the quota pool lock.
+func (l *limiter) maybeAddWaitingRULocked(req *waitRequest) {
+	if !req.waitingRUAccounted {
+		l.qp.waitingRU += req.needed
+		req.waitingRUAccounted = true
+	}
+}
+
+// maybeRemoveWaitingRULocked subtracts any "waitingRU" reserved by
+// addWaitingRULocked. It is called either in Acquire or in the OnWaitFinish
+// callback, depending on whether the request completes successfully or is
+// canceled, respectively.
+// NOTE: This must be called under the scope of the quota pool lock.
+func (l *limiter) maybeRemoveWaitingRULocked(req *waitRequest) {
+	if req.waitingRUAccounted {
+		l.qp.waitingRU -= req.needed
+		req.waitingRUAccounted = false
+	}
+}
+
+// waitRequest is used to wait for adequate resources in the tokenBucket for a
+// KV or external I/O operation.
 type waitRequest struct {
+	// needed is the RUs required by the operation.
 	needed tenantcostmodel.RU
 
 	// waitingRUAccounted is true if we counted the needed RUs as "waiting RU".
-	// This flag is necessary because we want to account f
+	// This is used to determine whether the RU needs to be subtracted from
+	// waitingRU once the request is complete.
 	waitingRUAccounted bool
 }
 
@@ -174,50 +267,48 @@ var waitRequestSyncPool = sync.Pool{
 }
 
 // newWaitRequest allocates a waitRequest from the sync.Pool.
-// It should be returned with putWaitRequest.
+// The waitRequest should be returned with putWaitRequest.
 func newWaitRequest(needed tenantcostmodel.RU) *waitRequest {
 	r := waitRequestSyncPool.Get().(*waitRequest)
 	*r = waitRequest{needed: needed}
 	return r
 }
 
+// putWaitRequest returns the waitRequest to the sync.Pool.
 func putWaitRequest(r *waitRequest) {
 	*r = waitRequest{}
 	waitRequestSyncPool.Put(r)
 }
 
-// neededCeil returns the amount of needed RUs, rounded up to an integer.
-func (req *waitRequest) neededCeil() int64 {
-	return int64(math.Ceil(float64(req.needed)))
-}
-
-// Acquire is part of quotapool.Request.
+// Acquire is part of quotapool.Request. It is called by the quota pool under
+// the scope of its lock.
 func (req *waitRequest) Acquire(
 	ctx context.Context, res quotapool.Resource,
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	l := res.(*limiter)
-	now := l.timeSource.Now()
-	fulfilled, tryAgainAfter = l.tb.TryToFulfill(now, req.needed)
+	now := l.qp.TimeSource().Now()
 
+	fulfilled, tryAgainAfter = l.qp.tb.TryToFulfill(now, req.needed)
 	if !fulfilled {
-		// We want to account for the waiting RU here (under the quotapool lock)
-		// rather than in the OnWaitStart callback. This is to ensure that the
-		// waiting RUs for the head of the queue are reliably reflected in the next
-		// call to AvailableTokens(). If it is not reflected, a low RU notification
-		// might effectively be ignored because it looks like we have enough RUs.
-		//
-		// The waitingRUAccounted flag ensures we don't count the same request
-		// multiple times.
-		if !req.waitingRUAccounted {
-			req.waitingRUAccounted = true
-			atomic.AddInt64(&l.waitingRU, req.neededCeil())
-		}
+		// This request will now be blocked (or is already blocked if it was
+		// already waiting) in the quota pool's queue. However, it still needs to
+		// be reliably reflected in the next call to AvailableRUs(). If it is not
+		// reflected, a low RU notification might effectively be ignored because
+		// it looks like we have enough RUs. Don't wait until OnWaitStart to call
+		// this, since there is a small unlocked window between now and then where
+		// waitingRU will be incorrect.
+		l.maybeAddWaitingRULocked(req)
 	} else {
-		if req.waitingRUAccounted {
-			req.waitingRUAccounted = false
-			atomic.AddInt64(&l.waitingRU, -req.neededCeil())
-		}
+		// If this request was part of waitingRU, eagerly subtract it now that it's
+		// complete. Don't wait until OnWaitFinish to call this, since there is a
+		// small unlocked window between now and then where waitingRU will be
+		// incorrect.
+		l.maybeRemoveWaitingRULocked(req)
 	}
+
+	// Check if new token bucket level is low enough to trigger notification.
+	l.maybeNotifyLocked(now)
+
 	return fulfilled, tryAgainAfter
 }
 

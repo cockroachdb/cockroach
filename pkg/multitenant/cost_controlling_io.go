@@ -20,9 +20,9 @@ import (
 )
 
 // DefaultBytesAllowedBeforeAccounting are how many bytes we will read/written
-// before trying to wait for RUs. The goal here is to avoid waiting in loops for
-// in common case without allowing an unbounded number of bytes read/written
-// before accounting for them.
+// before trying to wait for RUs. The goal here is to avoid waiting in loops in
+// the common case, but without allowing an unbounded number of bytes to be
+// read/written before accounting for them.
 var DefaultBytesAllowedBeforeAccounting = settings.RegisterIntSetting(
 	settings.TenantReadOnly,
 	"tenant_external_io_default_bytes_allowed_before_accounting",
@@ -31,7 +31,8 @@ var DefaultBytesAllowedBeforeAccounting = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
-// readWriteAccounter is cloud.ReadWriteInterceptor that records ingress and egress bytes.
+// readWriteAccounter is cloud.ReadWriteInterceptor that records ingress and
+// egress bytes.
 type readWriteAccounter struct {
 	recorder TenantSideExternalIORecorder
 	limit    int64
@@ -82,14 +83,15 @@ func (a *readWriteAccounter) Reader(
 	}
 }
 
-// accountingWriter is an io.WriteCloser that tracks how many total bytes have been written. If limit is > 0, then the
-// writer will record the written bytes and wait for the associated RUs in a Write call if more than limit bytes have been
-// written. On Close, any previously unaccounted for RUs will be recorded.
+// accountingWriter is an io.WriteCloser that tracks how many total bytes have
+// been written. If limit is > 0, then the writer will record the written bytes
+// and wait for the associated RUs in a Write call if more than limit bytes have
+// been written. On Close, any previously unaccounted for RUs will be recorded.
 //
 // If limit <= 0 then we will wait for RUs only on Close().
 //
-// NB: The implementation allows roughly 2x the limit to be unaccounted if the caller is making write calls with a large
-// values just under the limit.
+// NB: The implementation optimistically allows Write calls to proceed until the
+// rate limiter goes into debt.
 type accountingWriter struct {
 	ctx      context.Context
 	inner    io.WriteCloser
@@ -102,32 +104,23 @@ type accountingWriter struct {
 var _ io.WriteCloser = (*accountingWriter)(nil)
 
 func (aw *accountingWriter) Write(d []byte) (int, error) {
-	// If past writes have pushed us past the limit, account for them before allowing this write.
+	// If past writes have pushed us past the limit, account for them before
+	// allowing this write.
 	if err := aw.maybeWaitForRUs(); err != nil {
 		return 0, err
 	}
 
-	// If this single write is larger than the limit, immediately account for it.
+	// If this single write is larger than the limit, flush any previously
+	// written bytes and block until the rate limiter is not in debt before
+	// proceeding.
 	if int64(len(d)) > aw.limit {
-		return aw.immediatelyAccountedWrite(d)
+		if err := aw.waitForRUs(); err != nil {
+			return 0, err
+		}
 	}
 
 	n, err := aw.inner.Write(d)
 	aw.count += int64(n)
-	return n, err
-}
-
-func (aw *accountingWriter) immediatelyAccountedWrite(d []byte) (int, error) {
-	writeLen := int64(len(d))
-	if err := aw.recorder.ExternalIOWriteWait(aw.ctx, writeLen); err != nil {
-		return 0, err
-	}
-	n, err := aw.inner.Write(d)
-	if err != nil {
-		aw.recorder.ExternalIOWriteFailure(aw.ctx, int64(n), writeLen-int64(n))
-		return n, err
-	}
-	aw.recorder.ExternalIOWriteSuccess(aw.ctx, int64(n))
 	return n, err
 }
 
@@ -136,24 +129,31 @@ func (aw *accountingWriter) immediatelyAccountedWrite(d []byte) (int, error) {
 func (aw *accountingWriter) Close() error {
 	// NB: We only record bytes actually written (according to the underlying
 	// writer) in aw.count.
-	if err := aw.recorder.ExternalIOWriteWait(aw.ctx, aw.count); err != nil {
+	if err := aw.waitForRUs(); err != nil {
 		// We still want to close the underlying writer.
 		_ = aw.inner.Close()
 		return err
 	}
-	aw.recorder.ExternalIOWriteSuccess(aw.ctx, aw.count)
-	aw.count = 0
 	return aw.inner.Close()
 }
 
+// maybeWaitForRUs checks if the count of written bytes exceeds the limit, and
+// then blocks until the rate limiter allows that count.
 func (aw *accountingWriter) maybeWaitForRUs() error {
 	if aw.limit > 0 && aw.count >= aw.limit {
-		if err := aw.recorder.ExternalIOWriteWait(aw.ctx, aw.count); err != nil {
-			return err
-		}
-		aw.recorder.ExternalIOWriteSuccess(aw.ctx, aw.count)
-		aw.count = 0
+		return aw.waitForRUs()
 	}
+	return nil
+}
+
+// waitForRUs blocks until the rate limiter allows at least the count of already
+// written bytes.
+func (aw *accountingWriter) waitForRUs() error {
+	usage := ExternalIOUsage{EgressBytes: aw.count}
+	if err := aw.recorder.OnExternalIOWait(aw.ctx, usage); err != nil {
+		return err
+	}
+	aw.count = 0
 	return nil
 }
 
@@ -167,8 +167,7 @@ type accountingReader struct {
 	inner    ioctx.ReadCloserCtx
 	recorder TenantSideExternalIORecorder
 	limit    int64
-
-	count int64
+	count    int64
 }
 
 var _ ioctx.ReadCloserCtx = (*accountingReader)(nil)
@@ -178,7 +177,8 @@ func (ar *accountingReader) Read(ctx context.Context, d []byte) (int, error) {
 	// If past reads have pushed us past the limit, account for them before
 	// allowing this read.
 	if ar.limit > 0 && ar.count >= ar.limit {
-		if err := ar.recorder.ExternalIOReadWait(ctx, ar.count); err != nil {
+		usage := ExternalIOUsage{IngressBytes: ar.count}
+		if err := ar.recorder.OnExternalIOWait(ctx, usage); err != nil {
 			return 0, err
 		}
 		ar.count = 0
@@ -191,7 +191,8 @@ func (ar *accountingReader) Read(ctx context.Context, d []byte) (int, error) {
 
 // Close implements ioctx.ReadCloserCtx.
 func (ar *accountingReader) Close(ctx context.Context) error {
-	if err := ar.recorder.ExternalIOReadWait(ctx, ar.count); err != nil {
+	usage := ExternalIOUsage{IngressBytes: ar.count}
+	if err := ar.recorder.OnExternalIOWait(ctx, usage); err != nil {
 		_ = ar.inner.Close(ctx)
 		return err
 	}

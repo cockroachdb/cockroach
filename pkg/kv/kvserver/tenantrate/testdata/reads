@@ -4,8 +4,8 @@
 init
 rate:  2
 burst: 4
-read:  { base: 1, perbyte: 0.1 }
-write: { base: 1, perbyte: 0.1 }
+read:  { perbatch: 1, perrequest: 1, perbyte: 0.1 }
+write: { perbatch: 1, perrequest: 1, perbyte: 0.1 }
 ----
 00:00:00.000
 
@@ -20,8 +20,8 @@ get_tenants
 # metrics.
 
 record_read
-- { tenant: 2, readcount: 1, readbytes: 34 }
-- { tenant: 1, readcount: 1, readbytes: 10 }
+- { tenant: 2, readrequests: 1, readbytes: 24 }
+- { tenant: 1, readrequests: 1, readbytes: 10 }
 ----
 []
 
@@ -30,8 +30,11 @@ record_read
 metrics
 kv_tenant_rate_limit_read_.*_admitted
 ----
-kv_tenant_rate_limit_read_bytes_admitted 44
-kv_tenant_rate_limit_read_bytes_admitted{tenant_id="2"} 34
+kv_tenant_rate_limit_read_batches_admitted 2
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="2"} 1
+kv_tenant_rate_limit_read_batches_admitted{tenant_id="system"} 1
+kv_tenant_rate_limit_read_bytes_admitted 34
+kv_tenant_rate_limit_read_bytes_admitted{tenant_id="2"} 24
 kv_tenant_rate_limit_read_bytes_admitted{tenant_id="system"} 10
 kv_tenant_rate_limit_read_requests_admitted 2
 kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 1
@@ -58,7 +61,7 @@ timers
 # Record more reads, putting the limiter further into debt.
 
 record_read
-- { tenant: 2, readcount: 1, readbytes: 16 }
+- { tenant: 2, readrequests: 1, readbytes: 16 }
 ----
 [g1@2]
 
@@ -80,12 +83,12 @@ advance
 
 timers
 ----
-00:00:01.500
+00:00:02.000
 
 advance
-1300ms
+1800ms
 ----
-00:00:01.501
+00:00:02.001
 
 await
 - g1
