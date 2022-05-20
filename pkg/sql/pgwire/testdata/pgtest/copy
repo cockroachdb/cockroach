@@ -46,6 +46,20 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 3"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Client sends CopyFail.
+send
+Query {"String": "COPY t FROM STDIN"}
+CopyFail { "Message": "client received an error" }
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"ErrorResponse","Code":"57014","Message":"COPY from stdin failed: client received an error"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # Wrong number of columns.
 send
 Query {"String": "COPY t FROM STDIN"}
