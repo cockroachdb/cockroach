@@ -1,0 +1,16 @@
+{
+  "name": "@cockroachlabs/crdb-protobuf-client-ccl",
+  "version": "0.0.12",
+  "description": "Javascript client for use by CockroachDB UI (CCL licensed)",
+  "main": "./protos.js",
+  "types": "./protos.d.ts",
+  "license": "SEE LICENSE IN github.com/cockroachdb/cockroach/LICENSE",
+  "files": [
+    "protos.d.ts",
+    "protos.js"
+  ],
+  "devDependencies": {
+    "@babel/runtime": "7.12.13",
+    "protobufjs": "6.8.6"
+  }
+}
