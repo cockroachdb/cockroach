@@ -88,6 +88,11 @@ var maxRowSizeErr = settings.RegisterByteSizeSetting(
 	},
 ).WithPublic()
 
+type columnFamilyColumns struct {
+	id   descpb.FamilyID
+	cols []descpb.ColumnID
+}
+
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
 	Codec keys.SQLCodec
@@ -102,10 +107,11 @@ type rowHelper struct {
 	secIndexValDirs  [][]encoding.Direction
 
 	// Computed and cached.
-	primaryIndexKeyPrefix []byte
-	primaryIndexKeyCols   catalog.TableColSet
-	primaryIndexValueCols catalog.TableColSet
-	sortedColumnFamilies  map[descpb.FamilyID][]descpb.ColumnID
+	primaryIndexKeyPrefix     []byte
+	primaryIndexKeyCols       catalog.TableColSet
+	primaryIndexValueCols     catalog.TableColSet
+	primaryIndexCompositeCols catalog.TableColSet
+	sortedColumnFamilies      []columnFamilyColumns
 
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
@@ -234,37 +240,48 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 // datums are considered too, so a composite datum in a PK will return false.
 func (rh *rowHelper) skipColumnNotInPrimaryIndexValue(
 	colID descpb.ColumnID, value tree.Datum,
-) (bool, error) {
+) bool {
 	if rh.primaryIndexKeyCols.Empty() {
 		rh.primaryIndexKeyCols = rh.TableDesc.GetPrimaryIndex().CollectKeyColumnIDs()
 		rh.primaryIndexValueCols = rh.TableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
+		rh.primaryIndexCompositeCols = rh.TableDesc.GetPrimaryIndex().CollectCompositeColumnIDs()
 	}
 	if !rh.primaryIndexKeyCols.Contains(colID) {
-		return !rh.primaryIndexValueCols.Contains(colID), nil
+		return !rh.primaryIndexValueCols.Contains(colID)
 	}
-	if cdatum, ok := value.(tree.CompositeDatum); ok {
-		// Composite columns are encoded in both the key and the value.
-		return !cdatum.IsComposite(), nil
+	if rh.primaryIndexCompositeCols.Contains(colID) {
+		if cdatum, ok := value.(tree.CompositeDatum); ok {
+			// Composite columns are encoded in both the key and the value.
+			return !cdatum.IsComposite()
+		}
 	}
 	// Skip primary key columns as their values are encoded in the key of
 	// each family. Family 0 is guaranteed to exist and acts as a
 	// sentinel.
-	return true, nil
+	return true
 }
 
 func (rh *rowHelper) sortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnID, bool) {
 	if rh.sortedColumnFamilies == nil {
-		rh.sortedColumnFamilies = make(map[descpb.FamilyID][]descpb.ColumnID, rh.TableDesc.NumFamilies())
+		rh.sortedColumnFamilies = make([]columnFamilyColumns, 0, rh.TableDesc.NumFamilies())
 
 		_ = rh.TableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 			colIDs := append([]descpb.ColumnID{}, family.ColumnIDs...)
 			sort.Sort(descpb.ColumnIDs(colIDs))
-			rh.sortedColumnFamilies[family.ID] = colIDs
+			rh.sortedColumnFamilies = append(rh.sortedColumnFamilies, columnFamilyColumns{
+				id:   family.ID,
+				cols: colIDs,
+			})
 			return nil
 		})
 	}
-	colIDs, ok := rh.sortedColumnFamilies[famID]
-	return colIDs, ok
+	idx := sort.Search(len(rh.sortedColumnFamilies), func(i int) bool {
+		return rh.sortedColumnFamilies[i].id >= famID
+	})
+	if idx == len(rh.sortedColumnFamilies) {
+		return nil, false
+	}
+	return rh.sortedColumnFamilies[idx].cols, true
 }
 
 // checkRowSize compares the size of a primary key column family against the

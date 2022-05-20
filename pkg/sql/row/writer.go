@@ -177,9 +177,7 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			if skip, err := helper.skipColumnNotInPrimaryIndexValue(colID, values[idx]); err != nil {
-				return nil, err
-			} else if skip {
+			if skip := helper.skipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
 				continue
 			}
 
