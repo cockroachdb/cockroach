@@ -171,6 +171,17 @@ func MaybeDecorateError(
 			return connFailed()
 		}
 
+		// pgconn sometimes returns a context deadline error wrapped in a private
+		// connectError struct, which begins with this message.
+		if strings.HasPrefix(err.Error(), "failed to connect to") &&
+			errors.IsAny(err,
+				context.DeadlineExceeded,
+				context.Canceled,
+			) {
+			return connFailed()
+
+		}
+
 		if wErr := (*netutil.InitialHeartbeatFailedError)(nil); errors.As(err, &wErr) {
 			// A GRPC TCP connection was established but there was an early failure.
 			// Try to distinguish the cases.
