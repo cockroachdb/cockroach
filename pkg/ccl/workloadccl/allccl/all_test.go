@@ -52,7 +52,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 	for _, meta := range workload.Registered() {
 		meta := meta
 		gen := meta.New()
-		hasInitialData := true
+		hasInitialData := len(gen.Tables()) != 0
 		for _, table := range gen.Tables() {
 			if table.InitialRows.FillBatch == nil {
 				hasInitialData = false
