@@ -325,6 +325,7 @@ func (cf *cFetcher) resetBatch() {
 	}
 	cf.machine.batch, reallocated = cf.accountingHelper.ResetMaybeReallocate(
 		cf.table.typs, cf.machine.batch, minDesiredCapacity, cf.memoryLimit,
+		false, /* desiredCapacitySufficient */
 	)
 	if reallocated {
 		cf.machine.colvecs.SetBatch(cf.machine.batch)

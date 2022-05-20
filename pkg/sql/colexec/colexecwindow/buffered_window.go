@@ -251,6 +251,7 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 			const maxBatchMemSize = math.MaxInt64
 			b.currentBatch, _ = b.allocator.ResetMaybeReallocate(
 				b.outputTypes, b.currentBatch, batch.Length(), maxBatchMemSize,
+				true, /* desiredCapacitySufficient */
 			)
 			b.allocator.PerformOperation(b.currentBatch.ColVecs(), func() {
 				for colIdx, vec := range batch.ColVecs() {

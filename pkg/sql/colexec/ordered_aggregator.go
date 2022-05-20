@@ -285,14 +285,16 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, newMinCapacity)
 			} else {
 				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocate(
-					a.outputTypes, a.scratch.Batch, newMinCapacity, maxBatchMemSize,
+					a.outputTypes, a.scratch.Batch, newMinCapacity,
+					maxBatchMemSize, true, /* desiredCapacitySufficient */
 				)
 			}
 			// We will never copy more than coldata.BatchSize() into the
 			// temporary buffer, so a half of the scratch's capacity will always
 			// be sufficient.
 			a.scratch.tempBuffer, _ = a.allocator.ResetMaybeReallocate(
-				a.outputTypes, a.scratch.tempBuffer, newMinCapacity/2, maxBatchMemSize,
+				a.outputTypes, a.scratch.tempBuffer, newMinCapacity/2,
+				maxBatchMemSize, true, /* desiredCapacitySufficient */
 			)
 			for fnIdx, fn := range a.bucket.fns {
 				fn.SetOutput(a.scratch.ColVec(fnIdx))

@@ -107,6 +107,7 @@ func (c *crossJoiner) Next() coldata.Batch {
 	}
 	c.output, _ = c.unlimitedAllocator.ResetMaybeReallocate(
 		c.outputTypes, c.output, willEmit, c.maxOutputBatchMemSize,
+		true, /* desiredCapacitySufficient */
 	)
 	if willEmit > c.output.Capacity() {
 		willEmit = c.output.Capacity()
