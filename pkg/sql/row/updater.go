@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,7 +47,6 @@ type Updater struct {
 	ri Inserter
 
 	// For allocation avoidance.
-	marshaled       []roachpb.Value
 	newValues       []tree.Datum
 	key             roachpb.Key
 	valueBuf        []byte
@@ -175,7 +173,6 @@ func MakeUpdater(
 		UpdateCols:            updateCols,
 		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
-		marshaled:             make([]roachpb.Value, len(updateCols)),
 		oldIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
 		newIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
 	}
@@ -248,11 +245,14 @@ func (ru *Updater) UpdateRow(
 	//
 	// TODO(radu): the legacy marshaling is used only in rare cases; this is
 	// wasteful.
-	for i, val := range updateValues {
-		if ru.marshaled[i], err = valueside.MarshalLegacy(ru.UpdateCols[i].GetType(), val); err != nil {
-			return nil, err
+	/*
+		for i, val := range updateValues {
+			if ru.marshaled[i], err = valueside.MarshalLegacy(ru.UpdateCols[i].GetType(), val); err != nil {
+				return nil, err
+			}
 		}
-	}
+
+	*/
 
 	// Update the row values.
 	copy(ru.newValues, oldValues)
@@ -381,7 +381,7 @@ func (ru *Updater) UpdateRow(
 	ru.valueBuf, err = prepareInsertOrUpdateBatch(ctx, batch,
 		&ru.Helper, primaryIndexKey, ru.FetchCols,
 		ru.newValues, ru.FetchColIDtoRowIndex,
-		ru.marshaled, ru.UpdateColIDtoRowIndex,
+		ru.UpdateColIDtoRowIndex,
 		&ru.key, &ru.value, ru.valueBuf, insertPutFn, true /* overwrite */, traceKV)
 	if err != nil {
 		return nil, err

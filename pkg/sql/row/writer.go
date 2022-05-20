@@ -75,13 +75,8 @@ func ColMapping(fromCols, toCols []catalog.Column) []int {
 // - fetchedCols is the list of schema columns that have been fetched
 //   in preparation for this update.
 // - values is the SQL-level row values that are being written.
-// - marshaledValues contains the pre-encoded KV-level row values.
-//   marshaledValues is only used when writing single column families.
-//   Regardless of whether there are single column families,
-//   pre-encoding must occur prior to calling this function to check whether
-//   the encoding is _possible_ (i.e. values fit in the column types, etc).
 // - valColIDMapping/marshaledColIDMapping is the mapping from column
-//   IDs into positions of the slices values or marshaledValues.
+//   IDs into positions of the slices values.
 // - kvKey and kvValues must be heap-allocated scratch buffers to write
 //   roachpb.Key and roachpb.Value values.
 // - rawValueBuf must be a scratch byte array. This must be reinitialized
@@ -97,7 +92,6 @@ func prepareInsertOrUpdateBatch(
 	fetchedCols []catalog.Column,
 	values []tree.Datum,
 	valColIDMapping catalog.TableColMap,
-	marshaledValues []roachpb.Value,
 	marshaledColIDMapping catalog.TableColMap,
 	kvKey *roachpb.Key,
 	kvValue *roachpb.Value,
@@ -139,12 +133,18 @@ func prepareInsertOrUpdateBatch(
 			// Storage optimization to store DefaultColumnID directly as a value. Also
 			// backwards compatible with the original BaseFormatVersion.
 
-			idx, ok := marshaledColIDMapping.Get(family.DefaultColumnID)
+			idx, ok := valColIDMapping.Get(family.DefaultColumnID)
 			if !ok {
 				continue
 			}
 
-			if marshaledValues[idx].RawBytes == nil {
+			typ := fetchedCols[idx].GetType()
+			marshaled, err := valueside.MarshalLegacy(typ, values[idx])
+			if err != nil {
+				return nil, err
+			}
+
+			if marshaled.RawBytes == nil {
 				if overwrite {
 					// If the new family contains a NULL value, then we must
 					// delete any pre-existing row.
@@ -154,10 +154,10 @@ func prepareInsertOrUpdateBatch(
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
-				if err := helper.checkRowSize(ctx, kvKey, &marshaledValues[idx], family.ID); err != nil {
+				if err := helper.checkRowSize(ctx, kvKey, &marshaled, family.ID); err != nil {
 					return nil, err
 				}
-				putFn(ctx, batch, kvKey, &marshaledValues[idx], traceKV)
+				putFn(ctx, batch, kvKey, &marshaled, traceKV)
 			}
 
 			continue
