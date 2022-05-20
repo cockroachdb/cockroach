@@ -15,6 +15,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -141,6 +142,9 @@ func (c *sqlConn) SetMissingPassword(missing bool) {
 	c.passwordMissing = missing
 }
 
+// The default pgx dialer uses a KeepAlive of 5 minutes, which we don't want.
+var defaultDialer = &net.Dialer{}
+
 // EnsureConn (re-)establishes the connection to the server.
 func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	if c.conn != nil {
@@ -159,6 +163,11 @@ func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	base.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
 		c.handleNotice(notice)
 	}
+	defaultDialer.Timeout = 0
+	if base.ConnectTimeout > 0 {
+		defaultDialer.Timeout = base.ConnectTimeout
+	}
+	base.DialFunc = defaultDialer.DialContext
 	conn, err := pgx.ConnectConfig(ctx, base)
 	if err != nil {
 		// Connection failed: if the failure is due to a missing

@@ -221,6 +221,11 @@ func setCliContextDefaults() {
 	cliCtx.EmbeddedMode = false
 	cliCtx.cmdTimeout = 0 // no timeout
 	cliCtx.clientConnHost = "localhost"
+	if h := os.Getenv("PGHOST"); h != "" {
+		// We need to inspect the PGHOST variable here so that it takes precedence
+		// over the default value.
+		cliCtx.clientConnPort = h
+	}
 	cliCtx.clientConnPort = base.DefaultPort
 	cliCtx.certPrincipalMap = nil
 	cliCtx.sqlConnURL = nil
