@@ -238,7 +238,7 @@ func (w *wrappingCostController) recordEmittedBatch(
 	}
 	// NB: We don't Wait for RUs for changefeeds; but, this call may put the RU limiter in debt which
 	// will impact future KV requests.
-	w.recorder.ExternalIOWriteSuccess(w.ctx, int64(compressedBytes))
+	w.recorder.OnExternalIO(w.ctx, multitenant.ExternalIOUsage{EgressBytes: int64(compressedBytes)})
 }
 
 func (w *wrappingCostController) recordMessageSize(sz int64) {
