@@ -292,19 +292,23 @@ statement error pq: feature DROP INDEX is part of the schema change category, wh
 DROP INDEX t1@i
 
 # Test COMMENT ON COLUMN.
-statement error pq: feature COMMENT ON COLUMN is part of the schema change category, which was disabled by the database administrator
+skipif config local-legacy-schema-changer
+statement error pq: feature COMMENT ON is part of the schema change category, which was disabled by the database administrator
 COMMENT ON COLUMN t.a IS 'comment'
 
 # Test COMMENT ON DATABASE.
-statement error pq: feature COMMENT ON DATABASE is part of the schema change category, which was disabled by the database administrator
+skipif config local-legacy-schema-changer
+statement error pq: feature COMMENT ON is part of the schema change category, which was disabled by the database administrator
 COMMENT ON DATABASE d IS 'comment'
 
 # Test COMMENT ON INDEX.
-statement error pq: feature COMMENT ON INDEX is part of the schema change category, which was disabled by the database administrator
+skipif config local-legacy-schema-changer
+statement error pq: feature COMMENT ON is part of the schema change category, which was disabled by the database administrator
 COMMENT ON INDEX t1@i IS 'comment'
 
 # Test COMMENT ON TABLE.
-statement error pq: feature COMMENT ON TABLE is part of the schema change category, which was disabled by the database administrator
+skipif config local-legacy-schema-changer
+statement error pq: feature COMMENT ON is part of the schema change category, which was disabled by the database administrator
 COMMENT ON TABLE t IS 'comment'
 
 # Reset feature flag to true so that test objects can be dropped.

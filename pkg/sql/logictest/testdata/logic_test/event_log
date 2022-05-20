@@ -991,7 +991,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_index'
 ----
-1  {"Comment": "This is an index.", "EventType": "comment_on_index", "IndexName": "b_index", "Statement": "COMMENT ON INDEX defaultdb.public.a@b_index IS 'This is an index.'", "TableName": "defaultdb.public.a", "Tag": "COMMENT ON INDEX", "User": "root"}
+1  {"Comment": "This is an index.", "EventType": "comment_on_index", "IndexName": "b_index", "Statement": "COMMENT ON INDEX defaultdb.public.b_index IS 'This is an index.'", "TableName": "defaultdb.public.a", "Tag": "COMMENT ON INDEX", "User": "root"}
 
 statement ok
 COMMENT ON TABLE a IS 'This is a table.'
@@ -1001,7 +1001,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_table'
 ----
-1  {"Comment": "This is a table.", "EventType": "comment_on_table", "Statement": "COMMENT ON TABLE defaultdb.public.a IS 'This is a table.'", "TableName": "defaultdb.public.a", "Tag": "COMMENT ON TABLE", "User": "root"}
+1  {"Comment": "This is a table.", "EventType": "comment_on_table", "Statement": "COMMENT ON TABLE a IS 'This is a table.'", "TableName": "defaultdb.public.a", "Tag": "COMMENT ON TABLE", "User": "root"}
 
 statement ok
 CREATE SCHEMA sc;
