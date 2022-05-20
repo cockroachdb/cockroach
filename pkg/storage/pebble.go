@@ -932,6 +932,8 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		return nil, err
 	}
 
+	fmt.Printf("max-conc-compactions: %d, memtable-size %d\n",
+		cfg.Opts.MaxConcurrentCompactions, cfg.Opts.MemTableSize)
 	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
 	if err != nil {
 		return nil, err
@@ -1030,6 +1032,10 @@ func (p *Pebble) Close() {
 	if p.encryption != nil {
 		_ = p.encryption.Closer.Close()
 	}
+}
+
+func (p *Pebble) GetInternalIntervalMetrics() *pebble.InternalIntervalMetrics {
+	return p.db.InternalIntervalMetrics()
 }
 
 // Closed implements the Engine interface.

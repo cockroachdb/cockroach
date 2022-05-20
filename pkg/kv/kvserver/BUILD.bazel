@@ -255,6 +255,7 @@ go_test(
         "node_liveness_test.go",
         "queue_concurrency_test.go",
         "queue_test.go",
+        "raft_and_state_machine_storage_test.go",
         "raft_log_queue_test.go",
         "raft_log_truncator_test.go",
         "raft_test.go",

@@ -128,6 +128,27 @@ func MaxConcurrentCompactions(n int) ConfigOption {
 	}
 }
 
+func MemtableSize(bytes int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.Opts.MemTableSize = bytes
+		return nil
+	}
+}
+
+func L0CompactionThreshold(n int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.Opts.L0CompactionThreshold = n
+		return nil
+	}
+}
+
+func WALBytesPerSync(bytes int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.Opts.WALBytesPerSync = bytes
+		return nil
+	}
+}
+
 // EncryptionAtRest configures an engine to use encryption-at-rest. It is used
 // for configuring in-memory engines, which are used in tests. It is not safe
 // to modify the given slice afterwards as it is captured by reference.
