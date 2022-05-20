@@ -132,7 +132,7 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
       EventBase:
         Authorization:
           UserName: root
-        Statement: COMMENT ON INDEX ‹db1›.‹sc1›.‹t1_pkey› IS 'pkey is good'
+        Statement: COMMENT ON INDEX ‹db1›.‹sc1›.‹t1›@‹t1_pkey› IS 'pkey is good'
         StatementTag: COMMENT ON INDEX
         TargetMetadata:
           SourceElementID: 1
@@ -281,7 +281,7 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
       EventBase:
         Authorization:
           UserName: root
-        Statement: COMMENT ON INDEX ‹db1›.‹sc1›.‹t1_pkey› IS NULL
+        Statement: COMMENT ON INDEX ‹db1›.‹sc1›.‹t1›@‹t1_pkey› IS NULL
         StatementTag: COMMENT ON INDEX
         TargetMetadata:
           SourceElementID: 1

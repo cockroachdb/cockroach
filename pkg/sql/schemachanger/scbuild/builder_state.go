@@ -751,6 +751,7 @@ func (b *builderState) ResolveTableIndexBestEffort(
 	}
 	tableIndexName.Table.CatalogName = tree.Name(prefix.Database.GetName())
 	tableIndexName.Table.SchemaName = tree.Name(prefix.Schema.GetName())
+	tableIndexName.Table.ObjectName = tree.Name(tbl.GetName())
 	return b.ResolveIndex(tbl.GetID(), tree.Name(idx.GetName()), p)
 }
 
