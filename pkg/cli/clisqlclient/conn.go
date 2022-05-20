@@ -15,8 +15,10 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -94,7 +96,10 @@ var ErrConnectionClosed = errors.New("connection closed unexpectedly")
 // server.
 func wrapConnError(err error) error {
 	errMsg := err.Error()
-	if errMsg == "EOF" || errMsg == "unexpected EOF" {
+	// pgconn wraps some of these errors with the private connectError struct.
+	isPgconnConnectError := strings.HasPrefix(errMsg, "failed to connect to")
+	isEOF := errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+	if errMsg == "EOF" || errMsg == "unexpected EOF" || (isPgconnConnectError && isEOF) {
 		return &InitialSQLConnectionError{err}
 	}
 	return err
@@ -140,6 +145,9 @@ func (c *sqlConn) SetMissingPassword(missing bool) {
 	c.passwordMissing = missing
 }
 
+// The default pgx dialer uses a KeepAlive of 5 minutes, which we don't want.
+var defaultDialer = &net.Dialer{}
+
 // EnsureConn (re-)establishes the connection to the server.
 func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	if c.conn != nil {
@@ -157,6 +165,20 @@ func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	// Add a notice handler - re-use the cliOutputError function in this case.
 	base.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
 		c.handleNotice(notice)
+	}
+	// By default, pgx uses a Dialer with a KeepAlive of 5 minutes, which is not
+	// desired here, so we override it.
+	defaultDialer.Timeout = 0
+	if base.ConnectTimeout > 0 {
+		defaultDialer.Timeout = base.ConnectTimeout
+	}
+	base.DialFunc = defaultDialer.DialContext
+	// Override LookupFunc to be a no-op, so that the Dialer is responsible for
+	// resolving hostnames. This fixes an issue where pgx would error out too
+	// quickly if using TLS when an ipv6 address is resolved, but the networking
+	// stack does not support ipv6.
+	base.LookupFunc = func(ctx context.Context, host string) (addrs []string, err error) {
+		return []string{host}, nil
 	}
 	conn, err := pgx.ConnectConfig(ctx, base)
 	if err != nil {

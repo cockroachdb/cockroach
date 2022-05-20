@@ -221,6 +221,14 @@ func setCliContextDefaults() {
 	cliCtx.EmbeddedMode = false
 	cliCtx.cmdTimeout = 0 // no timeout
 	cliCtx.clientConnHost = "localhost"
+	if h := os.Getenv("PGHOST"); h != "" {
+		// We need to inspect the PGHOST variable here so that it takes precedence
+		// over the default value. pgx already has logic that would inspect PGHOST,
+		// but the problem is that if PGHOST not defined, pgx would default to using
+		// a unix socket. That is not desired, so here we make the CLI fallback
+		// to use "localhost" if PGHOST is not defined.
+		cliCtx.clientConnPort = h
+	}
 	cliCtx.clientConnPort = base.DefaultPort
 	cliCtx.certPrincipalMap = nil
 	cliCtx.sqlConnURL = nil
