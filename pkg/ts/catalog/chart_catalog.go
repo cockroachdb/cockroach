@@ -1337,23 +1337,82 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Assorted (Counters)",
+				Title: "Frontier Updates",
+				Metrics: []string{
+					"changefeed.frontier_updates",
+				},
+			},
+			{
+				Title: "Ingested Events",
+				Metrics: []string{
+					"streaming.events_ingested",
+					"streaming.resolved_events_ingested",
+				},
+			},
+			{
+				Title: "Flushes",
+				Metrics: []string{
+					"streaming.flushes",
+				},
+			},
+			{
+				Title: "Ingested Bytes",
+				Metrics: []string{
+					"streaming.ingested_bytes",
+				},
+			},
+			{
+				Title: "Flushed Bytes",
+				Metrics: []string{
+					"changefeed.flushed_bytes",
+				},
+			},
+			{
+				Title: "Forwarded Resolved Messages",
+				Metrics: []string{
+					"changefeed.forwarded_resolved_messages",
+				},
+			},
+			{
+				Title: "Messages Size",
+				Metrics: []string{
+					"changefeed.message_size_hist",
+				},
+			},
+			{
+				Title: "Commits Latency",
+				Metrics: []string{
+					"changefeed.commit_latency",
+				},
+			},
+			{
+				Title: "Time spent",
+				Metrics: []string{
+					"changefeed.checkpoint_hist_nanos",
+					"changefeed.flush_hist_nanos",
+					"changefeed.sink_batch_hist_nanos",
+				},
+			},
+			{
+				Title: "Backfill",
 				Metrics: []string{
 					"changefeed.backfill_count",
 					"changefeed.backfill_pending_ranges",
+				},
+			},
+			{
+				Title: "Time Spent Waiting",
+				Metrics: []string{
 					"changefeed.buffer_pushback_nanos",
-					"changefeed.bytes.messages_pushback_nanos",
-					"changefeed.checkpoint_hist_nanos",
-					"changefeed.commit_latency",
-					"changefeed.flush.messages_pushback_nanos",
-					"changefeed.flush_hist_nanos",
-					"changefeed.flushed_bytes",
-					"changefeed.forwarded_resolved_messages",
-					"changefeed.frontier_updates",
-					"changefeed.message_size_hist",
-					"changefeed.messages.messages_pushback_nanos",
 					"changefeed.queue_time_nanos",
-					"changefeed.sink_batch_hist_nanos",
+				},
+			},
+			{
+				Title: "Throttled Time",
+				Metrics: []string{
+					"changefeed.bytes.messages_pushback_nanos",
+					"changefeed.messages.messages_pushback_nanos",
+					"changefeed.flush.messages_pushback_nanos",
 				},
 			},
 		},
@@ -2787,6 +2846,12 @@ var charts = []sectionDescription{
 					"schedules.BACKUP.failed",
 				},
 			},
+			{
+				Title: "Last Completed Backups",
+				Metrics: []string{
+					"schedules.BACKUP.last-completed-time",
+				},
+			},
 		},
 	},
 	{
@@ -3118,19 +3183,34 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{Tenants}},
+		Organization: [][]string{{Tenants, "Consumption"}},
 		Charts: []chartDescription{
 			{
-				Title: "Assorted",
+				Title: "Total number of KV read/write requests (Gauge_Count_Requests)",
 				Metrics: []string{
+					"tenant.consumption.write_requests",
+					"tenant.consumption.read_requests",
+				},
+			},
+			{
+				Title: "Total RU consumption (Gauge_Count_Request_units)",
+				Metrics: []string{
+					"tenant.consumption.request_units",
 					"tenant.consumption.kv_request_units",
+				},
+			},
+			{
+				Title: "Total number of bytes written to KV (Gauge_Count_CPU_seconds)",
+				Metrics: []string{
+					"tenant.consumption.sql_pods_cpu_seconds",
+				},
+			},
+			{
+				Title: "Total number of bytes (Gauge_count_bytes)",
+				Metrics: []string{
+					"tenant.consumption.write_bytes",
 					"tenant.consumption.pgwire_egress_bytes",
 					"tenant.consumption.read_bytes",
-					"tenant.consumption.read_requests",
-					"tenant.consumption.request_units",
-					"tenant.consumption.sql_pods_cpu_seconds",
-					"tenant.consumption.write_bytes",
-					"tenant.consumption.write_requests",
 				},
 			},
 		},

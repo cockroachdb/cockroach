@@ -42,6 +42,12 @@ type SchedulerMetrics struct {
 	// Number of schedules that are malformed: that is, the schedules
 	// we cannot parse, or even attempt to execute.
 	NumMalformedSchedules *metric.Gauge
+	// Number of started schedules
+	NumTotalStartedSchedules *metric.Gauge
+	// Number of succeeded schedules
+	NumTotalSucceededSchedules *metric.Gauge
+	// Number of failed schedules
+	NumTotalFailedSchedules *metric.Gauge
 }
 
 // MakeSchedulerMetrics returns metrics for scheduled job daemon.
@@ -78,6 +84,27 @@ func MakeSchedulerMetrics() SchedulerMetrics {
 		NumMalformedSchedules: metric.NewGauge(metric.Metadata{
 			Name:        "schedules.malformed",
 			Help:        "Number of malformed schedules",
+			Measurement: "Schedules",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		NumTotalStartedSchedules: metric.NewGauge(metric.Metadata{
+			Name:        "schedules.total.started",
+			Help:        "Number of started schedules",
+			Measurement: "Schedules",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		NumTotalSucceededSchedules: metric.NewGauge(metric.Metadata{
+			Name:        "schedules.total.succeeded",
+			Help:        "Number of succeeded schedules",
+			Measurement: "Schedules",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		NumTotalFailedSchedules: metric.NewGauge(metric.Metadata{
+			Name:        "schedules.total.failed",
+			Help:        "Number of failed schedules",
 			Measurement: "Schedules",
 			Unit:        metric.Unit_COUNT,
 		}),

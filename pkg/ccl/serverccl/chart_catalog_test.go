@@ -91,18 +91,8 @@ func TestChartCatalogMetrics(t *testing.T) {
 
 // deleteSeenMetrics removes all metrics in a section from the metricMetadata map.
 func deleteSeenMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata, t *testing.T) {
-	// if c.Title == "SQL" {
-	// 	t.Log(c)
-	// }
 	for _, x := range c.Charts {
-		if x.Title == "Connections" || x.Title == "Byte I/O" {
-			t.Log(x)
-		}
-
 		for _, metric := range x.Metrics {
-			if metric.Name == "sql.new_conns" || metric.Name == "sql.bytesin" {
-				t.Logf("found %v\n", metric.Name)
-			}
 			_, ok := metadata[metric.Name]
 			if ok {
 				delete(metadata, metric.Name)

@@ -200,6 +200,13 @@ var chartCatalog = []ChartSection{
 		Description:     `Your cluster executes various background jobs, as well as scheduled jobs`,
 		Level:           0,
 	},
+	{
+		Title:           Tenants,
+		LongTitle:       Tenants,
+		CollectionTitle: "tenants-all",
+		Description:     `TBD`, // TODO (koorosh): provide a meaningful description.
+		Level:           0,
+	},
 }
 
 var catalogGenerated = false
@@ -215,6 +222,7 @@ var catalogKey = map[string]int{
 	StorageLayer:       5,
 	Timeseries:         6,
 	Jobs:               7,
+	Tenants:            8,
 }
 
 // unitsKey converts between metric.Unit and catalog.AxisUnits which is
