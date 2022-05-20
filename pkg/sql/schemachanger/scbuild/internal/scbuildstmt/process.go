@@ -46,21 +46,20 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// Alter table will have commands individually whitelisted via the
 	// supportedAlterTableStatements list, so wwe will consider it fully supported
 	// here.
-	reflect.TypeOf((*tree.AlterTable)(nil)):   {AlterTable, true},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):  {CreateIndex, false},
-	reflect.TypeOf((*tree.DropDatabase)(nil)): {DropDatabase, true},
-	reflect.TypeOf((*tree.DropSchema)(nil)):   {DropSchema, true},
-	reflect.TypeOf((*tree.DropSequence)(nil)): {DropSequence, true},
-	reflect.TypeOf((*tree.DropTable)(nil)):    {DropTable, true},
-	reflect.TypeOf((*tree.DropType)(nil)):     {DropType, true},
-	reflect.TypeOf((*tree.DropView)(nil)):     {DropView, true},
-	// TODO (Chengxiong) turn on `COMMENT ON` with version gating after 22.1 release.
-	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {CommentOnDatabase, false},
-	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {CommentOnSchema, false},
-	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {CommentOnTable, false},
-	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {CommentOnColumn, false},
-	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {CommentOnIndex, false},
-	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {CommentOnConstraint, false},
+	reflect.TypeOf((*tree.AlterTable)(nil)):          {AlterTable, true},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {CreateIndex, false},
+	reflect.TypeOf((*tree.DropDatabase)(nil)):        {DropDatabase, true},
+	reflect.TypeOf((*tree.DropSchema)(nil)):          {DropSchema, true},
+	reflect.TypeOf((*tree.DropSequence)(nil)):        {DropSequence, true},
+	reflect.TypeOf((*tree.DropTable)(nil)):           {DropTable, true},
+	reflect.TypeOf((*tree.DropType)(nil)):            {DropType, true},
+	reflect.TypeOf((*tree.DropView)(nil)):            {DropView, true},
+	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {CommentOnDatabase, true},
+	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {CommentOnSchema, true},
+	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {CommentOnTable, true},
+	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {CommentOnColumn, true},
+	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {CommentOnIndex, true},
+	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {CommentOnConstraint, true},
 }
 
 func init() {

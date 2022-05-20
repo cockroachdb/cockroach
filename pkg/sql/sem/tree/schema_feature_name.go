@@ -21,6 +21,12 @@ type SchemaFeatureName string
 func GetSchemaFeatureNameFromStmt(stmt Statement) SchemaFeatureName {
 	statementTag := stmt.StatementTag()
 	statementInfo := strings.Split(statementTag, " ")
+
+	switch stmt.(type) {
+	case *CommentOnDatabase, *CommentOnSchema, *CommentOnTable,
+		*CommentOnColumn, *CommentOnIndex, *CommentOnConstraint:
+		return SchemaFeatureName(strings.Join(statementInfo[:3], " "))
+	}
 	// Only grab the first two words (i.e. ALTER TABLE, etc..).
 	if len(statementInfo) >= 2 {
 		return SchemaFeatureName(statementInfo[0] + " " + statementInfo[1])
