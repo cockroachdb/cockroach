@@ -30,6 +30,7 @@ go_library(
         "costfuzz.go",
         "decommission.go",
         "decommission_self.go",
+        "decommissionbench.go",
         "disk_full.go",
         "disk_stall.go",
         "django.go",

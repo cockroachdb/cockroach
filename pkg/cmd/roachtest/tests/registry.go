@@ -33,6 +33,7 @@ func RegisterTests(r registry.Registry) {
 	registerCopy(r)
 	registerCostFuzz(r)
 	registerDecommission(r)
+	registerDecommissionBench(r)
 	registerDiskFull(r)
 	RegisterDiskStalledDetection(r)
 	registerDjango(r)
