@@ -577,9 +577,12 @@ func (c *SyncedCluster) generateStartFlagsKV(
 			storeDir := c.NodeDir(node, i)
 			storeDirs = append(storeDirs, storeDir)
 			// Place a store{i} attribute on each store to allow for zone configs
-			// that use specific stores.
+			// that use specific stores. Note that `i` is 1 most of the time, since
+			// it's the i-th store on the *current* node. This isn't always useful,
+			// for example it doesn't let one single out a specific node. We add
+			// nodeX-flavor attributes for that.
 			args = append(args, `--store`,
-				`path=`+storeDir+`,attrs=`+fmt.Sprintf("store%d", i))
+				fmt.Sprintf(`path=%s,attrs=store%d:node%d:node%dstore%d`, storeDir, i, node, node, i))
 		}
 	} else {
 		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[idx], "--store=")
