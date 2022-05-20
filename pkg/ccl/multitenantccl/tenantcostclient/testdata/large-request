@@ -7,34 +7,101 @@ wait-for-event
 token-bucket-response
 ----
 
-configure 
+configure
 throttle: 1000
 ----
 
 # Fire off a write that needs significantly more than the 10000 initial RUs.
-write bytes=20000000 label=w1
+write bytes=20477952 label=w1
+----
+
+timers
+----
+00:00:09.000
+00:00:10.000
+
+# Ensure that low RU notification is sent even though the token bucket still has
+# 10K RUs (waiting RUs need to be taken into account).
+wait-for-event
+low-ru
 ----
 
 wait-for-event
 token-bucket-response
 ----
 
-advance
-10s
+not-completed label=w1
 ----
-00:00:10.000
+
+token-bucket
+----
+10000.00 RU filling @ 1000.00 RU/s (20000.00 waiting RU)
+
+# Advance time to just short of trickle renewal and trigger tick event.
+advance wait=true
+8.75s
+----
+00:00:08.750
+
+token-bucket
+----
+18750.00 RU filling @ 1000.00 RU/s (20000.00 waiting RU)
+
+# Now advance time to trigger trickle renewal (but do not trigger tick in order
+# to avoid a race that makes test non-deterministic).
+advance
+0.25s
+----
+00:00:09.000
 
 wait-for-event
 low-ru
 ----
 
-not-completed label=w1
+wait-for-event
+token-bucket-response
 ----
 
-advance
-50s
+timers
 ----
-00:01:00.000
+00:00:09.909
+00:00:18.000
+
+token-bucket
+----
+19000.00 RU filling @ 1100.00 RU/s (20000.00 waiting RU)
+
+# One more second to fulfill waiting write.
+advance
+1s
+----
+00:00:10.000
 
 await label=w1
+----
+
+token-bucket
+----
+100.00 RU filling @ 1100.00 RU/s
+
+# Un-throttle central token bucket and ensure that another large write goes
+# through after requesting more RUs.
+configure
+----
+
+write bytes=20477952 label=w2
+----
+
+timers
+----
+00:00:18.000
+00:00:28.090
+
+# Advance another 8 seconds to trigger trickle renewal and reconfigure bucket.
+advance
+8s
+----
+00:00:18.000
+
+await label=w2
 ----

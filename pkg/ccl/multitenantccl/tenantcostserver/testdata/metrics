@@ -6,8 +6,10 @@ instance_id: 1
 consumption:
   ru: 10
   kvru: 8
+  read_batches: 2
   read_req: 20
   read_bytes: 30
+  write_batches: 3
   write_req: 40
   write_bytes: 50
   sql_pods_cpu_usage: 60
@@ -21,10 +23,12 @@ tenant_consumption_external_io_egress_bytes{tenant_id="5"} 0
 tenant_consumption_external_io_ingress_bytes{tenant_id="5"} 0
 tenant_consumption_kv_request_units{tenant_id="5"} 8
 tenant_consumption_pgwire_egress_bytes{tenant_id="5"} 70
+tenant_consumption_read_batches{tenant_id="5"} 2
 tenant_consumption_read_bytes{tenant_id="5"} 30
 tenant_consumption_read_requests{tenant_id="5"} 20
 tenant_consumption_request_units{tenant_id="5"} 10
 tenant_consumption_sql_pods_cpu_seconds{tenant_id="5"} 60
+tenant_consumption_write_batches{tenant_id="5"} 3
 tenant_consumption_write_bytes{tenant_id="5"} 50
 tenant_consumption_write_requests{tenant_id="5"} 40
 
@@ -33,8 +37,10 @@ instance_id: 1
 consumption:
   ru: 100
   kvru: 80
+  read_batches: 20
   read_req: 200
   read_bytes: 300
+  write_batches: 30
   write_req: 400
   write_bytes: 500
   sql_pods_cpu_usage: 600
@@ -46,8 +52,10 @@ instance_id: 2
 consumption:
   ru: 1000
   kvru: 800
+  read_batches: 200
   read_req: 2000
   read_bytes: 3000
+  write_batches: 300
   write_req: 4000
   write_bytes: 5000
   sql_pods_cpu_usage: 6000
@@ -57,7 +65,7 @@ consumption:
 inspect tenant=5
 ----
 Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
-Consumption: ru=1110 kvru=888  reads=2220 req/3330 bytes  writes=4440 req/5550 bytes  pod-cpu-usage: 6660 secs  pgwire-egress=7770 bytes  external-egress=0 bytes  external-ingress=0 bytes
+Consumption: ru=1110 kvru=888  reads=2220 in 222 batches (3330 bytes)  writes=4440 in 333 batches (5550 bytes)  pod-cpu-usage: 6660 secs  pgwire-egress=7770 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:00.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=2  shares=0.0  next-instance=2  last-update=00:00:00.000
@@ -70,9 +78,11 @@ tenant_consumption_external_io_egress_bytes{tenant_id="5"} 0
 tenant_consumption_external_io_ingress_bytes{tenant_id="5"} 0
 tenant_consumption_kv_request_units{tenant_id="5"} 888
 tenant_consumption_pgwire_egress_bytes{tenant_id="5"} 7770
+tenant_consumption_read_batches{tenant_id="5"} 222
 tenant_consumption_read_bytes{tenant_id="5"} 3330
 tenant_consumption_read_requests{tenant_id="5"} 2220
 tenant_consumption_request_units{tenant_id="5"} 1110
 tenant_consumption_sql_pods_cpu_seconds{tenant_id="5"} 6660
+tenant_consumption_write_batches{tenant_id="5"} 333
 tenant_consumption_write_bytes{tenant_id="5"} 5550
 tenant_consumption_write_requests{tenant_id="5"} 4440
