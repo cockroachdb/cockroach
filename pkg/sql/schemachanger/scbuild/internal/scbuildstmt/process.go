@@ -24,6 +24,7 @@ import (
 type supportedStatement struct {
 	fn             interface{}
 	fullySupported bool
+	featureName    tree.SchemaFeatureName
 }
 
 // IsFullySupported returns if this statement type is supported, where the
@@ -46,21 +47,20 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// Alter table will have commands individually whitelisted via the
 	// supportedAlterTableStatements list, so wwe will consider it fully supported
 	// here.
-	reflect.TypeOf((*tree.AlterTable)(nil)):   {AlterTable, true},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):  {CreateIndex, false},
-	reflect.TypeOf((*tree.DropDatabase)(nil)): {DropDatabase, true},
-	reflect.TypeOf((*tree.DropSchema)(nil)):   {DropSchema, true},
-	reflect.TypeOf((*tree.DropSequence)(nil)): {DropSequence, true},
-	reflect.TypeOf((*tree.DropTable)(nil)):    {DropTable, true},
-	reflect.TypeOf((*tree.DropType)(nil)):     {DropType, true},
-	reflect.TypeOf((*tree.DropView)(nil)):     {DropView, true},
-	// TODO (Chengxiong) turn on `COMMENT ON` with version gating after 22.1 release.
-	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {CommentOnDatabase, false},
-	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {CommentOnSchema, false},
-	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {CommentOnTable, false},
-	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {CommentOnColumn, false},
-	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {CommentOnIndex, false},
-	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {CommentOnConstraint, false},
+	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, fullySupported: true},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, fullySupported: false},
+	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, fullySupported: true},
+	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, fullySupported: true},
+	reflect.TypeOf((*tree.DropSequence)(nil)):        {fn: DropSequence, fullySupported: true},
+	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, fullySupported: true},
+	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, fullySupported: true},
+	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, fullySupported: true},
+	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, fullySupported: true, featureName: "COMMENT ON DATABASE"},
+	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, fullySupported: true, featureName: "COMMENT ON SCHEMA"},
+	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, fullySupported: true, featureName: "COMMENT ON TABLE"},
+	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, fullySupported: true, featureName: "COMMENT ON COLUMN"},
+	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, fullySupported: true, featureName: "COMMENT ON INDEX"},
+	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, fullySupported: true, featureName: "COMMENT ON CONSTRAINT"},
 }
 
 func init() {
@@ -99,7 +99,11 @@ func Process(b BuildCtx, n tree.Statement) {
 	fn := reflect.ValueOf(info.fn)
 	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(n)}
 	// Check if the feature flag for it is enabled.
-	err := b.CheckFeature(b, tree.GetSchemaFeatureNameFromStmt(n))
+	featureName := info.featureName
+	if featureName == "" {
+		featureName = tree.GetSchemaFeatureNameFromStmt(n)
+	}
+	err := b.CheckFeature(b, featureName)
 	if err != nil {
 		panic(err)
 	}
