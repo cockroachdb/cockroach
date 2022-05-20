@@ -79,7 +79,11 @@ func (p *planner) alterDefaultPrivileges(
 		if err != nil {
 			return nil, err
 		}
-		schemaDescs = append(schemaDescs, schemaDesc.(*schemadesc.Mutable))
+		mutableSchemaDesc, ok := schemaDesc.(*schemadesc.Mutable)
+		if !ok {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "%s is not a physical schema", schemaDesc.GetName())
+		}
+		schemaDescs = append(schemaDescs, mutableSchemaDesc)
 	}
 
 	return &alterDefaultPrivilegesNode{
