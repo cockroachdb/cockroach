@@ -1803,7 +1803,8 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				if err := populateInvertedIndexDescriptor(column, &idx, columns[len(columns)-1]); err != nil {
+				if err := populateInvertedIndexDescriptor(
+					ctx, evalCtx.Settings, column, &idx, columns[len(columns)-1]); err != nil {
 					return nil, err
 				}
 			}
