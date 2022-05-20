@@ -245,63 +245,9 @@ func runDecommission(
 	}
 	c.Run(ctx, c.Node(pinnedNode), `./workload init kv --drop`)
 
-	waitReplicatedAwayFrom := func(downNodeID int) error {
-		db := c.Conn(ctx, t.L(), pinnedNode)
-		defer func() {
-			_ = db.Close()
-		}()
+	h := newDecommTestHelper(t, c)
 
-		for {
-			var count int
-			if err := db.QueryRow(
-				// Check if the down node has any replicas.
-				"SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
-				downNodeID,
-			).Scan(&count); err != nil {
-				return err
-			}
-			if count == 0 {
-				fullReplicated := false
-				if err := db.QueryRow(
-					// Check if all ranges are fully replicated.
-					"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
-				).Scan(&fullReplicated); err != nil {
-					return err
-				}
-				if fullReplicated {
-					break
-				}
-			}
-			time.Sleep(time.Second)
-		}
-		return nil
-	}
-
-	waitUpReplicated := func(targetNode, targetNodeID int) error {
-		db := c.Conn(ctx, t.L(), pinnedNode)
-		defer func() {
-			_ = db.Close()
-		}()
-
-		var count int
-		for {
-			// Check to see that there are no ranges where the target node is
-			// not part of the replica set.
-			stmtReplicaCount := fmt.Sprintf(
-				`SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, %d) IS NULL and database_name = 'kv';`, targetNodeID)
-			if err := db.QueryRow(stmtReplicaCount).Scan(&count); err != nil {
-				return err
-			}
-			t.Status(fmt.Sprintf("node%d missing %d replica(s)", targetNode, count))
-			if count == 0 {
-				break
-			}
-			time.Sleep(time.Second)
-		}
-		return nil
-	}
-
-	if err := waitReplicatedAwayFrom(0 /* no down node */); err != nil {
+	if err := h.waitReplicatedAwayFrom(ctx, 0 /* no down node */, pinnedNode); err != nil {
 		t.Fatal(err)
 	}
 
@@ -351,12 +297,6 @@ func runDecommission(
 			return c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --host=:"+port)
 		}
 
-		decom := func(id int) error {
-			port := fmt.Sprintf("{pgport:%d}", pinnedNode) // always use the pinned node
-			t.Status(fmt.Sprintf("decommissioning node %d", id))
-			return c.RunE(ctx, c.Node(pinnedNode), fmt.Sprintf("./cockroach node decommission --insecure --wait=all --host=:%s %d", port, id))
-		}
-
 		tBegin, whileDown := timeutil.Now(), true
 		node := nodes
 		for timeutil.Since(tBegin) <= duration {
@@ -376,7 +316,7 @@ func runDecommission(
 			}
 
 			run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE = 'constraints: {"+node%d"}'`, node))
-			if err := waitUpReplicated(node, nodeID); err != nil {
+			if err := h.waitUpReplicated(ctx, node, nodeID); err != nil {
 				return err
 			}
 
@@ -388,11 +328,11 @@ func runDecommission(
 
 			run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE = 'constraints: {"-node%d"}'`, node))
 
-			if err := decom(nodeID); err != nil {
+			if _, err := h.decommission(ctx, c.Node(nodeID), pinnedNode, "--wait=all"); err != nil {
 				return err
 			}
 
-			if err := waitReplicatedAwayFrom(nodeID); err != nil {
+			if err := h.waitReplicatedAwayFrom(ctx, nodeID, pinnedNode); err != nil {
 				return err
 			}
 
@@ -1230,6 +1170,22 @@ func newDecommTestHelper(t test.Test, c cluster.Cluster) *decommTestHelper {
 	}
 }
 
+func (h *decommTestHelper) defaultRangesOnNode(ctx context.Context, target, runNode int) error {
+	db := h.c.Conn(ctx, h.t.L(), runNode)
+	defer db.Close()
+
+	stmt := fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE = 'constraints: {"+node%d"}'`, target)
+	h.t.Status(stmt)
+	_, err := db.ExecContext(ctx, stmt)
+	return err
+}
+
+func (h *decommTestHelper) stop(ctx context.Context, node int) error {
+	port := fmt.Sprintf("{pgport:%d}", node)
+	defer time.Sleep(time.Second) // work around quit returning too early
+	return h.c.RunE(ctx, h.c.Node(node), "./cockroach quit --insecure --host=:"+port)
+}
+
 // decommission decommissions the given targetNodes, running the process
 // through the specified runNode.
 func (h *decommTestHelper) decommission(
@@ -1264,6 +1220,81 @@ func (h *decommTestHelper) recommission(
 		}
 	}
 	return execCLI(ctx, h.t, h.c, runNode, args...)
+}
+
+func (h *decommTestHelper) checkDecommissioned(ctx context.Context, downNodeID, runNode int) error {
+	db := h.c.Conn(ctx, h.t.L(), runNode)
+	defer db.Close()
+	var membership string
+	if err := db.QueryRow("SELECT membership FROM crdb_internal.gossip_liveness WHERE node_id = $1", downNodeID).Scan(&membership); err != nil {
+		return err
+	}
+
+	if membership != "decommissioned" {
+		return errors.Newf("node %d not decommissioned", downNodeID)
+	}
+
+	return nil
+}
+
+func (h *decommTestHelper) waitReplicatedAwayFrom(
+	ctx context.Context, downNodeID, runNode int,
+) error {
+	db := h.c.Conn(ctx, h.t.L(), runNode)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	for {
+		var count int
+		if err := db.QueryRow(
+			// Check if the down node has any replicas.
+			"SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
+			downNodeID,
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count == 0 {
+			fullReplicated := false
+			if err := db.QueryRow(
+				// Check if all ranges are fully replicated.
+				"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
+			).Scan(&fullReplicated); err != nil {
+				return err
+			}
+			if fullReplicated {
+				break
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	return nil
+}
+
+func (h *decommTestHelper) waitUpReplicated(
+	ctx context.Context, targetNode, targetNodeID int,
+) error {
+	db := h.c.Conn(ctx, h.t.L(), targetNode)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	var count int
+	for {
+		// Check to see that there are no ranges where the target node is
+		// not part of the replica set.
+		stmtReplicaCount := fmt.Sprintf(
+			`SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, %d) IS NULL and database_name = 'kv';`, targetNodeID)
+		if err := db.QueryRow(stmtReplicaCount).Scan(&count); err != nil {
+			return err
+		}
+		h.t.Status(fmt.Sprintf("node%d missing %d replica(s)", targetNode, count))
+		if count == 0 {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	return nil
 }
 
 // expectColumn constructs a matching regex for a given column (identified
