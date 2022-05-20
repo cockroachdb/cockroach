@@ -70,7 +70,7 @@ type TenantSideKVInterceptor interface {
 	//
 	// If the context (or a parent context) was created using
 	// WithTenantCostControlExemption, the method is a no-op.
-	OnRequestWait(ctx context.Context, info tenantcostmodel.RequestInfo) error
+	OnRequestWait(ctx context.Context) error
 
 	// OnResponse accounts for the portion of the cost that can only be determined
 	// after-the-fact. It does not block, but it can push the rate limiting into
@@ -78,9 +78,9 @@ type TenantSideKVInterceptor interface {
 	//
 	// If the context (or a parent context) was created using
 	// WithTenantCostControlExemption, the method is a no-op.
-	OnResponse(
+	OnResponseWait(
 		ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
-	)
+	) error
 }
 
 // WithTenantCostControlExemption generates a child context which will cause the

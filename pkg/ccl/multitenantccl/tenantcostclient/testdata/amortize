@@ -1,0 +1,173 @@
+# Test token bucket that has gone into debt.
+
+# Wait for initial 10K RUs to be granted.
+wait-for-event
+token-bucket-response
+----
+
+# Set up throttling at 1000 RU/s.
+configure
+throttle: 1000
+----
+
+# Fire off 10 writes that consumes the initial 10K RUs.
+write bytes=1021952 repeat=10
+----
+
+# Wait for token bucket to be replenished and pick up the 1000 RU/s throttling
+# rate.
+wait-for-event
+token-bucket-response
+----
+
+# Advance 1 tick so that average ops/sec is updated.
+advance wait=true
+1s
+----
+00:00:01.000
+
+token-bucket
+include-details
+----
+1000.00 RU filling @ 1000.00 RU/s (avg 10.00 ops/sec, 0.00 extra RU)
+
+# Consume CPU and ensure that it is not applied to the token bucket immediately,
+# but instead amortized across subsequent read/write operations.
+cpu
+20s
+----
+
+advance wait=true
+1s
+----
+00:00:02.000
+
+token-bucket
+include-details
+----
+2000.00 RU filling @ 1000.00 RU/s (avg 8.00 ops/sec, 6663.33 extra RU)
+
+# 1/8th of the CPU RUs should be included with the next operation.
+read bytes=1024
+----
+
+token-bucket
+include-details
+----
+1166.40 RU filling @ 1000.00 RU/s (avg 8.00 ops/sec, 5830.42 extra RU)
+
+# A further 1/8th of the CPU RUs should be included with the next operation.
+write bytes=512000
+----
+
+token-bucket
+include-details
+----
+-168.52 RU filling @ 1000.00 RU/s (avg 8.00 ops/sec, 4997.50 extra RU)
+
+# Try another operation that should block.
+read bytes=1024 label=r2
+----
+
+timers
+----
+00:00:02.168
+00:00:09.000
+
+# Check that extra RU is not depleted when a request is blocked (only when the
+# response is received).
+token-bucket
+include-details
+----
+-168.52 RU filling @ 1000.00 RU/s (avg 8.00 ops/sec, 4997.50 extra RU)
+
+# Advance enough to complete the request, but not enough to trigger a tick,
+# since that would cause a race condition between operation completion and the
+# counting of operations that the tick handler does.
+advance
+500ms
+----
+00:00:02.500
+
+await label=r2
+----
+
+# Ensure that extra RU has now been depleted.
+token-bucket
+include-details
+----
+-502.11 RU filling @ 1000.00 RU/s (avg 8.00 ops/sec, 4164.58 extra RU)
+
+# Advance another 1/2 second in order to trigger the tick handling.
+advance wait=true
+500ms
+----
+00:00:03.000
+
+token-bucket
+include-details
+----
+-2.11 RU filling @ 1000.00 RU/s (avg 7.00 ops/sec, 4164.58 extra RU)
+
+advance wait=true
+1s
+----
+00:00:04.000
+
+# Advance another second without a further operation and expect extra RU to be
+# directly removed from the token bucket, putting it into debt.
+
+advance wait=true
+1s
+----
+00:00:05.000
+
+token-bucket
+include-details
+----
+-2166.70 RU filling @ 1000.00 RU/s (avg 4.48 ops/sec, 0.00 extra RU)
+
+# Record some egress.
+pgwire-egress
+65536
+----
+
+advance wait=true
+1s
+----
+00:00:06.000
+
+token-bucket
+include-details
+----
+-1166.70 RU filling @ 1000.00 RU/s (avg 3.58 ops/sec, 64.00 extra RU)
+
+# Start another read, which will block due to debt.
+read bytes=1024 label=r3
+----
+
+timers
+----
+00:00:07.166
+00:00:09.000
+
+# Advance one second in order to cause extra RU to get directly removed from the
+# token bucket.
+advance wait=true
+1s
+----
+00:00:07.000
+
+token-bucket
+include-details
+----
+-230.70 RU filling @ 1000.00 RU/s (avg 2.87 ops/sec, 0.00 extra RU)
+
+# Advance another second and ensure read completes.
+advance
+1s
+----
+00:00:08.000
+
+await label=r3
+----
