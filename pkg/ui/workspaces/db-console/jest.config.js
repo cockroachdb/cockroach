@@ -94,10 +94,10 @@ module.exports = {
     {},
     pathsToModuleNameMapper(compilerOptions.paths, { prefix: "<rootDir>/" }),
     {
-      "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$":
-        "identity-obj-proxy",
+      "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga|gif|png|svg)$":
+        "<rootDir>/src/test-utils/file.mock.js",
       "\\.(css|scss|less|styl)$": "identity-obj-proxy",
-      "\\.(gif|png|svg)$": "<rootDir>/../cluster-ui/.jest/fileMock.js",
+      "^react($|/.+)": "<rootDir>/node_modules/react$1",
     },
   ),
 
@@ -143,11 +143,17 @@ module.exports = {
   // Allows you to use a custom runner instead of Jest's default test runner
   // runner: "jest-runner",
 
-  // The paths to modules that run some code to configure or set up the testing environment before each test
+  // The paths to modules that run some code to configure or set up the testing environment
+  // before each test.
   // setupFiles: [],
 
-  // A list of paths to modules that run some code to configure or set up the testing framework before each test
-  setupFilesAfterEnv: ["jest-enzyme", "./enzyme.setup.js"],
+  // A list of paths to modules that run some code to configure or set up the testing framework
+  // before each test. These run after the test environment is setup for each test. This
+  setupFilesAfterEnv: [
+    "jest-canvas-mock",
+    "jest-enzyme",
+    "<rootDir>/src/setupTests.js",
+  ],
 
   // The number of seconds after which a test is considered as slow and reported as such in the results.
   // slowTestThreshold: 5,
