@@ -1124,6 +1124,11 @@ func BenchmarkWindowFunctions(b *testing.B) {
 	benchMemAccount := testMemMonitor.MakeBoundAccount()
 	defer benchMemAccount.Close(ctx)
 
+	var allClosers colexecop.Closers
+	defer func() {
+		require.NoError(b, allClosers.Close(ctx))
+	}()
+
 	getWindowFn := func(
 		fun execinfrapb.WindowerSpec_Func, source colexecop.Operator, partition, order bool,
 	) (op colexecop.Operator) {
@@ -1222,7 +1227,9 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			op = NewWindowAggregatorOperator(
 				args, *fun.AggregateFunc, NormalizeWindowFrame(nil),
 				&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx},
-				aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
+				aggArgs.OutputTypes[0], aggFnsAlloc,
+			)
+			allClosers = append(allClosers, toClose...)
 		} else {
 			require.Fail(b, "expected non-nil window function")
 		}

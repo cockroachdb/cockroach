@@ -324,9 +324,7 @@ func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 }
 
 func (r *percentRankNoPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() || r.Ctx == nil {
-		// Either Close() has already been called or Init() was never called. In
-		// both cases there is nothing to do.
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
@@ -603,9 +601,7 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 }
 
 func (r *percentRankWithPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() || r.Ctx == nil {
-		// Either Close() has already been called or Init() was never called. In
-		// both cases there is nothing to do.
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
@@ -870,9 +866,7 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 }
 
 func (r *cumeDistNoPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() || r.Ctx == nil {
-		// Either Close() has already been called or Init() was never called. In
-		// both cases there is nothing to do.
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
@@ -1231,9 +1225,7 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 }
 
 func (r *cumeDistWithPartitionOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() || r.Ctx == nil {
-		// Either Close() has already been called or Init() was never called. In
-		// both cases there is nothing to do.
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error

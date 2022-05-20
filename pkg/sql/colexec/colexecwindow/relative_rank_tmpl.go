@@ -590,9 +590,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 }
 
 func (r *_RELATIVE_RANK_STRINGOp) Close(ctx context.Context) error {
-	if !r.CloserHelper.Close() || r.Ctx == nil {
-		// Either Close() has already been called or Init() was never called. In
-		// both cases there is nothing to do.
+	if !r.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error

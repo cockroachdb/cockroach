@@ -29,7 +29,7 @@ func NewLastValueOperator(
 	frame *execinfrapb.WindowerSpec_Frame,
 	ordering *execinfrapb.Ordering,
 	argIdxs []int,
-) (colexecop.Operator, error) {
+) (colexecop.ClosableOperator, error) {
 	framer := newWindowFramer(args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
 	colsToStore := framer.getColsToStore([]int{argIdxs[0]})
 

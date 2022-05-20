@@ -49,7 +49,7 @@ const _TYPE_WIDTH = 0
 // should put its output (if there is no such column, a new column is appended).
 func New_UPPERCASE_NAMEOperator(
 	args *WindowArgs, argIdx int, offsetIdx int, defaultIdx int,
-) (colexecop.Operator, error) {
+) (colexecop.ClosableOperator, error) {
 	// Allow the direct-access buffer 10% of the available memory. The rest will
 	// be given to the bufferedWindowOp queue. While it is somewhat more important
 	// for the direct-access buffer tuples to be kept in-memory, it only has to

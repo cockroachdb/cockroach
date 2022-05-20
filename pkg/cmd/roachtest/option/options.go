@@ -19,8 +19,7 @@ import (
 type StartOpts struct {
 	RoachprodOpts install.StartOpts
 	RoachtestOpts struct {
-		Worker      bool
-		DontEncrypt bool
+		Worker bool
 	}
 }
 
