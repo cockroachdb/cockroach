@@ -76,6 +76,14 @@ func CommentOnSchema(b BuildCtx, n *tree.CommentOnSchema) {
 // CommentOnTable implements COMMENT ON TABLE xxx IS xxx statement.
 func CommentOnTable(b BuildCtx, n *tree.CommentOnTable) {
 	tableElements := b.ResolveTable(n.Table, commentResolveParams)
+	_, _, tbl := scpb.FindTable(tableElements)
+	tbn := n.Table.ToTableName()
+	if tbl == nil {
+		b.MarkNameAsNonExistent(&tbn)
+		return
+	}
+	tbn.ObjectNamePrefix = b.NamePrefix(tbl)
+	n.Table = tbn.ToUnresolvedObjectName()
 
 	if n.Comment == nil {
 		_, _, tableComment := scpb.FindTableComment(tableElements)
