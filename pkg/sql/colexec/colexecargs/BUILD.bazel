@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "colexecargs",
@@ -26,12 +26,4 @@ go_library(
         "@com_github_marusama_semaphore//:semaphore",
         "@com_github_stretchr_testify//require",
     ],
-)
-
-go_test(
-    name = "colexecargs_test",
-    srcs = ["dep_test.go"],
-    embed = [":colexecargs"],
-    tags = ["no-remote"],
-    deps = ["//pkg/testutils/buildutil"],
 )
