@@ -282,12 +282,22 @@ changed_go_pkgs() {
     | { while read path; do if ls "$path"/*.go &>/dev/null; then echo -n "./$path "; fi; done; }
 }
 
+# tc_build_branch returns $TC_BUILD_BRANCH but with the optional refs/heads/
+# prefix stripped.
+tc_build_branch() {
+    echo "${TC_BUILD_BRANCH#refs/heads/}"
+}
+
+# NB: Update _tc_release_branch in teamcity-bazel-support.sh if you update this
+# function.
 tc_release_branch() {
-  [[ "$TC_BUILD_BRANCH" == master || "$TC_BUILD_BRANCH" == release-* || "$TC_BUILD_BRANCH" == provisional_* ]]
+  branch=$(tc_build_branch)
+  [[ "$branch" == master || "$branch" == release-* || "$branch" == provisional_* ]]
 }
 
 tc_bors_branch() {
-  [[ "$TC_BUILD_BRANCH" == staging ]]
+  branch=$(tc_build_branch)
+  [[ "$branch" == staging ]]
 }
 
 if_tc() {
