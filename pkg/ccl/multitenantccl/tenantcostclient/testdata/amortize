@@ -1,0 +1,194 @@
+# Test token bucket that has gone into debt.
+
+# Wait for initial 10K RUs to be granted.
+wait-for-event
+token-bucket-response
+----
+
+# Consume some SQL RU before any KV operations have run.
+cpu
+1s
+----
+
+# Advance 1 tick so that average RU/sec is updated.
+advance wait=true
+1s
+----
+00:00:01.000
+
+token-bucket
+include-details
+----
+10000.00 RU filling @ 0.00 RU/s (330.00 SQL RU, 0.00 waiting RU, +Inf SQL/KV ratio)
+
+# Ensure that all SQL RU is added to even a small KV read.
+read bytes=1024
+----
+
+token-bucket
+include-details
+----
+9669.36 RU filling @ 0.00 RU/s (0.00 SQL RU, 0.00 waiting RU, +Inf SQL/KV ratio)
+
+# Set up throttling at 1000 RU/s.
+configure
+throttle: 1000
+----
+
+# Consume 6K RUs.
+write bytes=6141952
+----
+
+# Wait for token bucket to be replenished and pick up the 1000 RU/s throttling
+# rate.
+wait-for-event
+token-bucket-response
+----
+
+# Advance 1 tick so that RU/sec fill rate is updated.
+advance wait=true
+1s
+----
+00:00:02.000
+
+token-bucket
+include-details
+----
+4669.36 RU filling @ 1000.00 RU/s (0.00 SQL RU, 0.00 waiting RU, 0.00 SQL/KV ratio)
+
+# Consume CPU and ensure that it is not applied to the token bucket immediately,
+# but instead amortized across subsequent read/write operations.
+cpu
+3s
+----
+
+advance wait=true
+1s
+----
+00:00:03.000
+
+token-bucket
+include-details
+----
+5669.36 RU filling @ 1000.00 RU/s (996.67 SQL RU, 0.00 waiting RU, 0.21 SQL/KV ratio)
+
+# For a ~100 RU read, ~21 SQL RUs should be retired.
+read bytes=6553600
+----
+
+token-bucket
+include-details
+----
+5547.84 RU filling @ 1000.00 RU/s (975.78 SQL RU, 0.00 waiting RU, 0.21 SQL/KV ratio)
+
+# For a 700 RU write, ~147 SQL RUs should be retired.
+write bytes=714752
+----
+
+token-bucket
+include-details
+----
+4702.51 RU filling @ 1000.00 RU/s (830.44 SQL RU, 0.00 waiting RU, 0.21 SQL/KV ratio)
+
+# Try a 5K RU operation that should block when SQL RUs are added in.
+read count=40000 bytes=1024 label=r2
+----
+
+timers
+----
+00:00:04.128
+00:00:07.980
+
+# Check that all SQL RU is part of the waiting RU.
+token-bucket
+include-details
+----
+4702.51 RU filling @ 1000.00 RU/s (0.00 SQL RU, 5830.96 waiting RU, 0.21 SQL/KV ratio)
+
+# Advance enough to trigger a tick.
+advance wait=true
+1s
+----
+00:00:04.000
+
+# Advance enough to complete the request, but not to trigger another tick, in
+# order to avoid a race condition between them.
+advance
+250ms
+----
+00:00:04.250
+
+await label=r2
+----
+
+# Waiting RU should be gone.
+token-bucket
+include-details
+----
+121.55 RU filling @ 1000.00 RU/s (0.00 SQL RU, 0.00 waiting RU, 0.00 SQL/KV ratio)
+
+# Record some egress.
+pgwire-egress
+2048000
+----
+
+advance wait=true
+1s
+----
+00:00:05.250
+
+token-bucket
+include-details
+----
+1121.55 RU filling @ 1000.00 RU/s (2000.00 SQL RU, 0.00 waiting RU, 0.48 SQL/KV ratio)
+
+# Advance one second in order to cause SQL RU to get directly removed from the
+# token bucket, due to no KV operations occurring during the tick.
+advance wait=true
+1s
+----
+00:00:06.250
+
+token-bucket
+include-details
+----
+121.55 RU filling @ 1000.00 RU/s (0.00 SQL RU, 0.00 waiting RU, 0.00 SQL/KV ratio)
+
+# Create an enormous SQL RU debt, greater than the average KV RU per tick, so
+# that the SQL/KV ratio is > 1.
+cpu
+1m
+----
+
+advance wait=true
+1s
+----
+00:00:07.250
+
+token-bucket
+include-details
+----
+1121.55 RU filling @ 1000.00 RU/s (19996.66 SQL RU, 0.00 waiting RU, 7.44 SQL/KV ratio)
+
+# Try a read that requires ~250 RUs, which should block when SQL RUs are added.
+read bytes=16384000 label=r3
+----
+
+timers
+----
+00:00:07.980
+00:00:08.243
+
+token-bucket
+include-details
+----
+1121.55 RU filling @ 1000.00 RU/s (18132.44 SQL RU, 2114.85 waiting RU, 7.44 SQL/KV ratio)
+
+# Advance enough seconds to unblock read.
+advance wait=true
+3s
+----
+00:00:10.250
+
+await label=r3
+----

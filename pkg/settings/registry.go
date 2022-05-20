@@ -126,6 +126,14 @@ var retiredSettings = map[string]struct{}{
 	"kv.bulk_ingest.buffer_increment":                                  {},
 	"schemachanger.backfiller.buffer_increment":                        {},
 	"kv.rangefeed.separated_intent_scan.enabled":                       {},
+
+	// removed as of 22.1.1
+	"tenant_cost_model.kv_read_request_cost":            {},
+	"tenant_cost_model.kv_read_cost_per_megabyte":       {},
+	"tenant_cost_model.kv_write_request_cost":           {},
+	"tenant_cost_model.kv_write_cost_per_megabyte":      {},
+	"tenant_cost_model.pod_cpu_second_cost":             {},
+	"tenant_cost_model.pgwire_egress_cost_per_megabyte": {},
 }
 
 var sqlDefaultSettings = map[string]struct{}{
