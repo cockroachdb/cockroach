@@ -174,6 +174,21 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Test cancelling copy.
+
+send
+Query {"String": "COPY t FROM STDIN"}
+CopyFail { "Message": "client received an error" }
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"ErrorResponse","Code":"57014","Message":"COPY from stdin failed: client received an error"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # Invalid ESCAPE syntax.
 send
 Query {"String": "COPY t FROM STDIN ESCAPE 'xxx'"}
