@@ -209,3 +209,7 @@ query OTT colnames
 SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
 ----
 database_id  role_name  settings
+
+# Regression test for the special "tracing" variable.
+query error parameter \"tracing\" cannot be changed
+ALTER ROLE ALL SET tracing = 'off'

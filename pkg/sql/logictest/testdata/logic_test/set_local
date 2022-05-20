@@ -508,3 +508,7 @@ query TT
 SELECT * FROM tbl
 ----
 2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+# Regression test for the special "tracing" variable.
+query error parameter \"tracing\" cannot be changed
+SET LOCAL tracing = 'off'

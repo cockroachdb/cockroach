@@ -547,3 +547,11 @@ SET LOCAL intervalstyle = 'postgres' -- normalized!
 SET LOCAL intervalstyle = ('postgres') -- fully parenthesized
 SET LOCAL intervalstyle = '_' -- literals removed
 SET LOCAL intervalstyle = 'postgres' -- identifiers removed
+
+parse
+SET LOCAL tracing = 'off'
+----
+SET LOCAL tracing = 'off'
+SET LOCAL tracing = ('off') -- fully parenthesized
+SET LOCAL tracing = '_' -- literals removed
+SET LOCAL tracing = 'off' -- identifiers removed
