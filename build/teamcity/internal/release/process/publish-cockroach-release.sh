@@ -80,7 +80,11 @@ tc_end_block "Tag the release"
 tc_start_block "Make and publish release artifacts"
 # Using publish-provisional-artifacts here is funky. We're directly publishing
 # the official binaries, not provisional ones. Legacy naming. To clean up...
+<<<<<<< HEAD
 BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e gcs_credentials -e gcs_bucket=$gcs_bucket" run_bazel << 'EOF'
+=======
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e bucket=$bucket" run_bazel << 'EOF'
+>>>>>>> 01e5ea043dc (roachtest: allow TC_BUILDTYPE_ID to be accessible by Docker)
 bazel build --config ci //pkg/cmd/publish-provisional-artifacts
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
 export google_credentials="$gcs_credentials"
