@@ -380,6 +380,8 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 	c.run.lastRequestTime = c.run.now
 	// TODO(radu): in case of an error, we undercount some consumption.
 	c.run.lastReportedConsumption = c.run.consumption
+
+	c.run.requestNeedsRetry = false
 	c.run.requestInProgress = true
 
 	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
@@ -530,7 +532,6 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 				c.run.fallbackRateStart = time.Time{}
 			}
 			if c.run.requestNeedsRetry || c.shouldReportConsumption() {
-				c.run.requestNeedsRetry = false
 				c.sendTokenBucketRequest(ctx)
 			}
 			if c.testInstr != nil {
