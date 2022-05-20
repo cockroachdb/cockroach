@@ -292,18 +292,38 @@ statement error pq: feature DROP INDEX is part of the schema change category, wh
 DROP INDEX t1@i
 
 # Test COMMENT ON COLUMN.
+skipif config local-legacy-schema-changer
+statement error pq: feature COMMENT ON is part of the schema change category, which was disabled by the database administrator
+COMMENT ON COLUMN t.a IS 'comment'
+
+onlyif config local-legacy-schema-changer
 statement error pq: feature COMMENT ON COLUMN is part of the schema change category, which was disabled by the database administrator
 COMMENT ON COLUMN t.a IS 'comment'
 
 # Test COMMENT ON DATABASE.
-statement error pq: feature COMMENT ON DATABASE is part of the schema change category, which was disabled by the database administrator
+skipif config local-legacy-schema-changer
+statement error pq: feature COMMENT ON is part of the schema change category, which was disabled by the database administrator
+COMMENT ON DATABASE d IS 'comment'
+
+onlyif config local-legacy-schema-changer
+statement error pq: feature COMMENT ON DATABSE is part of the schema change category, which was disabled by the database administrator
 COMMENT ON DATABASE d IS 'comment'
 
 # Test COMMENT ON INDEX.
+skipif config local-legacy-schema-changer
+statement error pq: feature COMMENT ON is part of the schema change category, which was disabled by the database administrator
+COMMENT ON INDEX t1@i IS 'comment'
+
+onlyif config local-legacy-schema-changer
 statement error pq: feature COMMENT ON INDEX is part of the schema change category, which was disabled by the database administrator
 COMMENT ON INDEX t1@i IS 'comment'
 
 # Test COMMENT ON TABLE.
+skipif config local-legacy-schema-changer
+statement error pq: feature COMMENT ON is part of the schema change category, which was disabled by the database administrator
+COMMENT ON TABLE t IS 'comment'
+
+onlyif config local-legacy-schema-changer
 statement error pq: feature COMMENT ON TABLE is part of the schema change category, which was disabled by the database administrator
 COMMENT ON TABLE t IS 'comment'
 
