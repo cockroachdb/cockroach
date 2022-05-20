@@ -429,7 +429,10 @@ func (i *Inbox) Next() coldata.Batch {
 		}
 		// We rely on the outboxes to produce reasonably sized batches.
 		const maxBatchMemSize = math.MaxInt64
-		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(i.typs, i.scratch.b, batchLength, maxBatchMemSize)
+		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(
+			i.typs, i.scratch.b, batchLength, maxBatchMemSize,
+			true, /* desiredCapacitySufficient */
+		)
 		i.allocator.PerformOperation(i.scratch.b.ColVecs(), func() {
 			if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
 				colexecerror.InternalError(err)

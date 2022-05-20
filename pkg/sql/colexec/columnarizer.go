@@ -198,7 +198,8 @@ func (c *Columnarizer) Next() coldata.Batch {
 	switch c.mode {
 	case columnarizerBufferingMode:
 		c.batch, reallocated = c.allocator.ResetMaybeReallocate(
-			c.typs, c.batch, 1 /* minDesiredCapacity */, c.maxBatchMemSize,
+			c.typs, c.batch, 1, /* minDesiredCapacity */
+			c.maxBatchMemSize, false, /* desiredCapacitySufficient */
 		)
 	case columnarizerStreamingMode:
 		// Note that we're not using ResetMaybeReallocate because we will

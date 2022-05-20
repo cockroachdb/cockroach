@@ -459,6 +459,7 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 			// len(op.buckets) capacity.
 			op.output, _ = op.accountingHelper.ResetMaybeReallocate(
 				op.outputTypes, op.output, len(op.buckets), op.maxOutputBatchMemSize,
+				true, /* desiredCapacitySufficient */
 			)
 			curOutputIdx := 0
 			for curOutputIdx < op.output.Capacity() &&
@@ -606,6 +607,7 @@ func getNext_false(op *hashAggregator) coldata.Batch {
 			// len(op.buckets) capacity.
 			op.output, _ = op.accountingHelper.ResetMaybeReallocate(
 				op.outputTypes, op.output, len(op.buckets), op.maxOutputBatchMemSize,
+				true, /* desiredCapacitySufficient */
 			)
 			curOutputIdx := 0
 			for curOutputIdx < op.output.Capacity() &&
