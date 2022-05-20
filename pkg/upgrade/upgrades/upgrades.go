@@ -143,6 +143,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		seedSpanCountTableMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"upgrade sequences to be referenced by ID",
+		toCV(clusterversion.UpgradeSequenceToBeReferencedByID),
+		NoPrecondition,
+		upgradeSequenceToBeReferencedByID,
+	),
 }
 
 func init() {

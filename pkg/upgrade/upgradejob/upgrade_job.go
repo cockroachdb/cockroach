@@ -22,8 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -94,6 +96,19 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 		tenantDeps.SpanConfig.KVAccessor = execCtx.ExecCfg().SpanConfigKVAccessor
 		tenantDeps.SpanConfig.Splitter = execCtx.ExecCfg().SpanConfigSplitter
 		tenantDeps.SpanConfig.Default = execCtx.ExecCfg().DefaultZoneConfig.AsSpanConfig()
+
+		tenantDeps.InternalPlannerConstructor = func(
+			txn *kv.Txn, descriptors *descs.Collection, currDb string,
+		) (interface{}, func()) {
+			return sql.NewInternalPlanner("internal planner for upgrades",
+				txn,
+				execCtx.User(),
+				&sql.MemoryMetrics{},
+				execCtx.ExecCfg(),
+				sessiondatapb.SessionData{Database: currDb},
+				sql.WithDescCollection(descriptors),
+			)
+		}
 
 		err = m.Run(ctx, cv, tenantDeps, r.j)
 	default:

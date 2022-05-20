@@ -43,7 +43,8 @@ type TenantDeps struct {
 		Default roachpb.SpanConfig
 	}
 
-	TestingKnobs *TestingKnobs
+	TestingKnobs               *TestingKnobs
+	InternalPlannerConstructor func(txn *kv.Txn, descriptors *descs.Collection, currDb string) (interface{}, func())
 }
 
 // TenantUpgradeFunc is used to perform sql-level upgrades. It may be run from
