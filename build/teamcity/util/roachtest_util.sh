@@ -25,8 +25,9 @@ function upload_stats {
           bucket="cockroach-nightly"
       fi
 
-      remote_artifacts_dir="artifacts-${TC_BUILD_BRANCH}"
-      if [[ "${TC_BUILD_BRANCH}" == "master" ]]; then
+      branch=$(tc_build_branch)
+      remote_artifacts_dir="artifacts-${branch}"
+      if [[ "${branch}" == "master" ]]; then
         # The master branch is special, as roachperf hard-codes
         # the location.
         remote_artifacts_dir="artifacts"

@@ -34,9 +34,15 @@ run_bazel() {
         $BAZEL_IMAGE "$@"
 }
 
+# local copy of _tc_build_branch from teamcity-support.sh to avoid imports.
+_tc_build_branch() {
+    echo "${TC_BUILD_BRANCH#refs/heads/}"
+}
+
 # local copy of tc_release_branch from teamcity-support.sh to avoid imports.
 _tc_release_branch() {
-  [[ "$TC_BUILD_BRANCH" == master || "$TC_BUILD_BRANCH" == release-* || "$TC_BUILD_BRANCH" == provisional_* ]]
+  branch=$(_tc_build_branch)
+  [[ "$branch" == master || "$branch" == release-* || "$branch" == provisional_* ]]
 }
 
 # process_test_json processes logs and submits failures to GitHub
