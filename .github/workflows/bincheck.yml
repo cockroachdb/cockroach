@@ -2,7 +2,9 @@ name: bincheck
 
 on:
   push:
-    tags: [ v* ]
+    tags: 
+    - v*
+    - !v*-alpha.0000*
 
 jobs:
 
