@@ -225,6 +225,40 @@ func MaxConcurrentCompactions(n int) ConfigOption {
 	}
 }
 
+// MemtableSize configures the size of a MemTable in steady state.
+func MemtableSize(bytes uint64) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.opts.MemTableSize = bytes
+		return nil
+	}
+}
+
+// L0CompactionThreshold configures the amount of L0 read-amplification
+// necessary to trigger an L0 compaction.
+func L0CompactionThreshold(n int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.opts.L0CompactionThreshold = n
+		return nil
+	}
+}
+
+// DisableWAL disables the WAL for this Engine.
+func DisableWAL() ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.opts.DisableWAL = true
+		return nil
+	}
+}
+
+// WALBytesPerSync sets the number of bytes to write to a WAL before calling
+// Sync on it in the background.
+func WALBytesPerSync(bytes int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.opts.WALBytesPerSync = bytes
+		return nil
+	}
+}
+
 // MaxConcurrentDownloads configures the maximum number of concurrent
 // download compactions an Engine will execute.
 func MaxConcurrentDownloads(n int) ConfigOption {
