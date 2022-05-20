@@ -15,7 +15,6 @@ import * as sinon from "sinon";
 import moment from "moment";
 import _ from "lodash";
 
-import "src/enzymeInit";
 import { MetricsTimeManagerUnconnected as MetricsTimeManager } from "./";
 import * as timewindow from "src/redux/timeScale";
 

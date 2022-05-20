@@ -12,13 +12,9 @@ import React from "react";
 import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
 import sinon, { SinonSpy } from "sinon";
-import classNames from "classnames/bind";
 
-import "src/enzymeInit";
 import { EmailSubscriptionForm } from "./index";
-import buttonStyles from "src/components/button/button.module.styl";
 
-const cx = classNames.bind(buttonStyles);
 const sandbox = sinon.createSandbox();
 
 describe("EmailSubscriptionForm", () => {
@@ -36,9 +32,7 @@ describe("EmailSubscriptionForm", () => {
       const emailAddress = "foo@bar.com";
       const inputComponent = wrapper.find("input.crl-input__text").first();
       inputComponent.simulate("change", { target: { value: emailAddress } });
-      const buttonComponent = wrapper
-        .find(`button.${cx("crl-button")}`)
-        .first();
+      const buttonComponent = wrapper.find(`button`).first();
       buttonComponent.simulate("click");
 
       onSubmitHandler.calledOnceWith(emailAddress);
@@ -54,17 +48,13 @@ describe("EmailSubscriptionForm", () => {
     });
 
     it("doesn't call onSubmit callback", () => {
-      const buttonComponent = wrapper
-        .find(`button.${cx("crl-button")}`)
-        .first();
+      const buttonComponent = wrapper.find(`button`).first();
       buttonComponent.simulate("click");
       assert.isTrue(onSubmitHandler.notCalled);
     });
 
     it("submit button is disabled", () => {
-      const buttonComponent = wrapper
-        .find(`button.${cx("crl-button")}.${cx("crl-button--disabled")}`)
-        .first();
+      const buttonComponent = wrapper.find(`button[disabled]`).first();
       assert.isTrue(buttonComponent.exists());
     });
 

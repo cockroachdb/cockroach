@@ -11,7 +11,6 @@
 import { assert } from "chai";
 import { shallow } from "enzyme";
 import React from "react";
-import "src/enzymeInit";
 import * as sinon from "sinon";
 import uPlot from "uplot";
 import _ from "lodash";

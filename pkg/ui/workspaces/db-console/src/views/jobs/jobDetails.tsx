@@ -31,7 +31,7 @@ import { Button } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { DATE_FORMAT } from "src/util/format";
 import { JobStatusCell } from "./jobStatusCell";
-import "src/views/shared/components/summaryCard/styles.styl";
+import "../shared/components/summaryCard/styles.styl";
 import * as protos from "src/js/protos";
 import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
 

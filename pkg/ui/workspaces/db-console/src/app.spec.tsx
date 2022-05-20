@@ -14,7 +14,6 @@ import { Action, Store } from "redux";
 import { createMemoryHistory } from "history";
 import { mount, ReactWrapper } from "enzyme";
 
-import "src/enzymeInit";
 import { App } from "src/app";
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 
@@ -69,7 +68,7 @@ describe("Routing to", () => {
     <App history={history} store={store} />,
   );
 
-  after(() => {
+  afterAll(() => {
     appWrapper.unmount();
   });
 
