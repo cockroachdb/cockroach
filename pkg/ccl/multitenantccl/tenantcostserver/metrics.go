@@ -103,7 +103,7 @@ var (
 	}
 	metaTotalSQLPodsCPUSeconds = metric.Metadata{
 		Name:        "tenant.consumption.sql_pods_cpu_seconds",
-		Help:        "Total number of bytes written to KV",
+		Help:        "Total amount of CPU used by SQL pods",
 		Measurement: "CPU Seconds",
 		Unit:        metric.Unit_SECONDS,
 	}

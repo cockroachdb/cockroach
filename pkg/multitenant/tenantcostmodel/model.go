@@ -100,40 +100,53 @@ func (c *Config) PGWireEgressCost(bytes int64) RU {
 	return RU(bytes) * c.PGWireEgressByte
 }
 
-// ExternalWriteCost calculates the cost of an external write operation.
-func (c *Config) ExternalWriteCost(bytes int64) RU {
+// ExternalIOEgressCost calculates the cost of an external write operation.
+func (c *Config) ExternalIOEgressCost(bytes int64) RU {
 	return RU(bytes) * c.ExternalIOEgressByte
 }
 
-// ExternalReadCost calculates the cost of an external read operation.
-func (c *Config) ExternalReadCost(bytes int64) RU {
+// ExternalIOIngressCost calculates the cost of an external read operation.
+func (c *Config) ExternalIOIngressCost(bytes int64) RU {
 	return RU(bytes) * c.ExternalIOIngressByte
 }
 
-// RequestCost returns the portion of the cost that is calculated upfront: the
-// per-request and per-byte write cost.
+// RequestCost returns the cost, in RUs, of the given request. If it is a write,
+// that includes the per-batch, per-request, and per-byte costs, multiplied by
+// the number of write replicas. If it is a read, then the cost is zero, since
+// reads can only be costed by examining the ResponseInfo.
 func (c *Config) RequestCost(bri RequestInfo) RU {
 	if !bri.IsWrite() {
 		return 0
 	}
-	return c.KVWriteCost(bri.writeCount, bri.writeBytes)
+	cost := c.KVWriteBatch
+	cost += RU(bri.writeCount) * c.KVWriteRequest
+	cost += RU(bri.writeBytes) * c.KVWriteByte
+	return cost * RU(bri.writeReplicas)
 }
 
-// ResponseCost returns the portion of the cost that is calculated
-// after-the-fact: the per-request and per-byte read cost.
+// ResponseCost returns the cost, in RUs, of the given response. If it is a
+// read, that includes the per-batch, per-request, and per-byte costs. If it is
+// a write, then the cost is zero, since writes can only be costed by examining
+// the RequestInfo.
 func (c *Config) ResponseCost(bri ResponseInfo) RU {
 	if !bri.IsRead() {
 		return 0
 	}
-	return c.KVReadCost(bri.readCount, bri.readBytes)
+	cost := c.KVReadBatch
+	cost += RU(bri.readCount) * c.KVReadRequest
+	cost += RU(bri.readBytes) * c.KVReadByte
+	return cost
 }
 
-// RequestInfo captures the BatchRequeset information that is used (together
-// with the cost model) to determine the portion of the cost that can be
-// calculated upfront. Specifically: how many writes were batched together and
-// their total size (if the request is a write batch).
+// RequestInfo captures the BatchRequest information that is used (together with
+// the cost model) to determine the portion of the cost that can be calculated
+// up-front. Specifically: how many writes were batched together, their total
+// size, and the number of target replicas (if the request is a write batch).
 type RequestInfo struct {
-	// writeCount is the number of writes that were batched together. This is -1
+	// writeReplicas is the number of range replicas to which this write was sent
+	// (i.e. the replication factor). This is 0 if it is a read-only batch.
+	writeReplicas int64
+	// writeCount is the number of writes that were batched together. This is 0
 	// if it is a read-only batch.
 	writeCount int64
 	// writeBytes is the total size of all batched writes in the request, in
@@ -142,10 +155,10 @@ type RequestInfo struct {
 }
 
 // MakeRequestInfo extracts the relevant information from a BatchRequest.
-func MakeRequestInfo(ba *roachpb.BatchRequest) RequestInfo {
+func MakeRequestInfo(ba *roachpb.BatchRequest, replicas int) RequestInfo {
 	// The cost of read-only batches is captured by MakeResponseInfo.
 	if !ba.IsWrite() {
-		return RequestInfo{writeCount: -1}
+		return RequestInfo{}
 	}
 
 	var writeCount, writeBytes int64
@@ -164,15 +177,21 @@ func MakeRequestInfo(ba *roachpb.BatchRequest) RequestInfo {
 			}
 		}
 	}
-	return RequestInfo{writeCount: writeCount, writeBytes: writeBytes}
+	return RequestInfo{writeReplicas: int64(replicas), writeCount: writeCount, writeBytes: writeBytes}
 }
 
 // IsWrite is true if this was a write batch rather than a read-only batch.
 func (bri RequestInfo) IsWrite() bool {
-	return bri.writeCount != -1
+	return bri.writeCount != 0
 }
 
-// WriteCount is the number of writes that were batched together. This is -1 if
+// WriteReplicas is the number of range replicas to which the write was sent.
+// This is 0 if it is a read-only batch.
+func (bri RequestInfo) WriteReplicas() int64 {
+	return bri.writeReplicas
+}
+
+// WriteCount is the number of writes that were batched together. This is 0 if
 // it is a read-only batch.
 func (bri RequestInfo) WriteCount() int64 {
 	return bri.writeCount
@@ -185,8 +204,8 @@ func (bri RequestInfo) WriteBytes() int64 {
 }
 
 // TestingRequestInfo creates a RequestInfo for testing purposes.
-func TestingRequestInfo(writeCount, writeBytes int64) RequestInfo {
-	return RequestInfo{writeCount: writeCount, writeBytes: writeBytes}
+func TestingRequestInfo(writeReplicas, writeCount, writeBytes int64) RequestInfo {
+	return RequestInfo{writeReplicas: writeReplicas, writeCount: writeCount, writeBytes: writeBytes}
 }
 
 // ResponseInfo captures the BatchResponse information that is used (together
@@ -194,7 +213,10 @@ func TestingRequestInfo(writeCount, writeBytes int64) RequestInfo {
 // calculated after-the-fact. Specifically: how many reads were batched together
 // and their total size (if the request is a read-only batch).
 type ResponseInfo struct {
-	// readCount is the number of reads that were batched together. This is -1
+	// isRead is true if this batch contained only read requests, or false if it
+	// was a write batch.
+	isRead bool
+	// readCount is the number of reads that were batched together. This is 0
 	// if it is a write batch.
 	readCount int64
 	// readBytes is the total size of all batched reads in the response, in
@@ -206,7 +228,7 @@ type ResponseInfo struct {
 func MakeResponseInfo(br *roachpb.BatchResponse, isReadOnly bool) ResponseInfo {
 	// The cost of non read-only batches is captured by MakeRequestInfo.
 	if !isReadOnly {
-		return ResponseInfo{readCount: -1}
+		return ResponseInfo{}
 	}
 
 	var readCount, readBytes int64
@@ -222,15 +244,15 @@ func MakeResponseInfo(br *roachpb.BatchResponse, isReadOnly bool) ResponseInfo {
 			readBytes += resp.Header().NumBytes
 		}
 	}
-	return ResponseInfo{readCount: readCount, readBytes: readBytes}
+	return ResponseInfo{isRead: true, readCount: readCount, readBytes: readBytes}
 }
 
 // IsRead is true if this was a read-only batch rather than a write batch.
 func (bri ResponseInfo) IsRead() bool {
-	return bri.readCount != -1
+	return bri.isRead
 }
 
-// ReadCount is the number of reads that were batched together. This is -1 if it
+// ReadCount is the number of reads that were batched together. This is 0 if it
 // is a write batch.
 func (bri ResponseInfo) ReadCount() int64 {
 	return bri.readCount
@@ -243,6 +265,6 @@ func (bri ResponseInfo) ReadBytes() int64 {
 }
 
 // TestingResponseInfo creates a ResponseInfo for testing purposes.
-func TestingResponseInfo(readCount, readBytes int64) ResponseInfo {
-	return ResponseInfo{readCount: readCount, readBytes: readBytes}
+func TestingResponseInfo(isRead bool, readCount, readBytes int64) ResponseInfo {
+	return ResponseInfo{isRead: isRead, readCount: readCount, readBytes: readBytes}
 }

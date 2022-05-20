@@ -956,16 +956,16 @@ var charts = []sectionDescription{
 				Metrics:     []string{"kv.tenant_rate_limit.write_requests_admitted"},
 			},
 			{
-				Title:       "Write Bytes Admitted by Rate Limiter",
-				Downsampler: DescribeAggregator_MAX,
-				Percentiles: false,
-				Metrics:     []string{"kv.tenant_rate_limit.write_bytes_admitted"},
-			},
-			{
 				Title:       "Read Bytes Admitted by Rate Limiter",
 				Downsampler: DescribeAggregator_MAX,
 				Percentiles: false,
 				Metrics:     []string{"kv.tenant_rate_limit.read_bytes_admitted"},
+			},
+			{
+				Title:       "Write Bytes Admitted by Rate Limiter",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.write_bytes_admitted"},
 			},
 		},
 	},
