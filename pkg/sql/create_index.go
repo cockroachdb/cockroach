@@ -14,9 +14,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -219,7 +221,8 @@ func makeIndexDescriptor(
 		if err != nil {
 			return nil, err
 		}
-		if err := populateInvertedIndexDescriptor(column, &indexDesc, invCol); err != nil {
+		if err := populateInvertedIndexDescriptor(
+			params.ctx, params.ExecCfg().Settings, column, &indexDesc, invCol); err != nil {
 			return nil, err
 		}
 	}
@@ -312,7 +315,11 @@ func makeIndexDescriptor(
 // match (column is the catalog column, and invCol is the grammar node of
 // the column in the index creation statement).
 func populateInvertedIndexDescriptor(
-	column catalog.Column, indexDesc *descpb.IndexDescriptor, invCol tree.IndexElem,
+	ctx context.Context,
+	cs *cluster.Settings,
+	column catalog.Column,
+	indexDesc *descpb.IndexDescriptor,
+	invCol tree.IndexElem,
 ) error {
 	indexDesc.InvertedColumnKinds = []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_DEFAULT}
 	switch column.GetType().Family() {
@@ -349,6 +356,11 @@ func populateInvertedIndexDescriptor(
 		// we're going to inverted index.
 		switch invCol.OpClass {
 		case "gin_trgm_ops", "gist_trgm_ops":
+			if !cs.Version.IsActive(ctx, clusterversion.TrigramInvertedIndexes) {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"version %v must be finalized to create trigram inverted indexes",
+					clusterversion.ByKey(clusterversion.TrigramInvertedIndexes))
+			}
 		case "":
 			return errors.WithHint(
 				pgerror.New(pgcode.UndefinedObject, "data type text has no default operator class for access method \"gin\""),

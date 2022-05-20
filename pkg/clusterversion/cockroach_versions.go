@@ -366,6 +366,10 @@ const (
 	// keys at the Pebble layer.
 	EnablePebbleFormatVersionRangeKeys
 
+	// TrigramInvertedIndexes enables the creation of trigram inverted indexes
+	// on strings.
+	TrigramInvertedIndexes
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -637,6 +641,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnablePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 8},
+	},
+	{
+		Key:     TrigramInvertedIndexes,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
 	},
 
 	// *************************************************
