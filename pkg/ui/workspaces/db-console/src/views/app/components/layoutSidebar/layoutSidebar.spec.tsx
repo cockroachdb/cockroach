@@ -13,7 +13,6 @@ import { shallow } from "enzyme";
 import { createMemoryHistory, History } from "history";
 import { match as Match } from "react-router";
 import { assert } from "chai";
-import "src/enzymeInit";
 import { Sidebar } from "./index";
 
 describe("LayoutSidebar", () => {
