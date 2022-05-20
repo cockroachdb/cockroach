@@ -1232,10 +1232,10 @@ SELECT unnest(ARRAY[1,2,3,4]), unnest(ARRAY['one','two'])
 4  NULL
 
 query error expected 1 to be of type varbit, found type int
-SELECT unnest(ARRAY[1,2,3::varbit])
+SELECT unnest(ARRAY[1,2,3::varbit(3)])
 
 query error expected 2 to be of type varbit, found type int
-SELECT unnest(ARRAY[NULL,2,3::varbit])
+SELECT unnest(ARRAY[NULL,2,3::varbit(3)])
 
 query error pq: could not determine polymorphic type
 SELECT unnest(NULL, NULL)
