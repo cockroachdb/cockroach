@@ -52,7 +52,8 @@ func SupportsFixtures(gen Generator) bool {
 			return false
 		}
 	}
-	return true
+	// Don't use fixtures if there are no tables.
+	return len(gen.Tables()) != 0
 }
 
 // FlagMeta is metadata about a workload flag.
