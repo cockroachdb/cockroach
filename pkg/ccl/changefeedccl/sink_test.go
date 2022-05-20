@@ -205,6 +205,7 @@ func makeTestKafkaSink(
 		ctx:      context.Background(),
 		topics:   topics,
 		producer: p,
+		metrics:  (*sliMetrics)(nil),
 	}
 	s.start()
 
@@ -431,7 +432,7 @@ func TestSQLSink(t *testing.T) {
 		barTopic.GetTargetSpecification(),
 	}
 	const testTableName = `sink`
-	sink, err := makeSQLSink(sinkURL{URL: &pgURL}, testTableName, targets, nil)
+	sink, err := makeSQLSink(sinkURL{URL: &pgURL}, testTableName, targets, nilMetricsRecorderBuilder)
 	require.NoError(t, err)
 	require.NoError(t, sink.(*sqlSink).Dial())
 	defer func() { require.NoError(t, sink.Close()) }()
