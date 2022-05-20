@@ -12,7 +12,6 @@ import { shallow } from "enzyme";
 import { createMemoryHistory, History } from "history";
 import { match as Match } from "react-router-dom";
 
-import "src/enzymeInit";
 import { ClusterVisualization } from "./index";
 import { Breadcrumbs } from "./breadcrumbs";
 
