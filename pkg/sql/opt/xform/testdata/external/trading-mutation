@@ -839,7 +839,7 @@ project
  │         │    │    │    └── filters
  │         │    │    │         ├── transactiondetails.cardid:27 = id:1 [outer=(1,27), constraints=(/1: (/NULL - ]; /27: (/NULL - ]), fd=(1)==(27), (27)==(1)]
  │         │    │    │         ├── transactiondetails.dealerid:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
- │         │    │    │         ├── NOT isbuy:25 [outer=(25), constraints=(/25: [/false - /false]; tight), fd=()-->(25)]
+ │         │    │    │         ├── isbuy:25 = false [outer=(25), constraints=(/25: [/false - /false]; tight), fd=()-->(25)]
  │         │    │    │         └── (transactiondate:26 >= '2020-02-28 00:00:00+00:00') AND (transactiondate:26 <= '2020-03-01 00:00:00+00:00') [outer=(26), constraints=(/26: [/'2020-02-28 00:00:00+00:00' - /'2020-03-01 00:00:00+00:00']; tight)]
  │         │    │    ├── immutable
  │         │    │    ├── stats: [rows=423333.3, distinct(1)=19000, null(1)=0, avgsize(1)=4, distinct(2)=13000, null(2)=0, avgsize(2)=4, distinct(5)=829, null(5)=0, avgsize(5)=4, distinct(6)=5601.15, null(6)=0, avgsize(6)=4, distinct(27)=19000, null(27)=0, avgsize(27)=4]

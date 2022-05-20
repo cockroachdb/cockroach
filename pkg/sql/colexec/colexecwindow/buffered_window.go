@@ -30,7 +30,7 @@ import (
 // window function.
 func newBufferedWindowOperator(
 	args *WindowArgs, windower bufferedWindower, outputColType *types.T, memoryLimit int64,
-) colexecop.Operator {
+) colexecop.ClosableOperator {
 	outputTypes := make([]*types.T, len(args.InputTypes), len(args.InputTypes)+1)
 	copy(outputTypes, args.InputTypes)
 	outputTypes = append(outputTypes, outputColType)
@@ -213,7 +213,7 @@ func (b *bufferedWindowOp) Init(ctx context.Context) {
 	b.windower.startNewPartition()
 }
 
-var _ colexecop.Operator = &bufferedWindowOp{}
+var _ colexecop.ClosableOperator = &bufferedWindowOp{}
 
 func (b *bufferedWindowOp) Next() coldata.Batch {
 	var err error
@@ -344,16 +344,11 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 }
 
 func (b *bufferedWindowOp) Close(ctx context.Context) error {
-	if !b.CloserHelper.Close() || b.Ctx == nil {
-		// Either Close() has already been called or Init() was never called. In
-		// both cases there is nothing to do.
+	if !b.CloserHelper.Close() {
 		return nil
 	}
-	if err := b.bufferQueue.Close(ctx); err != nil {
-		return err
-	}
 	b.windower.Close(ctx)
-	return nil
+	return b.bufferQueue.Close(ctx)
 }
 
 // partitionSeekerBase extracts common fields and methods for buffered windower

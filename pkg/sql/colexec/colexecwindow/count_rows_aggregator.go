@@ -25,7 +25,7 @@ import (
 // aggregate window function.
 func NewCountRowsOperator(
 	args *WindowArgs, frame *execinfrapb.WindowerSpec_Frame, ordering *execinfrapb.Ordering,
-) colexecop.Operator {
+) colexecop.ClosableOperator {
 	// Because the buffer is potentially used multiple times per-row, it is
 	// important to prevent it from spilling to disk if possible. For this reason,
 	// we give the buffer half of the memory budget even though it will generally

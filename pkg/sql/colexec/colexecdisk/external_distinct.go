@@ -36,7 +36,7 @@ func NewExternalDistinct(
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	inMemUnorderedDistinct colexecop.Operator,
 	diskAcc *mon.BoundAccount,
-) colexecop.Operator {
+) (colexecop.Operator, colexecop.Closer) {
 	distinctSpec := args.Spec.Core.Distinct
 	distinctCols := distinctSpec.DistinctColumns
 	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) colexecop.ResettableOperator {
@@ -111,13 +111,13 @@ func NewExternalDistinct(
 	outputOrdering := args.Spec.Core.Distinct.OutputOrdering
 	if len(outputOrdering.Columns) == 0 {
 		// No particular output ordering is required.
-		return ed
+		return ed, ed
 	}
 	// TODO(yuzefovich): the fact that we're planning an additional external
 	// sort isn't accounted for when considering the number file descriptors to
 	// acquire. Not urgent, but it should be fixed.
 	maxNumberActivePartitions := calculateMaxNumberActivePartitions(flowCtx, args, numRequiredActivePartitions)
-	return createDiskBackedSorter(ed, inputTypes, outputOrdering.Columns, maxNumberActivePartitions)
+	return createDiskBackedSorter(ed, inputTypes, outputOrdering.Columns, maxNumberActivePartitions), ed
 }
 
 // unorderedDistinctFilterer filters out tuples that are duplicates of the
