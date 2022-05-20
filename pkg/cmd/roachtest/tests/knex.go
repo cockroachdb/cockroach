@@ -65,7 +65,7 @@ func registerKnex(r registry.Registry) {
 			c,
 			node,
 			"add nodesource repository",
-			`sudo apt install ca-certificates && curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -`,
+			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -`,
 		)
 		require.NoError(t, err)
 
@@ -101,7 +101,7 @@ func registerKnex(r registry.Registry) {
 		require.NoError(t, err)
 
 		err = repeatRunE(
-			ctx, t, c, node, "install knex npm dependencies", `cd /mnt/data1/knex/ && sudo npm i`,
+			ctx, t, c, node, "install knex npm dependencies", `cd /mnt/data1/knex/ && npm i`,
 		)
 		require.NoError(t, err)
 
