@@ -53,7 +53,7 @@ type tableWriter interface {
 
 	// init provides the tableWriter with a Txn and optional monitor to write to
 	// and returns an error if it was misconfigured.
-	init(context.Context, *kv.Txn, *eval.Context, *settings.Values) error
+	init(ctx context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values, expectedRows int) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
@@ -115,6 +115,9 @@ type tableWriterBase struct {
 	// lockTimeout specifies the maximum amount of time that the writer will
 	// wait while attempting to acquire a lock on a key.
 	lockTimeout time.Duration
+	// expectedRows determines the size of the expected first KV batch. It
+	// is used to pre-size the batch to avoid wasted re-allocations and copies.
+	expectedRows int
 	// maxBatchSize determines the maximum number of entries in the KV batch
 	// for a mutation operation. By default, it will be set to 10k but can be
 	// a different value in tests.
@@ -154,7 +157,11 @@ var maxBatchBytes = settings.RegisterByteSizeSetting(
 )
 
 func (tb *tableWriterBase) init(
-	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context, settings *settings.Values,
+	txn *kv.Txn,
+	tableDesc catalog.TableDescriptor,
+	evalCtx *eval.Context,
+	settings *settings.Values,
+	expectedRows int,
 ) {
 	tb.txn = txn
 	tb.desc = tableDesc
@@ -168,9 +175,16 @@ func (tb *tableWriterBase) init(
 	if evalCtx != nil {
 		batchMaxBytes = int(maxBatchBytes.Get(&evalCtx.Settings.SV))
 	}
+	tb.expectedRows = expectedRows
 	tb.maxBatchByteSize = mutations.MaxBatchByteSize(batchMaxBytes, tb.forceProductionBatchSizes)
 	tb.sv = settings
-	tb.initNewBatch()
+
+	n := tb.expectedRows
+	if n > tb.maxBatchSize {
+		n = tb.maxBatchSize
+	}
+
+	tb.initNewBatch(n)
 }
 
 // setRowsWrittenLimit should be called before finalize whenever the
@@ -193,7 +207,11 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	if err := tb.tryDoResponseAdmission(ctx); err != nil {
 		return err
 	}
-	tb.initNewBatch()
+	n := tb.expectedRows - int(tb.rowsWritten)
+	if n > tb.maxBatchSize {
+		n = tb.maxBatchSize
+	}
+	tb.initNewBatch(n)
 	tb.rowsWritten += int64(tb.currentBatchSize)
 	tb.lastBatchSize = tb.currentBatchSize
 	tb.currentBatchSize = 0
@@ -252,8 +270,8 @@ func (tb *tableWriterBase) enableAutoCommit() {
 	tb.autoCommit = autoCommitEnabled
 }
 
-func (tb *tableWriterBase) initNewBatch() {
-	tb.b = tb.txn.NewBatch()
+func (tb *tableWriterBase) initNewBatch(expectedBatchSize int) {
+	tb.b = tb.txn.NewBatchWithExpectedSize(expectedBatchSize)
 	tb.b.Header.LockTimeout = tb.lockTimeout
 }
 

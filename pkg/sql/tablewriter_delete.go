@@ -42,9 +42,9 @@ func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.Typed
 
 // init is part of the tableWriter interface.
 func (td *tableDeleter) init(
-	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
+	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values, expectedRows int,
 ) error {
-	td.tableWriterBase.init(txn, td.tableDesc(), evalCtx, sv)
+	td.tableWriterBase.init(txn, td.tableDesc(), evalCtx, sv, expectedRows)
 	return nil
 }
 

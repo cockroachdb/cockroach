@@ -34,9 +34,9 @@ func (*tableUpdater) desc() string { return "updater" }
 
 // init is part of the tableWriter interface.
 func (tu *tableUpdater) init(
-	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
+	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values, expectedRows int,
 ) error {
-	tu.tableWriterBase.init(txn, tu.tableDesc(), evalCtx, sv)
+	tu.tableWriterBase.init(txn, tu.tableDesc(), evalCtx, sv, expectedRows)
 	return nil
 }
 

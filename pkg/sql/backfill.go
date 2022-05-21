@@ -2640,7 +2640,7 @@ func indexTruncateInTxn(
 			execCfg.GetRowMetrics(internal),
 		)
 		td := tableDeleter{rd: rd, alloc: alloc}
-		if err := td.init(ctx, txn, evalCtx, &evalCtx.Settings.SV); err != nil {
+		if err := td.init(ctx, txn, evalCtx, &evalCtx.Settings.SV, 0 /* expectedBatchSize */); err != nil {
 			return err
 		}
 		var err error
