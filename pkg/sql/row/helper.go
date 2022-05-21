@@ -99,8 +99,11 @@ type rowHelper struct {
 
 	TableDesc catalog.TableDescriptor
 	// Secondary indexes.
-	Indexes      []catalog.Index
-	indexEntries map[catalog.Index][]rowenc.IndexEntry
+	Indexes []catalog.Index
+	// indexEntries has a slice per index in Indexes, in the same order. If
+	// a slice is nil at idx n, that index was skipped in encodeSecondaryIndexes
+	// due to a marker in the ignoreIndexes map.
+	indexEntries [][]rowenc.IndexEntry
 
 	// Computed during initialization for pretty-printing.
 	primIndexValDirs []encoding.Direction
@@ -159,11 +162,7 @@ func (rh *rowHelper) encodeIndexes(
 	values []tree.Datum,
 	ignoreIndexes util.FastIntSet,
 	includeEmpty bool,
-) (
-	primaryIndexKey []byte,
-	secondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry,
-	err error,
-) {
+) (primaryIndexKey []byte, secondaryIndexEntries [][]rowenc.IndexEntry, err error) {
 	primaryIndexKey, err = rh.encodePrimaryIndex(colIDtoRowIndex, values)
 	if err != nil {
 		return nil, nil, err
@@ -210,10 +209,10 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 	values []tree.Datum,
 	ignoreIndexes util.FastIntSet,
 	includeEmpty bool,
-) (secondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry, err error) {
+) (secondaryIndexEntries [][]rowenc.IndexEntry, err error) {
 
 	if rh.indexEntries == nil {
-		rh.indexEntries = make(map[catalog.Index][]rowenc.IndexEntry, len(rh.Indexes))
+		rh.indexEntries = make([][]rowenc.IndexEntry, len(rh.Indexes))
 	}
 
 	for i := range rh.indexEntries {
@@ -227,7 +226,7 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 			if err != nil {
 				return nil, err
 			}
-			rh.indexEntries[index] = append(rh.indexEntries[index], entries...)
+			rh.indexEntries[i] = append(rh.indexEntries[i], entries...)
 		}
 	}
 

@@ -222,7 +222,7 @@ func (ru *Updater) UpdateRow(
 	if err != nil {
 		return nil, err
 	}
-	var deleteOldSecondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry
+	var deleteOldSecondaryIndexEntries [][]rowenc.IndexEntry
 	if ru.DeleteHelper != nil {
 		// We want to include empty k/v pairs because we want
 		// to delete all k/v's for this row. By setting includeEmpty
@@ -545,13 +545,10 @@ func (ru *Updater) UpdateRow(
 		// order as they appear in the helper.
 		for idx := range ru.DeleteHelper.Indexes {
 			index := ru.DeleteHelper.Indexes[idx]
-			deletedSecondaryIndexEntries, ok := deleteOldSecondaryIndexEntries[index]
-
-			if ok {
-				for _, deletedSecondaryIndexEntry := range deletedSecondaryIndexEntries {
-					if err := ru.DeleteHelper.deleteIndexEntry(ctx, batch, index, nil /*valDir*/, &deletedSecondaryIndexEntry, traceKV); err != nil {
-						return nil, err
-					}
+			deletedSecondaryIndexEntries := deleteOldSecondaryIndexEntries[idx]
+			for _, deletedSecondaryIndexEntry := range deletedSecondaryIndexEntries {
+				if err := ru.DeleteHelper.deleteIndexEntry(ctx, batch, index, nil /*valDir*/, &deletedSecondaryIndexEntry, traceKV); err != nil {
+					return nil, err
 				}
 			}
 		}

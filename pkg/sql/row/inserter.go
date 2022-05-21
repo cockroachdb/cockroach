@@ -171,17 +171,15 @@ func (ri *Inserter) InsertRow(
 	// For determinism, add the entries for the secondary indexes in the same
 	// order as they appear in the helper.
 	for idx := range ri.Helper.Indexes {
-		entries, ok := secondaryIndexEntries[ri.Helper.Indexes[idx]]
-		if ok {
-			for i := range entries {
-				e := &entries[i]
+		entries := secondaryIndexEntries[idx]
+		for i := range entries {
+			e := &entries[i]
 
-				if ri.Helper.Indexes[idx].ForcePut() {
-					// See the comemnt on (catalog.Index).ForcePut() for more details.
-					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV)
-				} else {
-					putFn(ctx, b, &e.Key, &e.Value, traceKV)
-				}
+			if ri.Helper.Indexes[idx].ForcePut() {
+				// See the comemnt on (catalog.Index).ForcePut() for more details.
+				insertPutFn(ctx, b, &e.Key, &e.Value, traceKV)
+			} else {
+				putFn(ctx, b, &e.Key, &e.Value, traceKV)
 			}
 		}
 	}
