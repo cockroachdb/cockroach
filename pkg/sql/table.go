@@ -217,7 +217,9 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		}
 	}
 	record.Details = newDetails
-	record.AppendDescription(jobDesc)
+	if record.Description != jobDesc {
+		record.AppendDescription(jobDesc)
+	}
 	log.Infof(ctx, "job %d: updated with schema change for table %d, mutation %d",
 		record.JobID, tableDesc.ID, mutationID)
 	return nil
