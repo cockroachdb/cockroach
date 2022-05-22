@@ -300,7 +300,7 @@ Loop:
 			}
 			break Loop
 		case pgwirebase.ClientMsgCopyFail:
-			return errors.Newf("client canceled COPY")
+			return pgerror.Newf(pgcode.QueryCanceled, "COPY from stdin failed: %s", string(readBuf.Msg))
 		case pgwirebase.ClientMsgFlush, pgwirebase.ClientMsgSync:
 			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
 		default:

@@ -232,6 +232,8 @@ func toMessage(typ string) interface{} {
 		return &pgproto3.CommandComplete{}
 	case "CopyData":
 		return &pgproto3.CopyData{}
+	case "CopyFail":
+		return &pgproto3.CopyFail{}
 	case "CopyDone":
 		return &pgproto3.CopyDone{}
 	case "CopyInResponse":
