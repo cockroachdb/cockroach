@@ -276,21 +276,30 @@ func runBenchmarkInsert(b *testing.B, db *sqlutils.SQLRunner, count int) {
 	}()
 
 	db.Exec(b, `CREATE TABLE bench.insert (k INT PRIMARY KEY)`)
+	db.Exec(b, "set skip_reoptimize=true")
 
 	b.ResetTimer()
 	var buf bytes.Buffer
+	buf.WriteString(`INSERT INTO bench.insert VALUES `)
+	for i := 0; i < count; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "($%d)", i+1)
+	}
+	stmt := db.Prepare(b, buf.String())
 	val := 0
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
 		buf.WriteString(`INSERT INTO bench.insert VALUES `)
+		args := make([]interface{}, count)
 		for j := 0; j < count; j++ {
-			if j > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, "(%d)", val)
+			args[j] = val
 			val++
 		}
-		db.Exec(b, buf.String())
+		if _, err := stmt.Exec(args...); err != nil {
+			b.Fatal(err)
+		}
 	}
 	b.StopTimer()
 

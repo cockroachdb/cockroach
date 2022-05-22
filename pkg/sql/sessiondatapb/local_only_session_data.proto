@@ -259,6 +259,8 @@ message LocalOnlySessionData {
   // used in test scenarios and is very much a non-production setting.
   int64 testing_optimizer_random_cost_seed = 70;
 
+  bool skip_reoptimize = 71;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

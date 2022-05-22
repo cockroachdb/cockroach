@@ -108,6 +108,10 @@ func NewMultiConnPool(
 			}
 			// Disable the automatic prepared statement cache. We've seen a lot of
 			// churn in this cache since workloads create many of different queries.
+			connCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "SET skip_reoptimize=true")
+				return err
+			}
 			connCfg.ConnConfig.BuildStatementCache = nil
 			connCfg.ConnConfig.LogLevel = pgx.LogLevelWarn
 			connCfg.ConnConfig.Logger = pgxLogger{}

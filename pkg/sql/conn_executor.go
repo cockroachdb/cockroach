@@ -3091,12 +3091,9 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		if query.hidden {
 			continue
 		}
-		ast, err := query.getStatement()
-		if err != nil {
-			continue
-		}
+		ast := query.ast
 		sqlNoConstants := truncateSQL(formatStatementHideConstants(ast))
-		sql := truncateSQL(ast.String())
+		sql := truncateSQL(formatWithPlaceholders(ast, query.evalCtx))
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			TxnID:          query.txnID,

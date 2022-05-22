@@ -2108,6 +2108,24 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(0, 10)
 		},
 	},
+	// CockroachDB extension.
+	`skip_reoptimize`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`skip_reoptimize`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("skip_reoptimize", s)
+			if err != nil {
+				return err
+			}
+			m.SetSkipReoptimize(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().SkipReoptimize), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "false"
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

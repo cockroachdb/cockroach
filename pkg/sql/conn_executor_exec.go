@@ -321,7 +321,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		ex.planner.EvalContext().Placeholders = pinfo
 	}
 
-	ex.addActiveQuery(ast, formatWithPlaceholders(ast, ex.planner.EvalContext()), queryID, ex.state.cancel)
+	ex.addActiveQuery(ast, ex.planner.EvalContext(), queryID, ex.state.cancel)
 	if ex.executorType != executorTypeInternal {
 		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 	}
@@ -2009,13 +2009,14 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 
 // addActiveQuery adds a running query to the list of running queries.
 func (ex *connExecutor) addActiveQuery(
-	ast tree.Statement, rawStmt string, queryID clusterunique.ID, cancelFun context.CancelFunc,
+	ast tree.Statement, evalCtx *eval.Context, queryID clusterunique.ID, cancelFun context.CancelFunc,
 ) {
 	_, hidden := ast.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
 		txnID:         ex.state.mu.txn.ID(),
 		start:         ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-		rawStmt:       rawStmt,
+		ast:           ast,
+		evalCtx:       evalCtx,
 		phase:         preparing,
 		isDistributed: false,
 		ctxCancel:     cancelFun,
