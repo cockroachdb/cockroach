@@ -1696,6 +1696,114 @@ func TestEncodeContainedJSONInvertedIndexSpans(t *testing.T) {
 	}
 }
 
+func TestEncodeExistsJSONInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		indexedValue string
+		value        string
+		containsKeys bool
+		expected     bool
+		unique       bool
+	}{
+		// This test uses EncodeInvertedIndexKeys and EncodeExistsInvertedIndexSpans
+		// to determine if the spans produced from the string key will include or
+		// excludes the keys produced by the JSON value, indicated by exists.
+		// Then, if indexedValue ? value, expected is true.
+
+		// First we test that the spans will include expected results, even if
+		// they are not necessarily contained by the value.
+		{`{"a": "a"}`, `a`, true, true, true},
+		{`{"a": null}`, `a`, true, true, true},
+		{`{"a": []}`, `a`, true, true, true},
+		{`{"a": {}}`, `a`, true, true, true},
+		{`{"a": 3}`, `a`, true, true, true},
+		{`["a"]`, `a`, true, true, true},
+		{`["a", "a"]`, `a`, true, true, true},
+		{`["b", "a"]`, `a`, true, true, true},
+		{`"a"`, `a`, true, true, true},
+
+		// Test negative cases.
+		// The number 1 doesn't have key string-1.
+		{`1`, `1`, false, false, true},
+		// Null doesn't have key string-null.
+		{`null`, `null`, false, false, true},
+		// Null doesn't have key string-null.
+		{`[]`, `null`, false, false, true},
+		{`["a"]`, `argh`, false, false, true},
+		{`["argh"]`, `a`, false, false, true},
+		{`{}`, `null`, false, false, true},
+		{`{}`, `a`, false, false, true},
+		{`{"a":"a"}`, `argh`, false, false, true},
+		{`{"argh":"a"}`, `a`, false, false, true},
+	}
+
+	runTest := func(indexedValue JSON, value string, expectContainsKeys, expected, expectUnique bool) {
+		keys, err := EncodeInvertedIndexKeys(nil, indexedValue)
+		require.NoError(t, err)
+
+		invertedExpr, err := EncodeExistsInvertedIndexSpans(nil, value)
+		require.NoError(t, err)
+
+		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
+		if !ok {
+			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
+		}
+
+		// Spans should always be tight for exists.
+		if !spanExpr.Tight {
+			t.Errorf("For %s, expected tight=false, but got true", value)
+		}
+
+		// Spans should never be unique for exists.
+		if spanExpr.Unique {
+			t.Errorf("For %s, expected unique=false, but got true", value)
+		}
+
+		containsKeys, err := spanExpr.ContainsKeys(keys)
+		require.NoError(t, err)
+
+		if containsKeys != expectContainsKeys {
+			if expectContainsKeys {
+				t.Errorf("expected spans of %s to include %s but they did not", value, indexedValue)
+			} else {
+				t.Errorf("expected spans of %s not to include %s but they did", value, indexedValue)
+			}
+		}
+	}
+
+	// Run pre-defined test cases from above.
+	for _, c := range testCases {
+		indexedValue, value := jsonTestShorthand(c.indexedValue), c.value
+
+		// First check that evaluating `indexedValue ? value` matches the expected
+		// result.
+		actual, err := indexedValue.Exists(value)
+		require.NoError(t, err)
+		if actual != c.expected {
+			t.Fatalf(
+				"expected value of %s ? %s did not match actual value. Expected: %v. Got: %v",
+				c.indexedValue, c.value, c.expected, actual,
+			)
+		}
+		runTest(indexedValue, value, c.containsKeys, c.expected, c.unique)
+	}
+
+	// Run a set of randomly generated test cases.
+	rng, _ := randutil.NewTestRand()
+	for i := 0; i < 100; i++ {
+		// Generate two random JSONs and evaluate the result of `left ? right`.
+		left, err := Random(20, rng)
+		require.NoError(t, err)
+		right := randomJSONString(rng).(string)
+		require.NoError(t, err)
+
+		isContained, err := left.Exists(right)
+		require.NoError(t, err)
+
+		// Now check that we get the same result with the inverted index spans.
+		runTest(left, right, isContained, isContained, false)
+	}
+}
+
 func TestNumInvertedIndexEntries(t *testing.T) {
 	testCases := []struct {
 		value    string
