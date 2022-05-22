@@ -707,6 +707,49 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			remainingFilters: "",
 		},
 		{
+			// JSONExists is supported. Unique is false for all Exists predicates
+			// because they check containment within arrays as well.
+			filters:          "j ? 'foo'",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            true,
+			unique:           false,
+			remainingFilters: "",
+		},
+		{
+			// JSONSomeExists is supported.
+			filters:          "j ?| ARRAY['foo','bar']",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            true,
+			unique:           false,
+			remainingFilters: "",
+		},
+		{
+			// JSONAllExists is supported.
+			filters:          "j ?& ARRAY['foo','bar']",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            true,
+			unique:           false,
+			remainingFilters: "",
+		},
+		{
+			// JSONExists with boolean expressions are supported.
+			filters:          "j ?& ARRAY['foo','bar'] AND j ? 'qux' OR j ?| ARRAY['a','b']",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            true,
+			unique:           false,
+			remainingFilters: "",
+		},
+		{
+			// FetchVal + Exists isn't supported yet.
+			filters:  "j->'foo' ? 'bar'",
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
 			// Overlaps is supported for arrays.
 			// Overlaps with a single element array produces
 			// unique inverted span expression.
