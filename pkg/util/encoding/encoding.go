@@ -821,6 +821,11 @@ func AddJSONPathTerminator(b []byte) []byte {
 	return append(b, escape, escapedTerm)
 }
 
+// AddJSONPathSeparator adds a json path separator to a byte array.
+func AddJSONPathSeparator(b []byte) []byte {
+	return append(b, escape, escapedJSONObjectKeyTerm)
+}
+
 // EncodeJSONEmptyObject returns a byte array b with a byte to signify an empty JSON object.
 func EncodeJSONEmptyObject(b []byte) []byte {
 	return append(b, escape, escapedTerm, jsonEmptyObject)

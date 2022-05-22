@@ -1109,7 +1109,8 @@ INSERT INTO e VALUES
   (10, '3'),
   (11, NULL),
   (12, 'null'),
-  (13, 'true')
+  (13, 'true'),
+  (14, '{"aargh": 3, "b": 2, "c": 3}')
 
 query T
 SELECT j FROM e@i WHERE j ? 'a' ORDER BY k
@@ -1128,6 +1129,7 @@ SELECT j FROM e@i WHERE j ? 'aargh' OR j->'b' @> '{"a": "c"}' ORDER BY k
 ----
 {"b": {"a": "c"}}
 ["aargh"]
+{"aargh": 3, "b": 2, "c": 3}
 
 query T
 SELECT j FROM e@i WHERE j ?& ARRAY['a', 'b'] ORDER BY k
@@ -1148,6 +1150,7 @@ SELECT j FROM e@i WHERE j ?| ARRAY['a', 'b'] ORDER BY k
 ["b", "a", "c"]
 ["a"]
 "a"
+{"aargh": 3, "b": 2, "c": 3}
 
 subtest arrays
 
