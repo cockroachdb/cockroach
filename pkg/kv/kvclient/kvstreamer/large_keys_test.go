@@ -52,6 +52,10 @@ func TestLargeKeys(t *testing.T) {
 			name:  "lookup join, no ordering",
 			query: "SELECT * FROM bar INNER LOOKUP JOIN foo ON lookup_blob = pk_blob",
 		},
+		{
+			name:  "lookup join, with ordering",
+			query: "SELECT max(length(blob)) FROM bar INNER LOOKUP JOIN foo ON lookup_blob = pk_blob GROUP BY pk_blob",
+		},
 	}
 
 	rng, _ := randutil.NewTestRand()
@@ -132,7 +136,7 @@ func TestLargeKeys(t *testing.T) {
 						INDEX (attribute)%s
 					);`, familiesSuffix))
 				require.NoError(t, err)
-				_, err = db.Exec("CREATE TABLE bar (lookup_blob STRING)")
+				_, err = db.Exec("CREATE TABLE bar (lookup_blob STRING PRIMARY KEY)")
 				require.NoError(t, err)
 
 				// Insert some number of rows.
@@ -193,6 +197,11 @@ func TestLargeKeys(t *testing.T) {
 								func(t *testing.T) {
 									_, err = db.Exec(tc.query)
 									if err != nil {
+										// Make sure to discard the trace of the
+										// query that resulted in an error. If
+										// we don't do this, then the next test
+										// case will hang.
+										<-recCh
 										t.Fatal(err)
 									}
 									// Now examine the trace and count the async
