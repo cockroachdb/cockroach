@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "mock_webhook_sink.go",
         "nemeses.go",
+        "row.go",
         "schema_registry.go",
         "testfeed.go",
         "tls_util.go",
@@ -16,8 +17,16 @@ go_library(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/roachpb",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
+        "//pkg/util",
         "//pkg/util/fsm",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -26,6 +35,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_linkedin_goavro_v2//:goavro",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
