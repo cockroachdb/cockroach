@@ -2563,3 +2563,33 @@ tbl  CREATE TABLE public.tbl (
      j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
      CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
 )
+
+# Verify that adding not-null physical column with a default or computed expression
+# fails if the expression evaluates to NULL.
+subtest add_column_not_null
+
+statement ok
+CREATE TABLE t_add_column_not_null (i INT PRIMARY KEY);
+INSERT INTO t_add_column_not_null VALUES (1), (2), (3)
+
+statement error pgcode 23502 null value in column "j" violates not-null constraint
+ALTER TABLE t_add_column_not_null ADD COLUMN j INT NOT NULL DEFAULT (NULL:::INT)
+
+statement error pgcode 23502 null value in column "j" violates not-null constraint
+ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL:::INT) STORED NOT NULL;
+
+# Note that the UNIQUE here leads to a secondary index being built which will fail.
+statement error pgcode 23502 null value in column "j" violates not-null constraint
+ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL UNIQUE;
+
+# Note that this should absolutely not succeed, but it does because of #81675.
+# We'll rely on that in order to test that the subsequent index build fails.
+# When addressing #81675, this portion of this test will need to be removed.
+statement ok
+ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL;
+
+statement error pgcode 23502 null value in column "j" violates not-null constraint
+CREATE INDEX idx_j ON t_add_column_not_null (j);
+
+statement ok
+DROP TABLE t_add_column_not_null
