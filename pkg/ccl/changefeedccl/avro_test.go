@@ -166,7 +166,7 @@ func parseAvroSchema(t *testing.T, j string) (*avroDataRecord, error) {
 	}
 	return tableToAvroSchema(
 		cdcevent.TestingMakeEventRow(
-			tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), nil, false,
+			tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), 0, nil, false,
 		), "", string(changefeedbase.OptVirtualColumnsOmitted))
 }
 
@@ -391,7 +391,7 @@ func TestAvroSchema(t *testing.T) {
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.schema))
 			require.NoError(t, err)
 			origSchema, err := tableToAvroSchema(
-				cdcevent.TestingMakeEventRow(tableDesc, nil, false),
+				cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false),
 				avroSchemaNoSuffix, "")
 			require.NoError(t, err)
 			jsonSchema := origSchema.codec.Schema()
@@ -405,7 +405,7 @@ func TestAvroSchema(t *testing.T) {
 			require.NoError(t, err)
 
 			for _, encDatums := range rows {
-				row := cdcevent.TestingMakeEventRow(tableDesc, encDatums, false)
+				row := cdcevent.TestingMakeEventRow(tableDesc, 0, encDatums, false)
 				evalCtx := &eval.Context{
 					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 				}
@@ -430,7 +430,7 @@ func TestAvroSchema(t *testing.T) {
 		tableDesc, err := parseTableDesc(`CREATE TABLE "☃" (🍦 INT PRIMARY KEY)`)
 		require.NoError(t, err)
 		tableSchema, err := tableToAvroSchema(
-			cdcevent.TestingMakeEventRow(tableDesc, nil, false), avroSchemaNoSuffix, "")
+			cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false), avroSchemaNoSuffix, "")
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+
@@ -438,7 +438,7 @@ func TestAvroSchema(t *testing.T) {
 				`"__crdb__":"🍦 INT8 NOT NULL"}]}`,
 			tableSchema.codec.Schema())
 		indexSchema, err := primaryIndexToAvroSchema(
-			cdcevent.TestingMakeEventRow(tableDesc, nil, false), tableDesc.GetName(), "")
+			cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false), tableDesc.GetName(), "")
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+
@@ -661,7 +661,7 @@ func TestAvroSchema(t *testing.T) {
 			encDatums, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
-			row := cdcevent.TestingMakeEventRow(tableDesc, encDatums[0], false)
+			row := cdcevent.TestingMakeEventRow(tableDesc, 0, encDatums[0], false)
 			schema, err := tableToAvroSchema(
 				row, avroSchemaNoSuffix, "")
 			require.NoError(t, err)
@@ -719,7 +719,7 @@ func TestAvroSchema(t *testing.T) {
 			encDatums, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
-			row := cdcevent.TestingMakeEventRow(tableDesc, encDatums[0], false)
+			row := cdcevent.TestingMakeEventRow(tableDesc, 0, encDatums[0], false)
 			schema, err := tableToAvroSchema(row, avroSchemaNoSuffix, "")
 			require.NoError(t, err)
 			textual, err := schema.textualFromRow(row)
@@ -824,13 +824,13 @@ func TestAvroMigration(t *testing.T) {
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.writerSchema))
 			require.NoError(t, err)
 			writerSchema, err := tableToAvroSchema(
-				cdcevent.TestingMakeEventRow(writerDesc, nil, false), avroSchemaNoSuffix, "")
+				cdcevent.TestingMakeEventRow(writerDesc, 0, nil, false), avroSchemaNoSuffix, "")
 			require.NoError(t, err)
 			readerDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.readerSchema))
 			require.NoError(t, err)
 			readerSchema, err := tableToAvroSchema(
-				cdcevent.TestingMakeEventRow(readerDesc, nil, false), avroSchemaNoSuffix, "")
+				cdcevent.TestingMakeEventRow(readerDesc, 0, nil, false), avroSchemaNoSuffix, "")
 			require.NoError(t, err)
 
 			writerRows, err := parseValues(writerDesc, `VALUES `+test.writerValues)
@@ -839,7 +839,7 @@ func TestAvroMigration(t *testing.T) {
 			require.NoError(t, err)
 
 			for i := range writerRows {
-				writerEvent := cdcevent.TestingMakeEventRow(writerDesc, writerRows[i], false)
+				writerEvent := cdcevent.TestingMakeEventRow(writerDesc, 0, writerRows[i], false)
 				encoded, err := writerSchema.BinaryFromRow(nil, writerEvent.ForEachColumn())
 				require.NoError(t, err)
 				row, err := rowFromBinaryEvolved(encoded, writerSchema, readerSchema)
@@ -907,7 +907,7 @@ func benchmarkEncodeType(b *testing.B, typ *types.T, encRow rowenc.EncDatumRow) 
 	tableDesc, err := parseTableDesc(
 		fmt.Sprintf(`CREATE TABLE bench_table (bench_field %s)`, typ.SQLString()))
 	require.NoError(b, err)
-	row := cdcevent.TestingMakeEventRow(tableDesc, encRow, false)
+	row := cdcevent.TestingMakeEventRow(tableDesc, 0, encRow, false)
 	schema, err := tableToAvroSchema(row, "suffix", "namespace")
 	require.NoError(b, err)
 
