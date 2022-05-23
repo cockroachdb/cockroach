@@ -803,6 +803,30 @@ func TestJSONExists(t *testing.T) {
 			})
 		}
 	}
+
+	// Run a set of randomly generated test cases.
+	rng, _ := randutil.NewTestRand()
+	for i := 0; i < 100; i++ {
+		left, err := Random(20, rng)
+		require.NoError(t, err)
+		right := randomJSONString(rng).(string)
+		require.NoError(t, err)
+
+		var exists bool
+		exists, err = left.Exists(right)
+		require.NoError(t, err)
+
+		// Test that we get the same result with the encoded form of the JSON.
+		b, err := EncodeJSON(nil, left)
+		require.NoError(t, err)
+		j, err := FromEncoding(b)
+		require.NoError(t, err)
+
+		existsEncoded, err := j.Exists(right)
+		require.NoError(t, err)
+
+		require.Equal(t, exists, existsEncoded, "expected encoded/non-encoded Exists to match but didn't: %s %s", left, right)
+	}
 }
 
 func TestJSONStripNulls(t *testing.T) {
