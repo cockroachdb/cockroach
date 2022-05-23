@@ -1160,19 +1160,19 @@ func updateSequenceDependencies(
 		seqDescsToUpdate = truncated
 	}
 	for _, colExpr := range []struct {
-		name   string
-		exists func() bool
-		get    func() string
+		colExprKind tabledesc.ColExprKind
+		exists      func() bool
+		get         func() string
 	}{
 		{
-			name:   "DEFAULT",
-			exists: colDesc.HasDefault,
-			get:    colDesc.GetDefaultExpr,
+			colExprKind: tabledesc.DefaultExpr,
+			exists:      colDesc.HasDefault,
+			get:         colDesc.GetDefaultExpr,
 		},
 		{
-			name:   "ON UPDATE",
-			exists: colDesc.HasOnUpdate,
-			get:    colDesc.GetOnUpdateExpr,
+			colExprKind: tabledesc.OnUpdateExpr,
+			exists:      colDesc.HasOnUpdate,
+			get:         colDesc.GetOnUpdateExpr,
 		},
 	} {
 		if !colExpr.exists() {
@@ -1187,7 +1187,7 @@ func updateSequenceDependencies(
 			params,
 			untypedExpr,
 			colDesc,
-			"DEFAULT",
+			string(colExpr.colExprKind),
 		)
 		if err != nil {
 			return err
@@ -1201,6 +1201,7 @@ func updateSequenceDependencies(
 			colDesc.ColumnDesc(),
 			typedExpr,
 			nil, /* backrefs */
+			colExpr.colExprKind,
 		)
 		if err != nil {
 			return err
