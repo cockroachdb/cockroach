@@ -1262,7 +1262,7 @@ func WaitToUpdateLeases(
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
 	retryOpts := retry.Options{
-		InitialBackoff: 5 * time.Millisecond,
+		InitialBackoff: time.Millisecond,
 		MaxBackoff:     time.Second,
 		Multiplier:     1.5,
 	}
