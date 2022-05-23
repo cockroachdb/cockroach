@@ -224,8 +224,8 @@ func TestEncoders(t *testing.T) {
 			}
 			require.NoError(t, err)
 
-			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, row, false)
-			prevRow := cdcevent.TestingMakeEventRow(tableDesc, nil, false)
+			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
+			prevRow := cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false)
 			evCtx := eventContext{updated: ts}
 
 			keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
@@ -235,8 +235,8 @@ func TestEncoders(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
 
-			rowDelete := cdcevent.TestingMakeEventRow(tableDesc, row, true)
-			prevRow = cdcevent.TestingMakeEventRow(tableDesc, row, false)
+			rowDelete := cdcevent.TestingMakeEventRow(tableDesc, 0, row, true)
+			prevRow = cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
 
 			keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
 			require.NoError(t, err)
@@ -364,7 +364,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		e, err := getEncoder(opts, targets)
 		require.NoError(t, err)
 
-		rowInsert := cdcevent.TestingMakeEventRow(tableDesc, row, false)
+		rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
 		var prevRow cdcevent.Row
 		evCtx := eventContext{updated: ts}
 		keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
@@ -374,8 +374,8 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
 
-		rowDelete := cdcevent.TestingMakeEventRow(tableDesc, row, true)
-		prevRow = cdcevent.TestingMakeEventRow(tableDesc, row, false)
+		rowDelete := cdcevent.TestingMakeEventRow(tableDesc, 0, row, true)
+		prevRow = cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
 
 		keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
 		require.NoError(t, err)

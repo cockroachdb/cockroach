@@ -79,9 +79,8 @@ func newRowFetcherCache(
 	leaseMgr *lease.Manager,
 	cf *descs.CollectionFactory,
 	db *kv.DB,
-	details jobspb.ChangefeedDetails,
+	specs []jobspb.ChangefeedTargetSpecification,
 ) *rowFetcherCache {
-	specs := details.TargetSpecifications
 	watchedFamilies := make(map[watchedFamily]struct{}, len(specs))
 	for _, s := range specs {
 		watchedFamilies[watchedFamily{tableID: s.TableID, familyName: s.FamilyName}] = struct{}{}
