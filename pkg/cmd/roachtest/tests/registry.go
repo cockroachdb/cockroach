@@ -126,7 +126,6 @@ func RegisterTests(r registry.Registry) {
 	registerOverload(r)
 	registerMultiTenantUpgrade(r)
 	registerMultiTenantFairness(r)
-	registerVersionUpgradePublicSchema(r)
 	registerValidateSystemSchemaAfterVersionUpgrade(r)
 	registerIndexBackfill(r)
 }
