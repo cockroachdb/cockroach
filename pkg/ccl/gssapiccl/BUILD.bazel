@@ -4,22 +4,24 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "gssapiccl",
     srcs = select({
-        "@io_bazel_rules_go//go/platform:linux_amd64": ["gssapi.go", "get_user.go"],
+        "@io_bazel_rules_go//go/platform:linux": ["gssapi.go", "get_user.go"],
         "//conditions:default": ["empty.go"],
     }),
     cdeps = select({
-        "@io_bazel_rules_go//go/platform:linux_amd64": ["//c-deps:libkrb5"],
+        "@io_bazel_rules_go//go/platform:linux": ["//c-deps:libkrb5"],
         "//conditions:default": [],
     }),
     cgo = True,
     clinkopts = select({
-        "@io_bazel_rules_go//go/platform:linux_amd64": ["-ldl -lresolv"],
+        # NB: On Ubuntu, res_nsearch is found in resolv_wrapper library.
+        "//build/toolchains:is_dev_linux": ["-ldl -lresolv -lresolv_wrapper"],
+        "@io_bazel_rules_go//go/platform:linux": ["-ldl -lresolv"],
         "//conditions:default": [],
     }),
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl",
     visibility = ["//visibility:public"],
     deps = select({
-        "@io_bazel_rules_go//go/platform:linux_amd64": [
+        "@io_bazel_rules_go//go/platform:linux": [
             "//pkg/ccl/utilccl",
             "//pkg/security/username",
             "//pkg/settings",

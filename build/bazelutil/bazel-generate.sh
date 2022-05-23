@@ -59,7 +59,7 @@ fi
 
 bazel run //:gazelle
 
-if files_unchanged_from_upstream DEPS.bzl WORKSPACE $(find_relevant ./pkg/cmd/generate-distdir -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg/build/bazel -name BUILD.bazel -or -name '*.go') $(find_relevant pkg/build/starlarkutil -name BUILD.bazel -or -name '*.go'); then
+if files_unchanged_from_upstream c-deps/archived.bzl c-deps/REPOSITORIES.bzl DEPS.bzl WORKSPACE $(find_relevant ./pkg/cmd/generate-distdir -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg/build/bazel -name BUILD.bazel -or -name '*.go') $(find_relevant pkg/build/starlarkutil -name BUILD.bazel -or -name '*.go'); then
     echo "Skipping //pkg/cmd/generate-distdir (relevant files are unchanged from upstream)."
 else
     CONTENTS=$(bazel run //pkg/cmd/generate-distdir)

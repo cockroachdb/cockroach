@@ -23,6 +23,6 @@ for CONFIG in $CONFIGS; do
     done
 done
 
-for FILE in $(find /artifacts -name '*.tar.gz'); do
+for FILE in $(find /artifacts -name '*.tar.gz' | sort); do
     shasum -a 256 $FILE
 done
