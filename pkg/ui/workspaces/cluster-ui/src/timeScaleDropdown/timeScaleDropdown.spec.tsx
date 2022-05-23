@@ -158,10 +158,10 @@ describe("<TimeScaleDropdown> component", function() {
     getByText("Past 10 Minutes");
   });
 
-  it.only("allows selection of a custom time frame", () => {
+  it("initializes the custom selection to the current time frame", () => {
     const mockSetTimeScale = jest.fn();
     // Default state
-    const { getByText, getByDisplayValue, container } = render(
+    const { getByText, getByDisplayValue } = render(
       <MemoryRouter>
         <TimeScaleDropdownWrapper
           currentScale={new timescale.TimeScaleState().scale}
@@ -188,6 +188,9 @@ describe("<TimeScaleDropdown> component", function() {
     const endMoment = getNow();
     getByDisplayValue(startText); // start
     getByDisplayValue(endMoment.format(customMenuTimeFormat)); // end
+
+    // Testing changing and selecting a new custom time is blocked on being able to distinguish the time options in the
+    // start and end dropdowns; for an attempt see: https://github.com/jocrl/cockroach/commit/a15ac08b3ed0515a4c4910396e32dc8712cc86ec#diff-491a1b9fd6a93863973c270c8c05ab0d28e0a41f616ecd2222df9fab327806f2R196
   });
 });
 
