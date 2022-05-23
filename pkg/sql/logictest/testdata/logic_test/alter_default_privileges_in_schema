@@ -3,6 +3,9 @@
 statement error pq: cannot use IN SCHEMA clause when using GRANT/REVOKE ON SCHEMAS
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SCHEMAS TO root
 
+statement error pq: crdb_internal is not a physical schema
+ALTER DEFAULT PRIVILEGES IN SCHEMA crdb_internal GRANT SELECT ON TABLES TO root
+
 statement ok
 CREATE USER testuser2
 

@@ -645,7 +645,6 @@ func TestConcurrentSchemaChangesWait(t *testing.T) {
 		`CREATE TABLE db.t2 (i INT PRIMARY KEY, a INT REFERENCES db.t)`,
 		`CREATE VIEW db.v AS SELECT a FROM db.t`,
 		`ALTER TABLE db.t RENAME TO db.new`,
-		`GRANT ALL ON db.t TO root`,
 		`TRUNCATE TABLE db.t`,
 		`DROP TABLE db.t`,
 	}
