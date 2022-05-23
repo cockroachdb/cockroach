@@ -1225,16 +1225,9 @@ func applyColumnMutation(
 			}
 		}
 
-		info, err := tableDesc.GetConstraintInfo()
-		if err != nil {
+		if err := addNotNullConstraintMutationForCol(tableDesc, col); err != nil {
 			return err
 		}
-		inuseNames := make(map[string]struct{}, len(info))
-		for k := range info {
-			inuseNames[k] = struct{}{}
-		}
-		check := tabledesc.MakeNotNullCheckConstraint(col.GetName(), col.GetID(), inuseNames, descpb.ConstraintValidity_Validating)
-		tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_ADD)
 
 	case *tree.AlterTableDropNotNull:
 		if col.IsNullable() {
@@ -1287,6 +1280,20 @@ func applyColumnMutation(
 		}
 		col.ColumnDesc().ComputeExpr = nil
 	}
+	return nil
+}
+
+func addNotNullConstraintMutationForCol(tableDesc *tabledesc.Mutable, col catalog.Column) error {
+	info, err := tableDesc.GetConstraintInfo()
+	if err != nil {
+		return err
+	}
+	inuseNames := make(map[string]struct{}, len(info))
+	for k := range info {
+		inuseNames[k] = struct{}{}
+	}
+	check := tabledesc.MakeNotNullCheckConstraint(col.GetName(), col.GetID(), inuseNames, descpb.ConstraintValidity_Validating)
+	tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_ADD)
 	return nil
 }
 
