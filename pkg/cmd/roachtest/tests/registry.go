@@ -120,7 +120,6 @@ func RegisterTests(r registry.Registry) {
 	registerKVBench(r)
 	registerTypeORM(r)
 	registerLoadSplits(r)
-	registerValidateGrantOption(r)
 	registerVersion(r)
 	registerYCSB(r)
 	registerTPCHBench(r)
@@ -128,7 +127,6 @@ func RegisterTests(r registry.Registry) {
 	registerMultiTenantUpgrade(r)
 	registerMultiTenantFairness(r)
 	registerVersionUpgradePublicSchema(r)
-	registerRemoveInvalidDatabasePrivileges(r)
 	registerValidateSystemSchemaAfterVersionUpgrade(r)
 	registerIndexBackfill(r)
 }
