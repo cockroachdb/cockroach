@@ -108,10 +108,11 @@ func registerRustPostgres(r registry.Registry) {
 
 		t.Status("building rust postgres (without test)")
 
-		blocklistName, expectedFailures, ignorelistName, ignorelist := rustPostgresBlocklists.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No rust-postgres blocklist defined for cockroach version %s", version)
-		}
+		blocklistName := "rustPostgresBlockList"
+		ignorelistName := "rustPostgresIgnoreList"
+		expectedFailures := rustPostgresBlocklist
+		ignorelist := rustPostgresIgnoreList
+
 		status := fmt.Sprintf("running cockroach version %s, using blocklist %s", version, blocklistName)
 		if ignorelist != nil {
 			status = fmt.Sprintf(
