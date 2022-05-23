@@ -107,40 +107,38 @@ func alterTableAddColumn(
 		IsNullable: desc.Nullable,
 		IsVirtual:  desc.Virtual,
 	}
+
+	spec.colType.TypeT = b.ResolveTypeRef(d.Type)
+	if spec.colType.TypeT.Type.UserDefined() {
+		typeID, err := typedesc.UserDefinedTypeOIDToID(spec.colType.TypeT.Type.Oid())
+		if err != nil {
+			panic(err)
+		}
+		_, _, tableNamespace := scpb.FindNamespace(b.QueryByID(tbl.TableID))
+		_, _, typeNamespace := scpb.FindNamespace(b.QueryByID(typeID))
+		if typeNamespace.DatabaseID != tableNamespace.DatabaseID {
+			typeName := tree.MakeTypeNameWithPrefix(b.NamePrefix(typeNamespace), typeNamespace.Name)
+			panic(pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"cross database type references are not supported: %s",
+				typeName.String()))
+		}
+	}
+	// Block unsupported types.
+	switch spec.colType.Type.Oid() {
+	case oid.T_int2vector, oid.T_oidvector:
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"VECTOR column types are unsupported",
+		))
+	}
 	if desc.IsComputed() {
-		expr, typ := b.ComputedColumnExpression(tbl, d)
+		expr := b.ComputedColumnExpression(tbl, d)
 		spec.colType.ComputeExpr = b.WrapExpression(tbl.TableID, expr)
-		spec.colType.TypeT = typ
 		if desc.Virtual {
 			b.IncrementSchemaChangeAddColumnQualificationCounter("virtual")
 		} else {
 			b.IncrementSchemaChangeAddColumnQualificationCounter("computed")
-		}
-
-	} else {
-		spec.colType.TypeT = b.ResolveTypeRef(d.Type)
-		if spec.colType.TypeT.Type.UserDefined() {
-			typeID, err := typedesc.UserDefinedTypeOIDToID(spec.colType.TypeT.Type.Oid())
-			if err != nil {
-				panic(err)
-			}
-			_, _, tableNamespace := scpb.FindNamespace(b.QueryByID(tbl.TableID))
-			_, _, typeNamespace := scpb.FindNamespace(b.QueryByID(typeID))
-			if typeNamespace.DatabaseID != tableNamespace.DatabaseID {
-				typeName := tree.MakeTypeNameWithPrefix(b.NamePrefix(typeNamespace), typeNamespace.Name)
-				panic(pgerror.Newf(
-					pgcode.FeatureNotSupported,
-					"cross database type references are not supported: %s",
-					typeName.String()))
-			}
-		}
-		// Block unsupported types.
-		switch spec.colType.Type.Oid() {
-		case oid.T_int2vector, oid.T_oidvector:
-			panic(pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"VECTOR column types are unsupported",
-			))
 		}
 	}
 	if d.HasColumnFamily() {
