@@ -872,3 +872,15 @@ query B
 SELECT json_valid(NULL)
 ----
 NULL
+
+# Regression tests for #81647 (false negatives for ? operator in some cases).
+subtest regression_81647
+
+statement ok
+CREATE TABLE t81647(j JSON);
+INSERT INTO t81647 VALUES ('["a", "b"]')
+
+query TBTB
+SELECT j, j ? 'a', j-1, (j-1) ? 'a' FROM t81647
+----
+["a", "b"]  true  ["a"]  true
