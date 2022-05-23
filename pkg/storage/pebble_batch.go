@@ -204,10 +204,6 @@ func (p *pebbleBatch) MVCCIterate(
 
 // NewMVCCIterator implements the Batch interface.
 func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
-	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
-		panic("iterator must set prefix or upper bound or lower bound")
-	}
-
 	if p.writeOnly {
 		panic("write-only batch")
 	}
@@ -217,15 +213,6 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		// Doing defer r.Free() does not inline.
 		iter := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
-		if util.RaceEnabled {
-			iter = wrapInUnsafeIter(iter)
-		}
-		return iter
-	}
-
-	if !opts.MinTimestampHint.IsEmpty() {
-		// MVCCIterators that specify timestamp bounds cannot be cached.
-		iter := MVCCIterator(newPebbleIterator(p.batch, nil, opts, StandardDurability))
 		if util.RaceEnabled {
 			iter = wrapInUnsafeIter(iter)
 		}
@@ -243,11 +230,9 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	if iter.inuse {
 		return newPebbleIterator(handle, p.iter, opts, StandardDurability)
 	}
-	// Ensures no timestamp hints etc.
-	checkOptionsForIterReuse(opts)
 
 	if iter.iter != nil {
-		iter.setBounds(opts.LowerBound, opts.UpperBound)
+		iter.setOptions(opts, StandardDurability)
 	} else {
 		iter.init(handle, p.iter, p.iterUnused, opts, StandardDurability)
 		if p.iter == nil {
@@ -267,10 +252,6 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 
 // NewEngineIterator implements the Batch interface.
 func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
-	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
-		panic("iterator must set prefix or upper bound or lower bound")
-	}
-
 	if p.writeOnly {
 		panic("write-only batch")
 	}
@@ -286,11 +267,9 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.inuse {
 		return newPebbleIterator(handle, p.iter, opts, StandardDurability)
 	}
-	// Ensures no timestamp hints etc.
-	checkOptionsForIterReuse(opts)
 
 	if iter.iter != nil {
-		iter.setBounds(opts.LowerBound, opts.UpperBound)
+		iter.setOptions(opts, StandardDurability)
 	} else {
 		iter.init(handle, p.iter, p.iterUnused, opts, StandardDurability)
 		if p.iter == nil {

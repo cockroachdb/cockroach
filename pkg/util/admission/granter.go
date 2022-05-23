@@ -1909,6 +1909,7 @@ func (*ioLoadListener) adjustTokensInner(
 		numTokens := intL0CompactedBytes
 		smoothedTotalNumByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedTotalNumByteTokens
 		totalNumByteTokens = unlimitedTokens
+		doLog = false
 	}
 	// Install the latest cumulative stats.
 	return adjustTokensResult{
