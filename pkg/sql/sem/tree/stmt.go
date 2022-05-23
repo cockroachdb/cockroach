@@ -1781,6 +1781,12 @@ func (*ValuesClause) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*ValuesClause) StatementTag() string { return "VALUES" }
 
+func (*CreateFunction) StatementReturnType() StatementReturnType { return DDL }
+
+func (*CreateFunction) StatementType() StatementType { return TypeDDL }
+
+func (*CreateFunction) StatementTag() string { return "CREATE FUNCTION" }
+
 func (n *AlterChangefeed) String() string                { return AsString(n) }
 func (n *AlterChangefeedCmds) String() string            { return AsString(n) }
 func (n *AlterBackup) String() string                    { return AsString(n) }
@@ -1953,3 +1959,4 @@ func (n *Truncate) String() string                       { return AsString(n) }
 func (n *UnionClause) String() string                    { return AsString(n) }
 func (n *Update) String() string                         { return AsString(n) }
 func (n *ValuesClause) String() string                   { return AsString(n) }
+func (n *CreateFunction) String() string                 { return AsString(n) }

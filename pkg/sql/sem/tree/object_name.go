@@ -211,7 +211,15 @@ func (u *UnresolvedObjectName) String() string { return AsString(u) }
 // would only figure that out during name resolution. This method is temporary,
 // while we change all the code paths to only use TableName after resolution.
 func (u *UnresolvedObjectName) ToTableName() TableName {
-	return TableName{objName{
+	return TableName{u.toObjName()}
+}
+
+func (u *UnresolvedObjectName) ToFunctionName() FunctionName {
+	return FunctionName{u.toObjName()}
+}
+
+func (u *UnresolvedObjectName) toObjName() objName {
+	return objName{
 		ObjectName: Name(u.Parts[0]),
 		ObjectNamePrefix: ObjectNamePrefix{
 			SchemaName:      Name(u.Parts[1]),
@@ -219,7 +227,7 @@ func (u *UnresolvedObjectName) ToTableName() TableName {
 			ExplicitSchema:  u.NumParts >= 2,
 			ExplicitCatalog: u.NumParts >= 3,
 		},
-	}}
+	}
 }
 
 // ToUnresolvedName converts the unresolved object name to the more general
