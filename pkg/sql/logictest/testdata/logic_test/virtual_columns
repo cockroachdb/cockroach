@@ -1256,3 +1256,59 @@ JOIN t75147 AS t2 ON
   AND t1.v1 = t2.v1
   AND t1.b = t2.b
 JOIN t75147 AS t3 ON t1.a = t3.a;
+
+
+# This tests that the type of a computed expression properly reflects the
+# user's intention. Before this test was added, the declarative schema changer
+# would not apply the proper type.
+subtest computed_column_type
+
+statement ok
+CREATE TABLE t_added (i INT PRIMARY KEY);
+INSERT INTO t_added VALUES (1);
+
+statement ok
+ALTER TABLE t_added ADD COLUMN i4n INT4 GENERATED ALWAYS AS (NULL) VIRTUAL;
+
+statement ok
+ALTER TABLE t_added ADD COLUMN dn DECIMAL(5, 2) GENERATED ALWAYS AS (NULL) VIRTUAL;
+
+# Note that we really should not be able to add this column as the expression
+# does not fit into the type. See #81698.
+statement ok
+ALTER TABLE t_added ADD COLUMN d DECIMAL(5, 2) GENERATED ALWAYS AS (123456.000000::DECIMAL) VIRTUAL;
+
+statement ok
+ALTER TABLE t_added ADD COLUMN i4 INT4 GENERATED ALWAYS AS (4) VIRTUAL;
+
+statement ok
+ALTER TABLE t_added ADD COLUMN i2 INT2 GENERATED ALWAYS AS (2) VIRTUAL;
+
+
+# Before the PR which introduced this test, the below query would output:
+#
+# CREATE TABLE public.t_added (
+#    i INT8 NOT NULL,
+#    i4n UNKNOWN NULL AS (NULL) VIRTUAL,
+#    dn UNKNOWN NULL AS (NULL) VIRTUAL,
+#    d DECIMAL NULL AS (123456.000000:::DECIMAL) VIRTUAL,
+#    i4 INT8 NULL AS (4:::INT8) VIRTUAL,
+#    i2 INT8 NULL AS (2:::INT8) VIRTUAL,
+#    CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
+# )
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_added]
+----
+CREATE TABLE public.t_added (
+   i INT8 NOT NULL,
+   i4n INT4 NULL AS (NULL) VIRTUAL,
+   dn DECIMAL(5,2) NULL AS (NULL) VIRTUAL,
+   d DECIMAL(5,2) NULL AS (123456.000000:::DECIMAL) VIRTUAL,
+   i4 INT4 NULL AS (4:::INT8) VIRTUAL,
+   i2 INT2 NULL AS (2:::INT8) VIRTUAL,
+   CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
+)
+
+statement ok
+DROP TABLE t_added
