@@ -235,6 +235,8 @@ type Node struct {
 	suppressNodeStatus syncutil.AtomicBool
 
 	testingErrorEvent func(context.Context, *roachpb.BatchRequest, error)
+
+	gc *admission.GrantCoordinator
 }
 
 var _ roachpb.InternalServer = &Node{}
@@ -359,6 +361,7 @@ func NewNode(
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
+	gc *admission.GrantCoordinator,
 ) *Node {
 	var sqlExec *sql.InternalExecutor
 	if execCfg != nil {
@@ -379,6 +382,7 @@ func NewNode(
 		tenantSettingsWatcher: tenantSettingsWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
+		gc: gc,
 	}
 	n.storeCfg.KVAdmissionController = n.admissionController
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
@@ -777,6 +781,18 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 		return nil
 	})
 	return metrics
+}
+
+func (n *Node) SetPebbleCPU() error {
+	ssg, err := admission.MakeSoftSlotGranter(n.gc)
+	if err != nil {
+		return err
+	}
+	n.stores.VisitStores(func(s *kvserver.Store) error {
+		s.Engine().SetSoftSlotGranter(ssg)
+		return nil
+	})
+	return nil
 }
 
 // GetTenantWeights implements kvserver.TenantWeightProvider.

@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"io"
 	"io/ioutil"
 	"math"
@@ -646,13 +647,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	}
 	// Instantiate a file system with disk health checking enabled. This FS wraps
 	// vfs.Default, and can be wrapped for encryption-at-rest.
-	opts.FS = vfs.WithDiskHealthChecks(vfs.Default, diskHealthCheckInterval,
-		func(name string, duration time.Duration) {
-			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
-				Path:     name,
-				Duration: duration,
-			})
-		})
+	opts.FS = vfs.Default
 	// If we encounter ENOSPC, exit with an informative exit code.
 	opts.FS = vfs.OnDiskFull(opts.FS, func() {
 		exit.WithCode(exit.DiskFull())
@@ -1483,6 +1478,11 @@ func (p *Pebble) GetMetrics() Metrics {
 		DiskSlowCount:   atomic.LoadInt64(&p.diskSlowCount),
 		DiskStallCount:  atomic.LoadInt64(&p.diskStallCount),
 	}
+}
+
+// SetSoftSlotGranter implements the Engine interface.
+func (p *Pebble) SetSoftSlotGranter(ssg *admission.SoftSlotGranter) {
+	p.db.SetCPURequester(ssg)
 }
 
 // GetEncryptionRegistries implements the Engine interface.

@@ -667,7 +667,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, cfg.ClusterIDContainer,
 		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
-		tenantUsage, tenantSettingsWatcher, spanConfig.kvAccessor,
+		tenantUsage, tenantSettingsWatcher, spanConfig.kvAccessor, gcoords.Regular,
 	)
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -1417,6 +1417,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Raft commands like log application and snapshot application may be able
 	// to bypass admission control.
 	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node)
+	s.node.SetPebbleCPU()
 
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.
