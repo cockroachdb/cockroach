@@ -39,6 +39,7 @@ type ReplicaMVCCDataIterator struct {
 	reader   storage.Reader
 	curIndex int
 	ranges   []KeyRange
+	keyTypes storage.IterKeyType
 	// When it is non-nil, it represents the iterator for curIndex.
 	// A non-nil it is valid, else it is either done, or err != nil.
 	it      storage.MVCCIterator
@@ -207,15 +208,16 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 // MVCCIterator only allows changing the upper-bound of an existing iterator,
 // and not both upper and lower bound.
 func NewReplicaMVCCDataIterator(
-	d *roachpb.RangeDescriptor, reader storage.Reader, seekEnd bool,
+	d *roachpb.RangeDescriptor, reader storage.Reader, keyTypes storage.IterKeyType, seekEnd bool,
 ) *ReplicaMVCCDataIterator {
 	if !reader.ConsistentIterators() {
 		panic("ReplicaMVCCDataIterator needs a Reader that provides ConsistentIterators")
 	}
 	ri := &ReplicaMVCCDataIterator{
-		reader:  reader,
-		ranges:  MakeReplicatedKeyRangesExceptLockTable(d),
-		reverse: seekEnd,
+		reader:   reader,
+		ranges:   MakeReplicatedKeyRangesExceptLockTable(d),
+		reverse:  seekEnd,
+		keyTypes: keyTypes,
 	}
 	if ri.reverse {
 		ri.curIndex = len(ri.ranges) - 1
@@ -240,7 +242,7 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 			storage.IterOptions{
 				LowerBound: ri.ranges[ri.curIndex].Start,
 				UpperBound: ri.ranges[ri.curIndex].End,
-				KeyTypes:   storage.IterKeyTypePointsAndRanges,
+				KeyTypes:   ri.keyTypes,
 			})
 		if ri.reverse {
 			ri.it.SeekLT(storage.MakeMVCCMetadataKey(ri.ranges[ri.curIndex].End))

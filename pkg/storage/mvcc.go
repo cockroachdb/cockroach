@@ -4100,6 +4100,28 @@ func MVCCGarbageCollect(
 	return nil
 }
 
+// MVCCGarbageCollectRangeTombstones remove range tombstones from provided
+// writer and update stats to reflect removed keys.
+// TODO(oleg): verify that we don't have points left
+func MVCCGarbageCollectRangeTombstones(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	keys []roachpb.GCRequest_GCRangeKey,
+	timestamp hlc.Timestamp,
+) error {
+	for _, k := range keys {
+		if err := rw.ExperimentalClearMVCCRangeKey(MVCCRangeKey{
+			StartKey:  k.StartKey,
+			EndKey:    k.EndKey,
+			Timestamp: k.Timestamp,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // MVCCFindSplitKey finds a key from the given span such that the left side of
 // the split is roughly targetSize bytes. The returned key will never be chosen
 // from the key ranges listed in keys.NoSplitSpans.

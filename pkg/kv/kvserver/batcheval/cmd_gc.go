@@ -119,6 +119,14 @@ func GC(
 		}
 	}
 
+	// Remove range tombstones.
+	if len(args.RangeKeys) > 0 {
+		if err := storage.MVCCGarbageCollectRangeTombstones(ctx, readWriter, cArgs.Stats,
+			args.RangeKeys, h.Timestamp); err != nil {
+			return result.Result{}, err
+		}
+	}
+
 	// Optionally bump the GC threshold timestamp.
 	var res result.Result
 	if !args.Threshold.IsEmpty() {

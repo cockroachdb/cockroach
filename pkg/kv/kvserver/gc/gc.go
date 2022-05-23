@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -159,7 +160,7 @@ type Info struct {
 	// Stats about the userspace key-values considered, namely the number of
 	// keys with GC'able data, the number of "old" intents and the number of
 	// associated distinct transactions.
-	NumKeysAffected, IntentsConsidered, IntentTxns int
+	NumKeysAffected, NumRangeKeyTombstonesAffected, IntentsConsidered, IntentTxns int
 	// TransactionSpanTotal is the total number of entries in the transaction span.
 	TransactionSpanTotal int
 	// Summary of transactions which were found GCable (assuming that
@@ -193,6 +194,10 @@ type Info struct {
 	// AffectedVersionsValBytes is the number of (fully encoded) bytes deleted from values in the storage engine.
 	// See AffectedVersionsKeyBytes for caveats.
 	AffectedVersionsValBytes int64
+	// Size of keys for removed range key tombstones. This is an approximate value
+	// which is not reflecting underlying storage range fragmentation used for
+	// optimisations.
+	AffectedVersionsRangeTombstonesKeyBytes int64
 }
 
 // RunOptions contains collection of limits that GC run applies when performing operations
@@ -257,14 +262,21 @@ func Run(
 		Threshold: newThreshold,
 	}
 
-	// TODO(oleg): collection of range tombstones would happen here
-	err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, options.IntentAgeThreshold, gcer,
+	err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, options.IntentAgeThreshold,
+		gcer,
 		intentBatcherOptions{
 			maxIntentsPerIntentCleanupBatch:        options.MaxIntentsPerIntentCleanupBatch,
 			maxIntentKeyBytesPerIntentCleanupBatch: options.MaxIntentKeyBytesPerIntentCleanupBatch,
 			maxTxnsPerIntentCleanupBatch:           options.MaxTxnsPerIntentCleanupBatch,
 			intentCleanupBatchTimeout:              options.IntentCleanupBatchTimeout,
 		}, cleanupIntentsFn, &info)
+	if err != nil {
+		return Info{}, err
+	}
+
+	// TODO(oleg): collection of range tombstones would happen here but only if we
+	// didn't fail any point values.
+	err = processRangeTombstones(ctx, desc, snap, newThreshold, gcer, &info)
 	if err != nil {
 		return Info{}, err
 	}
@@ -604,6 +616,137 @@ func isGarbage(
 	}
 	hiddenByRangeTombstone := cur.Key.Timestamp.Less(rangeTombstoneTs)
 	return isDelete || next.Key.Timestamp.LessEq(threshold) || hiddenByRangeTombstone
+}
+
+// rangeTombstoneBatcher accumulates ranges until it gets's to it upper allowed
+// size and flushes results once results are exceeded.
+type rangeTombstoneBatcher struct {
+	ranges        []storage.MVCCRangeKey
+	pendingBytes  int64
+	sizeThreshold int64
+	gcer          GCer
+	info          *Info
+}
+
+func (b *rangeTombstoneBatcher) addAndMaybeFlush(ctx context.Context, ks ...storage.MVCCRangeKey) {
+	for _, k := range ks {
+		b.info.NumRangeKeyTombstonesAffected++
+		b.ranges = append(b.ranges, k)
+		b.pendingBytes += int64(k.EncodedSize())
+		if b.pendingBytes > b.sizeThreshold {
+			b.flush(ctx)
+		}
+	}
+}
+
+func (b *rangeTombstoneBatcher) flush(ctx context.Context) {
+	if len(b.ranges) > 0 {
+		var rKeys []roachpb.GCRequest_GCRangeKey
+		for _, r := range b.ranges {
+			rKeys = append(rKeys, roachpb.GCRequest_GCRangeKey{
+				StartKey:  r.StartKey,
+				EndKey:    r.EndKey,
+				Timestamp: r.Timestamp,
+			})
+		}
+		if err := b.gcer.GC(ctx, nil, rKeys); err != nil {
+			log.Warningf(ctx, "failed to gc range keys: %s", err)
+		} else {
+			b.info.AffectedVersionsRangeTombstonesKeyBytes += b.pendingBytes
+		}
+		b.pendingBytes = 0
+		b.ranges = b.ranges[:0]
+	}
+}
+
+// processRangeTombstones finds all range keys that are below gc threshold and
+// sends them for removal to gcer.
+// We can share all keys starting or ending with the same value for different timestamps.
+// We can reuse underlying slice when extending range.
+func processRangeTombstones(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	rw storage.Reader,
+	gcThreshold hlc.Timestamp,
+	gcer GCer,
+	info *Info, // TODO(oleg): add range key info
+) error {
+	it := rditer.NewReplicaMVCCDataIterator(desc, rw, storage.IterKeyTypeRangesOnly, false /* seekEnd */)
+	defer it.Close()
+
+	clone := func(k storage.MVCCRangeKey) storage.MVCCRangeKey {
+		return k.Clone()
+	}
+	batcher := rangeTombstoneBatcher{
+		sizeThreshold: KeyVersionChunkBytes,
+		gcer:          gcer,
+		info:          info,
+	}
+	var partial []storage.MVCCRangeKey
+	for ; ; it.Next() {
+		ok, err := it.Valid()
+		// TODO(oleg): do something with iterator errors
+		if !ok || err != nil {
+			break
+		}
+		if _, hasR := it.HasPointAndRange(); hasR {
+			var newPartial []storage.MVCCRangeKey
+			rs := it.RangeKeys()
+			iPartial := 0
+			iNew := len(rs) - 1
+			for iPartial < len(partial) && iNew >= 0 {
+				r := rs[iNew]
+				if !r.Timestamp.LessEq(gcThreshold) {
+					break
+				}
+				// If iter range is less - new range, if greater - new range
+				// equal - compare end with start.
+				p := partial[iPartial]
+				switch r.Timestamp.Compare(p.Timestamp) {
+				case 0:
+					if r.StartKey.Equal(p.EndKey) {
+						newPartial = append(newPartial, storage.MVCCRangeKey{
+							StartKey:  p.StartKey,
+							EndKey:    append(p.EndKey[:0], r.EndKey...),
+							Timestamp: p.Timestamp,
+						})
+					} else {
+						// If there's a gap, copy old to complete and add new to partial.
+						batcher.addAndMaybeFlush(ctx, partial[iPartial])
+						newPartial = append(newPartial, clone(r))
+					}
+					iNew--
+					iPartial++
+				case 1:
+					// Range is greater than next partial means we need to
+					// add range to partial list before next partial.
+					newPartial = append(newPartial, clone(r))
+					iNew--
+				case -1:
+					// Range timestamp is lower means partial is now complete.
+					batcher.addAndMaybeFlush(ctx, partial[iPartial])
+					iPartial++
+				}
+			}
+			// All partial ranges that have no matching current ones are complete.
+			batcher.addAndMaybeFlush(ctx, partial[iPartial:]...)
+			// Swap partial with new partial containing updated ranges.
+			partial = newPartial
+			// All new ranges move to partial.
+			for ; iNew >= 0; iNew-- {
+				r := rs[iNew]
+				// We are only interested in ranges beyond gc threshold.
+				if !r.Timestamp.LessEq(gcThreshold) {
+					break
+				}
+				partial = append(partial, clone(r))
+			}
+		}
+	}
+	// Copy partial since they span till the end or range.
+	batcher.addAndMaybeFlush(ctx, partial...)
+	batcher.flush(ctx)
+	return nil
 }
 
 // processLocalKeyRange scans the local range key entries, consisting of

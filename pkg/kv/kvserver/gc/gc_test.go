@@ -138,13 +138,15 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	fakeGCer := makeFakeGCer()
 
 	// Test GC desired behavior.
-	info, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentLongThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
+	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
+		RunOptions{IntentAgeThreshold: intentLongThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Zero(t, info.IntentsConsidered,
 		"Expected no intents considered by GC with default threshold")
 
-	info, err = Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentShortThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
+	info, err = Run(ctx, &desc, snap, nowTs, nowTs,
+		RunOptions{IntentAgeThreshold: intentShortThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Equal(t, 1, info.IntentsConsidered,
@@ -191,7 +193,8 @@ func TestIntentCleanupBatching(t *testing.T) {
 	// Base GCer will cleanup all intents in one go and its result is used as a baseline
 	// to compare batched runs for checking completeness.
 	baseGCer := makeFakeGCer()
-	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold}, gcTTL, &baseGCer, baseGCer.resolveIntents,
+	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold},
+		gcTTL, &baseGCer, baseGCer.resolveIntents,
 		baseGCer.resolveIntentsAsync)
 	if err != nil {
 		t.Fatal("Can't prepare test fixture. Non batched GC run fails.")
@@ -201,7 +204,8 @@ func TestIntentCleanupBatching(t *testing.T) {
 	var batchSize int64 = 7
 	fakeGCer := makeFakeGCer()
 	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
-		RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: batchSize}, gcTTL,
+		RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: batchSize},
+		gcTTL,
 		&fakeGCer, fakeGCer.resolveIntents, fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	maxIntents := 0
@@ -246,8 +250,10 @@ func (r *testResolver) assertInvariants(t *testing.T, opts intentBatcherOptions)
 		}
 		// Last key could overspill over limit, but that's ok.
 		if opts.maxIntentKeyBytesPerIntentCleanupBatch > 0 {
-			require.Less(t, int64(totalKeyBytes-len(batch[len(batch)-1].Key)), opts.maxIntentKeyBytesPerIntentCleanupBatch,
-				fmt.Sprintf("Byte limit was exceeded for more than the last key in batch %d/%d", i+1, len(*r)))
+			require.Less(t, int64(totalKeyBytes-len(batch[len(batch)-1].Key)),
+				opts.maxIntentKeyBytesPerIntentCleanupBatch,
+				fmt.Sprintf("Byte limit was exceeded for more than the last key in batch %d/%d", i+1,
+					len(*r)))
 		}
 		if opts.maxTxnsPerIntentCleanupBatch > 0 {
 			require.LessOrEqual(t, int64(len(txnMap)), opts.maxTxnsPerIntentCleanupBatch,
@@ -275,8 +281,10 @@ func generateScattered(total int, txns int, maxKeySize int, random *rand.Rand) [
 	var intents []testIntent
 	for len(intents) < total {
 		intents = append(intents,
-			testIntent{randomLengthKey(random, maxKeySize),
-				&enginepb.MVCCMetadata{Txn: &enginepb.TxnMeta{ID: txnIds[random.Intn(len(txnIds))]}}})
+			testIntent{
+				randomLengthKey(random, maxKeySize),
+				&enginepb.MVCCMetadata{Txn: &enginepb.TxnMeta{ID: txnIds[random.Intn(len(txnIds))]}},
+			})
 	}
 	return intents
 }
@@ -300,8 +308,10 @@ func generateSequential(total int, maxTxnSize int, maxKeySize int, random *rand.
 			txnUUID = uuid.FastMakeV4()
 		}
 		intents = append(intents,
-			testIntent{randomLengthKey(random, maxKeySize),
-				&enginepb.MVCCMetadata{Txn: &enginepb.TxnMeta{ID: txnUUID}}})
+			testIntent{
+				randomLengthKey(random, maxKeySize),
+				&enginepb.MVCCMetadata{Txn: &enginepb.TxnMeta{ID: txnUUID}},
+			})
 	}
 	return intents
 }
@@ -322,7 +332,8 @@ func TestGCIntentBatcher(t *testing.T) {
 		for _, batchSize := range []int64{0, 1, 10, 100, 1000} {
 			for _, byteCount := range []int64{0, 1, 10, 100, 1000} {
 				for _, txnCount := range []int64{0, 1, 10, 100, 1000} {
-					t.Run(fmt.Sprintf("batch=%d,bytes=%d,txns=%d,txn_intents=%s", batchSize, byteCount, txnCount, s.name), func(t *testing.T) {
+					t.Run(fmt.Sprintf("batch=%d,bytes=%d,txns=%d,txn_intents=%s", batchSize, byteCount,
+						txnCount, s.name), func(t *testing.T) {
 						info := Info{}
 						opts := intentBatcherOptions{
 							maxIntentsPerIntentCleanupBatch:        batchSize,
@@ -405,4 +416,101 @@ func TestGC(t *testing.T) {
 		})
 	require.NoError(t, err)
 	fmt.Printf("Collected keys: %s\n", gcer.gcKeys)
+}
+
+func TestCombineRangeKeys(t *testing.T) {
+	tr := func(start, end string, ts int) func(rw storage.ReadWriter) {
+		return func(rw storage.ReadWriter) {
+			putRange1(t, rw, start, end, ts)
+		}
+	}
+	data := func(d ...func(rw storage.ReadWriter)) []func(rw storage.ReadWriter) {
+		return d
+	}
+
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("zzzzzzzzzzzzzzzzz"),
+	}
+
+	for _, td := range []struct {
+		name      string
+		data      []func(rw storage.ReadWriter)
+		threshold hlc.Timestamp
+	}{
+		{
+			"single range",
+			data(
+				tr("abc", "z", 40)),
+			hlc.Timestamp{WallTime: 45},
+		},
+		{
+			"stacked ranges",
+			data(
+				tr("a", "z", 40),
+				tr("a", "z", 20)),
+			hlc.Timestamp{WallTime: 45},
+		},
+		{
+			"gap in range",
+			data(
+				tr("abc", "abcd", 40),
+				tr("bc", "e", 40)),
+			hlc.Timestamp{WallTime: 45},
+		},
+		{
+			"ignore range above threshold",
+			data(
+				tr("a", "z", 40),
+				tr("a", "z", 20)),
+			hlc.Timestamp{WallTime: 30},
+		},
+		{
+			"enclosed rangee",
+			data(
+				tr("a", "z", 40),
+				tr("d", "f", 20),
+				tr("a", "z", 10),
+			),
+			hlc.Timestamp{WallTime: 45},
+		},
+		{
+			"overlapping ranges",
+			data(
+				tr("a", "l", 40),
+				tr("j", "z", 20)),
+			hlc.Timestamp{WallTime: 45},
+		},
+		{
+			"surrounded range",
+			data(
+				tr("a", "c", 40),
+				tr("c", "e", 20),
+				tr("e", "z", 40)),
+			hlc.Timestamp{WallTime: 45},
+		},
+		{
+			"surrounded with gap",
+			data(
+				tr("a", "c", 40),
+				tr("d", "f", 20),
+				tr("g", "z", 40)),
+			hlc.Timestamp{WallTime: 45},
+		},
+	} {
+		t.Run(td.name, func(t *testing.T) {
+			e := storage.NewDefaultInMemForTesting()
+			for _, f := range td.data {
+				f(e)
+			}
+			s := e.NewSnapshot()
+			gcer := makeFakeGCer()
+			require.NoError(t,
+				processRangeTombstones(context.Background(), &desc, s, td.threshold, &gcer, &Info{}))
+			// TODO(oleg): compare collected keys with expectations
+			// expectations should come from the original keys?
+			// for that we need to abandon functions maybe and produce ranges directly.
+			fmt.Printf("Collected range keys %s\n", gcer.gcRangeKeys)
+		})
+	}
 }
