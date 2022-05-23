@@ -8008,12 +8008,18 @@ var similarOverloads = []tree.Overload{
 }
 
 func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
-	overloads := make([]tree.Overload, 0, len(types.Scalar)+2)
+	overloads := make([]tree.Overload, 0, len(types.Scalar)+3)
 	for _, typ := range append(types.Scalar, types.AnyEnum) {
 		if ok, _ := types.IsValidArrayElementType(typ); ok {
 			overloads = append(overloads, impl(typ))
 		}
 	}
+
+	arrayOfJSONImpl := impl(types.Jsonb)
+	if _, ok := arrayOfJSONImpl.Types.(tree.ArgTypes); ok && arrayOfJSONImpl.Fn != nil {
+		overloads = append(overloads, makeJSONArrayOverload(arrayOfJSONImpl))
+	}
+
 	// Prevent usage in DistSQL because it cannot handle arrays of untyped tuples.
 	tupleOverload := impl(types.AnyTuple)
 	tupleOverload.DistsqlBlocklist = true
@@ -8022,6 +8028,75 @@ func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
 		props:     tree.FunctionProperties{Category: categoryArray},
 		overloads: overloads,
 	}
+}
+
+// Convert a json[] function to a json_array function.
+func makeJSONArrayOverload(arrayOfJSONImpl tree.Overload) tree.Overload {
+	isJSONArray := func(t *types.T) bool {
+		return t != nil && t.ArrayContents() == types.Jsonb
+	}
+	castToJSON := func(t *types.T) *types.T {
+		if isJSONArray(t) {
+			return types.Jsonb
+		}
+		return t
+	}
+	newImpl := arrayOfJSONImpl
+	newImpl.Types = make(tree.ArgTypes, len(arrayOfJSONImpl.Types.(tree.ArgTypes)))
+	argsToCast := make([]int, 0)
+	// TODO: Don't panic if it's not an ArgTypes
+	for i, t := range arrayOfJSONImpl.Types.(tree.ArgTypes) {
+		if isJSONArray(t.Typ) {
+			argsToCast = append(argsToCast, i)
+			newImpl.Types.(tree.ArgTypes)[i] = struct {
+				Name string
+				Typ  *types.T
+			}{t.Name, types.Jsonb}
+		} else {
+			newImpl.Types.(tree.ArgTypes)[i] = t
+		}
+	}
+	newImpl.ReturnType = func(args []tree.TypedExpr) *types.T {
+		return castToJSON(arrayOfJSONImpl.ReturnType(args))
+	}
+	newImpl.Fn = func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+		newArgs := append(tree.Datums{}, args...)
+		for _, i := range argsToCast {
+			j := tree.MustBeDJSON(args[i])
+			if j.Type() != json.ArrayJSONType {
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot call array function on non-array json value")
+			}
+			ary := tree.NewDArray(types.Jsonb)
+			for idx := 0; idx < j.Len(); idx++ {
+				json, err := j.FetchValIdx(idx)
+				if err != nil {
+					return nil, err
+				}
+				d, err := tree.MakeDJSON(json)
+				if err != nil {
+					return nil, err
+				}
+				if err := ary.Append(d); err != nil {
+					return nil, err
+				}
+			}
+			newArgs[i] = ary
+		}
+		ret, err := arrayOfJSONImpl.Fn.(eval.FnOverload)(ctx, newArgs)
+		if err == nil && isJSONArray(ret.ResolvedType()) {
+			dArray := tree.MustBeDArray(ret).Array
+			builder := json.NewArrayBuilder(len(dArray))
+			for _, elt := range dArray {
+				builder.Add(tree.MustBeDJSON(elt).JSON)
+			}
+			return tree.NewDJSON(builder.Build()), nil
+		}
+		return ret, err
+	}
+
+	return newImpl
+
 }
 
 func setProps(props tree.FunctionProperties, d builtinDefinition) builtinDefinition {

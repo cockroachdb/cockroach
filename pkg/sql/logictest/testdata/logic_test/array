@@ -1070,6 +1070,11 @@ SELECT array_remove(NULL::INT[], NULL::INT)
 ----
 NULL
 
+query T
+SELECT array_remove('[1,2,3,2]'::jsonb, '2'::jsonb)
+----
+[1, 3]
+
 # ARRAY_REPLACE function
 
 query T
