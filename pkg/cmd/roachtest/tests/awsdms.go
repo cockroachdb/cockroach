@@ -147,14 +147,20 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.L().Printf("testing all data gets replicated")
 	if err := func() error {
 		for r := retry.StartWithCtx(ctx, waitForReplicationRetryOpts); r.Next(); {
-			var numRows int
-			if err := targetPGConn.QueryRow("SELECT count(1) FROM test_table").Scan(&numRows); err != nil {
-				return err
-			}
-			if numRows == awsdmsNumInitialRows {
+			err := func() error {
+				var numRows int
+				if err := targetPGConn.QueryRow("SELECT count(1) FROM test_table").Scan(&numRows); err != nil {
+					return err
+				}
+				if numRows == awsdmsNumInitialRows {
+					return nil
+				}
+				return errors.Newf("found %d rows when expecting %d", numRows, awsdmsNumInitialRows)
+			}()
+			if err == nil {
 				return nil
 			}
-			t.L().Printf("found %d rows when expecting %d, retrying", numRows, awsdmsNumInitialRows)
+			t.L().Printf("initial replication not up to date, retrying: %+v", err)
 		}
 		return errors.Newf("failed to find target in sync")
 	}(); err != nil {
