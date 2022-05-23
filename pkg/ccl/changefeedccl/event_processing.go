@@ -56,7 +56,6 @@ func newKVEventToRowConsumer(
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
 ) *kvEventToRowConsumer {
-
 	return &kvEventToRowConsumer{
 		frontier:             frontier,
 		encoder:              encoder,
