@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -24,15 +25,53 @@ import (
 // singleRangeBatch contains parts of the originally enqueued requests that have
 // been truncated to be within a single range. All requests within the
 // singleRangeBatch will be issued as a single BatchRequest.
+// TODO(yuzefovich): perform memory accounting for slices other than reqs in
+// singleRangeBatch.
 type singleRangeBatch struct {
 	reqs []roachpb.RequestUnion
 	// positions is a 1-to-1 mapping with reqs to indicate which ordinal among
 	// the originally enqueued requests a particular reqs[i] corresponds to. In
 	// other words, if reqs[i] is (or a part of) enqueuedReqs[j], then
 	// positions[i] = j.
+	//
+	// In the InOrder mode, positions[0] is treated as the priority of this
+	// singleRangeBatch where the smaller the value is, the sooner the Result
+	// will be needed, so batches with the smallest priority value have the
+	// highest "urgency". We look specifically at the 0th position because, by
+	// construction, values in positions slice are increasing.
 	// TODO(yuzefovich): this might need to be [][]int when non-unique requests
 	// are supported.
 	positions []int
+	// subRequestIdx, if non-nil, is a 1-to-1 mapping with positions which
+	// indicates the ordinal of the corresponding reqs[i] among all sub-requests
+	// that comprise a single originally enqueued Scan request. This ordinal
+	// allows us to maintain the order of these sub-requests, each going to a
+	// different range. If reqs[i] is a Get request, then subRequestIdx[i] is 0.
+	//
+	// Consider the following example: original Scan request is Scan(b, f), and
+	// we have three ranges: [a, c), [c, e), [e, g). In Streamer.Enqueue, the
+	// original Scan is broken down into three single-range Scan requests:
+	//   singleRangeReq[0]:
+	//     reqs          = [Scan(b, c)]
+	//     positions     = [0]
+	//     subRequestIdx = [0]
+	//   singleRangeReq[1]:
+	//     reqs          = [Scan(c, e)]
+	//     positions     = [0]
+	//     subRequestIdx = [1]
+	//   singleRangeReq[2]:
+	//     reqs          = [Scan(e, f)]
+	//     positions     = [0]
+	//     subRequestIdx = [2]
+	// Note that positions values are the same (indicating that each
+	// single-range request is a part of the same original multi-range request),
+	// but values of subRequestIdx are different - they will allow us to order
+	// the responses to these single-range requests (which might come back in
+	// any order) correctly.
+	//
+	// subRequestIdx is only allocated in InOrder mode when
+	// Hints.SingleRowLookup is false and some Scan requests were enqueued.
+	subRequestIdx []int
 	// reqsReservedBytes tracks the memory reservation against the budget for
 	// the memory usage of reqs.
 	reqsReservedBytes int64
@@ -41,14 +80,6 @@ type singleRangeBatch struct {
 	// not be empty. Note that TargetBytes of at least minTargetBytes is
 	// necessary but might not be sufficient for the response to be non-empty.
 	minTargetBytes int64
-	// priority is the smallest number in positions. It is the priority of this
-	// singleRangeBatch where the smaller the value is, the sooner the Result
-	// will be needed, so batches with the smallest priority value has the
-	// highest "urgency".
-	// TODO(yuzefovich): once lookup joins are supported, we'll need a way to
-	// order singleRangeBatches that contain parts of a single ScanRequest
-	// spanning multiple ranges.
-	priority int
 }
 
 var _ sort.Interface = &singleRangeBatch{}
@@ -60,6 +91,9 @@ func (r *singleRangeBatch) Len() int {
 func (r *singleRangeBatch) Swap(i, j int) {
 	r.reqs[i], r.reqs[j] = r.reqs[j], r.reqs[i]
 	r.positions[i], r.positions[j] = r.positions[j], r.positions[i]
+	if r.subRequestIdx != nil {
+		r.subRequestIdx[i], r.subRequestIdx[j] = r.subRequestIdx[j], r.subRequestIdx[i]
+	}
 }
 
 // Less returns true if r.reqs[i]'s key comes before r.reqs[j]'s key.
@@ -67,6 +101,24 @@ func (r *singleRangeBatch) Less(i, j int) bool {
 	// TODO(yuzefovich): figure out whether it's worth extracting the keys when
 	// constructing singleRangeBatch object.
 	return r.reqs[i].GetInner().Header().Key.Compare(r.reqs[j].GetInner().Header().Key) < 0
+}
+
+// priority returns the priority value of this batch.
+//
+// It is invalid to call this method on a batch with no requests.
+func (r singleRangeBatch) priority() int {
+	return r.positions[0]
+}
+
+// subPriority returns the "sub-priority" value of this batch that should be
+// compared when two batches have the same priority value.
+//
+// It is invalid to call this method on a batch with no requests.
+func (r singleRangeBatch) subPriority() int {
+	if r.subRequestIdx == nil {
+		return 0
+	}
+	return r.subRequestIdx[0]
 }
 
 func reqsToString(reqs []singleRangeBatch) string {
@@ -245,7 +297,19 @@ func (p *inOrderRequestsProvider) Len() int {
 }
 
 func (p *inOrderRequestsProvider) Less(i, j int) bool {
-	return p.requests[i].priority < p.requests[j].priority
+	rI, rJ := p.requests[i], p.requests[j]
+	if buildutil.CrdbTestBuild {
+		if rI.priority() == rJ.priority() {
+			subI, subJ := rI.subRequestIdx, rJ.subRequestIdx
+			if (subI != nil && subJ == nil) || (subI == nil && subJ != nil) {
+				panic(errors.AssertionFailedf(
+					"unexpectedly only one subRequestIdx is non-nil when priorities are the same",
+				))
+			}
+		}
+	}
+	return rI.priority() < rJ.priority() ||
+		(rI.priority() == rJ.priority() && rI.subPriority() < rJ.subPriority())
 }
 
 func (p *inOrderRequestsProvider) Swap(i, j int) {
