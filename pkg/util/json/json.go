@@ -2249,8 +2249,15 @@ func (j jsonString) Exists(s string) (bool, error) {
 
 func (j jsonArray) Exists(s string) (bool, error) {
 	for i := 0; i < len(j); i++ {
-		if elem, ok := j[i].(jsonString); ok && string(elem) == s {
-			return true, nil
+		switch elem := j[i].(type) {
+		case jsonString:
+			if string(elem) == s {
+				return true, nil
+			}
+		case *jsonEncoded:
+			if elem.typ == StringJSONType && string(elem.value) == s {
+				return true, nil
+			}
 		}
 	}
 	return false, nil
