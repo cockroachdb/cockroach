@@ -200,7 +200,7 @@ type TableHelpers interface {
 	// ComputedColumnExpression returns a validated computed column expression
 	// and its type.
 	// TODO(postamar): make this more low-level instead of consuming an AST
-	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) (tree.Expr, scpb.TypeT)
+	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) tree.Expr
 
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
