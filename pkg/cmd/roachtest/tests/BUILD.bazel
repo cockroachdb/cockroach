@@ -139,7 +139,6 @@ go_library(
         "util_load_group.go",
         "validate_system_schema_after_version_upgrade.go",
         "version.go",
-        "version_upgrade_public_schema.go",
         "versionupgrade.go",
         "ycsb.go",
     ],
