@@ -206,6 +206,17 @@ func (p *planner) addColumnImpl(
 		}
 	}
 
+	if col.Virtual && !col.Nullable {
+		colName := tree.Name(col.Name)
+		newCol, err := n.tableDesc.FindColumnWithName(colName)
+		if err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err, "failed to find newly added column %v", colName)
+		}
+		if err := addNotNullConstraintMutationForCol(n.tableDesc, newCol); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

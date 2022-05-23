@@ -1256,3 +1256,28 @@ JOIN t75147 AS t2 ON
   AND t1.v1 = t2.v1
   AND t1.b = t2.b
 JOIN t75147 AS t3 ON t1.a = t3.a;
+
+
+# Regression test for #81675. The schema change logic must validate that
+# NOT NULL virtual columns indeed validate to non-NULL values for the existing
+# data in the table.
+subtest adding_not_null_virtual_column_validates_81675
+
+statement ok
+CREATE TABLE t81675 (i INT);
+INSERT INTO t81675 VALUES (1), (2), (NULL)
+
+statement ok
+ALTER TABLE t81675 ADD COLUMN j INT GENERATED ALWAYS AS (i+1) VIRTUAL;
+
+statement ok
+ALTER TABLE t81675 DROP COLUMN j;
+
+# Note that the pgcode here ought to be 23502 (not null violation) but is
+# instead 23514 (check constraint violation) because of implementation details.
+onlyif config local-legacy-schema-changer
+statement error pgcode 23514 validation of NOT NULL constraint failed
+ALTER TABLE t81675 ADD COLUMN j INT GENERATED ALWAYS AS (i+1) VIRTUAL NOT NULL;
+
+statement ok
+DROP TABLE t81675;
