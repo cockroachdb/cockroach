@@ -19,6 +19,9 @@ proc stop_secure_server {argv certs_dir} {
     report "END STOP SECURE SERVER"
 }
 
+system "env"
+system "cat /etc/hosts"
+
 start_secure_server $argv $certs_dir ""
 
 spawn $argv sql --certs-dir=$certs_dir

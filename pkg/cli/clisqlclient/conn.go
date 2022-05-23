@@ -168,6 +168,9 @@ func (c *sqlConn) EnsureConn(ctx context.Context) error {
 		defaultDialer.Timeout = base.ConnectTimeout
 	}
 	base.DialFunc = defaultDialer.DialContext
+	base.LookupFunc = func(ctx context.Context, host string) (addrs []string, err error) {
+		return []string{host}, nil
+	}
 	conn, err := pgx.ConnectConfig(ctx, base)
 	if err != nil {
 		// Connection failed: if the failure is due to a missing
