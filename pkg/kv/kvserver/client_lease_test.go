@@ -617,6 +617,11 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 					DefaultZoneConfigOverride: &zcfg,
 					StickyEngineRegistry:      stickyRegistry,
 				},
+				Store: &kvserver.StoreTestingKnobs{
+					// The Raft leadership may not end up on the eu node, but it needs to
+					// be able to acquire the lease anyway.
+					AllowLeaseRequestProposalsWhenNotLeader: true,
+				},
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
