@@ -1490,7 +1490,21 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	now := timeutil.Now()
+	retentionTime := 336 * time.Hour
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: &jobs.TestingKnobs{
+				IntervalOverrides: jobs.TestingIntervalOverrides{
+					RetentionTime: &retentionTime,
+				},
+			},
+			Server: &TestingKnobs{
+				StubTimeNow: func() time.Time { return now },
+			},
+		},
+	})
+
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -1657,6 +1671,7 @@ func TestAdminAPIJobs(t *testing.T) {
 			if e, a := expected, resIDs; !reflect.DeepEqual(e, a) {
 				t.Errorf("%d: expected job IDs %v, but got %v", i, e, a)
 			}
+			require.Equal(t, now.Add(-retentionTime), res.EarliestRetainedTime)
 		}
 	})
 }

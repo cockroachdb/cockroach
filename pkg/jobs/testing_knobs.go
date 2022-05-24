@@ -88,7 +88,7 @@ type TestingIntervalOverrides struct {
 	// Gc overrides the gcIntervalSetting cluster setting.
 	Gc *time.Duration
 
-	// RetentionTime overrides the retentionTimeSetting cluster setting.
+	// RetentionTime overrides the RetentionTimeSetting cluster setting.
 	RetentionTime *time.Duration
 
 	// RetryInitialDelay overrides retryInitialDelaySetting cluster setting.
