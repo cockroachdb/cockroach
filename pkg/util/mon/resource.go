@@ -22,6 +22,17 @@ type Resource interface {
 	NewBudgetExceededError(requestedBytes int64, reservedBytes int64, budgetBytes int64) error
 }
 
+func newMemoryBudgetExceededError(
+	requestedBytes int64, reservedBytes int64, budgetBytes int64,
+) error {
+	return errors.Newf(
+		"memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
+		errors.Safe(requestedBytes),
+		errors.Safe(reservedBytes),
+		errors.Safe(budgetBytes),
+	)
+}
+
 // memoryResource is a Resource that represents memory.
 type memoryResource struct{}
 
@@ -34,12 +45,34 @@ func (m memoryResource) NewBudgetExceededError(
 	requestedBytes int64, reservedBytes int64, budgetBytes int64,
 ) error {
 	return pgerror.WithCandidateCode(
-		errors.Newf(
-			"memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
-			errors.Safe(requestedBytes),
-			errors.Safe(reservedBytes),
-			errors.Safe(budgetBytes),
-		), pgcode.OutOfMemory)
+		newMemoryBudgetExceededError(requestedBytes, reservedBytes, budgetBytes),
+		pgcode.OutOfMemory,
+	)
+}
+
+// memoryResourceWithErrorHint is a Resource that represents memory and augments
+// the "budget exceeded" error with a hint.
+type memoryResourceWithErrorHint struct {
+	hint string
+}
+
+// NewMemoryResourceWithErrorHint returns a new memory Resource that augments
+// all "budget exceeded" errors with the given hint.
+func NewMemoryResourceWithErrorHint(hint string) Resource {
+	return memoryResourceWithErrorHint{hint: hint}
+}
+
+// NewBudgetExceededError implements the Resource interface.
+func (m memoryResourceWithErrorHint) NewBudgetExceededError(
+	requestedBytes int64, reservedBytes int64, budgetBytes int64,
+) error {
+	return pgerror.WithCandidateCode(
+		errors.WithHint(
+			newMemoryBudgetExceededError(requestedBytes, reservedBytes, budgetBytes),
+			m.hint,
+		),
+		pgcode.OutOfMemory,
+	)
 }
 
 // diskResource is a Resource that represents disk.
