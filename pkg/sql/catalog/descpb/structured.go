@@ -278,6 +278,17 @@ func (desc *TableDescriptor) Persistence() tree.Persistence {
 	return tree.PersistencePermanent
 }
 
+// ForEachPublicIndex is exported to provide low-overhead access to the set of
+// public indexes in a table descriptor for use in backup planning.
+//
+// Most users should prefer the methods provided by the catalog package.
+func (desc *TableDescriptor) ForEachPublicIndex(f func(*IndexDescriptor)) {
+	f(&desc.PrimaryIndex)
+	for i := range desc.Indexes {
+		f(&desc.Indexes[i])
+	}
+}
+
 // IsVirtualTable returns true if the TableDescriptor describes a
 // virtual Table (like the information_schema tables) and thus doesn't
 // need to be physically stored.
