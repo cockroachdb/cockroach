@@ -649,6 +649,7 @@ func setProxyContextDefaults() {
 	proxyContext.ValidateAccessInterval = 30 * time.Second
 	proxyContext.PollConfigInterval = 30 * time.Second
 	proxyContext.ThrottleBaseDelay = time.Second
+	proxyContext.DisableConnectionRebalancing = false
 }
 
 var testDirectorySvrContext struct {
