@@ -39,7 +39,6 @@ go_library(
         "drop.go",
         "drt.go",
         "encryption.go",
-        "engine_switch.go",
         "event_log.go",
         "fixtures.go",
         "flowable.go",
@@ -224,7 +223,6 @@ go_library(
         "@com_github_shopify_sarama//:sarama",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_protobuf//proto",
-        "@org_golang_x_exp//rand",
         "@org_golang_x_sync//errgroup",
     ],
 )
