@@ -40,7 +40,7 @@ go_library(
 
 go_test(
     name = "rangefeed_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "budget_test.go",
         "catchup_scan_bench_test.go",

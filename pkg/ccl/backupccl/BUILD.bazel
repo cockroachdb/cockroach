@@ -254,6 +254,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
+        "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/protoutil",

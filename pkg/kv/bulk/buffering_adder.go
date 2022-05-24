@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -78,6 +79,7 @@ func MakeBulkAdder(
 	timestamp hlc.Timestamp,
 	opts kvserverbase.BulkAdderOptions,
 	bulkMon *mon.BytesMonitor,
+	sendLimiter limit.ConcurrentRequestLimiter,
 ) (*BufferingAdder, error) {
 	if opts.MinBufferSize == 0 {
 		opts.MinBufferSize = 32 << 20
@@ -98,6 +100,7 @@ func MakeBulkAdder(
 			batchTS:                opts.BatchTimestamp,
 			writeAtBatchTS:         opts.WriteAtBatchTimestamp,
 			mem:                    bulkMon.MakeBoundAccount(),
+			limiter:                sendLimiter,
 		},
 		timestamp:      timestamp,
 		maxBufferLimit: opts.MaxBufferSize,

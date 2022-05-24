@@ -6,6 +6,7 @@ go_library(
         "in_mem_listener.go",
         "test_directory_svr.go",
         "test_simple_directory_svr.go",
+        "test_static_directory_svr.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr",
     visibility = ["//visibility:public"],

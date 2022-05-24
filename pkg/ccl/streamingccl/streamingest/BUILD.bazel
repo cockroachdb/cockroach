@@ -111,6 +111,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",

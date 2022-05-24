@@ -45,13 +45,13 @@ database_name  schema_name  type_name  grantee  privilege_type  is_grantable
 test           public       enum_a     user1    USAGE           false
 test           schema_a     enum_b     user1    ALL             true
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR user1
 ----
-database_name  schema_name  relation_name  grantee  privilege_type
-test           public       enum_a         user1    USAGE
-test           public       enum_a+b       user1    USAGE
-test           schema_a     enum_b         user1    ALL
+database_name  schema_name  relation_name  grantee  privilege_type  is_grantable
+test           public       enum_a         user1    USAGE           false
+test           public       enum_a+b       user1    USAGE           false
+test           schema_a     enum_b         user1    ALL             true
 
 statement error type "non_existent" does not exist
 SHOW GRANTS ON TYPE non_existent

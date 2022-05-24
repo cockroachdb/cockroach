@@ -9,10 +9,10 @@ CREATE SCHEMA s2;
 statement ok
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA s TO testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee  privilege_type
+database_name  schema_name  relation_name  grantee  privilege_type  is_grantable
 
 statement ok
 CREATE SEQUENCE s.q;
@@ -32,46 +32,46 @@ SET ROLE root
 statement ok
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA s TO testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee   privilege_type
-test           s            q              testuser  SELECT
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           s            q              testuser  SELECT          false
 
 statement ok
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA s TO testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee   privilege_type
-test           s            q              testuser  SELECT
-test           s            q              testuser  USAGE
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           s            q              testuser  SELECT          false
+test           s            q              testuser  USAGE           false
 
 statement ok
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA s, s2 TO testuser, testuser2
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           s            q              testuser   SELECT
-test           s            q              testuser   USAGE
-test           s            q              testuser2  SELECT
-test           s2           q              testuser   SELECT
-test           s2           q              testuser2  SELECT
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           s            q              testuser   SELECT          false
+test           s            q              testuser   USAGE           false
+test           s            q              testuser2  SELECT          false
+test           s2           q              testuser   SELECT          false
+test           s2           q              testuser2  SELECT          false
 
 statement ok
 GRANT ALL ON ALL SEQUENCES IN SCHEMA s, s2 TO testuser, testuser2
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           s            q              testuser   ALL
-test           s            q              testuser2  ALL
-test           s2           q              testuser   ALL
-test           s2           q              testuser2  ALL
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           s            q              testuser   ALL             true
+test           s            q              testuser2  ALL             true
+test           s2           q              testuser   ALL             true
+test           s2           q              testuser2  ALL             true
 
 statement ok
 CREATE USER testuser3
@@ -80,9 +80,9 @@ CREATE USER testuser3
 statement ok
 GRANT ALL ON ALL TABLES IN SCHEMA s2 TO testuser3
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser3
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           s2           q              testuser3  ALL
-test           s2           t              testuser3  ALL
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           s2           q              testuser3  ALL             true
+test           s2           t              testuser3  ALL             true

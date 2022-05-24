@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	math "math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
@@ -247,9 +249,10 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
 					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil, nil, opts...)
 			},
-			Settings:      s.ClusterSettings(),
-			Codec:         keys.SystemSQLCodec,
-			BackupMonitor: mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, 0, s.ClusterSettings()),
+			Settings:          s.ClusterSettings(),
+			Codec:             keys.SystemSQLCodec,
+			BackupMonitor:     mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, 0, s.ClusterSettings()),
+			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},
 		EvalCtx: &eval.Context{
 			Codec:    keys.SystemSQLCodec,

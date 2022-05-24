@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
@@ -763,6 +765,121 @@ func TestDirectoryConnect(t *testing.T) {
 	})
 }
 
+func TestPodWatcher(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	defer log.Scope(t).Close(t)
+
+	// Start KV server, and enable session migration.
+	params, _ := tests.CreateTestServerParams()
+	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	_, err := mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
+	require.NoError(t, err)
+
+	// Start four SQL pods for the test tenant.
+	var addresses []string
+	tenantID := serverutils.TestTenantID()
+	const podCount = 4
+	for i := 0; i < podCount; i++ {
+		params := tests.CreateTestTenantParams(tenantID)
+		// The first SQL pod will create the tenant keyspace in the host.
+		if i != 0 {
+			params.Existing = true
+		}
+		tenant, tenantDB := serverutils.StartTenant(t, s, params)
+		tenant.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+		defer tenant.Stopper().Stop(ctx)
+
+		// Create a test user. We only need to do it once.
+		if i == 0 {
+			_, err = tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
+			require.NoError(t, err)
+			_, err = tenantDB.Exec("GRANT admin TO testuser")
+			require.NoError(t, err)
+		}
+		tenantDB.Close()
+
+		addresses = append(addresses, tenant.SQLAddr())
+	}
+
+	// Register only 3 SQL pods in the directory server. We will add the 4th
+	// once the watcher has been established.
+	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), nil /* timeSource */)
+	tds.CreateTenant(tenantID, "tenant-cluster")
+	for i := 0; i < 3; i++ {
+		tds.AddPod(tenantID, &tenant.Pod{
+			TenantID:       tenantID.ToUint64(),
+			Addr:           addresses[i],
+			State:          tenant.RUNNING,
+			StateTimestamp: timeutil.Now(),
+		})
+	}
+	require.NoError(t, tds.Start(ctx))
+
+	opts := &ProxyOptions{SkipVerify: true}
+	opts.testingKnobs.directoryServer = tds
+	opts.testingKnobs.balancerOpts = []balancer.Option{
+		balancer.NoRebalanceLoop(),
+		balancer.RebalanceRate(1.0),
+	}
+	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addr, tenantID)
+
+	// Open 12 connections to it. The balancer should distribute the connections
+	// evenly across 3 SQL pods (i.e. 4 connections each).
+	dist := map[string]int{}
+	var conns []*gosql.DB
+	for i := 0; i < 12; i++ {
+		db, err := gosql.Open("postgres", connectionString)
+		db.SetMaxOpenConns(1)
+		defer db.Close()
+		require.NoError(t, err)
+		addr := queryAddr(ctx, t, db)
+		dist[addr]++
+		conns = append(conns, db)
+	}
+
+	// Validate that connections are balanced evenly (i.e. 12/3 = 4).
+	for _, d := range dist {
+		require.Equal(t, 4, d)
+	}
+
+	// Register the 4th pod. This should emit an event to the pod watcher, which
+	// triggers rebalancing. Based on the balancer's algorithm, balanced is
+	// defined as [2, 4] connections. As a result, 2 connections will be moved
+	// to the new pod. Note that for testing, we set customRebalanceRate to 1.0.
+	tds.AddPod(tenantID, &tenant.Pod{
+		TenantID:       tenantID.ToUint64(),
+		Addr:           addresses[3],
+		State:          tenant.RUNNING,
+		StateTimestamp: timeutil.Now(),
+	})
+
+	// Wait until two connections have been migrated.
+	testutils.SucceedsSoon(t, func() error {
+		if proxy.metrics.ConnMigrationSuccessCount.Count() >= 2 {
+			return nil
+		}
+		return errors.New("waiting for connection migration")
+	})
+
+	// Reset distribution and count again.
+	dist = map[string]int{}
+	for _, c := range conns {
+		addr := queryAddr(ctx, t, c)
+		dist[addr]++
+	}
+
+	// Validate distribution.
+	var counts []int
+	for _, d := range dist {
+		counts = append(counts, d)
+	}
+	sort.Ints(counts)
+	require.Equal(t, []int{2, 3, 3, 4}, counts)
+}
+
 func TestConnectionMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -773,9 +890,7 @@ func TestConnectionMigration(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tenantID := serverutils.TestTenantID()
 
-	// TODO(rafi): use ALTER TENANT ALL when available.
-	_, err := mainDB.Exec(`INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
-		(0, 'server.user_login.session_revival_token.enabled', 'true', 'b')`)
+	_, err := mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
 	require.NoError(t, err)
 
 	// Start first SQL pod.
@@ -805,23 +920,6 @@ func TestConnectionMigration(t *testing.T) {
 	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
 
 	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addr, tenantID)
-
-	type queryer interface {
-		QueryRowContext(context.Context, string, ...interface{}) *gosql.Row
-	}
-	// queryAddr queries the SQL node that `db` is connected to for its address.
-	queryAddr := func(t *testing.T, ctx context.Context, db queryer) string {
-		t.Helper()
-		var host, port string
-		require.NoError(t, db.QueryRowContext(ctx, `
-			SELECT
-				a.value AS "host", b.value AS "port"
-			FROM crdb_internal.node_runtime_info a, crdb_internal.node_runtime_info b
-			WHERE a.component = 'DB' AND a.field = 'Host'
-				AND b.component = 'DB' AND b.field = 'Port'
-		`).Scan(&host, &port))
-		return fmt.Sprintf("%s:%s", host, port)
-	}
 
 	// validateMiscMetrics ensures that our invariant of
 	// attempts = success + error_recoverable + error_fatal is valid, and all
@@ -887,7 +985,7 @@ func TestConnectionMigration(t *testing.T) {
 		}
 
 		t.Run("normal_transfer", func(t *testing.T) {
-			require.Equal(t, tenant1.SQLAddr(), queryAddr(t, tCtx, db))
+			require.Equal(t, tenant1.SQLAddr(), queryAddr(tCtx, t, db))
 
 			_, err = db.Exec("SET application_name = 'foo'")
 			require.NoError(t, err)
@@ -895,7 +993,7 @@ func TestConnectionMigration(t *testing.T) {
 			// Show that we get alternating SQL pods when we transfer.
 			require.NoError(t, f.TransferConnection())
 			require.Equal(t, int64(1), f.metrics.ConnMigrationSuccessCount.Count())
-			require.Equal(t, tenant2.SQLAddr(), queryAddr(t, tCtx, db))
+			require.Equal(t, tenant2.SQLAddr(), queryAddr(tCtx, t, db))
 
 			var name string
 			require.NoError(t, db.QueryRow("SHOW application_name").Scan(&name))
@@ -906,7 +1004,7 @@ func TestConnectionMigration(t *testing.T) {
 
 			require.NoError(t, f.TransferConnection())
 			require.Equal(t, int64(2), f.metrics.ConnMigrationSuccessCount.Count())
-			require.Equal(t, tenant1.SQLAddr(), queryAddr(t, tCtx, db))
+			require.Equal(t, tenant1.SQLAddr(), queryAddr(tCtx, t, db))
 
 			require.NoError(t, db.QueryRow("SHOW application_name").Scan(&name))
 			require.Equal(t, "bar", name)
@@ -929,7 +1027,7 @@ func TestConnectionMigration(t *testing.T) {
 			// This loop will run approximately 5 seconds.
 			var tenant1Addr, tenant2Addr int
 			for i := 0; i < 100; i++ {
-				addr := queryAddr(t, tCtx, db)
+				addr := queryAddr(tCtx, t, db)
 				if addr == tenant1.SQLAddr() {
 					tenant1Addr++
 				} else {
@@ -962,7 +1060,7 @@ func TestConnectionMigration(t *testing.T) {
 		// transfers should not close the connection.
 		t.Run("failed_transfers_with_tx", func(t *testing.T) {
 			initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
-			initAddr := queryAddr(t, tCtx, db)
+			initAddr := queryAddr(tCtx, t, db)
 
 			err = crdb.ExecuteTx(tCtx, db, nil /* txopts */, func(tx *gosql.Tx) error {
 				// Run multiple times to ensure that connection isn't closed.
@@ -974,7 +1072,7 @@ func TestConnectionMigration(t *testing.T) {
 					if !assert.Regexp(t, "cannot serialize", err.Error()) {
 						return errors.Wrap(err, "non-serialization error")
 					}
-					addr := queryAddr(t, tCtx, tx)
+					addr := queryAddr(tCtx, t, tx)
 					if initAddr != addr {
 						return errors.Newf(
 							"address does not match, expected %s, found %s",
@@ -996,7 +1094,7 @@ func TestConnectionMigration(t *testing.T) {
 
 			// Once the transaction is closed, transfers should work.
 			require.NoError(t, f.TransferConnection())
-			require.NotEqual(t, initAddr, queryAddr(t, tCtx, db))
+			require.NotEqual(t, initAddr, queryAddr(tCtx, t, db))
 			require.Nil(t, f.ctx.Err())
 			require.Equal(t, initSuccessCount+1, f.metrics.ConnMigrationSuccessCount.Count())
 			require.Equal(t, int64(5), f.metrics.ConnMigrationErrorRecoverableCount.Count())
@@ -1011,7 +1109,7 @@ func TestConnectionMigration(t *testing.T) {
 		t.Run("failed_transfers_with_dial_issues", func(t *testing.T) {
 			initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
 			initErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
-			initAddr := queryAddr(t, tCtx, db)
+			initAddr := queryAddr(tCtx, t, db)
 
 			// Set the delay longer than the timeout.
 			lookupAddrDelayDuration = 10 * time.Second
@@ -1020,7 +1118,7 @@ func TestConnectionMigration(t *testing.T) {
 			err := f.TransferConnection()
 			require.Error(t, err)
 			require.Regexp(t, "injected delays", err.Error())
-			require.Equal(t, initAddr, queryAddr(t, tCtx, db))
+			require.Equal(t, initAddr, queryAddr(tCtx, t, db))
 			require.Nil(t, f.ctx.Err())
 
 			require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
@@ -1617,4 +1715,22 @@ func mustGetTestSimpleDirectoryServer(
 	svr, ok := handler.testingKnobs.directoryServer.(*tenantdirsvr.TestSimpleDirectoryServer)
 	require.True(t, ok)
 	return svr
+}
+
+type queryer interface {
+	QueryRowContext(context.Context, string, ...interface{}) *gosql.Row
+}
+
+// queryAddr queries the SQL node that `db` is connected to for its address.
+func queryAddr(ctx context.Context, t *testing.T, db queryer) string {
+	t.Helper()
+	var host, port string
+	require.NoError(t, db.QueryRowContext(ctx, `
+			SELECT
+				a.value AS "host", b.value AS "port"
+			FROM crdb_internal.node_runtime_info a, crdb_internal.node_runtime_info b
+			WHERE a.component = 'DB' AND a.field = 'Host'
+				AND b.component = 'DB' AND b.field = 'Port'
+		`).Scan(&host, &port))
+	return fmt.Sprintf("%s:%s", host, port)
 }

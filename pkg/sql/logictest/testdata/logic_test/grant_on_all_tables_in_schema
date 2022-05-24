@@ -9,10 +9,10 @@ CREATE SCHEMA s2;
 statement ok
 GRANT SELECT ON ALL TABLES IN SCHEMA s TO testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee  privilege_type
+database_name  schema_name  relation_name  grantee  privilege_type  is_grantable
 
 statement ok
 CREATE TABLE s.t();
@@ -21,79 +21,79 @@ CREATE TABLE s2.t();
 statement ok
 GRANT SELECT ON ALL TABLES IN SCHEMA s TO testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee   privilege_type
-test           s            t              testuser  SELECT
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           s            t              testuser  SELECT          false
 
 statement ok
 GRANT SELECT ON ALL TABLES IN SCHEMA s, s2 TO testuser, testuser2
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           s            t              testuser   SELECT
-test           s            t              testuser2  SELECT
-test           s2           t              testuser   SELECT
-test           s2           t              testuser2  SELECT
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           s            t              testuser   SELECT          false
+test           s            t              testuser2  SELECT          false
+test           s2           t              testuser   SELECT          false
+test           s2           t              testuser2  SELECT          false
 
 statement ok
 GRANT ALL ON ALL TABLES IN SCHEMA s, s2 TO testuser, testuser2
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           s            t              testuser   ALL
-test           s            t              testuser2  ALL
-test           s2           t              testuser   ALL
-test           s2           t              testuser2  ALL
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           s            t              testuser   ALL             true
+test           s            t              testuser2  ALL             true
+test           s2           t              testuser   ALL             true
+test           s2           t              testuser2  ALL             true
 
 statement ok
 REVOKE SELECT ON ALL TABLES IN SCHEMA s, s2 FROM testuser, testuser2
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           s            t              testuser   CREATE
-test           s            t              testuser   DELETE
-test           s            t              testuser   DROP
-test           s            t              testuser   GRANT
-test           s            t              testuser   INSERT
-test           s            t              testuser   UPDATE
-test           s            t              testuser   ZONECONFIG
-test           s            t              testuser2  CREATE
-test           s            t              testuser2  DELETE
-test           s            t              testuser2  DROP
-test           s            t              testuser2  GRANT
-test           s            t              testuser2  INSERT
-test           s            t              testuser2  UPDATE
-test           s            t              testuser2  ZONECONFIG
-test           s2           t              testuser   CREATE
-test           s2           t              testuser   DELETE
-test           s2           t              testuser   DROP
-test           s2           t              testuser   GRANT
-test           s2           t              testuser   INSERT
-test           s2           t              testuser   UPDATE
-test           s2           t              testuser   ZONECONFIG
-test           s2           t              testuser2  CREATE
-test           s2           t              testuser2  DELETE
-test           s2           t              testuser2  DROP
-test           s2           t              testuser2  GRANT
-test           s2           t              testuser2  INSERT
-test           s2           t              testuser2  UPDATE
-test           s2           t              testuser2  ZONECONFIG
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           s            t              testuser   CREATE          true
+test           s            t              testuser   DELETE          true
+test           s            t              testuser   DROP            true
+test           s            t              testuser   GRANT           true
+test           s            t              testuser   INSERT          true
+test           s            t              testuser   UPDATE          true
+test           s            t              testuser   ZONECONFIG      true
+test           s            t              testuser2  CREATE          true
+test           s            t              testuser2  DELETE          true
+test           s            t              testuser2  DROP            true
+test           s            t              testuser2  GRANT           true
+test           s            t              testuser2  INSERT          true
+test           s            t              testuser2  UPDATE          true
+test           s            t              testuser2  ZONECONFIG      true
+test           s2           t              testuser   CREATE          true
+test           s2           t              testuser   DELETE          true
+test           s2           t              testuser   DROP            true
+test           s2           t              testuser   GRANT           true
+test           s2           t              testuser   INSERT          true
+test           s2           t              testuser   UPDATE          true
+test           s2           t              testuser   ZONECONFIG      true
+test           s2           t              testuser2  CREATE          true
+test           s2           t              testuser2  DELETE          true
+test           s2           t              testuser2  DROP            true
+test           s2           t              testuser2  GRANT           true
+test           s2           t              testuser2  INSERT          true
+test           s2           t              testuser2  UPDATE          true
+test           s2           t              testuser2  ZONECONFIG      true
 
 statement ok
 REVOKE ALL ON ALL TABLES IN SCHEMA s, s2 FROM testuser, testuser2
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser, testuser2
 ----
-database_name  schema_name  relation_name  grantee  privilege_type
+database_name  schema_name  relation_name  grantee  privilege_type  is_grantable
 
 # Verify that the database name is resolved correctly if specified.
 statement ok
