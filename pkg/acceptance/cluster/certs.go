@@ -25,7 +25,11 @@ const certsDir = ".localcluster.certs"
 
 var absCertsDir string
 
-// keyLen is the length (in bits) of the generated CA and node certs.
+// keyLen is the length (in bits) of the generated TLS certs.
+//
+// This needs to be at least 2048 since the newer versions of openssl
+// (used by some tests) produce an error 'ee key too small' for
+// smaller values.
 const keyLen = 2048
 
 // AbsCertsDir returns the absolute path to the certificate directory.
@@ -53,12 +57,12 @@ func GenerateCerts(ctx context.Context) func() {
 	// Root user.
 	maybePanic(security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		2048, 48*time.Hour, false, security.RootUserName(), true /* generate pk8 key */))
+		keyLen, 48*time.Hour, false, security.RootUserName(), true /* generate pk8 key */))
 
 	// Test user.
 	maybePanic(security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		1024, 48*time.Hour, false, security.TestUserName(), true /* generate pk8 key */))
+		keyLen, 48*time.Hour, false, security.TestUserName(), true /* generate pk8 key */))
 
 	// Certs for starting a cockroach server. Key size is from cli/cert.go:defaultKeySize.
 	maybePanic(security.CreateNodePair(
