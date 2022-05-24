@@ -1,0 +1,14 @@
+# LogicTest: local-mixed-22.1-22.2
+
+user testuser
+
+statement error pq: only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to read crdb_internal.cluster_settings
+SELECT * FROM crdb_internal.cluster_settings;
+
+user root
+
+statement error pq: system cluster privileges are not supported until upgrade to version SystemPrivilegesTable is finalized
+GRANT SYSTEM MODIFYCLUSTERSETTING TO root
+
+statement error pq: system cluster privileges are not supported until upgrade to version SystemPrivilegesTable is finalized
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM root

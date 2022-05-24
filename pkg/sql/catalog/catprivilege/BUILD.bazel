@@ -18,6 +18,8 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/catconstants",
+        "//pkg/sql/systemprivilege",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

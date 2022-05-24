@@ -11,9 +11,13 @@
 package catprivilege
 
 import (
+	"reflect"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/systemprivilege"
+	"github.com/cockroachdb/errors"
 )
 
 // Validate validates a privilege descriptor.
@@ -51,4 +55,19 @@ func allowedSuperuserPrivileges(objectNameKey catalog.NameKey) privilege.List {
 		return privs
 	}
 	return catpb.DefaultSuperuserPrivileges
+}
+
+// ValidateSystemPrivilegeObject validates a SystemPrivilegeObject.
+// TODO(richardjcai): Make sure the actual privilege descriptor is validated.
+func ValidateSystemPrivilegeObject(systemPrivilegeObject catalog.SystemPrivilegeObject) error {
+	out, err := systemprivilege.Parse(systemPrivilegeObject.ToString())
+	if err != nil {
+		return err
+	}
+
+	if !reflect.DeepEqual(out, systemPrivilegeObject) {
+		return errors.Newf("system privilege object is invalid, expected %v, got %v", out, systemPrivilegeObject)
+	}
+
+	return nil
 }

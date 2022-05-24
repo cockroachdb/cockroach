@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "systemprivilege",
+    srcs = ["system_privilege.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/systemprivilege",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "systemprivilege_test",
+    srcs = ["system_privilege_test.go"],
+    embed = [":systemprivilege"],
+    deps = [
+        "//pkg/sql/catalog",
+        "@com_github_stretchr_testify//require",
+    ],
+)
