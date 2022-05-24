@@ -658,8 +658,8 @@ CREATE TABLE system.span_count (
 CREATE TABLE system.privileges (
 	username STRING NOT NULL,
 	path STRING NOT NULL,
-	privileges VARBIT NOT NULL,
-	grant_options VARBIT NOT NULL,
+	privileges STRING[] NOT NULL,
+	grant_options STRING[] NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username, path),
 	FAMILY "primary" (username, path, privileges, grant_options)
 );`
@@ -2401,8 +2401,8 @@ var (
 			[]descpb.ColumnDescriptor{
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "path", ID: 2, Type: types.String},
-				{Name: "privileges", ID: 3, Type: types.VarBit},
-				{Name: "grant_options", ID: 4, Type: types.VarBit},
+				{Name: "privileges", ID: 3, Type: types.StringArray},
+				{Name: "grant_options", ID: 4, Type: types.StringArray},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
