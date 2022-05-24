@@ -957,7 +957,7 @@ func (a *Allocator) allocateTargetFromList(
 	candidateStores StoreList,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
-	options *rangeCountScorerOptions,
+	options scorerOptions,
 	allowMultipleReplsPerNode bool,
 	targetType targetReplicaType,
 ) (roachpb.ReplicationTarget, string) {
@@ -1454,7 +1454,7 @@ func (a Allocator) RebalanceNonVoter(
 func (a *Allocator) scorerOptions() *rangeCountScorerOptions {
 	return &rangeCountScorerOptions{
 		deterministic:           a.storePool.deterministic,
-		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
+		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.storePool.st.SV),
 	}
 }
 
@@ -1470,7 +1470,7 @@ func (a *Allocator) scorerOptionsForScatter() *scatterScorerOptions {
 		// made by the replicateQueue during normal course of operations. In other
 		// words, we don't want stores that are too far away from the mean to be
 		// affected by the jitter.
-		jitter: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
+		jitter: RangeRebalanceThreshold.Get(&a.storePool.st.SV),
 	}
 }
 
@@ -2093,6 +2093,8 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	return false
 }
 
+// preferredLeaseholders returns a slice of replica descriptors corresponding to
+// replicas that meet lease preferences (among the `existing` replicas).
 func (a Allocator) preferredLeaseholders(
 	conf roachpb.SpanConfig, existing []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
