@@ -394,6 +394,31 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 	return nil
 }
 
+// SchemaChangerStateInDescs goes over all mutable descriptors and cleans any
+// empty state information.
+func SchemaChangerStateInDescs(descriptors []catalog.MutableDescriptor) error {
+	nonEmptyJobs := make(map[jobspb.JobID]struct{})
+	// Track all the schema changer states that have a non-empty job associated
+	// withe them.
+	for _, desc := range descriptors {
+		if state := desc.GetDeclarativeSchemaChangerState(); state != nil &&
+			len(state.Targets) > 0 {
+			nonEmptyJobs[state.JobID] = struct{}{}
+		}
+	}
+	// Clean up any schema changer states that have empty jobs that don't have any
+	// targets associated.
+	for _, desc := range descriptors {
+		if state := desc.GetDeclarativeSchemaChangerState(); state != nil &&
+			len(state.Targets) == 0 {
+			if _, found := nonEmptyJobs[state.JobID]; !found {
+				desc.SetDeclarativeSchemaChangerState(nil)
+			}
+		}
+	}
+	return nil
+}
+
 // TypeDescs rewrites all ID's in the input slice of TypeDescriptors
 // using the input ID rewrite mapping.
 func TypeDescs(types []*typedesc.Mutable, descriptorRewrites jobspb.DescRewriteMap) error {
@@ -521,9 +546,6 @@ func rewriteSchemaChangerState(
 		}
 		// TODO(ajwerner): Remember to rewrite views when the time comes. Currently
 		// views are not handled by the declarative schema changer.
-	}
-	if len(state.Targets) == 0 {
-		d.SetDeclarativeSchemaChangerState(nil)
 	}
 	return nil
 }

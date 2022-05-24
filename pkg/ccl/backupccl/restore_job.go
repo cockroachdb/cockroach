@@ -677,6 +677,7 @@ func createImportingDescriptors(
 ) (*restorationDataBase, *mainRestorationData, error) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
+	var allMutableDescs []catalog.MutableDescriptor
 	var databases []catalog.DatabaseDescriptor
 	var writtenTypes []catalog.TypeDescriptor
 	var schemas []*schemadesc.Mutable
@@ -706,19 +707,23 @@ func createImportingDescriptors(
 			}
 			tables = append(tables, mut)
 			mutableTables = append(mutableTables, mut)
+			allMutableDescs = append(allMutableDescs, mut)
 			oldTableIDs = append(oldTableIDs, mut.GetID())
 		case catalog.DatabaseDescriptor:
 			if _, ok := details.DescriptorRewrites[desc.GetID()]; ok {
 				mut := dbdesc.NewBuilder(desc.DatabaseDesc()).BuildCreatedMutableDatabase()
 				databases = append(databases, mut)
 				mutableDatabases = append(mutableDatabases, mut)
+				allMutableDescs = append(allMutableDescs, mut)
 			}
 		case catalog.SchemaDescriptor:
 			mut := schemadesc.NewBuilder(desc.SchemaDesc()).BuildCreatedMutableSchema()
 			schemas = append(schemas, mut)
+			allMutableDescs = append(allMutableDescs, mut)
 		case catalog.TypeDescriptor:
 			mut := typedesc.NewBuilder(desc.TypeDesc()).BuildCreatedMutableType()
 			types = append(types, mut)
+			allMutableDescs = append(allMutableDescs, mut)
 		}
 	}
 
@@ -811,6 +816,12 @@ func createImportingDescriptors(
 	// descriptors will not be written to disk, and is only for accurate,
 	// in-memory resolution hereon out.
 	if err := rewrite.TypeDescs(types, details.DescriptorRewrites); err != nil {
+		return nil, nil, err
+	}
+
+	// Finally, clean up / update any schema changer state inside descriptors
+	// globally.
+	if err := rewrite.SchemaChangerStateInDescs(allMutableDescs); err != nil {
 		return nil, nil, err
 	}
 
