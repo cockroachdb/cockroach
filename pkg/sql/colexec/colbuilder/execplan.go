@@ -1237,6 +1237,7 @@ func NewColOperator(
 					}
 					typs = append(typs, typ)
 					argIdxs[i] = castIdx
+					argTypes[i] = typ
 				}
 
 				partitionColIdx := tree.NoColumnIdx
