@@ -1284,7 +1284,7 @@ and the system tenant using the \connect command.`,
 	DemoNoLicense = FlagInfo{
 		Name: "disable-demo-license",
 		Description: `
-If set, disable cockroach demo from attempting to obtain a temporary license.`,
+If set, disable enterprise features.`,
 	}
 
 	UseEmptyDatabase = FlagInfo{
