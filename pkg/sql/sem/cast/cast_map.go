@@ -493,7 +493,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 	},
 	oid.T_name: {
 		oid.T_bpchar:  {MaxContext: ContextAssignment, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
-		oid.T_text:    {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
+		oid.T_text:    {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.LeakProof},
 		oid.T_varchar: {MaxContext: ContextAssignment, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		// Automatic I/O conversions to string types.
 		oid.T_char: {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
@@ -720,7 +720,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_bpchar:      {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		oid.T_char:        {MaxContext: ContextAssignment, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
 		oidext.T_geometry: {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
-		oid.T_name:        {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Immutable},
+		oid.T_name:        {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.LeakProof},
 		oid.T_regclass:    {MaxContext: ContextImplicit, origin: ContextOriginPgCast, Volatility: volatility.Stable},
 		// We include a TEXT->TEXT entry to mimic the VARCHAR->VARCHAR entry
 		// that is included in the pg_cast table. Postgres doesn't include a

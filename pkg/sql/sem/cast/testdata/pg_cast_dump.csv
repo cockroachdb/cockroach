@@ -7,7 +7,7 @@ castsource|casttarget|provolatile|proleakproof|castcontext|pg_version
 18|25|i|f|i|13.5
 18|1042|i|f|a|13.5
 18|1043|i|f|a|13.5
-19|25|i|f|i|13.5
+19|25|i|t|i|14.2
 19|1042|i|f|a|13.5
 19|1043|i|f|a|13.5
 20|21|i|f|a|13.5
@@ -57,7 +57,7 @@ castsource|casttarget|provolatile|proleakproof|castcontext|pg_version
 23|1700|i|f|i|13.5
 24|20|i|f|a|13.5
 25|18|i|f|a|13.5
-25|19|i|f|i|13.5
+25|19|i|t|i|14.2
 25|142|s|f|e|13.5
 25|2205|s|f|i|13.5
 26|20|i|f|a|13.5
