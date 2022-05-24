@@ -4720,6 +4720,17 @@ grant_stmt:
       WithGrantOption: $11.bool(),
     }
   }
+| GRANT SYSTEM privileges TO role_spec_list opt_with_grant_option
+  {
+    $$.val = &tree.Grant{
+      Privileges: $3.privilegeList(),
+      Targets: tree.TargetList{
+        System: true,
+      },
+      Grantees: $5.roleSpecList(),
+      WithGrantOption: $6.bool(),
+    }
+  }
 | GRANT error // SHOW HELP: GRANT
 
 // %Help: REVOKE - remove access privileges and role memberships
@@ -4823,6 +4834,20 @@ revoke_stmt:
       Grantees: $13.roleSpecList(),
       GrantOptionFor: true,
     }
+  }
+| REVOKE SYSTEM privileges FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $3.privilegeList(),
+      Targets: tree.TargetList{
+        System: true,
+      },
+      Grantees: $5.roleSpecList(),
+    }
+  }
+| REVOKE privileges ON SEQUENCE error
+  {
+    return unimplemented(sqllex, "revoke privileges on sequence")
   }
 | REVOKE error // SHOW HELP: REVOKE
 

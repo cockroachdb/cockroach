@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -72,16 +73,14 @@ type userRoleMembership map[username.SQLUsername]bool
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
-		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user username.SQLUsername,
+		ctx context.Context, privilegeObject catalog.PrivilegeObject, privilege privilege.Kind, user username.SQLUsername,
 	) error
 
 	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
-	CheckPrivilege(
-		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
-	) error
+	CheckPrivilege(ctx context.Context, privilegeObject catalog.PrivilegeObject, privilege privilege.Kind) error
 
 	// CheckAnyPrivilege returns nil if user has any privileges at all.
-	CheckAnyPrivilege(ctx context.Context, descriptor catalog.Descriptor) error
+	CheckAnyPrivilege(ctx context.Context, descriptor catalog.PrivilegeObject) error
 
 	// UserHasAdminRole returns tuple of bool and error:
 	// (true, nil) means that the user has an admin role (i.e. root or node)
@@ -118,7 +117,7 @@ var _ AuthorizationAccessor = &planner{}
 // Requires a valid transaction to be open.
 func (p *planner) CheckPrivilegeForUser(
 	ctx context.Context,
-	descriptor catalog.Descriptor,
+	privilegeObject catalog.PrivilegeObject,
 	privilege privilege.Kind,
 	user username.SQLUsername,
 ) error {
@@ -134,9 +133,12 @@ func (p *planner) CheckPrivilegeForUser(
 	// it will not be forgotten if features are added that access
 	// descriptors (since every use of descriptors presumably need a
 	// permission check).
-	p.maybeAudit(descriptor, privilege)
+	p.maybeAudit(privilegeObject, privilege)
 
-	privs := descriptor.GetPrivileges()
+	privs, err := privilegeObject.GetPrivilegeDescriptor(ctx, p)
+	if err != nil {
+		return err
+	}
 
 	// Check if the 'public' pseudo-role has privileges.
 	if privs.CheckPrivilege(username.PublicRoleName(), privilege) {
@@ -144,7 +146,7 @@ func (p *planner) CheckPrivilegeForUser(
 	}
 
 	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) bool {
-		return IsOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
+		return IsOwner(privilegeObject, role) || privs.CheckPrivilege(role, privilege)
 	})
 	if err != nil {
 		return err
@@ -154,7 +156,7 @@ func (p *planner) CheckPrivilegeForUser(
 	}
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
-		user, privilege, descriptor.DescriptorType(), descriptor.GetName())
+		user, privilege, privilegeObject.GetObjectType(), privilegeObject.GetName())
 }
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
@@ -163,7 +165,7 @@ func (p *planner) CheckPrivilegeForUser(
 // it should be probably be called CheckPrivilegesOrOwnership and return
 // a better error.
 func (p *planner) CheckPrivilege(
-	ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
+	ctx context.Context, descriptor catalog.PrivilegeObject, privilege privilege.Kind,
 ) error {
 	return p.CheckPrivilegeForUser(ctx, descriptor, privilege, p.User())
 }
@@ -174,6 +176,7 @@ func (p *planner) CheckPrivilege(
 // options are inherited from parent roles.
 func (p *planner) CheckGrantOptionsForUser(
 	ctx context.Context,
+	privs *catpb.PrivilegeDescriptor,
 	descriptor catalog.Descriptor,
 	privList privilege.List,
 	user username.SQLUsername,
@@ -187,9 +190,8 @@ func (p *planner) CheckGrantOptionsForUser(
 		return nil
 	}
 
-	privs := descriptor.GetPrivileges()
 	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) bool {
-		return IsOwner(descriptor, role) || privs.CheckGrantOptions(role, privList)
+		return privs.CheckGrantOptions(role, privList) || (descriptor != nil && IsOwner(descriptor, role))
 	})
 	if err != nil {
 		return err
@@ -232,8 +234,15 @@ func getOwnerOfDesc(desc catalog.Descriptor) username.SQLUsername {
 }
 
 // IsOwner returns if the role has ownership on the descriptor.
-func IsOwner(desc catalog.Descriptor, role username.SQLUsername) bool {
-	return role == getOwnerOfDesc(desc)
+func IsOwner(privilegeObject catalog.PrivilegeObject, role username.SQLUsername) bool {
+	switch p := privilegeObject.(type) {
+	case catalog.Descriptor:
+		return role == getOwnerOfDesc(p)
+	case catalog.SystemPrivilegeObject:
+		return role.IsAdminRole()
+	default:
+		panic(errors.AssertionFailedf("unknown privilege object type %v", privilegeObject))
+	}
 }
 
 // HasOwnership returns if the role or any role the role is a member of
@@ -270,7 +279,9 @@ func (p *planner) checkRolePredicate(
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
-func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Descriptor) error {
+func (p *planner) CheckAnyPrivilege(
+	ctx context.Context, privilegeObject catalog.PrivilegeObject,
+) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
@@ -285,7 +296,10 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 		return nil
 	}
 
-	privs := descriptor.GetPrivileges()
+	privs, err := privilegeObject.GetPrivilegeDescriptor(ctx, p)
+	if err != nil {
+		return err
+	}
 
 	// Check if 'user' itself has privileges.
 	if privs.AnyPrivilege(user) {
@@ -312,7 +326,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s has no privileges on %s %s",
-		p.SessionData().User(), descriptor.DescriptorType(), descriptor.GetName())
+		p.SessionData().User(), privilegeObject.GetObjectType(), privilegeObject.GetName())
 }
 
 // UserHasAdminRole implements the AuthorizationAccessor interface.

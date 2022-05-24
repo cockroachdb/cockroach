@@ -410,6 +410,7 @@ ALL_TESTS = [
     "//pkg/sql/sqltestutils:sqltestutils_test",
     "//pkg/sql/stats:stats_test",
     "//pkg/sql/stmtdiagnostics:stmtdiagnostics_test",
+    "//pkg/sql/systemprivilege:systemprivilege_test",
     "//pkg/sql/tests:tests_test",
     "//pkg/sql/ttl/ttljob:ttljob_test",
     "//pkg/sql/types:types_disallowed_imports_test",
