@@ -69,6 +69,7 @@ func (sb *blockingSyncBuffer) Write(p []byte) (n int, err error) {
 func TestRepro81025(t *testing.T) {
 	// Don't bother sending crash events.
 	MaybeSendCrashReport = func(ctx context.Context, err error) {}
+	ExitTimeoutOnFatalLog = time.Second
 
 	// Create a new file-backed sink.
 	dir := t.TempDir()
@@ -80,7 +81,7 @@ func TestRepro81025(t *testing.T) {
 		nil,    /* getStartLines */
 		0777,   /* file mode */
 	)
-	defer s.closeFileLocked()
+	defer func() { _ = s.closeFileLocked() }()
 
 	// Update the global stderr sink. This ensures that we pipe fatal errors into
 	// our blocking sink.
@@ -168,8 +169,9 @@ func TestRepro81025(t *testing.T) {
 	// (above), we haven't seen it. This is a compressed version of what happened
 	// in the original issue, where it took 7 mins for the file rotation to
 	// complete.
-	time.Sleep(5 * time.Second)
-	require.Nil(t, observedExitCode)
+	require.Eventuallyf(t, func() bool {
+		return observedExitCode != nil && observedExitCode.String() == "8"
+	}, 5*time.Second, 100*time.Millisecond, "eventually exit")
 
 	// Unblock the file rotation.
 	sb.doneC <- struct{}{}
