@@ -80,7 +80,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 
 func (rq *raftSnapshotQueue) process(
 	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
-) (processed bool, err error) {
+) (anyProcessed bool, _ error) {
 	// If a follower requires a Raft snapshot, perform it.
 	if status := repl.RaftStatus(); status != nil {
 		// raft.Status.Progress is only populated on the Raft group leader.
@@ -89,29 +89,30 @@ func (rq *raftSnapshotQueue) process(
 				if log.V(1) {
 					log.Infof(ctx, "sending raft snapshot")
 				}
-				if err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
+				if processed, err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
 					return false, err
+				} else if processed {
+					anyProcessed = true
 				}
-				processed = true
 			}
 		}
 	}
-	return processed, nil
+	return anyProcessed, nil
 }
 
 func (rq *raftSnapshotQueue) processRaftSnapshot(
 	ctx context.Context, repl *Replica, id roachpb.ReplicaID,
-) error {
+) (processed bool, _ error) {
 	desc := repl.Desc()
 	repDesc, ok := desc.GetReplicaDescriptorByID(id)
 	if !ok {
-		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
+		return false, errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
 	snapType := kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE
 
 	if typ := repDesc.GetType(); typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
 		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
-			return nil
+			return false, nil
 		}
 		if repl.hasOutstandingSnapshotInFlightToStore(repDesc.StoreID) {
 			// There is a snapshot being transferred. It's probably an INITIAL snap,
@@ -135,7 +136,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 			// some point the snapshot lock above will be released and we'll fall
 			// through to the logic below.
 			repl.reportSnapshotStatus(ctx, repDesc.ReplicaID, err)
-			return nil
+			return false, nil
 		}
 	}
 
@@ -160,7 +161,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	// We're currently not handling this and instead rely on the quota pool to
 	// make sure that log truncations won't require snapshots for healthy
 	// followers.
-	return err
+	return err == nil /* processed */, err
 }
 
 func (*raftSnapshotQueue) timer(_ time.Duration) time.Duration {
