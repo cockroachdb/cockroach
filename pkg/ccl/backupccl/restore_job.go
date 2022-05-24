@@ -1164,6 +1164,7 @@ func remapPublicSchemas(
 		// if the database does not have a public schema backed by a descriptor
 		// (meaning they were created before 22.1), we need to create a public
 		// schema descriptor for it.
+		// TODO(richardjcai): Are we worried about leaking IDs here?
 		id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return err
@@ -2396,11 +2397,22 @@ func (r *restoreResumer) restoreSystemUsers(
 		}
 
 		insertUser := `INSERT INTO system.users ("username", "hashedPassword", "isRole") VALUES ($1, $2, $3)`
+		if r.execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
+			insertUser = `INSERT INTO system.users ("username", "hashedPassword", "isRole", "user_id") VALUES ($1, $2, $3, $4)`
+		}
 		newUsernames := make(map[string]bool)
 		for _, user := range users {
 			newUsernames[user[0].String()] = true
+			args := []interface{}{user[0], user[1], user[2]}
+			if r.execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
+				id, err := descidgen.GenerateUniqueRoleID(ctx, r.execCfg.DB, r.execCfg.Codec)
+				if err != nil {
+					return err
+				}
+				args = append(args, id)
+			}
 			if _, err = executor.Exec(ctx, "insert-non-existent-users", txn, insertUser,
-				user[0], user[1], user[2]); err != nil {
+				args...); err != nil {
 				return err
 			}
 		}
