@@ -365,6 +365,8 @@ const (
 	// version is guaranteed to reside in a cluster where all nodes support range
 	// keys at the Pebble layer.
 	EnablePebbleFormatVersionRangeKeys
+	// SystemPrivilegesTable adds system.privileges table.
+	SystemPrivilegesTable
 
 	// TrigramInvertedIndexes enables the creation of trigram inverted indexes
 	// on strings.
@@ -645,6 +647,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TrigramInvertedIndexes,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
+	},
+	{
+		Key:     SystemPrivilegesTable,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
 	},
 
 	// *************************************************

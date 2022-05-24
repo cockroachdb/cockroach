@@ -137,6 +137,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		seedSpanCountTableMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"add the system.privileges table",
+		toCV(clusterversion.SystemPrivilegesTable),
+		NoPrecondition,
+		systemPrivilegesTableMigration,
+	),
 }
 
 func init() {
