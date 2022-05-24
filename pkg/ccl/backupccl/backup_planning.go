@@ -163,16 +163,17 @@ func spansForAllTableIndexes(
 		if err != nil {
 			return nil, err
 		}
-
 		for _, indexSpan := range publicIndexSpans {
 			if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
 		}
 	}
+
 	// If there are desc revisions, ensure that we also add any index spans
 	// in them that we didn't already get above e.g. indexes or tables that are
 	// not in latest because they were dropped during the time window in question.
+	publicIndexSpans = nil
 	for _, rev := range revs {
 		// If the table was dropped during the last interval, it will have
 		// at least 2 revisions, and the first one should have the table in a PUBLIC
@@ -187,14 +188,14 @@ func spansForAllTableIndexes(
 			}
 
 			publicIndexSpans = append(publicIndexSpans, revSpans...)
-			for _, indexSpan := range publicIndexSpans {
-				if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
-					panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
-				}
-			}
 		}
 	}
 
+	for _, indexSpan := range publicIndexSpans {
+		if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
+		}
+	}
 	var spans []roachpb.Span
 	_ = sstIntervalTree.Do(func(r interval.Interface) bool {
 		spans = append(spans, roachpb.Span{
