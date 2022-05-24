@@ -594,7 +594,9 @@ func (n *createTableNode) startExec(params runParams) error {
 				// size limit.
 				if ti.currentBatchSize >= ti.maxBatchSize ||
 					ti.b.ApproximateMutationBytes() >= ti.maxBatchByteSize {
-					ti.flushAndStartNewBatch(params.ctx)
+					if err := ti.flushAndStartNewBatch(params.ctx); err != nil {
+						return err
+					}
 				}
 			}
 			return nil
