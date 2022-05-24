@@ -54,7 +54,7 @@ go_library(
 
 go_test(
     name = "sqlproxyccl_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "authentication_test.go",
         "conn_migration_test.go",

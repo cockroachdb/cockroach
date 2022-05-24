@@ -765,6 +765,94 @@ func TestDirectoryConnect(t *testing.T) {
 	})
 }
 
+func TestConnectionRebalancingDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	defer log.Scope(t).Close(t)
+
+	// Start KV server, and enable session migration.
+	params, _ := tests.CreateTestServerParams()
+	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	_, err := mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
+	require.NoError(t, err)
+
+	// Start two SQL pods for the test tenant.
+	const podCount = 2
+	tenantID := serverutils.TestTenantID()
+	tenants := startTestTenantPods(ctx, t, s, tenantID, podCount)
+	defer func() {
+		for _, tenant := range tenants {
+			tenant.Stopper().Stop(ctx)
+		}
+	}()
+
+	// Register one SQL pod in the directory server.
+	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), nil /* timeSource */)
+	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.AddPod(tenantID, &tenant.Pod{
+		TenantID:       tenantID.ToUint64(),
+		Addr:           tenants[0].SQLAddr(),
+		State:          tenant.RUNNING,
+		StateTimestamp: timeutil.Now(),
+	})
+	require.NoError(t, tds.Start(ctx))
+
+	opts := &ProxyOptions{SkipVerify: true, DisableConnectionRebalancing: true}
+	opts.testingKnobs.directoryServer = tds
+	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addr, tenantID)
+
+	// Open 12 connections to the first pod.
+	dist := map[string]int{}
+	var conns []*gosql.DB
+	for i := 0; i < 12; i++ {
+		db, err := gosql.Open("postgres", connectionString)
+		db.SetMaxOpenConns(1)
+		defer db.Close()
+		require.NoError(t, err)
+		addr := queryAddr(ctx, t, db)
+		dist[addr]++
+		conns = append(conns, db)
+	}
+	require.Len(t, dist, 1)
+
+	// Add a second SQL pod.
+	tds.AddPod(tenantID, &tenant.Pod{
+		TenantID:       tenantID.ToUint64(),
+		Addr:           tenants[1].SQLAddr(),
+		State:          tenant.RUNNING,
+		StateTimestamp: timeutil.Now(),
+	})
+
+	// Wait until the update gets propagated to the directory cache.
+	testutils.SucceedsSoon(t, func() error {
+		pods, err := proxy.handler.directoryCache.TryLookupTenantPods(ctx, tenantID)
+		if err != nil {
+			return err
+		}
+		if len(pods) != 2 {
+			return errors.Newf("expected 2 pods, but got %d", len(pods))
+		}
+		return nil
+	})
+
+	// The update above should trigger the pod watcher. Regardless, we'll invoke
+	// rebalancing directly as well. There should be no rebalancing attempts.
+	proxy.handler.balancer.RebalanceTenant(ctx, tenantID)
+	time.Sleep(2 * time.Second)
+
+	require.Equal(t, int64(0), proxy.metrics.ConnMigrationAttemptedCount.Count())
+
+	// Reset distribution and count again.
+	dist = map[string]int{}
+	for _, c := range conns {
+		addr := queryAddr(ctx, t, c)
+		dist[addr]++
+	}
+	require.Len(t, dist, 1)
+}
+
 func TestPodWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -778,30 +866,14 @@ func TestPodWatcher(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start four SQL pods for the test tenant.
-	var addresses []string
-	tenantID := serverutils.TestTenantID()
 	const podCount = 4
-	for i := 0; i < podCount; i++ {
-		params := tests.CreateTestTenantParams(tenantID)
-		// The first SQL pod will create the tenant keyspace in the host.
-		if i != 0 {
-			params.Existing = true
+	tenantID := serverutils.TestTenantID()
+	tenants := startTestTenantPods(ctx, t, s, tenantID, podCount)
+	defer func() {
+		for _, tenant := range tenants {
+			tenant.Stopper().Stop(ctx)
 		}
-		tenant, tenantDB := serverutils.StartTenant(t, s, params)
-		tenant.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
-		defer tenant.Stopper().Stop(ctx)
-
-		// Create a test user. We only need to do it once.
-		if i == 0 {
-			_, err = tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
-			require.NoError(t, err)
-			_, err = tenantDB.Exec("GRANT admin TO testuser")
-			require.NoError(t, err)
-		}
-		tenantDB.Close()
-
-		addresses = append(addresses, tenant.SQLAddr())
-	}
+	}()
 
 	// Register only 3 SQL pods in the directory server. We will add the 4th
 	// once the watcher has been established.
@@ -810,7 +882,7 @@ func TestPodWatcher(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		tds.AddPod(tenantID, &tenant.Pod{
 			TenantID:       tenantID.ToUint64(),
-			Addr:           addresses[i],
+			Addr:           tenants[i].SQLAddr(),
 			State:          tenant.RUNNING,
 			StateTimestamp: timeutil.Now(),
 		})
@@ -851,7 +923,7 @@ func TestPodWatcher(t *testing.T) {
 	// to the new pod. Note that for testing, we set customRebalanceRate to 1.0.
 	tds.AddPod(tenantID, &tenant.Pod{
 		TenantID:       tenantID.ToUint64(),
-		Addr:           addresses[3],
+		Addr:           tenants[3].SQLAddr(),
 		State:          tenant.RUNNING,
 		StateTimestamp: timeutil.Now(),
 	})
@@ -1733,4 +1805,40 @@ func queryAddr(ctx context.Context, t *testing.T, db queryer) string {
 				AND b.component = 'DB' AND b.field = 'Port'
 		`).Scan(&host, &port))
 	return fmt.Sprintf("%s:%s", host, port)
+}
+
+// startTestTenantPods starts count SQL pods for the given tenant, and returns
+// a list of tenant servers. Note that a default admin testuser with the
+// password hunter2 will be created.
+func startTestTenantPods(
+	ctx context.Context,
+	t *testing.T,
+	ts serverutils.TestServerInterface,
+	tenantID roachpb.TenantID,
+	count int,
+) []serverutils.TestTenantInterface {
+	t.Helper()
+
+	var tenants []serverutils.TestTenantInterface
+	for i := 0; i < count; i++ {
+		params := tests.CreateTestTenantParams(tenantID)
+		// The first SQL pod will create the tenant keyspace in the host.
+		if i != 0 {
+			params.Existing = true
+		}
+		tenant, tenantDB := serverutils.StartTenant(t, ts, params)
+		tenant.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+
+		// Create a test user. We only need to do it once.
+		if i == 0 {
+			_, err := tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
+			require.NoError(t, err)
+			_, err = tenantDB.Exec("GRANT admin TO testuser")
+			require.NoError(t, err)
+		}
+		tenantDB.Close()
+
+		tenants = append(tenants, tenant)
+	}
+	return tenants
 }

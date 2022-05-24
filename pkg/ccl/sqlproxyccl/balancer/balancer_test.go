@@ -716,6 +716,81 @@ func TestRebalancer_rebalance(t *testing.T) {
 	}
 }
 
+func TestBalancer_RebalanceTenant_WithRebalancingDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Use a custom time source for testing.
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := timeutil.NewManualTime(t0)
+
+	metrics := NewMetrics()
+	directoryCache := newTestDirectoryCache()
+
+	b, err := NewBalancer(
+		ctx,
+		stopper,
+		metrics,
+		directoryCache,
+		DisableRebalancing(),
+		TimeSource(timeSource),
+	)
+	require.NoError(t, err)
+
+	tenantID := roachpb.MakeTenantID(10)
+	pods := []*tenant.Pod{
+		{TenantID: tenantID.ToUint64(), Addr: "127.0.0.30:80", State: tenant.DRAINING},
+		{TenantID: tenantID.ToUint64(), Addr: "127.0.0.30:81", State: tenant.RUNNING},
+	}
+	for _, pod := range pods {
+		require.True(t, directoryCache.upsertPod(pod))
+	}
+
+	// Create 100 active connections, all to the draining pod.
+	const numConns = 100
+	var handles []ConnectionHandle
+	for i := 0; i < numConns; i++ {
+		handle := makeTestHandle()
+		handles = append(handles, handle)
+		_ = NewServerAssignment(tenantID, b.connTracker, handle, pods[0].Addr)
+	}
+
+	assertZeroTransfers := func() {
+		count := 0
+		for i := 0; i < numConns; i++ {
+			count += handles[i].(*testConnHandle).transferConnectionCount()
+		}
+		require.Equal(t, 0, count)
+	}
+
+	// Attempt the rebalance, and wait for a while. No rebalancing should occur.
+	b.RebalanceTenant(ctx, tenantID)
+	time.Sleep(1 * time.Second)
+
+	// Queue should be empty, and no additional connections should be moved.
+	b.queue.mu.Lock()
+	queueLen := b.queue.queue.Len()
+	b.queue.mu.Unlock()
+	require.Equal(t, 0, queueLen)
+	assertZeroTransfers()
+
+	// Advance the timer by some rebalance interval. No rebalancing should
+	// occur since the loop is disabled.
+	timeSource.Advance(2 * rebalanceInterval)
+	time.Sleep(1 * time.Second)
+
+	// Queue should be empty, and no additional connections should be moved.
+	b.queue.mu.Lock()
+	queueLen = b.queue.queue.Len()
+	b.queue.mu.Unlock()
+	require.Equal(t, 0, queueLen)
+	assertZeroTransfers()
+}
+
 func TestBalancer_RebalanceTenant_WithDefaultDelay(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -781,7 +856,7 @@ func TestBalancer_RebalanceTenant_WithDefaultDelay(t *testing.T) {
 	waitFor := func(numTransfers int) {
 		testutils.SucceedsSoon(t, func() error {
 			count := 0
-			for i := 0; i < 100; i++ {
+			for i := 0; i < numConns; i++ {
 				count += handles[i].(*testConnHandle).transferConnectionCount()
 			}
 			if count != numTransfers {
