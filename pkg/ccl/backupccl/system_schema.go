@@ -14,12 +14,15 @@ import (
 	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -113,6 +116,7 @@ func defaultSystemTableRestoreFunc(
 	if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
 		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 	}
+
 	return nil
 }
 
@@ -247,6 +251,82 @@ func jobsRestoreFunc(
 	return nil
 }
 
+func usersRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
+		executor := execCfg.InternalExecutor
+
+		deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+		opName := systemTableName + "-data-deletion"
+		log.Eventf(ctx, "clearing data from system table %s with query %q",
+			systemTableName, deleteQuery)
+
+		_, err := executor.Exec(ctx, opName, txn, deleteQuery)
+		if err != nil {
+			return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+		}
+
+		hasIDColumnQuery := fmt.Sprintf(
+			`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = 'user_id')`, tempTableName)
+		row, err := executor.QueryRow(ctx, "has-id-column", txn, hasIDColumnQuery)
+		hasIDColumn := tree.MustBeDBool(row[0])
+
+		if hasIDColumn {
+			return defaultSystemTableRestoreFunc(
+				ctx, execCfg, txn, systemTableName, tempTableName,
+			)
+		}
+
+		it, err := executor.QueryIteratorEx(ctx, "query-system-users-in-backup",
+			txn, sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(`SELECT * FROM %s`, tempTableName))
+		if err != nil {
+			return err
+		}
+
+		for {
+			ok, err := it.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				break
+			}
+
+			username := tree.MustBeDString(it.Cur()[0])
+			password := it.Cur()[1]
+			isRole := tree.MustBeDBool(it.Cur()[2])
+
+			var id int64
+			if username == "root" {
+				id = 1
+			} else if username == "admin" {
+				id = 2
+			} else {
+				id, err = descidgen.GenerateUniqueRoleID(ctx, execCfg.DB, execCfg.Codec)
+				if err != nil {
+					return err
+				}
+			}
+
+			restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4);",
+				systemTableName)
+			opName = systemTableName + "-data-insert"
+			if _, err := executor.Exec(ctx, opName, txn, restoreQuery, username, password, isRole, id); err != nil {
+				return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+			}
+		}
+		return nil
+	}
+	return defaultSystemTableRestoreFunc(
+		ctx, execCfg, txn, systemTableName, tempTableName,
+	)
+}
+
 // When restoring the settings table, we want to make sure to not override the
 // version.
 func settingsRestoreFunc(
@@ -276,6 +356,28 @@ func settingsRestoreFunc(
 	return nil
 }
 
+func roleIDSeqRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
+		datums, err := execCfg.InternalExecutor.QueryRowEx(
+			ctx, "role-id-seq-custom-restore", txn,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(`SELECT max(user_id) FROM system.users`),
+		)
+		if err != nil {
+			return err
+		}
+		max := tree.MustBeDOid(datums[0])
+		execCfg.DB.Put(ctx, execCfg.Codec.SequenceKey(keys.RoleIDSequenceID), max.Oid+1)
+	}
+	// Nothing to be done since no user ids have been assigned.
+	return nil
+}
+
 // systemTableBackupConfiguration is a map from every systemTable present in the
 // cluster to a configuration struct which specifies how it should be treated by
 // backup. Every system table should have a specification defined here, enforced
@@ -283,6 +385,7 @@ func settingsRestoreFunc(
 var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.UsersTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            usersRestoreFunc,
 	},
 	systemschema.ZonesTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
@@ -415,7 +518,8 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optInToClusterBackup,
 	},
 	systemschema.RoleIDSequence.GetName(): {
-		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            roleIDSeqRestoreFunc,
 	},
 }
 
