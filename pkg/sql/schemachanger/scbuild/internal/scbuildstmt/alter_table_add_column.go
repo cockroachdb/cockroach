@@ -166,11 +166,6 @@ func alterTableAddColumn(
 	}
 	if desc.HasDefault() {
 		expression := b.WrapExpression(tbl.TableID, cdd.DefaultExpr)
-		// Sequence references inside expressions are unsupported, since these will
-		// hit errors during backfill.
-		if len(expression.UsesSequenceIDs) > 0 {
-			panic(scerrors.NotImplementedErrorf(t, "sequence default expression %s", cdd.DefaultExpr))
-		}
 		spec.def = &scpb.ColumnDefaultExpression{
 			TableID:    tbl.TableID,
 			ColumnID:   spec.col.ColumnID,

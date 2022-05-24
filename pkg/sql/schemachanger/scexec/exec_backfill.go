@@ -252,6 +252,8 @@ func runBackfills(
 			ctx, deps.IndexSpanSplitter(), bf, *p, tracker, tables[p.TableID],
 		)
 	}); err != nil {
+		// We ran into an  uncategorized schema change error.
+		deps.Telemetry().IncrementSchemaChangeErrorType("uncategorized")
 		return scerrors.SchemaChangerUserError(err)
 	}
 	if err := stop(); err != nil {

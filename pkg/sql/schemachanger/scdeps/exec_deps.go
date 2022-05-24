@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -447,9 +449,19 @@ func (d *execDeps) getTablesForStatsRefresh() []descpb.ID {
 	return d.tableStatsToRefresh
 }
 
-// StatsRefreshQueue implements scexec.Dependencies
+// StatsRefresher implements scexec.Dependencies
 func (d *execDeps) StatsRefresher() scexec.StatsRefreshQueue {
 	return d
+}
+
+// Telemetry implements the scexec.Dependencies interface.
+func (d *execDeps) Telemetry() scexec.Telemetry {
+	return d
+}
+
+// IncrementSchemaChangeErrorType implemented the scexec.Telemetry interface.
+func (d *execDeps) IncrementSchemaChangeErrorType(typ string) {
+	telemetry.Inc(sqltelemetry.SchemaChangeErrorCounter(typ))
 }
 
 // NewNoOpBackfillTracker constructs a backfill tracker which does not do
