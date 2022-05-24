@@ -126,7 +126,7 @@ export class DiagnosticsView extends React.Component<
       defaultSortOrder: "descend",
       render: (_text, record) => {
         const timestamp = record.requested_at.seconds.toNumber() * 1000;
-        return moment(timestamp).format("LL[ at ]h:mm a");
+        return moment.utc(timestamp).format("LL[ at ]H:mm");
       },
     },
     {

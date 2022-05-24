@@ -115,7 +115,7 @@ export class IndexDetailsPage extends React.Component<
     if (timestamp.isSame(minDate)) {
       return "Never";
     } else {
-      return formatDate(timestamp, "MMM DD, YYYY [at] h:mm A [(UTC)]");
+      return formatDate(timestamp, "MMM DD, YYYY [at] H:mm [(UTC)]");
     }
   }
 
