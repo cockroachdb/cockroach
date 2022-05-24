@@ -54,12 +54,27 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	return &changePrivilegesNode{
-		isGrant:         true,
-		withGrantOption: n.WithGrantOption,
-		targets:         n.Targets,
-		grantees:        grantees,
-		desiredprivs:    n.Privileges,
+	if !grantOn.IsDescriptorBacked() {
+		return &changeNonDescriptorBackedPrivilegesNode{
+			changePrivilegesNode: changePrivilegesNode{
+				isGrant:         true,
+				withGrantOption: n.WithGrantOption,
+				grantees:        grantees,
+				desiredprivs:    n.Privileges,
+				grantOn:         grantOn,
+			},
+		}, nil
+	}
+
+	return &changeDescriptorBackedPrivilegesNode{
+		changePrivilegesNode: changePrivilegesNode{
+			isGrant:         true,
+			withGrantOption: n.WithGrantOption,
+			targets:         n.Targets,
+			grantees:        grantees,
+			desiredprivs:    n.Privileges,
+			grantOn:         grantOn,
+		},
 		changePrivilege: func(
 			privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee username.SQLUsername,
 		) (changed bool) {
@@ -70,7 +85,6 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 			granteePrivsAfterGrant := *(privDesc.FindOrCreateUser(grantee))
 			return granteePrivsBeforeGrant != granteePrivsAfterGrant
 		},
-		grantOn: grantOn,
 	}, nil
 }
 
@@ -93,12 +107,28 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &changePrivilegesNode{
-		isGrant:         false,
-		withGrantOption: n.GrantOptionFor,
-		targets:         n.Targets,
-		grantees:        grantees,
-		desiredprivs:    n.Privileges,
+
+	if !grantOn.IsDescriptorBacked() {
+		return &changeNonDescriptorBackedPrivilegesNode{
+			changePrivilegesNode: changePrivilegesNode{
+				isGrant:         false,
+				withGrantOption: false,
+				grantees:        grantees,
+				desiredprivs:    n.Privileges,
+				grantOn:         grantOn,
+			},
+		}, nil
+	}
+
+	return &changeDescriptorBackedPrivilegesNode{
+		changePrivilegesNode: changePrivilegesNode{
+			isGrant:         false,
+			withGrantOption: n.GrantOptionFor,
+			targets:         n.Targets,
+			grantees:        grantees,
+			desiredprivs:    n.Privileges,
+			grantOn:         grantOn,
+		},
 		changePrivilege: func(
 			privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee username.SQLUsername,
 		) (changed bool) {
@@ -115,35 +145,44 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 			privsChanges := !ok || granteePrivsBeforeGrant != *granteePrivs
 			return privsChanges
 		},
-		grantOn: grantOn,
 	}, nil
 }
 
 type changePrivilegesNode struct {
 	isGrant         bool
 	withGrantOption bool
-	targets         tree.TargetList
 	grantees        []username.SQLUsername
 	desiredprivs    privilege.List
-	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername) (changed bool)
+	targets         tree.TargetList
 	grantOn         privilege.ObjectType
+}
+
+type changeDescriptorBackedPrivilegesNode struct {
+	changePrivilegesNode
+	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername) (changed bool)
+}
+
+type changeNonDescriptorBackedPrivilegesNode struct {
+	changePrivilegesNode
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
 // This is because GRANT/REVOKE performs multiple KV operations on descriptors
 // and expects to see its own writes.
-func (n *changePrivilegesNode) ReadingOwnWrites() {}
+func (n *changeDescriptorBackedPrivilegesNode) ReadingOwnWrites() {}
 
-func (n *changePrivilegesNode) startExec(params runParams) error {
+func (n *changePrivilegesNode) preChangePrivilegesValidation(
+	params runParams, isGrant bool, withGrantOption bool, grantees []username.SQLUsername,
+) error {
 	ctx := params.ctx
 	p := params.p
 
-	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
+	if err := p.validateRoles(ctx, grantees, true /* isPublicValid */); err != nil {
 		return err
 	}
 	// The public role is not allowed to have grant options.
-	if n.isGrant && n.withGrantOption {
-		for _, grantee := range n.grantees {
+	if isGrant && withGrantOption {
+		for _, grantee := range grantees {
 			if grantee.IsPublicRole() {
 				return pgerror.Newf(
 					pgcode.InvalidGrantOperation,
@@ -152,6 +191,16 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				)
 			}
 		}
+	}
+	return nil
+}
+
+func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error {
+	ctx := params.ctx
+	p := params.p
+
+	if err := n.changePrivilegesNode.preChangePrivilegesValidation(params, n.isGrant, n.withGrantOption, n.grantees); err != nil {
+		return err
 	}
 
 	var err error
@@ -212,7 +261,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				}
 			}
 
-			err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, p.User(), n.isGrant)
+			err := p.CheckGrantOptionsForUser(ctx, descriptor.GetPrivileges(), descriptor, n.desiredprivs, p.User(), n.isGrant)
 			if err != nil {
 				return err
 			}
@@ -359,9 +408,9 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	return nil
 }
 
-func (*changePrivilegesNode) Next(runParams) (bool, error) { return false, nil }
-func (*changePrivilegesNode) Values() tree.Datums          { return tree.Datums{} }
-func (*changePrivilegesNode) Close(context.Context)        {}
+func (*changeDescriptorBackedPrivilegesNode) Next(runParams) (bool, error) { return false, nil }
+func (*changeDescriptorBackedPrivilegesNode) Values() tree.Datums          { return tree.Datums{} }
+func (*changeDescriptorBackedPrivilegesNode) Close(context.Context)        {}
 
 // getGrantOnObject returns the type of object being granted on based on the TargetList.
 // getGrantOnObject also calls incIAMFunc with the object type name.
@@ -382,6 +431,9 @@ func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privi
 	case targets.Types != nil:
 		incIAMFunc(sqltelemetry.OnType)
 		return privilege.Type
+	case targets.System:
+		incIAMFunc(sqltelemetry.OnSystem)
+		return privilege.System
 	default:
 		if targets.Tables.IsSequence {
 			incIAMFunc(sqltelemetry.OnSequence)

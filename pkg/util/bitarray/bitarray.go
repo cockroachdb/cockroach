@@ -616,3 +616,18 @@ func (d BitArray) SetBitAtIndex(index, toSet int) (BitArray, error) {
 	res.words[index/numBitsPerWord] |= word(toSet) << (numBitsPerWord - 1 - uint(index)%numBitsPerWord)
 	return res, nil
 }
+
+// AsUInt64 returns the uint64 constituted from the rightmost bits in the
+// bit array.
+func (d *BitArray) AsUInt64() uint64 {
+	if len(d.words) == 0 {
+		return 0
+	}
+
+	lowPart := d.words[len(d.words)-1] >> (numBitsPerWord - d.lastBitsUsed)
+	highPart := word(0)
+	if len(d.words) > 1 {
+		highPart = d.words[len(d.words)-2] << d.lastBitsUsed
+	}
+	return lowPart | highPart
+}
