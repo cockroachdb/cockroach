@@ -363,3 +363,10 @@ CREATE TABLE public.tenant_settings (
 	CONSTRAINT "primary" PRIMARY KEY (tenant_id ASC, name ASC),
 	FAMILY fam_0_tenant_id_name_value_last_updated_value_type_reason (tenant_id, name, value, last_updated, value_type, reason)
 );
+CREATE TABLE public.privileges (
+	username STRING NOT NULL,
+	path STRING NOT NULL,
+	privileges VARBIT NOT NULL,
+	grant_options VARBIT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (username ASC, path ASC)
+);

@@ -365,6 +365,8 @@ const (
 	// version is guaranteed to reside in a cluster where all nodes support range
 	// keys at the Pebble layer.
 	EnablePebbleFormatVersionRangeKeys
+	// SystemPrivilegesTable adds system.privileges table.
+	SystemPrivilegesTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -637,6 +639,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnablePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 8},
+	},
+	{
+		Key:     SystemPrivilegesTable,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
 	},
 
 	// *************************************************
