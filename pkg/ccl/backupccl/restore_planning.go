@@ -226,6 +226,11 @@ func allocateDescriptorRewrites(
 			}
 			for _, seqID := range col.UsesSequenceIds {
 				if _, ok := tablesByID[seqID]; !ok {
+					if seqID == keys.RoleIDSequenceID {
+						// We don't have to restore the RoleIDSequence, the sequence should
+						// already exist in the system database.
+						continue
+					}
 					if !opts.SkipMissingSequences {
 						return nil, errors.Errorf(
 							"cannot restore table %q without referenced sequence %d (or %q option)",
