@@ -10,13 +10,9 @@
 
 package tests
 
-var rustPostgresBlocklists = blocklistsForVersion{
-	{"v22.1", "rustPostgresBlocklist22_1", rustPostgresBlocklist22_1, "rustPostgresIgnoreList22_1", rustPostgresIgnoreList22_1},
-}
+var rustPostgresBlocklist = blocklist{}
 
-var rustPostgresBlocklist22_1 = blocklist{}
-
-var rustPostgresIgnoreList22_1 = blocklist{
+var rustPostgresIgnoreList = blocklist{
 	"binary_copy.read_basic":                "unknown",
 	"binary_copy.read_big_rows":             "unknown",
 	"binary_copy.read_many_rows":            "unknown",
