@@ -42,9 +42,30 @@ func logfDepth(
 			MaybeSendCrashReport(ctx, err)
 		}
 		if ch != channel.OPS {
-			// Tell the OPS channel about this termination.
-			logfDepth(ctx, depth+1, severity.INFO, channel.OPS,
-				"the server is terminating due to a fatal error (see the %s channel for details)", ch)
+			// Tell the OPS channel about this termination, but impose a
+			// timeout on the request so that we can crash in a timely manner
+			// if logging is stalled.
+			exitFunc := func(x exit.Code, _ error) { exit.WithCode(x) }
+			logging.mu.Lock()
+			if logging.mu.exitOverride.f != nil {
+				exitFunc = logging.mu.exitOverride.f
+			}
+			logging.mu.Unlock()
+
+			opsLogFinished := make(chan struct{})
+			go func() {
+				logfDepth(ctx, depth+1, severity.INFO, channel.OPS,
+					"the server is terminating due to a fatal error (see the %s channel for details)", ch)
+				close(opsLogFinished)
+			}()
+			select {
+			// TODO(davidh): probably don't want this to be 1 second
+			case <-time.After(time.Second):
+				exitFunc(exit.TimeoutAfterFatalError(), nil)
+			case <-opsLogFinished:
+				// Continue as usual, the call to `outputLogEntry` will manage
+				// exiting on timeout if it happens to be a problem.
+			}
 		}
 	}
 

@@ -80,7 +80,7 @@ func TestRepro81025(t *testing.T) {
 		nil,    /* getStartLines */
 		0777,   /* file mode */
 	)
-	defer s.closeFileLocked()
+	defer func() { _ = s.closeFileLocked() }()
 
 	// Update the global stderr sink. This ensures that we pipe fatal errors into
 	// our blocking sink.
@@ -169,7 +169,7 @@ func TestRepro81025(t *testing.T) {
 	// in the original issue, where it took 7 mins for the file rotation to
 	// complete.
 	time.Sleep(5 * time.Second)
-	require.Nil(t, observedExitCode)
+	require.Equal(t, "8", observedExitCode.String())
 
 	// Unblock the file rotation.
 	sb.doneC <- struct{}{}
