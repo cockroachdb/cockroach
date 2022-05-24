@@ -42,6 +42,8 @@ const (
 	// OnAllSequencesInSchema is used when a GRANT/REVOKE is happening on
 	// all sequences in a set of schemas.
 	OnAllSequencesInSchema = "on_all_sequences_in_schemas"
+	// OnSystem is used when a GRANT/REVOKE is happening on system.
+	OnSystem = "on_system"
 
 	iamRoles = "iam.roles"
 )

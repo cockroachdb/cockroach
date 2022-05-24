@@ -55,6 +55,16 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
+	if !grantOn.IsDescriptorBacked() {
+		return &changeNonDescriptorBackedPrivilegesNode{
+			isGrant:         true,
+			withGrantOption: n.WithGrantOption,
+			grantees:        grantees,
+			desiredprivs:    n.Privileges,
+			grantOn:         grantOn,
+		}, nil
+	}
+
 	return &changePrivilegesNode{
 		isGrant:         true,
 		withGrantOption: n.WithGrantOption,
@@ -94,6 +104,17 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 	if err != nil {
 		return nil, err
 	}
+
+	if !grantOn.IsDescriptorBacked() {
+		return &changeNonDescriptorBackedPrivilegesNode{
+			isGrant:         false,
+			withGrantOption: false,
+			grantees:        grantees,
+			desiredprivs:    n.Privileges,
+			grantOn:         grantOn,
+		}, nil
+	}
+
 	return &changePrivilegesNode{
 		isGrant:         false,
 		withGrantOption: n.GrantOptionFor,
@@ -130,27 +151,38 @@ type changePrivilegesNode struct {
 	grantOn         privilege.ObjectType
 }
 
+type changeNonDescriptorBackedPrivilegesNode struct {
+	isGrant         bool
+	withGrantOption bool
+	grantees        []username.SQLUsername
+	desiredprivs    privilege.List
+	grantOn         privilege.ObjectType
+	targets         tree.TargetList
+}
+
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
 // This is because GRANT/REVOKE performs multiple KV operations on descriptors
 // and expects to see its own writes.
 func (n *changePrivilegesNode) ReadingOwnWrites() {}
 
-func (n *changePrivilegesNode) startExec(params runParams) error {
+func preChangePrivilegesValidation(
+	params runParams, isGrant bool, withGrantOption bool, grantees []username.SQLUsername,
+) error {
 	ctx := params.ctx
 	p := params.p
 
-	if n.withGrantOption && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+	if withGrantOption && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"version %v must be finalized to use grant options",
 			clusterversion.ByKey(clusterversion.ValidateGrantOption))
 	}
 
-	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
+	if err := p.validateRoles(ctx, grantees, true /* isPublicValid */); err != nil {
 		return err
 	}
 	// The public role is not allowed to have grant options.
-	if n.isGrant && n.withGrantOption {
-		for _, grantee := range n.grantees {
+	if isGrant && withGrantOption {
+		for _, grantee := range grantees {
 			if grantee.IsPublicRole() {
 				return pgerror.Newf(
 					pgcode.InvalidGrantOperation,
@@ -159,6 +191,16 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				)
 			}
 		}
+	}
+	return nil
+}
+
+func (n *changePrivilegesNode) startExec(params runParams) error {
+	ctx := params.ctx
+	p := params.p
+
+	if err := preChangePrivilegesValidation(params, n.isGrant, n.withGrantOption, n.grantees); err != nil {
+		return err
 	}
 
 	var err error
@@ -233,7 +275,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 			noticeMessage := ""
 			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-				err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, p.User(), n.isGrant)
+				err := p.CheckGrantOptionsForUser(ctx, descriptor.GetPrivileges(), descriptor, n.desiredprivs, p.User(), n.isGrant)
 				if err != nil {
 					return err
 				}
@@ -437,6 +479,9 @@ func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privi
 	case targets.Types != nil:
 		incIAMFunc(sqltelemetry.OnType)
 		return privilege.Type
+	case targets.System:
+		incIAMFunc(sqltelemetry.OnSystem)
+		return privilege.System
 	default:
 		if targets.Tables.IsSequence {
 			incIAMFunc(sqltelemetry.OnSequence)

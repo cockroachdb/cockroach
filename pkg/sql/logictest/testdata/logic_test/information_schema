@@ -1518,7 +1518,8 @@ system              public             primary                                  
 system              public             630200280_51_1_not_null                                                                                         system         public        privileges                       CHECK            NO             NO
 system              public             630200280_51_2_not_null                                                                                         system         public        privileges                       CHECK            NO             NO
 system              public             630200280_51_3_not_null                                                                                         system         public        privileges                       CHECK            NO             NO
-system              public             privileges_pkey                                                                                                 system         public        privileges                       PRIMARY KEY      NO             NO
+system              public             630200280_51_4_not_null                                                                                         system         public        privileges                       CHECK            NO             NO
+system              public             primary                                                                                                         system         public        privileges                       PRIMARY KEY      NO             NO
 system              public             630200280_31_1_not_null                                                                                         system         public        protected_ts_meta                CHECK            NO             NO
 system              public             630200280_31_2_not_null                                                                                         system         public        protected_ts_meta                CHECK            NO             NO
 system              public             630200280_31_3_not_null                                                                                         system         public        protected_ts_meta                CHECK            NO             NO
@@ -1826,9 +1827,10 @@ system              public             630200280_50_2_not_null                  
 system              public             630200280_50_3_not_null                                                                                         value IS NOT NULL
 system              public             630200280_50_4_not_null                                                                                         last_updated IS NOT NULL
 system              public             630200280_50_5_not_null                                                                                         value_type IS NOT NULL
-system              public             630200280_51_1_not_null                                                                                         path IS NOT NULL
-system              public             630200280_51_2_not_null                                                                                         privileges IS NOT NULL
-system              public             630200280_51_3_not_null                                                                                         grant_options IS NOT NULL
+system              public             630200280_51_1_not_null                                                                                         username IS NOT NULL
+system              public             630200280_51_2_not_null                                                                                         path IS NOT NULL
+system              public             630200280_51_3_not_null                                                                                         privileges IS NOT NULL
+system              public             630200280_51_4_not_null                                                                                         grant_options IS NOT NULL
 system              public             630200280_5_1_not_null                                                                                          id IS NOT NULL
 system              public             630200280_6_1_not_null                                                                                          name IS NOT NULL
 system              public             630200280_6_2_not_null                                                                                          value IS NOT NULL
@@ -1869,7 +1871,8 @@ system         public        migrations                       patch             
 system         public        namespace                        name                                                                                                      system              public             primary
 system         public        namespace                        parentID                                                                                                  system              public             primary
 system         public        namespace                        parentSchemaID                                                                                            system              public             primary
-system         public        privileges                       path                                                                                                      system              public             privileges_pkey
+system         public        privileges                       path                                                                                                      system              public             primary
+system         public        privileges                       username                                                                                                  system              public             primary
 system         public        protected_ts_meta                singleton                                                                                                 system              public             check_singleton
 system         public        protected_ts_meta                singleton                                                                                                 system              public             primary
 system         public        protected_ts_records             id                                                                                                        system              public             primary
@@ -2070,9 +2073,10 @@ system         public        namespace                        id                
 system         public        namespace                        name                                                                                                      3
 system         public        namespace                        parentID                                                                                                  1
 system         public        namespace                        parentSchemaID                                                                                            2
-system         public        privileges                       grant_options                                                                                             3
-system         public        privileges                       path                                                                                                      1
-system         public        privileges                       privileges                                                                                                2
+system         public        privileges                       grant_options                                                                                             4
+system         public        privileges                       path                                                                                                      2
+system         public        privileges                       privileges                                                                                                3
+system         public        privileges                       username                                                                                                  1
 system         public        protected_ts_meta                num_records                                                                                               3
 system         public        protected_ts_meta                num_spans                                                                                                 4
 system         public        protected_ts_meta                singleton                                                                                                 1

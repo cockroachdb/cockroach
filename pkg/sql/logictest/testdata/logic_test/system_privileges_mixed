@@ -1,0 +1,6 @@
+# LogicTest: local-mixed-22.1-22.2
+
+user testuser
+
+statement error pq: only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to read crdb_internal.cluster_settings
+SELECT * FROM crdb_internal.cluster_settings;

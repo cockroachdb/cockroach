@@ -12,6 +12,8 @@
 package tabledesc
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -19,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -590,4 +593,16 @@ func (desc *wrapper) getExistingOrNewMutationCache() *mutationCache {
 // AllMutations implements the TableDescriptor interface.
 func (desc *wrapper) AllMutations() []catalog.Mutation {
 	return desc.getExistingOrNewMutationCache().all
+}
+
+// GetObjectType implements the PrivilegeObject interface.
+func (desc *wrapper) GetObjectType() string {
+	return string(desc.DescriptorType())
+}
+
+// GetPrivilegeDescriptor implements the PrivilegeObject interface.
+func (desc *wrapper) GetPrivilegeDescriptor(
+	ctx context.Context, planner eval.Planner,
+) (*catpb.PrivilegeDescriptor, error) {
+	return desc.GetPrivileges(), nil
 }

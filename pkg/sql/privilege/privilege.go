@@ -31,18 +31,19 @@ type Kind uint32
 // Do not change values of privileges. These correspond to the position
 // of the privilege in a bit field and are expected to stay constant.
 const (
-	ALL        Kind = 1
-	CREATE     Kind = 2
-	DROP       Kind = 3
-	GRANT      Kind = 4
-	SELECT     Kind = 5
-	INSERT     Kind = 6
-	DELETE     Kind = 7
-	UPDATE     Kind = 8
-	USAGE      Kind = 9
-	ZONECONFIG Kind = 10
-	CONNECT    Kind = 11
-	RULE       Kind = 12
+	ALL                  Kind = 1
+	CREATE               Kind = 2
+	DROP                 Kind = 3
+	GRANT                Kind = 4
+	SELECT               Kind = 5
+	INSERT               Kind = 6
+	DELETE               Kind = 7
+	UPDATE               Kind = 8
+	USAGE                Kind = 9
+	ZONECONFIG           Kind = 10
+	CONNECT              Kind = 11
+	RULE                 Kind = 12
+	MODIFYCLUSTERSETTING Kind = 13 // SYSTEM CLUSTER PRIVILEGE.
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
@@ -72,7 +73,18 @@ const (
 	Type ObjectType = "type"
 	// Sequence represents a sequence object.
 	Sequence ObjectType = "sequence"
+	// System represents system privileges.
+	System ObjectType = "system"
 )
+
+var isDescriptorBacked = map[ObjectType]bool{
+	Database: true,
+	Schema:   true,
+	Table:    true,
+	Type:     true,
+	Sequence: true,
+	System:   false,
+}
 
 // Predefined sets of privileges.
 var (
@@ -88,6 +100,7 @@ var (
 	// certain privileges unavailable after upgrade migration.
 	// Note that "CREATE, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
 	SequencePrivileges = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, GRANT, INSERT, DELETE, ZONECONFIG}
+	SystemPrivileges   = List{ALL, MODIFYCLUSTERSETTING}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -102,23 +115,24 @@ func (k Kind) IsSetIn(bits uint32) bool {
 
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
-	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE,
+	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE, MODIFYCLUSTERSETTING,
 }
 
 // ByName is a map of string -> kind value.
 var ByName = map[string]Kind{
-	"ALL":        ALL,
-	"CONNECT":    CONNECT,
-	"CREATE":     CREATE,
-	"DROP":       DROP,
-	"GRANT":      GRANT,
-	"SELECT":     SELECT,
-	"INSERT":     INSERT,
-	"DELETE":     DELETE,
-	"UPDATE":     UPDATE,
-	"ZONECONFIG": ZONECONFIG,
-	"USAGE":      USAGE,
-	"RULE":       RULE,
+	"ALL":                  ALL,
+	"CONNECT":              CONNECT,
+	"CREATE":               CREATE,
+	"DROP":                 DROP,
+	"GRANT":                GRANT,
+	"SELECT":               SELECT,
+	"INSERT":               INSERT,
+	"DELETE":               DELETE,
+	"UPDATE":               UPDATE,
+	"ZONECONFIG":           ZONECONFIG,
+	"USAGE":                USAGE,
+	"RULE":                 RULE,
+	"MODIFYCLUSTERSETTING": MODIFYCLUSTERSETTING,
 }
 
 // List is a list of privileges.
@@ -279,6 +293,8 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 		return SequencePrivileges
 	case Any:
 		return AllPrivileges
+	case System:
+		return SystemPrivileges
 	default:
 		panic(errors.AssertionFailedf("unknown object type %s", objectType))
 	}
@@ -326,4 +342,11 @@ func (pl List) ListToACL(grantOptions List, objectType ObjectType) string {
 
 	return strings.Join(chars, "")
 
+}
+
+// IsDescriptorBacked returns whether o is a descriptor backed object.
+// If o is not a descriptor backed object, then privileges are stored to
+// system.privileges.
+func (o ObjectType) IsDescriptorBacked() bool {
+	return isDescriptorBacked[o]
 }
