@@ -36,8 +36,7 @@ func (*tableInserter) desc() string { return "inserter" }
 func (ti *tableInserter) init(
 	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
 ) error {
-	ti.tableWriterBase.init(txn, ti.tableDesc(), evalCtx, sv)
-	return nil
+	return ti.tableWriterBase.init(txn, ti.tableDesc(), evalCtx, sv)
 }
 
 // row is part of the tableWriter interface.

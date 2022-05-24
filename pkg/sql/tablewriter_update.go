@@ -36,8 +36,7 @@ func (*tableUpdater) desc() string { return "updater" }
 func (tu *tableUpdater) init(
 	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
 ) error {
-	tu.tableWriterBase.init(txn, tu.tableDesc(), evalCtx, sv)
-	return nil
+	return tu.tableWriterBase.init(txn, tu.tableDesc(), evalCtx, sv)
 }
 
 // row is part of the tableWriter interface.
