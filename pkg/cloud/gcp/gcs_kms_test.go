@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
+	_ "google.golang.org/api/impersonate"
 )
 
 func TestEncryptDecryptGCS(t *testing.T) {
