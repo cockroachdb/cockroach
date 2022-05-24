@@ -1,0 +1,89 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "serverpb";
+
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "google/api/annotations.proto";
+
+message GetSpanStatisticsRequest {
+  util.hlc.Timestamp start = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end   = 2 [(gogoproto.nullable) = false];
+}
+
+message SpanStatistics {
+
+  message SpanPretty {
+    string start_key = 1;
+    string end_key = 2;
+  }
+
+  SpanPretty pretty = 1;
+  roachpb.Span span = 2;
+  uint64 batch_requests = 3;
+  uint64 n_bytes = 4;
+}
+
+message Sample {
+  util.hlc.Timestamp sample_time = 1;
+  repeated SpanStatistics span_stats = 2;
+}
+
+message GetSpanStatisticsResponse {
+  repeated Sample samples = 1;
+}
+
+// retrieve stats from stores that live on a specific node
+message GetNodeSpanStatsRequest {
+//  todo: time window
+}
+
+// this is aggregated.
+message GetNodeSpanStatsResponse {
+  message NodeSpanStat {
+    roachpb.Span span = 1;
+    uint64 batch_requests = 2;
+    uint64 n_bytes = 3;
+  }
+  repeated NodeSpanStat stats = 1;
+}
+
+message SetSpanBoundariesRequest{}
+message SetSpanBoundariesResponse{}
+
+// TODO: use time window
+message GetSamplesRequest {}
+
+message GetSamplesResponse {
+  repeated Sample samples = 1;
+  repeated string keys = 2;
+}
+
+service SpanStats {
+  // GetSpanStatistics fans out to all stores of interest to retrieve
+  // histogram data over the requested period and aggregates the results.
+  rpc GetSpanStatistics(GetSpanStatisticsRequest) returns (GetSpanStatisticsResponse) {}
+
+  rpc GetNodeSpanStats(GetNodeSpanStatsRequest) returns (GetNodeSpanStatsResponse) {}
+
+  rpc SetSpanBoundaries(SetSpanBoundariesRequest) returns (SetSpanBoundariesResponse) {}
+
+
+  rpc GetSamples(GetSamplesRequest) returns (GetSamplesResponse) {
+    option (google.api.http) = {
+      get: "/_status/v1/key-visualizer"
+    };
+  }
+
+}

@@ -74,6 +74,7 @@ import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import HotRangesPage from "src/views/hotRanges/index";
+import KeyVisualizerPage from "./views/keyVisualizer";
 import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
 import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
 import "styl/app.styl";
@@ -376,6 +377,8 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 />
                 {/* hot ranges */}
                 <Route exact path={`/hotranges`} component={HotRangesPage} />
+
+                <Route exact path={`/keyvisualizer`} component={KeyVisualizerPage} />
                 {/* old route redirects */}
                 <Redirect
                   exact

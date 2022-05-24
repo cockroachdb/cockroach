@@ -13,8 +13,10 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/gogo/protobuf/jsonpb"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -127,6 +129,7 @@ type Server struct {
 	decomNodeMap    *decommissioningNodeMap
 	authentication  *authenticationServer
 	migrationServer *migrationServer
+	spanStatsServer *spanStatsServer
 	tsDB            *ts.DB
 	tsServer        *ts.Server
 	raftTransport   *kvserver.RaftTransport
@@ -963,7 +966,9 @@ func (s *Server) Start(ctx context.Context) error {
 // complexity that can be summarized as follows:
 //
 // - before blocking trying to connect to the Gossip network, we already open
-//   the admin UI (so that its diagnostics are available)
+//
+//	the admin UI (so that its diagnostics are available)
+//
 // - we also allow our Gossip and our connection health Ping service
 // - everything else returns Unavailable errors (which are retryable)
 // - once the node has started, unlock all RPCs.
@@ -1103,6 +1108,47 @@ func (s *Server) PreStart(ctx context.Context) error {
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
 	s.migrationServer = migrationServer // only for testing via TestServer
 
+	// Register the SpanStats service, to power the key visualizer.
+	spanStatsServer := &spanStatsServer{server: s}
+	spanStatsServer.RegisterService(s.grpc.Server)
+	s.spanStatsServer = spanStatsServer
+
+	collectStats := func() {
+		if s.NodeID() == 1 {
+			ctx := context.Background()
+			sample, err := s.spanStatsServer.GetSpanStatistics(ctx, &serverpb.GetSpanStatisticsRequest{})
+
+			if err != nil {
+				log.Errorf(ctx, "Span Statistics Error: %s", err.Error())
+				return
+			}
+
+			m := jsonpb.Marshaler{}
+			result, _ := m.MarshalToString(sample)
+
+			// write to file
+			filename := fmt.Sprintf("./key-visualizer-write/span_stats_%d.json", time.Now().Unix())
+			f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0777)
+			if err != nil {
+				log.Fatal(ctx, err.Error())
+			}
+
+			if _, err := f.WriteString(result); err != nil {
+				s := fmt.Sprintf("%s %s", "could not write", err.Error())
+				panic(s)
+			}
+
+			f.Close()
+		}
+	}
+
+	go func() {
+		for {
+			time.Sleep(15 * time.Second)
+			collectStats()
+		}
+	}()
+
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
@@ -1153,7 +1199,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, s.tsServer} {
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, s.tsServer, s.spanStatsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}
