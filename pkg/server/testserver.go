@@ -298,12 +298,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 //
 // Example usage of a TestServer:
 //
-//   s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-//   defer s.Stopper().Stop()
-//   // If really needed, in tests that can depend on server, downcast to
-//   // server.TestServer:
-//   ts := s.(*server.TestServer)
-//
+//	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+//	defer s.Stopper().Stop()
+//	// If really needed, in tests that can depend on server, downcast to
+//	// server.TestServer:
+//	ts := s.(*server.TestServer)
 type TestServer struct {
 	Cfg    *Config
 	params base.TestServerArgs
@@ -1092,6 +1091,11 @@ func (ts *TestServer) DistSender() *kvcoord.DistSender {
 // MigrationServer is part of TestServerInterface.
 func (ts *TestServer) MigrationServer() interface{} {
 	return ts.migrationServer
+}
+
+// SpanStatsServer is part of TestServerInterface.
+func (ts *TestServer) SpanStatsServer() interface{} {
+	return ts.spanStatsServer
 }
 
 // SpanConfigKVAccessor is part of TestServerInterface.
