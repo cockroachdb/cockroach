@@ -38,6 +38,13 @@ func Example_sql_format() {
 	c.RunWithArgs([]string{"sql", "-e", `select '{"(n,1)","(\n,2)","(\\n,3)"}'::tup[]`})
 	c.RunWithArgs([]string{"sql", "-e", `create type e as enum('a', '\n')`})
 	c.RunWithArgs([]string{"sql", "-e", `select '\n'::e, '{a, "\\n"}'::e[]`})
+	// Check that intervals are formatted correctly.
+	c.RunWithArgs([]string{"sql", "-e", `select '1 day 2 minutes'::interval`})
+	c.RunWithArgs([]string{"sql", "-e", `select '{3 months 4 days 2 hours, 4 years 1 second}'::interval[]`})
+	c.RunWithArgs([]string{"sql", "-e", `SET intervalstyle = sql_standard; select '1 day 2 minutes'::interval`})
+	c.RunWithArgs([]string{"sql", "-e", `SET intervalstyle = sql_standard; select '{3 months 4 days 2 hours,4 years 1 second}'::interval[]`})
+	c.RunWithArgs([]string{"sql", "-e", `SET intervalstyle = iso_8601; select '1 day 2 minutes'::interval`})
+	c.RunWithArgs([]string{"sql", "-e", `SET intervalstyle = iso_8601; select '{3 months 4 days 2 hours,4 years 1 second}'::interval[]`})
 
 	// Output:
 	// sql -e create database t; create table t.times (bare timestamp, withtz timestamptz)
@@ -99,4 +106,26 @@ func Example_sql_format() {
 	// sql -e select '\n'::e, '{a, "\\n"}'::e[]
 	// e	e
 	// \n	"{a,""\\n""}"
+	// sql -e select '1 day 2 minutes'::interval
+	// interval
+	// 1 day 00:02:00
+	// sql -e select '{3 months 4 days 2 hours, 4 years 1 second}'::interval[]
+	// interval
+	// "{""3 mons 4 days 02:00:00"",""4 years 00:00:01""}"
+	// sql -e SET intervalstyle = sql_standard; select '1 day 2 minutes'::interval
+	// SET
+	// interval
+	// 1 0:02:00
+	// sql -e SET intervalstyle = sql_standard; select '{3 months 4 days 2 hours,4 years 1 second}'::interval[]
+	// SET
+	// interval
+	// "{""+0-3 +4 +2:00:00"",""+4-0 +0 +0:00:01""}"
+	// sql -e SET intervalstyle = iso_8601; select '1 day 2 minutes'::interval
+	// SET
+	// interval
+	// P1DT2M
+	// sql -e SET intervalstyle = iso_8601; select '{3 months 4 days 2 hours,4 years 1 second}'::interval[]
+	// SET
+	// interval
+	// {P3M4DT2H,P4YT1S}
 }

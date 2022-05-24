@@ -117,10 +117,11 @@ func (r *sqlRowsMultiResultSet) Next(values []driver.Value) error {
 		} else if fieldOID == pgtype.ByteaOID ||
 			fieldOID == pgtype.QCharOID ||
 			fieldOID == pgtype.NumericOID ||
-			fieldOID == pgtype.RecordOID {
+			fieldOID == pgtype.RecordOID ||
+			fieldOID == pgtype.IntervalOID {
 			// BYTEA values are already sent according to the bytea_output setting.
 			// QChar and Record values can't be decoded using the default decoder.
-			// Numeric values are already sent in the correct format.
+			// Numeric and Interval values are already sent in the correct format.
 			var s string
 			err := r.connInfo.Scan(fieldOID, fieldFormat, rowVal, &s)
 			if err != nil {
