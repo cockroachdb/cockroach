@@ -4351,10 +4351,10 @@ def go_deps():
         name = "com_github_jackc_pgconn",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jackc/pgconn",
-        sha256 = "e85fe75c44045c1c2f1e27846739d873c673cfe210623165d9831bb42c6d19bc",
-        strip_prefix = "github.com/jackc/pgconn@v1.12.1-0.20220426135424-84e8238fa074",
+        sha256 = "48d34064a1facff7766713d9224502e7376a5d90c1506f99a37c57bfceaf9636",
+        strip_prefix = "github.com/jackc/pgconn@v1.12.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgconn/com_github_jackc_pgconn-v1.12.1-0.20220426135424-84e8238fa074.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jackc/pgconn/com_github_jackc_pgconn-v1.12.1.zip",
         ],
     )
     go_repository(
@@ -9095,10 +9095,10 @@ def go_deps():
         name = "org_golang_x_crypto",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/crypto",
-        sha256 = "6904630b4bc6f767bc024b544c405239a773a4e6f839286009eb0474addd1b28",
-        strip_prefix = "golang.org/x/crypto@v0.0.0-20220427172511-eb4f295cb31f",
+        sha256 = "81dbe3648b3bb1f191ac7584626106bf0a8ceccd62e1cd33dbb0e4bd266d1340",
+        strip_prefix = "golang.org/x/crypto@v0.0.0-20220518034528-6f7dac969898",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/crypto/org_golang_x_crypto-v0.0.0-20220427172511-eb4f295cb31f.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/crypto/org_golang_x_crypto-v0.0.0-20220518034528-6f7dac969898.zip",
         ],
     )
     go_repository(
