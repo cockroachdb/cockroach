@@ -302,7 +302,7 @@ var varGen = map[string]sessionVar{
 					"Setting DateStyle changes the volatility of timestamp/timestamptz/date::string "+
 						"and string::timestamp/timestamptz/date/time/timetz casts from immutable to stable. "+
 						"No computed columns, partial indexes, partitions and check constraints can "+
-						"use this casts. "+
+						"use these casts. "+
 						"Use to_char_with_style or parse_{timestamp,timestamptz,date,time,timetz} "+
 						"instead if you need these casts to work in the aforementioned cases.",
 				)
@@ -899,7 +899,7 @@ var varGen = map[string]sessionVar{
 					),
 					"Setting IntervalStyle changes the volatility of string::interval or interval::string "+
 						"casts from immutable to stable. No computed columns, partial indexes, partitions "+
-						"and check constraints can use this casts. "+
+						"and check constraints can use these casts. "+
 						"Use to_char_with_style or parse_interval instead if you need these casts to work "+
 						"in the aforementioned cases.",
 				)
