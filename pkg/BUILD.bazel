@@ -487,6 +487,7 @@ ALL_TESTS = [
     "//pkg/util/optional:optional_test",
     "//pkg/util/pretty:pretty_test",
     "//pkg/util/protoutil:protoutil_test",
+    "//pkg/util/quantile:quantile_test",
     "//pkg/util/quotapool:quotapool_test",
     "//pkg/util/randutil:randutil_test",
     "//pkg/util/retry:retry_test",
