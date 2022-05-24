@@ -86,6 +86,7 @@ type balancerOptions struct {
 	timeSource              timeutil.TimeSource
 	rebalanceRate           float32
 	rebalanceDelay          time.Duration
+	disableRebalancing      bool
 }
 
 // Option defines an option that can be passed to NewBalancer in order to
@@ -136,6 +137,16 @@ func RebalanceDelay(delay time.Duration) Option {
 	}
 }
 
+// DisableRebalancing disables all rebalancing operations within the balancer.
+// Unlike NoRebalanceLoop that only disables automated rebalancing, this also
+// causes RebalanceTenant to no-op if called by the pod watcher. Using this
+// option implicitly disables the rebalance loop as well.
+func DisableRebalancing() Option {
+	return func(opts *balancerOptions) {
+		opts.disableRebalancing = true
+	}
+}
+
 // Balancer handles load balancing of SQL connections within the proxy.
 // All methods on the Balancer instance are thread-safe.
 type Balancer struct {
@@ -174,6 +185,10 @@ type Balancer struct {
 	// rebalanceDelay is the minimum amount of time that must elapse between
 	// attempts to rebalance a given tenant. Defaults to defaultRebalanceDelay.
 	rebalanceDelay time.Duration
+
+	// disableRebalancing is used to indicate that all rebalancing options will
+	// be disabled.
+	disableRebalancing bool
 
 	// lastRebalance is the last time the tenants are rebalanced. This is used
 	// to rate limit the number of rebalances per tenant. Synchronization is
@@ -214,6 +229,9 @@ func NewBalancer(
 	if options.rebalanceDelay == 0 {
 		options.rebalanceDelay = defaultRebalanceDelay
 	}
+	if options.disableRebalancing {
+		options.noRebalanceLoop = true
+	}
 
 	// Ensure that ctx gets cancelled on stopper's quiescing.
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
@@ -224,14 +242,15 @@ func NewBalancer(
 	}
 
 	b := &Balancer{
-		stopper:        stopper,
-		metrics:        metrics,
-		directoryCache: directoryCache,
-		queue:          q,
-		processSem:     semaphore.New(options.maxConcurrentRebalances),
-		timeSource:     options.timeSource,
-		rebalanceRate:  options.rebalanceRate,
-		rebalanceDelay: options.rebalanceDelay,
+		stopper:            stopper,
+		metrics:            metrics,
+		directoryCache:     directoryCache,
+		queue:              q,
+		processSem:         semaphore.New(options.maxConcurrentRebalances),
+		timeSource:         options.timeSource,
+		rebalanceRate:      options.rebalanceRate,
+		rebalanceDelay:     options.rebalanceDelay,
+		disableRebalancing: options.disableRebalancing,
 	}
 	b.lastRebalance.tenants = make(map[roachpb.TenantID]time.Time)
 
@@ -259,8 +278,9 @@ func NewBalancer(
 // pod exists for the given tenant, or the tenant has been recently rebalanced,
 // this is a no-op.
 func (b *Balancer) RebalanceTenant(ctx context.Context, tenantID roachpb.TenantID) {
-	// If rebalanced recently, no-op.
-	if !b.canRebalanceTenant(tenantID) {
+	// If rebalancing is disabled, or tenant was rebalanced recently, then
+	// RebalanceTenant is a no-op.
+	if b.disableRebalancing || !b.canRebalanceTenant(tenantID) {
 		return
 	}
 
