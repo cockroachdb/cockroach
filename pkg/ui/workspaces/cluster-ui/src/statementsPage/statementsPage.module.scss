@@ -48,7 +48,8 @@
 
 .table-area {
   position: relative;
-  width: fit-content;
+  overflow-x: scroll;
+  min-height: 480px;
 }
 
 .reset-btn-area {

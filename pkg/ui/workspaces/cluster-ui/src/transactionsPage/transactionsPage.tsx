@@ -382,7 +382,7 @@ export class TransactionsPage extends React.Component<
     );
 
     return (
-      <div className={cx("table-area")}>
+      <>
         <PageConfig>
           <PageConfigItem>
             <Search
@@ -417,113 +417,117 @@ export class TransactionsPage extends React.Component<
             />
           </PageConfigItem>
         </PageConfig>
-        <Loading
-          loading={!this.props?.data}
-          page={"transactions"}
-          error={this.props?.error}
-          render={() => {
-            const { pagination } = this.state;
-            const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
-              filteredTransactions,
-              statements,
-            ).map(t => ({
-              stats_data: t.stats_data,
-              node_id: t.node_id,
-              regionNodes: isTenant
-                ? []
-                : generateRegionNode(t, statements, nodeRegions),
-            }));
-            const { current, pageSize } = pagination;
-            const hasData = data.transactions?.length > 0;
-            const isUsedFilter = search?.length > 0;
+        <div className={cx("table-area")}>
+          <Loading
+            loading={!this.props?.data}
+            page={"transactions"}
+            error={this.props?.error}
+            render={() => {
+              const { pagination } = this.state;
+              const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
+                filteredTransactions,
+                statements,
+              ).map(t => ({
+                stats_data: t.stats_data,
+                node_id: t.node_id,
+                regionNodes: isTenant
+                  ? []
+                  : generateRegionNode(t, statements, nodeRegions),
+              }));
+              const { current, pageSize } = pagination;
+              const hasData = data.transactions?.length > 0;
+              const isUsedFilter = search?.length > 0;
 
-            // Creates a list of all possible columns,
-            // hiding nodeRegions if is not multi-region and
-            // hiding columns that won't be displayed for tenants.
-            const columns = makeTransactionsColumns(
-              transactionsToDisplay,
-              statements,
-              isTenant,
-              search,
-            )
-              .filter(c => !(c.name === "regionNodes" && regions.length < 2))
-              .filter(c => !(isTenant && c.hideIfTenant));
+              // Creates a list of all possible columns,
+              // hiding nodeRegions if is not multi-region and
+              // hiding columns that won't be displayed for tenants.
+              const columns = makeTransactionsColumns(
+                transactionsToDisplay,
+                statements,
+                isTenant,
+                search,
+              )
+                .filter(c => !(c.name === "regionNodes" && regions.length < 2))
+                .filter(c => !(isTenant && c.hideIfTenant));
 
-            const isColumnSelected = (c: ColumnDescriptor<TransactionInfo>) => {
+              const isColumnSelected = (
+                c: ColumnDescriptor<TransactionInfo>,
+              ) => {
+                return (
+                  ((userSelectedColumnsToShow === null ||
+                    userSelectedColumnsToShow === undefined) &&
+                    c.showByDefault !== false) || // show column if list of visible was never defined and can be show by default.
+                  (userSelectedColumnsToShow !== null &&
+                    userSelectedColumnsToShow.includes(c.name)) || // show column if user changed its visibility.
+                  c.alwaysShow === true // show column if alwaysShow option is set explicitly.
+                );
+              };
+
+              // Iterate over all available columns and create list of SelectOptions with initial selection
+              // values based on stored user selections in local storage and default column configs.
+              // Columns that are set to alwaysShow are filtered from the list.
+              const tableColumns = columns
+                .filter(c => !c.alwaysShow)
+                .map(
+                  (c): SelectOption => ({
+                    label: getLabel(
+                      c.name as StatisticTableColumnKeys,
+                      "transaction",
+                    ),
+                    value: c.name,
+                    isSelected: isColumnSelected(c),
+                  }),
+                );
+
+              // List of all columns that will be displayed based on the column selection.
+              const displayColumns = columns.filter(c => isColumnSelected(c));
+
               return (
-                ((userSelectedColumnsToShow === null ||
-                  userSelectedColumnsToShow === undefined) &&
-                  c.showByDefault !== false) || // show column if list of visible was never defined and can be show by default.
-                (userSelectedColumnsToShow !== null &&
-                  userSelectedColumnsToShow.includes(c.name)) || // show column if user changed its visibility.
-                c.alwaysShow === true // show column if alwaysShow option is set explicitly.
+                <>
+                  <section className={statisticsClasses.tableContainerClass}>
+                    <ColumnsSelector
+                      options={tableColumns}
+                      onSubmitColumns={onColumnsChange}
+                    />
+                    <TableStatistics
+                      pagination={pagination}
+                      search={search}
+                      totalCount={transactionsToDisplay.length}
+                      arrayItemName="transactions"
+                      activeFilters={activeFilters}
+                      onClearFilters={this.onClearFilters}
+                    />
+                    <TransactionsTable
+                      columns={displayColumns}
+                      transactions={transactionsToDisplay}
+                      sortSetting={sortSetting}
+                      onChangeSortSetting={this.onChangeSortSetting}
+                      pagination={pagination}
+                      renderNoResult={
+                        <EmptyTransactionsPlaceholder
+                          isEmptySearchResults={hasData && isUsedFilter}
+                        />
+                      }
+                    />
+                  </section>
+                  <Pagination
+                    pageSize={pageSize}
+                    current={current}
+                    total={transactionsToDisplay.length}
+                    onChange={this.onChangePage}
+                  />
+                </>
               );
-            };
-
-            // Iterate over all available columns and create list of SelectOptions with initial selection
-            // values based on stored user selections in local storage and default column configs.
-            // Columns that are set to alwaysShow are filtered from the list.
-            const tableColumns = columns
-              .filter(c => !c.alwaysShow)
-              .map(
-                (c): SelectOption => ({
-                  label: getLabel(
-                    c.name as StatisticTableColumnKeys,
-                    "transaction",
-                  ),
-                  value: c.name,
-                  isSelected: isColumnSelected(c),
-                }),
-              );
-
-            // List of all columns that will be displayed based on the column selection.
-            const displayColumns = columns.filter(c => isColumnSelected(c));
-
-            return (
-              <>
-                <section className={statisticsClasses.tableContainerClass}>
-                  <ColumnsSelector
-                    options={tableColumns}
-                    onSubmitColumns={onColumnsChange}
-                  />
-                  <TableStatistics
-                    pagination={pagination}
-                    search={search}
-                    totalCount={transactionsToDisplay.length}
-                    arrayItemName="transactions"
-                    activeFilters={activeFilters}
-                    onClearFilters={this.onClearFilters}
-                  />
-                  <TransactionsTable
-                    columns={displayColumns}
-                    transactions={transactionsToDisplay}
-                    sortSetting={sortSetting}
-                    onChangeSortSetting={this.onChangeSortSetting}
-                    pagination={pagination}
-                    renderNoResult={
-                      <EmptyTransactionsPlaceholder
-                        isEmptySearchResults={hasData && isUsedFilter}
-                      />
-                    }
-                  />
-                </section>
-                <Pagination
-                  pageSize={pageSize}
-                  current={current}
-                  total={transactionsToDisplay.length}
-                  onChange={this.onChangePage}
-                />
-              </>
-            );
-          }}
-          renderError={() =>
-            SQLActivityError({
-              statsType: "transactions",
-            })
-          }
-        />
-        {longLoadingMessage}
-      </div>
+            }}
+            renderError={() =>
+              SQLActivityError({
+                statsType: "transactions",
+              })
+            }
+          />
+          {longLoadingMessage}
+        </div>
+      </>
     );
   }
 }
