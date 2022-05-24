@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -1175,10 +1176,37 @@ func (c *transientCluster) GetSQLCredentials() (
 	return c.adminUser, c.adminPassword, c.demoDir
 }
 
+func (c *transientCluster) maybeEnableMultiTenantMultiRegion(ctx context.Context) error {
+	if !c.demoCtx.Multitenant {
+		return nil
+	}
+
+	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, false /* isTenant */)
+	if err != nil {
+		return err
+	}
+	db, err := gosql.Open("postgres", storageURL.ToPQ().String())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if _, err = db.Exec(`ALTER TENANT ALL SET CLUSTER SETTING ` +
+		sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName + " = true"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *transientCluster) SetupWorkload(ctx context.Context, licenseDone <-chan error) error {
-	gen := c.demoCtx.WorkloadGenerator
+	if err := c.maybeEnableMultiTenantMultiRegion(ctx); err != nil {
+		return err
+	}
+
 	// If there is a load generator, create its database and load its
 	// fixture.
+	gen := c.demoCtx.WorkloadGenerator
 	if gen != nil {
 		db, err := gosql.Open("postgres", c.connURL)
 		if err != nil {
