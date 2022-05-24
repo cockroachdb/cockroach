@@ -23,7 +23,12 @@ export enum JobStatusVisual {
 
 export function jobToVisual(job: Job): JobStatusVisual {
   if (job.type === "CHANGEFEED") {
-    return JobStatusVisual.BadgeOnly;
+    switch (job.status) {
+      case JOB_STATUS_FAILED:
+        return JobStatusVisual.BadgeWithErrorMessage;
+      default:
+        return JobStatusVisual.BadgeOnly;
+    }
   }
   switch (job.status) {
     case JOB_STATUS_SUCCEEDED:

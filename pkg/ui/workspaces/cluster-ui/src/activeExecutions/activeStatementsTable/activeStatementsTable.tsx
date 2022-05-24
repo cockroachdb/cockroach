@@ -26,7 +26,7 @@ import {
   ExecutionsColumn,
 } from "../execTableCommon";
 
-interface ActiveStatementsTable {
+interface ActiveStatementsTableProps {
   data: ActiveStatement[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
@@ -107,7 +107,7 @@ export function getColumnOptions(
     }));
 }
 
-export const ActiveStatementsTable: React.FC<ActiveStatementsTable> = props => {
+export const ActiveStatementsTable: React.FC<ActiveStatementsTableProps> = props => {
   const { selectedColumns, ...rest } = props;
   const columns = makeActiveStatementsColumns().filter(col =>
     isSelectedColumn(selectedColumns, col),
