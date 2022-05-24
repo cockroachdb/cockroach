@@ -10,7 +10,6 @@
 
 import React from "react";
 import { cockroach } from "src/js/protos";
-import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
 import { JobStatus } from "./jobStatus";
 import { isRetrying } from "src/views/jobs/jobStatusOptions";
 import { util } from "@cockroachlabs/cluster-ui";
@@ -29,15 +28,6 @@ export const JobStatusCell: React.FC<JobStatusCellProps> = ({
   lineWidth,
   compact = false,
 }) => {
-  if (job.highwater_timestamp) {
-    return (
-      <HighwaterTimestamp
-        highwater={job.highwater_timestamp}
-        tooltip={job.highwater_decimal}
-      />
-    );
-  }
-
   const jobStatus = (
     <JobStatus job={job} lineWidth={lineWidth} compact={compact} />
   );

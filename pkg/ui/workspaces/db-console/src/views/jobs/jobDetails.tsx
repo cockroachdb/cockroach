@@ -31,6 +31,7 @@ import { DATE_FORMAT } from "src/util/format";
 import { JobStatusCell } from "./jobStatusCell";
 import "src/views/shared/components/summaryCard/styles.styl";
 import * as protos from "src/js/protos";
+import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
 
 interface JobsTableProps extends RouteComponentProps {
   refreshJob: typeof refreshJob;
@@ -84,6 +85,21 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
                   <p className="summary--card__counting--label">Users</p>
                 </div>
               </Col>
+              {job.highwater_timestamp ? (
+                <Col span={24}>
+                  <div className="summary--card__counting">
+                    <h3 className="summary--card__counting--value">
+                      <HighwaterTimestamp
+                        timestamp={job.highwater_timestamp}
+                        decimalString={job.highwater_decimal}
+                      />
+                    </h3>
+                    <p className="summary--card__counting--label">
+                      High-water Timestamp
+                    </p>
+                  </div>
+                </Col>
+              ) : null}
             </Row>
           </SummaryCard>
         </Col>
