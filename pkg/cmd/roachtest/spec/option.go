@@ -157,15 +157,21 @@ func (p clusterReusePolicyOption) apply(spec *ClusterSpec) {
 	spec.ReusePolicy = p.p
 }
 
-type preferSSDOption struct{}
+type preferSSDOption struct{ val bool }
 
-func (*preferSSDOption) apply(spec *ClusterSpec) {
-	spec.PreferLocalSSD = true
+func (o *preferSSDOption) apply(spec *ClusterSpec) {
+	spec.PreferLocalSSD = o.val
 }
 
 // PreferSSD prefers using local SSD, when possible.
 func PreferSSD() Option {
-	return &preferSSDOption{}
+	return &preferSSDOption{val: true}
+}
+
+// AvoidSSD avoids creating the cluster with a local SSD store directory.
+// Network-backed storage will be used instead.
+func AvoidSSD() Option {
+	return &preferSSDOption{val: false}
 }
 
 type terminateOnMigrationOption struct{}
