@@ -739,6 +739,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "expropt":
 		e, err := ot.ExprOpt()
 		if err != nil {
+			if len(errors.GetAllDetails(err)) > 0 {
+				return fmt.Sprintf("error: %s\ndetails:\n%s", err, errors.FlattenDetails(err))
+			}
 			return fmt.Sprintf("error: %s\n", err)
 		}
 		ot.postProcess(tb, d, e)
