@@ -1076,6 +1076,16 @@ func (s *TestState) StatsRefresher() scexec.StatsRefreshQueue {
 	return s
 }
 
+// Telemetry implement scexec.Dependencies.
+func (s *TestState) Telemetry() scexec.Telemetry {
+	return s
+}
+
+// IncrementSchemaChangeErrorType implements scexec.Telemetry
+func (s *TestState) IncrementSchemaChangeErrorType(typ string) {
+	s.LogSideEffectf("incrementing schema change error type metric %s", typ)
+}
+
 // GetTestingKnobs implement scexec.Dependencies.
 func (s *TestState) GetTestingKnobs() *scexec.TestingKnobs {
 	return &scexec.TestingKnobs{}

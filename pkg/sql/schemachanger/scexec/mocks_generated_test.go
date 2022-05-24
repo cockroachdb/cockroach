@@ -332,6 +332,20 @@ func (mr *MockDependenciesMockRecorder) StatsRefresher() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StatsRefresher", reflect.TypeOf((*MockDependencies)(nil).StatsRefresher))
 }
 
+// Telemetry mocks base method.
+func (m *MockDependencies) Telemetry() scexec.Telemetry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Telemetry")
+	ret0, _ := ret[0].(scexec.Telemetry)
+	return ret0
+}
+
+// Telemetry indicates an expected call of Telemetry.
+func (mr *MockDependenciesMockRecorder) Telemetry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Telemetry", reflect.TypeOf((*MockDependencies)(nil).Telemetry))
+}
+
 // TransactionalJobRegistry mocks base method.
 func (m *MockDependencies) TransactionalJobRegistry() scexec.TransactionalJobRegistry {
 	m.ctrl.T.Helper()
