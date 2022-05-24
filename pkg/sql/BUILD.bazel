@@ -105,6 +105,7 @@ go_library(
         "export.go",
         "filter.go",
         "grant_revoke.go",
+        "grant_revoke_system.go",
         "grant_role.go",
         "group.go",
         "index_backfiller.go",

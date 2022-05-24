@@ -366,7 +366,7 @@ CREATE TABLE public.tenant_settings (
 CREATE TABLE public.privileges (
 	username STRING NOT NULL,
 	path STRING NOT NULL,
-	privileges VARBIT NOT NULL,
-	grant_options VARBIT NOT NULL,
+	privileges STRING[] NOT NULL,
+	grant_options STRING[] NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username ASC, path ASC)
 );

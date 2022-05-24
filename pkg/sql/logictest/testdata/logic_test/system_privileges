@@ -1,0 +1,35 @@
+user testuser
+
+statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on SystemCluster
+SELECT * FROM crdb_internal.cluster_settings;
+
+user root
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.cluster_settings;
+
+user root
+
+query TTTT
+SELECT * FROM system.privileges
+----
+testuser  /system/  {MODIFYCLUSTERSETTING}  {}
+
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+user testuser
+
+statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on SystemCluster
+SELECT * FROM crdb_internal.cluster_settings;
+
+user root
+
+query TTTT
+SELECT * FROM system.privileges
+----

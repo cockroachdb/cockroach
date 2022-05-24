@@ -933,6 +933,14 @@ var logicTestConfigs = []testClusterConfig{
 		backupRestoreProbability: envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0),
 		isCCLConfig:              true,
 	},
+	{
+		name:                "local-mixed-22.1-22.2",
+		numNodes:            1,
+		overrideDistSQLMode: "off",
+		bootstrapVersion:    roachpb.Version{Major: 22, Minor: 1},
+		binaryVersion:       roachpb.Version{Major: 22, Minor: 2},
+		disableUpgrade:      true,
+	},
 }
 
 // An index in the above slice.
