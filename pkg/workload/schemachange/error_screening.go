@@ -449,7 +449,7 @@ GROUP BY name;
 				}
 				// Only accept known error types for generated expressions.
 				if !isValidGenerationError(pgErr.Code) {
-					return false, generatedCodes, err
+					return false, err
 				}
 				generatedCodes = append(generatedCodes,
 					codesWithConditions{

@@ -436,7 +436,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 			return errors.Wrapf(err, "***UNEXPECTED ERROR")
 		}
 	}
-
+	fmt.Printf("COMMIT TXN START (%d)\n", w.id)
 	w.logger.writeLog("COMMIT")
 	if err = tx.Commit(ctx); err != nil {
 		fmt.Printf("FINISH TXN (%d)", w.id)

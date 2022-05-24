@@ -2470,7 +2470,7 @@ const (
 	OpStmtDML opStmtType = 2
 )
 
-type opStmtQueryResultCallback func(rows pgx.Rows) error
+type opStmtQueryResultCallback func(ctx context.Context, rows pgx.Rows) error
 
 // opStmt a generated statement that is either DDL or DML, including the potential
 // set of execution errors this statement can generate.
@@ -2576,7 +2576,7 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 	}
 	// Next validate the result set.
 	if s.queryResultCallback != nil {
-		if err := s.queryResultCallback(rows); err != nil {
+		if err := s.queryResultCallback(ctx, rows); err != nil {
 			return err
 		}
 	}
@@ -2586,7 +2586,7 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *opStmt, err error) {
 	const MaxTablesForSelect = 3
 	const MaxColumnsForSelect = 16
-	const MaxRowsToConsume = 300000
+	const MaxRowsToConsume = 1
 	// Select the number of target tables.
 	numTables := og.randIntn(MaxTablesForSelect) + 1
 	tableNames := make([]*tree.TableName, numTables)
@@ -2655,18 +2655,24 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 		selectQuery.WriteString(" AS ")
 		selectQuery.WriteString(fmt.Sprintf("t%d ", idx))
 	}
-	selectQuery.WriteString(fmt.Sprintf(" FETCH FIRST %d ROWS ONLY", MaxRowsToConsume))
-
+	if MaxRowsToConsume > 0 {
+		selectQuery.WriteString(fmt.Sprintf(" FETCH FIRST %d ROWS ONLY", MaxRowsToConsume))
+	}
 	// Setup a statement with the query and a call back to validate the result
 	// set.
 	stmt = makeOpStmt(OpStmtDML)
 	stmt.sql = selectQuery.String()
-	stmt.queryResultCallback = func(rows pgx.Rows) error {
+	stmt.queryResultCallback = func(ctx context.Context, rows pgx.Rows) error {
 		// Only read rows from the select for up to a minute.
 		const MaxTimeForRead = time.Minute
 		startTime := time.Now()
 		defer rows.Close()
 		for rows.Next() && time.Since(startTime) < MaxTimeForRead {
+			// Detect if the context is cancelled while processing
+			// the result set.
+			if err = ctx.Err(); err != nil {
+				return err
+			}
 			rawValues := rows.RawValues()
 			if len(rawValues) != numColumnsToSelect {
 				return errors.AssertionFailedf("query returned incorrect number of columns. "+
