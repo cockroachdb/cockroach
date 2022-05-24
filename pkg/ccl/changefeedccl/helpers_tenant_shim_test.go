@@ -68,6 +68,7 @@ func (t *testServerShim) GossipI() interface{}                  { panic(unsuppor
 func (t *testServerShim) RangeFeedFactory() interface{}         { panic(unsupportedShimMethod) }
 func (t *testServerShim) DistSenderI() interface{}              { panic(unsupportedShimMethod) }
 func (t *testServerShim) MigrationServer() interface{}          { panic(unsupportedShimMethod) }
+func (t *testServerShim) SpanStatsServer() interface{}          { panic(unsupportedShimMethod) }
 func (t *testServerShim) SQLServer() interface{}                { panic(unsupportedShimMethod) }
 func (t *testServerShim) SQLLivenessProvider() interface{}      { panic(unsupportedShimMethod) }
 func (t *testServerShim) StartupMigrationsManager() interface{} { panic(unsupportedShimMethod) }

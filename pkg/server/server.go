@@ -125,6 +125,7 @@ type Server struct {
 	drain           *drainServer
 	authentication  *authenticationServer
 	migrationServer *migrationServer
+	spanStatsServer *spanStatsServer
 	tsDB            *ts.DB
 	tsServer        *ts.Server
 	raftTransport   *kvserver.RaftTransport
@@ -933,7 +934,9 @@ func (s *Server) Start(ctx context.Context) error {
 // complexity that can be summarized as follows:
 //
 // - before blocking trying to connect to the Gossip network, we already open
-//   the admin UI (so that its diagnostics are available)
+//
+//	the admin UI (so that its diagnostics are available)
+//
 // - we also allow our Gossip and our connection health Ping service
 // - everything else returns Unavailable errors (which are retryable)
 // - once the node has started, unlock all RPCs.
@@ -1072,6 +1075,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 	migrationServer := &migrationServer{server: s}
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
 	s.migrationServer = migrationServer // only for testing via TestServer
+
+	// Register the SpanStats service, to power the key visualizer.
+	spanStatsServer := &spanStatsServer{server: s}
+	serverpb.RegisterSpanStatsServer(s.grpc.Server, spanStatsServer)
+	s.spanStatsServer = spanStatsServer // only for testing via TestServer; XXX: unnecessary
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.

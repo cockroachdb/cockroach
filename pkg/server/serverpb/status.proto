@@ -1810,7 +1810,8 @@ service Status {
   // Node retrieves details about a single node.
   // API: PUBLIC ALPHA
   rpc Node(NodeRequest) returns (server.status.statuspb.NodeStatus) {
-    option (google.api.http) = {
+    option (google.api.http) = { // XXX: Here's how you expose an optional http
+    // end point for an RPC. Don't know what the payload looks like yet.
       get : "/_status/nodes/{node_id}"
     };
   }

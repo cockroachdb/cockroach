@@ -1,0 +1,30 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "serverpb";
+
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+message GetSpanStatisticsRequest {
+  util.hlc.Timestamp start = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end   = 2 [(gogoproto.nullable) = false];
+}
+
+message GetSpanStatisticsResponse {
+}
+
+service SpanStats {
+  // GetSpanStatistics fans out to all stores of interest to retrieve
+  // histogram data over the requested period and aggregates the results.
+  rpc GetSpanStatistics(GetSpanStatisticsRequest) returns (GetSpanStatisticsResponse) { }
+}

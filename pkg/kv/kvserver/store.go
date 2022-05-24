@@ -441,7 +441,7 @@ INVARIANT: the set of all Ranges (as determined by, e.g. a transactionally
 consistent scan of the meta index ranges) always exactly covers the addressable
 keyspace roachpb.KeyMin (inclusive) to roachpb.KeyMax (exclusive).
 
-Ranges
+# Ranges
 
 Each Replica is part of a Range, i.e. corresponds to what other systems would
 call a shard. A Range is a consensus group backed by Raft, i.e. each Replica is
@@ -458,7 +458,7 @@ these interact heavily with the Range as a consensus group (of which each
 Replica is a member). All of these intricacies are described at a high level in
 this comment.
 
-RangeDescriptor
+# RangeDescriptor
 
 A roachpb.RangeDescriptor is the configuration of a Range. It is an
 MVCC-backed key-value pair (where the key is derived from the StartKey via
@@ -477,7 +477,8 @@ these operations at some point will
 to the Replicas comprising the members of the Range)
 
 - update the meta ranges (which form a search index used for request routing, see
-  kv.RangeLookup and updateRangeAddressing for details)
+
+	kv.RangeLookup and updateRangeAddressing for details)
 
 - commit with a roachpb.InternalCommitTrigger.
 
@@ -516,7 +517,7 @@ Replica for any given key, and ensure that no two Replicas on a Store operate on
 shared keyspace (as seen by the storage.Engine). Refer to the Replica Lifecycle
 diagram below for details on how this invariant is upheld.
 
-Replica Lifecycle
+# Replica Lifecycle
 
 A Replica should be thought of primarily as a State Machine applying commands
 from a replicated log (the log being replicated across the members of the
@@ -576,41 +577,41 @@ request a snapshot. See maybeDelaySplitToAvoidSnapshot.
 The diagram is a lot to take in. The various transitions are discussed in
 prose below, and the source .dot file is in store_doc_replica_lifecycle.dot.
 
-                                +---------------------+
-            +------------------ |       Absent        | ---------------------------------------------------------------------------------------------------+
-            |                   +---------------------+                                                                                                    |
-            |                     |                        Subsume              Crash          applySnapshot                                               |
-            |                     | Store.Start          +---------------+    +---------+    +---------------+                                             |
-            |                     v                      v               |    v         |    v               |                                             |
-            |                   +-----------------------------------------------------------------------------------------------------------------------+  |
-  +---------+------------------ |                                                                                                                       |  |
-  |         |                   |                                                      Initialized                                                      |  |
-  |         |                   |                                                                                                                       |  |
-  |    +----+------------------ |                                                                                                                       | -+----+
-  |    |    |                   +-----------------------------------------------------------------------------------------------------------------------+  |    |
-  |    |    |                     |                      ^                    ^                                   |              |                    |    |    |
-  |    |    | Raft msg            | Crash                | applySnapshot      | post-split                        |              |                    |    |    |
-  |    |    |                     v                      |                    |                                   |              |                    |    |    |
-  |    |    |                   +---------------------------------------------------------+  pre-split            |              |                    |    |    |
-  |    |    +-----------------> |                                                         | <---------------------+--------------+--------------------+----+    |
-  |    |                        |                                                         |                       |              |                    |         |
-  |    |                        |                      Uninitialized                      |   Raft msg            |              |                    |         |
-  |    |                        |                                                         | -----------------+    |              |                    |         |
-  |    |                        |                                                         |                  |    |              |                    |         |
-  |    |                        |                                                         | <----------------+    |              |                    |         |
-  |    |                        +---------------------------------------------------------+                       |              | apply removal      |         |
-  |    |                          |                      |                                                        |              |                    |         |
-  |    |                          | ReplicaTooOldError   | higher ReplicaID                                       | Replica GC   |                    |         |
-  |    |                          v                      v                                                        v              |                    |         |
-  |    |   Merged (snapshot)    +---------------------------------------------------------------------------------------------+  |                    |         |
-  |    +----------------------> |                                                                                             | <+                    |         |
-  |                             |                                                                                             |                       |         |
-  |        apply Merge          |                                                                                             |  ReplicaTooOld        |         |
-  +---------------------------> |                                           Removed                                           | <---------------------+         |
-                                |                                                                                             |                                 |
-                                |                                                                                             |  higher ReplicaID               |
-                                |                                                                                             | <-------------------------------+
-                                +---------------------------------------------------------------------------------------------+
+	                              +---------------------+
+	          +------------------ |       Absent        | ---------------------------------------------------------------------------------------------------+
+	          |                   +---------------------+                                                                                                    |
+	          |                     |                        Subsume              Crash          applySnapshot                                               |
+	          |                     | Store.Start          +---------------+    +---------+    +---------------+                                             |
+	          |                     v                      v               |    v         |    v               |                                             |
+	          |                   +-----------------------------------------------------------------------------------------------------------------------+  |
+	+---------+------------------ |                                                                                                                       |  |
+	|         |                   |                                                      Initialized                                                      |  |
+	|         |                   |                                                                                                                       |  |
+	|    +----+------------------ |                                                                                                                       | -+----+
+	|    |    |                   +-----------------------------------------------------------------------------------------------------------------------+  |    |
+	|    |    |                     |                      ^                    ^                                   |              |                    |    |    |
+	|    |    | Raft msg            | Crash                | applySnapshot      | post-split                        |              |                    |    |    |
+	|    |    |                     v                      |                    |                                   |              |                    |    |    |
+	|    |    |                   +---------------------------------------------------------+  pre-split            |              |                    |    |    |
+	|    |    +-----------------> |                                                         | <---------------------+--------------+--------------------+----+    |
+	|    |                        |                                                         |                       |              |                    |         |
+	|    |                        |                      Uninitialized                      |   Raft msg            |              |                    |         |
+	|    |                        |                                                         | -----------------+    |              |                    |         |
+	|    |                        |                                                         |                  |    |              |                    |         |
+	|    |                        |                                                         | <----------------+    |              |                    |         |
+	|    |                        +---------------------------------------------------------+                       |              | apply removal      |         |
+	|    |                          |                      |                                                        |              |                    |         |
+	|    |                          | ReplicaTooOldError   | higher ReplicaID                                       | Replica GC   |                    |         |
+	|    |                          v                      v                                                        v              |                    |         |
+	|    |   Merged (snapshot)    +---------------------------------------------------------------------------------------------+  |                    |         |
+	|    +----------------------> |                                                                                             | <+                    |         |
+	|                             |                                                                                             |                       |         |
+	|        apply Merge          |                                                                                             |  ReplicaTooOld        |         |
+	+---------------------------> |                                           Removed                                           | <---------------------+         |
+	                              |                                                                                             |                                 |
+	                              |                                                                                             |  higher ReplicaID               |
+	                              |                                                                                             | <-------------------------------+
+	                              +---------------------------------------------------------------------------------------------+
 
 When a Store starts, it iterates through all RangeDescriptors it can find on its
 Engine. Finding a RangeDescriptor by definition implies that the Replica is
@@ -903,6 +904,8 @@ type Store struct {
 		// INVARIANT: any entry in this map is also in replicasByKey.
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
+
+	spanStatsHistogram *spanStatsHistogram // XXX: Add commentary
 
 	// The unquiesced subset of replicas.
 	unquiescedReplicas struct {
@@ -1242,6 +1245,8 @@ func NewStore(
 	concurrentscanInterleavedIntentsLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		s.limiters.ConcurrentScanInterleavedIntents.SetLimit(int(concurrentscanInterleavedIntentsLimit.Get(&cfg.Settings.SV)))
 	})
+
+	s.spanStatsHistogram = newSpanStatsHistogram() // XXX: initializing things here
 
 	// The snapshot storage is usually empty at this point since it is cleared
 	// after each snapshot application, except when the node crashed right before

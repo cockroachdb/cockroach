@@ -41,7 +41,7 @@ import (
 // instance due to the timestamp cache or finding a committed value in the path
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction object.
-func (s *Store) Send(
+func (s *Store) Send( // XXX: point where all requests go through
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Attach any log tags from the store to the context (which normally
@@ -204,6 +204,12 @@ func (s *Store) Send(
 				br.RangeInfos = append(rangeInfos, br.RangeInfos...)
 			}
 
+			// XXX: Do we want to increment the counters here?
+			for _, union := range ba.Requests {
+				arg := union.GetInner()
+				header := arg.Header()
+				s.spanStatsHistogram.increment(roachpb.Span{Key: header.Key, EndKey: header.EndKey})
+			}
 			return br, nil
 		}
 
@@ -394,15 +400,18 @@ func (s *Store) maybeThrottleBatch(
 //
 // The server-side negotiation fast-path provides two benefits:
 // 1. it avoids two network hops in the common-case where a bounded staleness
-//    read is targeting a single range. This in an important performance
-//    optimization for single-row point lookups.
+//
+//	read is targeting a single range. This in an important performance
+//	optimization for single-row point lookups.
+//
 // 2. it provides stronger guarantees around minimizing staleness during bounded
-//    staleness reads. Bounded staleness reads that hit the server-side
-//    fast-path use their target replica's most up-to-date resolved timestamp,
-//    so they are as fresh as possible. Bounded staleness reads that miss the
-//    fast-path and perform explicit negotiation (see below) consult a cache, so
-//    they may use an out-of-date, suboptimal resolved timestamp, as long as it
-//    is fresh enough to satisfy the staleness bound of the request.
+//
+//	staleness reads. Bounded staleness reads that hit the server-side
+//	fast-path use their target replica's most up-to-date resolved timestamp,
+//	so they are as fresh as possible. Bounded staleness reads that miss the
+//	fast-path and perform explicit negotiation (see below) consult a cache, so
+//	they may use an out-of-date, suboptimal resolved timestamp, as long as it
+//	is fresh enough to satisfy the staleness bound of the request.
 //
 // The method should be called for requests that have their MinTimestampBound
 // field set, which indicates that the request wants a dynamic timestamp equal

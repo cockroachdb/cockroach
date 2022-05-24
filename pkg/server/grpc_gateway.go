@@ -29,7 +29,7 @@ import (
 
 // grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC
 // gateway.
-type grpcGatewayServer interface {
+type grpcGatewayServer interface { // XXX: interops between http+grpc
 	RegisterService(g *grpc.Server)
 	RegisterGateway(
 		ctx context.Context,
