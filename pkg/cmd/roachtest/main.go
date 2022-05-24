@@ -132,9 +132,10 @@ func main() {
 		&cockroach, "cockroach", "", "path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
 		&workload, "workload", "", "path to workload binary to use")
-	f := rootCmd.PersistentFlags().VarPF(
-		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
-	f.NoOptDefVal = "true"
+	rootCmd.PersistentFlags().Float64Var(
+		&encryptionProbability, "metamorphic-encryption-probability", defaultEncryptionProbability,
+		"probability that clusters will be created with encryption-at-rest enabled "+
+			"for tests that support metamorphic encryption (default 1.0)")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   `version`,

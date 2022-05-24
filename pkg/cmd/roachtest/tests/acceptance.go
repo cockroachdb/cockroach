@@ -21,13 +21,13 @@ import (
 
 func registerAcceptance(r registry.Registry) {
 	testCases := map[registry.Owner][]struct {
-		name            string
-		fn              func(ctx context.Context, t test.Test, c cluster.Cluster)
-		skip            string
-		minVersion      string
-		numNodes        int
-		timeout         time.Duration
-		encryptAtRandom bool
+		name              string
+		fn                func(ctx context.Context, t test.Test, c cluster.Cluster)
+		skip              string
+		minVersion        string
+		numNodes          int
+		timeout           time.Duration
+		encryptionSupport registry.EncryptionSupport
 	}{
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
@@ -35,8 +35,9 @@ func registerAcceptance(r registry.Registry) {
 			{name: "gossip/peerings", fn: runGossipPeerings},
 			{name: "gossip/restart", fn: runGossipRestart},
 			{
-				name: "gossip/restart-node-one",
-				fn:   runGossipRestartNodeOne,
+				name:              "gossip/restart-node-one",
+				fn:                runGossipRestartNodeOne,
+				encryptionSupport: registry.EncryptionAlwaysDisabled,
 			},
 			{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 			{
@@ -47,8 +48,8 @@ func registerAcceptance(r registry.Registry) {
 			{name: "reset-quorum", fn: runResetQuorum, numNodes: 8},
 			{
 				name: "many-splits", fn: runManySplits,
-				minVersion:      "v19.2.0", // SQL syntax unsupported on 19.1.x
-				encryptAtRandom: true,
+				minVersion:        "v19.2.0", // SQL syntax unsupported on 19.1.x
+				encryptionSupport: registry.EncryptionMetamorphic,
 			},
 			{
 				name: "version-upgrade",
@@ -102,7 +103,7 @@ func registerAcceptance(r registry.Registry) {
 			if tc.timeout != 0 {
 				spec.Timeout = tc.timeout
 			}
-			spec.EncryptAtRandom = tc.encryptAtRandom
+			spec.EncryptionSupport = tc.encryptionSupport
 			spec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tc.fn(ctx, t, c)
 			}

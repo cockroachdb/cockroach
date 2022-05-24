@@ -67,10 +67,12 @@ type TestSpec struct {
 	// in the environment.
 	RequiresLicense bool
 
-	// EncryptAtRandom specifies that even when roachtest is invoked without the
-	// `--encrypt` flag, clusters handed to this test will randomly have
-	// encryption-at-rest enabled.
-	EncryptAtRandom bool
+	// EncryptionSupport encodes to what extent tests supports
+	// encryption-at-rest. See the EncryptionSupport type for details.
+	// Encryption support is opt-in -- i.e., if the TestSpec does not
+	// pass a value to this field, it will be assumed that the test
+	// cannot be run with encryption enabled.
+	EncryptionSupport EncryptionSupport
 
 	// Run is the test function.
 	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
