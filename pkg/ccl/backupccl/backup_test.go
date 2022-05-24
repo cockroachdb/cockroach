@@ -9500,7 +9500,6 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 78963)
 
 	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
@@ -9515,6 +9514,15 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo+"/1")
 	sqlDB.Exec(t, `BACKUP DATABASE db TO $1`, localFoo+"/2")
 	sqlDB.Exec(t, `BACKUP TABLE system.users TO $1`, localFoo+"/3")
+
+	sqlDB.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
+		{"root", "", "false", "1"},
+		{"admin", "", "true", "2"},
+		{"app", "NULL", "false", "100"},
+		{"test", "NULL", "false", "101"},
+		{"app_role", "NULL", "true", "102"},
+		{"test_role", "NULL", "true", "103"},
+	})
 
 	// User 'test' exists in both clusters but 'app' only exists in the backup
 	sqlDBRestore.Exec(t, `CREATE USER test`)
@@ -9550,6 +9558,19 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"test", "", "{}"},
 			{"test_role", "", "{app_role}"},
 		})
+
+		// Note that test has ID 100 even though in the backup it had
+		// id 101. This is because test was already created in this
+		// cluster and on restore we skip it.
+		// Furthermore we alloc 101 to app and so on.
+		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
+			{"root", "", "false", "1"},
+			{"admin", "", "true", "2"},
+			{"test", "NULL", "false", "100"},
+			{"app", "NULL", "false", "101"},
+			{"app_role", "NULL", "true", "102"},
+			{"test_role", "NULL", "true", "103"},
+		})
 	})
 
 	t.Run("restore-from-backup-with-no-system-users", func(t *testing.T) {
@@ -9559,16 +9580,20 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 
 	_, sqlDBRestore1, cleanupEmptyCluster1 := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupEmptyCluster1()
-	t.Run("restore-from-backup-with-no-system-role-members", func(t *testing.T) {
+	t.Run("restore-from-backup-with-system-role-members", func(t *testing.T) {
+		// testuser should take ID 101. The restored users originally have no ID
+		// but should be updated to have IDs 101 and so on.
+		sqlDBRestore1.Exec(t, `CREATE USER testuser`)
 		sqlDBRestore1.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/3")
 
-		sqlDBRestore1.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\" FROM system.users", [][]string{
-			{"admin", "", "true"},
-			{"app", "NULL", "false"},
-			{"app_role", "NULL", "true"},
-			{"root", "", "false"},
-			{"test", "NULL", "false"},
-			{"test_role", "NULL", "true"},
+		sqlDBRestore1.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\", \"user_id\" FROM system.users", [][]string{
+			{"admin", "", "true", "2"},
+			{"app", "NULL", "false", "101"},
+			{"app_role", "NULL", "true", "102"},
+			{"root", "", "false", "1"},
+			{"test", "NULL", "false", "103"},
+			{"test_role", "NULL", "true", "104"},
+			{"testuser", "NULL", "false", "100"},
 		})
 		sqlDBRestore1.CheckQueryResults(t, "SELECT \"role\", \"member\", \"isAdmin\" FROM system.role_members", [][]string{
 			{"admin", "root", "true"},
@@ -9580,6 +9605,7 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"root", "", "{admin}"},
 			{"test", "", "{}"},
 			{"test_role", "", "{}"},
+			{"testuser", "", "{}"},
 		})
 	})
 }
