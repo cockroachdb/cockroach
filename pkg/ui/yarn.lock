@@ -1590,6 +1590,10 @@
   dependencies:
     "@babel/runtime" "^7.12.13"
 
+"@cockroachlabs/crdb-protobuf-client-ccl@link:./workspaces/db-console/ccl/src/js":
+  version "0.0.0"
+  uid ""
+
 "@cockroachlabs/crdb-protobuf-client@link:./workspaces/db-console/src/js":
   version "0.0.12"
 
