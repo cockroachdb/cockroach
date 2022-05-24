@@ -39,7 +39,6 @@ func RegisterTests(r registry.Registry) {
 	registerDrain(r)
 	registerDrop(r)
 	registerEncryption(r)
-	registerEngineSwitch(r)
 	registerFlowable(r)
 	registerFollowerReads(r)
 	registerGopg(r)
