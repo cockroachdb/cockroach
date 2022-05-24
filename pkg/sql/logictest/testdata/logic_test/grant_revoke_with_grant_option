@@ -63,12 +63,12 @@ user testuser
 statement ok
 GRANT SELECT, INSERT ON TABLE t TO testuser2
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           public       t              testuser2  INSERT
-test           public       t              testuser2  SELECT
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           public       t              testuser2  INSERT          false
+test           public       t              testuser2  SELECT          false
 
 user testuser2
 
@@ -83,13 +83,13 @@ GRANT GRANT ON TABLE t TO testuser2
 NOTICE: the GRANT privilege is deprecated
 HINT: please use WITH GRANT OPTION
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           public       t              testuser2  GRANT
-test           public       t              testuser2  INSERT
-test           public       t              testuser2  SELECT
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           public       t              testuser2  GRANT           true
+test           public       t              testuser2  INSERT          true
+test           public       t              testuser2  SELECT          true
 
 user testuser2
 
@@ -121,27 +121,27 @@ GRANT DELETE, UPDATE ON TABLE t TO testuser2 WITH GRANT OPTION
 statement ok
 REVOKE INSERT ON TABLE t FROM testuser2
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           public       t              testuser2  DELETE
-test           public       t              testuser2  GRANT
-test           public       t              testuser2  SELECT
-test           public       t              testuser2  UPDATE
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           public       t              testuser2  DELETE          true
+test           public       t              testuser2  GRANT           true
+test           public       t              testuser2  SELECT          true
+test           public       t              testuser2  UPDATE          true
 
 statement ok
 REVOKE GRANT OPTION FOR SELECT ON TABLE t FROM testuser2
 
 # revoking GRANT OPTION FOR does not take away the privilege for the user
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           public       t              testuser2  DELETE
-test           public       t              testuser2  GRANT
-test           public       t              testuser2  SELECT
-test           public       t              testuser2  UPDATE
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           public       t              testuser2  DELETE          true
+test           public       t              testuser2  GRANT           true
+test           public       t              testuser2  SELECT          false
+test           public       t              testuser2  UPDATE          true
 
 user testuser2
 
@@ -223,11 +223,11 @@ REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLE t FROM testuser2
 statement ok
 REVOKE GRANT OPTION FOR ALL PRIVILEGES ON TABLE t FROM testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           public       t              testuser   ALL
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           public       t              testuser  ALL             false
 
 user testuser
 
@@ -239,30 +239,30 @@ user root
 statement ok
 REVOKE ALL PRIVILEGES ON TABLE t FROM testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
+database_name  schema_name  relation_name  grantee  privilege_type  is_grantable
 
 statement ok
 GRANT UPDATE, DELETE ON TABLE t to testuser WITH GRANT OPTION
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           public       t              testuser   DELETE
-test           public       t              testuser   UPDATE
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           public       t              testuser  DELETE          true
+test           public       t              testuser  UPDATE          true
 
 # test applying repeat privileges (ALL replaces individual privileges)
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t to testuser WITH GRANT OPTION
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           public       t              testuser   ALL
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           public       t              testuser  ALL             true
 
 user testuser
 
@@ -274,11 +274,11 @@ user root
 statement ok
 REVOKE GRANT OPTION FOR UPDATE, DELETE ON TABLE t FROM testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           public       t              testuser   ALL
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           public       t              testuser  ALL             false
 
 user testuser
 
@@ -291,15 +291,15 @@ GRANT UPDATE ON TABLE t TO testuser2 WITH GRANT OPTION
 statement error user testuser missing WITH GRANT OPTION privilege on DELETE
 GRANT DELETE ON TABLE t TO testuser2 WITH GRANT OPTION
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           public       t              testuser2  DELETE
-test           public       t              testuser2  GRANT
-test           public       t              testuser2  INSERT
-test           public       t              testuser2  SELECT
-test           public       t              testuser2  UPDATE
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           public       t              testuser2  DELETE          false
+test           public       t              testuser2  GRANT           false
+test           public       t              testuser2  INSERT          false
+test           public       t              testuser2  SELECT          true
+test           public       t              testuser2  UPDATE          false
 
 user testuser2
 
@@ -338,17 +338,17 @@ GRANT DELETE ON TABLE t TO testuser
 statement ok
 REVOKE DELETE ON TABLE t FROM testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           public       t              testuser   CREATE
-test           public       t              testuser   DROP
-test           public       t              testuser   GRANT
-test           public       t              testuser   INSERT
-test           public       t              testuser   SELECT
-test           public       t              testuser   UPDATE
-test           public       t              testuser   ZONECONFIG
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           public       t              testuser  CREATE          true
+test           public       t              testuser  DROP            true
+test           public       t              testuser  GRANT           true
+test           public       t              testuser  INSERT          true
+test           public       t              testuser  SELECT          true
+test           public       t              testuser  UPDATE          true
+test           public       t              testuser  ZONECONFIG      true
 
 statement ok
 GRANT SELECT ON TABLE t TO target
@@ -380,10 +380,10 @@ GRANT ALL PRIVILEGES ON TABLE t TO testuser WITH GRANT OPTION
 statement ok
 REVOKE ALL PRIVILEGES ON TABLE t FROM testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
+database_name  schema_name  relation_name  grantee  privilege_type  is_grantable
 
 # revoking grant from ALL privileges means you lose grant options on
 # all the other privileges
@@ -395,17 +395,17 @@ GRANT ALL PRIVILEGES ON TABLE t TO testuser
 statement ok
 REVOKE GRANT ON TABLE t FROM testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee   privilege_type
-test           public       t              testuser  CREATE
-test           public       t              testuser  DELETE
-test           public       t              testuser  DROP
-test           public       t              testuser  INSERT
-test           public       t              testuser  SELECT
-test           public       t              testuser  UPDATE
-test           public       t              testuser  ZONECONFIG
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           public       t              testuser  CREATE          false
+test           public       t              testuser  DELETE          false
+test           public       t              testuser  DROP            false
+test           public       t              testuser  INSERT          false
+test           public       t              testuser  SELECT          false
+test           public       t              testuser  UPDATE          false
+test           public       t              testuser  ZONECONFIG      false
 
 user testuser
 
@@ -424,15 +424,15 @@ REVOKE ALL PRIVILEGES ON TABLE t FROM testuser
 statement ok
 REVOKE ALL PRIVILEGES ON TABLE t FROM testuser2
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
+database_name  schema_name  relation_name  grantee  privilege_type  is_grantable
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
+database_name  schema_name  relation_name  grantee  privilege_type  is_grantable
 
 statement ok
 CREATE SCHEMA s
@@ -440,11 +440,11 @@ CREATE SCHEMA s
 statement ok
 GRANT ALL PRIVILEGES ON SCHEMA s TO testuser WITH GRANT OPTION
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           s            NULL           testuser   ALL
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           s            NULL           testuser  ALL             true
 
 user testuser
 
@@ -453,20 +453,20 @@ GRANT CREATE ON SCHEMA s TO testuser2 WITH GRANT OPTION
 
 user root
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser2
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           s            NULL           testuser2  CREATE
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           s            NULL           testuser2  CREATE          true
 
 statement ok
 REVOKE GRANT OPTION FOR ALL PRIVILEGES ON SCHEMA s FROM testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
-test           s            NULL           testuser   ALL
+database_name  schema_name  relation_name  grantee   privilege_type  is_grantable
+test           s            NULL           testuser  ALL             false
 
 user testuser
 

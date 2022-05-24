@@ -438,6 +438,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		writeAtBatchTS,
 		false, /* splitFilledRanges */
 		rd.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
+		rd.flowCtx.Cfg.BulkSenderLimiter,
 	)
 	if err != nil {
 		return summary, err

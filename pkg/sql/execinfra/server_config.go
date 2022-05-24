@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -112,6 +113,10 @@ type ServerConfig struct {
 	// Child monitor of the bulk monitor which will be used to monitor the memory
 	// used during backup.
 	BackupMonitor *mon.BytesMonitor
+
+	// BulkSenderLimiter is the concurrency limiter that is shared across all of
+	// the processes in a given sql server when sending bulk ingest (AddSST) reqs.
+	BulkSenderLimiter limit.ConcurrentRequestLimiter
 
 	// ParentDiskMonitor is normally the root disk monitor. It should only be used
 	// when setting up a server, a child monitor (usually belonging to a sql
