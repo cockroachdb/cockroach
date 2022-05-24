@@ -22,6 +22,7 @@ public  lease                            table  NULL  NULL
 public  locations                        table  NULL  NULL
 public  migrations                       table  NULL  NULL
 public  namespace                        table  NULL  NULL
+public  privileges                       table  NULL  NULL
 public  protected_ts_meta                table  NULL  NULL
 public  protected_ts_records             table  NULL  NULL
 public  rangelog                         table  NULL  NULL
@@ -65,6 +66,7 @@ public  lease                            table     NULL  NULL
 public  locations                        table     NULL  NULL
 public  migrations                       table     NULL  NULL
 public  namespace                        table     NULL  NULL
+public  privileges                       table     NULL  NULL
 public  protected_ts_meta                table     NULL  NULL
 public  protected_ts_records             table     NULL  NULL
 public  rangelog                         table     NULL  NULL
@@ -135,6 +137,7 @@ SELECT id FROM system.descriptor
 46
 47
 50
+51
 100
 101
 102
@@ -182,6 +185,7 @@ SELECT id FROM system.descriptor
 44
 46
 50
+51
 100
 101
 102
@@ -395,6 +399,16 @@ system  public  namespace                        admin   GRANT   true
 system  public  namespace                        admin   SELECT  true
 system  public  namespace                        root    GRANT   true
 system  public  namespace                        root    SELECT  true
+system  public  privileges                       admin   DELETE  true
+system  public  privileges                       admin   GRANT   true
+system  public  privileges                       admin   INSERT  true
+system  public  privileges                       admin   SELECT  true
+system  public  privileges                       admin   UPDATE  true
+system  public  privileges                       root    DELETE  true
+system  public  privileges                       root    GRANT   true
+system  public  privileges                       root    INSERT  true
+system  public  privileges                       root    SELECT  true
+system  public  privileges                       root    UPDATE  true
 system  public  protected_ts_meta                admin   GRANT   true
 system  public  protected_ts_meta                admin   SELECT  true
 system  public  protected_ts_meta                root    GRANT   true
@@ -733,6 +747,16 @@ system  public  namespace                        admin   GRANT   true
 system  public  namespace                        admin   SELECT  true
 system  public  namespace                        root    GRANT   true
 system  public  namespace                        root    SELECT  true
+system  public  privileges                       admin   DELETE  true
+system  public  privileges                       admin   GRANT   true
+system  public  privileges                       admin   INSERT  true
+system  public  privileges                       admin   SELECT  true
+system  public  privileges                       admin   UPDATE  true
+system  public  privileges                       root    DELETE  true
+system  public  privileges                       root    GRANT   true
+system  public  privileges                       root    INSERT  true
+system  public  privileges                       root    SELECT  true
+system  public  privileges                       root    UPDATE  true
 system  public  protected_ts_meta                admin   GRANT   true
 system  public  protected_ts_meta                admin   SELECT  true
 system  public  protected_ts_meta                root    GRANT   true
