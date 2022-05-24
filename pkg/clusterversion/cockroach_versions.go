@@ -380,6 +380,8 @@ const (
 	// AddSSTableTombstones allows writing MVCC point tombstones via AddSSTable.
 	// Previously, SSTs containing these could error.
 	AddSSTableTombstones
+	// SystemPrivilegesTable adds system.privileges table.
+	SystemPrivilegesTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -672,6 +674,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddSSTableTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
+	},
+	{
+		Key:     SystemPrivilegesTable,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 22},
 	},
 
 	// *************************************************

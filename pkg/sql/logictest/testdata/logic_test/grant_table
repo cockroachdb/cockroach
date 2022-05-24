@@ -921,6 +921,14 @@ system         public        tenant_settings                  root     DELETE   
 system         public        tenant_settings                  root     INSERT          true
 system         public        tenant_settings                  root     SELECT          true
 system         public        tenant_settings                  root     UPDATE          true
+system         public        privileges                       admin    DELETE          true
+system         public        privileges                       admin    INSERT          true
+system         public        privileges                       admin    SELECT          true
+system         public        privileges                       admin    UPDATE          true
+system         public        privileges                       root     DELETE          true
+system         public        privileges                       root     INSERT          true
+system         public        privileges                       root     SELECT          true
+system         public        privileges                       root     UPDATE          true
 a              pg_extension  NULL                             public   USAGE           false
 a              public        NULL                             admin    ALL             true
 a              public        NULL                             public   CREATE          false
@@ -1305,6 +1313,10 @@ system         public       migrations                       root     INSERT    
 system         public       migrations                       root     SELECT          true
 system         public       migrations                       root     UPDATE          true
 system         public       namespace                        root     SELECT          true
+system         public       privileges                       root     DELETE          true
+system         public       privileges                       root     INSERT          true
+system         public       privileges                       root     SELECT          true
+system         public       privileges                       root     UPDATE          true
 system         public       protected_ts_meta                root     SELECT          true
 system         public       protected_ts_records             root     SELECT          true
 system         public       rangelog                         root     DELETE          true
