@@ -6,6 +6,7 @@ go_library(
         "asim.go",
         "config_loader.go",
         "load.go",
+        "pacer.go",
         "workload.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim",
@@ -14,6 +15,7 @@ go_library(
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/roachpb",
+        "//pkg/util/shuffle",
         "//pkg/util/timeutil",
         "@com_github_google_btree//:btree",
     ],
@@ -24,6 +26,7 @@ go_test(
     srcs = [
         "asim_test.go",
         "config_loader_test.go",
+        "pacer_test.go",
         "workload_test.go",
     ],
     embed = [":asim"],
