@@ -32,7 +32,6 @@ go_library(
         "@com_github_prometheus_common//expfmt",
         "@com_github_prometheus_prometheus//promql/parser",
         "@com_github_rcrowley_go_metrics//:go-metrics",
-        "@com_github_vividcortex_ewma//:ewma",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
