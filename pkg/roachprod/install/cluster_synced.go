@@ -580,8 +580,10 @@ func runCmdOnSingleNode(
 
 	sess.SetWithExitStatus(true)
 	var stdoutBuffer, stderrBuffer bytes.Buffer
-	sess.SetStdout(&stdoutBuffer)
-	sess.SetStderr(&stderrBuffer)
+	multStdout := io.MultiWriter(&stdoutBuffer, l.Stdout)
+	multStderr := io.MultiWriter(&stderrBuffer, l.Stderr)
+	sess.SetStdout(multStdout)
+	sess.SetStderr(multStderr)
 
 	// Argument template expansion is node specific (e.g. for {store-dir}).
 	e := expander{
