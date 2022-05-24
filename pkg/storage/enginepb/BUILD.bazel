@@ -66,5 +66,6 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

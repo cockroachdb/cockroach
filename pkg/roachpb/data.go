@@ -2488,7 +2488,9 @@ var _ = (SequencedWriteBySeq{}).Find
 
 func init() {
 	// Inject the format dependency into the enginepb package.
-	enginepb.FormatBytesAsKey = func(k []byte) string { return Key(k).String() }
+	enginepb.FormatBytesAsKey = func(k []byte) redact.RedactableString {
+		return redact.Sprint(Key(k))
+	}
 }
 
 // SafeValue implements the redact.SafeValue interface.

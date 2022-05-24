@@ -90,7 +90,7 @@ require (
 	github.com/goware/modvendor v0.5.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/irfansharif/recorder v0.0.0-20211218081646-a21b46510fd6
-	github.com/jackc/pgconn v1.12.1-0.20220426135424-84e8238fa074
+	github.com/jackc/pgconn v1.12.1
 	github.com/jackc/pgproto3/v2 v2.3.0
 	github.com/jackc/pgtype v1.11.0
 	github.com/jackc/pgx/v4 v4.16.0
@@ -152,7 +152,7 @@ require (
 	go.opentelemetry.io/otel/exporters/zipkin v1.0.0-RC3
 	go.opentelemetry.io/otel/sdk v1.0.0-RC3
 	go.opentelemetry.io/otel/trace v1.0.0-RC3
-	golang.org/x/crypto v0.0.0-20220427172511-eb4f295cb31f
+	golang.org/x/crypto v0.0.0-20220518034528-6f7dac969898
 	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
 	golang.org/x/net v0.0.0-20220421235706-1d1ef9303861
