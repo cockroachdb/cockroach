@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -120,6 +121,23 @@ func (p synthetic) GetPostDeserializationChanges() catalog.PostDeserializationCh
 // HasConcurrentSchemaChanges implements catalog.Descriptor.
 func (p synthetic) HasConcurrentSchemaChanges() bool {
 	return false
+}
+
+// GetName implements the PrivilegeObject interface.
+func (p synthetic) GetName() string {
+	return p.kindName()
+}
+
+// GetObjectType implements the PrivilegeObject interface.
+func (p synthetic) GetObjectType() string {
+	return string(p.DescriptorType())
+}
+
+// GetPrivilegeDescriptor implements the PrivilegeObject interface.
+func (p synthetic) GetPrivilegeDescriptor(
+	ctx context.Context, planner eval.Planner,
+) (*catpb.PrivilegeDescriptor, error) {
+	return p.GetPrivileges(), nil
 }
 
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.

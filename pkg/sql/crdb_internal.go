@@ -1556,9 +1556,20 @@ CREATE TABLE crdb_internal.cluster_settings (
 				return err
 			}
 			if !hasModify && !hasView {
-				return pgerror.Newf(pgcode.InsufficientPrivilege,
-					"only users with either %s or %s privileges are allowed to read "+
-						"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
+				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+					// We check for EITHER the MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING
+					// role option OR the MODIFYCLUSTERSETTING system cluster privilege.
+					// We return the error for "system cluster privilege" due to
+					// the long term goal of moving away from coarse-grained role options.
+					if err := p.CheckPrivilege(ctx, catalog.SystemClusterPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err != nil {
+						return err
+					}
+				} else {
+					return pgerror.Newf(pgcode.InsufficientPrivilege,
+
+						"only users with either %s or %s privileges are allowed to read "+
+							"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
+				}
 			}
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
