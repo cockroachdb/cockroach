@@ -333,6 +333,7 @@ func DefaultPebbleOptions() *pebble.Options {
 
 	opts := &pebble.Options{
 		Comparer:                    EngineComparer,
+		FS:                          vfs.Default,
 		L0CompactionThreshold:       2,
 		L0StopWritesThreshold:       1000,
 		LBaseMaxBytes:               64 << 20, // 64 MB
@@ -395,7 +396,14 @@ func DefaultPebbleOptions() *pebble.Options {
 	// of the benefit of having bloom filters on every level for only 10% of the
 	// memory cost.
 	opts.Levels[6].FilterPolicy = nil
+	return opts
+}
 
+// wrapFilesystemMiddleware wraps the Option's vfs.FS with disk-health checking
+// and ENOSPC detection. It mutates the provided options to set the FS and
+// returns a Closer that should be invoked when the filesystem will no longer be
+// used.
+func wrapFilesystemMiddleware(opts *pebble.Options) io.Closer {
 	// Set disk health check interval to min(5s, maxSyncDurationDefault). This
 	// is mostly to ease testing; the default of 5s is too infrequent to test
 	// conveniently. See the disk-stalled roachtest for an example of how this
@@ -404,9 +412,12 @@ func DefaultPebbleOptions() *pebble.Options {
 	if diskHealthCheckInterval.Seconds() > maxSyncDurationDefault.Seconds() {
 		diskHealthCheckInterval = maxSyncDurationDefault
 	}
-	// Instantiate a file system with disk health checking enabled. This FS wraps
-	// vfs.Default, and can be wrapped for encryption-at-rest.
-	opts.FS = vfs.WithDiskHealthChecks(vfs.Default, diskHealthCheckInterval,
+
+	// Instantiate a file system with disk health checking enabled. This FS
+	// wraps the filesystem with a layer that times all write-oriented
+	// operations.
+	var closer io.Closer
+	opts.FS, closer = vfs.WithDiskHealthChecks(opts.FS, diskHealthCheckInterval,
 		func(name string, duration time.Duration) {
 			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
 				Path:     name,
@@ -417,7 +428,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	opts.FS = vfs.OnDiskFull(opts.FS, func() {
 		exit.WithCode(exit.DiskFull())
 	})
-	return opts
+	return closer
 }
 
 type pebbleLogger struct {
@@ -490,6 +501,10 @@ type Pebble struct {
 	unencryptedFS vfs.FS
 	logger        pebble.Logger
 	eventListener *pebble.EventListener
+
+	// closer is populated when the database is opened. The closer is associated
+	// with the filesyetem
+	closer io.Closer
 
 	wrappedIntentWriter intentDemuxWriter
 
@@ -589,13 +604,23 @@ func ResolveEncryptedEnvOptions(cfg *PebbleConfig) (*PebbleFileRegistry, *Encryp
 }
 
 // NewPebble creates a new Pebble instance, at the specified path.
-func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
+func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
 	// EnsureDefaults beforehand so we have a matching cfg here for when we save
 	// cfg.FS and cfg.ReadOnly later on.
 	if cfg.Opts == nil {
 		cfg.Opts = DefaultPebbleOptions()
 	}
+
+	// Initialize the FS, wrapping it with disk health-checking and
+	// ENOSPC-detection.
+	filesystemCloser := wrapFilesystemMiddleware(cfg.Opts)
+	defer func() {
+		if err != nil {
+			filesystemCloser.Close()
+		}
+	}()
+
 	cfg.Opts.EnsureDefaults()
 	cfg.Opts.ErrorIfNotExists = cfg.MustExist
 	if settings := cfg.Settings; settings != nil {
@@ -661,7 +686,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		}
 	}
 
-	p := &Pebble{
+	p = &Pebble{
 		readOnly:                cfg.Opts.ReadOnly,
 		path:                    cfg.Dir,
 		auxDir:                  auxDir,
@@ -676,6 +701,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		unencryptedFS:           unencryptedFS,
 		logger:                  cfg.Opts.Logger,
 		storeIDPebbleLog:        storeIDContainer,
+		closer:                  filesystemCloser,
 		disableSeparatedIntents: cfg.DisableSeparatedIntents,
 	}
 	cfg.Opts.EventListener = pebble.TeeEventListener(
@@ -780,6 +806,9 @@ func (p *Pebble) Close() {
 	}
 	if p.encryption != nil {
 		_ = p.encryption.Closer.Close()
+	}
+	if p.closer != nil {
+		_ = p.closer.Close()
 	}
 }
 
