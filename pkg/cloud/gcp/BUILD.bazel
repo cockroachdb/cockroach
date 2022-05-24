@@ -51,5 +51,6 @@ go_test(
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_api//impersonate",
     ],
 )
