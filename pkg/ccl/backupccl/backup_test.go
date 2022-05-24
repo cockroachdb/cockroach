@@ -6333,8 +6333,7 @@ func TestPublicIndexTableSpans(t *testing.T) {
 		tableDesc := getMockTableDesc(test.tableID, test.pkIndex,
 			test.indexes, test.addingIndexes, test.droppingIndexes)
 		t.Run(fmt.Sprintf("%s:%s", "getPublicIndexTableSpans", test.name), func(t *testing.T) {
-			spans, err := getPublicIndexTableSpans(tableDesc, unusedMap, codec)
-			require.NoError(t, err)
+			spans := getPublicIndexTableSpans(tableDesc.TableDesc(), unusedMap, codec)
 			var unmergedSpans []string
 			for _, span := range spans {
 				unmergedSpans = append(unmergedSpans, span.String())
