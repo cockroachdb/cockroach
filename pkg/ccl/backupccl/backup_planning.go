@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -125,21 +126,25 @@ var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
 // getPublicIndexTableSpans returns all the public index spans of the
 // provided table.
 func getPublicIndexTableSpans(
-	table catalog.TableDescriptor, added map[tableAndIndex]bool, codec keys.SQLCodec,
+	table *descpb.TableDescriptor, added map[tableAndIndex]bool, codec keys.SQLCodec,
 ) ([]roachpb.Span, error) {
-	publicIndexSpans := make([]roachpb.Span, 0)
-	if err := catalog.ForEachActiveIndex(table, func(idx catalog.Index) error {
-		key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
+	publicIndexSpans := make([]roachpb.Span, 0, len(table.Indexes)+1)
+	makeIndexSpan := func(id descpb.IndexID) roachpb.Span {
+		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, table.GetID(), id))
+		return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	}
+	addIndex := func(indexID descpb.IndexID) {
+		key := tableAndIndex{tableID: table.GetID(), indexID: indexID}
 		if added[key] {
-			return nil
+			return
 		}
 		added[key] = true
-		publicIndexSpans = append(publicIndexSpans, table.IndexSpan(codec, idx.GetID()))
-		return nil
-	}); err != nil {
-		return nil, err
+		publicIndexSpans = append(publicIndexSpans, makeIndexSpan(indexID))
 	}
-
+	addIndex(table.GetPrimaryIndex().ID)
+	for _, idx := range table.Indexes {
+		addIndex(idx.ID)
+	}
 	return publicIndexSpans, nil
 }
 
@@ -155,25 +160,25 @@ func spansForAllTableIndexes(
 
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
-	var publicIndexSpans []roachpb.Span
-	var err error
+	insertSpan := func(indexSpan roachpb.Span) {
+		if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
+		}
+	}
 
 	for _, table := range tables {
-		publicIndexSpans, err = getPublicIndexTableSpans(table, added, execCfg.Codec)
+		publicIndexSpans, err := getPublicIndexTableSpans(table.TableDesc(), added, execCfg.Codec)
 		if err != nil {
 			return nil, err
 		}
 		for _, indexSpan := range publicIndexSpans {
-			if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
-			}
+			insertSpan(indexSpan)
 		}
 	}
 
 	// If there are desc revisions, ensure that we also add any index spans
 	// in them that we didn't already get above e.g. indexes or tables that are
 	// not in latest because they were dropped during the time window in question.
-	publicIndexSpans = nil
 	for _, rev := range revs {
 		// If the table was dropped during the last interval, it will have
 		// at least 2 revisions, and the first one should have the table in a PUBLIC
@@ -181,21 +186,16 @@ func spansForAllTableIndexes(
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTbl != nil && rawTbl.Public() {
-			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
-			revSpans, err := getPublicIndexTableSpans(tbl, added, execCfg.Codec)
+			publicIndexSpans, err := getPublicIndexTableSpans(rawTbl, added, execCfg.Codec)
 			if err != nil {
 				return nil, err
 			}
-
-			publicIndexSpans = append(publicIndexSpans, revSpans...)
+			for _, indexSpan := range publicIndexSpans {
+				insertSpan(indexSpan)
+			}
 		}
 	}
 
-	for _, indexSpan := range publicIndexSpans {
-		if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
-			panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
-		}
-	}
 	var spans []roachpb.Span
 	_ = sstIntervalTree.Do(func(r interval.Interface) bool {
 		spans = append(spans, roachpb.Span{
