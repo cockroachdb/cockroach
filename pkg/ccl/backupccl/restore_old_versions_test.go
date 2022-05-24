@@ -74,6 +74,7 @@ func TestRestoreOldVersions(t *testing.T) {
 		privilegeDirs               = testdataBase + "/privileges"
 		multiRegionDirs             = testdataBase + "/multi-region"
 		publicSchemaDirs            = testdataBase + "/public-schema-remap"
+		systemUsersDirs             = testdataBase + "/system-users-restore"
 	)
 
 	t.Run("table-restore", func(t *testing.T) {
@@ -297,6 +298,28 @@ ORDER BY object_type, object_name`, [][]string{
 			exportDir, err := filepath.Abs(filepath.Join(publicSchemaDirs, dir.Name()))
 			require.NoError(t, err)
 			t.Run(dir.Name(), restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir))
+		}
+	})
+
+	t.Run("system-users-restore", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(systemUsersDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(systemUsersDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restoreSystemUsersWithoutIDs(exportDir))
+		}
+	})
+
+	t.Run("full-cluster-restore-users-without-ids", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(systemUsersDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(systemUsersDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), fullClusterRestoreUsersWithoutIDs(exportDir))
 		}
 	})
 }
@@ -1109,5 +1132,121 @@ func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) f
 		// We should have no non-system database with a public schema name space
 		// entry with id 29.
 		sqlDB.CheckQueryResults(t, `SELECT id FROM system.namespace WHERE name = 'public' AND id=29 AND "parentID"!=1`, [][]string{})
+	}
+}
+
+func fullClusterRestoreUsersWithoutIDs(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		const numAccounts = 1000
+		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
+		defer cleanupFn()
+
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+					},
+				}})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s'", localFoo))
+
+		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
+			{"admin", "", "true", "2"},
+			{"root", "", "false", "1"},
+			{"testrole", "NULL", "true", "100"},
+			{"testuser", "NULL", "false", "101"},
+			{"testuser2", "NULL", "false", "102"},
+			{"testuser3", "NULL", "false", "103"},
+		})
+
+		// Verify that the next user we create uses the next biggest ID.
+		sqlDB.Exec(t, "CREATE USER testuser4")
+
+		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
+			{"admin", "", "true", "2"},
+			{"root", "", "false", "1"},
+			{"testrole", "NULL", "true", "100"},
+			{"testuser", "NULL", "false", "101"},
+			{"testuser2", "NULL", "false", "102"},
+			{"testuser3", "NULL", "false", "103"},
+			{"testuser4", "NULL", "false", "104"},
+		})
+	}
+}
+
+func restoreSystemUsersWithoutIDs(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		const numAccounts = 1000
+		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
+		defer cleanupFn()
+
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+					},
+				}})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE SYSTEM USERS FROM '%s'", localFoo))
+
+		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
+			{"admin", "", "true", "2"},
+			{"root", "", "false", "1"},
+			{"testrole", "NULL", "true", "100"},
+			{"testuser", "NULL", "false", "101"},
+			{"testuser2", "NULL", "false", "102"},
+			{"testuser3", "NULL", "false", "103"},
+		})
+
+		// Verify that the next user we create uses the next biggest ID.
+		sqlDB.Exec(t, "CREATE USER testuser4")
+
+		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
+			{"admin", "", "true", "2"},
+			{"root", "", "false", "1"},
+			{"testrole", "NULL", "true", "100"},
+			{"testuser", "NULL", "false", "101"},
+			{"testuser2", "NULL", "false", "102"},
+			{"testuser3", "NULL", "false", "103"},
+			{"testuser4", "NULL", "false", "104"},
+		})
+
+		// Drop some users and try restoring again.
+		sqlDB.Exec(t, "DROP ROLE testrole")
+		sqlDB.Exec(t, "DROP ROLE testuser2")
+		sqlDB.Exec(t, "DROP ROLE testuser3")
+		sqlDB.Exec(t, "DROP ROLE testuser4")
+
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE SYSTEM USERS FROM '%s'", localFoo))
+
+		// testrole, testuser2, testuser3 should be reassigned higher ids.
+		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
+			{"admin", "", "true", "2"},
+			{"root", "", "false", "1"},
+			{"testrole", "NULL", "true", "105"},
+			{"testuser", "NULL", "false", "101"},
+			{"testuser2", "NULL", "false", "106"},
+			{"testuser3", "NULL", "false", "107"},
+		})
+
+		// Verify that the next user we create uses the next biggest ID.
+		sqlDB.Exec(t, "CREATE USER testuser4")
+		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
+			{"admin", "", "true", "2"},
+			{"root", "", "false", "1"},
+			{"testrole", "NULL", "true", "105"},
+			{"testuser", "NULL", "false", "101"},
+			{"testuser2", "NULL", "false", "106"},
+			{"testuser3", "NULL", "false", "107"},
+			{"testuser4", "NULL", "false", "108"},
+		})
 	}
 }

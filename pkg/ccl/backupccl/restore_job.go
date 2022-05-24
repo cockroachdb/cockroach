@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/ingesting"
@@ -2400,11 +2401,25 @@ func (r *restoreResumer) restoreSystemUsers(
 		}
 
 		insertUser := `INSERT INTO system.users ("username", "hashedPassword", "isRole") VALUES ($1, $2, $3)`
+		if r.execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
+			insertUser = `INSERT INTO system.users ("username", "hashedPassword", "isRole", "user_id") VALUES ($1, $2, $3, $4)`
+		}
 		newUsernames := make(map[string]bool)
+		args := make([]interface{}, 4)
 		for _, user := range users {
 			newUsernames[user[0].String()] = true
+			args[0] = user[0]
+			args[1] = user[1]
+			args[2] = user[2]
+			if r.execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
+				id, err := descidgen.GenerateUniqueRoleID(ctx, r.execCfg.DB, r.execCfg.Codec)
+				if err != nil {
+					return err
+				}
+				args[3] = id
+			}
 			if _, err = executor.Exec(ctx, "insert-non-existent-users", txn, insertUser,
-				user[0], user[1], user[2]); err != nil {
+				args...); err != nil {
 				return err
 			}
 		}
