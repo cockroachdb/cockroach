@@ -1112,3 +1112,51 @@ DROP DATABASE defaultdb;
 		{fmt.Sprint(parentID), fmt.Sprint(parentSchemaID), name, fmt.Sprint(ID)},
 	})
 }
+
+func TestFullClusterRestoreWithUserIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+	const numAccounts = 10
+	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, params)
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	sqlDB.Exec(t, `CREATE USER test1`)
+	sqlDB.Exec(t, `CREATE USER test2`)
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+
+	sqlDB.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
+		{"root", "", "false", "1"},
+		{"admin", "", "true", "2"},
+		{"test1", "NULL", "false", "100"},
+		{"test2", "NULL", "false", "101"},
+	})
+	// Ensure that the new backup succeeds.
+	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+
+	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
+		{"root", "", "false", "1"},
+		{"admin", "", "true", "2"},
+		{"test1", "NULL", "false", "100"},
+		{"test2", "NULL", "false", "101"},
+	})
+
+	sqlDBRestore.Exec(t, `CREATE USER test3`)
+
+	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
+		{"root", "", "false", "1"},
+		{"admin", "", "true", "2"},
+		{"test1", "NULL", "false", "100"},
+		{"test2", "NULL", "false", "101"},
+		{"test3", "NULL", "false", "102"},
+	})
+}
