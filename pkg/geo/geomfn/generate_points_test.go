@@ -70,7 +70,7 @@ func TestGenerateRandomPoints(t *testing.T) {
 			rng := rand.New(rand.NewSource(tt.args.seed))
 			got, err := GenerateRandomPoints(tt.args.g, tt.args.nPoints, rng)
 			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+			requireGeometryWithinEpsilon(t, tt.want, got, 1e-5)
 		})
 	}
 
