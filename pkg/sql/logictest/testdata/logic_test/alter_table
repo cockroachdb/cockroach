@@ -1777,6 +1777,18 @@ ALTER TABLE t61762 ADD COLUMN v OIDVECTOR
 statement error VECTOR column types are unsupported
 ALTER TABLE t61762 ADD COLUMN v INT2VECTOR
 
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v OIDVECTOR AS (ARRAY[1]) STORED
+
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v OIDVECTOR AS (ARRAY[1]) VIRTUAL
+
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v INT2VECTOR AS (ARRAY[1]) STORED
+
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v INT2VECTOR AS (ARRAY[1]) VIRTUAL
+
 # Regression test for #60786. Handle in-transaction constraint ADD+DROP correctly.
 subtest regression_60786
 

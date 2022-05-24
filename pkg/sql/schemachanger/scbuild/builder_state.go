@@ -416,14 +416,12 @@ func (b *builderState) WrapExpression(parentID catid.DescID, expr tree.Expr) *sc
 }
 
 // ComputedColumnExpression implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) ComputedColumnExpression(
-	tbl *scpb.Table, d *tree.ColumnTableDef,
-) (tree.Expr, scpb.TypeT) {
+func (b *builderState) ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) tree.Expr {
 	_, _, ns := scpb.FindNamespace(b.QueryByID(tbl.TableID))
 	tn := tree.MakeTableNameFromPrefix(b.NamePrefix(tbl), tree.Name(ns.Name))
 	b.ensureDescriptor(tbl.TableID)
 	// TODO(postamar): this doesn't work when referencing newly added columns.
-	expr, typ, err := schemaexpr.ValidateComputedColumnExpression(
+	expr, _, err := schemaexpr.ValidateComputedColumnExpression(
 		b.ctx,
 		b.descCache[tbl.TableID].desc.(catalog.TableDescriptor),
 		d,
@@ -441,7 +439,7 @@ func (b *builderState) ComputedColumnExpression(
 	if err != nil {
 		panic(err)
 	}
-	return parsedExpr, newTypeT(typ)
+	return parsedExpr
 }
 
 var _ scbuildstmt.ElementReferences = (*builderState)(nil)
