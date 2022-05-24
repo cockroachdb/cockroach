@@ -9576,17 +9576,17 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer cleanupEmptyCluster1()
 	t.Run("restore-from-backup-with-no-system-role-members", func(t *testing.T) {
 		sqlDBRestore1.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/3")
-
-		sqlDBRestore1.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\" FROM system.users", [][]string{
-			{"admin", "", "true"},
-			{"app", "NULL", "false"},
-			{"app_role", "NULL", "true"},
-			{"root", "", "false"},
-			{"test", "NULL", "false"},
-			{"test_role", "NULL", "true"},
-		})
 		sqlDBRestore1.CheckQueryResults(t, "SELECT \"role\", \"member\", \"isAdmin\" FROM system.role_members", [][]string{
 			{"admin", "root", "true"},
+		})
+		sqlDBRestore1.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\", \"user_id\" FROM system.users", [][]string{
+			{"admin", "", "true", "2"},
+			{"app", "NULL", "false", "101"},
+			{"app_role", "NULL", "true", "102"},
+			{"root", "", "false", "1"},
+			{"test", "NULL", "false", "103"},
+			{"test_role", "NULL", "true", "104"},
+			{"testuser", "NULL", "false", "100"},
 		})
 		sqlDBRestore1.CheckQueryResults(t, "SHOW USERS", [][]string{
 			{"admin", "", "{}"},
