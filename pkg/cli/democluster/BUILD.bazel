@@ -29,6 +29,7 @@ go_library(
         "//pkg/server/pgurl",
         "//pkg/server/serverpb",
         "//pkg/server/status",
+        "//pkg/sql",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/distsql",
