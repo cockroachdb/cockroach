@@ -1000,7 +1000,7 @@ func (c *transientCluster) GetSQLCredentials() (
 	return c.adminUser, c.adminPassword, c.demoDir
 }
 
-func (c *transientCluster) SetupWorkload(ctx context.Context, licenseDone <-chan error) error {
+func (c *transientCluster) SetupWorkload(ctx context.Context) error {
 	gen := c.demoCtx.WorkloadGenerator
 	// If there is a load generator, create its database and load its
 	// fixture.
@@ -1025,13 +1025,6 @@ func (c *transientCluster) SetupWorkload(ctx context.Context, licenseDone <-chan
 		}
 		// Perform partitioning if requested by configuration.
 		if c.demoCtx.GeoPartitionedReplicas {
-			// Wait until the license has been acquired to trigger partitioning.
-			if c.demoCtx.IsInteractive() {
-				fmt.Println("#\n# Waiting for license acquisition to complete...")
-			}
-			if err := <-licenseDone; err != nil {
-				return err
-			}
 			if c.demoCtx.IsInteractive() {
 				fmt.Println("#\n# Partitioning the demo database, please wait...")
 			}
@@ -1129,63 +1122,14 @@ func (c *transientCluster) runWorkload(
 	return nil
 }
 
-// acquireDemoLicense begins an asynchronous process to obtain a
-// temporary demo license from the Cockroach Labs website. It returns
-// a channel that can be waited on if it is needed to wait on the
-// license acquisition.
-func (c *transientCluster) AcquireDemoLicense(ctx context.Context) (chan error, error) {
-	// Communicate information about license acquisition to services
-	// that depend on it.
-	licenseDone := make(chan error)
-	if c.demoCtx.DisableLicenseAcquisition {
-		// If we are not supposed to acquire a license, close the channel
-		// immediately so that future waiters don't hang.
-		close(licenseDone)
-	} else {
-		// If we allow telemetry, then also try and get an enterprise license for the demo.
-		// GetAndApplyLicense will be nil in the pure OSS/BSL build of cockroach.
-		db, err := gosql.Open("postgres", c.connURL)
-		if err != nil {
-			return nil, err
-		}
-		go func() {
-			defer db.Close()
-
-			success, err := GetAndApplyLicense(db, c.firstServer.ClusterID(), demoOrg)
-			if err != nil {
-				select {
-				case licenseDone <- err:
-
-				// Avoid waiting on the license channel write if the
-				// server or cluster is shutting down.
-				case <-ctx.Done():
-				case <-c.firstServer.Stopper().ShouldQuiesce():
-				case <-c.stopper.ShouldQuiesce():
-				}
-				return
-			}
-			if !success {
-				if c.demoCtx.GeoPartitionedReplicas {
-					select {
-					case licenseDone <- errors.WithDetailf(
-						errors.New("unable to acquire a license for this demo"),
-						"Enterprise features are needed for this demo (--%s).",
-						cliflags.DemoGeoPartitionedReplicas.Name):
-
-						// Avoid waiting on the license channel write if the
-						// server or cluster is shutting down.
-					case <-ctx.Done():
-					case <-c.firstServer.Stopper().ShouldQuiesce():
-					case <-c.stopper.ShouldQuiesce():
-					}
-					return
-				}
-			}
-			close(licenseDone)
-		}()
+// EnableEnterprise enables enterprise features if available in this build.
+func (c *transientCluster) EnableEnterprise(ctx context.Context) (func(), error) {
+	db, err := gosql.Open("postgres", c.connURL)
+	if err != nil {
+		return nil, err
 	}
-
-	return licenseDone, nil
+	defer db.Close()
+	return EnableEnterprise(db, demoOrg)
 }
 
 // sockForServer generates the metadata for a unix socket for the given node.

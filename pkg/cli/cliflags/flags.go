@@ -1211,7 +1211,7 @@ More information about the geo-partitioned replicas topology can be found at:
 	DemoNoLicense = FlagInfo{
 		Name: "disable-demo-license",
 		Description: `
-If set, disable cockroach demo from attempting to obtain a temporary license.`,
+If set, disable enterprise features.`,
 	}
 
 	UseEmptyDatabase = FlagInfo{

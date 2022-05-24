@@ -822,7 +822,8 @@ func init() {
 			"to start a test server without any security, run start-single-node --insecure\n"+
 				"For details, see: "+build.MakeIssueURL(53404))
 
-		boolFlag(f, &demoCtx.DisableLicenseAcquisition, cliflags.DemoNoLicense)
+		boolFlag(f, &demoCtx.disableEnterpriseFeatures, cliflags.DemoNoLicense)
+
 		boolFlag(f, &demoCtx.SimulateLatency, cliflags.Global)
 		// The --empty flag is only valid for the top level demo command,
 		// so we use the regular flag set.
