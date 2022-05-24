@@ -17,6 +17,7 @@ SELECT * FROM system.namespace
 1    29  locations                        21
 1    29  migrations                       40
 1    29  namespace                        30
+1    29  privileges                       51
 1    29  protected_ts_meta                31
 1    29  protected_ts_records             32
 1    29  rangelog                         13
@@ -71,6 +72,7 @@ SELECT * FROM system.namespace
 1    29  locations                        21
 1    29  migrations                       40
 1    29  namespace                        30
+1    29  privileges                       51
 1    29  protected_ts_meta                31
 1    29  protected_ts_records             32
 1    29  rangelog                         13
