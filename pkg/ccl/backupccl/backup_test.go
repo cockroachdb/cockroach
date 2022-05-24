@@ -66,13 +66,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -1071,7 +1069,7 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 
 	// At the time this test was written, these were the only system tables that
 	// were reasonable for a user to backup and restore into another cluster.
-	tables := []string{"locations", "role_members", "users", "zones", "role_id_seq"}
+	tables := []string{"locations", "role_members", "users", "zones"}
 	tableSpec := "system." + strings.Join(tables, ", system.")
 
 	// Take a consistent fingerprint of the original tables.
@@ -1079,9 +1077,6 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 	expectedFingerprints := map[string][][]string{}
 	err := crdb.ExecuteTx(ctx, conn, nil /* txopts */, func(tx *gosql.Tx) error {
 		for _, table := range tables {
-			if table == "role_id_seq" {
-				continue
-			}
 			rows, err := conn.Query("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system." + table)
 			if err != nil {
 				return err
@@ -1107,9 +1102,6 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 
 	// Verify the fingerprints match.
 	for _, table := range tables {
-		if table == "role_id_seq" {
-			continue
-		}
 		a := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system_new."+table)
 		if e := expectedFingerprints[table]; !reflect.DeepEqual(e, a) {
 			t.Fatalf("fingerprints between system.%[1]s and system_new.%[1]s did not match:%s\n",
@@ -9555,7 +9547,6 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 78963)
 
 	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
@@ -9616,17 +9607,16 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer cleanupEmptyCluster1()
 	t.Run("restore-from-backup-with-no-system-role-members", func(t *testing.T) {
 		sqlDBRestore1.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/3")
-
-		sqlDBRestore1.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\" FROM system.users", [][]string{
-			{"admin", "", "true"},
-			{"app", "NULL", "false"},
-			{"app_role", "NULL", "true"},
-			{"root", "", "false"},
-			{"test", "NULL", "false"},
-			{"test_role", "NULL", "true"},
-		})
 		sqlDBRestore1.CheckQueryResults(t, "SELECT \"role\", \"member\", \"isAdmin\" FROM system.role_members", [][]string{
 			{"admin", "root", "true"},
+		})
+		sqlDBRestore1.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\", \"user_id\" FROM system.users", [][]string{
+			{"admin", "", "true", "2"},
+			{"app", "NULL", "false", "100"},
+			{"app_role", "NULL", "true", "101"},
+			{"root", "", "false", "1"},
+			{"test", "NULL", "false", "102"},
+			{"test_role", "NULL", "true", "103"},
 		})
 		sqlDBRestore1.CheckQueryResults(t, "SHOW USERS", [][]string{
 			{"admin", "", "{}"},
@@ -9635,6 +9625,35 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"root", "", "{admin}"},
 			{"test", "", "{}"},
 			{"test_role", "", "{}"},
+		})
+	})
+	_, sqlDBRestore2, cleanupEmptyCluster2 := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupEmptyCluster2()
+	t.Run("restore-from-backup-with-existing-user", func(t *testing.T) {
+		// Create testuser and verify that the system user ids are
+		// allocated properly in the restore.
+		sqlDBRestore2.Exec(t, "CREATE USER testuser")
+		sqlDBRestore2.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/3")
+		sqlDBRestore2.CheckQueryResults(t, "SELECT \"role\", \"member\", \"isAdmin\" FROM system.role_members", [][]string{
+			{"admin", "root", "true"},
+		})
+		sqlDBRestore2.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\", \"user_id\" FROM system.users", [][]string{
+			{"admin", "", "true", "2"},
+			{"app", "NULL", "false", "101"},
+			{"app_role", "NULL", "true", "102"},
+			{"root", "", "false", "1"},
+			{"test", "NULL", "false", "103"},
+			{"test_role", "NULL", "true", "104"},
+			{"testuser", "NULL", "false", "100"},
+		})
+		sqlDBRestore2.CheckQueryResults(t, "SHOW USERS", [][]string{
+			{"admin", "", "{}"},
+			{"app", "", "{}"},
+			{"app_role", "", "{}"},
+			{"root", "", "{admin}"},
+			{"test", "", "{}"},
+			{"test_role", "", "{}"},
+			{"testuser", "", "{}"},
 		})
 	})
 }
@@ -10155,78 +10174,6 @@ func TestBackupNoOverwriteLatest(t *testing.T) {
 	numLatest, thirdLatest := findNumLatestFiles()
 	require.Equal(t, numLatest, 3)
 	require.NotEqual(t, firstLatest, thirdLatest)
-}
-
-// TestBackupLatestInBaseDirectory tests to see that a LATEST
-// file in the base directory can be properly read when one is not found
-// in metadata/latest. This can occur when an older version node creates
-// the backup.
-func TestBackupLatestInBaseDirectory(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	disableUpgradeCh := make(chan struct{})
-	const numAccounts = 1
-	const userfile = "'userfile:///a'"
-	args := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint - 1),
-					DisableAutomaticVersionUpgrade: disableUpgradeCh,
-				},
-			},
-		},
-	}
-
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, args)
-	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
-	ctx := context.Background()
-	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
-	require.NoError(t, err)
-
-	query := fmt.Sprintf("BACKUP INTO %s", userfile)
-	sqlDB.Exec(t, query)
-
-	// Confirm that the LATEST file was written to the base directory.
-	r, err := store.ReadFile(ctx, backupbase.LatestFileName)
-	require.NoError(t, err)
-	r.Close(ctx)
-
-	// Drop the system.role_seq_id so that we can perform the migration.
-	sqlDB.Exec(t, `INSERT INTO system.users VALUES ('node', '', false, 0)`)
-	sqlDB.Exec(t, `GRANT node TO root`)
-	sqlDB.Exec(t, `DROP SEQUENCE system.role_id_seq`)
-	sqlDB.Exec(t, `REVOKE node FROM root`)
-
-	err = tc.Servers[0].DB().Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.RoleIDSequenceID))
-	require.NoError(t, err)
-	err = tc.Servers[0].DB().Del(ctx, keys.SystemSQLCodec.SequenceKey(uint32(keys.RoleIDSequenceID)))
-	require.NoError(t, err)
-
-	// Close the channel so that the cluster version is upgraded.
-	close(disableUpgradeCh)
-	// Check the cluster version is bumped to newVersion.
-	testutils.SucceedsSoon(t, func() error {
-		var version string
-		sqlDB.QueryRow(t, "SELECT value FROM system.settings WHERE name = 'version'").Scan(&version)
-		var v clusterversion.ClusterVersion
-		if err := protoutil.Unmarshal([]byte(version), &v); err != nil {
-			return err
-		}
-		version = v.String()
-		if version != clusterversion.TestingBinaryVersion.String() {
-			return errors.Errorf("cluster version is still %s, should be %s", version, clusterversion.TestingBinaryVersion.String())
-		}
-		return nil
-	})
-
-	// Take an incremental backup on the new version using the latest file
-	// written by the old version in the base directory.
-	query = fmt.Sprintf("BACKUP INTO LATEST IN %s", userfile)
-	sqlDB.Exec(t, query)
-
 }
 
 // TestBackupRestoreTelemetryEvents tests that BACKUP and RESTORE correctly
