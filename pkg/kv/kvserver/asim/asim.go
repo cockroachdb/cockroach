@@ -118,6 +118,7 @@ type Replica struct {
 type Store struct {
 	Replicas  map[int]*Replica
 	allocator allocatorimpl.Allocator
+	pacer     ReplicaPacer
 }
 
 // Node represents a node within the cluster.
@@ -177,6 +178,21 @@ func (s *State) AddStore(node int) {
 		allocator: allocator,
 		Replicas:  make(map[int]*Replica),
 	}
+	nextReplsFn := func() []*Replica {
+		repls := make([]*Replica, 0, 1)
+		for _, repl := range store.Replicas {
+			repls = append(repls, repl)
+		}
+		return repls
+	}
+
+	store.pacer = NewScannerReplicaPacer(
+		nextReplsFn,
+		defaultLoopInterval,
+		defaultMinInterInterval,
+		defaultMaxIterInterval,
+	)
+
 	s.Nodes[node].Stores = append(s.Nodes[node].Stores, store)
 }
 
@@ -244,10 +260,6 @@ func (s *State) ApplyLoad(ctx context.Context, le LoadEvent) {
 	leaseHolder.ReplicaLoad.ApplyLoad(le)
 }
 
-func shouldRun(time.Time) bool {
-	return false
-}
-
 // RunAllocator runs the allocator code for some replicas as needed.
 func RunAllocator(
 	ctx context.Context,
@@ -255,16 +267,9 @@ func RunAllocator(
 	spanConf roachpb.SpanConfig,
 	desc *roachpb.RangeDescriptor,
 	tick time.Time,
-) (done bool, action allocatorimpl.AllocatorAction, priority float64) {
-	// TODO: we should pace the calls to ComputeAction. The replicate queue tries
-	// to call ComputeAction for all replicas at a steady pace, to complete a pass
-	// within 10 minutes. We should have similar logic here (using simulated
-	// time).
-	if !shouldRun(tick) {
-		return true, allocatorimpl.AllocatorNoop, 0
-	}
+) (action allocatorimpl.AllocatorAction, priority float64) {
 	action, priority = allocator.ComputeAction(ctx, spanConf, desc)
-	return false, action, priority
+	return action, priority
 }
 
 // Simulator simulates an entire cluster, and runs the allocators of each store
@@ -337,13 +342,21 @@ func (s *Simulator) RunSim(ctx context.Context) {
 
 		for _, node := range stateForAlloc.Nodes {
 			for _, store := range node.Stores {
-				for _, r := range store.Replicas {
-					// Run the real allocator code. Note that the input is from the
-					// "frozen" state which is not affected by rebalancing decisions.
-					done, action, priority := RunAllocator(ctx, store.allocator, *r.spanConf, r.rangeDesc, tick)
-					if done {
+				for {
+					noRepls, r := store.pacer.Next(tick)
+					if noRepls {
 						break
 					}
+
+					// NB: Only the leaseholder replica for the range is
+					// considered in the allocator.
+					if !r.leaseHolder {
+						continue
+					}
+
+					// Run the real allocator code. Note that the input is from the
+					// "frozen" state which is not affected by rebalancing decisions.
+					action, priority := RunAllocator(ctx, store.allocator, *r.spanConf, r.rangeDesc, tick)
 
 					// The allocator ops are applied.
 					s.state.ApplyAllocatorAction(ctx, action, priority)
