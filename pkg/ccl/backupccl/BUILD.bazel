@@ -78,6 +78,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descbuilder",
+        "//pkg/sql/catalog/descidgen",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/ingesting",
