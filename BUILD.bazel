@@ -169,9 +169,6 @@ nogo(
             "@org_golang_x_tools//go/analysis/passes/nilness:go_default_library",
             "@org_golang_x_tools//go/analysis/passes/pkgfact:go_default_library",
             "@org_golang_x_tools//go/analysis/passes/printf:go_default_library",
-            # TODO(ricky): we do want to run the shadow check, we just want to exclude
-            # shadows of the variable "err". Presumably we can hack around this. #73069
-            # "@org_golang_x_tools//go/analysis/passes/shadow:go_default_library",
             "@org_golang_x_tools//go/analysis/passes/shift:go_default_library",
             "@org_golang_x_tools//go/analysis/passes/sortslice:go_default_library",
             "@org_golang_x_tools//go/analysis/passes/stdmethods:go_default_library",
@@ -196,6 +193,7 @@ nogo(
             "//pkg/testutils/lint/passes/nocopy",
             "//pkg/testutils/lint/passes/returncheck",
             "//pkg/testutils/lint/passes/returnerrcheck",
+            "//pkg/testutils/lint/passes/shadow",
             "//pkg/testutils/lint/passes/timer",
             "//pkg/testutils/lint/passes/unconvert",
         ] + STATICCHECK_CHECKS,
