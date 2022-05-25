@@ -11,11 +11,11 @@
 package indexrec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -165,9 +165,27 @@ func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 	case *memo.ContainedByExpr:
 		ics.addVariableExprIndex(expr.Left, ics.overallCandidates)
 		ics.addVariableExprIndex(expr.Right, ics.overallCandidates)
+	case *memo.FunctionExpr:
+		ics.addGeoSpatialIndexes(expr, ics.overallCandidates)
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
 		ics.categorizeIndexCandidates(expr.Child(i))
+	}
+}
+
+// addGeoSpatialIndexes is used to add index candidates on the columns of spatial functions if the expr
+// argument can be cast to a *memo.FunctionExpr
+func (ics *indexCandidateSet) addGeoSpatialIndexes(expr opt.Expr, indexCandidates map[cat.Table][][]cat.IndexColumn) {
+	switch expr := expr.(type) {
+	case *memo.FunctionExpr:
+		// check if the function is one of the geo relationship
+		_, ok := geoindex.RelationshipMap[expr.Name]
+		if ok {
+			for i := range expr.Args {
+				var child = expr.Args.Child(i)
+				ics.addVariableExprIndex(child, indexCandidates)
+			}
+		}
 	}
 }
 
@@ -379,14 +397,7 @@ func addIndexToCandidates(
 		return
 	}
 
-	// Do not add indexes on spatial columns.
-	// TODO(rytaft): Support spatial predicates like st_contains() etc.
-	for _, indexCol := range newIndex {
-		colFamily := indexCol.Column.DatumType().Family()
-		if colFamily == types.GeometryFamily || colFamily == types.GeographyFamily {
-			return
-		}
-	}
+	// Now we are adding indexes for geospatial indexes: removed the short circuit
 
 	// Do not add duplicate indexes.
 	for _, existingIndex := range indexCandidates[currTable] {
