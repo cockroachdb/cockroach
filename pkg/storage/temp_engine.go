@@ -12,6 +12,7 @@ package storage
 
 import (
 	"context"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
@@ -29,13 +30,16 @@ func NewTempEngine(
 }
 
 type pebbleTempEngine struct {
-	db *pebble.DB
+	db     *pebble.DB
+	closer io.Closer
 }
 
 // Close implements the diskmap.Factory interface.
 func (r *pebbleTempEngine) Close() {
-	err := r.db.Close()
-	if err != nil {
+	if err := r.db.Close(); err != nil {
+		log.Fatalf(context.TODO(), "%v", err)
+	}
+	if err := r.closer.Close(); err != nil {
 		log.Fatalf(context.TODO(), "%v", err)
 	}
 }
@@ -92,5 +96,5 @@ func newPebbleTempEngine(
 	// Set store ID for the pebble engine.
 	p.SetStoreID(ctx, base.TempStoreID)
 
-	return &pebbleTempEngine{db: p.db}, p, nil
+	return &pebbleTempEngine{db: p.db, closer: p.closer}, p, nil
 }
