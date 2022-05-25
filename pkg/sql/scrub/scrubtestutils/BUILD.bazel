@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "scrubtestutils",
+    srcs = ["scrub_test_helper.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/scrub/scrubtestutils",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/testutils/sqlutils"],
+)

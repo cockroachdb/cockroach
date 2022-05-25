@@ -394,8 +394,7 @@ func createIndexCheckOperations(
 // createConstraintCheckOperations will return all of the constraints
 // that are being checked. If constraintNames is nil, then all
 // constraints are returned.
-// TODO(joey): Only SQL CHECK and FOREIGN KEY constraints are
-// implemented.
+// Only SQL CHECK, FOREIGN KEY, and UNIQUE constraints are supported.
 func createConstraintCheckOperations(
 	ctx context.Context,
 	p *planner,
@@ -438,6 +437,13 @@ func createConstraintCheckOperations(
 			))
 		case descpb.ConstraintTypeFK:
 			results = append(results, newSQLForeignKeyCheckOperation(
+				tableName,
+				tableDesc,
+				constraint,
+				asOf,
+			))
+		case descpb.ConstraintTypePK, descpb.ConstraintTypeUnique:
+			results = append(results, newSQLUniqueConstraintCheckOperation(
 				tableName,
 				tableDesc,
 				constraint,
