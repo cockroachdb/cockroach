@@ -821,7 +821,7 @@ func createImportingDescriptors(
 
 	// Finally, clean up / update any schema changer state inside descriptors
 	// globally.
-	if err := rewrite.SchemaChangerStateInDescs(allMutableDescs); err != nil {
+	if err := rewrite.CleanSchemaChangerStateInDescs(allMutableDescs); err != nil {
 		return nil, nil, err
 	}
 

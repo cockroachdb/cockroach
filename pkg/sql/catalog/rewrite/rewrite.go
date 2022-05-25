@@ -394,9 +394,9 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 	return nil
 }
 
-// SchemaChangerStateInDescs goes over all mutable descriptors and cleans any
+// CleanSchemaChangerStateInDescs goes over all mutable descriptors and cleans any
 // empty state information.
-func SchemaChangerStateInDescs(descriptors []catalog.MutableDescriptor) error {
+func CleanSchemaChangerStateInDescs(descriptors []catalog.MutableDescriptor) error {
 	nonEmptyJobs := make(map[jobspb.JobID]struct{})
 	// Track all the schema changer states that have a non-empty job associated
 	// withe them.
