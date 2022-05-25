@@ -16,10 +16,28 @@ import { alertDataSync } from "src/redux/alerts";
 import { App } from "src/app";
 import { store, history } from "src/redux/state";
 import "src/redux/analytics";
+import {
+  fetchDataFromServer,
+  setDataFromServer,
+} from "src/util/dataFromServer";
+import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
 
-ReactDOM.render(
-  <App history={history} store={store} />,
-  document.getElementById("react-layout"),
-);
+fetchDataFromServer()
+  .then(d => {
+    setDataFromServer(d);
 
-store.subscribe(alertDataSync(store));
+    ReactDOM.render(
+      <App history={history} store={store} />,
+      document.getElementById("react-layout"),
+    );
+
+    store.subscribe(alertDataSync(store));
+  })
+  .catch(e => {
+    window.errorFromServer = "Failed to load init data from CRDB.";
+    console.log(window.errorFromServer, e);
+    ReactDOM.render(
+      <ErrorBoundary></ErrorBoundary>,
+      document.getElementById("react-layout"),
+    );
+  });

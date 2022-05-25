@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "ui",
@@ -12,7 +12,6 @@ go_library(
         "//pkg/build",
         "//pkg/util/httputil",
         "//pkg/util/log",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -50,5 +49,17 @@ test_suite(
     tests = [
         "//pkg/ui/workspaces/cluster-ui:lint",
         "//pkg/ui/workspaces/db-console:lint",
+    ],
+)
+
+go_test(
+    name = "ui_test",
+    srcs = ["ui_test.go"],
+    embed = [":ui"],
+    deps = [
+        "//pkg/base",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )

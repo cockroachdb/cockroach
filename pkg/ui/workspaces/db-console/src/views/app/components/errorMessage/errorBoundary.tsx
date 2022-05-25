@@ -30,7 +30,7 @@ export default class ErrorBoundary extends React.Component<
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
-      hasError: false,
+      hasError: !!window.errorFromServer,
       error: undefined,
     };
   }
