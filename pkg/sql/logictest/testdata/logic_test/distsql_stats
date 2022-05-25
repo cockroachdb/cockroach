@@ -1219,6 +1219,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         ],
         "distinct_count": 1,
         "histo_col_type": "INT8",
+        "histo_version": 1,
         "name": "s",
         "null_count": 1,
         "row_count": 1
@@ -1375,3 +1376,196 @@ ANALYZE system.jobs
 # Collecting stats on system.scheduled_jobs is disallowed.
 statement error pq: cannot create statistics on system.scheduled_jobs
 ANALYZE system.scheduled_jobs
+
+# Collecting stats on empty tables should result in empty (but not NULL)
+# histograms.
+statement ok
+CREATE TABLE tabula (r INT, a INT, sa INT, PRIMARY KEY (r), INDEX (a, sa))
+
+statement ok
+CREATE STATISTICS aristotle FROM tabula
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE tabula]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  has_histogram
+aristotle        {a,sa}        0          false
+aristotle        {a}           0          true
+aristotle        {r}           0          true
+aristotle        {sa}          0          true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE tabula]
+WHERE statistics_name = 'aristotle' AND column_names = '{a}'
+
+# This histogram should be empty.
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+
+query T
+SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+  FROM (SELECT json_array_elements(statistics) - 'created_at' AS stat
+        FROM [SHOW STATISTICS USING JSON FOR TABLE tabula])
+----
+[
+    {
+        "avg_size": 0,
+        "columns": [
+            "r"
+        ],
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "name": "aristotle",
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "a"
+        ],
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "name": "aristotle",
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "sa"
+        ],
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "name": "aristotle",
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "a",
+            "sa"
+        ],
+        "distinct_count": 0,
+        "histo_col_type": "",
+        "name": "aristotle",
+        "null_count": 0,
+        "row_count": 0
+    }
+]
+
+# Collecting stats on columns with all NULL values should also result in empty
+# (but not NULL) histograms.
+statement ok
+INSERT INTO tabula VALUES (11, 12, NULL)
+
+statement ok
+CREATE STATISTICS locke FROM tabula
+
+query TTIIB colnames
+SELECT statistics_name, column_names, row_count, null_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE tabula]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+locke            {a,sa}        1          0           false
+locke            {a}           1          0           true
+locke            {r}           1          0           true
+locke            {sa}          1          1           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE tabula]
+WHERE statistics_name = 'locke' AND column_names = '{a}'
+
+# This histogram should *not* be empty.
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+12           0           0                    1
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE tabula]
+WHERE statistics_name = 'locke' AND column_names = '{sa}'
+
+# This histogram *should* be empty.
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+
+query T
+SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+  FROM (SELECT json_array_elements(statistics) - 'created_at' - 'avg_size' AS stat
+        FROM [SHOW STATISTICS USING JSON FOR TABLE tabula])
+----
+[
+    {
+        "columns": [
+            "r"
+        ],
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "11"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "name": "locke",
+        "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "a"
+        ],
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "12"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "name": "locke",
+        "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "sa"
+        ],
+        "distinct_count": 1,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "name": "locke",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "a",
+            "sa"
+        ],
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "locke",
+        "null_count": 0,
+        "row_count": 1
+    }
+]
