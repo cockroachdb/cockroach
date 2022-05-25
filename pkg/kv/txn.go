@@ -446,6 +446,18 @@ func (txn *Txn) NewBatch() *Batch {
 	return &Batch{txn: txn, AdmissionHeader: txn.AdmissionHeader()}
 }
 
+// NewBatchWithExpectedSize creates and returns a new empty batch object for use
+// with the Txn. The batch has expected size (in requests) of n.
+func (txn *Txn) NewBatchWithExpectedSize(n int) *Batch {
+	b := &Batch{txn: txn, AdmissionHeader: txn.AdmissionHeader()}
+	if n > batchPreAllocSize {
+		b.reqs = make([]roachpb.RequestUnion, 0, n)
+		b.Results = make([]Result, 0, n)
+		b.rowsBuf = make([]KeyValue, 0, n)
+	}
+	return b
+}
+
 // Get retrieves the value for a key, returning the retrieved key/value or an
 // error. It is not considered an error for the key to not exist.
 //

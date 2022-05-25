@@ -59,7 +59,8 @@ func (n *upsertNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	return n.run.tw.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
+	return n.run.tw.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV,
+		0 /* expectedBatchSize */)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but

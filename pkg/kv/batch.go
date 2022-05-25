@@ -24,6 +24,8 @@ const (
 	notRaw = false
 )
 
+const batchPreAllocSize = 8
+
 // Batch provides for the parallel execution of a number of database
 // operations. Operations are added to the Batch and then the Batch is executed
 // via either DB.Run, Txn.Run or Txn.Commit.
@@ -65,9 +67,9 @@ type Batch struct {
 	pErr *roachpb.Error
 
 	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
-	resultsBuf    [8]Result
+	resultsBuf    [batchPreAllocSize]Result
 	rowsBuf       []KeyValue
-	rowsStaticBuf [8]KeyValue
+	rowsStaticBuf [batchPreAllocSize]KeyValue
 	rowsStaticIdx int
 }
 
@@ -111,7 +113,7 @@ func (b *Batch) initResult(calls, numRows int, raw bool, err error) {
 	// TODO(tschottdorf): assert that calls is 0 or 1?
 	r := Result{calls: calls, Err: err}
 	if numRows > 0 && !b.raw {
-		if b.rowsStaticIdx+numRows <= len(b.rowsStaticBuf) {
+		if b.rowsBuf == nil && b.rowsStaticIdx+numRows <= len(b.rowsStaticBuf) {
 			r.Rows = b.rowsStaticBuf[b.rowsStaticIdx : b.rowsStaticIdx+numRows]
 			b.rowsStaticIdx += numRows
 		} else {

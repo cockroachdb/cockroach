@@ -99,9 +99,9 @@ var _ tableWriter = &optTableUpserter{}
 
 // init is part of the tableWriter interface.
 func (tu *optTableUpserter) init(
-	ctx context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
+	ctx context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values, expectedRows int,
 ) error {
-	tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx, sv)
+	tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx, sv, expectedRows)
 
 	// rowsNeeded, set upon initialization, indicates pkg/sql/backfill.gowhether or not we want
 	// rows returned from the operation.

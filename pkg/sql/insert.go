@@ -188,7 +188,8 @@ func (n *insertNode) startExec(params runParams) error {
 
 	n.run.initRowContainer(params, n.columns)
 
-	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
+	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV,
+		0 /* expectedBatchSize */)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but

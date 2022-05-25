@@ -34,9 +34,9 @@ func (*tableInserter) desc() string { return "inserter" }
 
 // init is part of the tableWriter interface.
 func (ti *tableInserter) init(
-	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
+	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values, expectedRows int,
 ) error {
-	ti.tableWriterBase.init(txn, ti.tableDesc(), evalCtx, sv)
+	ti.tableWriterBase.init(txn, ti.tableDesc(), evalCtx, sv, expectedRows)
 	return nil
 }
 
