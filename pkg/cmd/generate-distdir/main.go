@@ -208,7 +208,7 @@ func getShasFromYarnRepositoriesCall(call *syntax.CallExpr, shas map[string]stri
 			}
 		}
 	}
-	if yarnURLTmpl == "" || yarnVersion == "" || yarnSha == "" || yarnFilename == "" {	
+	if yarnURLTmpl == "" || yarnVersion == "" || yarnSha == "" || yarnFilename == "" {
 		return fmt.Errorf("did not parse all needed data from yarn_repositories call")
 	}
 	shas[strings.ReplaceAll(strings.ReplaceAll(yarnURLTmpl, "{version}", yarnVersion), "{filename}", yarnFilename)] = yarnSha
