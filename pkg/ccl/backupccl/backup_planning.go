@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -150,7 +151,7 @@ func getPublicIndexTableSpans(
 func spansForAllTableIndexes(
 	execCfg *sql.ExecutorConfig,
 	tables []catalog.TableDescriptor,
-	revs []BackupManifest_DescriptorRevision,
+	revs []backuppb.BackupManifest_DescriptorRevision,
 ) ([]roachpb.Span, error) {
 
 	added := make(map[tableAndIndex]bool, len(tables))
@@ -933,7 +934,9 @@ func backupPlanHook(
 }
 
 func collectTelemetry(
-	backupManifest BackupManifest, initialDetails, backupDetails jobspb.BackupDetails, licensed bool,
+	backupManifest backuppb.BackupManifest,
+	initialDetails, backupDetails jobspb.BackupDetails,
+	licensed bool,
 ) {
 	// sourceSuffix specifies if this schedule was created by a schedule.
 	sourceSuffix := ".manual"
@@ -948,7 +951,7 @@ func collectTelemetry(
 	}
 
 	countSource("backup.total.started")
-	if backupManifest.isIncremental() || backupDetails.EncryptionOptions != nil {
+	if backupManifest.IsIncremental() || backupDetails.EncryptionOptions != nil {
 		countSource("backup.using-enterprise-features")
 	}
 	if licensed {
@@ -969,7 +972,7 @@ func collectTelemetry(
 	if len(backupDetails.URIsByLocalityKV) > 1 {
 		countSource("backup.partitioned")
 	}
-	if backupManifest.MVCCFilter == MVCCFilter_All {
+	if backupManifest.MVCCFilter == backuppb.MVCCFilter_All {
 		countSource("backup.revision-history")
 	}
 	if backupDetails.EncryptionOptions != nil {
@@ -1019,14 +1022,14 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	txn *kv.Txn,
 	ie *sql.InternalExecutor,
 	scheduleID int64,
-) (*jobs.ScheduledJob, *ScheduledBackupExecutionArgs, error) {
+) (*jobs.ScheduledJob, *backuppb.ScheduledBackupExecutionArgs, error) {
 	// Load the schedule that has spawned this job.
 	sj, err := jobs.LoadScheduledJob(ctx, env, scheduleID, ie, txn)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to load scheduled job %d", scheduleID)
 	}
 
-	args := &ScheduledBackupExecutionArgs{}
+	args := &backuppb.ScheduledBackupExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return nil, nil, errors.Wrap(err, "un-marshaling args")
 	}
@@ -1034,7 +1037,7 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	return sj, args, nil
 }
 
-// writeBackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST
+// writebackuppb.BackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST
 // and CHECKSUM file. If it is a pure v22.1 cluster or later, it will write
 // a timestamped BACKUP-CHECKPOINT to the /progress directory.
 // If it is a mixed cluster version, it will write a non timestamped BACKUP-CHECKPOINT
@@ -1044,7 +1047,7 @@ func writeBackupManifestCheckpoint(
 	ctx context.Context,
 	storageURI string,
 	encryption *jobspb.BackupEncryptionOptions,
-	desc *BackupManifest,
+	desc *backuppb.BackupManifest,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 ) error {
@@ -1179,7 +1182,7 @@ func planSchedulePTSChaining(
 		return nil
 	}
 
-	if args.BackupType == ScheduledBackupExecutionArgs_FULL {
+	if args.BackupType == backuppb.ScheduledBackupExecutionArgs_FULL {
 		// Check if there is a dependent incremental schedule associated with the
 		// full schedule running the current backup.
 		//
@@ -1231,9 +1234,9 @@ func planSchedulePTSChaining(
 func getReintroducedSpans(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	prevBackups []BackupManifest,
+	prevBackups []backuppb.BackupManifest,
 	tables []catalog.TableDescriptor,
-	revs []BackupManifest_DescriptorRevision,
+	revs []backuppb.BackupManifest_DescriptorRevision,
 	endTime hlc.Timestamp,
 ) ([]roachpb.Span, error) {
 	reintroducedTables := make(map[descpb.ID]struct{})
@@ -1276,7 +1279,7 @@ func getReintroducedSpans(
 
 	// All revisions of the table that we're re-introducing must also be
 	// considered.
-	allRevs := make([]BackupManifest_DescriptorRevision, 0, len(revs))
+	allRevs := make([]backuppb.BackupManifest_DescriptorRevision, 0, len(revs))
 	for _, rev := range revs {
 		rawTable, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTable == nil {
@@ -1294,7 +1297,7 @@ func getReintroducedSpans(
 	return tableSpans, nil
 }
 
-func getProtectedTimestampTargetForBackup(backupManifest BackupManifest) *ptpb.Target {
+func getProtectedTimestampTargetForBackup(backupManifest backuppb.BackupManifest) *ptpb.Target {
 	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
 		return ptpb.MakeClusterTarget()
 	}
@@ -1333,7 +1336,7 @@ func protectTimestampForBackup(
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	jobID jobspb.JobID,
-	backupManifest BackupManifest,
+	backupManifest backuppb.BackupManifest,
 	backupDetails jobspb.BackupDetails,
 ) error {
 	tsToProtect := backupManifest.EndTime
@@ -1439,24 +1442,24 @@ func getBackupDetailAndManifest(
 	txn *kv.Txn,
 	initialDetails jobspb.BackupDetails,
 	user username.SQLUsername,
-) (jobspb.BackupDetails, BackupManifest, error) {
+) (jobspb.BackupDetails, backuppb.BackupManifest, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
 	// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
 	// backupDestination struct.
 	collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
 		resolveDest(ctx, user, initialDetails.Destination, initialDetails.EndTime, initialDetails.IncrementalFrom, execCfg)
 	if err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 
 	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
 	if err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 	defer defaultStore.Close()
 
 	if err := checkForPreviousBackup(ctx, defaultStore, defaultURI); err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 
 	kmsEnv := &backupKMSEnv{settings: execCfg.Settings, conf: &execCfg.ExternalIODirConfig}
@@ -1468,7 +1471,7 @@ func getBackupDetailAndManifest(
 		makeCloudStorage, prevs, *initialDetails.EncryptionOptions, kmsEnv)
 
 	if err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 	defer func() {
 		mem.Shrink(ctx, memSize)
@@ -1478,15 +1481,15 @@ func getBackupDetailAndManifest(
 		baseManifest := prevBackups[0]
 		if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
 			!initialDetails.FullCluster {
-			return jobspb.BackupDetails{}, BackupManifest{}, errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
 		}
 
 		if err := requireEnterprise(execCfg, "incremental"); err != nil {
-			return jobspb.BackupDetails{}, BackupManifest{}, err
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 		}
 		lastEndTime := prevBackups[len(prevBackups)-1].EndTime
 		if lastEndTime.Compare(initialDetails.EndTime) > 0 {
-			return jobspb.BackupDetails{}, BackupManifest{},
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{},
 				errors.Newf("`AS OF SYSTEM TIME` %s must be greater than "+
 					"the previous backup's end time of %s.",
 					initialDetails.EndTime.GoTime(), lastEndTime.GoTime())
@@ -1506,7 +1509,7 @@ func getBackupDetailAndManifest(
 		// context of their own cluster, so we need to ensure we only allow
 		// incremental previous backups that we created.
 		if fromCluster := prevBackup.ClusterID; !fromCluster.Equal(execCfg.LogicalClusterID()) {
-			return jobspb.BackupDetails{}, BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
 		}
 
 		prevLocalityKVs := prevBackup.LocalityKVs
@@ -1525,7 +1528,7 @@ func getBackupDetailAndManifest(
 			// necessary, because the default locality defines the backup manifest
 			// location. If that URI isn't right, the backup chain will fail to
 			// load.
-			return jobspb.BackupDetails{}, BackupManifest{}, errors.Newf(
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Newf(
 				"Requested backup has localities %s, but a previous backup layer in this collection has localities %s. "+
 					"Mismatched backup layers are not supported. Please take a new full backup with the new localities, or an "+
 					"incremental backup with matching localities.",
@@ -1548,7 +1551,7 @@ func getBackupDetailAndManifest(
 		encryptionOptions,
 		kmsEnv)
 	if err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 
 	backupManifest, err := createBackupManifest(
@@ -1558,7 +1561,7 @@ func getBackupDetailAndManifest(
 		updatedDetails,
 		prevBackups)
 	if err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 
 	return updatedDetails, backupManifest, nil
@@ -1607,11 +1610,11 @@ func createBackupManifest(
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	jobDetails jobspb.BackupDetails,
-	prevBackups []BackupManifest,
-) (BackupManifest, error) {
-	mvccFilter := MVCCFilter_Latest
+	prevBackups []backuppb.BackupManifest,
+) (backuppb.BackupManifest, error) {
+	mvccFilter := backuppb.MVCCFilter_Latest
 	if jobDetails.RevisionHistory {
-		mvccFilter = MVCCFilter_All
+		mvccFilter = backuppb.MVCCFilter_All
 	}
 	endTime := jobDetails.EndTime
 	var targetDescs []catalog.Descriptor
@@ -1621,7 +1624,7 @@ func createBackupManifest(
 		var err error
 		targetDescs, _, err = fullClusterTargetsBackup(ctx, execCfg, endTime)
 		if err != nil {
-			return BackupManifest{}, err
+			return backuppb.BackupManifest{}, err
 		}
 		descriptorProtos = make([]descpb.Descriptor, len(targetDescs))
 		for i, desc := range targetDescs {
@@ -1652,13 +1655,13 @@ func createBackupManifest(
 	var newSpans roachpb.Spans
 	var priorIDs map[descpb.ID]descpb.ID
 
-	var revs []BackupManifest_DescriptorRevision
-	if mvccFilter == MVCCFilter_All {
+	var revs []backuppb.BackupManifest_DescriptorRevision
+	if mvccFilter == backuppb.MVCCFilter_All {
 		priorIDs = make(map[descpb.ID]descpb.ID)
 		revs, err = getRelevantDescChanges(ctx, execCfg, startTime, endTime, targetDescs,
 			jobDetails.ResolvedCompleteDbs, priorIDs, jobDetails.FullCluster)
 		if err != nil {
-			return BackupManifest{}, err
+			return backuppb.BackupManifest{}, err
 		}
 	}
 
@@ -1668,14 +1671,14 @@ func createBackupManifest(
 		ctx, execCfg, txn, jobDetails,
 	)
 	if err != nil {
-		return BackupManifest{}, err
+		return backuppb.BackupManifest{}, err
 	}
 	spans = append(spans, tenantSpans...)
 	tenants = append(tenants, tenantInfos...)
 
 	tableSpans, err := spansForAllTableIndexes(execCfg, tables, revs)
 	if err != nil {
-		return BackupManifest{}, err
+		return backuppb.BackupManifest{}, err
 	}
 	spans = append(spans, tableSpans...)
 
@@ -1694,12 +1697,12 @@ func createBackupManifest(
 
 		if !jobDetails.FullCluster {
 			if err := checkForNewTables(ctx, execCfg.Codec, execCfg.DB, targetDescs, tablesInPrev, dbsInPrev, priorIDs, startTime, endTime); err != nil {
-				return BackupManifest{}, err
+				return backuppb.BackupManifest{}, err
 			}
 			// Let's check that we're not widening the scope of this backup to an
 			// entire database, even if no tables were created in the meantime.
 			if err := checkForNewCompleteDatabases(targetDescs, jobDetails.ResolvedCompleteDbs, dbsInPrev); err != nil {
-				return BackupManifest{}, err
+				return backuppb.BackupManifest{}, err
 			}
 		}
 
@@ -1707,7 +1710,7 @@ func createBackupManifest(
 
 		tableSpans, err := getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
 		if err != nil {
-			return BackupManifest{}, err
+			return backuppb.BackupManifest{}, err
 		}
 		newSpans = append(newSpans, tableSpans...)
 	}
@@ -1724,7 +1727,7 @@ func createBackupManifest(
 		coverage = tree.AllDescriptors
 	}
 
-	backupManifest := BackupManifest{
+	backupManifest := backuppb.BackupManifest{
 		StartTime:           startTime,
 		EndTime:             endTime,
 		MVCCFilter:          mvccFilter,
@@ -1742,7 +1745,7 @@ func createBackupManifest(
 		DescriptorCoverage:  coverage,
 	}
 	if err := checkCoverage(ctx, backupManifest.Spans, append(prevBackups, backupManifest)); err != nil {
-		return BackupManifest{}, errors.Wrap(err, "new backup would not cover expected time")
+		return backuppb.BackupManifest{}, errors.Wrap(err, "new backup would not cover expected time")
 	}
 	return backupManifest, nil
 }
@@ -1754,7 +1757,7 @@ func updateBackupDetails(
 	defaultURI string,
 	resolvedSubdir string,
 	urisByLocalityKV map[string]string,
-	prevBackups []BackupManifest,
+	prevBackups []backuppb.BackupManifest,
 	encryptionOptions *jobspb.BackupEncryptionOptions,
 	kmsEnv *backupKMSEnv,
 ) (jobspb.BackupDetails, error) {
