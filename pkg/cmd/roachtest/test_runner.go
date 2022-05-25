@@ -104,8 +104,10 @@ type testRunner struct {
 // newTestRunner constructs a testRunner.
 //
 // cr: The cluster registry with which all clusters will be registered. The
-//   caller provides this as the caller needs to be able to shut clusters down
-//   on Ctrl+C.
+//
+//	caller provides this as the caller needs to be able to shut clusters down
+//	on Ctrl+C.
+//
 // buildVersion: The version of the Cockroach binary against which tests will run.
 func newTestRunner(
 	cr *clusterRegistry, stopper *stop.Stopper, buildVersion version.Version,
@@ -169,9 +171,11 @@ type testOpts struct {
 // tests: The tests to run.
 // count: How many times to run each test selected by filter.
 // parallelism: How many workers to use for running tests. Tests are run
-//   locally (although generally they run against remote roachprod clusters).
-//   parallelism bounds the maximum number of tests that run concurrently. Note
-//   that the concurrency is also affected by cpuQuota.
+//
+//	locally (although generally they run against remote roachprod clusters).
+//	parallelism bounds the maximum number of tests that run concurrently. Note
+//	that the concurrency is also affected by cpuQuota.
+//
 // clusterOpt: Options for the clusters to use by tests.
 // lopt: Options for logging.
 func (r *testRunner) Run(
@@ -406,11 +410,17 @@ type clusterAllocatorFn func(
 // Args:
 // name: The worker's name, to be used as a prefix for log messages.
 // artifactsRootDir: The artifacts dir. Each test's logs are going to be under a
-//   run_<n> dir. If empty, test log files will not be created.
+//
+//	run_<n> dir. If empty, test log files will not be created.
+//
 // literalArtifactsDir: The literal on-agent path where artifacts are stored.
-//      Only used for teamcity[publishArtifacts] messages.
+//
+//	Only used for teamcity[publishArtifacts] messages.
+//
 // stdout: The Writer to use for messages that need to go to stdout (e.g. the
-// 	 "=== RUN" and "--- FAIL" lines).
+//
+//	"=== RUN" and "--- FAIL" lines).
+//
 // teeOpt: The teeing option for future test loggers.
 // l: The logger to use for more verbose messages.
 func (r *testRunner) runWorker(
@@ -721,7 +731,8 @@ func allStacks() []byte {
 //
 // Args:
 // c: The cluster on which the test will run. runTest() does not wipe or destroy
-//    the cluster.
+//
+//	the cluster.
 func (r *testRunner) runTest(
 	ctx context.Context,
 	t *testImpl,
@@ -1037,6 +1048,7 @@ func (r *testRunner) maybePostGithubIssue(
 	// they are also release blockers (this label may be removed
 	// by a human upon closer investigation).
 	labels := []string{"O-roachtest"}
+	spec := t.Spec().(*registry.TestSpec)
 	if !t.Spec().(*registry.TestSpec).NonReleaseBlocker {
 		labels = append(labels, "release-blocker")
 	}
@@ -1063,18 +1075,24 @@ func (r *testRunner) maybePostGithubIssue(
 		branch = "<unknown branch>"
 	}
 
-	msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
-		branch, t.Spec().(*registry.TestSpec).Cluster.Cloud, output)
 	artifacts := fmt.Sprintf("/%s", t.Name())
+
+	roachtestParam := func(s string) string { return "ROACHTEST_" + s }
+	clusterParams := map[string]string{
+		roachtestParam("cloud"): spec.Cluster.Cloud,
+		roachtestParam("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
+		roachtestParam("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
+	}
 
 	req := issues.PostRequest{
 		MentionOnCreate: mention,
 		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        t.Name(),
-		Message:         msg,
+		Message:         output,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
+		ExtraParams:     clusterParams,
 		HelpCommand: func(renderer *issues.Renderer) {
 			issues.HelpCommandAsLink(
 				"roachtest README",
@@ -1173,7 +1191,6 @@ type getWorkCallbacks struct {
 // getWork takes in a cluster; if not nil, tests that can reuse it are
 // preferred. If a test that can reuse it is not found (or if there's no more
 // work), the cluster is destroyed (and so its resources are released).
-//
 func (r *testRunner) getWork(
 	ctx context.Context,
 	work *workPool,
@@ -1225,7 +1242,8 @@ func (r *testRunner) removeWorker(ctx context.Context, name string) {
 // runHTTPServer starts a server running in the background.
 //
 // httpPort: The port on which to serve the web interface. Pass 0 for allocating
-// 	 a port automatically (which will be printed to stdout).
+//
+//	a port automatically (which will be printed to stdout).
 func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer) error {
 	http.HandleFunc("/", r.serveHTTP)
 	// Run an http server in the background.
