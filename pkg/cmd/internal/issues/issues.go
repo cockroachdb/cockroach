@@ -138,6 +138,25 @@ func newPoster(client *github.Client, opts *Options) *poster {
 	}
 }
 
+// parameters returns the parameters to be displayed in the failure
+// report. It adds the default parameters (currently, TAGS and
+// GOFLAGS) to the list of parameters passed by the caller.
+func (p *poster) parameters(extraParams map[string]string) map[string]string {
+	ps := map[string]string{}
+	for name, value := range extraParams {
+		ps[name] = value
+	}
+
+	if p.Tags != "" {
+		ps["TAGS"] = p.Tags
+	}
+	if p.Goflags != "" {
+		ps["GOFLAGS"] = p.Goflags
+	}
+
+	return ps
+}
+
 // Options configures the issue poster.
 type Options struct {
 	Token        string // GitHub API token
@@ -217,8 +236,9 @@ type TemplateData struct {
 	PostRequest
 	// This is foo/bar instead of github.com/cockroachdb/cockroach/pkg/foo/bar.
 	PackageNameShort string
-	// GOFLAGS=-foo TAGS=-race etc.
-	Parameters []string
+	// Parameters includes relevant test or build parameters, such as
+	// build tags or cluster configuration
+	Parameters map[string]string
 	// The message, garnished with helpers that allow extracting the useful
 	// bots.
 	CondensedMessage CondensedMessage
@@ -249,7 +269,7 @@ func (p *poster) templateData(
 	}
 	return TemplateData{
 		PostRequest:      req,
-		Parameters:       p.parameters(),
+		Parameters:       p.parameters(req.ExtraParams),
 		CondensedMessage: CondensedMessage(req.Message),
 		Branch:           p.Branch,
 		Commit:           p.SHA,
@@ -394,17 +414,6 @@ func (p *poster) teamcityArtifactsURL(artifacts string) *url.URL {
 	return p.teamcityURL("artifacts", artifacts)
 }
 
-func (p *poster) parameters() []string {
-	var ps []string
-	if p.Tags != "" {
-		ps = append(ps, "TAGS="+p.Tags)
-	}
-	if p.Goflags != "" {
-		ps = append(ps, "GOFLAGS="+p.Goflags)
-	}
-	return ps
-}
-
 // A PostRequest contains the information needed to create an issue about a
 // test failure.
 type PostRequest struct {
@@ -414,6 +423,9 @@ type PostRequest struct {
 	TestName string
 	// The test output.
 	Message string
+	// ExtraParams contains the parameters to be included in a failure
+	// report, other than the defaults (git branch, test flags).
+	ExtraParams map[string]string
 	// A path to the test artifacts relative to the artifacts root. If nonempty,
 	// allows the poster formatter to construct a direct URL to this directory.
 	Artifacts string

@@ -72,6 +72,14 @@ func (r *Renderer) Escaped(txt string) {
 	r.printf("%s", html.EscapeString(txt))
 }
 
+// Code renders a word or phrase as code. Instead of using backticks
+// here (Markdown), we rely on HTML tags since that works even if the
+// this function is called within the context of an HTML tag (such as
+// a paragraph).
+func (r *Renderer) Code(txt string) {
+	r.HTML("code", func() { r.Escaped(txt) })
+}
+
 // CodeBlock renders a code block.
 func (r *Renderer) CodeBlock(typ string, txt string) {
 	r.nl()
