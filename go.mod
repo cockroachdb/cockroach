@@ -120,7 +120,7 @@ require (
 	github.com/montanaflynn/stats v0.6.3
 	github.com/olekukonko/tablewriter v0.0.5-0.20200416053754-163badb3bac6
 	github.com/opencontainers/image-spec v1.0.1
-	github.com/otan/gopgkrb5 v1.0.1
+	github.com/otan/gopgkrb5 v1.0.3
 	github.com/petermattis/goid v0.0.0-20211229010228-4d14c490ee36
 	github.com/pierrre/geohash v1.0.0
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
@@ -155,7 +155,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220518034528-6f7dac969898
 	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
-	golang.org/x/net v0.0.0-20220520000938-2e3eb7b945c2
+	golang.org/x/net v0.0.0-20220524220425-1d687d428aca
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
@@ -246,7 +246,7 @@ require (
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
-	github.com/hashicorp/go-uuid v1.0.2 // indirect
+	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639 // indirect

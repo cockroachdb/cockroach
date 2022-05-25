@@ -3911,10 +3911,10 @@ def go_deps():
         name = "com_github_hashicorp_go_uuid",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/hashicorp/go-uuid",
-        sha256 = "30e419ebb4658e789be8ef1f5629faccc15d6571c6914a51afdcbaf74a5862b8",
-        strip_prefix = "github.com/hashicorp/go-uuid@v1.0.2",
+        sha256 = "5e9dc2bb3785d69a65d287a4b3fa7e9f583a127e41c6a2fd095ac862fed71dad",
+        strip_prefix = "github.com/hashicorp/go-uuid@v1.0.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/go-uuid/com_github_hashicorp_go_uuid-v1.0.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/go-uuid/com_github_hashicorp_go_uuid-v1.0.3.zip",
         ],
     )
     go_repository(
@@ -6339,10 +6339,10 @@ def go_deps():
         name = "com_github_otan_gopgkrb5",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/otan/gopgkrb5",
-        sha256 = "b3f1fa147ead882226f08ab2a15974931a273d209b9041c07b7d0b45d9e7933f",
-        strip_prefix = "github.com/otan/gopgkrb5@v1.0.1",
+        sha256 = "8d7241eed0a03a88654c49ee0a0c5db4f5bd37682011ee953cddb623f16bb349",
+        strip_prefix = "github.com/otan/gopgkrb5@v1.0.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/otan/gopgkrb5/com_github_otan_gopgkrb5-v1.0.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/otan/gopgkrb5/com_github_otan_gopgkrb5-v1.0.3.zip",
         ],
     )
     go_repository(
@@ -9155,10 +9155,10 @@ def go_deps():
         name = "org_golang_x_net",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/net",
-        sha256 = "d8b6dacdfd15aaa995d5e1e40a5b89073d855af55a2f0866ed1f904e8fe8c63b",
-        strip_prefix = "golang.org/x/net@v0.0.0-20220520000938-2e3eb7b945c2",
+        sha256 = "b3d53182e3eb8aa90a0105e84dc8fe58aaa8e37168d2302e70165a1039b5548f",
+        strip_prefix = "golang.org/x/net@v0.0.0-20220524220425-1d687d428aca",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/net/org_golang_x_net-v0.0.0-20220520000938-2e3eb7b945c2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/net/org_golang_x_net-v0.0.0-20220524220425-1d687d428aca.zip",
         ],
     )
     go_repository(
