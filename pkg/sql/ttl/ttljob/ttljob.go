@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -357,11 +358,12 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 	statsCloseCh := make(chan struct{})
 	ch := make(chan rangeToProcess, rangeConcurrency)
+	rowCount := int64(0)
 	for i := 0; i < rangeConcurrency; i++ {
 		g.GoCtx(func(ctx context.Context) error {
 			for r := range ch {
 				start := timeutil.Now()
-				err := runTTLOnRange(
+				rangeRowCount, err := runTTLOnRange(
 					ctx,
 					p.ExecCfg(),
 					details,
@@ -378,6 +380,8 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					deleteRateLimiter,
 					*aost,
 				)
+				// add before returning err in case of partial success
+				atomic.AddInt64(&rowCount, rangeRowCount)
 				metrics.RangeTotalDuration.RecordValue(int64(timeutil.Since(start)))
 				if err != nil {
 					// Continue until channel is fully read.
@@ -414,6 +418,14 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			close(ch)
 			close(statsCloseCh)
 			retErr = errors.CombineErrors(retErr, g.Wait())
+			retErr = errors.CombineErrors(retErr, db.Txn(ctx, func(_ context.Context, txn *kv.Txn) error {
+				return t.job.Update(ctx, txn, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+					progress := md.Progress
+					progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount += rowCount
+					ju.UpdateProgress(progress)
+					return nil
+				})
+			}))
 		}()
 
 		ri := kvcoord.MakeRangeIterator(p.ExecCfg().DistSender)
@@ -562,6 +574,7 @@ func fetchStatistics(
 	}
 }
 
+// rangeRowCount should be checked even if the function returns an error because it may have partially succeeded
 func runTTLOnRange(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -577,7 +590,7 @@ func runTTLOnRange(
 	selectBatchSize, deleteBatchSize int,
 	deleteRateLimiter *quotapool.RateLimiter,
 	aost tree.DTimestampTZ,
-) error {
+) (rangeRowCount int64, err error) {
 	metrics.NumActiveRanges.Inc(1)
 	defer metrics.NumActiveRanges.Dec(1)
 
@@ -608,13 +621,13 @@ func runTTLOnRange(
 	for {
 		if f := knobs.OnDeleteLoopStart; f != nil {
 			if err := f(); err != nil {
-				return err
+				return rangeRowCount, err
 			}
 		}
 
 		// Check the job is enabled on every iteration.
 		if enabled := jobEnabled.Get(execCfg.SV()); !enabled {
-			return errors.Newf(
+			return rangeRowCount, errors.Newf(
 				"ttl jobs are currently disabled by CLUSTER SETTING %s",
 				jobEnabled.Key(),
 			)
@@ -626,7 +639,7 @@ func runTTLOnRange(
 		expiredRowsPKs, err := selectBuilder.run(ctx, ie)
 		metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
 		if err != nil {
-			return errors.Wrapf(err, "error selecting rows to delete")
+			return rangeRowCount, errors.Wrapf(err, "error selecting rows to delete")
 		}
 		metrics.RowSelections.Inc(int64(len(expiredRowsPKs)))
 
@@ -660,7 +673,6 @@ func runTTLOnRange(
 						desc.GetModificationTime().GoTime().Format(time.RFC3339),
 					)
 				}
-
 				tokens, err := deleteRateLimiter.Acquire(ctx, int64(len(deleteBatch)))
 				if err != nil {
 					return err
@@ -668,11 +680,16 @@ func runTTLOnRange(
 				defer tokens.Consume()
 
 				start := timeutil.Now()
-				err = deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				rowCount, err := deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				if err != nil {
+					return err
+				}
+
 				metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
-				return err
+				rangeRowCount += int64(rowCount)
+				return nil
 			}); err != nil {
-				return errors.Wrapf(err, "error during row deletion")
+				return rangeRowCount, errors.Wrapf(err, "error during row deletion")
 			}
 			metrics.RowDeletions.Inc(int64(len(deleteBatch)))
 		}
@@ -685,7 +702,7 @@ func runTTLOnRange(
 			break
 		}
 	}
-	return nil
+	return rangeRowCount, nil
 }
 
 // keyToDatums translates a RKey on a range for a table to the appropriate datums.

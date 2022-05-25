@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -605,6 +607,29 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				fmt.Sprintf(`SELECT count(1) FROM %s WHERE crdb_internal_expiration >= now()`, createTableStmt.Table.Table()),
 			).Scan(&numRows)
 			require.Equal(t, tc.numNonExpiredRows, numRows)
+
+			rows := th.sqlDB.Query(t, `
+SELECT sys_j.status, sys_j.progress
+FROM crdb_internal.jobs AS crdb_j
+JOIN system.jobs as sys_j ON crdb_j.job_id = sys_j.id
+WHERE crdb_j.job_type = 'ROW LEVEL TTL'
+`)
+			jobCount := 0
+			for rows.Next() {
+				var status string
+				var progressBytes []byte
+				require.NoError(t, rows.Scan(&status, &progressBytes))
+
+				require.Equal(t, "succeeded", status)
+
+				var progress jobspb.Progress
+				require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
+
+				rowLevelTTLProgress := progress.UnwrapDetails().(jobspb.RowLevelTTLProgress)
+				require.Equal(t, int64(tc.numExpiredRows), rowLevelTTLProgress.RowCount)
+				jobCount++
+			}
+			require.Equal(t, 1, jobCount)
 		})
 	}
 }
