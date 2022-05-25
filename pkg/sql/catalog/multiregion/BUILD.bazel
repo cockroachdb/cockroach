@@ -4,6 +4,7 @@ go_library(
     name = "multiregion",
     srcs = [
         "region_config.go",
+        "telemetry.go",
         "validate_table.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion",

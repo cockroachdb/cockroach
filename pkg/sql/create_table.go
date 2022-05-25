@@ -2253,7 +2253,7 @@ func NewTableDesc(
 	if regionConfig != nil || n.Locality != nil {
 		localityTelemetryName := "unspecified"
 		if n.Locality != nil {
-			localityTelemetryName = n.Locality.TelemetryName()
+			localityTelemetryName = multiregion.TelemetryNameForLocality(n.Locality)
 		}
 		telemetry.Inc(sqltelemetry.CreateTableLocalityCounter(localityTelemetryName))
 		if n.Locality == nil {

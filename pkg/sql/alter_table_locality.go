@@ -462,14 +462,14 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	newLocality := n.n.Locality
 	existingLocality := n.tableDesc.LocalityConfig
 
-	existingLocalityTelemetryName, err := existingLocality.TelemetryName()
+	existingLocalityTelemetryName, err := multiregion.TelemetryNameForLocalityConfig(existingLocality)
 	if err != nil {
 		return err
 	}
 	telemetry.Inc(
 		sqltelemetry.AlterTableLocalityCounter(
 			existingLocalityTelemetryName,
-			newLocality.TelemetryName(),
+			multiregion.TelemetryNameForLocality(newLocality),
 		),
 	)
 
