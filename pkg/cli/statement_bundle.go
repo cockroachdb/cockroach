@@ -130,7 +130,7 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 	}
 	defer closeFn()
 	ctx := context.Background()
-	c, err := democluster.NewDemoCluster(ctx, &demoCtx,
+	c, err := democluster.NewDemoCluster(ctx, &demoCtx.Context,
 		log.Infof,
 		log.Warningf,
 		log.Ops.Shoutf,
