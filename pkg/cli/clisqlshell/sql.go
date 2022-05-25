@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
 )
@@ -1854,13 +1853,6 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 }
 
 func (c *cliState) beginCopyFrom(ctx context.Context, sql string) error {
-	c.refreshTransactionStatus()
-	if c.lastKnownTxnStatus != "" {
-		return unimplemented.Newf(
-			"cli_copy_in_txn",
-			"cannot use COPY inside a transaction",
-		)
-	}
 	copyFromState, err := clisqlclient.BeginCopyFrom(ctx, c.conn, sql)
 	if err != nil {
 		return err

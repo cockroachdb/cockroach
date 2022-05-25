@@ -41,9 +41,14 @@ start_test "Copy in transaction"
 send "BEGIN;\r"
 eexpect root@
 send "COPY t FROM STDIN CSV;\r"
-eexpect "cannot use COPY inside a transaction"
+eexpect ">>"
+send "-3,cat;\r"
+send "-2,dog\r"
+send "\\.\r"
+
+eexpect "COPY 3"
 eexpect root@
-send "ROLLBACK;\r"
+send "COMMIT;\r"
 eexpect root@
 end_test
 
@@ -70,11 +75,13 @@ eexpect root@
 
 send "SELECT * FROM t ORDER BY id ASC;\r"
 
+eexpect "-3 | cat"
+eexpect "-2 | dog"
 eexpect "1 | text with semicolon;"
 eexpect "2 | beat chef@;"
 eexpect "3 | more&text"
 eexpect "4 | epa! epa!"
-eexpect "(4 rows)"
+eexpect "(6 rows)"
 
 eexpect root@
 
