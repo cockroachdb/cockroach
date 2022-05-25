@@ -1033,14 +1033,6 @@ func (r *testRunner) maybePostGithubIssue(
 		return
 	}
 
-	// Issues posted from roachtest are identifiable as such and
-	// they are also release blockers (this label may be removed
-	// by a human upon closer investigation).
-	labels := []string{"O-roachtest"}
-	if !t.Spec().(*registry.TestSpec).NonReleaseBlocker {
-		labels = append(labels, "release-blocker")
-	}
-
 	teams, err := team.DefaultLoadTeams()
 	if err != nil {
 		t.Fatalf("could not load teams: %v", err)
@@ -1051,9 +1043,6 @@ func (r *testRunner) maybePostGithubIssue(
 	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(t.Spec().(*registry.TestSpec).Owner), team.PurposeRoachtest); ok {
 		for _, alias := range sl {
 			mention = append(mention, "@"+string(alias))
-			if label := teams[alias].Label; label != "" {
-				labels = append(labels, label)
-			}
 		}
 		projColID = teams[sl[0]].TriageColumnID
 	}
@@ -1063,18 +1052,33 @@ func (r *testRunner) maybePostGithubIssue(
 		branch = "<unknown branch>"
 	}
 
-	msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
-		branch, t.Spec().(*registry.TestSpec).Cluster.Cloud, output)
 	artifacts := fmt.Sprintf("/%s", t.Name())
+
+	// Issues posted from roachtest are identifiable as such and
+	// they are also release blockers (this label may be removed
+	// by a human upon closer investigation).
+	spec := t.Spec().(*registry.TestSpec)
+	labels := []string{"O-roachtest"}
+	if !spec.NonReleaseBlocker {
+		labels = append(labels, "release-blocker")
+	}
+
+	roachtestParam := func(s string) string { return "ROACHTEST_" + s }
+	clusterParams := map[string]string{
+		roachtestParam("cloud"): spec.Cluster.Cloud,
+		roachtestParam("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
+		roachtestParam("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
+	}
 
 	req := issues.PostRequest{
 		MentionOnCreate: mention,
 		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        t.Name(),
-		Message:         msg,
+		Message:         output,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
+		ExtraParams:     clusterParams,
 		HelpCommand: func(renderer *issues.Renderer) {
 			issues.HelpCommandAsLink(
 				"roachtest README",
