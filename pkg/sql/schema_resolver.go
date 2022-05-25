@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -272,6 +274,181 @@ func (sr *schemaResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*t
 		return nil, err
 	}
 	return desc.MakeTypesT(ctx, &name, sr)
+}
+
+func (sr *schemaResolver) ResolveFunction(
+	ctx context.Context, fName *tree.FunctionName, argTypes []*types.T,
+) (*tree.FunctionDefinition, error) {
+	if fName.ExplicitCatalog && string(fName.CatalogName) != sr.CurrentDatabase() {
+		return nil, pgerror.New(pgcode.FeatureNotSupported, "cross-database function references are not supported")
+	}
+
+	if fName.ExplicitSchema {
+		found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), fName.Schema())
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			return nil, pgerror.Newf(pgcode.UndefinedSchema, "schema %q does not exist", fName.Schema())
+		}
+
+		sc := prefix.Schema
+		found, fn := sc.GetFunction(string(fName.ObjectName))
+		if !found {
+			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q does not exist", fName.ObjectName)
+		}
+		found, overload, err := sr.getFunctionOverload(ctx, fn, argTypes)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			return nil, pgerror.Newf(
+				pgcode.UndefinedFunction, "function %q does not exist in schema %q", fName.ObjectName, fName.Schema(),
+			)
+		}
+
+		fd := &tree.FunctionDefinition{
+			Name:               fName.Object(),
+			FunctionProperties: tree.FunctionProperties{NullableArgs: false, IsUDF: true},
+		}
+		fd.Definition = append(fd.Definition, &overload)
+		return fd, nil
+	}
+
+	iter := sr.CurrentSearchPath().IterWithoutImplicitPGSchemas()
+	for path, ok := iter.Next(); ok; path, ok = iter.Next() {
+		scName, err := sr.CurrentSearchPath().MaybeResolveTemporarySchema(path)
+		if err != nil {
+			return nil, err
+		}
+		if scFound, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), scName); err != nil {
+			return nil, err
+		} else if scFound {
+			fnFound, fn := prefix.Schema.GetFunction(string(fName.ObjectName))
+			if fnFound {
+				olFound, overload, err := sr.getFunctionOverload(ctx, fn, argTypes)
+				if err != nil {
+					return nil, err
+				}
+				if olFound {
+					fd := &tree.FunctionDefinition{
+						Name:               fName.Object(),
+						FunctionProperties: tree.FunctionProperties{NullableArgs: false, IsUDF: true},
+					}
+					fd.Definition = append(fd.Definition, &overload)
+					return fd, nil
+				}
+			}
+		}
+	}
+
+	return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %q does not exist", fName.ObjectName)
+}
+
+func (sr *schemaResolver) getFunctionOverload(
+	ctx context.Context, fn descpb.SchemaDescriptor_Function, argTypes []*types.T,
+) (bool, tree.Overload, error) {
+
+	if argTypes == nil {
+		overload, err := sr.toFunctionOverload(ctx, fn.Overloads[0])
+		if err != nil {
+			return false, tree.Overload{}, err
+		}
+		return true, overload, nil
+	}
+
+	// TODO (Chengxiong): UDF we should check types at the end of the day.
+	for _, pbOverload := range fn.Overloads {
+		if len(argTypes) != len(pbOverload.ArgTypes) {
+			continue
+		}
+		typesMatched := true
+		// TODO (Chengxiong): UDF we need to handle VARIADIC args.
+		for i, typOid := range pbOverload.ArgTypes {
+			var typ *types.T
+			var err error
+			if !types.IsOIDUserDefinedType(typOid) {
+				typ = types.OidToType[typOid]
+			} else {
+				typ, err = sr.ResolveTypeByOID(ctx, typOid)
+				if err != nil {
+					return false, tree.Overload{}, err
+				}
+			}
+			if !typ.Equivalent(argTypes[i]) {
+				typesMatched = false
+				break
+			}
+		}
+		if typesMatched {
+			overload, err := sr.toFunctionOverload(ctx, pbOverload)
+			if err != nil {
+				return false, tree.Overload{}, err
+			}
+			return true, overload, nil
+		}
+	}
+
+	return false, tree.Overload{}, nil
+}
+
+func (sr *schemaResolver) toFunctionOverload(
+	ctx context.Context, pbOverload descpb.SchemaDescriptor_FunctionOverload,
+) (tree.Overload, error) {
+	flags := sr.CommonLookupFlags(true)
+	flags.RequireMutable = false
+	fnDesc, err := sr.descCollection.GetImmutableFunctionByID(
+		ctx,
+		sr.txn,
+		pbOverload.ID,
+		tree.ObjectLookupFlags{CommonLookupFlags: flags},
+	)
+	if err != nil {
+		return tree.Overload{}, err
+	}
+
+	overload := tree.Overload{}
+	typs := make(tree.ArgTypes, len(pbOverload.ArgTypes), len(pbOverload.ArgTypes))
+	// TODO (Chengxiong): UDF add support of `VARIADIC` args in first pass.
+	for i, arg := range fnDesc.GetArgs() {
+		typs[i] = struct {
+			Name string
+			Typ  *types.T
+		}{Name: arg.Name, Typ: arg.Type}
+	}
+
+	overload.Types = typs
+	// TODO (Chengxiong): UDF for now let's just support `IN` arg types, so that
+	// it's simpler to handle the return type. We can add support of `OUT` arg
+	// types later, so that return type can be a record type composed of `OUT`
+	// args.
+	overload.ReturnType = tree.FixedReturnType(fnDesc.GetReturnType().Type)
+
+	pbVolatility := fnDesc.GetVolatility()
+	switch pbVolatility {
+	case descpb.FunctionDescriptor_Immutable:
+		overload.Volatility = volatility.Immutable
+	case descpb.FunctionDescriptor_Volatile:
+		overload.Volatility = volatility.Volatile
+	case descpb.FunctionDescriptor_Stable:
+		overload.Volatility = volatility.Stable
+	default:
+		panic("unexpected volatility value")
+	}
+	if overload.Volatility == volatility.Immutable && fnDesc.GetLeakProof() {
+		overload.Volatility = volatility.LeakProof
+	}
+
+	overload.SQLFn = eval.SQLFnOverload(
+		func(ctx *eval.Context, args tree.Datums) (string, error) {
+			return fnDesc.GetFunctionBody(), nil
+		},
+	)
+
+	// TODO (Chengxiong): UDF need a pr to move NullableArgs property of FuncExpr
+	// to Overload level so that we can assign it to overload here.
+
+	return overload, nil
 }
 
 // GetTypeDescriptor implements the catalog.TypeDescriptorResolver interface.

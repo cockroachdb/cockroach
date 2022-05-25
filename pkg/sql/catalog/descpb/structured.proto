@@ -1521,7 +1521,114 @@ message SchemaDescriptor {
   // descriptor being changed as part of a declarative schema change.
   optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 11;
 
-  // Next field is 12.
+  message FunctionOverload {
+    option (gogoproto.equal) = true;
+
+    optional uint32 id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+    // TODO (Chengxiong): UDF need to make variadic type works.
+    // Look at VariadicTypes in tree/overload.go
+    repeated uint32 arg_types = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/lib/pq/oid.Oid"];
+  }
+  message Function {
+    option (gogoproto.equal) = true;
+
+    repeated FunctionOverload overloads = 1 [(gogoproto.nullable) = false];
+  }
+
+  map<string, Function> functions = 13 [(gogoproto.nullable) = false];
+  // Next field is 14.
+}
+
+message FunctionDescriptor {
+  option (gogoproto.equal) = true;
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  enum Volatility {
+    Immutable = 0;
+    Stable = 1;
+    Volatile = 2;
+  }
+
+  enum NullInputBehavior {
+    CalledOnNullInput = 0;
+    ReturnsNullOnNullInput = 1;
+    Strict = 3;
+  }
+
+  enum Language {
+    Sql = 0;
+  }
+
+  message Argument {
+    option (gogoproto.equal) = true;
+
+    enum Class {
+      In = 0;
+      Out = 1;
+      InOut = 2;
+      Variadic = 3;
+    }
+    optional Class class = 1 [(gogoproto.nullable) = false];
+    optional string name = 2 [(gogoproto.nullable) = false];
+    optional sql.sem.types.T type = 3;
+    optional string default_expr = 4;
+  }
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+  optional uint32 parent_id = 3 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+  optional uint32 parent_schema_id = 4 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
+
+  repeated Argument args = 5 [(gogoproto.nullable) = false];
+
+  message ReturnType {
+    option (gogoproto.equal) = true;
+    optional sql.sem.types.T type = 1;
+    optional bool is_set = 2 [(gogoproto.nullable) = false];
+  }
+  optional ReturnType return_type = 6 [(gogoproto.nullable) = false];;
+  optional Language lang = 7 [(gogoproto.nullable) = false];
+  optional string function_body = 8 [(gogoproto.nullable) = false];
+
+  optional Volatility volatility = 9 [(gogoproto.nullable) = false];
+  optional bool leak_proof = 10 [(gogoproto.nullable) = false];
+  optional NullInputBehavior null_input_behavior = 11 [(gogoproto.nullable) = false];
+  optional PrivilegeDescriptor privileges = 12;
+
+  repeated uint32 depends_on = 13 [(gogoproto.casttype) = "ID"];
+  repeated uint32 depends_on_types = 14 [(gogoproto.casttype) = "ID"];
+
+  message Reference {
+    option (gogoproto.equal) = true;
+    // The ID of the relation that depends on this function.
+    optional uint32 id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    // If applicable, IDs of the inbound reference table's index.
+    repeated uint32 index_ids = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "IndexIDs", (gogoproto.casttype) = "IndexID"];
+    // If applicable, IDs of the inbound reference table's column.
+    repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+    repeated uint32 constraint_ids = 4 [(gogoproto.customname) = "ConstraintIDs",
+      (gogoproto.casttype) = "ConstraintID"];
+  }
+  repeated Reference depended_on_by = 15 [(gogoproto.nullable) = false];
+
+  optional DescriptorState state = 16 [(gogoproto.nullable) = false];
+  optional string offline_reason = 17 [(gogoproto.nullable) = false];
+  optional uint32 version = 18 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  optional util.hlc.Timestamp modification_time = 19 [(gogoproto.nullable) = false];
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 20;
+  // Next field id is 21
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,
@@ -1533,5 +1640,6 @@ message Descriptor {
     DatabaseDescriptor database = 2;
     TypeDescriptor type = 3;
     SchemaDescriptor schema = 4;
+    FunctionDescriptor function = 5;
   }
 }

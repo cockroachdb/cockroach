@@ -85,8 +85,10 @@ type SQLFnOverload interface {
 
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
+// TODO (Chengxiong): UDF, add transform logic from function descriptor to a overload object
 type Overload struct {
-	Types      TypeList
+	Types TypeList
+	// TODO (Chengxiong): UDF need to add default values for each arg type
 	ReturnType ReturnTyper
 	Volatility volatility.V
 

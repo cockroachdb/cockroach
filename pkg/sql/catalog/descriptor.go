@@ -45,6 +45,8 @@ const (
 
 	// Schema is for schema descriptors.
 	Schema = "schema"
+
+	Function = "function"
 )
 
 // MutationPublicationFilter is used by MakeFirstMutationPublic to filter the
@@ -221,6 +223,11 @@ type Descriptor interface {
 	// HasConcurrentSchemaChanges returns if declarative schema
 	// changes are currently in progress.
 	HasConcurrentSchemaChanges() bool
+
+	// SkipNamespace indicates whether a descriptor should have a namespace
+	// record. For now this only returns true for function descriptors.
+	// TODO (Chengxiong): UDF probably need a better interface for this.
+	SkipNamespace() bool
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.
@@ -823,6 +830,24 @@ type DefaultPrivilegeDescriptor interface {
 	GetDefaultPrivilegesForRole(catpb.DefaultPrivilegesRole) (*catpb.DefaultPrivilegesForRole, bool)
 	ForEachDefaultPrivilegeForRole(func(catpb.DefaultPrivilegesForRole) error) error
 	GetDefaultPrivilegeDescriptorType() catpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType
+}
+
+type FunctionDescriptor interface {
+	Descriptor
+
+	FunctionDesc() *descpb.FunctionDescriptor
+
+	GetReturnType() descpb.FunctionDescriptor_ReturnType
+
+	GetVolatility() descpb.FunctionDescriptor_Volatility
+
+	GetLeakProof() bool
+
+	GetNullInputBehavior() descpb.FunctionDescriptor_NullInputBehavior
+
+	GetFunctionBody() string
+
+	GetArgs() []descpb.FunctionDescriptor_Argument
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an

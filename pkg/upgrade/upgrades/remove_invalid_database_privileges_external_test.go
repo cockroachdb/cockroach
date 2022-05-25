@@ -90,7 +90,7 @@ func TestConvertIncompatibleDatabasePrivilegesToDefaultPrivileges(t *testing.T) 
 
 	testuser := username.MakeSQLUsernameFromPreNormalizedString("testuser")
 	testuser2 := username.MakeSQLUsernameFromPreNormalizedString("testuser2")
-	_, dbDesc, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, hlc.Timestamp{WallTime: 1})
+	_, dbDesc, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, hlc.Timestamp{WallTime: 1})
 	privilegesForTestuser := dbDesc.Privileges.FindOrCreateUser(testuser)
 	privilegesForTestuser2 := dbDesc.Privileges.FindOrCreateUser(testuser2)
 

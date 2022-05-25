@@ -56,6 +56,12 @@ func GetDescriptorMetadata(
 		name = t.Schema.Name
 		state = t.Schema.State
 		modTime = t.Schema.ModificationTime
+	case *Descriptor_Function:
+		id = t.Function.ID
+		version = t.Function.Version
+		name = t.Function.Name
+		state = t.Function.State
+		modTime = t.Function.ModificationTime
 	case nil:
 		err = errors.AssertionFailedf("Table/Database/Type/Schema not set in descpb.Descriptor")
 	default:
@@ -120,6 +126,8 @@ func setDescriptorModificationTime(desc *Descriptor, ts hlc.Timestamp) {
 		t.Type.ModificationTime = ts
 	case *Descriptor_Schema:
 		t.Schema.ModificationTime = ts
+	case *Descriptor_Function:
+		t.Function.ModificationTime = ts
 	default:
 		panic(errors.AssertionFailedf("setModificationTime: unknown Descriptor type %T", t))
 	}
@@ -208,9 +216,10 @@ func FromDescriptorWithMVCCTimestamp(
 	database *DatabaseDescriptor,
 	typ *TypeDescriptor,
 	schema *SchemaDescriptor,
+	function *FunctionDescriptor,
 ) {
 	if desc == nil {
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	}
 	//nolint:descriptormarshal
 	table = desc.GetTable()
@@ -220,8 +229,10 @@ func FromDescriptorWithMVCCTimestamp(
 	typ = desc.GetType()
 	//nolint:descriptormarshal
 	schema = desc.GetSchema()
+	//nolint:descriptormarshal
+	function = desc.GetFunction()
 	MaybeSetDescriptorModificationTimeFromMVCCTimestamp(desc, ts)
-	return table, database, typ, schema
+	return table, database, typ, schema, function
 }
 
 // FromDescriptor is a convenience function for FromDescriptorWithMVCCTimestamp
@@ -229,6 +240,12 @@ func FromDescriptorWithMVCCTimestamp(
 // descriptor.
 func FromDescriptor(
 	desc *Descriptor,
-) (*TableDescriptor, *DatabaseDescriptor, *TypeDescriptor, *SchemaDescriptor) {
+) (
+	*TableDescriptor,
+	*DatabaseDescriptor,
+	*TypeDescriptor,
+	*SchemaDescriptor,
+	*FunctionDescriptor,
+) {
 	return FromDescriptorWithMVCCTimestamp(desc, hlc.Timestamp{})
 }

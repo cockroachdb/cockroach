@@ -270,6 +270,10 @@ func (desc *immutable) HasConcurrentSchemaChanges() bool {
 		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID
 }
 
+func (desc *immutable) SkipNamespace() bool {
+	return false
+}
+
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.
@@ -369,6 +373,18 @@ func (desc *immutable) GetDeclarativeSchemaChangeState() *scpb.DescriptorState {
 // interface.
 func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorState) {
 	desc.DeclarativeSchemaChangerState = state
+}
+
+func (desc *Mutable) AddFunction(name string, f descpb.SchemaDescriptor_FunctionOverload) {
+	if desc.Functions == nil {
+		desc.Functions = make(map[string]descpb.SchemaDescriptor_Function)
+	}
+	if overloads, ok := desc.Functions[name]; !ok {
+		desc.Functions[name] = descpb.SchemaDescriptor_Function{Overloads: []descpb.SchemaDescriptor_FunctionOverload{f}}
+	} else {
+		newOverloads := append(overloads.Overloads, f)
+		desc.Functions[name] = descpb.SchemaDescriptor_Function{Overloads: newOverloads}
+	}
 }
 
 // IsSchemaNameValid returns whether the input name is valid for a user defined

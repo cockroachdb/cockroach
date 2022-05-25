@@ -751,6 +751,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 		TableDescriptors    map[descpb.ID]string
 		TypeDescriptors     map[descpb.ID]string
 		SchemaDescriptors   map[descpb.ID]string
+		FunctionDescriptors map[descpb.ID]string
 	}{
 		StartTime:           timeutil.Unix(0, b.StartTime.WallTime).Format(time.RFC3339),
 		EndTime:             timeutil.Unix(0, b.EndTime.WallTime).Format(time.RFC3339),
@@ -767,6 +768,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 		TableDescriptors:    make(map[descpb.ID]string),
 		TypeDescriptors:     make(map[descpb.ID]string),
 		SchemaDescriptors:   make(map[descpb.ID]string),
+		FunctionDescriptors: make(map[descpb.ID]string),
 	}
 
 	dbIDToName := make(map[descpb.ID]string)
@@ -774,11 +776,12 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 	schemaIDToFullyQualifiedName[keys.PublicSchemaIDForBackup] = catconstants.PublicSchemaName
 	typeIDToFullyQualifiedName := make(map[descpb.ID]string)
 	tableIDToFullyQualifiedName := make(map[descpb.ID]string)
+	functionIDToFullyQualifiedName := make(map[descpb.ID]string)
 
 	for i := range b.Descriptors {
 		d := &b.Descriptors[i]
 		id := descpb.GetDescriptorID(d)
-		tableDesc, databaseDesc, typeDesc, schemaDesc := descpb.FromDescriptor(d)
+		tableDesc, databaseDesc, typeDesc, schemaDesc, funcDesc := descpb.FromDescriptor(d)
 		if databaseDesc != nil {
 			dbIDToName[id] = descpb.GetDescriptorName(d)
 		} else if schemaDesc != nil {
@@ -800,12 +803,19 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 			}
 			tableName := descpb.GetDescriptorName(d)
 			tableIDToFullyQualifiedName[id] = parentSchema + "." + tableName
+		} else if funcDesc != nil {
+			parentSchema := schemaIDToFullyQualifiedName[funcDesc.GetParentSchemaID()]
+			if parentSchema == catconstants.PublicSchemaName {
+				parentSchema = dbIDToName[funcDesc.GetParentID()] + "." + parentSchema
+			}
+			functionIDToFullyQualifiedName[id] = parentSchema + "." + funcDesc.GetName()
 		}
 	}
 	displayMsg.DatabaseDescriptors = dbIDToName
 	displayMsg.TableDescriptors = tableIDToFullyQualifiedName
 	displayMsg.SchemaDescriptors = schemaIDToFullyQualifiedName
 	displayMsg.TypeDescriptors = typeIDToFullyQualifiedName
+	displayMsg.FunctionDescriptors = functionIDToFullyQualifiedName
 
 	return json.Marshal(displayMsg)
 }

@@ -75,6 +75,7 @@ func (t AlterDefaultPrivilegesTargetObject) ToPrivilegeObjectType() privilege.Ob
 		Sequences: privilege.Sequence,
 		Schemas:   privilege.Schema,
 		Types:     privilege.Type,
+		Functions: privilege.Function,
 	}
 	return targetObjectToPrivilegeObject[t]
 }
@@ -87,6 +88,7 @@ const (
 	Sequences AlterDefaultPrivilegesTargetObject = 2
 	Types     AlterDefaultPrivilegesTargetObject = 3
 	Schemas   AlterDefaultPrivilegesTargetObject = 4
+	Functions AlterDefaultPrivilegesTargetObject = 5
 )
 
 // GetAlterDefaultPrivilegesTargetObjects returns a slice of all the
@@ -97,6 +99,7 @@ func GetAlterDefaultPrivilegesTargetObjects() []AlterDefaultPrivilegesTargetObje
 		Sequences,
 		Types,
 		Schemas,
+		Functions,
 	}
 }
 
@@ -110,6 +113,8 @@ func (t AlterDefaultPrivilegesTargetObject) String() string {
 		return "types"
 	case Schemas:
 		return "schemas"
+	case Functions:
+		return "functions"
 	default:
 		panic(errors.AssertionFailedf("unknown AlterDefaultPrivilegesTargetObject value: %d", t))
 	}
@@ -138,6 +143,8 @@ func (n *AbbreviatedGrant) Format(ctx *FmtCtx) {
 		ctx.WriteString("TYPES ")
 	case Schemas:
 		ctx.WriteString("SCHEMAS ")
+	case Functions:
+		ctx.WriteString("FUNCTIONS ")
 	}
 	ctx.WriteString("TO ")
 	n.Grantees.Format(ctx)
@@ -172,6 +179,8 @@ func (n *AbbreviatedRevoke) Format(ctx *FmtCtx) {
 		ctx.WriteString("TYPES ")
 	case Schemas:
 		ctx.WriteString("SCHEMAS ")
+	case Functions:
+		ctx.WriteString("FUNCTIONS ")
 	}
 	ctx.WriteString(" FROM ")
 	n.Grantees.Format(ctx)

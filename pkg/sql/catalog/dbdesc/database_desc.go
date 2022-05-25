@@ -483,6 +483,10 @@ func (desc *immutable) HasConcurrentSchemaChanges() bool {
 		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID
 }
 
+func (desc *immutable) SkipNamespace() bool {
+	return false
+}
+
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
 func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()

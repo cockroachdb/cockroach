@@ -780,7 +780,7 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, dbDesc, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, res.Value.Timestamp)
+			_, dbDesc, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, res.Value.Timestamp)
 			require.NotNil(t, dbDesc)
 			for name := range dbDesc.Schemas {
 				if name == dbName {

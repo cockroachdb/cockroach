@@ -72,6 +72,7 @@ const (
 	Type ObjectType = "type"
 	// Sequence represents a sequence object.
 	Sequence ObjectType = "sequence"
+	Function ObjectType = "function"
 )
 
 // Predefined sets of privileges.
@@ -88,6 +89,7 @@ var (
 	// certain privileges unavailable after upgrade migration.
 	// Note that "CREATE, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
 	SequencePrivileges = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, GRANT, INSERT, DELETE, ZONECONFIG}
+	FunctionPrivileges = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, GRANT}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -277,6 +279,8 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 		return TypePrivileges
 	case Sequence:
 		return SequencePrivileges
+	case Function:
+		return FunctionPrivileges
 	case Any:
 		return AllPrivileges
 	default:

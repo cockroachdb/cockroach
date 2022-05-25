@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "funcdesc",
+    srcs = [
+        "func_desc.go",
+        "func_desc_builder.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/types",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+    ],
+)

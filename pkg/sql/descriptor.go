@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -248,7 +249,10 @@ func (p *planner) createDescriptorWithID(
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 	}
-	b.CPut(idKey, descID, nil)
+
+	if !descriptor.SkipNamespace() {
+		b.CPut(idKey, descID, nil)
+	}
 	if err := p.Descriptors().Direct().WriteNewDescToBatch(
 		ctx,
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
@@ -266,7 +270,7 @@ func (p *planner) createDescriptorWithID(
 	isTable := false
 	addUncommitted := false
 	switch mutDesc.(type) {
-	case *dbdesc.Mutable, *schemadesc.Mutable, *typedesc.Mutable:
+	case *dbdesc.Mutable, *schemadesc.Mutable, *typedesc.Mutable, *funcdesc.Mutable:
 		addUncommitted = true
 	case *tabledesc.Mutable:
 		addUncommitted = true

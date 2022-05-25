@@ -487,8 +487,8 @@ func TestSystemConfigGossip(t *testing.T) {
 			return err
 		}
 
-		_, expected, _, _ := descpb.FromDescriptor(valAt(2))
-		_, db, _, _ := descpb.FromDescriptor(&got)
+		_, expected, _, _, _ := descpb.FromDescriptor(valAt(2))
+		_, db, _, _, _ := descpb.FromDescriptor(&got)
 		if db == nil {
 			panic(errors.Errorf("found nil database: %v", got))
 		}

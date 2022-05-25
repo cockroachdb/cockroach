@@ -122,6 +122,11 @@ func (p synthetic) HasConcurrentSchemaChanges() bool {
 	return false
 }
 
+// we never store synthetic descriptors
+func (p synthetic) SkipNamespace() bool {
+	return true
+}
+
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
 func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	return catprivilege.MakeDefaultPrivileges(catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA))
