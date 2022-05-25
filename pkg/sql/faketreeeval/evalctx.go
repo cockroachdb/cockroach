@@ -177,13 +177,6 @@ func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
 	return errors.WithStack(errEvalPlanner)
 }
 
-// GetImmutableTableInterfaceByID is part of the Planner interface.
-func (ep *DummyEvalPlanner) GetImmutableTableInterfaceByID(
-	ctx context.Context, id int,
-) (interface{}, error) {
-	return nil, errors.WithStack(errEvalPlanner)
-}
-
 // UnsafeDeleteDescriptor is part of the Planner interface.
 func (ep *DummyEvalPlanner) UnsafeDeleteDescriptor(
 	ctx context.Context, descID int64, force bool,

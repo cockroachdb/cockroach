@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -237,6 +238,9 @@ type planner struct {
 	noticeSender noticeSender
 
 	queryCacheSession querycache.Session
+
+	// evalCatalogBuiltins is used as part of the eval.Context.
+	evalCatalogBuiltins evalcatalog.Builtins
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
@@ -412,6 +416,7 @@ func newInternalPlanner(
 	p.schemaResolver.sessionDataStack = sds
 	p.schemaResolver.txn = p.txn
 	p.schemaResolver.authAccessor = p
+	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create

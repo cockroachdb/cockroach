@@ -13,6 +13,7 @@ package builtins
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/md5"
 	cryptorand "crypto/rand"
 	"crypto/sha1"
@@ -47,10 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -63,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -4920,8 +4920,8 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				tableID := int(tree.MustBeDInt(args[0]))
-				indexID := int(tree.MustBeDInt(args[1]))
+				tableID := catid.DescID(tree.MustBeDInt(args[0]))
+				indexID := catid.IndexID(tree.MustBeDInt(args[1]))
 				rowDatums, ok := tree.AsDTuple(args[2])
 				if !ok {
 					return nil, pgerror.Newf(
@@ -4930,107 +4930,14 @@ value if you rely on the HLC for accuracy.`,
 						args[2],
 					)
 				}
-
-				// Get the referenced table and index.
-				tableDescI, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), tableID)
-				if err != nil {
-					return nil, err
-				}
-				tableDesc := tableDescI.(catalog.TableDescriptor)
-				index, err := tableDesc.FindIndexWithID(descpb.IndexID(indexID))
-				if err != nil {
-					return nil, err
-				}
-				// Collect the index columns. If the index is a non-unique secondary
-				// index, it might have some extra key columns.
-				indexColIDs := make([]descpb.ColumnID, index.NumKeyColumns(), index.NumKeyColumns()+index.NumKeySuffixColumns())
-				for i := 0; i < index.NumKeyColumns(); i++ {
-					indexColIDs[i] = index.GetKeyColumnID(i)
-				}
-				if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() {
-					for i := 0; i < index.NumKeySuffixColumns(); i++ {
-						indexColIDs = append(indexColIDs, index.GetKeySuffixColumnID(i))
-					}
-				}
-
-				// Ensure that the input tuple length equals the number of index cols.
-				if len(rowDatums.D) != len(indexColIDs) {
-					err := errors.Newf(
-						"number of values must equal number of columns in index %q",
-						index.GetName(),
-					)
-					// If the index has some extra key columns, then output an error
-					// message with some extra information to explain the subtlety.
-					if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() && index.NumKeySuffixColumns() > 0 {
-						var extraColNames []string
-						for i := 0; i < index.NumKeySuffixColumns(); i++ {
-							id := index.GetKeySuffixColumnID(i)
-							col, colErr := tableDesc.FindColumnWithID(id)
-							if colErr != nil {
-								return nil, errors.CombineErrors(err, colErr)
-							}
-							extraColNames = append(extraColNames, col.GetName())
-						}
-						var allColNames []string
-						for _, id := range indexColIDs {
-							col, colErr := tableDesc.FindColumnWithID(id)
-							if colErr != nil {
-								return nil, errors.CombineErrors(err, colErr)
-							}
-							allColNames = append(allColNames, col.GetName())
-						}
-						return nil, errors.WithHintf(
-							err,
-							"columns %v are implicitly part of index %q's key, include columns %v in this order",
-							extraColNames,
-							index.GetName(),
-							allColNames,
-						)
-					}
-					return nil, err
-				}
-
-				// Check that the input datums are typed as the index columns types.
-				var datums tree.Datums
-				for i, d := range rowDatums.D {
-					// We perform a cast here rather than a type check because datums
-					// already have a fixed type, and not enough information is known at
-					// typechecking time to ensure that the datums are typed with the
-					// types of the index columns. So, try to cast the input datums to
-					// the types of the index columns here.
-					var newDatum tree.Datum
-					col, err := tableDesc.FindColumnWithID(indexColIDs[i])
-					if err != nil {
-						return nil, err
-					}
-					if d.ResolvedType() == types.Unknown {
-						if !col.IsNullable() {
-							return nil, pgerror.Newf(pgcode.NotNullViolation, "NULL provided as a value for a non-nullable column")
-						}
-						newDatum = tree.DNull
-					} else {
-						expectedTyp := col.GetType()
-						newDatum, err = eval.PerformCast(ctx, d, expectedTyp)
-						if err != nil {
-							return nil, errors.WithHint(err, "try to explicitly cast each value to the corresponding column type")
-						}
-					}
-					datums = append(datums, newDatum)
-				}
-
-				// Create a column id to row index map. In this case, each column ID
-				// just maps to the i'th ordinal.
-				var colMap catalog.TableColMap
-				for i, id := range indexColIDs {
-					colMap.Set(id, i)
-				}
-				// Finally, encode the index key using the provided datums.
-				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc.GetID(), index.GetID())
-				keyAndSuffixCols := tableDesc.IndexFetchSpecKeyAndSuffixColumns(index)
-				if len(datums) > len(keyAndSuffixCols) {
-					return nil, errors.Errorf("encoding too many columns (%d)", len(datums))
-				}
-				res, _, err := rowenc.EncodePartialIndexKey(keyAndSuffixCols[:len(datums)], colMap, datums, keyPrefix)
+				res, err := ctx.CatalogBuiltins.EncodeTableIndexKey(
+					ctx.Ctx(), tableID, indexID, rowDatums,
+					func(
+						_ context.Context, d tree.Datum, t *types.T,
+					) (tree.Datum, error) {
+						return eval.PerformCast(ctx, d, t)
+					},
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -5551,29 +5458,14 @@ value if you rely on the HLC for accuracy.`,
 				if args[0] == tree.DNull || args[1] == tree.DNull || args[2] == tree.DNull {
 					return tree.DZero, nil
 				}
-				tableID := int(tree.MustBeDInt(args[0]))
-				indexID := int(tree.MustBeDInt(args[1]))
+				tableID := catid.DescID(tree.MustBeDInt(args[0]))
+				indexID := catid.IndexID(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeography(args[2])
-				// TODO(postamar): give the eval.Context a useful interface
-				// instead of cobbling a descs.Collection in this way.
-				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
-				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack), nil /* monitor */)
-				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
+				n, err := ctx.CatalogBuiltins.NumGeographyInvertedIndexEntries(ctx.Ctx(), tableID, indexID, g)
 				if err != nil {
 					return nil, err
 				}
-				index, err := tableDesc.FindIndexWithID(descpb.IndexID(indexID))
-				if err != nil {
-					return nil, err
-				}
-				if index.GetGeoConfig().S2Geography == nil {
-					return nil, errors.Errorf("index_id %d is not a geography inverted index", indexID)
-				}
-				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.GetGeoConfig())
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDInt(tree.DInt(len(keys))), nil
+				return tree.NewDInt(tree.DInt(n)), nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,
@@ -5589,29 +5481,14 @@ value if you rely on the HLC for accuracy.`,
 				if args[0] == tree.DNull || args[1] == tree.DNull || args[2] == tree.DNull {
 					return tree.DZero, nil
 				}
-				tableID := int(tree.MustBeDInt(args[0]))
-				indexID := int(tree.MustBeDInt(args[1]))
+				tableID := catid.DescID(tree.MustBeDInt(args[0]))
+				indexID := catid.IndexID(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeometry(args[2])
-				// TODO(postamar): give the eval.Context a useful interface
-				// instead of cobbling a descs.Collection in this way.
-				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
-				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack), nil /* monitor */)
-				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
+				n, err := ctx.CatalogBuiltins.NumGeometryInvertedIndexEntries(ctx.Ctx(), tableID, indexID, g)
 				if err != nil {
 					return nil, err
 				}
-				index, err := tableDesc.FindIndexWithID(descpb.IndexID(indexID))
-				if err != nil {
-					return nil, err
-				}
-				if index.GetGeoConfig().S2Geometry == nil {
-					return nil, errors.Errorf("index_id %d is not a geometry inverted index", indexID)
-				}
-				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.GetGeoConfig())
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDInt(tree.DInt(len(keys))), nil
+				return tree.NewDInt(tree.DInt(n)), nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,
