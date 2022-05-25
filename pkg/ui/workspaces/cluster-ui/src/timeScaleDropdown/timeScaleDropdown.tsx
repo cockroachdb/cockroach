@@ -136,7 +136,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     end,
   };
 
-  const onOptionSelect = (rangeOption: RangeOption) => {
+  const onPresetOptionSelect = (rangeOption: RangeOption) => {
     let timeScale: TimeScale = {
       ...options[rangeOption.label],
       key: rangeOption.label,
@@ -247,9 +247,9 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   return (
     <div className={cx("timescale")}>
       <RangeSelect
-        onChange={onOptionSelect}
-        changeDate={setDateRange}
         selected={formatRangeSelectSelected(currentWindow, currentScale)}
+        onPresetOptionSelect={onPresetOptionSelect}
+        onCustomSelect={setDateRange}
         options={timeScaleOptions}
       />
       <TimeFrameControls
