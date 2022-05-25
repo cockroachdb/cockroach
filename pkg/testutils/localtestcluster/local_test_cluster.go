@@ -183,6 +183,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,
+		Stopper:                 ltc.stopper,
 		Clock:                   cfg.Clock,
 		DB:                      cfg.DB,
 		Gossip:                  cfg.Gossip,
@@ -271,7 +272,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	if !ltc.DisableLivenessHeartbeat {
 		cfg.NodeLiveness.Start(ctx,
-			liveness.NodeLivenessStartOptions{Stopper: ltc.stopper, Engines: []storage.Engine{ltc.Eng}})
+			liveness.NodeLivenessStartOptions{Engines: []storage.Engine{ltc.Eng}})
 	}
 
 	if err := ltc.Store.Start(ctx, ltc.stopper); err != nil {
