@@ -82,7 +82,13 @@ func indexJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) o
 	// using column equivalencies.
 	indexJoin := expr.(*memo.IndexJoinExpr)
 	rel := indexJoin.Relational()
-	return remapProvided(indexJoin.Input.ProvidedPhysical().Ordering, &rel.FuncDeps, rel.OutputCols)
+	input := indexJoin.Input
+	// The index join's FDs may not include all the necessary columns for
+	// remapping, so we add the input's FDs as well. See `buildIndexJoinProps`.
+	var fds props.FuncDepSet
+	fds.CopyFrom(&input.Relational().FuncDeps)
+	rel.FuncDeps.AddFrom(&rel.FuncDeps)
+	return remapProvided(input.ProvidedPhysical().Ordering, &fds, rel.OutputCols)
 }
 
 func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
