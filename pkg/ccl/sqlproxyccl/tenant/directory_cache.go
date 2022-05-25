@@ -416,7 +416,12 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 				continue
 			}
 
-			// If caller is watching pods, send to its channel now.
+			// Update the directory entry for the tenant with the latest
+			// information about this pod.
+			d.updateTenantEntry(ctx, resp.Pod)
+
+			// If caller is watching pods, send to its channel now. Only do this
+			// after updating the tenant entry in the directory.
 			if d.options.podWatcher != nil {
 				select {
 				case d.options.podWatcher <- resp.Pod:
@@ -424,10 +429,6 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 					return
 				}
 			}
-
-			// Update the directory entry for the tenant with the latest
-			// information about this pod.
-			d.updateTenantEntry(ctx, resp.Pod)
 		}
 	})
 	if err != nil {
