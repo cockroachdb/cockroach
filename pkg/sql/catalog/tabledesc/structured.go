@@ -714,7 +714,6 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	if err != nil {
 		return err
 	}
-
 	var compositeColIDs catalog.TableColSet
 	for i := range desc.Columns {
 		col := &desc.Columns[i]

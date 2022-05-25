@@ -165,9 +165,9 @@ CREATE INDEX id4
         oid: 23
         width: 32
     tableId: 104
-- [[IndexName:{DescID: 104, Name: id4, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: id4, IndexID: 4}, PUBLIC], ABSENT]
   details:
-    indexId: 3
+    indexId: 4
     name: id4
     tableId: 104
 - [[IndexName:{DescID: 104, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
@@ -211,10 +211,10 @@ CREATE INDEX id4
       - 4
       tableId: 104
       temporaryIndexId: 3
-- [[SecondaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, TemporaryIndexID: 4}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
-      indexId: 3
+      indexId: 4
       keyColumnDirections:
       - ASC
       - ASC
@@ -232,7 +232,7 @@ CREATE INDEX id4
       storingColumnIds:
       - 3
       tableId: 104
-      temporaryIndexId: 4
+      temporaryIndexId: 5
 - [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
@@ -249,10 +249,10 @@ CREATE INDEX id4
       - 3
       - 4
       tableId: 104
-- [[TemporaryIndex:{DescID: 104, IndexID: 4}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
-      indexId: 4
+      indexId: 5
       keyColumnDirections:
       - ASC
       - ASC
