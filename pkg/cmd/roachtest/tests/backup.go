@@ -659,9 +659,10 @@ func registerBackup(r registry.Registry) {
 			Cluster:         r.MakeClusterSpec(3),
 			EncryptAtRandom: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != item.machine {
-					t.Skip("backup assumeRole is only configured to run on "+item.machine, "")
-				}
+				//if c.Spec().Cloud != item.machine {
+				//	fmt.Println("@@@ skipped")
+				//	t.Skip("backup assumeRole is only configured to run on "+item.machine, "")
+				//}
 
 				rows := 100
 
@@ -689,6 +690,11 @@ func registerBackup(r registry.Registry) {
 				m := c.NewMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
 					t.Status(`running backup`)
+					c.Run(ctx, c.Node(1), fmt.Sprintf(
+						"./cockroach sql --insecure -e \"SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';\""))
+					c.Run(ctx, c.Node(1), fmt.Sprintf(
+						"./cockroach sql --insecure -e \"SET CLUSTER SETTING enterprise.license = 'crl-0-EJL04ukFGAEiI0NvY2tyb2FjaCBMYWJzIC0gUHJvZHVjdGlvbiBUZXN0aW5n';\""))
+
 					c.Run(ctx, c.Node(1), fmt.Sprintf(
 						"./cockroach sql --insecure -e \"BACKUP bank.bank TO '%s' WITH KMS='%s'\"",
 						backupPath, kmsURI))
@@ -1155,8 +1161,8 @@ func getGCSKMSAssumeRoleURI() (string, error) {
 		return "", errors.Newf("env variable %s must be present to run the KMS test", KMSKeyNameAEnvVar)
 	}
 
-	// Set AUTH to assume role
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
+	// Set AUTH to specified
+	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
 	correctURI := fmt.Sprintf("gs:///%s?%s", keyName, q.Encode())
 
 	return correctURI, nil
@@ -1181,8 +1187,8 @@ func getGCSBackupPath(dest string) (string, error) {
 		q.Add(param, v)
 	}
 
-	// Set AUTH to assume role
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
+	// Set AUTH to specified
+	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
 	uri := fmt.Sprintf("gs://cockroachdb-backup-testing/gcs/%s?%s", dest, q.Encode())
 
 	return uri, nil

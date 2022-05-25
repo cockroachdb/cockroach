@@ -95,10 +95,10 @@ func TestEncryptDecryptGCS(t *testing.T) {
 
 func TestKMSAssumeRoleGCP(t *testing.T) {
 	envVars := []string{
-		"CREDENTIALS",
+		"GOOGLE_CREDENTIALS_JSON",
 		"GOOGLE_APPLICATION_CREDENTIALS",
-		"GCP_SERVICE_ACCOUNT",
-		"GCS_LIMITED_KEY_ID",
+		"ASSUME_SERVICE_ACCOUNT",
+		"GOOGLE_LIMITED_KEY_ID",
 	}
 	for _, env := range envVars {
 		v := os.Getenv(env)
@@ -107,16 +107,16 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 		}
 	}
 
-	keyID := os.Getenv("GCS_LIMITED_KEY_ID")
-	serviceAccount := os.Getenv("GCP_SERVICE_ACCOUNT")
-	credentials := os.Getenv("CREDENTIALS")
+	keyID := os.Getenv("GOOGLE_LIMITED_KEY_ID")
+	serviceAccount := os.Getenv("ASSUME_SERVICE_ACCOUNT")
+	encodedCredentials := base64.StdEncoding.EncodeToString([]byte(os.Getenv("GOOGLE_CREDENTIALS_JSON")))
 
 	t.Run("auth-assume-role-implicit", func(t *testing.T) {
 		testEnv := &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}}
 		cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s=%s", keyID, cloud.AuthParam, cloud.AuthParamImplicit), testEnv)
 
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamAssume)
+		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
 		q.Set(ServiceAccountParam, serviceAccount)
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
@@ -125,12 +125,12 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 	t.Run("auth-assume-role-specified", func(t *testing.T) {
 		testEnv := &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}}
 		cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s=%s&%s=%s", keyID, cloud.AuthParam,
-			cloud.AuthParamSpecified, CredentialsParam, credentials), testEnv)
+			cloud.AuthParamSpecified, CredentialsParam, url.QueryEscape(encodedCredentials)), testEnv)
 
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamAssume)
+		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
 		q.Set(ServiceAccountParam, serviceAccount)
-		q.Set(CredentialsParam, credentials)
+		q.Set(CredentialsParam, encodedCredentials)
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
 	})

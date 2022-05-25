@@ -31,11 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
-	"golang.org/x/oauth2/google"
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
-	gcsapi "google.golang.org/api/storage/v1"
 )
 
 const (
@@ -110,7 +108,6 @@ func makeGCSStorage(
 		return nil, errors.Errorf("google cloud storage upload requested but info missing")
 	}
 	const scope = gcs.ScopeReadWrite
-	opts := []option.ClientOption{option.WithScopes(scope)}
 
 	// "default": only use the key in the settings; error if not present.
 	// "specified": the JSON object for authentication is given by the CREDENTIALS param.
@@ -121,26 +118,11 @@ func makeGCSStorage(
 			"implicit credentials disallowed for gs due to --external-io-disable-implicit-credentials flag")
 	}
 
+	var credentialsOpt []option.ClientOption
 	switch conf.Auth {
 	case cloud.AuthParamImplicit:
 		// Do nothing; use implicit params:
 		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
-	case cloud.AuthParamAssume:
-		if conf.ServiceAccount == "" {
-			return nil, errors.Errorf(
-				"%s must be set for %s = %s",
-				ServiceAccountParam,
-				cloud.AuthParam,
-				cloud.AuthParamAssume,
-			)
-		}
-
-		assumeOpt, err := createImpersonateCredentials(ctx, conf.ServiceAccount, []string{scope}, conf.Credentials)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to assume service account")
-		}
-		opts = append(opts, assumeOpt)
-
 	default:
 		if conf.Credentials == "" {
 			return nil, errors.Errorf(
@@ -150,12 +132,26 @@ func makeGCSStorage(
 				cloud.AuthParamSpecified,
 			)
 		}
-		authOption, err := createAuthOption(ctx, conf.Credentials, scope)
+
+		authOption, err := createAuthOption(conf.Credentials)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error getting credentials from %s", CredentialsParam)
 		}
-		opts = append(opts, authOption)
+		credentialsOpt = append(credentialsOpt, authOption)
 	}
+
+	opts := []option.ClientOption{option.WithScopes(scope)}
+	if conf.ServiceAccount == "" {
+		opts = append(opts, credentialsOpt...)
+	} else {
+		assumeOpt, err := createImpersonateCredentials(ctx, conf.ServiceAccount, []string{scope}, credentialsOpt...)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to assume role")
+		}
+
+		opts = append(opts, assumeOpt)
+	}
+
 	g, err := gcs.NewClient(ctx, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create google cloud client")
@@ -175,55 +171,36 @@ func makeGCSStorage(
 }
 
 // createAuthOption creates an option.ClientOption for authentication with the given
-// credentials for the specified scopes.
-func createAuthOption(
-	ctx context.Context, credentials string, scopes ...string,
-) (option.ClientOption, error) {
-	var authOption option.ClientOption
-	if credentials != "" {
-		decodedKey, err := base64.StdEncoding.DecodeString(credentials)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error decoding value")
-		}
-		source, err := google.JWTConfigFromJSON(decodedKey, scopes...)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating GCS oauth token source from specified credentials")
-		}
-
-		authOption = option.WithTokenSource(source.TokenSource(ctx))
+// credentials.
+func createAuthOption(credentials string) (option.ClientOption, error) {
+	// Credentials are passed in base64 encoded, so decode the credentials first.
+	credentialsJSON, err := base64.StdEncoding.DecodeString(credentials)
+	if err != nil {
+		return nil, err
 	}
 
-	return authOption, nil
+	return option.WithCredentialsJSON(credentialsJSON), nil
 }
 
 // createImpersonateCredentials creates an option.ClientOption for
 // authentication for the specified scopes by impersonating the specified
-// serviceAccount with the input credentials.
+// service account, potentially with authentication from another auth option.
 func createImpersonateCredentials(
-	ctx context.Context, serviceAccount string, scopes []string, credentials string,
+	ctx context.Context, serviceAccount string, scopes []string, authOpts ...option.ClientOption,
 ) (option.ClientOption, error) {
-	var opts []option.ClientOption
-	if credentials != "" {
-		authOpt, err := createAuthOption(ctx, credentials, gcsapi.CloudPlatformScope)
-		if err != nil {
-			return nil, errors.Wrap(err, "specified credentials")
-		}
-
-		opts = append(opts, authOpt)
-	}
-
 	cfg := impersonate.CredentialsConfig{
 		TargetPrincipal: serviceAccount,
 		Scopes:          scopes,
 	}
 
-	source, err := impersonate.CredentialsTokenSource(ctx, cfg, opts...)
+	source, err := impersonate.CredentialsTokenSource(ctx, cfg, authOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "impersonate credentials")
 	}
 
 	return option.WithTokenSource(source), nil
 }
+
 func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	_, sp := tracing.ChildSpan(ctx, "gcs.Writer")
 	defer sp.Finish()

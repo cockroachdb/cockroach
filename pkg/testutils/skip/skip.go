@@ -40,12 +40,14 @@ func WithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
 // should be tracked as a "skipped test" by external tools. You should use this
 // if, for example, your test should only be run in Race mode.
 func IgnoreLint(t SkippableTest, args ...interface{}) {
+	fmt.Println("@@@ skipping ", args)
 	t.Helper()
 	t.Skip(args...)
 }
 
 // IgnoreLintf is like IgnoreLint, and it also takes a format string.
 func IgnoreLintf(t SkippableTest, format string, args ...interface{}) {
+	fmt.Println("@@@ skipping ", args)
 	t.Helper()
 	t.Skipf(format, args...)
 }

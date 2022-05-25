@@ -96,30 +96,22 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				"implicit credentials disallowed for gcs due to --external-io-implicit-credentials flag")
 		}
 		// If implicit credentials used, no client options needed.
-	case cloud.AuthParamAssume:
-		if kmsURIParams.serviceAccount == "" {
-			return nil, errors.Errorf(
-				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamAssume,
-				ServiceAccountParam,
-			)
-		}
-		impersonateOpt, err := createImpersonateCredentials(ctx, kmsURIParams.serviceAccount, kms.DefaultAuthScopes(), kmsURIParams.credentials)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error impersonating %s", kmsURIParams.serviceAccount)
-		}
-
-		credentialsOpt = append(
-			credentialsOpt,
-			impersonateOpt,
-			option.WithScopes(kms.DefaultAuthScopes()...),
-		)
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
 
-	kmc, err := kms.NewKeyManagementClient(ctx, credentialsOpt...)
+	opts := []option.ClientOption{option.WithScopes(kms.DefaultAuthScopes()...)}
+	if kmsURIParams.serviceAccount == "" {
+		opts = append(opts, credentialsOpt...)
+	} else {
+		assumeOpt, err := createImpersonateCredentials(ctx, kmsURIParams.serviceAccount, kms.DefaultAuthScopes(), credentialsOpt...)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to assume role")
+		}
+		opts = append(opts, assumeOpt)
+	}
+
+	kmc, err := kms.NewKeyManagementClient(ctx, opts...)
 
 	if err != nil {
 		return nil, err

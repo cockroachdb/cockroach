@@ -104,34 +104,35 @@ func TestGCSAssumeRole(t *testing.T) {
 	user := username.RootUserName()
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	limitedBucket := os.Getenv("GS_LIMITED_BUCKET")
+	limitedBucket := os.Getenv("GOOGLE_LIMITED_BUCKET")
 	if limitedBucket == "" {
-		skip.IgnoreLint(t, "GS_LIMITED_BUCKET env var must be set")
+		skip.IgnoreLint(t, "GOOGLE_LIMITED_BUCKET env var must be set")
 	}
-	serviceAccount := os.Getenv("GCP_SERVICE_ACCOUNT")
+	serviceAccount := os.Getenv("ASSUME_SERVICE_ACCOUNT")
 	if serviceAccount == "" {
-		skip.IgnoreLint(t, "GCP_SERVICE_ACCOUNT env var must be set")
+		skip.IgnoreLint(t, "ASSUME_SERVICE_ACCOUNT env var must be set")
 	}
 
 	t.Run("specified", func(t *testing.T) {
-		credentials := os.Getenv("CREDENTIALS")
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
 		if credentials == "" {
-			skip.IgnoreLint(t, "CREDENTIALS env var must be set")
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
 		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 
 		// Verify that specified permissions with the credentials do not give us
 		// access to the bucket.
 		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, "backup-test-assume-role",
-			CredentialsParam, url.QueryEscape(credentials)), user, nil, nil, testSettings)
+			CredentialsParam, url.QueryEscape(encoded)), user, nil, nil, testSettings)
 
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s&%s=%s",
 			limitedBucket,
 			"backup-test-assume-role",
 			cloud.AuthParam,
-			cloud.AuthParamAssume,
+			cloud.AuthParamSpecified,
 			ServiceAccountParam,
 			serviceAccount, CredentialsParam,
-			url.QueryEscape(credentials),
+			url.QueryEscape(encoded),
 		),
 			false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t,
@@ -140,11 +141,11 @@ func TestGCSAssumeRole(t *testing.T) {
 				"backup-test-assume-role",
 				"listing-test",
 				cloud.AuthParam,
-				cloud.AuthParamAssume,
+				cloud.AuthParamSpecified,
 				ServiceAccountParam,
 				serviceAccount,
 				CredentialsParam,
-				url.QueryEscape(credentials),
+				url.QueryEscape(encoded),
 			),
 			username.RootUserName(), nil, nil, testSettings,
 		)
@@ -161,14 +162,14 @@ func TestGCSAssumeRole(t *testing.T) {
 			cloud.AuthParam, cloud.AuthParamImplicit), user, nil, nil, testSettings)
 
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role",
-			cloud.AuthParam, cloud.AuthParamAssume, ServiceAccountParam, serviceAccount), false, user, nil, nil, testSettings)
+			cloud.AuthParam, cloud.AuthParamImplicit, ServiceAccountParam, serviceAccount), false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t,
 			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
 				limitedBucket,
 				"backup-test-assume-role",
 				"listing-test",
 				cloud.AuthParam,
-				cloud.AuthParamAssume,
+				cloud.AuthParamImplicit,
 				ServiceAccountParam,
 				serviceAccount,
 			),
