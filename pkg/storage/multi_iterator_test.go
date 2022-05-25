@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMultiIterator(t *testing.T) {
@@ -37,13 +38,6 @@ func TestMultiIterator(t *testing.T) {
 	// MultiIterator, which is fully iterated (using either NextKey or Next) and
 	// turned back into a string in the same format as `input`. This is compared
 	// to expectedNextKey or expectedNext.
-	//
-	// Input is a string containing key, timestamp, value tuples: first a single
-	// character key, then a single character timestamp walltime. If the
-	// character after the timestamp is an M, this entry is a "metadata" key
-	// (timestamp=0, sorts before any non-0 timestamp, and no value). If the
-	// character after the timestamp is an X, this entry is a deletion
-	// tombstone. Otherwise the value is the same as the timestamp.
 	tests := []struct {
 		inputs          []string
 		expectedNextKey string
@@ -86,73 +80,84 @@ func TestMultiIterator(t *testing.T) {
 			for _, input := range test.inputs {
 				batch := pebble.NewBatch()
 				defer batch.Close()
-				for i := 0; ; {
-					if i == len(input) {
-						break
-					}
-					k := []byte{input[i]}
-					ts := hlc.Timestamp{WallTime: int64(input[i+1])}
-					var v []byte
-					if i+1 < len(input) && input[i+1] == 'M' {
-						ts = hlc.Timestamp{}
-						v = nil
-					} else if i+2 < len(input) && input[i+2] == 'X' {
-						v = nil
-						i++
-					} else {
-						v = []byte{input[i+1]}
-					}
-					i += 2
-					if ts.IsEmpty() {
-						if err := batch.PutUnversioned(k, v); err != nil {
-							t.Fatalf("%+v", err)
-						}
-					} else {
-						if err := batch.PutRawMVCC(MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
-							t.Fatalf("%+v", err)
-						}
-					}
-				}
+				populateBatch(t, batch, input)
 				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 				defer iter.Close()
 				iters = append(iters, iter)
 			}
 
-			subtests := []struct {
-				name     string
-				expected string
-				fn       func(SimpleMVCCIterator)
-			}{
+			subtests := []iterSubtest{
 				{"NextKey", test.expectedNextKey, (SimpleMVCCIterator).NextKey},
 				{"Next", test.expectedNext, (SimpleMVCCIterator).Next},
 			}
 			for _, subtest := range subtests {
 				t.Run(subtest.name, func(t *testing.T) {
-					var output bytes.Buffer
 					it := MakeMultiIterator(iters)
-					for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; subtest.fn(it) {
-						ok, err := it.Valid()
-						if err != nil {
-							t.Fatalf("unexpected error: %+v", err)
-						}
-						if !ok {
-							break
-						}
-						output.Write(it.UnsafeKey().Key)
-						if it.UnsafeKey().Timestamp.IsEmpty() {
-							output.WriteRune('M')
-						} else {
-							output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
-							if len(it.UnsafeValue()) == 0 {
-								output.WriteRune('X')
-							}
-						}
-					}
-					if actual := output.String(); actual != subtest.expected {
-						t.Errorf("got %q expected %q", actual, subtest.expected)
-					}
+					iterateSimpleMultiIter(t, it, subtest)
 				})
 			}
 		})
 	}
+}
+
+// populateBatch populates a pebble batch with a series of MVCC key values.
+// input is a string containing key, timestamp, value tuples: first a single
+// character key, then a single character timestamp walltime. If the
+// character after the timestamp is an M, this entry is a "metadata" key
+// (timestamp=0, sorts before any non-0 timestamp, and no value). If the
+// character after the timestamp is an X, this entry is a deletion
+// tombstone. Otherwise the value is the same as the timestamp.
+func populateBatch(t *testing.T, batch Batch, input string) {
+	for i := 0; ; {
+		if i == len(input) {
+			break
+		}
+		k := []byte{input[i]}
+		ts := hlc.Timestamp{WallTime: int64(input[i+1])}
+		var v []byte
+		if i+1 < len(input) && input[i+1] == 'M' {
+			ts = hlc.Timestamp{}
+			v = nil
+		} else if i+2 < len(input) && input[i+2] == 'X' {
+			v = nil
+			i++
+		} else {
+			v = []byte{input[i+1]}
+		}
+		i += 2
+		if ts.IsEmpty() {
+			require.NoError(t, batch.PutUnversioned(k, v))
+		} else {
+			require.NoError(t, batch.PutRawMVCC(MVCCKey{Key: k, Timestamp: ts}, v))
+		}
+	}
+}
+
+type iterSubtest struct {
+	name     string
+	expected string
+	fn       func(SimpleMVCCIterator)
+}
+
+// iterateSimpleMultiIter iterates through a simpleMVCCIterator for expected values,
+// and assumes that populateBatch populated the keys for the iterator.
+func iterateSimpleMultiIter(t *testing.T, it SimpleMVCCIterator, subtest iterSubtest) {
+	var output bytes.Buffer
+	for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; subtest.fn(it) {
+		ok, err := it.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		output.Write(it.UnsafeKey().Key)
+		if it.UnsafeKey().Timestamp.IsEmpty() {
+			output.WriteRune('M')
+		} else {
+			output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
+			if len(it.UnsafeValue()) == 0 {
+				output.WriteRune('X')
+			}
+		}
+	}
+	require.Equal(t, subtest.expected, output.String())
 }
