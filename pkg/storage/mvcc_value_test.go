@@ -235,3 +235,15 @@ func BenchmarkDecodeMVCCValue(b *testing.B) {
 		}
 	}
 }
+
+func stringValue(s string) MVCCValue {
+	return MVCCValue{Value: roachpb.MakeValueFromString(s)}
+}
+
+func stringValueRaw(s string) []byte {
+	b, err := EncodeMVCCValue(MVCCValue{Value: roachpb.MakeValueFromString(s)})
+	if err != nil {
+		panic(err)
+	}
+	return b
+}

@@ -516,17 +516,9 @@ var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 // CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
 // Returns an error if the respective replica is not eligible.
 //
-// An error is also returned is the replica is not part of `rngDesc`.
-//
-// For now, don't allow replicas of type LEARNER to be leaseholders. There's
-// no reason this wouldn't work in principle, but it seems inadvisable. In
-// particular, learners can't become raft leaders, so we wouldn't be able to
-// co-locate the leaseholder + raft leader, which is going to affect tail
-// latencies. Additionally, as of the time of writing, learner replicas are
-// only used for a short time in replica addition, so it's not worth working
-// out the edge cases.
-func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, rngDesc *RangeDescriptor) error {
-	repDesc, ok := rngDesc.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
+// An error is also returned is the replica is not part of `replDescs`.
+func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet) error {
+	repDesc, ok := replDescs.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
 		return errReplicaNotFound
 	} else if !repDesc.IsVoterNewConfig() {

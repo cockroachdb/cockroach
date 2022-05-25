@@ -83,15 +83,6 @@ func TestGaugeFloat64(t *testing.T) {
 	}
 }
 
-func TestRate(t *testing.T) {
-	r := NewRate(emptyMetadata, time.Minute)
-	r.Add(0)
-	if v := r.Value(); v != 0 {
-		t.Fatalf("unexpected value: %f", v)
-	}
-	testMarshal(t, r, "0")
-}
-
 func TestCounter(t *testing.T) {
 	c := NewCounter(emptyMetadata)
 	c.Inc(90)
@@ -174,37 +165,5 @@ func TestHistogramRotate(t *testing.T) {
 		if max, expMax := cur.Max(), v; max != expMax {
 			t.Fatalf("%d: unexpected maximum %d, expected %d", i, max, expMax)
 		}
-	}
-}
-
-func TestRateRotate(t *testing.T) {
-	defer TestingSetNow(nil)()
-	setNow(0)
-	const interval = 10 * time.Second
-	r := NewRate(emptyMetadata, interval)
-
-	// Skip the warmup phase of the wrapped EWMA for this test.
-	for i := 0; i < 100; i++ {
-		r.wrapped.Add(0)
-	}
-
-	// Put something nontrivial in.
-	r.Add(100)
-
-	for cur := time.Duration(0); cur < 5*interval; cur += time.Second / 2 {
-		prevVal := r.Value()
-		setNow(cur)
-		curVal := r.Value()
-		expChange := (cur % time.Second) != 0
-		hasChange := prevVal != curVal
-		if expChange != hasChange {
-			t.Fatalf("%s: expChange %t, hasChange %t (from %v to %v)",
-				cur, expChange, hasChange, prevVal, curVal)
-		}
-	}
-
-	v := r.Value()
-	if v > .1 {
-		t.Fatalf("final value implausible: %v", v)
 	}
 }
