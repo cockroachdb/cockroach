@@ -966,3 +966,20 @@ export function setTraceRecordingType(
     timeout,
   );
 }
+
+// TODO @santamaura: update with correct names when rpc is implemented
+export function getKeyVizualizerCellInfo(
+  req: any,
+  timeout?: moment.Duration,
+): Promise<any> {
+  // return timeoutFetch(
+  //   serverpb.KeyVizualizerCellInfoResponse,
+  //   `${API_PREFIX}/keyvizualizer_cellinfo`,
+  //   req as any,
+  //   timeout,
+  // );
+  if (req || timeout) {
+    return null;
+  }
+  return null;
+}
