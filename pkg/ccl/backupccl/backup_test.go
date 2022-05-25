@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"hash/crc32"
 	"io"
 	"io/ioutil"
@@ -901,7 +902,7 @@ func backupAndRestore(
 				t.Fatal("cannot unmarshal job payload from system.jobs")
 			}
 
-			backupManifest := &BackupManifest{}
+			backupManifest := &backuppb.BackupManifest{}
 			backupPayload, ok := payload.Details.(*jobspb.Payload_Backup)
 			if !ok {
 				t.Logf("job %T is not a backup: %v", payload.Details, payload.Details)
@@ -1482,7 +1483,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 		if err != nil {
 			return errors.Wrap(err, "error while reading checkpoint")
 		}
-		var checkpointDesc BackupManifest
+		var checkpointDesc backuppb.BackupManifest
 		if err := protoutil.Unmarshal(checkpointDescBytes, &checkpointDesc); err != nil {
 			return errors.Wrap(err, "error while unmarshalling checkpoint")
 		}
@@ -1594,9 +1595,9 @@ func TestBackupRestoreResume(t *testing.T) {
 					t.Fatal(err)
 				}
 				backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
-				mockManifest, err := protoutil.Marshal(&BackupManifest{
+				mockManifest, err := protoutil.Marshal(&backuppb.BackupManifest{
 					ClusterID: tc.Servers[0].RPCContext().LogicalClusterID.Get(),
-					Files: []BackupManifest_File{
+					Files: []backuppb.BackupManifest_File{
 						{Path: "garbage-checkpoint", Span: backupCompletedSpan},
 					},
 				})
@@ -1632,7 +1633,7 @@ func TestBackupRestoreResume(t *testing.T) {
 					backupManifestBytes, err = decompressData(ctx, nil, backupManifestBytes)
 					require.NoError(t, err)
 				}
-				var backupManifest BackupManifest
+				var backupManifest backuppb.BackupManifest
 				if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 					t.Fatal(err)
 				}
@@ -3978,7 +3979,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, localFoo)
 
-	var backupManifest BackupManifest
+	var backupManifest backuppb.BackupManifest
 	{
 		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, backupManifestName))
 		if err != nil {
@@ -5834,7 +5835,7 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest,
 		username.RootUserName())
 	require.NoError(t, err)
-	statsTable := StatsTable{
+	statsTable := backuppb.StatsTable{
 		Statistics: []*stats.TableStatisticProto{{TableID: descpb.ID(tableID + 1), Name: "notbank"}},
 	}
 	require.NoError(t, writeTableStatistics(ctx, store, backupStatisticsFileName,
@@ -8040,10 +8041,10 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		Mode: jobspb.EncryptionMode_Passphrase,
 		Key:  storageccl.GenerateKey([]byte("passphrase"), []byte("sodium")),
 	}
-	desc := &BackupManifest{}
+	desc := &backuppb.BackupManifest{}
 	magic := 5500
 	for i := 0; i < magic; i++ {
-		desc.Files = append(desc.Files, BackupManifest_File{Path: fmt.Sprintf("%d-file-%d", i, i)})
+		desc.Files = append(desc.Files, backuppb.BackupManifest_File{Path: fmt.Sprintf("%d-file-%d", i, i)})
 	}
 	require.NoError(t, writeBackupManifest(ctx, st, storage, "testmanifest", encOpts, desc))
 	_, sz, err := readBackupManifest(ctx, &mem, storage, "testmanifest", encOpts)
@@ -8070,7 +8071,7 @@ func TestManifestTooNew(t *testing.T) {
 	require.NoError(t, err)
 	manifestData, err = decompressData(context.Background(), nil, manifestData)
 	require.NoError(t, err)
-	var backupManifest BackupManifest
+	var backupManifest backuppb.BackupManifest
 	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
 
 	// Bump the version and write it back out to make it look newer.

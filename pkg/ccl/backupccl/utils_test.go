@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -368,7 +369,7 @@ func makeThresholdBlocker(threshold int) thresholdBlocker {
 func getSpansFromManifest(ctx context.Context, t *testing.T, backupPath string) roachpb.Spans {
 	backupManifestBytes, err := ioutil.ReadFile(backupPath + "/" + backupManifestName)
 	require.NoError(t, err)
-	var backupManifest BackupManifest
+	var backupManifest backuppb.BackupManifest
 	decompressedBytes, err := decompressData(ctx, nil, backupManifestBytes)
 	require.NoError(t, err)
 	require.NoError(t, protoutil.Unmarshal(decompressedBytes, &backupManifest))

@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -240,7 +241,7 @@ type spanAndTime struct {
 }
 
 type exportedSpan struct {
-	metadata       BackupManifest_File
+	metadata       backuppb.BackupManifest_File
 	dataSST        []byte
 	revStart       hlc.Timestamp
 	completedSpans int32
@@ -417,7 +418,7 @@ func runBackupProcessor(
 						fmt.Sprintf("ExportRequest for span %s", span.span),
 						timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
 							reqSentTime = timeutil.Now()
-							backupProcessorSpan.RecordStructured(&BackupExportTraceRequestEvent{
+							backupProcessorSpan.RecordStructured(&backuppb.BackupExportTraceRequestEvent{
 								Span:        span.span.String(),
 								Attempt:     int32(span.attempts + 1),
 								Priority:    header.UserPriority.String(),
@@ -439,7 +440,7 @@ func runBackupProcessor(
 							todo <- span
 							// TODO(dt): send a progress update to update job progress to note
 							// the intents being hit.
-							backupProcessorSpan.RecordStructured(&BackupExportTraceResponseEvent{
+							backupProcessorSpan.RecordStructured(&backuppb.BackupExportTraceResponseEvent{
 								RetryableError: tracing.RedactAndTruncateError(intentErr),
 							})
 							continue
@@ -501,7 +502,7 @@ func runBackupProcessor(
 					}
 
 					duration := respReceivedTime.Sub(reqSentTime)
-					exportResponseTraceEvent := &BackupExportTraceResponseEvent{
+					exportResponseTraceEvent := &backuppb.BackupExportTraceResponseEvent{
 						Duration:      duration.String(),
 						FileSummaries: make([]roachpb.RowCount, 0),
 					}
@@ -518,7 +519,7 @@ func runBackupProcessor(
 							// BackupManifest_File just happens to contain the exact fields
 							// to store the metadata we need, but there's no actual File
 							// on-disk anywhere yet.
-							metadata: BackupManifest_File{
+							metadata: backuppb.BackupManifest_File{
 								Span:        file.Span,
 								Path:        file.Path,
 								EntryCounts: entryCounts,

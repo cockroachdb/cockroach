@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"math"
 	"sort"
 	"time"
@@ -122,7 +123,7 @@ func restoreWithRetry(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
 	numNodes int,
-	backupManifests []BackupManifest,
+	backupManifests []backuppb.BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
@@ -218,7 +219,7 @@ func restore(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
 	numNodes int,
-	backupManifests []BackupManifest,
+	backupManifests []backuppb.BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
@@ -340,7 +341,7 @@ func restore(
 		// to progCh.
 		for progress := range progCh {
 			mu.Lock()
-			var progDetails RestoreProgress
+			var progDetails backuppb.RestoreProgress
 			if err := pbtypes.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
 				log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
 			}
@@ -410,11 +411,11 @@ func loadBackupSQLDescs(
 	p sql.JobExecContext,
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
-) ([]BackupManifest, BackupManifest, []catalog.Descriptor, int64, error) {
+) ([]backuppb.BackupManifest, backuppb.BackupManifest, []catalog.Descriptor, int64, error) {
 	backupManifests, sz, err := loadBackupManifests(ctx, mem, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
 	if err != nil {
-		return nil, BackupManifest{}, nil, 0, err
+		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
 
 	allDescs, latestBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
@@ -441,7 +442,7 @@ func loadBackupSQLDescs(
 
 	if err := maybeUpgradeDescriptors(sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
 		mem.Shrink(ctx, sz)
-		return nil, BackupManifest{}, nil, 0, err
+		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
 
 	return backupManifests, latestBackupManifest, sqlDescs, sz, nil
@@ -483,7 +484,7 @@ func getStatisticsFromBackup(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
-	backup BackupManifest,
+	backup backuppb.BackupManifest,
 ) ([]*stats.TableStatisticProto, error) {
 	// This part deals with pre-20.2 stats format where backup statistics
 	// are stored as a field in backup manifests instead of in their
@@ -597,7 +598,7 @@ func isSchemaEmpty(
 // and table passed in. They would normally overlap if any of them are
 // interleaved.
 func spansForAllRestoreTableIndexes(
-	codec keys.SQLCodec, tables []catalog.TableDescriptor, revs []BackupManifest_DescriptorRevision,
+	codec keys.SQLCodec, tables []catalog.TableDescriptor, revs []backuppb.BackupManifest_DescriptorRevision,
 ) []roachpb.Span {
 
 	added := make(map[tableAndIndex]bool, len(tables))

@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"sort"
 	"testing"
 
@@ -108,7 +109,7 @@ func checkMetadata(
 	checkStats(ctx, t, store, m, bm)
 }
 
-func checkManifest(t *testing.T, m *BackupManifest, bm *BackupMetadata) {
+func checkManifest(t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata) {
 	expectedManifest := *m
 	expectedManifest.Descriptors = nil
 	expectedManifest.DescriptorChanges = nil
@@ -121,7 +122,7 @@ func checkManifest(t *testing.T, m *BackupManifest, bm *BackupMetadata) {
 	require.Equal(t, expectedManifest, bm.BackupManifest)
 }
 
-func checkDescriptors(ctx context.Context, t *testing.T, m *BackupManifest, bm *BackupMetadata) {
+func checkDescriptors(ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata) {
 	var metaDescs []descpb.Descriptor
 	var desc descpb.Descriptor
 
@@ -139,10 +140,10 @@ func checkDescriptors(ctx context.Context, t *testing.T, m *BackupManifest, bm *
 }
 
 func checkDescriptorChanges(
-	ctx context.Context, t *testing.T, m *BackupManifest, bm *BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata,
 ) {
-	var metaRevs []BackupManifest_DescriptorRevision
-	var rev BackupManifest_DescriptorRevision
+	var metaRevs []backuppb.BackupManifest_DescriptorRevision
+	var rev backuppb.BackupManifest_DescriptorRevision
 	it := bm.DescriptorChangesIter(ctx)
 	defer it.Close()
 
@@ -161,9 +162,9 @@ func checkDescriptorChanges(
 	require.Equal(t, m.DescriptorChanges, metaRevs)
 }
 
-func checkFiles(ctx context.Context, t *testing.T, m *BackupManifest, bm *BackupMetadata) {
-	var metaFiles []BackupManifest_File
-	var file BackupManifest_File
+func checkFiles(ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata) {
+	var metaFiles []backuppb.BackupManifest_File
+	var file backuppb.BackupManifest_File
 	it := bm.FileIter(ctx)
 	defer it.Close()
 
@@ -177,7 +178,7 @@ func checkFiles(ctx context.Context, t *testing.T, m *BackupManifest, bm *Backup
 	require.Equal(t, m.Files, metaFiles)
 }
 
-func checkSpans(ctx context.Context, t *testing.T, m *BackupManifest, bm *BackupMetadata) {
+func checkSpans(ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata) {
 	var metaSpans []roachpb.Span
 	var span roachpb.Span
 	it := bm.SpanIter(ctx)
@@ -194,7 +195,7 @@ func checkSpans(ctx context.Context, t *testing.T, m *BackupManifest, bm *Backup
 }
 
 func checkIntroducedSpans(
-	ctx context.Context, t *testing.T, m *BackupManifest, bm *BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata,
 ) {
 	var metaSpans []roachpb.Span
 	var span roachpb.Span
@@ -210,7 +211,7 @@ func checkIntroducedSpans(
 	require.Equal(t, m.IntroducedSpans, metaSpans)
 }
 
-func checkTenants(ctx context.Context, t *testing.T, m *BackupManifest, bm *BackupMetadata) {
+func checkTenants(ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata) {
 	var metaTenants []descpb.TenantInfoWithUsage
 	var tenant descpb.TenantInfoWithUsage
 	it := bm.TenantIter(ctx)
@@ -230,7 +231,7 @@ func checkStats(
 	ctx context.Context,
 	t *testing.T,
 	store cloud.ExternalStorage,
-	m *BackupManifest,
+	m *backuppb.BackupManifest,
 	bm *BackupMetadata,
 ) {
 	expectedStats, err := getStatisticsFromBackup(ctx, store, nil, *m)
@@ -254,7 +255,7 @@ func checkStats(
 
 func testingReadBackupManifest(
 	ctx context.Context, store cloud.ExternalStorage, file string,
-) (*BackupManifest, error) {
+) (*backuppb.BackupManifest, error) {
 	r, err := store.ReadFile(ctx, file)
 	if err != nil {
 		return nil, err
@@ -273,7 +274,7 @@ func testingReadBackupManifest(
 		bytes = descBytes
 	}
 
-	var m BackupManifest
+	var m backuppb.BackupManifest
 	if err := protoutil.Unmarshal(bytes, &m); err != nil {
 		return nil, err
 	}

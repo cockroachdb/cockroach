@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,7 +52,7 @@ func (ie intervalSpan) Range() interval.Range {
 // This example is tested in TestRestoreEntryCoverExample.
 func makeSimpleImportSpans(
 	requiredSpans []roachpb.Span,
-	backups []BackupManifest,
+	backups []backuppb.BackupManifest,
 	backupLocalityMap map[int]storeByLocalityKV,
 	lowWaterMark roachpb.Key,
 ) []execinfrapb.RestoreSpanEntry {

@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"net/url"
 	"strings"
 
@@ -46,7 +47,7 @@ func fetchPreviousBackups(
 	prevBackupURIs []string,
 	encryptionParams jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) ([]BackupManifest, *jobspb.BackupEncryptionOptions, int64, error) {
+) ([]backuppb.BackupManifest, *jobspb.BackupEncryptionOptions, int64, error) {
 	if len(prevBackupURIs) == 0 {
 		return nil, nil, 0, nil
 	}
@@ -236,8 +237,8 @@ func getBackupManifests(
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	backupURIs []string,
 	encryption *jobspb.BackupEncryptionOptions,
-) ([]BackupManifest, int64, error) {
-	manifests := make([]BackupManifest, len(backupURIs))
+) ([]backuppb.BackupManifest, int64, error) {
+	manifests := make([]backuppb.BackupManifest, len(backupURIs))
 	if len(backupURIs) == 0 {
 		return manifests, 0, nil
 	}

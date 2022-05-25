@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -183,7 +184,7 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 		return "", err
 	}
 
-	args := &ScheduledBackupExecutionArgs{}
+	args := &backuppb.ScheduledBackupExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return "", errors.Wrap(err, "un-marshaling args")
 	}
@@ -327,7 +328,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	ex sqlutil.InternalExecutor,
 	txn *kv.Txn,
 ) error {
-	args := &ScheduledBackupExecutionArgs{}
+	args := &backuppb.ScheduledBackupExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, args); err != nil {
 		return errors.Wrap(err, "un-marshaling args")
 	}
@@ -381,7 +382,7 @@ func (e *scheduledBackupExecutor) Metrics() metric.Struct {
 
 // extractBackupStatement returns tree.Backup node encoded inside scheduled job.
 func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, error) {
-	args := &ScheduledBackupExecutionArgs{}
+	args := &backuppb.ScheduledBackupExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return nil, errors.Wrap(err, "un-marshaling args")
 	}
@@ -411,7 +412,7 @@ func unlinkDependentSchedule(
 	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
-	args *ScheduledBackupExecutionArgs,
+	args *backuppb.ScheduledBackupExecutionArgs,
 ) error {
 	if args.DependentScheduleID == 0 {
 		return nil
@@ -452,7 +453,7 @@ func (e *scheduledBackupExecutor) OnDrop(
 	txn *kv.Txn,
 	descsCol *descs.Collection,
 ) error {
-	args := &ScheduledBackupExecutionArgs{}
+	args := &backuppb.ScheduledBackupExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return errors.Wrap(err, "un-marshaling args")
 	}

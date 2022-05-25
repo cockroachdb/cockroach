@@ -15,6 +15,7 @@ import (
 	gohex "encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -288,7 +289,7 @@ func externalStorageFromURIFactory(
 		defaultSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/, nil, opts...)
 }
 
-func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManifest, error) {
+func getManifestFromURI(ctx context.Context, path string) (backuppb.BackupManifest, error) {
 
 	if !strings.Contains(path, "://") {
 		path = nodelocal.MakeLocalStorageURI(path)
@@ -300,7 +301,7 @@ func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManif
 	backupManifest, _, err := backupccl.ReadBackupManifestFromURI(ctx, nil /* mem */, path, username.RootUserName(),
 		externalStorageFromURIFactory, nil)
 	if err != nil {
-		return backupccl.BackupManifest{}, err
+		return backuppb.BackupManifest{}, err
 	}
 	return backupManifest, nil
 }
@@ -459,7 +460,7 @@ func runExportDataCmd(cmd *cobra.Command, args []string) error {
 	fullyQualifiedTableName := strings.ToLower(debugBackupArgs.exportTableName)
 	manifestPaths := args
 	ctx := context.Background()
-	manifests := make([]backupccl.BackupManifest, 0, len(manifestPaths))
+	manifests := make([]backuppb.BackupManifest, 0, len(manifestPaths))
 	for _, path := range manifestPaths {
 		manifest, err := getManifestFromURI(ctx, path)
 		if err != nil {
@@ -468,7 +469,7 @@ func runExportDataCmd(cmd *cobra.Command, args []string) error {
 		manifests = append(manifests, manifest)
 	}
 
-	if debugBackupArgs.withRevisions && manifests[0].MVCCFilter != backupccl.MVCCFilter_All {
+	if debugBackupArgs.withRevisions && manifests[0].MVCCFilter != backuppb.MVCCFilter_All {
 		return errors.WithHintf(
 			errors.Newf("invalid flag: %s", cliflags.ExportRevisions.Name),
 			"requires backup created with %q", backupOptRevisionHistory,
@@ -500,7 +501,7 @@ func runExportDataCmd(cmd *cobra.Command, args []string) error {
 }
 
 func evalAsOfTimestamp(
-	readTime string, manifests []backupccl.BackupManifest,
+	readTime string, manifests []backuppb.BackupManifest,
 ) (hlc.Timestamp, error) {
 	if readTime == "" {
 		return manifests[len(manifests)-1].EndTime, nil
@@ -708,8 +709,8 @@ func processEntryFiles(
 	return nil
 }
 
-type backupMetaDisplayMsg backupccl.BackupManifest
-type backupFileDisplayMsg backupccl.BackupManifest_File
+type backupMetaDisplayMsg backuppb.BackupManifest
+type backupFileDisplayMsg backuppb.BackupManifest_File
 
 func (f backupFileDisplayMsg) MarshalJSON() ([]byte, error) {
 	fileDisplayMsg := struct {

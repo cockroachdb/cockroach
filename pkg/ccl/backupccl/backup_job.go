@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"net/url"
 	"path"
 	"strings"
@@ -129,7 +130,7 @@ func backup(
 	defaultStore cloud.ExternalStorage,
 	storageByLocalityKV map[string]*roachpb.ExternalStorage,
 	job *jobs.Job,
-	backupManifest *BackupManifest,
+	backupManifest *backuppb.BackupManifest,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
@@ -218,7 +219,7 @@ func backup(
 		defer close(requestFinishedCh)
 		var numBackedUpFiles int64
 		for progress := range progCh {
-			var progDetails BackupManifest_Progress
+			var progDetails backuppb.BackupManifest_Progress
 			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
 				log.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
 			}
@@ -236,7 +237,7 @@ func backup(
 				requestFinishedCh <- struct{}{}
 			}
 			if timeutil.Since(lastCheckpoint) > BackupCheckpointInterval {
-				resumerSpan.RecordStructured(&BackupProgressTraceEvent{
+				resumerSpan.RecordStructured(&backuppb.BackupProgressTraceEvent{
 					TotalNumFiles:     numBackedUpFiles,
 					TotalEntryCounts:  backupManifest.EntryCounts,
 					RevisionStartTime: backupManifest.RevisionStartTime,
@@ -280,7 +281,7 @@ func backup(
 	// Write additional partial descriptors to each node for partitioned backups.
 	if len(storageByLocalityKV) > 0 {
 		resumerSpan.RecordStructured(&types.StringValue{Value: "writing partition descriptors for partitioned backup"})
-		filesByLocalityKV := make(map[string][]BackupManifest_File)
+		filesByLocalityKV := make(map[string][]backuppb.BackupManifest_File)
 		for _, file := range backupManifest.Files {
 			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], file)
 		}
@@ -295,7 +296,7 @@ func backup(
 				backupPartitionDescriptorPrefix, nextPartitionedDescFilenameID, sanitizeLocalityKV(kv))
 			nextPartitionedDescFilenameID++
 			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
-			desc := BackupPartitionDescriptor{
+			desc := backuppb.BackupPartitionDescriptor{
 				LocalityKV: kv,
 				Files:      filesByLocalityKV[kv],
 				BackupID:   backupID,
@@ -340,7 +341,7 @@ func backup(
 			}
 		}
 	}
-	statsTable := StatsTable{
+	statsTable := backuppb.StatsTable{
 		Statistics: tableStatistics,
 	}
 
@@ -402,7 +403,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	var backupManifest *BackupManifest
+	var backupManifest *backuppb.BackupManifest
 
 	// If planning didn't resolve the external destination, then we need to now.
 	if details.URI == "" {
@@ -723,7 +724,7 @@ func (b *backupResumer) readManifestOnResume(
 	defaultStore cloud.ExternalStorage,
 	details jobspb.BackupDetails,
 	user username.SQLUsername,
-) (*BackupManifest, int64, error) {
+) (*backuppb.BackupManifest, int64, error) {
 	// We don't read the table descriptors from the backup descriptor, but
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the

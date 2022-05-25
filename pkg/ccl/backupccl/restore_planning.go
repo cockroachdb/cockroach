@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"sort"
 	"strconv"
 	"strings"
@@ -894,7 +895,7 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 // "other" table is missing from the set provided are omitted during the
 // upgrade, instead of causing an error to be returned.
 func maybeUpgradeDescriptorsInBackupManifests(
-	backupManifests []BackupManifest, skipFKsWithNoMatchingTable bool,
+	backupManifests []backuppb.BackupManifest, skipFKsWithNoMatchingTable bool,
 ) error {
 	if len(backupManifests) == 0 {
 		return nil
@@ -1469,7 +1470,7 @@ func doRestorePlan(
 	// directories, return the URIs and manifests of all backup layers in all
 	// localities.
 	var defaultURIs []string
-	var mainBackupManifests []BackupManifest
+	var mainBackupManifests []backuppb.BackupManifest
 	var localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
 	var memReserved int64
 	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI

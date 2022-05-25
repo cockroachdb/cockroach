@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"path"
 	"strings"
 	"time"
@@ -562,7 +563,7 @@ func checkBackupFiles(
 type backupInfo struct {
 	collectionURI string
 	defaultURIs   []string
-	manifests     []BackupManifest
+	manifests     []backuppb.BackupManifest
 	subdir        string
 	localityInfo  []jobspb.RestoreDetails_BackupLocalityInfo
 	enc           *jobspb.BackupEncryptionOptions
@@ -651,7 +652,7 @@ func backupShowerDefault(
 					return nil, err
 				}
 				backupType := tree.NewDString("full")
-				if manifest.isIncremental() {
+				if manifest.IsIncremental() {
 					backupType = tree.NewDString("incremental")
 				}
 				start := tree.DNull
@@ -815,7 +816,7 @@ type descriptorSize struct {
 // getLogicalSSTSize gets the total logical bytes stored in each SST. Note that a
 // BackupManifest_File identifies a span in an SST and there can be multiple
 // spans stored in an SST.
-func getLogicalSSTSize(files []BackupManifest_File) map[string]int64 {
+func getLogicalSSTSize(files []backuppb.BackupManifest_File) map[string]int64 {
 	sstDataSize := make(map[string]int64)
 	for _, file := range files {
 		sstDataSize[file.Path] += file.EntryCounts.DataSize
@@ -832,7 +833,7 @@ func approximateTablePhysicalSize(
 
 // getTableSizes gathers row and size count for each table in the manifest
 func getTableSizes(
-	files []BackupManifest_File, fileSizes []int64,
+	files []backuppb.BackupManifest_File, fileSizes []int64,
 ) (map[descpb.ID]descriptorSize, error) {
 	tableSizes := make(map[descpb.ID]descriptorSize)
 	if len(files) == 0 {
@@ -984,7 +985,7 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 			}
 			for i, manifest := range info.manifests {
 				backupType := "full"
-				if manifest.isIncremental() {
+				if manifest.IsIncremental() {
 					backupType = "incremental"
 				}
 

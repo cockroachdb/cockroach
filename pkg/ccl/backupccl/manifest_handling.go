@@ -15,6 +15,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"net/url"
 	"path"
 	"regexp"
@@ -131,7 +132,7 @@ func isGZipped(dat []byte) bool {
 }
 
 // BackupFileDescriptors is an alias on which to implement sort's interface.
-type BackupFileDescriptors []BackupManifest_File
+type BackupFileDescriptors []backuppb.BackupManifest_File
 
 func (r BackupFileDescriptors) Len() int      { return len(r) }
 func (r BackupFileDescriptors) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
@@ -140,10 +141,6 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 		return cmp < 0
 	}
 	return bytes.Compare(r[i].Span.EndKey, r[j].Span.EndKey) < 0
-}
-
-func (m *BackupManifest) isIncremental() bool {
-	return !m.StartTime.IsEmpty()
 }
 
 // ReadBackupManifestFromURI creates an export store from the given URI, then
@@ -156,11 +153,11 @@ func ReadBackupManifestFromURI(
 	user username.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
-) (BackupManifest, int64, error) {
+) (backuppb.BackupManifest, int64, error) {
 	exportStore, err := makeExternalStorageFromURI(ctx, uri, user)
 
 	if err != nil {
-		return BackupManifest{}, 0, err
+		return backuppb.BackupManifest{}, 0, err
 	}
 	defer exportStore.Close()
 	return ReadBackupManifestFromStore(ctx, mem, exportStore, encryption)
@@ -173,21 +170,21 @@ func ReadBackupManifestFromStore(
 	mem *mon.BoundAccount,
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
-) (BackupManifest, int64, error) {
+) (backuppb.BackupManifest, int64, error) {
 	backupManifest, memSize, err := readBackupManifest(ctx, mem, exportStore, backupManifestName,
 		encryption)
 	if err != nil {
 		oldManifest, newMemSize, newErr := readBackupManifest(ctx, mem, exportStore, backupOldManifestName,
 			encryption)
 		if newErr != nil {
-			return BackupManifest{}, 0, err
+			return backuppb.BackupManifest{}, 0, err
 		}
 		backupManifest = oldManifest
 		memSize = newMemSize
 	}
 	backupManifest.Dir = exportStore.Conf()
-	// TODO(dan): Sanity check this BackupManifest: non-empty EndTime,
-	// non-empty Paths, and non-overlapping Spans and keyranges in Files.
+	// TODO(dan): Sanity check this BackupManifest: non-empty EndTime, non-empty
+	// Paths, and non-overlapping Spans and keyranges in Files.
 	return backupManifest, memSize, nil
 }
 
@@ -236,10 +233,10 @@ func readBackupCheckpointManifest(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
-) (BackupManifest, int64, error) {
+) (backuppb.BackupManifest, int64, error) {
 	checkpointFile, err := readLatestCheckpointFile(ctx, exportStore, filename)
 	if err != nil {
-		return BackupManifest{}, 0, err
+		return backuppb.BackupManifest{}, 0, err
 	}
 	defer checkpointFile.Close(ctx)
 
@@ -248,7 +245,7 @@ func readBackupCheckpointManifest(
 	checksumFile, err := readLatestCheckpointFile(ctx, exportStore, filename+backupManifestChecksumSuffix)
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return BackupManifest{}, 0, err
+			return backuppb.BackupManifest{}, 0, err
 		}
 		// Pass checksumFile as nil to indicate it was not found.
 		return readManifest(ctx, mem, exportStore, encryption, checkpointFile, nil)
@@ -257,18 +254,18 @@ func readBackupCheckpointManifest(
 	return readManifest(ctx, mem, exportStore, encryption, checkpointFile, checksumFile)
 }
 
-// readBackupManifest reads and unmarshals a BackupManifest from filename in
-// the provided export store.
+// readBackupManifest reads and unmarshals a BackupManifest from filename in the
+// provided export store.
 func readBackupManifest(
 	ctx context.Context,
 	mem *mon.BoundAccount,
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
-) (BackupManifest, int64, error) {
+) (backuppb.BackupManifest, int64, error) {
 	manifestFile, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
-		return BackupManifest{}, 0, err
+		return backuppb.BackupManifest{}, 0, err
 	}
 	defer manifestFile.Close(ctx)
 
@@ -277,7 +274,7 @@ func readBackupManifest(
 	checksumFile, err := exportStore.ReadFile(ctx, filename+backupManifestChecksumSuffix)
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return BackupManifest{}, 0, err
+			return backuppb.BackupManifest{}, 0, err
 		}
 		// Pass checksumFile as nil to indicate it was not found.
 		return readManifest(ctx, mem, exportStore, encryption, manifestFile, nil)
@@ -286,10 +283,10 @@ func readBackupManifest(
 	return readManifest(ctx, mem, exportStore, encryption, manifestFile, checksumFile)
 }
 
-// readManifest reads and unmarshals a BackupManifest from filename in
-// the provided export store. If the passed bound account is not nil, the bytes
-// read are reserved from it as it is read and then the approximate in-memory
-// size (the total decompressed serialized byte size) is reserved as well before
+// readManifest reads and unmarshals a BackupManifest from filename in the
+// provided export store. If the passed bound account is not nil, the bytes read
+// are reserved from it as it is read and then the approximate in-memory size
+// (the total decompressed serialized byte size) is reserved as well before
 // deserialization and returned so that callers can then shrink the bound acct
 // by that amount when they release the returned manifest.
 func readManifest(
@@ -299,10 +296,10 @@ func readManifest(
 	encryption *jobspb.BackupEncryptionOptions,
 	manifestReader ioctx.ReadCloserCtx,
 	checksumReader ioctx.ReadCloserCtx,
-) (BackupManifest, int64, error) {
+) (backuppb.BackupManifest, int64, error) {
 	descBytes, err := mon.ReadAll(ctx, manifestReader, mem)
 	if err != nil {
-		return BackupManifest{}, 0, err
+		return backuppb.BackupManifest{}, 0, err
 	}
 	defer func() {
 		mem.Shrink(ctx, int64(cap(descBytes)))
@@ -311,14 +308,14 @@ func readManifest(
 		// If there is a checksum file present, check that it matches.
 		checksumFileData, err := ioctx.ReadAll(ctx, checksumReader)
 		if err != nil {
-			return BackupManifest{}, 0, errors.Wrap(err, "reading checksum file")
+			return backuppb.BackupManifest{}, 0, errors.Wrap(err, "reading checksum file")
 		}
 		checksum, err := getChecksum(descBytes)
 		if err != nil {
-			return BackupManifest{}, 0, errors.Wrap(err, "calculating checksum of manifest")
+			return backuppb.BackupManifest{}, 0, errors.Wrap(err, "calculating checksum of manifest")
 		}
 		if !bytes.Equal(checksumFileData, checksum) {
-			return BackupManifest{}, 0, errors.Newf("checksum mismatch; expected %s, got %s",
+			return backuppb.BackupManifest{}, 0, errors.Newf("checksum mismatch; expected %s, got %s",
 				hex.EncodeToString(checksumFileData), hex.EncodeToString(checksum))
 		}
 	}
@@ -328,11 +325,11 @@ func readManifest(
 		encryptionKey, err = getEncryptionKey(ctx, encryption, exportStore.Settings(),
 			exportStore.ExternalIOConf())
 		if err != nil {
-			return BackupManifest{}, 0, err
+			return backuppb.BackupManifest{}, 0, err
 		}
 		plaintextBytes, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
 		if err != nil {
-			return BackupManifest{}, 0, err
+			return backuppb.BackupManifest{}, 0, err
 		}
 		mem.Shrink(ctx, int64(cap(descBytes)))
 		descBytes = plaintextBytes
@@ -341,7 +338,7 @@ func readManifest(
 	if isGZipped(descBytes) {
 		decompressedBytes, err := decompressData(ctx, mem, descBytes)
 		if err != nil {
-			return BackupManifest{}, 0, errors.Wrap(
+			return backuppb.BackupManifest{}, 0, errors.Wrap(
 				err, "decompressing backup manifest")
 		}
 		// Release the compressed bytes from the monitor before we switch descBytes
@@ -353,18 +350,18 @@ func readManifest(
 
 	approxMemSize := int64(len(descBytes))
 	if err := mem.Grow(ctx, approxMemSize); err != nil {
-		return BackupManifest{}, 0, err
+		return backuppb.BackupManifest{}, 0, err
 	}
 
-	var backupManifest BackupManifest
+	var backupManifest backuppb.BackupManifest
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
 		mem.Shrink(ctx, approxMemSize)
 		if encryption == nil && storageccl.AppearsEncrypted(descBytes) {
-			return BackupManifest{}, 0, errors.Wrapf(
+			return backuppb.BackupManifest{}, 0, errors.Wrapf(
 				err, "file appears encrypted -- try specifying one of \"%s\" or \"%s\"",
 				backupOptEncPassphrase, backupOptEncKMS)
 		}
-		return BackupManifest{}, 0, err
+		return backuppb.BackupManifest{}, 0, err
 	}
 	for _, d := range backupManifest.Descriptors {
 		// Calls to GetTable are generally frowned upon.
@@ -394,15 +391,15 @@ func readBackupPartitionDescriptor(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
-) (BackupPartitionDescriptor, int64, error) {
+) (backuppb.BackupPartitionDescriptor, int64, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
-		return BackupPartitionDescriptor{}, 0, err
+		return backuppb.BackupPartitionDescriptor{}, 0, err
 	}
 	defer r.Close(ctx)
 	descBytes, err := mon.ReadAll(ctx, r, mem)
 	if err != nil {
-		return BackupPartitionDescriptor{}, 0, err
+		return backuppb.BackupPartitionDescriptor{}, 0, err
 	}
 	defer func() {
 		mem.Shrink(ctx, int64(cap(descBytes)))
@@ -412,11 +409,11 @@ func readBackupPartitionDescriptor(
 		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
 			exportStore.ExternalIOConf())
 		if err != nil {
-			return BackupPartitionDescriptor{}, 0, err
+			return backuppb.BackupPartitionDescriptor{}, 0, err
 		}
 		plaintextData, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
 		if err != nil {
-			return BackupPartitionDescriptor{}, 0, err
+			return backuppb.BackupPartitionDescriptor{}, 0, err
 		}
 		mem.Shrink(ctx, int64(cap(descBytes)))
 		descBytes = plaintextData
@@ -425,7 +422,7 @@ func readBackupPartitionDescriptor(
 	if isGZipped(descBytes) {
 		decompressedData, err := decompressData(ctx, mem, descBytes)
 		if err != nil {
-			return BackupPartitionDescriptor{}, 0, errors.Wrap(
+			return backuppb.BackupPartitionDescriptor{}, 0, errors.Wrap(
 				err, "decompressing backup partition descriptor")
 		}
 		mem.Shrink(ctx, int64(cap(descBytes)))
@@ -435,13 +432,13 @@ func readBackupPartitionDescriptor(
 	memSize := int64(len(descBytes))
 
 	if err := mem.Grow(ctx, memSize); err != nil {
-		return BackupPartitionDescriptor{}, 0, err
+		return backuppb.BackupPartitionDescriptor{}, 0, err
 	}
 
-	var backupManifest BackupPartitionDescriptor
+	var backupManifest backuppb.BackupPartitionDescriptor
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
 		mem.Shrink(ctx, memSize)
-		return BackupPartitionDescriptor{}, 0, err
+		return backuppb.BackupPartitionDescriptor{}, 0, err
 	}
 
 	return backupManifest, memSize, err
@@ -454,7 +451,7 @@ func readTableStatistics(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
-) (*StatsTable, error) {
+) (*backuppb.StatsTable, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
 		return nil, err
@@ -475,7 +472,7 @@ func readTableStatistics(
 			return nil, err
 		}
 	}
-	var tableStats StatsTable
+	var tableStats backuppb.StatsTable
 	if err := protoutil.Unmarshal(statsBytes, &tableStats); err != nil {
 		return nil, err
 	}
@@ -488,7 +485,7 @@ func writeBackupManifest(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
-	desc *BackupManifest,
+	desc *backuppb.BackupManifest,
 ) error {
 	sort.Sort(BackupFileDescriptors(desc.Files))
 
@@ -549,7 +546,7 @@ func writeBackupPartitionDescriptor(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
-	desc *BackupPartitionDescriptor,
+	desc *backuppb.BackupPartitionDescriptor,
 ) error {
 	descBuf, err := protoutil.Marshal(desc)
 	if err != nil {
@@ -582,7 +579,7 @@ func writeTableStatistics(
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
-	stats *StatsTable,
+	stats *backuppb.StatsTable,
 ) error {
 	statsBuf, err := protoutil.Marshal(stats)
 	if err != nil {
@@ -609,8 +606,8 @@ func loadBackupManifests(
 	user username.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
-) ([]BackupManifest, int64, error) {
-	backupManifests := make([]BackupManifest, len(uris))
+) ([]backuppb.BackupManifest, int64, error) {
+	backupManifests := make([]backuppb.BackupManifest, len(uris))
 	var reserved int64
 	defer func() {
 		if reserved != 0 {
@@ -644,7 +641,7 @@ func getLocalityInfo(
 	ctx context.Context,
 	stores []cloud.ExternalStorage,
 	uris []string,
-	mainBackupManifest BackupManifest,
+	mainBackupManifest backuppb.BackupManifest,
 	encryption *jobspb.BackupEncryptionOptions,
 	prefix string,
 ) (jobspb.RestoreDetails_BackupLocalityInfo, error) {
@@ -736,7 +733,7 @@ func resolveBackupManifestsExplicitIncrementals(
 ) (
 	defaultURIs []string,
 	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
-	mainBackupManifests []BackupManifest,
+	mainBackupManifests []backuppb.BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	reservedMemSize int64,
 	_ error,
@@ -752,7 +749,7 @@ func resolveBackupManifestsExplicitIncrementals(
 
 	defaultURIs = make([]string, len(from))
 	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
-	mainBackupManifests = make([]BackupManifest, len(from))
+	mainBackupManifests = make([]backuppb.BackupManifest, len(from))
 
 	var err error
 	for i, uris := range from {
@@ -816,7 +813,7 @@ func resolveBackupManifests(
 ) (
 	defaultURIs []string,
 	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
-	mainBackupManifests []BackupManifest,
+	mainBackupManifests []backuppb.BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	reservedMemSize int64,
 	_ error,
@@ -853,7 +850,7 @@ func resolveBackupManifests(
 	numLayers := len(prev) + 1
 
 	defaultURIs = make([]string, numLayers)
-	mainBackupManifests = make([]BackupManifest, numLayers)
+	mainBackupManifests = make([]backuppb.BackupManifest, numLayers)
 	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, numLayers)
 
 	// Setup the full backup layer explicitly.
@@ -922,10 +919,10 @@ func resolveBackupManifests(
 
 func validateEndTimeAndTruncate(
 	defaultURIs []string,
-	mainBackupManifests []BackupManifest,
+	mainBackupManifests []backuppb.BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
-) ([]string, []BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
 	// Check that the requested target time, if specified, is valid for the list
 	// of incremental backups resolved, truncating the results to the backup that
 	// contains the target time.
@@ -940,7 +937,7 @@ func validateEndTimeAndTruncate(
 
 		// Ensure that the backup actually has revision history.
 		if !endTime.Equal(b.EndTime) {
-			if b.MVCCFilter != MVCCFilter_All {
+			if b.MVCCFilter != backuppb.MVCCFilter_All {
 				const errPrefix = "invalid RESTORE timestamp: restoring to arbitrary time requires that BACKUP for requested time be created with '%s' option."
 				if i == 0 {
 					return nil, nil, nil, errors.Errorf(
@@ -978,7 +975,7 @@ func validateEndTimeAndTruncate(
 
 // TODO(anzoteh96): benchmark the performance of different search algorithms,
 // e.g.  linear search, binary search, reverse linear search.
-func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) (int, error) {
+func getBackupIndexAtTime(backupManifests []backuppb.BackupManifest, asOf hlc.Timestamp) (int, error) {
 	if len(backupManifests) == 0 {
 		return -1, errors.New("expected a nonempty backup manifest list, got an empty list")
 	}
@@ -996,8 +993,8 @@ func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) 
 }
 
 func loadSQLDescsFromBackupsAtTime(
-	backupManifests []BackupManifest, asOf hlc.Timestamp,
-) ([]catalog.Descriptor, BackupManifest) {
+	backupManifests []backuppb.BackupManifest, asOf hlc.Timestamp,
+) ([]catalog.Descriptor, backuppb.BackupManifest) {
 	lastBackupManifest := backupManifests[len(backupManifests)-1]
 
 	unwrapDescriptors := func(raw []descpb.Descriptor) []catalog.Descriptor {
@@ -1012,10 +1009,10 @@ func loadSQLDescsFromBackupsAtTime(
 			return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
 		}
 
-		// Cluster backups with revision history may have included previous
-		// database versions of database descriptors in
-		// lastBackupManifest.Descriptors. Find the correct set of descriptors by
-		// going through their revisions. See #68541.
+		// Cluster backups with revision history may have included previous database
+		// versions of database descriptors in lastBackupManifest.Descriptors. Find
+		// the correct set of descriptors by going through their revisions. See
+		// #68541.
 		asOf = lastBackupManifest.EndTime
 	}
 

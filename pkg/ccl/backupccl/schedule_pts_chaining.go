@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	fmt "fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -129,7 +130,7 @@ func maybeUpdateSchedulePTSRecord(
 
 		// Update the full schedule to disable chaining since there is no associated
 		// inc schedule. It could have been dropped before we got here.
-		if args.BackupType == ScheduledBackupExecutionArgs_FULL && args.DependentScheduleID == 0 {
+		if args.BackupType == backuppb.ScheduledBackupExecutionArgs_FULL && args.DependentScheduleID == 0 {
 			args.ChainProtectedTimestampRecords = false
 			any, err := pbtypes.MarshalAny(args)
 			if err != nil {
@@ -145,7 +146,7 @@ func maybeUpdateSchedulePTSRecord(
 		}
 
 		switch args.BackupType {
-		case ScheduledBackupExecutionArgs_INCREMENTAL:
+		case backuppb.ScheduledBackupExecutionArgs_INCREMENTAL:
 			if backupDetails.SchedulePTSChainingRecord.Action != jobspb.SchedulePTSChainingRecord_UPDATE {
 				return errors.AssertionFailedf("incremental backup has unexpected chaining action %d on"+
 					" backup job details", backupDetails.SchedulePTSChainingRecord.Action)
@@ -155,7 +156,7 @@ func maybeUpdateSchedulePTSRecord(
 				backupDetails.EndTime, exec, txn, scheduleID); err != nil {
 				return errors.Wrap(err, "failed to manage chaining of pts record during a inc backup")
 			}
-		case ScheduledBackupExecutionArgs_FULL:
+		case backuppb.ScheduledBackupExecutionArgs_FULL:
 			if backupDetails.SchedulePTSChainingRecord.Action != jobspb.SchedulePTSChainingRecord_RELEASE {
 				return errors.AssertionFailedf("full backup has unexpected chaining action %d on"+
 					" backup job details", backupDetails.SchedulePTSChainingRecord.Action)
@@ -176,7 +177,7 @@ func manageFullBackupPTSChaining(
 	txn *kv.Txn,
 	backupDetails jobspb.BackupDetails,
 	exec *sql.ExecutorConfig,
-	fullScheduleArgs *ScheduledBackupExecutionArgs,
+	fullScheduleArgs *backuppb.ScheduledBackupExecutionArgs,
 ) error {
 	// Let's resolve the dependent incremental schedule as the first step. If the
 	// schedule has been dropped then we can avoid doing unnecessary work.
