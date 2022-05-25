@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -384,6 +385,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					deleteBatchSize,
 					deleteRateLimiter,
 					*aost,
+					t.job,
 				)
 				metrics.RangeTotalDuration.RecordValue(int64(timeutil.Since(start)))
 				if err != nil {
@@ -615,6 +617,7 @@ func runTTLOnRange(
 	selectBatchSize, deleteBatchSize int,
 	deleteRateLimiter *quotapool.RateLimiter,
 	aost tree.DTimestampTZ,
+	job *jobs.Job,
 ) error {
 	metrics.NumActiveRanges.Inc(1)
 	defer metrics.NumActiveRanges.Dec(1)
@@ -698,7 +701,6 @@ func runTTLOnRange(
 						desc.GetModificationTime().GoTime().Format(time.RFC3339),
 					)
 				}
-
 				tokens, err := deleteRateLimiter.Acquire(ctx, int64(len(deleteBatch)))
 				if err != nil {
 					return err
@@ -706,8 +708,18 @@ func runTTLOnRange(
 				defer tokens.Consume()
 
 				start := timeutil.Now()
-				err = deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				rowCount, err := deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				if err != nil {
+					return err
+				}
+
 				metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
+				err = job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+					progress := md.Progress
+					atomic.AddInt64(&progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount, int64(rowCount))
+					ju.UpdateProgress(progress)
+					return nil
+				})
 				return err
 			}); err != nil {
 				return errors.Wrapf(err, "error during row deletion")

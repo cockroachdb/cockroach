@@ -53,6 +53,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
         "//pkg/keys",
         "//pkg/kv",
@@ -74,6 +75,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
