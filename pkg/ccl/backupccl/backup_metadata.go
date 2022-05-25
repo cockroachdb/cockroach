@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -48,7 +49,7 @@ func writeBackupMetadataSST(
 	ctx context.Context,
 	dest cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
-	manifest *BackupManifest,
+	manifest *backuppb.BackupManifest,
 	stats []*stats.TableStatisticProto,
 ) error {
 	var w io.WriteCloser
@@ -106,7 +107,7 @@ func constructMetadataSST(
 	dest cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
 	w io.Writer,
-	m *BackupManifest,
+	m *backuppb.BackupManifest,
 	stats []*stats.TableStatisticProto,
 ) error {
 	// TODO(dt): use a seek-optimized SST writer instead.
@@ -146,7 +147,9 @@ func constructMetadataSST(
 	return sst.Finish()
 }
 
-func writeManifestToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupManifest) error {
+func writeManifestToMetadata(
+	ctx context.Context, sst storage.SSTWriter, m *backuppb.BackupManifest,
+) error {
 	info := *m
 	info.Descriptors = nil
 	info.DescriptorChanges = nil
@@ -163,7 +166,9 @@ func writeManifestToMetadata(ctx context.Context, sst storage.SSTWriter, m *Back
 	return sst.PutUnversioned(roachpb.Key(sstBackupKey), b)
 }
 
-func writeDescsToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupManifest) error {
+func writeDescsToMetadata(
+	ctx context.Context, sst storage.SSTWriter, m *backuppb.BackupManifest,
+) error {
 	// Add descriptors from revisions if available, Descriptors if not.
 	if len(m.DescriptorChanges) > 0 {
 		sort.Slice(m.DescriptorChanges, func(i, j int) bool {
@@ -226,7 +231,7 @@ func writeDescsToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupM
 func writeFilesToMetadata(
 	ctx context.Context,
 	sst storage.SSTWriter,
-	m *BackupManifest,
+	m *backuppb.BackupManifest,
 	dest cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
 	fileInfoPath string,
@@ -290,10 +295,12 @@ func (a namespace) Less(i, j int) bool {
 	return a[i].parent < a[j].parent
 }
 
-func writeNamesToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupManifest) error {
+func writeNamesToMetadata(
+	ctx context.Context, sst storage.SSTWriter, m *backuppb.BackupManifest,
+) error {
 	revs := m.DescriptorChanges
 	if len(revs) == 0 {
-		revs = make([]BackupManifest_DescriptorRevision, len(m.Descriptors))
+		revs = make([]backuppb.BackupManifest_DescriptorRevision, len(m.Descriptors))
 		for i := range m.Descriptors {
 			revs[i].Desc = &m.Descriptors[i]
 			revs[i].Time = m.EndTime
@@ -348,7 +355,9 @@ func writeNamesToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupM
 	return nil
 }
 
-func writeSpansToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupManifest) error {
+func writeSpansToMetadata(
+	ctx context.Context, sst storage.SSTWriter, m *backuppb.BackupManifest,
+) error {
 	sort.Sort(roachpb.Spans(m.Spans))
 	sort.Sort(roachpb.Spans(m.IntroducedSpans))
 
@@ -411,7 +420,9 @@ func writeStatsToMetadata(
 	return nil
 }
 
-func writeTenantsToMetadata(ctx context.Context, sst storage.SSTWriter, m *BackupManifest) error {
+func writeTenantsToMetadata(
+	ctx context.Context, sst storage.SSTWriter, m *backuppb.BackupManifest,
+) error {
 	sort.Slice(m.Tenants, func(i, j int) bool { return m.Tenants[i].ID < m.Tenants[j].ID })
 	for _, i := range m.Tenants {
 		b, err := protoutil.Marshal(&i)
@@ -618,7 +629,7 @@ func debugDumpFileSST(
 		if err != nil {
 			return err
 		}
-		f, err := pbBytesToJSON(iter.UnsafeValue(), &BackupManifest_File{})
+		f, err := pbBytesToJSON(iter.UnsafeValue(), &backuppb.BackupManifest_File{})
 		if err != nil {
 			return err
 		}
@@ -664,7 +675,7 @@ func DebugDumpMetadataSST(
 		k := iter.UnsafeKey()
 		switch {
 		case bytes.Equal(k.Key, []byte(sstBackupKey)):
-			info, err := pbBytesToJSON(iter.UnsafeValue(), &BackupManifest{})
+			info, err := pbBytesToJSON(iter.UnsafeValue(), &backuppb.BackupManifest{})
 			if err != nil {
 				return err
 			}
@@ -761,11 +772,11 @@ func DebugDumpMetadataSST(
 	return nil
 }
 
-// BackupMetadata holds all of the data in BackupManifest except a few repeated
+// BackupMetadata holds all of the data in backuppb.BackupManifest except a few repeated
 // fields such as descriptors or spans. BackupMetadata provides iterator methods
 // so that the excluded fields can be accessed in a streaming manner.
 type BackupMetadata struct {
-	BackupManifest
+	backuppb.BackupManifest
 	store    cloud.ExternalStorage
 	enc      *jobspb.BackupEncryptionOptions
 	filename string
@@ -792,7 +803,7 @@ func newBackupMetadata(
 	}
 	defer iter.Close()
 
-	var sstManifest BackupManifest
+	var sstManifest backuppb.BackupManifest
 	iter.SeekGE(storage.MakeMVCCMetadataKey([]byte(sstBackupKey)))
 	ok, err := iter.Valid()
 	if err != nil {
@@ -939,7 +950,7 @@ func (fi *FileIterator) Err() error {
 // and false if there are no more elements or if an error was encountered. When
 // Next returns false, the user should call the Err method to verify the
 // existence of an error.
-func (fi *FileIterator) Next(file *BackupManifest_File) bool {
+func (fi *FileIterator) Next(file *backuppb.BackupManifest_File) bool {
 	if fi.err != nil {
 		return false
 	}
@@ -1060,7 +1071,7 @@ func (ti *TenantIterator) Next(tenant *descpb.TenantInfoWithUsage) bool {
 	return true
 }
 
-// DescriptorRevisionIterator is a simple iterator to iterate over BackupManifest_DescriptorRevisions.
+// DescriptorRevisionIterator is a simple iterator to iterate over backuppb.BackupManifest_DescriptorRevisions.
 type DescriptorRevisionIterator struct {
 	backing bytesIter
 	err     error
@@ -1093,7 +1104,9 @@ func (dri *DescriptorRevisionIterator) Err() error {
 // revision, and false if there are no more elements or if an error was
 // encountered. When Next returns false, the user should call the Err method to
 // verify the existence of an error.
-func (dri *DescriptorRevisionIterator) Next(revision *BackupManifest_DescriptorRevision) bool {
+func (dri *DescriptorRevisionIterator) Next(
+	revision *backuppb.BackupManifest_DescriptorRevision,
+) bool {
 	wrapper := resultWrapper{}
 	ok := dri.backing.next(&wrapper)
 	if !ok {
@@ -1109,7 +1122,9 @@ func (dri *DescriptorRevisionIterator) Next(revision *BackupManifest_DescriptorR
 	return true
 }
 
-func unmarshalWrapper(wrapper *resultWrapper, rev *BackupManifest_DescriptorRevision) error {
+func unmarshalWrapper(
+	wrapper *resultWrapper, rev *backuppb.BackupManifest_DescriptorRevision,
+) error {
 	var desc *descpb.Descriptor
 	if len(wrapper.value) > 0 {
 		desc = &descpb.Descriptor{}
@@ -1124,7 +1139,7 @@ func unmarshalWrapper(wrapper *resultWrapper, rev *BackupManifest_DescriptorRevi
 		return err
 	}
 
-	*rev = BackupManifest_DescriptorRevision{
+	*rev = backuppb.BackupManifest_DescriptorRevision{
 		Desc: desc,
 		ID:   id,
 		Time: wrapper.key.Timestamp,

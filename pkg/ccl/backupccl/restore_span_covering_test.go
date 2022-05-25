@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -28,8 +29,8 @@ import (
 // file spans suitable for checking coverage computations. Every 3rd inc backup
 // introduces a span and drops a span. Incremental backups have half as many
 // files as the base. Files spans are ordered by start key but may overlap.
-func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []BackupManifest {
-	backups := make([]BackupManifest, length)
+func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []backuppb.BackupManifest {
+	backups := make([]backuppb.BackupManifest, length)
 	ts := hlc.Timestamp{WallTime: time.Second.Nanoseconds()}
 	for i := range backups {
 		backups[i].Spans = make(roachpb.Spans, spans)
@@ -46,10 +47,10 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []BackupManifes
 
 		files := baseFiles
 		if i == 0 {
-			backups[i].Files = make([]BackupManifest_File, files)
+			backups[i].Files = make([]backuppb.BackupManifest_File, files)
 		} else {
 			files = baseFiles / 2
-			backups[i].Files = make([]BackupManifest_File, files)
+			backups[i].Files = make([]backuppb.BackupManifest_File, files)
 		}
 
 		for f := range backups[i].Files {
@@ -80,7 +81,7 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []BackupManifes
 // key when walking files in order by start key in the backups. This check is
 // thus sensitive to ordering; the coverage correctness check however is not.
 func checkRestoreCovering(
-	backups []BackupManifest, spans roachpb.Spans, cov []execinfrapb.RestoreSpanEntry,
+	backups []backuppb.BackupManifest, spans roachpb.Spans, cov []execinfrapb.RestoreSpanEntry,
 ) error {
 	var expectedPartitions int
 	required := make(map[string]*roachpb.SpanGroup)
@@ -123,8 +124,8 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	sp := func(start, end string) roachpb.Span {
 		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
 	}
-	f := func(start, end, path string) BackupManifest_File {
-		return BackupManifest_File{Span: sp(start, end), Path: path}
+	f := func(start, end, path string) backuppb.BackupManifest_File {
+		return backuppb.BackupManifest_File{Span: sp(start, end), Path: path}
 	}
 	paths := func(names ...string) []execinfrapb.RestoreFileSpec {
 		r := make([]execinfrapb.RestoreFileSpec, len(names))
@@ -136,11 +137,11 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 
 	// Setup and test the example in the comnent on makeSimpleImportSpans.
 	spans := []roachpb.Span{sp("a", "f"), sp("f", "i"), sp("l", "m")}
-	backups := []BackupManifest{
-		{Files: []BackupManifest_File{f("a", "c", "1"), f("c", "e", "2"), f("h", "i", "3")}},
-		{Files: []BackupManifest_File{f("b", "d", "4"), f("g", "i", "5")}},
-		{Files: []BackupManifest_File{f("a", "h", "6"), f("j", "k", "7")}},
-		{Files: []BackupManifest_File{f("h", "i", "8"), f("l", "m", "9")}},
+	backups := []backuppb.BackupManifest{
+		{Files: []backuppb.BackupManifest_File{f("a", "c", "1"), f("c", "e", "2"), f("h", "i", "3")}},
+		{Files: []backuppb.BackupManifest_File{f("b", "d", "4"), f("g", "i", "5")}},
+		{Files: []backuppb.BackupManifest_File{f("a", "h", "6"), f("j", "k", "7")}},
+		{Files: []backuppb.BackupManifest_File{f("h", "i", "8"), f("l", "m", "9")}},
 	}
 	cover := makeSimpleImportSpans(spans, backups, nil, nil)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
