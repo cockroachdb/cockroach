@@ -71,6 +71,7 @@ func RegisterTests(r registry.Registry) {
 	registerLedger(r)
 	registerLibPQ(r)
 	registerLiquibase(r)
+	registerLOQRecovery(r)
 	registerNetwork(r)
 	registerPebbleWriteThroughput(r)
 	registerPebbleYCSB(r)
