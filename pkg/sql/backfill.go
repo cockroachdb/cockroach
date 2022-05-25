@@ -1691,11 +1691,19 @@ func ValidateForwardIndexes(
 						invalid <- idx.GetID()
 						return nil
 					}
+					// Resolve the table index descriptor name.
+					indexName, err := tableDesc.GetIndexNameByID(idx.GetID())
+					if err != nil {
+						log.Warningf(ctx,
+							"unable to find index by ID for ValidateForwardIndexes: %d",
+							idx.GetID())
+						indexName = idx.GetName()
+					}
 					// TODO(vivek): find the offending row and include it in the error.
 					return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
 						"duplicate key value violates unique constraint %q",
-						idx.GetName()),
-						idx.GetName())
+						indexName),
+						indexName)
 
 				}
 			case <-ctx.Done():

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -129,14 +130,21 @@ func NewUniquenessConstraintViolationError(
 		return pgerror.Wrap(err, pgcode.UniqueViolation,
 			"duplicate key value got decoding error")
 	}
-
+	// Resolve the table index descriptor name.
+	indexName, err := tableDesc.GetIndexNameByID(index.GetID())
+	if err != nil {
+		log.Warningf(ctx,
+			"unable to find index by ID for NewUniquenessConstraintViolationError: %d",
+			index.GetID())
+		indexName = index.GetName()
+	}
 	// Exclude implicit partitioning columns and hash sharded index columns from
 	// the error message.
 	skipCols := index.ExplicitColumnStartIdx()
 	return errors.WithDetail(
 		pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
-			"duplicate key value violates unique constraint %q", index.GetName(),
-		), index.GetName()),
+			"duplicate key value violates unique constraint %q", indexName,
+		), indexName),
 		fmt.Sprintf(
 			"Key (%s)=(%s) already exists.",
 			strings.Join(names[skipCols:], ","),

@@ -710,6 +710,12 @@ type TableDescriptor interface {
 	// GetAutoStatsSettings returns the table settings related to automatic
 	// statistics collection. May return nil if none are set.
 	GetAutoStatsSettings() *catpb.AutoStatsSettings
+	// GetIndexNameByID returns the name of an index based on an ID, taking into
+	// account any ongoing declarative schema changes. Declarative schema changes
+	// do not propagate the index name into the mutations until changes are fully
+	// validated and swap operations are complete (to avoid having two constraints
+	// with the same name).
+	GetIndexNameByID(indexID descpb.IndexID) (name string, err error)
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.
