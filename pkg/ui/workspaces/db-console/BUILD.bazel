@@ -188,6 +188,9 @@ webpack(
         "--env.output=$(RULEDIR)/db-console-ccl",
     ],
     data = WEBPACK_DATA_CCL + [":node_modules"],
+    env = {
+        "NODE_OPTIONS": "--max-old-space-size=8192",
+    },
     output_dir = True,
     visibility = ["//visibility:public"],
 )
@@ -201,6 +204,9 @@ webpack(
         "--env.output=$(RULEDIR)/db-console-oss",
     ],
     data = WEBPACK_DATA_OSS + [":node_modules"],
+    env = {
+        "NODE_OPTIONS": "--max-old-space-size=8192",
+    },
     output_dir = True,
     visibility = ["//visibility:public"],
 )
