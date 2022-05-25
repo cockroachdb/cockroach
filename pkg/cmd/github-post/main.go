@@ -84,7 +84,7 @@ func main() {
 
 	fileIssue := func(ctx context.Context, f failure) error {
 		fmter, req := reqFromFailure(ctx, f)
-		return issues.Post(ctx, fmter, req)
+		return issues.Post(ctx, fmter, req, nil)
 	}
 
 	ctx := context.Background()

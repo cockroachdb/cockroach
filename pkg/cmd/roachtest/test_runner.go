@@ -1053,16 +1053,22 @@ func (r *testRunner) maybePostGithubIssue(
 		branch = "<unknown branch>"
 	}
 
-	msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
-		branch, t.Spec().(*registry.TestSpec).Cluster.Cloud, output)
 	artifacts := fmt.Sprintf("/%s", t.Name())
 
 	// Issues posted from roachtest are identifiable as such and
 	// they are also release blockers (this label may be removed
 	// by a human upon closer investigation).
+	spec := t.Spec().(*registry.TestSpec)
 	labels := []string{"O-roachtest"}
-	if !t.Spec().(*registry.TestSpec).NonReleaseBlocker {
+	if !spec.NonReleaseBlocker {
 		labels = append(labels, "release-blocker")
+	}
+
+	roachtestParam := func(s string) string { return "ROACHTEST_" + s }
+	clusterParams := map[string]string{
+		roachtestParam("cloud"): spec.Cluster.Cloud,
+		roachtestParam("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
+		roachtestParam("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
 	}
 
 	req := issues.PostRequest{
@@ -1070,7 +1076,7 @@ func (r *testRunner) maybePostGithubIssue(
 		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        t.Name(),
-		Message:         msg,
+		Message:         output,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
 		HelpCommand: func(renderer *issues.Renderer) {
@@ -1088,6 +1094,7 @@ func (r *testRunner) maybePostGithubIssue(
 		context.Background(),
 		issues.UnitTestFormatter,
 		req,
+		clusterParams,
 	); err != nil {
 		shout(ctx, l, stdout, "failed to post issue: %s", err)
 	}

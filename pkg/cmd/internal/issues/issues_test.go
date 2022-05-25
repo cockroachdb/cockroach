@@ -232,6 +232,11 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 
 			p := &poster{
 				Options: &opts,
+				parameters: map[string]string{
+					"TEST":    opts.Tags,
+					"GOFLAGS": opts.Goflags,
+					"cloud":   "gce",
+				},
 			}
 
 			createdIssue := false
@@ -350,6 +355,12 @@ func TestPostEndToEnd(t *testing.T) {
 	unset := setEnv(env)
 	defer unset()
 
+	params := map[string]string{
+		"GOFLAGS":         "-race_test",
+		"ROACHTEST_cloud": "test",
+		"ROACHTEST_cpu":   "2",
+	}
+
 	req := PostRequest{
 		PackageName: "github.com/cockroachdb/cockroach/pkg/foo/bar",
 		TestName:    "TestFooBarBaz",
@@ -357,7 +368,7 @@ func TestPostEndToEnd(t *testing.T) {
 		ExtraLabels: []string{"release-blocker"},
 	}
 
-	require.NoError(t, Post(context.Background(), UnitTestFormatter, req))
+	require.NoError(t, Post(context.Background(), UnitTestFormatter, req, params))
 }
 
 // setEnv overrides the env variables corresponding to the input map. The

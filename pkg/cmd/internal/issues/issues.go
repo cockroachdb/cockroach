@@ -112,6 +112,8 @@ func (p *poster) getProbableMilestone(ctx *postCtx) *int {
 type poster struct {
 	*Options
 
+	parameters map[string]string
+
 	createIssue func(ctx context.Context, owner string, repo string,
 		issue *github.IssueRequest) (*github.Issue, *github.Response, error)
 	searchIssues func(ctx context.Context, query string,
@@ -126,9 +128,22 @@ type poster struct {
 		opt *github.ProjectCardOptions) (*github.ProjectCard, *github.Response, error)
 }
 
-func newPoster(client *github.Client, opts *Options) *poster {
+func newPoster(client *github.Client, opts *Options, params map[string]string) *poster {
+	ps := map[string]string{}
+	for name, value := range params {
+		ps[name] = value
+	}
+
+	if opts.Tags != "" {
+		ps["TAGS"] = opts.Tags
+	}
+	if opts.Goflags != "" {
+		ps["GOFLAGS"] = opts.Goflags
+	}
+
 	return &poster{
 		Options:           opts,
+		parameters:        params,
 		createIssue:       client.Issues.Create,
 		searchIssues:      client.Search.Issues,
 		createComment:     client.Issues.CreateComment,
@@ -217,8 +232,9 @@ type TemplateData struct {
 	PostRequest
 	// This is foo/bar instead of github.com/cockroachdb/cockroach/pkg/foo/bar.
 	PackageNameShort string
-	// GOFLAGS=-foo TAGS=-race etc.
-	Parameters []string
+	// Parameters includes relevant test or build parameters, such as
+	// build tags or cluster configuration
+	Parameters map[string]string
 	// The message, garnished with helpers that allow extracting the useful
 	// bots.
 	CondensedMessage CondensedMessage
@@ -249,7 +265,7 @@ func (p *poster) templateData(
 	}
 	return TemplateData{
 		PostRequest:      req,
-		Parameters:       p.parameters(),
+		Parameters:       p.parameters,
 		CondensedMessage: CondensedMessage(req.Message),
 		Branch:           p.Branch,
 		Commit:           p.SHA,
@@ -394,17 +410,6 @@ func (p *poster) teamcityArtifactsURL(artifacts string) *url.URL {
 	return p.teamcityURL("artifacts", artifacts)
 }
 
-func (p *poster) parameters() []string {
-	var ps []string
-	if p.Tags != "" {
-		ps = append(ps, "TAGS="+p.Tags)
-	}
-	if p.Goflags != "" {
-		ps = append(ps, "GOFLAGS="+p.Goflags)
-	}
-	return ps
-}
-
 // A PostRequest contains the information needed to create an issue about a
 // test failure.
 type PostRequest struct {
@@ -438,7 +443,9 @@ type PostRequest struct {
 // existing open issue. GITHUB_API_TOKEN must be set to a valid GitHub token
 // that has permissions to search and create issues and comments or an error
 // will be returned.
-func Post(ctx context.Context, formatter IssueFormatter, req PostRequest) error {
+func Post(
+	ctx context.Context, formatter IssueFormatter, req PostRequest, params map[string]string,
+) error {
 	opts := DefaultOptionsFromEnv()
 	if !opts.CanPost() {
 		return errors.Newf("GITHUB_API_TOKEN env variable is not set; cannot post issue")
@@ -447,7 +454,7 @@ func Post(ctx context.Context, formatter IssueFormatter, req PostRequest) error 
 	client := github.NewClient(oauth2.NewClient(ctx, oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: opts.Token},
 	)))
-	return newPoster(client, opts).post(ctx, formatter, req)
+	return newPoster(client, opts, params).post(ctx, formatter, req)
 }
 
 // ReproductionCommandFromString returns a value for the

@@ -73,11 +73,18 @@ var UnitTestFormatter = IssueFormatter{
 			}
 
 			if len(data.Parameters) != 0 {
-				r.Escaped("Parameters in this failure:\n")
-				for _, p := range data.Parameters {
-					r.Escaped("\n- ")
-					r.Escaped(p)
-					r.Escaped("\n")
+				params := make([]string, 0, len(data.Parameters))
+				for name := range data.Parameters {
+					params = append(params, name)
+				}
+				sort.Strings(params)
+
+				r.Escaped("Parameters: ")
+				separator := ""
+				for _, name := range params {
+					r.Escaped(separator)
+					r.Code(fmt.Sprintf("%s=%s", name, data.Parameters[name]))
+					separator = ", "
 				}
 			}
 		})
