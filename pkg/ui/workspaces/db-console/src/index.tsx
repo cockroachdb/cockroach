@@ -16,10 +16,18 @@ import { alertDataSync } from "src/redux/alerts";
 import { App } from "src/app";
 import { store, history } from "src/redux/state";
 import "src/redux/analytics";
+import {
+  fetchDataFromServer,
+  setDataFromServer,
+} from "oss/src/util/dataFromServer";
 
-ReactDOM.render(
-  <App history={history} store={store} />,
-  document.getElementById("react-layout"),
-);
+fetchDataFromServer().then(d => {
+  setDataFromServer(d);
 
-store.subscribe(alertDataSync(store));
+  ReactDOM.render(
+    <App history={history} store={store} />,
+    document.getElementById("react-layout"),
+  );
+
+  store.subscribe(alertDataSync(store));
+});

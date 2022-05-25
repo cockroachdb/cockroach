@@ -19,8 +19,8 @@ package ui
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"html/template"
 	"io/fs"
 	"net/http"
 
@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // Assets is used for embedded JS assets required for UI.
@@ -43,7 +42,7 @@ var HaveUI = false
 // which includes the UI JavaScript bundles, plus a script tag which sets the
 // currently logged in user so that the UI JavaScript can decide whether to show
 // a login page.
-var indexHTMLTemplate = template.Must(template.New("index").Parse(`<!DOCTYPE html>
+var indexHTMLTemplate = []byte(`<!DOCTYPE html>
 <html>
 	<head>
 		<title>Cockroach Console</title>
@@ -52,15 +51,10 @@ var indexHTMLTemplate = template.Must(template.New("index").Parse(`<!DOCTYPE htm
 	</head>
 	<body>
 		<div id="react-layout"></div>
-
-		<script>
-			window.dataFromServer = {{.}};
-		</script>
-
 		<script src="bundle.js" type="text/javascript"></script>
 	</body>
 </html>
-`))
+`)
 
 type indexHTMLArgs struct {
 	ExperimentalUseLogin bool
@@ -134,19 +128,9 @@ func Handler(cfg Config) http.Handler {
 	buildInfo := build.GetInfo()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !HaveUI {
-			http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(bareIndexHTML))
-			return
-		}
-
-		if r.URL.Path != "/" {
-			fileHandlerChain.ServeHTTP(w, r)
-			return
-		}
-
+		log.Infof(r.Context(), "%v", r)
 		oidcConf := cfg.OIDC.GetOIDCConf()
-
-		if err := indexHTMLTemplate.Execute(w, indexHTMLArgs{
+		args := indexHTMLArgs{
 			ExperimentalUseLogin: cfg.ExperimentalUseLogin,
 			LoginEnabled:         cfg.LoginEnabled,
 			LoggedInUser:         cfg.GetUser(r.Context()),
@@ -156,10 +140,27 @@ func Handler(cfg Config) http.Handler {
 			OIDCAutoLogin:        oidcConf.AutoLogin,
 			OIDCLoginEnabled:     oidcConf.Enabled,
 			OIDCButtonText:       oidcConf.ButtonText,
-		}); err != nil {
-			err = errors.Wrap(err, "templating index.html")
-			http.Error(w, err.Error(), 500)
-			log.Errorf(r.Context(), "%v", err)
 		}
+		if r.Header.Get("content-type") == "application/json" {
+			argBytes, err := json.Marshal(args)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			w.Write(argBytes)
+			return
+		}
+
+		if !HaveUI && r.Header.Get("X-Crdb-Development") == "" {
+			http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(bareIndexHTML))
+			return
+		}
+
+		if r.URL.Path != "/" {
+			fileHandlerChain.ServeHTTP(w, r)
+			return
+		}
+
+		http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(indexHTMLTemplate))
 	})
 }

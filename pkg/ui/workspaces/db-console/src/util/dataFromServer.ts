@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { AdminUIState } from "oss/src/redux/state";
+
 export interface DataFromServer {
   ExperimentalUseLogin: boolean;
   LoginEnabled: boolean;
@@ -19,7 +21,6 @@ export interface DataFromServer {
   OIDCLoginEnabled: boolean;
   OIDCButtonText: string;
 }
-
 // Tell TypeScript about `window.dataFromServer`, which is set in a script
 // tag in index.html, the contents of which are generated in a Go template
 // server-side.
@@ -29,6 +30,25 @@ declare global {
   }
 }
 
+export function fetchDataFromServer(): Promise<DataFromServer> {
+  return fetch("/", {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+  }).then(d => {
+    return d.json();
+  });
+}
+
+export const dataFromServerSelector = (s: AdminUIState) =>
+  s.cachedData.dataFromServer;
+
 export function getDataFromServer(): DataFromServer {
   return window.dataFromServer || ({} as DataFromServer);
+}
+
+export function setDataFromServer(d: DataFromServer) {
+  window.dataFromServer = d;
 }
