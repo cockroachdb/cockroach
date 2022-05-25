@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "builtins",
@@ -51,7 +52,6 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/descs",
         "//pkg/sql/colexecerror",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
@@ -75,7 +75,6 @@ go_library(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
-        "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqltelemetry",
@@ -168,5 +167,12 @@ go_test(
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    src = "builtins",
+    disallowed_list = [
+        "//pkg/sql/catalog/descs",
     ],
 )
