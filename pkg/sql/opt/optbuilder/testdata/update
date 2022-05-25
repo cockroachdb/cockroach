@@ -81,9 +81,11 @@ CREATE TABLE assn_cast (
 exec-ddl
 CREATE TABLE assn_cast_on_update (
     i INT,
+    i2 INT ON UPDATE 1.0::FLOAT,
     d DECIMAL(10, 1) ON UPDATE 1.23,
     d2 DECIMAL(10, 1) ON UPDATE 1.23::DECIMAL(10, 2),
-    d_comp DECIMAL(10, 0) AS (d) STORED
+    d_comp DECIMAL(10, 0) AS (d) STORED,
+    b BOOL ON UPDATE 1.0::FLOAT
 )
 ----
 
@@ -2218,42 +2220,54 @@ update assn_cast
 
 # Test ON UPDATE columns that require assignment casts.
 build
-UPDATE assn_cast_on_update SET i=1
+UPDATE assn_cast_on_update SET i=1, b=true
 ----
 update assn_cast_on_update
  ├── columns: <none>
- ├── fetch columns: i:8 d:9 d2:10 d_comp:11 rowid:12
+ ├── fetch columns: i:10 i2:11 d:12 d2:13 d_comp:14 b:15 rowid:16
  ├── update-mapping:
- │    ├── i_new:15 => i:1
- │    ├── d_cast:18 => d:2
- │    ├── d2_cast:19 => d2:3
- │    └── d_comp_cast:20 => d_comp:4
+ │    ├── i_new:19 => i:1
+ │    ├── i2_cast:24 => i2:2
+ │    ├── d_cast:25 => d:3
+ │    ├── d2_cast:26 => d2:4
+ │    ├── d_comp_cast:27 => d_comp:5
+ │    └── b_new:20 => b:6
  └── project
-      ├── columns: d_comp_cast:20!null i:8 d:9 d2:10 d_comp:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 i_new:15!null d_cast:18!null d2_cast:19!null
+      ├── columns: d_comp_cast:27!null i:10 i2:11 d:12 d2:13 d_comp:14 b:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18 i_new:19!null b_new:20!null i2_cast:24!null d_cast:25!null d2_cast:26!null
       ├── project
-      │    ├── columns: d_cast:18!null d2_cast:19!null i:8 d:9 d2:10 d_comp:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 i_new:15!null
+      │    ├── columns: i2_cast:24!null d_cast:25!null d2_cast:26!null i:10 i2:11 d:12 d2:13 d_comp:14 b:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18 i_new:19!null b_new:20!null
       │    ├── project
-      │    │    ├── columns: d_on_update:16!null d2_on_update:17!null i:8 d:9 d2:10 d_comp:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 i_new:15!null
+      │    │    ├── columns: i2_on_update:21!null d_on_update:22!null d2_on_update:23!null i:10 i2:11 d:12 d2:13 d_comp:14 b:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18 i_new:19!null b_new:20!null
       │    │    ├── project
-      │    │    │    ├── columns: i_new:15!null i:8 d:9 d2:10 d_comp:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── columns: i_new:19!null b_new:20!null i:10 i2:11 d:12 d2:13 d_comp:14 b:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    ├── scan assn_cast_on_update
-      │    │    │    │    ├── columns: i:8 d:9 d2:10 d_comp:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    ├── columns: i:10 i2:11 d:12 d2:13 d_comp:14 b:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    │    └── computed column expressions
-      │    │    │    │         └── d_comp:11
-      │    │    │    │              └── d:9
+      │    │    │    │         └── d_comp:14
+      │    │    │    │              └── d:12
       │    │    │    └── projections
-      │    │    │         └── 1 [as=i_new:15]
+      │    │    │         ├── 1 [as=i_new:19]
+      │    │    │         └── true [as=b_new:20]
       │    │    └── projections
-      │    │         ├── 1.23 [as=d_on_update:16]
-      │    │         └── 1.23::DECIMAL(10,2) [as=d2_on_update:17]
+      │    │         ├── 1.0 [as=i2_on_update:21]
+      │    │         ├── 1.23 [as=d_on_update:22]
+      │    │         └── 1.23::DECIMAL(10,2) [as=d2_on_update:23]
       │    └── projections
-      │         ├── assignment-cast: DECIMAL(10,1) [as=d_cast:18]
-      │         │    └── d_on_update:16
-      │         └── assignment-cast: DECIMAL(10,1) [as=d2_cast:19]
-      │              └── d2_on_update:17
+      │         ├── assignment-cast: INT8 [as=i2_cast:24]
+      │         │    └── i2_on_update:21
+      │         ├── assignment-cast: DECIMAL(10,1) [as=d_cast:25]
+      │         │    └── d_on_update:22
+      │         └── assignment-cast: DECIMAL(10,1) [as=d2_cast:26]
+      │              └── d2_on_update:23
       └── projections
-           └── assignment-cast: DECIMAL(10) [as=d_comp_cast:20]
-                └── d_cast:18
+           └── assignment-cast: DECIMAL(10) [as=d_comp_cast:27]
+                └── d_cast:25
+
+# This fails because the cast from FLOAT to BOOL is not a valid assignment cast.
+build
+UPDATE assn_cast_on_update SET i=1
+----
+error (42804): value type float doesn't match type bool of column "b"
 
 # ------------------------------------------------------------------------------
 # ON UPDATE tests.
