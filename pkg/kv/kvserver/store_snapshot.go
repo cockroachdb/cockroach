@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -72,6 +71,8 @@ type outgoingDelegatedStream interface {
 	Recv() (*kvserverpb.DelegateSnapshotResponse, error)
 }
 
+type snapshotBytesMetricFn func(inc int64)
+
 // snapshotStrategy is an approach to sending and receiving Range snapshots.
 // Each implementation corresponds to a SnapshotRequest_Strategy, and it is
 // expected that the implementation that matches the Strategy specified in the
@@ -83,7 +84,7 @@ type snapshotStrategy interface {
 		context.Context,
 		incomingSnapshotStream,
 		kvserverpb.SnapshotRequest_Header,
-		*metric.Counter,
+		snapshotBytesMetricFn,
 	) (IncomingSnapshot, error)
 
 	// Send streams SnapshotRequests created from the OutgoingSnapshot in to the
@@ -93,7 +94,7 @@ type snapshotStrategy interface {
 		outgoingSnapshotStream,
 		kvserverpb.SnapshotRequest_Header,
 		*OutgoingSnapshot,
-		*metric.Counter,
+		snapshotBytesMetricFn,
 	) (int64, error)
 
 	// Status provides a status report on the work performed during the
@@ -264,7 +265,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	ctx context.Context,
 	stream incomingSnapshotStream,
 	header kvserverpb.SnapshotRequest_Header,
-	bytesRcvdCounter *metric.Counter,
+	bytesRcvdMetricFn snapshotBytesMetricFn,
 ) (IncomingSnapshot, error) {
 	assertStrategy(ctx, header, kvserverpb.SnapshotRequest_KV_BATCH)
 
@@ -288,7 +289,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		}
 
 		if req.KVBatch != nil {
-			bytesRcvdCounter.Inc(int64(len(req.KVBatch)))
+			bytesRcvdMetricFn(int64(len(req.KVBatch)))
 			batchReader, err := storage.NewRocksDBBatchReader(req.KVBatch)
 			if err != nil {
 				return noSnap, errors.Wrap(err, "failed to decode batch")
@@ -350,10 +351,9 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	stream outgoingSnapshotStream,
 	header kvserverpb.SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
-	bytesSentMetric *metric.Counter,
+	bytesSentMetricFn snapshotBytesMetricFn,
 ) (int64, error) {
 	assertStrategy(ctx, header, kvserverpb.SnapshotRequest_KV_BATCH)
-
 	// bytesSent is updated as key-value batches are sent with sendBatch. It does
 	// not reflect the log entries sent (which are never sent in newer versions of
 	// CRDB, as of VersionUnreplicatedTruncatedState).
@@ -389,7 +389,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				return 0, err
 			}
 			bytesSent += bLen
-			bytesSentMetric.Inc(bLen)
+			bytesSentMetricFn(bLen)
 			b.Close()
 			b = nil
 		}
@@ -399,7 +399,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			return 0, err
 		}
 		bytesSent += int64(b.Len())
-		bytesSentMetric.Inc(int64(b.Len()))
+		bytesSentMetricFn(int64(b.Len()))
 	}
 
 	kvSS.status = redact.Sprintf("kv pairs: %d", kvs)
@@ -774,7 +774,21 @@ func (s *Store) receiveSnapshot(
 		log.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
 	}
 
-	inSnap, err := ss.Receive(ctx, stream, *header, s.metrics.RangeSnapshotRcvdBytes)
+	metricsFn := func(inc int64) {
+		s.metrics.RangeSnapshotRcvdBytes.Inc(inc)
+
+		switch header.Priority {
+		case kvserverpb.SnapshotRequest_RECOVERY:
+			s.metrics.RangeSnapshotRecoveryRcvdBytes.Inc(inc)
+		case kvserverpb.SnapshotRequest_REBALANCE:
+			s.metrics.RangeSnapshotRebalancingRcvdBytes.Inc(inc)
+		default:
+			// Unknown
+			s.metrics.RangeSnapshotUnknownRcvdBytes.Inc(inc)
+		}
+	}
+
+	inSnap, err := ss.Receive(ctx, stream, *header, metricsFn)
 	if err != nil {
 		return err
 	}
@@ -1160,13 +1174,13 @@ func sendSnapshot(
 	snap *OutgoingSnapshot,
 	newBatch func() storage.Batch,
 	sent func(),
-	bytesSentCounter *metric.Counter,
+	bytesSentMetricFn snapshotBytesMetricFn,
 ) error {
-	if bytesSentCounter == nil {
+	if bytesSentMetricFn == nil {
 		// NB: Some tests and an offline tool (ResetQuorum) call into `sendSnapshot`
-		// with a nil counter. We pass in a fake metrics counter here that isn't
+		// with a nil counter. We pass in a fake metrics counter function here that isn't
 		// hooked up to anything.
-		bytesSentCounter = metric.NewCounter(metric.Metadata{Name: "range.snapshots.sent-bytes"})
+		bytesSentMetricFn = func(inc int64) {}
 	}
 	start := timeutil.Now()
 	to := header.RaftMessageRequest.ToReplica
@@ -1229,7 +1243,7 @@ func sendSnapshot(
 		log.Fatalf(ctx, "unknown snapshot strategy: %s", header.Strategy)
 	}
 
-	numBytesSent, err := ss.Send(ctx, stream, header, snap, bytesSentCounter)
+	numBytesSent, err := ss.Send(ctx, stream, header, snap, bytesSentMetricFn)
 	if err != nil {
 		return err
 	}

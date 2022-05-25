@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -775,7 +774,7 @@ func (t *RaftTransport) SendSnapshot(
 	snap *OutgoingSnapshot,
 	newBatch func() storage.Batch,
 	sent func(),
-	bytesSentCounter *metric.Counter,
+	bytesSentMetricFn snapshotBytesMetricFn,
 ) error {
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 
@@ -794,7 +793,7 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
-	return sendSnapshot(ctx, t.st, stream, storePool, header, snap, newBatch, sent, bytesSentCounter)
+	return sendSnapshot(ctx, t.st, stream, storePool, header, snap, newBatch, sent, bytesSentMetricFn)
 }
 
 // DelegateSnapshot creates a rpc stream between the leaseholder and the

@@ -2767,6 +2767,20 @@ func (r *Replica) followerSendSnapshot(
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
 
+	metricsFn := func(inc int64) {
+		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
+
+		switch header.Priority {
+		case kvserverpb.SnapshotRequest_RECOVERY:
+			r.store.metrics.RangeSnapshotRecoverySentBytes.Inc(inc)
+		case kvserverpb.SnapshotRequest_REBALANCE:
+			r.store.metrics.RangeSnapshotRebalancingSentBytes.Inc(inc)
+		default:
+			// Unknown
+			r.store.metrics.RangeSnapshotUnknownSentBytes.Inc(inc)
+		}
+	}
+
 	err = contextutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			return r.store.cfg.Transport.SendSnapshot(
@@ -2776,7 +2790,7 @@ func (r *Replica) followerSendSnapshot(
 				snap,
 				newBatchFn,
 				sent,
-				r.store.metrics.RangeSnapshotSentBytes,
+				metricsFn,
 			)
 		},
 	)

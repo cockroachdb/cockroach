@@ -1533,3 +1533,276 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
 	}
 }
+
+// Tests the accuracy of the 'range.snapshots.rebalancing.rcvd-bytes' and
+// 'range.snapshots.rebalancing.sent-bytes' metrics. This test adds a new
+// replica to a cluster, and during the process, a learner snapshot is sent to
+// the new replica.
+func TestRebalancingSnapshotMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	blockUntilSnapshotCh := make(chan struct{})
+	blockSnapshotsCh := make(chan struct{})
+	knobs, ltk := makeReplicationTestKnobs()
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
+		close(blockUntilSnapshotCh)
+		select {
+		case <-blockSnapshotsCh:
+		case <-time.After(10 * time.Second):
+			return errors.New(`test timed out`)
+		}
+		return nil
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchStartKey := tc.ScratchRange(t)
+
+	// Initial recording of metrics
+	senderRebalancingSentBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rebalancing.sent-bytes")
+	senderRebalancingRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rebalancing.rcvd-bytes")
+	receiverRebalancingSentBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rebalancing.sent-bytes")
+	receiverRebalancingRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rebalancing.rcvd-bytes")
+
+	senderRecoverySentBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.recovery.sent-bytes")
+	senderRecoveryRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.recovery.rcvd-bytes")
+	receiverRecoverySentBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.recovery.sent-bytes")
+	receiverRecoveryRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.recovery.rcvd-bytes")
+
+	senderUnknownSentBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.unknown.sent-bytes")
+	senderUnknownRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.unknown.rcvd-bytes")
+	receiverUnknownSentBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.unknown.sent-bytes")
+	receiverUnknownRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.unknown.rcvd-bytes")
+
+	senderTotalSentBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.sent-bytes")
+	senderTotalRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rcvd-bytes")
+	receiverTotalSentBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.sent-bytes")
+	receiverTotalRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rcvd-bytes")
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
+		return err
+	})
+
+	// Wait until the snapshot starts, which happens after the learner has been
+	// added.
+	<-blockUntilSnapshotCh
+
+	// Unblock the snapshot and let the learner finish receiving the snapshot
+	close(blockSnapshotsCh)
+	require.NoError(t, g.Wait())
+
+	// Asserts about the snapshot sender replica
+	senderRebalancingSentBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rebalancing.sent-bytes")
+	senderRebalancingRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rebalancing.rcvd-bytes")
+
+	senderRecoverySentBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.recovery.sent-bytes")
+	senderRecoveryRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.recovery.rcvd-bytes")
+
+	senderUnknownSentBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.unknown.sent-bytes")
+	senderUnknownRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.unknown.rcvd-bytes")
+
+	senderTotalSentBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.sent-bytes")
+	senderTotalRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rcvd-bytes")
+
+	require.True(t, senderRebalancingSentBytesAfter > senderRebalancingSentBytesBefore)
+	require.True(t, senderRebalancingRcvdBytesAfter == senderRebalancingRcvdBytesBefore)
+
+	require.True(t, senderRecoverySentBytesAfter == senderRecoverySentBytesBefore)
+	require.True(t, senderRecoveryRcvdBytesAfter == senderRecoveryRcvdBytesBefore)
+
+	require.True(t, senderUnknownSentBytesAfter == senderUnknownSentBytesBefore)
+	require.True(t, senderUnknownRcvdBytesAfter == senderUnknownRcvdBytesBefore)
+
+	require.True(t, senderTotalSentBytesAfter > senderTotalSentBytesBefore)
+	require.True(t, senderTotalRcvdBytesAfter == senderTotalRcvdBytesBefore)
+
+	// Asserts about the snapshot receiver replica
+	receiverRebalancingSentBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rebalancing.sent-bytes")
+	receiverRebalancingRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rebalancing.rcvd-bytes")
+
+	receiverRecoverySentBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.recovery.sent-bytes")
+	receiverRecoveryRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.recovery.rcvd-bytes")
+
+	receiverUnknownSentBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.unknown.sent-bytes")
+	receiverUnknownRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.unknown.rcvd-bytes")
+
+	receiverTotalSentBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.sent-bytes")
+	receiverTotalRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rcvd-bytes")
+
+	require.True(t, receiverRebalancingSentBytesAfter == receiverRebalancingSentBytesBefore)
+	require.True(t, receiverRebalancingRcvdBytesAfter > receiverRebalancingRcvdBytesBefore)
+
+	require.True(t, receiverRecoverySentBytesAfter == receiverRecoverySentBytesBefore)
+	require.True(t, receiverRecoveryRcvdBytesAfter == receiverRecoveryRcvdBytesBefore)
+
+	require.True(t, receiverUnknownSentBytesAfter == receiverUnknownSentBytesBefore)
+	require.True(t, receiverUnknownRcvdBytesAfter == receiverUnknownRcvdBytesBefore)
+
+	require.True(t, receiverTotalSentBytesAfter == receiverTotalSentBytesBefore)
+	require.True(t, receiverTotalRcvdBytesAfter > receiverTotalRcvdBytesBefore)
+}
+
+// Tests the accuracy of the 'range.snapshots.recovery.rcvd-bytes' and
+// 'range.snapshots.recovery.sent-bytes' metrics. This test duplicates a lot
+// of the logic of TestRaftSnapshotsToNonVoters, but records the metrics before
+// and after the raft snapshort is sent
+func TestRecoverySnapshotMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderShort(t, "this test sleeps for a few seconds")
+
+	var skipInitialSnapshot int64
+	knobs, ltk := makeReplicationTestKnobs()
+	ctx := context.Background()
+
+	// Set it up such that the newly added non-voter will not receive its INITIAL
+	// snapshot.
+	ltk.storeKnobs.ReplicaSkipInitialSnapshot = func() bool {
+		return atomic.LoadInt64(&skipInitialSnapshot) == 1
+	}
+	// Synchronize with the removal of the "best effort" lock on log truncation.
+	// See (*Replica).lockLearnerSnapshot for details.
+	nonVoterSnapLockRemoved := make(chan struct{}, 1)
+	ltk.storeKnobs.NonVoterAfterInitialization = func() {
+		nonVoterSnapLockRemoved <- struct{}{}
+	}
+	// Disable the raft snapshot queue, we will manually queue a replica into it
+	// below.
+	ltk.storeKnobs.DisableRaftSnapshotQueue = true
+
+	tc := testcluster.StartTestCluster(
+		t, 2, base.TestClusterArgs{
+			ServerArgs:      base.TestServerArgs{Knobs: knobs},
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+	scratchStartKey := tc.ScratchRange(t)
+	g, ctx := errgroup.WithContext(ctx)
+
+	// Initial recording of metrics
+	senderRebalancingSentBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rebalancing.sent-bytes")
+	senderRebalancingRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rebalancing.rcvd-bytes")
+	receiverRebalancingSentBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rebalancing.sent-bytes")
+	receiverRebalancingRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rebalancing.rcvd-bytes")
+
+	senderRecoverySentBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.recovery.sent-bytes")
+	senderRecoveryRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.recovery.rcvd-bytes")
+	receiverRecoverySentBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.recovery.sent-bytes")
+	receiverRecoveryRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.recovery.rcvd-bytes")
+
+	senderUnknownSentBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.unknown.sent-bytes")
+	senderUnknownRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.unknown.rcvd-bytes")
+	receiverUnknownSentBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.unknown.sent-bytes")
+	receiverUnknownRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.unknown.rcvd-bytes")
+
+	senderTotalSentBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.sent-bytes")
+	senderTotalRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rcvd-bytes")
+	receiverTotalSentBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.sent-bytes")
+	receiverTotalRcvdBytesBefore := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rcvd-bytes")
+
+	// Add a new voting replica, but don't initialize it. Note that
+	// `tc.AddNonVoters` will not return until the newly added non-voter is
+	// initialized, which we will do below via the snapshot queue.
+	g.Go(func() error {
+		atomic.StoreInt64(&skipInitialSnapshot, 1)
+		_, err := tc.AddNonVoters(scratchStartKey, tc.Target(1))
+		return err
+	})
+
+	// Wait until we remove the lock that prevents the raft snapshot queue from
+	// sending this replica a snapshot.
+	select {
+	case <-nonVoterSnapLockRemoved:
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatal("took too long")
+	}
+
+	scratchDesc := tc.LookupRangeOrFatal(t, scratchStartKey)
+	leaseholderStore := tc.GetFirstStoreFromServer(t, 0)
+	require.NotNil(t, leaseholderStore)
+	leaseholderRepl, err := leaseholderStore.GetReplica(scratchDesc.RangeID)
+	require.NoError(t, err)
+	require.NotNil(t, leaseholderRepl)
+
+	testutils.SucceedsSoon(t, func() error {
+		// Manually enqueue the leaseholder replica into its store's raft snapshot
+		// queue. We expect it to pick up on the fact that the non-voter on its range
+		// needs a snapshot.
+		recording, pErr, err := leaseholderStore.ManuallyEnqueue(
+			ctx, "raftsnapshot", leaseholderRepl, false, /* skipShouldQueue */
+		)
+		if pErr != nil {
+			return pErr
+		}
+		if err != nil {
+			return err
+		}
+		matched, err := regexp.MatchString("streamed VIA_SNAPSHOT_QUEUE snapshot.*to.*NON_VOTER", recording.String())
+		if err != nil {
+			return err
+		}
+		if !matched {
+			return errors.Errorf("the raft snapshot queue did not send a snapshot to the non-voter")
+		}
+		return nil
+	})
+	require.NoError(t, g.Wait())
+
+	// Asserts about the snapshot sender replica
+	senderRebalancingSentBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rebalancing.sent-bytes")
+	senderRebalancingRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rebalancing.rcvd-bytes")
+
+	senderRecoverySentBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.recovery.sent-bytes")
+	senderRecoveryRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.recovery.rcvd-bytes")
+
+	senderUnknownSentBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.unknown.sent-bytes")
+	senderUnknownRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.unknown.rcvd-bytes")
+
+	senderTotalSentBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.sent-bytes")
+	senderTotalRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(0), "range.snapshots.rcvd-bytes")
+
+	require.True(t, senderRebalancingSentBytesAfter == senderRebalancingSentBytesBefore)
+	require.True(t, senderRebalancingRcvdBytesAfter == senderRebalancingRcvdBytesBefore)
+
+	require.True(t, senderRecoverySentBytesAfter > senderRecoverySentBytesBefore)
+	require.True(t, senderRecoveryRcvdBytesAfter == senderRecoveryRcvdBytesBefore)
+
+	require.True(t, senderUnknownSentBytesAfter == senderUnknownSentBytesBefore)
+	require.True(t, senderUnknownRcvdBytesAfter == senderUnknownRcvdBytesBefore)
+
+	require.True(t, senderTotalSentBytesAfter > senderTotalSentBytesBefore)
+	require.True(t, senderTotalRcvdBytesAfter == senderTotalRcvdBytesBefore)
+
+	// Assertions about the snapshot receiver replica
+	receiverRebalancingSentBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rebalancing.sent-bytes")
+	receiverRebalancingRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rebalancing.rcvd-bytes")
+
+	receiverRecoverySentBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.recovery.sent-bytes")
+	receiverRecoveryRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.recovery.rcvd-bytes")
+
+	receiverUnknownSentBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.unknown.sent-bytes")
+	receiverUnknownRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.unknown.rcvd-bytes")
+
+	receiverTotalSentBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.sent-bytes")
+	receiverTotalRcvdBytesAfter := getFirstStoreMetric(t, tc.Server(1), "range.snapshots.rcvd-bytes")
+
+	require.True(t, receiverRebalancingSentBytesAfter == receiverRebalancingSentBytesBefore)
+	require.True(t, receiverRebalancingRcvdBytesAfter == receiverRebalancingRcvdBytesBefore)
+
+	require.True(t, receiverRecoverySentBytesAfter == receiverRecoverySentBytesBefore)
+	require.True(t, receiverRecoveryRcvdBytesAfter > receiverRecoveryRcvdBytesBefore)
+
+	require.True(t, receiverUnknownSentBytesAfter == receiverUnknownSentBytesBefore)
+	require.True(t, receiverUnknownRcvdBytesAfter == receiverUnknownRcvdBytesBefore)
+
+	require.True(t, receiverTotalSentBytesAfter == receiverTotalSentBytesBefore)
+	require.True(t, receiverTotalRcvdBytesAfter > receiverTotalRcvdBytesBefore)
+}
