@@ -30,14 +30,6 @@ class RemoveBrokenDependenciesPlugin {
   }
 }
 
-const proxyPrefixes = ["/_admin", "/_status", "/ts", "/login", "/logout"];
-function shouldProxy(reqPath) {
-  if (reqPath === "/") {
-    return true;
-  }
-  return proxyPrefixes.some(prefix => reqPath.startsWith(prefix));
-}
-
 // tslint:disable:object-literal-sort-keys
 module.exports = (env, argv) => {
   env = env || {};
@@ -58,7 +50,7 @@ module.exports = (env, argv) => {
     new WebpackBar({
       name: "db-console",
       color: "orange",
-      reporters: [ (env.WEBPACK_WATCH || env.WEBPACK_SERVE) ? "basic" : "fancy" ],
+      reporters: [env.WEBPACK_WATCH || env.WEBPACK_SERVE ? "basic" : "fancy"],
       profile: true,
     }),
   ];
@@ -215,6 +207,9 @@ module.exports = (env, argv) => {
         "/": {
           secure: false,
           target: env.target || process.env.TARGET,
+          headers: {
+            "CRDB-Development": "true",
+          },
         },
       },
     },
