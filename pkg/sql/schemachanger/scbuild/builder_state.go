@@ -237,6 +237,11 @@ func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 			ret = index.IndexID + 1
 		}
 	})
+	scpb.ForEachTemporaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.TemporaryIndex) {
+		if index.TableID == id && index.IndexID >= ret {
+			ret = index.IndexID + 1
+		}
+	})
 	scpb.ForEachSecondaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.SecondaryIndex) {
 		if index.TableID == id && index.IndexID >= ret {
 			ret = index.IndexID + 1

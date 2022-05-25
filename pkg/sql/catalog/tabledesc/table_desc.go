@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -590,4 +591,25 @@ func (desc *wrapper) getExistingOrNewMutationCache() *mutationCache {
 // AllMutations implements the TableDescriptor interface.
 func (desc *wrapper) AllMutations() []catalog.Mutation {
 	return desc.getExistingOrNewMutationCache().all
+}
+
+func (desc *wrapper) GetIndexNameByID(indexID descpb.IndexID) (string, error) {
+	// Check if there are any ongoing schema changes and prefer the name from
+	// them.
+	if scState := desc.GetDeclarativeSchemaChangerState(); scState != nil {
+		for _, target := range scState.Targets {
+			if target.IndexName != nil &&
+				target.TargetStatus == scpb.Status_PUBLIC &&
+				target.IndexName.TableID == desc.GetID() &&
+				target.IndexName.IndexID == indexID {
+				return target.IndexName.Name, nil
+			}
+		}
+	}
+	// Otherwise, try fetching the name from the index descriptor.
+	index, err := desc.FindIndexWithID(indexID)
+	if err != nil {
+		return "", err
+	}
+	return index.GetName(), err
 }

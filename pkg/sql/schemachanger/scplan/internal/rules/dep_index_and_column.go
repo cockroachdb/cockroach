@@ -43,6 +43,28 @@ func init() {
 			}
 		},
 	)
+
+	registerDepRule(
+		"reverting primary index swap",
+		scgraph.SameStagePrecedence,
+		"new-index", "old-index",
+		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil)),
+				join(from, to, screl.DescID, "table-id"),
+				targetStatus(fromTarget, scpb.ToAbsent),
+				targetStatus(toTarget, scpb.ToPublic),
+				currentStatus(fromNode, scpb.Status_VALIDATED),
+				currentStatus(toNode, scpb.Status_PUBLIC),
+				rel.Filter(
+					"new-primary-index-depends-on-old", from, to,
+				)(func(add, drop *scpb.PrimaryIndex) bool {
+					return add.SourceIndexID == drop.IndexID
+				}),
+			}
+		},
+	)
 }
 
 // These rules ensure that index-dependent elements, like an index's name, its
@@ -145,24 +167,25 @@ func init() {
 
 	registerDepRule(
 		"dependents removed after index no longer public",
-		scgraph.Precedence,
-		"index", "child",
+		scgraph.SameStagePrecedence,
+		"child", "index",
 		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
 			return rel.Clauses{
 				from.Type(
-					(*scpb.PrimaryIndex)(nil),
-					(*scpb.SecondaryIndex)(nil),
-				),
-				to.Type(
 					(*scpb.IndexName)(nil),
 					(*scpb.IndexPartitioning)(nil),
 					(*scpb.SecondaryIndexPartial)(nil),
 					(*scpb.IndexComment)(nil),
 				),
+				to.Type(
+					(*scpb.PrimaryIndex)(nil),
+					(*scpb.SecondaryIndex)(nil),
+				),
+
 				joinOnIndexID(from, to),
 				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
-				currentStatus(fromNode, scpb.Status_VALIDATED),
-				currentStatus(toNode, scpb.Status_ABSENT),
+				currentStatus(fromNode, scpb.Status_ABSENT),
+				currentStatus(toNode, scpb.Status_VALIDATED),
 			}
 		},
 	)
@@ -232,7 +255,6 @@ func init() {
 			}
 		},
 	)
-
 	registerDepRule(
 		"column existence precedes column dependents",
 		scgraph.Precedence,
@@ -455,6 +477,9 @@ func init() {
 			columnInList(from.ColumnID, idx.StoringColumnIDs) ||
 			columnInList(from.ColumnID, idx.KeySuffixColumnIDs)
 	}
+	columnInPrimaryIndexSwap := func(from *scpb.Column, to *scpb.PrimaryIndex) bool {
+		return columnInIndex(from, to) && to.SourceIndexID != 0
+	}
 
 	registerDepRule(
 		"column depends on primary index",
@@ -473,7 +498,22 @@ func init() {
 			}
 		},
 	)
-
+	registerDepRule(
+		"primary index should be cleaned up before newly added column when reverting",
+		scgraph.Precedence,
+		"index", "column",
+		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+			var status rel.Var = "status"
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				join(from, to, screl.DescID, "table-id"),
+				rel.Filter("columnFeaturedInIndex", to, from)(columnInPrimaryIndexSwap),
+				status.Eq(scpb.Status_WRITE_ONLY),
+				status.Entities(screl.CurrentStatus, fromNode, toNode),
+			}
+		})
 	registerDepRule(
 		"column existence precedes index existence",
 		scgraph.Precedence,
@@ -507,6 +547,89 @@ func init() {
 			}
 		},
 	)
+	primaryIndexHasSecondaryColumns := func(from *scpb.PrimaryIndex, to scpb.Element) bool {
+		switch to := to.(type) {
+		case *scpb.SecondaryIndex:
+			for _, colID := range from.StoringColumnIDs {
+				if columnInList(colID, to.KeyColumnIDs) ||
+					columnInList(colID, to.StoringColumnIDs) ||
+					columnInList(colID, to.KeySuffixColumnIDs) {
+					return true
+				}
+			}
+		case *scpb.TemporaryIndex:
+			if !to.IsUsingSecondaryEncoding {
+				return false
+			}
+			for _, colID := range from.StoringColumnIDs {
+				if columnInList(colID, to.KeyColumnIDs) ||
+					columnInList(colID, to.StoringColumnIDs) ||
+					columnInList(colID, to.KeySuffixColumnIDs) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	secondaryIndexHasPrimarySwapColumns := func(to scpb.Element, from *scpb.PrimaryIndex) bool {
+		if from.SourceIndexID == 0 {
+			return false
+		}
+		switch to := to.(type) {
+		case *scpb.SecondaryIndex:
+			for _, colID := range from.StoringColumnIDs {
+				if columnInList(colID, to.KeyColumnIDs) ||
+					columnInList(colID, to.StoringColumnIDs) ||
+					columnInList(colID, to.KeySuffixColumnIDs) {
+					return true
+				}
+			}
+		case *scpb.TemporaryIndex:
+			if !to.IsUsingSecondaryEncoding {
+				return false
+			}
+			for _, colID := range from.StoringColumnIDs {
+				if columnInList(colID, to.KeyColumnIDs) ||
+					columnInList(colID, to.StoringColumnIDs) ||
+					columnInList(colID, to.KeySuffixColumnIDs) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	registerDepRule(
+		"primary index with new columns should exist before secondary/temp indexes",
+		scgraph.Precedence,
+		"primary-index", "second-index",
+		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.SecondaryIndex)(nil), (*scpb.TemporaryIndex)(nil)),
+				join(from, to, screl.DescID, "table-id"),
+				targetStatus(fromTarget, scpb.ToPublic),
+				targetStatus(toTarget, scpb.ToPublic),
+				currentStatus(fromNode, scpb.Status_VALIDATED),
+				currentStatus(toNode, scpb.Status_BACKFILL_ONLY),
+				rel.Filter("newColumnFeaturedInIndex", from, to)(primaryIndexHasSecondaryColumns),
+			}
+		})
+	registerDepRule(
+		"secondary indexes should be cleaned up before any primary index with columns when reverting",
+		scgraph.Precedence,
+		"second-index", "primary-index",
+		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.SecondaryIndex)(nil), (*scpb.TemporaryIndex)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil)),
+				join(from, to, screl.DescID, "table-id"),
+				targetStatus(fromTarget, scpb.ToAbsent),
+				targetStatus(toTarget, scpb.ToAbsent),
+				currentStatus(fromNode, scpb.Status_ABSENT),
+				currentStatus(toNode, scpb.Status_VALIDATED),
+				rel.Filter("newColumnFeaturedInIndex", from, to)(secondaryIndexHasPrimarySwapColumns),
+			}
+		})
 }
 
 // This rule ensures that columns depend on each other in increasing order.

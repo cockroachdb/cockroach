@@ -3,10 +3,6 @@ CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ADD COLUMN j INT UNIQUE
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo ADD COLUMN j INT CHECK (j > 0)
 ----
 
