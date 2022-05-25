@@ -152,6 +152,18 @@ SELECT uuid_generate_v1mc() = uuid_generate_v1mc()
 ----
 false
 
+# Verify that uuid_generate_v1 does not return deterministic output for the MAC
+# address bits.
+query B
+SELECT substr(uuid_generate_v1()::TEXT, 24) = substr(uuid_generate_v1()::TEXT, 24)
+----
+false
+
+query B
+SELECT substr(uuid_generate_v1mc()::TEXT, 24) = substr(uuid_generate_v1mc()::TEXT, 24)
+----
+false
+
 query T
 SELECT uuid_generate_v3(uuid_ns_x500(), 'cat')
 ----

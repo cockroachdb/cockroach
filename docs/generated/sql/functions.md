@@ -880,7 +880,7 @@ available replica will error.</p>
 </span></td></tr>
 <tr><td><a name="unordered_unique_rowid"></a><code>unordered_unique_rowid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a unique ID. The value is a combination of the insert timestamp and the ID of the node executing the statement, which guarantees this combination is globally unique. The way it is generated there is no ordering</p>
 </span></td></tr>
-<tr><td><a name="uuid_generate_v1"></a><code>uuid_generate_v1() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a version 1 UUID, and returns it as a value of UUID type. This uses the real MAC address of the server and a timestamp.</p>
+<tr><td><a name="uuid_generate_v1"></a><code>uuid_generate_v1() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a version 1 UUID, and returns it as a value of UUID type. To avoid exposing the server’s real MAC address, this uses a random MAC address and a timestamp. Essentially, this is an alias for uuid_generate_v1mc.</p>
 </span></td></tr>
 <tr><td><a name="uuid_generate_v1mc"></a><code>uuid_generate_v1mc() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a version 1 UUID, and returns it as a value of UUID type. This uses a random MAC address and a timestamp.</p>
 </span></td></tr>
