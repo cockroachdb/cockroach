@@ -8,9 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment, { Moment } from "moment";
-
-export const start = moment.utc("2021.08.08");
-export const end = moment.utc("2021.08.12");
-
-export const allowedInterval: [Moment, Moment] = [start, end];
+export * from "./dateRangeMenu";
