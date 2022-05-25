@@ -661,7 +661,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 		"BACKUP INTO LATEST IN $4 WITH incremental_location = ($1, $2, $3)",
 		append(incrementals, collections[0])...)
 
-	sqlDB.ExpectErr(t, "The full backup cannot get written to '/subdir', a user defined subdirectory. To take a full backup, remove the subdirectory from the backup command",
+	sqlDB.ExpectErr(t, "A full backup cannot be written to \"/subdir\", a user defined subdirectory. To take a full backup, remove the subdirectory from the backup command",
 		"BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
 
 	time.Sleep(time.Second + 2)
@@ -6598,8 +6598,8 @@ INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
 	resetStateVars()
 
 	tenant10.Exec(t, `
-CREATE DATABASE baz; 
-CREATE TABLE baz.bar(i int primary key, v string); 
+CREATE DATABASE baz;
+CREATE TABLE baz.bar(i int primary key, v string);
 INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510, 'e')`)
 	var id2 int
 	tenant10.QueryRow(t, "SELECT 'baz.bar'::regclass::int").Scan(&id2)
