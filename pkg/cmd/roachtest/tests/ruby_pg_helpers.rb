@@ -7,21 +7,26 @@ require 'pathname'
 require 'rspec'
 require 'shellwords'
 require 'pg'
+require 'openssl'
+require_relative 'helpers/scheduler.rb'
+require_relative 'helpers/tcp_gate_scheduler.rb'
 
 DEFAULT_TEST_DIR_STR = File.join(Dir.pwd, "tmp_test_specs")
 TEST_DIR_STR = ENV['RUBY_PG_TEST_DIR'] || DEFAULT_TEST_DIR_STR
 TEST_DIRECTORY = Pathname.new(TEST_DIR_STR)
+DATA_OBJ_MEMSIZE = 40
 
 module PG::TestingHelpers
 
-	### Automatically set up the database when it's used, and wrap a transaction around
-	### examples that don't disable it.
+	### Automatically wrap a transaction around examples that don't disable it.
 	def self::included( mod )
 		super
 
 		if mod.respond_to?( :around )
 
-			mod.before( :all ) { @conn = setup_testing_db(described_class ? described_class.name : mod.description) }
+			mod.before( :all ) do
+				@conn = connect_testing_db
+			end
 
 			mod.around( :each ) do |example|
 				begin
@@ -32,11 +37,27 @@ module PG::TestingHelpers
 						[@conn.escape_string(desc.slice(-60))]
 					example.run
 				ensure
+					if @conn.respond_to?(:exit_pipeline_mode) &&
+							@conn.pipeline_status != PG::PQ_PIPELINE_OFF
+						@conn.pipeline_sync
+						# Fetch results until two successive nil's
+						loop do
+							unless @conn.get_result
+								break unless @conn.get_result
+							end
+						end
+						@conn.exit_pipeline_mode
+					end
 					@conn.exec( 'ROLLBACK' ) unless example.metadata[:without_transaction]
 				end
 			end
 
-			mod.after( :all ) { teardown_testing_db(@conn) }
+			mod.after( :all ) do
+				if @conn
+					check_for_lingering_connections( @conn )
+					@conn.finish
+				end
+			end
 		end
 
 	end
@@ -191,20 +212,24 @@ module PG::TestingHelpers
 		end
 	end
 
+	def define_testing_conninfo
+    ENV['PGPORT'] ||= "26257"
+		@port = ENV['PGPORT'].to_i
+		ENV['PGHOST'] = 'localhost'
+    ENV['PGUSER'] = 'root'
+		@conninfo = "user=root host=localhost port=#{@port} dbname=test"
+		@unix_socket = TEST_DIRECTORY.to_s
+	end
 
 	### Set up a CockroachDB database instance for testing.
 	def setup_testing_db( description )
-		require 'pg'
 		stop_existing_postmasters()
 
 		trace "Setting up test database for #{description}"
 		@test_pgdata = TEST_DIRECTORY + 'data'
 		@test_pgdata.mkpath
 
-		ENV['PGPORT'] ||= "26257"
-		@port = ENV['PGPORT'].to_i
-		ENV['PGHOST'] = 'localhost'
-		@conninfo = "host=localhost port=#{@port} dbname=test"
+		define_testing_conninfo
 
 		@logfile = TEST_DIRECTORY + 'setup.log'
 		trace "Command output logged to #{@logfile}"
@@ -218,7 +243,7 @@ module PG::TestingHelpers
 
 			trace "Creating the test DB"
 			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--insecure', '-e', 'DROP DATABASE IF EXISTS test'
-            log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--insecure', '-e', 'CREATE DATABASE test'
+			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--insecure', '-e', 'CREATE DATABASE test'
 
 		rescue => err
 			$stderr.puts "%p during test setup: %s" % [ err.class, err.message ]
@@ -226,7 +251,10 @@ module PG::TestingHelpers
 			$stderr.puts err.backtrace if $DEBUG
 			fail
 		end
+	end
 
+	def connect_testing_db
+		define_testing_conninfo
 		conn = PG.connect( @conninfo )
 		conn.set_notice_processor do |message|
 			$stderr.puts( description + ':' + message ) if $DEBUG
@@ -235,17 +263,138 @@ module PG::TestingHelpers
 		return conn
 	end
 
-
-	def teardown_testing_db( conn )
+	def teardown_testing_db
 		trace "Tearing down test database"
-
-		if conn
-			check_for_lingering_connections( conn )
-			conn.finish
-		end
-
+		# This is changed to a no-op so that we can inspect the database after the
+		# test runs.
 	end
 
+	class CertGenerator
+		attr_reader :output_dir
+
+		def initialize(output_dir='.')
+			@output_dir = output_dir
+			@serial = Time.now.to_i
+		end
+
+		def next_serial
+			@serial += 1
+		end
+
+		def create_ca_cert(name, ca_key, x509_name, valid_years: 10)
+			ca_key = OpenSSL::PKey::RSA.new File.read "#{ca_key}" unless ca_key.kind_of?(OpenSSL::PKey::RSA)
+			ca_name = OpenSSL::X509::Name.parse x509_name
+
+			ca_cert = OpenSSL::X509::Certificate.new
+			ca_cert.serial = next_serial
+			ca_cert.version = 2
+			ca_cert.not_before = Time.now
+			ca_cert.not_after = Time.now + valid_years*365*24*60*60
+
+			ca_cert.public_key = ca_key.public_key
+			ca_cert.subject = ca_name
+			ca_cert.issuer = ca_name
+
+			extension_factory = OpenSSL::X509::ExtensionFactory.new
+			extension_factory.subject_certificate = ca_cert
+			extension_factory.issuer_certificate = ca_cert
+
+			ca_cert.add_extension extension_factory.create_extension('subjectKeyIdentifier', 'hash')
+			ca_cert.add_extension extension_factory.create_extension('basicConstraints', 'CA:TRUE', true)
+			ca_cert.add_extension extension_factory.create_extension('keyUsage', 'cRLSign,keyCertSign', true)
+
+			ca_cert.sign ca_key, OpenSSL::Digest::SHA256.new
+
+			File.open "#{output_dir}/#{name}", 'w' do |io|
+				io.puts ca_cert.to_text
+				io.write ca_cert.to_pem
+			end
+			ca_cert
+		end
+
+		def create_key(name, rsa_size: 2048)
+			ca_key = OpenSSL::PKey::RSA.new rsa_size
+
+			#cipher = OpenSSL::Cipher.new 'AES-128-CBC'
+
+			File.open "#{output_dir}/#{name}", 'w', 0600 do |io|
+				io.puts ca_key.to_text
+				io.write ca_key.export # (cipher)
+			end
+			ca_key
+		end
+
+		def create_signing_request(name, x509_name, key)
+			key = OpenSSL::PKey::RSA.new File.read "#{key}" unless key.kind_of?(OpenSSL::PKey::RSA)
+			csr = OpenSSL::X509::Request.new
+			csr.version = 0
+			csr.subject = OpenSSL::X509::Name.parse x509_name
+			csr.public_key = key.public_key
+			csr.sign key, OpenSSL::Digest::SHA256.new
+
+			File.open "#{output_dir}/#{name}", 'w' do |io|
+				io.puts csr.to_text
+				io.write csr.to_pem
+			end
+			csr
+		end
+
+		def create_cert_from_csr(name, csr, ca_cert, ca_key, valid_years: 10, dns_names: nil)
+			ca_key = OpenSSL::PKey::RSA.new File.read "#{ca_key}" unless ca_key.kind_of?(OpenSSL::PKey::RSA)
+			ca_cert = OpenSSL::X509::Certificate.new File.read "#{ca_cert}" unless ca_cert.kind_of?(OpenSSL::X509::Certificate)
+			csr = OpenSSL::X509::Request.new File.read "#{csr}" unless csr.kind_of?(OpenSSL::X509::Request)
+			raise 'CSR can not be verified' unless csr.verify csr.public_key
+
+			csr_cert = OpenSSL::X509::Certificate.new
+			csr_cert.serial = next_serial
+			csr_cert.version = 2
+			csr_cert.not_before = Time.now
+			csr_cert.not_after = Time.now + valid_years*365*24*60*60
+
+			csr_cert.subject = csr.subject
+			csr_cert.public_key = csr.public_key
+			csr_cert.issuer = ca_cert.subject
+
+			extension_factory = OpenSSL::X509::ExtensionFactory.new
+			extension_factory.subject_certificate = csr_cert
+			extension_factory.issuer_certificate = ca_cert
+
+			csr_cert.add_extension extension_factory.create_extension('basicConstraints', 'CA:FALSE')
+			csr_cert.add_extension extension_factory.create_extension('keyUsage', 'keyEncipherment,dataEncipherment,digitalSignature')
+			csr_cert.add_extension extension_factory.create_extension('subjectKeyIdentifier', 'hash')
+			if dns_names
+				san = dns_names.map{|n| "DNS:#{n}" }.join(",")
+				csr_cert.add_extension extension_factory.create_extension('subjectAltName', san)
+			end
+
+			csr_cert.sign ca_key, OpenSSL::Digest::SHA256.new
+
+			open "#{output_dir}/#{name}", 'w' do |io|
+				io.puts csr_cert.to_text
+				io.write csr_cert.to_pem
+			end
+
+			csr_cert
+		end
+	end
+
+	def generate_ssl_certs(output_dir)
+		gen = CertGenerator.new(output_dir)
+
+		trace "create ca-key"
+		ca_key = gen.create_key('ruby-pg-ca-key')
+		ca_cert = gen.create_ca_cert('ruby-pg-ca-cert', ca_key, '/CN=ruby-pg root key')
+
+		trace "create server cert"
+		key = gen.create_key('ruby-pg-server-key')
+		csr = gen.create_signing_request('ruby-pg-server-csr', '/CN=localhost', key)
+		gen.create_cert_from_csr('ruby-pg-server-cert', csr, ca_cert, ca_key, dns_names: %w[localhost] )
+
+		trace "create client cert"
+		key = gen.create_key('ruby-pg-client-key')
+		csr = gen.create_signing_request('ruby-pg-client-csr', '/CN=ruby-pg client', key)
+		gen.create_cert_from_csr('ruby-pg-client-cert', csr, ca_cert, ca_key)
+	end
 
 	def check_for_lingering_connections( conn )
 		conn.exec( "SELECT * FROM pg_stat_activity" ) do |res|
@@ -327,6 +476,9 @@ module PG::TestingHelpers
 			elsif status == PG::PGRES_POLLING_WRITING
 				select( [], [conn.socket_io], [], 5.0 ) or
 					raise "Asynchronous connection timed out!"
+
+			elsif status == PG::PGRES_POLLING_FAILED
+				break
 			end
 			status = conn.send(meth)
 		end
@@ -349,6 +501,15 @@ module PG::TestingHelpers
 		result
 	end
 
+	def wait_for_flush(conn)
+		until conn.flush()
+			# wait for the socket to become read- or write-ready
+			readable, _writable = IO.select([conn.socket_io], [conn.socket_io])
+			if readable.any?
+				conn.consume_input
+			end
+		end
+	end
 end
 
 
@@ -368,10 +529,21 @@ RSpec.configure do |config|
 		config.filter_run_excluding :windows
 	end
 
-	config.filter_run_excluding( :postgresql_93 ) if PG.library_version <  90300
 	config.filter_run_excluding( :postgresql_94 ) if PG.library_version <  90400
 	config.filter_run_excluding( :postgresql_95 ) if PG.library_version <  90500
 	config.filter_run_excluding( :postgresql_96 ) if PG.library_version <  90600
 	config.filter_run_excluding( :postgresql_10 ) if PG.library_version < 100000
 	config.filter_run_excluding( :postgresql_12 ) if PG.library_version < 120000
+	config.filter_run_excluding( :postgresql_14 ) if PG.library_version < 140000
+	config.filter_run_excluding( :unix_socket ) if RUBY_PLATFORM=~/mingw|mswin/i
+	config.filter_run_excluding( :scheduler ) if RUBY_VERSION < "3.0" || !Fiber.respond_to?(:scheduler)
+	config.filter_run_excluding( :scheduler_address_resolve ) if RUBY_VERSION < "3.1"
+
+	### Automatically set up and tear down the database
+	config.before(:suite) do |*args|
+		PG::TestingHelpers.setup_testing_db("the spec suite")
+	end
+	config.after(:suite) do
+		PG::TestingHelpers.teardown_testing_db
+	end
 end
