@@ -1252,7 +1252,10 @@ func (nl *NodeLiveness) updateLiveness(
 		for i, eng := range engines {
 			eng := eng // pin the loop variable
 			resultCs[i], _ = nl.engineSyncs.DoChan(strconv.Itoa(i), func() (interface{}, error) {
-				return nil, storage.WriteSyncNoop(eng)
+				return nil, nl.stopper.RunTaskWithErr(ctx, "liveness-hb-diskwrite",
+					func(ctx context.Context) error {
+						return storage.WriteSyncNoop(eng)
+					})
 			})
 		}
 		for _, resultC := range resultCs {
