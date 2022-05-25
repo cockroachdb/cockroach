@@ -44,8 +44,7 @@ func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.Typed
 func (td *tableDeleter) init(
 	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
 ) error {
-	td.tableWriterBase.init(txn, td.tableDesc(), evalCtx, sv)
-	return nil
+	return td.tableWriterBase.init(txn, td.tableDesc(), evalCtx, sv)
 }
 
 // row is part of the tableWriter interface.

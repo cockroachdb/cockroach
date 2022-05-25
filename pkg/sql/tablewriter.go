@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // expressionCarrier handles visiting sub-expressions.
@@ -155,7 +156,10 @@ var maxBatchBytes = settings.RegisterByteSizeSetting(
 
 func (tb *tableWriterBase) init(
 	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context, settings *settings.Values,
-) {
+) error {
+	if txn.Type() != kv.RootTxn {
+		return errors.AssertionFailedf("unexpectedly non-root txn is used by the table writer")
+	}
 	tb.txn = txn
 	tb.desc = tableDesc
 	tb.lockTimeout = 0
@@ -171,6 +175,7 @@ func (tb *tableWriterBase) init(
 	tb.maxBatchByteSize = mutations.MaxBatchByteSize(batchMaxBytes, tb.forceProductionBatchSizes)
 	tb.sv = settings
 	tb.initNewBatch()
+	return nil
 }
 
 // setRowsWrittenLimit should be called before finalize whenever the
