@@ -57,7 +57,7 @@ func registerPebbleYCSB(r registry.Registry) {
 				Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
 				Tags:    []string{tag},
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runPebbleYCSB(ctx, t, c, size, pebble, d, nil)
+					runPebbleYCSB(ctx, t, c, size, pebble, d, nil, true /* artifacts */)
 				},
 			})
 		}
@@ -71,7 +71,7 @@ func registerPebbleYCSB(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
 		Tags:    []string{"pebble_nightly_ycsb_race"},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runPebbleYCSB(ctx, t, c, 64, pebble, 30, []string{"A"})
+			runPebbleYCSB(ctx, t, c, 64, pebble, 30, []string{"A"}, false /* artifacts */)
 		},
 	})
 }
@@ -85,6 +85,7 @@ func runPebbleYCSB(
 	bin string,
 	dur int64,
 	workloads []string,
+	collectArtifacts bool,
 ) {
 	c.Put(ctx, bin, "./pebble")
 	if workloads == nil {
@@ -133,6 +134,10 @@ func runPebbleYCSB(
 				" --cache=%d"+
 				" --duration=%s > ycsb.log 2>&1",
 			benchDir, dataTar, benchDir, workload, size, keys, initialKeys, cache, duration))
+
+		if !collectArtifacts {
+			return
+		}
 
 		runPebbleCmd(ctx, t, c, fmt.Sprintf("tar cvPf profiles_%s.tar *.prof", workload))
 
