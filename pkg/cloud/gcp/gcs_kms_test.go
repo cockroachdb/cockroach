@@ -10,8 +10,11 @@
 package gcp
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"golang.org/x/oauth2/google"
 	"net/url"
 	"os"
 	"testing"
@@ -23,11 +26,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
-	_ "google.golang.org/api/impersonate"
 )
 
 func TestEncryptDecryptGCS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	credential, err := google.FindDefaultCredentials(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := map[string]interface{}{}
+
+	err = json.Unmarshal(credential.JSON, &content)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if content["client_email"] != nil {
+		fmt.Println("debug:", content["client_email"])
+	}
 
 	q := make(url.Values)
 
