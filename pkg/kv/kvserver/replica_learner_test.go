@@ -13,6 +13,7 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -1532,4 +1533,336 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.Len(t, desc.Replicas().VoterDescriptors(), 2)
 		require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
 	}
+}
+
+type snapshotBytesMetrics struct {
+	sentBytes int64
+	rcvdBytes int64
+}
+
+// getSnapshotBytesMetrics returns metrics on the number of snapshot bytes sent
+// and received by a server. TC and SERVERIDX specify the index of the target
+// server on the TestCluster TC. The function returns the total number of
+// snapshot bytes sent/received, as well as a map with granular metrics on the
+// number of snapshot bytes sent and received for each type of snapshot. The
+// return value is of the form (TOTALBYTES, GRANULARMETRICS), where TOTALBYTES
+// is a `snapshotBytesMetrics` struct containing the total bytes sent/received,
+// and GRANULARMETRICS is the map mentioned above.
+func getSnapshotBytesMetrics(
+	t *testing.T, tc *testcluster.TestCluster, serverIdx int,
+) (snapshotBytesMetrics, map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics) {
+	granularMetrics := make(map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics)
+
+	granularMetrics[kvserverpb.SnapshotRequest_UNKNOWN] = snapshotBytesMetrics{
+		sentBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.unknown.sent-bytes"),
+		rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.unknown.rcvd-bytes"),
+	}
+	granularMetrics[kvserverpb.SnapshotRequest_RECOVERY] = snapshotBytesMetrics{
+		sentBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.recovery.sent-bytes"),
+		rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.recovery.rcvd-bytes"),
+	}
+	granularMetrics[kvserverpb.SnapshotRequest_REBALANCE] = snapshotBytesMetrics{
+		sentBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.rebalancing.sent-bytes"),
+		rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.rebalancing.rcvd-bytes"),
+	}
+
+	totalBytes := snapshotBytesMetrics{
+		sentBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.sent-bytes"),
+		rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.rcvd-bytes"),
+	}
+
+	return totalBytes, granularMetrics
+
+	//return &testingSnapshotBytesMetrics{
+	//	rebalancingSentBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.rebalancing.sent-bytes"),
+	//	rebalancingRcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.rebalancing.rcvd-bytes"),
+	//	recoverySentBytes:    getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.recovery.sent-bytes"),
+	//	recoveryRcvdBytes:    getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.recovery.rcvd-bytes"),
+	//	unknownSentBytes:     getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.unknown.sent-bytes"),
+	//	unknownRcvdBytes:     getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.unknown.rcvd-bytes"),
+	//	totalSentBytes:       getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.sent-bytes"),
+	//	totalRcvdBytes:       getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.rcvd-bytes"),
+	//}
+}
+
+func getSnapshotMetricsDiff(
+	beforeTotal snapshotBytesMetrics,
+	beforeMap map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics,
+	afterTotal snapshotBytesMetrics,
+	afterMap map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics,
+) (snapshotBytesMetrics, map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics) {
+	diffTotal := snapshotBytesMetrics{
+		sentBytes: afterTotal.sentBytes - beforeTotal.sentBytes,
+		rcvdBytes: afterTotal.rcvdBytes - beforeTotal.rcvdBytes,
+	}
+	diffMap := map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics{
+		kvserverpb.SnapshotRequest_REBALANCE: snapshotBytesMetrics{
+			sentBytes: afterMap[kvserverpb.SnapshotRequest_REBALANCE].sentBytes - beforeMap[kvserverpb.SnapshotRequest_REBALANCE].sentBytes,
+			rcvdBytes: afterMap[kvserverpb.SnapshotRequest_REBALANCE].rcvdBytes - beforeMap[kvserverpb.SnapshotRequest_REBALANCE].rcvdBytes,
+		},
+		kvserverpb.SnapshotRequest_RECOVERY: snapshotBytesMetrics{
+			sentBytes: afterMap[kvserverpb.SnapshotRequest_RECOVERY].sentBytes - beforeMap[kvserverpb.SnapshotRequest_RECOVERY].sentBytes,
+			rcvdBytes: afterMap[kvserverpb.SnapshotRequest_RECOVERY].rcvdBytes - beforeMap[kvserverpb.SnapshotRequest_RECOVERY].rcvdBytes,
+		},
+		kvserverpb.SnapshotRequest_UNKNOWN: snapshotBytesMetrics{
+			sentBytes: afterMap[kvserverpb.SnapshotRequest_UNKNOWN].sentBytes - beforeMap[kvserverpb.SnapshotRequest_UNKNOWN].sentBytes,
+			rcvdBytes: afterMap[kvserverpb.SnapshotRequest_UNKNOWN].rcvdBytes - beforeMap[kvserverpb.SnapshotRequest_UNKNOWN].rcvdBytes,
+		},
+	}
+
+	return diffTotal, diffMap
+}
+
+// This function returns the number of bytes sent for a snapshot SNAP. It
+// follows the sending logic of kvBatchSnapshotStrategy.Send() but has one key
+// difference. This helper function assumes that the Snapshot size is under
+// `kv.snapshot_sender.batch_size` and will fit in a single storage.Batch.
+func getLengthOfSnapshot(snap *kvserver.OutgoingSnapshot, origin *kvserver.Store) (int64, error) {
+	totalBytes := int64(0)
+	var b storage.Batch
+	defer func() {
+		b.Close()
+	}()
+	// This function assumes that all the data of SNAP will fit into one batch.
+	b = origin.Engine().NewUnindexedBatch(true)
+	for iter := snap.Iter; ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return 0, err
+		} else if !ok {
+			break
+		}
+		unsafeKey := iter.UnsafeKey()
+		unsafeValue := iter.UnsafeValue()
+
+		if err := b.PutEngineKey(unsafeKey, unsafeValue); err != nil {
+			return 0, err
+		}
+	}
+	totalBytes += int64(b.Len())
+
+	return totalBytes, nil
+}
+
+// Tests the accuracy of the 'range.snapshots.rebalancing.rcvd-bytes' and
+// 'range.snapshots.rebalancing.sent-bytes' metrics. This test adds a new
+// replica to a cluster, and during the process, a learner snapshot is sent to
+// the new replica.
+func TestRebalancingSnapshotMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	knobs, ltk := makeReplicationTestKnobs()
+	ltk.storeKnobs.DisableRaftSnapshotQueue = true
+
+	blockUntilSnapshotSendCh := make(chan struct{})
+	blockSnapshotSendCh := make(chan struct{})
+	ltk.storeKnobs.SendSnapshot = func() {
+		close(blockUntilSnapshotSendCh)
+		select {
+		case <-blockSnapshotSendCh:
+		case <-time.After(10 * time.Second):
+			return
+		}
+		return
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchStartKey := tc.ScratchRange(t)
+
+	// Record the snapshot metrics before anything has been sent / received.
+	senderTotalBefore, senderMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 0)
+	receiverTotalBefore, receiverMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 1)
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
+		return err
+	})
+
+	<-blockUntilSnapshotSendCh
+	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
+	snap, err := repl.GetSnapshot(ctx, kvserverpb.SnapshotRequest_INITIAL, tc.Server(1).GetFirstStoreID())
+	require.NoError(t, err)
+	snapshotLength, err := getLengthOfSnapshot(snap, store)
+	require.NoError(t, err)
+
+	close(blockSnapshotSendCh)
+	require.NoError(t, g.Wait())
+
+	// Record the snapshot metrics for the sender after a voter has been added. A
+	// learner snapshot should have been sent from the sender to the receiver.
+	senderTotalAfter, senderMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 0)
+
+	// Asserts that the learner snapshot (aka rebalancing snapshot) bytes sent
+	// have been recorded and that it was not double counted in a different
+	// metric.
+	senderTotalActual, senderMapActual := getSnapshotMetricsDiff(senderTotalBefore, senderMetricsMapBefore, senderTotalAfter, senderMetricsMapAfter)
+	senderTotalExpected := snapshotBytesMetrics{sentBytes: snapshotLength, rcvdBytes: 0}
+	senderMapExpected := map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics{
+		kvserverpb.SnapshotRequest_REBALANCE: snapshotBytesMetrics{sentBytes: snapshotLength, rcvdBytes: 0},
+		kvserverpb.SnapshotRequest_RECOVERY:  snapshotBytesMetrics{sentBytes: 0, rcvdBytes: 0},
+		kvserverpb.SnapshotRequest_UNKNOWN:   snapshotBytesMetrics{sentBytes: 0, rcvdBytes: 0},
+	}
+	require.Equal(t, senderTotalExpected, senderTotalActual)
+	require.Equal(t, senderMapExpected, senderMapActual)
+
+	// Record the snapshot metrics for the receiver after a voter has been added.
+	receiverTotalAfter, receiverMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 1)
+
+	// Asserts that the learner snapshot (aka rebalancing snapshot) bytes received
+	// have been recorded and that it was not double counted in a different
+	// metric.
+	receiverTotalActual, receiverMapActual := getSnapshotMetricsDiff(receiverTotalBefore, receiverMetricsMapBefore, receiverTotalAfter, receiverMetricsMapAfter)
+	receiverTotalExpected := snapshotBytesMetrics{sentBytes: 0, rcvdBytes: snapshotLength}
+	receiverMapExpected := map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics{
+		kvserverpb.SnapshotRequest_REBALANCE: snapshotBytesMetrics{sentBytes: 0, rcvdBytes: snapshotLength},
+		kvserverpb.SnapshotRequest_RECOVERY:  snapshotBytesMetrics{sentBytes: 0, rcvdBytes: 0},
+		kvserverpb.SnapshotRequest_UNKNOWN:   snapshotBytesMetrics{sentBytes: 0, rcvdBytes: 0},
+	}
+	require.Equal(t, receiverTotalExpected, receiverTotalActual)
+	require.Equal(t, receiverMapExpected, receiverMapActual)
+}
+
+// Tests the accuracy of the 'range.snapshots.recovery.rcvd-bytes' and
+// 'range.snapshots.recovery.sent-bytes' metrics. This test duplicates a lot
+// of the logic of TestRaftSnapshotsToNonVoters, but records the metrics before
+// and after the raft snapshort is sent
+func TestRecoverySnapshotMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderShort(t, "this test sleeps for a few seconds")
+
+	var skipInitialSnapshot int64
+	knobs, ltk := makeReplicationTestKnobs()
+	ctx := context.Background()
+
+	// Set it up such that the newly added non-voter will not receive its INITIAL
+	// snapshot.
+	ltk.storeKnobs.ReplicaSkipInitialSnapshot = func() bool {
+		return atomic.LoadInt64(&skipInitialSnapshot) == 1
+	}
+	// Synchronize with the removal of the "best effort" lock on log truncation.
+	// See (*Replica).lockLearnerSnapshot for details.
+	nonVoterSnapLockRemoved := make(chan struct{}, 1)
+	ltk.storeKnobs.NonVoterAfterInitialization = func() {
+		nonVoterSnapLockRemoved <- struct{}{}
+	}
+	// Disable the raft snapshot queue, we will manually queue a replica into it
+	// below.
+	ltk.storeKnobs.DisableRaftSnapshotQueue = true
+
+	tc := testcluster.StartTestCluster(
+		t, 2, base.TestClusterArgs{
+			ServerArgs:      base.TestServerArgs{Knobs: knobs},
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+	scratchStartKey := tc.ScratchRange(t)
+	g, ctx := errgroup.WithContext(ctx)
+
+	// Record the snapshot metrics before anything has been sent / received.
+	senderTotalBefore, senderMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 0)
+	receiverTotalBefore, receiverMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 1)
+
+	// Add a new voting replica, but don't initialize it. Note that
+	// `tc.AddNonVoters` will not return until the newly added non-voter is
+	// initialized, which we will do below via the snapshot queue.
+	g.Go(func() error {
+		atomic.StoreInt64(&skipInitialSnapshot, 1)
+		_, err := tc.AddNonVoters(scratchStartKey, tc.Target(1))
+		return err
+	})
+
+	// Wait until we remove the lock that prevents the raft snapshot queue from
+	// sending this replica a snapshot.
+	select {
+	case <-nonVoterSnapLockRemoved:
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatal("took too long")
+	}
+
+	scratchDesc := tc.LookupRangeOrFatal(t, scratchStartKey)
+	leaseholderStore := tc.GetFirstStoreFromServer(t, 0)
+	require.NotNil(t, leaseholderStore)
+	leaseholderRepl, err := leaseholderStore.GetReplica(scratchDesc.RangeID)
+	require.NoError(t, err)
+	require.NotNil(t, leaseholderRepl)
+
+	testutils.SucceedsSoon(t, func() error {
+		// Manually enqueue the leaseholder replica into its store's raft snapshot
+		// queue. We expect it to pick up on the fact that the non-voter on its range
+		// needs a snapshot.
+		recording, pErr, err := leaseholderStore.ManuallyEnqueue(
+			ctx, "raftsnapshot", leaseholderRepl, false, /* skipShouldQueue */
+		)
+		if pErr != nil {
+			return pErr
+		}
+		if err != nil {
+			return err
+		}
+		matched, err := regexp.MatchString("streamed VIA_SNAPSHOT_QUEUE snapshot.*to.*NON_VOTER", recording.String())
+		if err != nil {
+			return err
+		}
+		if !matched {
+			return errors.Errorf("the raft snapshot queue did not send a snapshot to the non-voter")
+		}
+		return nil
+	})
+	require.NoError(t, g.Wait())
+
+	// Record the snapshot metrics for the sender after the raft snapshot was sent
+	senderTotalAfter, senderMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 0)
+
+	// Asserts that the raft snapshot (aka recovery snapshot) bytes sent have been
+	// recorded and that it was not double counted in a different metric.
+	senderRebalancingMetricsAfter := senderMetricsMapAfter[kvserverpb.SnapshotRequest_REBALANCE]
+	senderRebalancingMetricsBefore := senderMetricsMapBefore[kvserverpb.SnapshotRequest_REBALANCE]
+	require.Equal(t, senderRebalancingMetricsAfter.sentBytes, senderRebalancingMetricsBefore.sentBytes)
+	require.Equal(t, senderRebalancingMetricsAfter.rcvdBytes, senderRebalancingMetricsBefore.rcvdBytes)
+
+	senderRecoveryMetricsAfter := senderMetricsMapAfter[kvserverpb.SnapshotRequest_RECOVERY]
+	senderRecoveryMetricsBefore := senderMetricsMapBefore[kvserverpb.SnapshotRequest_RECOVERY]
+	require.Greater(t, senderRecoveryMetricsAfter.sentBytes, senderRecoveryMetricsBefore.sentBytes)
+	require.Equal(t, senderRecoveryMetricsAfter.rcvdBytes, senderRecoveryMetricsBefore.rcvdBytes)
+
+	senderUnknownMetricsAfter := senderMetricsMapAfter[kvserverpb.SnapshotRequest_UNKNOWN]
+	senderUnknownMetricsBefore := senderMetricsMapBefore[kvserverpb.SnapshotRequest_UNKNOWN]
+	require.Equal(t, senderUnknownMetricsAfter.sentBytes, senderUnknownMetricsBefore.sentBytes)
+	require.Equal(t, senderUnknownMetricsAfter.rcvdBytes, senderUnknownMetricsBefore.rcvdBytes)
+
+	require.Greater(t, senderTotalAfter.sentBytes, senderTotalBefore.sentBytes)
+	require.Equal(t, senderTotalAfter.rcvdBytes, senderTotalBefore.rcvdBytes)
+
+	// Record the snapshot metrics for the receiver after the raft snapshot was
+	// received
+	receiverTotalAfter, receiverMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 1)
+
+	// Asserts that the raft snapshot (aka recovery snapshot) bytes received have
+	// been recorded and that it was not double counted in a different metric.
+	receiverRebalancingMetricsAfter := receiverMetricsMapAfter[kvserverpb.SnapshotRequest_REBALANCE]
+	receiverRebalancingMetricsBefore := receiverMetricsMapBefore[kvserverpb.SnapshotRequest_REBALANCE]
+	require.Equal(t, receiverRebalancingMetricsAfter.sentBytes, receiverRebalancingMetricsBefore.sentBytes)
+	require.Equal(t, receiverRebalancingMetricsAfter.rcvdBytes, receiverRebalancingMetricsBefore.rcvdBytes)
+
+	receiverRecoveryMetricsAfter := receiverMetricsMapAfter[kvserverpb.SnapshotRequest_RECOVERY]
+	receiverRecoveryMetricsBefore := receiverMetricsMapBefore[kvserverpb.SnapshotRequest_RECOVERY]
+	require.Equal(t, receiverRecoveryMetricsAfter.sentBytes, receiverRecoveryMetricsBefore.sentBytes)
+	require.Greater(t, receiverRecoveryMetricsAfter.rcvdBytes, receiverRecoveryMetricsBefore.rcvdBytes)
+
+	receiverUnknownMetricsAfter := receiverMetricsMapAfter[kvserverpb.SnapshotRequest_UNKNOWN]
+	receiverUnknownMetricsBefore := receiverMetricsMapBefore[kvserverpb.SnapshotRequest_UNKNOWN]
+	require.Equal(t, receiverUnknownMetricsAfter.sentBytes, receiverUnknownMetricsBefore.sentBytes)
+	require.Equal(t, receiverUnknownMetricsAfter.rcvdBytes, receiverUnknownMetricsBefore.rcvdBytes)
+
+	require.Equal(t, receiverTotalAfter.sentBytes, receiverTotalBefore.sentBytes)
+	require.Greater(t, receiverTotalAfter.rcvdBytes, receiverTotalBefore.rcvdBytes)
 }

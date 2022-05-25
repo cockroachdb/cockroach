@@ -268,6 +268,9 @@ type StoreTestingKnobs struct {
 	// in handleRaftReady to refreshReasonNewLeaderOrConfigChange.
 	EnableUnconditionalRefreshesInRaftReady bool
 
+	// SendSnapshot is run after receiving a DelegateRaftSnapshot request but
+	// before any throttling or sending logic.
+	SendSnapshot func()
 	// ReceiveSnapshot is run after receiving a snapshot header but before
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
