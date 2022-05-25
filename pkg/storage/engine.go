@@ -883,6 +883,63 @@ type EncryptionRegistries struct {
 	KeyRegistry []byte
 }
 
+// QueryIntent will look up an intent given a key. It there is no intent for a
+// key, it will return nil rather than an error. Errors are returned for the
+// following cases: problem at the storage layer unable to decode the key
+// returned from the iterator unable to unmarshal the intent more than one entry
+// for this key
+func QueryIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
+	// translate to a key in the lock space
+	var intent *roachpb.Intent = nil
+	lbKey, _ := keys.LockTableSingleKey(key, nil)
+
+	iter := reader.NewEngineIterator(IterOptions{Prefix: true, LowerBound: lbKey})
+	defer iter.Close()
+
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: lbKey})
+	if err != nil {
+		return intent, err
+	}
+	if valid {
+		engineKey, err := iter.EngineKey()
+		if err != nil {
+			return intent, err
+		}
+		checkKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+		if err != nil {
+			return intent, err
+		}
+		if !checkKey.Equal(key) {
+			// This should not be possible, a key and using prefix match means that it
+			// must match.
+			return intent, errors.AssertionFailedf("key does not match expected %v != %v", checkKey, key)
+		}
+		var meta enginepb.MVCCMetadata
+		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+			return intent, err
+		}
+		// TODO: Why can't this be inlined?
+		var x = roachpb.MakeIntent(meta.Txn, checkKey)
+		intent = &x
+
+		hasNext, err := iter.NextEngineKey()
+		if err != nil {
+			// we expect false, but not an error
+			return intent, err
+		}
+		// This should not be possible. There can only be one outstanding write
+		// intent for a key and with prefix match we don't find additional names.
+		if hasNext {
+			engineKey, err := iter.EngineKey()
+			if err != nil {
+				return intent, err
+			}
+			return intent, errors.AssertionFailedf("unexpected additional key found %v while looking for %v", engineKey, key)
+		}
+	}
+	return intent, nil
+}
+
 // Scan returns up to max key/value objects starting from start (inclusive)
 // and ending at end (non-inclusive). Specify max=0 for unbounded scans. Since
 // this code may use an intentInterleavingIter, the caller should not attempt
