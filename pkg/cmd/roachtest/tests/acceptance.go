@@ -41,9 +41,9 @@ func registerAcceptance(r registry.Registry) {
 			},
 			{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 			{
-				name:       "multitenant",
-				minVersion: "v20.2.0", // multitenancy is introduced in this cycle
-				fn:         runAcceptanceMultitenant,
+				name: "multitenant",
+				skip: "https://github.com/cockroachdb/cockroach/issues/81506",
+				fn:   runAcceptanceMultitenant,
 			},
 			{name: "reset-quorum", fn: runResetQuorum, numNodes: 8},
 			{
