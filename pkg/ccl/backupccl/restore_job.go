@@ -12,12 +12,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"math"
 	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -412,7 +413,7 @@ func loadBackupSQLDescs(
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
 ) ([]backuppb.BackupManifest, backuppb.BackupManifest, []catalog.Descriptor, int64, error) {
-	backupManifests, sz, err := loadBackupManifests(ctx, mem, details.URIs,
+	backupManifests, sz, err := backupinfo.LoadBackupManifests(ctx, mem, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
 	if err != nil {
 		return nil, backuppb.BackupManifest{}, nil, 0, err
@@ -476,36 +477,6 @@ type restoreResumer struct {
 		// data.
 		afterPreRestore func() error
 	}
-}
-
-// getStatisticsFromBackup retrieves Statistics from backup manifest,
-// either through the Statistics field or from the files.
-func getStatisticsFromBackup(
-	ctx context.Context,
-	exportStore cloud.ExternalStorage,
-	encryption *jobspb.BackupEncryptionOptions,
-	backup backuppb.BackupManifest,
-) ([]*stats.TableStatisticProto, error) {
-	// This part deals with pre-20.2 stats format where backup statistics
-	// are stored as a field in backup manifests instead of in their
-	// individual files.
-	if backup.DeprecatedStatistics != nil {
-		return backup.DeprecatedStatistics, nil
-	}
-	tableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.StatisticsFilenames))
-	uniqueFileNames := make(map[string]struct{})
-	for _, fname := range backup.StatisticsFilenames {
-		if _, exists := uniqueFileNames[fname]; !exists {
-			uniqueFileNames[fname] = struct{}{}
-			myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption)
-			if err != nil {
-				return tableStatistics, err
-			}
-			tableStatistics = append(tableStatistics, myStatsTable.Statistics...)
-		}
-	}
-
-	return tableStatistics, nil
 }
 
 // remapRelevantStatistics changes the table ID references in the stats
@@ -1278,7 +1249,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 	}
 
-	lastBackupIndex, err := getBackupIndexAtTime(backupManifests, details.EndTime)
+	lastBackupIndex, err := backupinfo.GetBackupIndexAtTime(backupManifests, details.EndTime)
 	if err != nil {
 		return err
 	}
@@ -1337,7 +1308,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 	}
 	var remappedStats []*stats.TableStatisticProto
-	backupStats, err := getStatisticsFromBackup(ctx, defaultStore, details.Encryption,
+	backupStats, err := backupinfo.GetStatisticsFromBackup(ctx, defaultStore, details.Encryption,
 		latestBackupManifest)
 	if err == nil {
 		remappedStats = remapRelevantStatistics(ctx, backupStats, details.DescriptorRewrites,

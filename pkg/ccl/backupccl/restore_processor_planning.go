@@ -11,6 +11,7 @@ package backupccl
 import (
 	"bytes"
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"sort"
 	"time"
 
@@ -71,9 +72,9 @@ func distRestore(
 	var noTxn *kv.Txn
 
 	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
-		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
-			settings: execCtx.ExecCfg().Settings,
-			conf:     &execCtx.ExecCfg().ExternalIODirConfig,
+		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupencryption.BackupKMSEnv{
+			Settings: execCtx.ExecCfg().Settings,
+			Conf:     &execCtx.ExecCfg().ExternalIODirConfig,
 		})
 		if err != nil {
 			return err

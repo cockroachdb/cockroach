@@ -6,16 +6,17 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package backupinfo
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -38,7 +39,8 @@ func TestMetadataSST(t *testing.T) {
 	ctx := context.Background()
 	const numAccounts = 1
 	userfile := "userfile:///0"
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backuputils.BackupRestoreTestSetup(t, backuputils.SingleNode, numAccounts,
+		backuputils.InitManualReplication)
 	defer cleanupFn()
 
 	// Check that backup metadata is correct on full cluster backup.
@@ -80,12 +82,12 @@ func checkMetadata(
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := testingReadBackupManifest(ctx, store, backupManifestName)
+	m, err := testingReadBackupManifest(ctx, store, BackupManifestName)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	bm, err := newBackupMetadata(ctx, store, metadataSSTName, nil)
+	bm, err := newBackupMetadata(ctx, store, MetadataSSTName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +236,7 @@ func checkStats(
 	m *backuppb.BackupManifest,
 	bm *BackupMetadata,
 ) {
-	expectedStats, err := getStatisticsFromBackup(ctx, store, nil, *m)
+	expectedStats, err := GetStatisticsFromBackup(ctx, store, nil, *m)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,8 +268,8 @@ func testingReadBackupManifest(
 	if err != nil {
 		return nil, err
 	}
-	if isGZipped(bytes) {
-		descBytes, err := decompressData(ctx, nil, bytes)
+	if IsGZipped(bytes) {
+		descBytes, err := DecompressData(ctx, nil, bytes)
 		if err != nil {
 			return nil, err
 		}

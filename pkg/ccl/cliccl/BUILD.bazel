@@ -16,6 +16,8 @@ go_library(
         "//pkg/blobs",
         "//pkg/build",
         "//pkg/ccl/backupccl",
+        "//pkg/ccl/backupccl/backupdestination",
+        "//pkg/ccl/backupccl/backupinfo",
         "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/baseccl",
         "//pkg/ccl/cliccl/cliflagsccl",
@@ -71,7 +73,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/build",
-        "//pkg/ccl/backupccl",
+        "//pkg/ccl/backupccl/backupinfo",
         "//pkg/ccl/utilccl",
         "//pkg/cli",
         "//pkg/cli/clisqlexec",

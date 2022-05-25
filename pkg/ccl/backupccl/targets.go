@@ -11,11 +11,12 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"reflect"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -39,6 +40,79 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+// loadSQLDescsFromBackupsAtTime returns the descriptors from the
+// BACKUP_MANIFEST corresponding to the backup taken asOf system time, along
+// with the BACKUP_MANIFEST itself.
+func loadSQLDescsFromBackupsAtTime(
+	backupManifests []backuppb.BackupManifest, asOf hlc.Timestamp,
+) ([]catalog.Descriptor, backuppb.BackupManifest) {
+	lastBackupManifest := backupManifests[len(backupManifests)-1]
+
+	unwrapDescriptors := func(raw []descpb.Descriptor) []catalog.Descriptor {
+		ret := make([]catalog.Descriptor, 0, len(raw))
+		for i := range raw {
+			ret = append(ret, descbuilder.NewBuilder(&raw[i]).BuildExistingMutable())
+		}
+		return ret
+	}
+	if asOf.IsEmpty() {
+		if lastBackupManifest.DescriptorCoverage != tree.AllDescriptors {
+			return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		}
+
+		// Cluster backups with revision history may have included previous database
+		// versions of database descriptors in lastBackupManifest.Descriptors. Find
+		// the correct set of descriptors by going through their revisions. See
+		// #68541.
+		asOf = lastBackupManifest.EndTime
+	}
+
+	for _, b := range backupManifests {
+		if asOf.Less(b.StartTime) {
+			break
+		}
+		lastBackupManifest = b
+	}
+	if len(lastBackupManifest.DescriptorChanges) == 0 {
+		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+	}
+
+	byID := make(map[descpb.ID]*descpb.Descriptor, len(lastBackupManifest.Descriptors))
+	for _, rev := range lastBackupManifest.DescriptorChanges {
+		if asOf.Less(rev.Time) {
+			break
+		}
+		if rev.Desc == nil {
+			delete(byID, rev.ID)
+		} else {
+			byID[rev.ID] = rev.Desc
+		}
+	}
+
+	allDescs := make([]catalog.Descriptor, 0, len(byID))
+	for _, raw := range byID {
+		// A revision may have been captured before it was in a DB that is
+		// backed up -- if the DB is missing, filter the object.
+		desc := descbuilder.NewBuilder(raw).BuildExistingMutable()
+		var isObject bool
+		switch d := desc.(type) {
+		case catalog.TableDescriptor:
+			// Filter out revisions in the dropped state.
+			if d.GetState() == descpb.DescriptorState_DROP {
+				continue
+			}
+			isObject = true
+		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
+			isObject = true
+		}
+		if isObject && byID[desc.GetParentID()] == nil {
+			continue
+		}
+		allDescs = append(allDescs, desc)
+	}
+	return allDescs, lastBackupManifest
+}
 
 // getRelevantDescChanges finds the changes between start and end time to the
 // SQL descriptors matching `descs` or `expandedDBs`, ordered by time. A
@@ -388,7 +462,7 @@ func selectTargets(
 		return nil, nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
 	}
 
-	if lastBackupManifest.FormatVersion >= BackupFormatDescriptorTrackingVersion {
+	if lastBackupManifest.FormatVersion >= backupinfo.BackupFormatDescriptorTrackingVersion {
 		if err := matched.CheckExpansions(lastBackupManifest.CompleteDbs); err != nil {
 			return nil, nil, nil, err
 		}

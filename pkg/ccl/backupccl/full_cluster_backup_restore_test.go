@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"os"
 	"path/filepath"
 	"strings"
@@ -645,7 +646,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == backupManifestName || !strings.HasSuffix(path, ".sst") {
+		if info.Name() == backupinfo.BackupManifestName || !strings.HasSuffix(path, ".sst") {
 			return nil
 		}
 		return os.Remove(path)

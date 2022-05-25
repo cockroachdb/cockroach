@@ -1,0 +1,62 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "backupdestination",
+    srcs = [
+        "backup_destination.go",
+        "incrementals.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/backupccl/backupencryption",
+        "//pkg/ccl/backupccl/backupinfo",
+        "//pkg/ccl/backupccl/backuppb",
+        "//pkg/cloud",
+        "//pkg/clusterversion",
+        "//pkg/featureflag",
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
+        "//pkg/security/username",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/ioctx",
+        "//pkg/util/mon",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "backupdestination_test",
+    srcs = [
+        "backup_destination_test.go",
+        "incrementals_test.go",
+    ],
+    embed = [":backupdestination"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/backupccl/backupinfo",
+        "//pkg/ccl/backupccl/backuputils",
+        "//pkg/cloud",
+        "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
+        "//pkg/security/username",
+        "//pkg/sql",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

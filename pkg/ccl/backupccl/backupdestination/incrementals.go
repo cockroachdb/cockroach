@@ -6,21 +6,25 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package backupdestination
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 	"net/url"
 	"path"
 	"regexp"
 	"sort"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/errors"
 )
 
 // The default subdirectory for incremental backups.
@@ -32,8 +36,6 @@ const (
 	// data sst files in each backup, which start with "data/", into a single result
 	// that can be skipped over quickly.
 	listingDelimDataSlash = "data/"
-
-	URLSeparator = '/'
 )
 
 // backupSubdirRE identifies the portion of a larger path that refers to the full backup subdirectory.
@@ -65,20 +67,20 @@ func FindPriorBackups(
 ) ([]string, error) {
 	var prev []string
 	if err := store.List(ctx, "", listingDelimDataSlash, func(p string) error {
-		if ok, err := path.Match(incBackupSubdirGlob+backupManifestName, p); err != nil {
+		if ok, err := path.Match(incBackupSubdirGlob+backupinfo.BackupManifestName, p); err != nil {
 			return err
 		} else if ok {
 			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupManifestName)
+				p = strings.TrimSuffix(p, "/"+backupinfo.BackupManifestName)
 			}
 			prev = append(prev, p)
 			return nil
 		}
-		if ok, err := path.Match(incBackupSubdirGlob+backupOldManifestName, p); err != nil {
+		if ok, err := path.Match(incBackupSubdirGlob+backupinfo.BackupOldManifestName, p); err != nil {
 			return err
 		} else if ok {
 			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupOldManifestName)
+				p = strings.TrimSuffix(p, "/"+backupinfo.BackupOldManifestName)
 			}
 			prev = append(prev, p)
 		}
@@ -90,7 +92,9 @@ func FindPriorBackups(
 	return prev, nil
 }
 
-func appendPaths(uris []string, tailDir ...string) ([]string, error) {
+// AppendPaths appends the tailDir to the Path of the passed in URIs and returns
+// the newly created URIs.
+func AppendPaths(uris []string, tailDir ...string) ([]string, error) {
 	retval := make([]string, len(uris))
 	for i, uri := range uris {
 		parsed, err := url.Parse(uri)
@@ -136,13 +140,13 @@ func JoinURLPath(args ...string) string {
 
 	// We have at least 1 arg, and each has at least length 1.
 	isAbs := false
-	if argsCopy[0][0] == URLSeparator {
+	if argsCopy[0][0] == '/' {
 		isAbs = true
 		argsCopy[0] = argsCopy[0][1:]
 	}
 	joined := path.Join(argsCopy...)
 	if isAbs {
-		joined = string(URLSeparator) + joined
+		joined = "/" + joined
 	}
 	return joined
 }
@@ -162,7 +166,9 @@ func backupsFromLocation(
 	return prev, err
 }
 
-func resolveIncrementalsBackupLocation(
+// ResolveIncrementalsBackupLocation resolves and returns the URIs of where the
+// incremental backups are stored.
+func ResolveIncrementalsBackupLocation(
 	ctx context.Context,
 	user username.SQLUsername,
 	execCfg *sql.ExecutorConfig,
@@ -171,7 +177,7 @@ func resolveIncrementalsBackupLocation(
 	subdir string,
 ) ([]string, error) {
 	if len(explicitIncrementalCollections) > 0 {
-		incPaths, err := appendPaths(explicitIncrementalCollections, subdir)
+		incPaths, err := AppendPaths(explicitIncrementalCollections, subdir)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +194,7 @@ func resolveIncrementalsBackupLocation(
 		return incPaths, nil
 	}
 
-	resolvedIncrementalsBackupLocationOld, err := appendPaths(fullBackupCollections, subdir)
+	resolvedIncrementalsBackupLocationOld, err := AppendPaths(fullBackupCollections, subdir)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +208,7 @@ func resolveIncrementalsBackupLocation(
 		return nil, err
 	}
 
-	resolvedIncrementalsBackupLocation, err := appendPaths(fullBackupCollections, DefaultIncrementalsSubdir, subdir)
+	resolvedIncrementalsBackupLocation, err := AppendPaths(fullBackupCollections, DefaultIncrementalsSubdir, subdir)
 	if err != nil {
 		return nil, err
 	}
@@ -229,4 +235,79 @@ func resolveIncrementalsBackupLocation(
 
 	// Otherwise, use the new location.
 	return resolvedIncrementalsBackupLocation, nil
+}
+
+// ResolveBackupManifestsExplicitIncrementals returns the BackupManifests and
+// related information when the BACKUP statement explicitly lists out the
+// incremental backup locations.
+func ResolveBackupManifestsExplicitIncrementals(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	mkStore cloud.ExternalStorageFromURIFactory,
+	from [][]string,
+	endTime hlc.Timestamp,
+	encryption *jobspb.BackupEncryptionOptions,
+	user username.SQLUsername,
+) (
+	defaultURIs []string,
+	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
+	mainBackupManifests []backuppb.BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	reservedMemSize int64,
+	_ error,
+) {
+	// If explicit incremental backups were are passed, we simply load them one
+	// by one as specified and return the results.
+	var ownedMemSize int64
+	defer func() {
+		if ownedMemSize != 0 {
+			mem.Shrink(ctx, ownedMemSize)
+		}
+	}()
+
+	defaultURIs = make([]string, len(from))
+	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
+	mainBackupManifests = make([]backuppb.BackupManifest, len(from))
+
+	var err error
+	for i, uris := range from {
+		// The first URI in the list must contain the main BACKUP manifest.
+		defaultURIs[i] = uris[0]
+
+		stores := make([]cloud.ExternalStorage, len(uris))
+		for j := range uris {
+			stores[j], err = mkStore(ctx, uris[j], user)
+			if err != nil {
+				return nil, nil, nil, 0, errors.Wrapf(err, "export configuration")
+			}
+			defer stores[j].Close()
+		}
+
+		var memSize int64
+		mainBackupManifests[i], memSize, err = backupinfo.ReadBackupManifestFromStore(ctx, mem, stores[0], encryption)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		ownedMemSize += memSize
+
+		if len(uris) > 1 {
+			localityInfo[i], err = getLocalityInfo(
+				ctx, stores, uris, mainBackupManifests[i], encryption, "", /* prefix */
+			)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+		}
+	}
+
+	totalMemSize := ownedMemSize
+	ownedMemSize = 0
+
+	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := validateEndTimeAndTruncate(
+		defaultURIs, mainBackupManifests, localityInfo, endTime)
+
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	return validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, totalMemSize, nil
 }

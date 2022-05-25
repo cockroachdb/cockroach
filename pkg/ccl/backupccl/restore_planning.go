@@ -11,6 +11,8 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"sort"
 	"strconv"
@@ -1373,9 +1375,10 @@ func doRestorePlan(
 
 	var fullyResolvedSubdir string
 
-	if strings.EqualFold(subdir, latestFileName) {
+	if strings.EqualFold(subdir, backupdestination.LatestFileName) {
 		// set subdir to content of latest file
-		latest, err := readLatestFile(ctx, from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+		latest, err := backupdestination.ReadLatestFile(ctx, from[0][0],
+			p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
 		if err != nil {
 			return err
 		}
@@ -1384,12 +1387,12 @@ func doRestorePlan(
 		fullyResolvedSubdir = subdir
 	}
 
-	fullyResolvedBaseDirectory, err := appendPaths(from[0][:], fullyResolvedSubdir)
+	fullyResolvedBaseDirectory, err := backupdestination.AppendPaths(from[0][:], fullyResolvedSubdir)
 	if err != nil {
 		return err
 	}
 
-	fullyResolvedIncrementalsDirectory, err := resolveIncrementalsBackupLocation(
+	fullyResolvedIncrementalsDirectory, err := backupdestination.ResolveIncrementalsBackupLocation(
 		ctx,
 		p.User(),
 		p.ExecCfg(),
@@ -1423,7 +1426,7 @@ func doRestorePlan(
 
 	var encryption *jobspb.BackupEncryptionOptions
 	if restoreStmt.Options.EncryptionPassphrase != nil {
-		opts, err := readEncryptionOptions(ctx, baseStores[0])
+		opts, err := backupencryption.ReadEncryptionOptions(ctx, baseStores[0])
 		if err != nil {
 			return err
 		}
@@ -1433,7 +1436,7 @@ func doRestorePlan(
 			Key:  encryptionKey,
 		}
 	} else if restoreStmt.Options.DecryptionKMSURI != nil {
-		opts, err := readEncryptionOptions(ctx, baseStores[0])
+		opts, err := backupencryption.ReadEncryptionOptions(ctx, baseStores[0])
 		if err != nil {
 			return err
 		}
@@ -1445,8 +1448,9 @@ func doRestorePlan(
 		// restore has been used to encrypt the backup at least once.
 		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 		for _, encFile := range opts {
-			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(kms,
-				newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
+			defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup(kms,
+				backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID),
+				&backupencryption.BackupKMSEnv{
 					baseStores[0].Settings(),
 					&ioConf,
 				})
@@ -1477,14 +1481,14 @@ func doRestorePlan(
 	if len(from) <= 1 {
 		// Incremental layers are not specified explicitly. They will be searched for automatically.
 		// This could be either INTO-syntax, OR TO-syntax.
-		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifests(
+		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = backupdestination.ResolveBackupManifests(
 			ctx, &mem, baseStores, mkStore, fullyResolvedBaseDirectory,
 			fullyResolvedIncrementalsDirectory, endTime, encryption, p.User(),
 		)
 	} else {
 		// Incremental layers are specified explicitly.
 		// This implies the old, deprecated TO-syntax.
-		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifestsExplicitIncrementals(
+		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = backupdestination.ResolveBackupManifestsExplicitIncrementals(
 			ctx, &mem, mkStore, from, endTime, encryption, p.User())
 	}
 

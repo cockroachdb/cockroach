@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"net/url"
 	"regexp"
@@ -814,7 +815,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 				ctx := context.Background()
 				store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, destination, username.RootUserName())
 				require.NoError(t, err)
-				r, err := findLatestFile(ctx, store)
+				r, err := backupdestination.FindLatestFile(ctx, store)
 				require.NoError(t, err)
 				latest, err := ioctx.ReadAll(ctx, r)
 				require.NoError(t, err)

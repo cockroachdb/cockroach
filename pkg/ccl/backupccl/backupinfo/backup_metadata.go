@@ -6,17 +6,18 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package backupinfo
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"io"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -34,8 +35,8 @@ import (
 )
 
 const (
-	metadataSSTName  = "metadata.sst"
-	fileInfoPath     = "fileinfo.sst"
+	MetadataSSTName  = "metadata.sst"
+	FileInfoPath     = "fileinfo.sst"
 	sstBackupKey     = "backup"
 	sstDescsPrefix   = "desc/"
 	sstFilesPrefix   = "file/"
@@ -45,7 +46,9 @@ const (
 	sstTenantsPrefix = "tenant/"
 )
 
-func writeBackupMetadataSST(
+// WriteBackupMetadataSST constructs the metatdata SST corresponding to the
+// provided manifest, and writes it to dest.
+func WriteBackupMetadataSST(
 	ctx context.Context,
 	dest cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
@@ -61,7 +64,7 @@ func writeBackupMetadataSST(
 		}
 	}()
 
-	w, err := makeWriter(ctx, dest, metadataSSTName, enc)
+	w, err := makeWriter(ctx, dest, MetadataSSTName, enc)
 	if err != nil {
 		return err
 	}
@@ -89,7 +92,7 @@ func makeWriter(
 	}
 
 	if enc != nil {
-		key, err := getEncryptionKey(ctx, enc, dest.Settings(), dest.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, dest.Settings(), dest.ExternalIOConf())
 		if err != nil {
 			return nil, err
 		}
@@ -124,7 +127,7 @@ func constructMetadataSST(
 		return err
 	}
 
-	if err := writeFilesToMetadata(ctx, sst, m, dest, enc, fileInfoPath); err != nil {
+	if err := writeFilesToMetadata(ctx, sst, m, dest, enc, FileInfoPath); err != nil {
 		return err
 	}
 
@@ -595,7 +598,7 @@ func debugDumpFileSST(
 ) error {
 	var encOpts *roachpb.FileEncryptionOptions
 	if enc != nil {
-		key, err := getEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
 		if err != nil {
 			return err
 		}
@@ -641,7 +644,7 @@ func DebugDumpMetadataSST(
 ) error {
 	var encOpts *roachpb.FileEncryptionOptions
 	if enc != nil {
-		key, err := getEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
 		if err != nil {
 			return err
 		}
@@ -780,7 +783,8 @@ func newBackupMetadata(
 ) (*BackupMetadata, error) {
 	var encOpts *roachpb.FileEncryptionOptions
 	if encryption != nil {
-		key, err := getEncryptionKey(ctx, encryption, exportStore.Settings(), exportStore.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
+			exportStore.ExternalIOConf())
 		if err != nil {
 			return nil, err
 		}
@@ -890,7 +894,7 @@ func (b *BackupMetadata) FileIter(ctx context.Context) FileIterator {
 	var iters []storage.SimpleMVCCIterator
 	var encOpts *roachpb.FileEncryptionOptions
 	if b.enc != nil {
-		key, err := getEncryptionKey(ctx, b.enc, b.store.Settings(), b.store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, b.enc, b.store.Settings(), b.store.ExternalIOConf())
 		if err != nil {
 			return FileIterator{err: err}
 		}
@@ -1203,7 +1207,7 @@ func makeBytesIter(
 ) bytesIter {
 	var encOpts *roachpb.FileEncryptionOptions
 	if enc != nil {
-		key, err := getEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
 		if err != nil {
 			return bytesIter{iterError: err}
 		}

@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"sort"
 
@@ -61,7 +62,7 @@ func makeSimpleImportSpans(
 	}
 
 	for i := range backups {
-		sort.Sort(BackupFileDescriptors(backups[i].Files))
+		sort.Sort(backupinfo.BackupFileDescriptors(backups[i].Files))
 	}
 
 	var cover []execinfrapb.RestoreSpanEntry

@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -66,10 +67,11 @@ func distBackupPlanSpecs(
 	}
 
 	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
-		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
-			settings: execCfg.Settings,
-			conf:     &execCfg.ExternalIODirConfig,
-		})
+		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri,
+			&backupencryption.BackupKMSEnv{
+				Settings: execCfg.Settings,
+				Conf:     &execCfg.ExternalIODirConfig,
+			})
 		if err != nil {
 			return nil, err
 		}

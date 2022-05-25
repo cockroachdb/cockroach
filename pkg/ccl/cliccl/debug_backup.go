@@ -15,6 +15,8 @@ import (
 	gohex "encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"net/url"
 	"os"
@@ -298,7 +300,7 @@ func getManifestFromURI(ctx context.Context, path string) (backuppb.BackupManife
 	// upgraded from the old FK representation, or even older formats). If more
 	// fields are added to the output, the table descriptors may need to be
 	// upgraded.
-	backupManifest, _, err := backupccl.ReadBackupManifestFromURI(ctx, nil /* mem */, path, username.RootUserName(),
+	backupManifest, _, err := backupinfo.ReadBackupManifestFromURI(ctx, nil /* mem */, path, username.RootUserName(),
 		externalStorageFromURIFactory, nil)
 	if err != nil {
 		return backuppb.BackupManifest{}, err
@@ -338,7 +340,7 @@ func runListBackupsCmd(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	backupPaths, err := backupccl.ListFullBackupsInCollection(ctx, store)
+	backupPaths, err := backupdestination.ListFullBackupsInCollection(ctx, store)
 	if err != nil {
 		return errors.Wrapf(err, "list full backups in collection")
 	}
@@ -377,7 +379,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 		path = nodelocal.MakeLocalStorageURI(path)
 	}
 
-	basepath, subdir := backupccl.CollectionAndSubdir(path, "")
+	basepath, subdir := backupdestination.CollectionAndSubdir(path, "")
 
 	uri, err := url.Parse(basepath)
 	if err != nil {
@@ -387,43 +389,43 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
 	// Start the list of prior incremental backups with the full backup.
-	priorPaths := []string{backupccl.JoinURLPath(
+	priorPaths := []string{backupdestination.JoinURLPath(
 		strings.TrimSuffix(
-			uri.Path, string(backupccl.URLSeparator)+backupccl.DefaultIncrementalsSubdir),
+			uri.Path, "/"+backupdestination.DefaultIncrementalsSubdir),
 		subdir)}
 
 	// Search for incrementals in the old default location, i.e. the given path.
 	oldIncURI := *uri
-	oldIncURI.Path = backupccl.JoinURLPath(oldIncURI.Path, subdir)
+	oldIncURI.Path = backupdestination.JoinURLPath(oldIncURI.Path, subdir)
 	baseStore, err := externalStorageFromURIFactory(ctx, oldIncURI.String(), username.RootUserName())
 	if err != nil {
 		return errors.Wrapf(err, "connect to external storage")
 	}
 	defer baseStore.Close()
 
-	oldIncPaths, err := backupccl.FindPriorBackups(ctx, baseStore, backupccl.OmitManifest)
+	oldIncPaths, err := backupdestination.FindPriorBackups(ctx, baseStore, backupdestination.OmitManifest)
 	if err != nil {
 		return err
 	}
 	for _, path := range oldIncPaths {
-		priorPaths = append(priorPaths, backupccl.JoinURLPath(oldIncURI.Path, path))
+		priorPaths = append(priorPaths, backupdestination.JoinURLPath(oldIncURI.Path, path))
 	}
 
 	// Search for incrementals in the new default location, i.e. the "/incrementals" subdir.
 	newIncURI := *uri
-	newIncURI.Path = backupccl.JoinURLPath(newIncURI.Path, backupccl.DefaultIncrementalsSubdir, subdir)
+	newIncURI.Path = backupdestination.JoinURLPath(newIncURI.Path, backupdestination.DefaultIncrementalsSubdir, subdir)
 	incStore, err := externalStorageFromURIFactory(ctx, newIncURI.String(), username.RootUserName())
 	if err != nil {
 		return errors.Wrapf(err, "connect to external storage")
 	}
 	defer incStore.Close()
 
-	newIncPaths, err := backupccl.FindPriorBackups(ctx, incStore, backupccl.OmitManifest)
+	newIncPaths, err := backupdestination.FindPriorBackups(ctx, incStore, backupdestination.OmitManifest)
 	if err != nil {
 		return err
 	}
 	for _, path := range newIncPaths {
-		priorPaths = append(priorPaths, backupccl.JoinURLPath(newIncURI.Path, path))
+		priorPaths = append(priorPaths, backupdestination.JoinURLPath(newIncURI.Path, path))
 	}
 
 	// List and report manifests found in all locations.
@@ -436,7 +438,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer stores[i].Close()
-		manifest, _, err := backupccl.ReadBackupManifestFromStore(ctx, nil /* mem */, stores[i], nil)
+		manifest, _, err := backupinfo.ReadBackupManifestFromStore(ctx, nil /* mem */, stores[i], nil)
 		if err != nil {
 			return err
 		}

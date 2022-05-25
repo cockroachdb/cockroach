@@ -10,6 +10,9 @@ package backupccl
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"path"
 	"strings"
@@ -158,7 +161,7 @@ func (m metadataSSTInfoReader) showBackup(
 	user username.SQLUsername,
 	resultsCh chan<- tree.Datums,
 ) error {
-	filename := metadataSSTName
+	filename := backupinfo.MetadataSSTName
 	push := func(_, readable string, value json.JSON) error {
 		val := tree.DNull
 		if value != nil {
@@ -177,7 +180,7 @@ func (m metadataSSTInfoReader) showBackup(
 			return errors.Wrapf(err, "creating external store")
 		}
 		defer store.Close()
-		if err := DebugDumpMetadataSST(ctx, store, filename, info.enc, push); err != nil {
+		if err := backupinfo.DebugDumpMetadataSST(ctx, store, filename, info.enc, push); err != nil {
 			return err
 		}
 	}
@@ -291,14 +294,14 @@ func showBackupPlanHook(
 
 		fullyResolvedDest := dest
 		if subdir != "" {
-			if strings.EqualFold(subdir, latestFileName) {
-				subdir, err = readLatestFile(ctx, dest[0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+			if strings.EqualFold(subdir, backupdestination.LatestFileName) {
+				subdir, err = backupdestination.ReadLatestFile(ctx, dest[0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 					p.User())
 				if err != nil {
 					return errors.Wrap(err, "read LATEST path")
 				}
 			}
-			fullyResolvedDest, err = appendPaths(dest, subdir)
+			fullyResolvedDest, err = backupdestination.AppendPaths(dest, subdir)
 			if err != nil {
 				return err
 			}
@@ -329,8 +332,8 @@ func showBackupPlanHook(
 		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup, 
 you must pass the 'encryption_info_dir' parameter that points to the directory of your full backup`
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
-			opts, err := readEncryptionOptions(ctx, encStore)
-			if errors.Is(err, errEncryptionInfoRead) {
+			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
+			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)
 			}
 			if err != nil {
@@ -342,19 +345,19 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				Key:  encryptionKey,
 			}
 		} else if kms, ok := opts[backupOptEncKMS]; ok {
-			opts, err := readEncryptionOptions(ctx, encStore)
-			if errors.Is(err, errEncryptionInfoRead) {
+			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
+			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)
 			}
 			if err != nil {
 				return err
 			}
 
-			env := &backupKMSEnv{p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig}
+			env := &backupencryption.BackupKMSEnv{p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig}
 			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 			for _, encFile := range opts {
-				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup([]string{kms},
-					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), env)
+				defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup([]string{kms},
+					backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), env)
 				if err == nil {
 					break
 				}
@@ -377,8 +380,8 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			}
 		}
 
-		collection, computedSubdir := CollectionAndSubdir(dest[0], subdir)
-		fullyResolvedIncrementalsDirectory, err := resolveIncrementalsBackupLocation(
+		collection, computedSubdir := backupdestination.CollectionAndSubdir(dest[0], subdir)
+		fullyResolvedIncrementalsDirectory, err := backupdestination.ResolveIncrementalsBackupLocation(
 			ctx,
 			p.User(),
 			p.ExecCfg(),
@@ -409,14 +412,14 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 
 		info.defaultURIs, info.manifests, info.localityInfo, memReserved,
-			err = resolveBackupManifests(
+			err = backupdestination.ResolveBackupManifests(
 			ctx, &mem, baseStores, mkStore, fullyResolvedDest,
 			fullyResolvedIncrementalsDirectory, hlc.Timestamp{}, encryption, p.User())
 		defer func() {
 			mem.Shrink(ctx, memReserved)
 		}()
 		if err != nil {
-			if errors.Is(err, errLocalityDescriptor) && subdir == "" {
+			if errors.Is(err, backupdestination.ErrLocalityDescriptor) && subdir == "" {
 				p.BufferClientNotice(ctx,
 					pgnotice.Newf("`SHOW BACKUP` using the old syntax ("+
 						"without the `IN` keyword) on a locality aware backup does not display or validate"+
@@ -424,7 +427,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 						"Consider using the new `BACKUP INTO` syntax and `SHOW BACKUP"+
 						" FROM <backup> IN <collection>`"))
 			} else if errors.Is(err, cloud.ErrFileDoesNotExist) {
-				latestFileExists, errLatestFile := checkForLatestFileInCollection(ctx, baseStores[0])
+				latestFileExists, errLatestFile := backupdestination.CheckForLatestFileInCollection(ctx, baseStores[0])
 
 				if errLatestFile == nil && latestFileExists {
 					return errors.WithHintf(err, "The specified path is the root of a backup collection. "+
@@ -507,9 +510,9 @@ func checkBackupFiles(
 		// metadata files ( prefixed with `backupPartitionDescriptorPrefix`) , as
 		// they're validated in resolveBackupManifests.
 		for _, metaFile := range []string{
-			fileInfoPath,
-			metadataSSTName,
-			backupManifestName + backupManifestChecksumSuffix} {
+			backupinfo.FileInfoPath,
+			backupinfo.MetadataSSTName,
+			backupinfo.BackupManifestName + backupinfo.BackupManifestChecksumSuffix} {
 			if _, err := defaultStore.Size(ctx, metaFile); err != nil {
 				return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
 					info.defaultURIs[layer], metaFile)
@@ -1061,10 +1064,10 @@ func getManifestDirs(fullSubdir string, defaultUris []string) ([]string, error) 
 	}
 
 	var incSubdir string
-	if strings.HasSuffix(incRoot, DefaultIncrementalsSubdir) {
+	if strings.HasSuffix(incRoot, backupdestination.DefaultIncrementalsSubdir) {
 		// The incremental backup is stored in the default incremental
 		// directory (i.e. collectionURI/incrementals/fullSubdir)
-		incSubdir = path.Join("/"+DefaultIncrementalsSubdir, fullSubdir)
+		incSubdir = path.Join("/"+backupdestination.DefaultIncrementalsSubdir, fullSubdir)
 	} else {
 		// Implies one of two scenarios:
 		// 1) the incremental chain is stored in the pre 22.1
@@ -1144,7 +1147,7 @@ func showBackupsInCollectionPlanHook(
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer store.Close()
-		res, err := ListFullBackupsInCollection(ctx, store)
+		res, err := backupdestination.ListFullBackupsInCollection(ctx, store)
 		if err != nil {
 			return err
 		}

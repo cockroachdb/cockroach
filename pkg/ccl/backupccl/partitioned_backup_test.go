@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -95,7 +96,7 @@ func TestGetURIsByLocalityKV(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			defaultURI, urisByLocality, err := getURIsByLocalityKV(tc.input, "" /* appendPath */)
+			defaultURI, urisByLocality, err := backupdestination.GetURIsByLocalityKV(tc.input, "" /* appendPath */)
 			if tc.error != "" {
 				if !testutils.IsError(err, tc.error) {
 					t.Fatalf("expected error matching %q, got %q", tc.error, err)

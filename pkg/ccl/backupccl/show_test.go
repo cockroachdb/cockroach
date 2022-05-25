@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -129,7 +130,7 @@ ORDER BY object_type, object_name`, full)
 	require.NotNil(t, matchResult)
 	backupTime, err := time.Parse("2006-01-02 15:04:05.00", matchResult[1])
 	require.NoError(t, err)
-	backupFolder := backupTime.Format(DateBasedIntoFolderName)
+	backupFolder := backupTime.Format(backupinfo.DateBasedIntoFolderName)
 	resolvedBackupFolder := full + backupFolder
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN $1 AS OF SYSTEM TIME '%s'`, incTS), full)
