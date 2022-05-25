@@ -714,11 +714,6 @@ func TestServeIndexHTML(t *testing.T) {
 	</head>
 	<body>
 		<div id="react-layout"></div>
-
-		<script>
-			window.dataFromServer = %s;
-		</script>
-
 		<script src="bundle.js" type="text/javascript"></script>
 	</body>
 </html>
@@ -778,16 +773,22 @@ Binary built without web UI.
 			require.NoError(t, err)
 
 			respString := string(respBytes)
+			require.Equal(t, htmlTemplate, respString)
+
+			resp, err = client.Get(s.AdminURL() + "/uiconfig")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			require.Equal(t, 200, resp.StatusCode)
+
+			respBytes, err = ioutil.ReadAll(resp.Body)
+			require.NoError(t, err)
 			expected := fmt.Sprintf(
-				htmlTemplate,
-				fmt.Sprintf(
-					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
-					build.GetInfo().Tag,
-					build.BinaryVersionPrefix(),
-					1,
-				),
+				`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
+				build.GetInfo().Tag,
+				build.BinaryVersionPrefix(),
+				1,
 			)
-			require.Equal(t, expected, respString)
+			require.Equal(t, expected, string(respBytes))
 		})
 	})
 
@@ -841,8 +842,19 @@ Binary built without web UI.
 				require.NoError(t, err)
 
 				respString := string(respBytes)
-				expected := fmt.Sprintf(htmlTemplate, testCase.json)
-				require.Equal(t, expected, respString)
+				require.Equal(t, htmlTemplate, respString)
+
+				req, err = http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/uiconfig", nil)
+				require.NoError(t, err)
+
+				resp, err = testCase.client.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
+				require.Equal(t, 200, resp.StatusCode)
+
+				respBytes, err = ioutil.ReadAll(resp.Body)
+				require.NoError(t, err)
+				require.Equal(t, testCase.json, string(respBytes))
 			})
 		}
 	})

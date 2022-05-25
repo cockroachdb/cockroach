@@ -201,6 +201,9 @@ module.exports = (env, argv) => {
         "/": {
           secure: false,
           target: env.target || process.env.TARGET,
+          headers: {
+            "CRDB-Development": "true",
+          },
         },
       },
     },
