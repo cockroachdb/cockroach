@@ -1273,7 +1273,13 @@ func (nl *NodeLiveness) updateLiveness(
 		for i, eng := range engines {
 			eng := eng // pin the loop variable
 			resultCs[i], _ = nl.engineSyncs.DoChan(strconv.Itoa(i), func() (interface{}, error) {
-				return nil, storage.WriteSyncNoop(eng)
+				var taskErr error
+				if err := nl.stopper.RunTask(ctx, "liveness-hb-diskwrite", func(ctx context.Context) {
+					taskErr = storage.WriteSyncNoop(eng)
+				}); err != nil {
+					return nil, err
+				}
+				return nil, taskErr
 			})
 		}
 		for _, resultC := range resultCs {
