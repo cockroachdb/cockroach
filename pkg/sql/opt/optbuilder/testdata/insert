@@ -1333,52 +1333,65 @@ exec-ddl
 CREATE TABLE assn_cast_default (
     k INT PRIMARY KEY,
     i2 INT2 DEFAULT 10::INT,
+    i3 INT DEFAULT 1.0::FLOAT,
     c1 CHAR DEFAULT 'foo',
     c2 CHAR DEFAULT 'bar'::TEXT,
     d1 DECIMAL(10, 0) DEFAULT 1.23,
     d2 DECIMAL(10, 0) DEFAULT 4.56::DECIMAL(10, 2),
+    b BOOL DEFAULT 1.0::FLOAT,
     s TEXT DEFAULT NULL
 )
 ----
 
 build
-INSERT INTO assn_cast_default (k) VALUES (1)
+INSERT INTO assn_cast_default (k, b) VALUES (1, true)
 ----
 insert assn_cast_default
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:10 => k:1
- │    ├── i2_cast:17 => i2:2
- │    ├── c1_cast:18 => c1:3
- │    ├── c2_cast:19 => c2:4
- │    ├── d1_cast:20 => d1:5
- │    ├── d2_cast:21 => d2:6
- │    └── s_default:16 => s:7
+ │    ├── column1:12 => k:1
+ │    ├── i2_cast:21 => i2:2
+ │    ├── i3_cast:22 => i3:3
+ │    ├── c1_cast:23 => c1:4
+ │    ├── c2_cast:24 => c2:5
+ │    ├── d1_cast:25 => d1:6
+ │    ├── d2_cast:26 => d2:7
+ │    ├── column2:13 => b:8
+ │    └── s_default:20 => s:9
  └── project
-      ├── columns: i2_cast:17!null c1_cast:18!null c2_cast:19!null d1_cast:20!null d2_cast:21!null column1:10!null s_default:16
+      ├── columns: i2_cast:21!null i3_cast:22!null c1_cast:23!null c2_cast:24!null d1_cast:25!null d2_cast:26!null column1:12!null column2:13!null s_default:20
       ├── project
-      │    ├── columns: i2_default:11!null c1_default:12!null c2_default:13!null d1_default:14!null d2_default:15!null s_default:16 column1:10!null
+      │    ├── columns: i2_default:14!null i3_default:15!null c1_default:16!null c2_default:17!null d1_default:18!null d2_default:19!null s_default:20 column1:12!null column2:13!null
       │    ├── values
-      │    │    ├── columns: column1:10!null
-      │    │    └── (1,)
+      │    │    ├── columns: column1:12!null column2:13!null
+      │    │    └── (1, true)
       │    └── projections
-      │         ├── 10 [as=i2_default:11]
-      │         ├── 'foo' [as=c1_default:12]
-      │         ├── 'bar' [as=c2_default:13]
-      │         ├── 1.23 [as=d1_default:14]
-      │         ├── 4.56::DECIMAL(10,2) [as=d2_default:15]
-      │         └── NULL::STRING [as=s_default:16]
+      │         ├── 10 [as=i2_default:14]
+      │         ├── 1.0 [as=i3_default:15]
+      │         ├── 'foo' [as=c1_default:16]
+      │         ├── 'bar' [as=c2_default:17]
+      │         ├── 1.23 [as=d1_default:18]
+      │         ├── 4.56::DECIMAL(10,2) [as=d2_default:19]
+      │         └── NULL::STRING [as=s_default:20]
       └── projections
-           ├── assignment-cast: INT2 [as=i2_cast:17]
-           │    └── i2_default:11
-           ├── assignment-cast: CHAR [as=c1_cast:18]
-           │    └── c1_default:12
-           ├── assignment-cast: CHAR [as=c2_cast:19]
-           │    └── c2_default:13
-           ├── assignment-cast: DECIMAL(10) [as=d1_cast:20]
-           │    └── d1_default:14
-           └── assignment-cast: DECIMAL(10) [as=d2_cast:21]
-                └── d2_default:15
+           ├── assignment-cast: INT2 [as=i2_cast:21]
+           │    └── i2_default:14
+           ├── assignment-cast: INT8 [as=i3_cast:22]
+           │    └── i3_default:15
+           ├── assignment-cast: CHAR [as=c1_cast:23]
+           │    └── c1_default:16
+           ├── assignment-cast: CHAR [as=c2_cast:24]
+           │    └── c2_default:17
+           ├── assignment-cast: DECIMAL(10) [as=d1_cast:25]
+           │    └── d1_default:18
+           └── assignment-cast: DECIMAL(10) [as=d2_cast:26]
+                └── d2_default:19
+
+# This fails because the cast from FLOAT to BOOL is not a valid assignment cast.
+build
+INSERT INTO assn_cast_default (k) VALUES (1)
+----
+error (42804): value type float doesn't match type bool of column "b"
 
 exec-ddl
 CREATE TABLE assn_cast_comp (
