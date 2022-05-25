@@ -1599,6 +1599,49 @@ func TestFS(t *testing.T) {
 	}
 }
 
+func TestGetIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	reader, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	require.NoError(t, err)
+	defer reader.Close()
+
+	for _, keyName := range []string{"a", "aa", "b"} {
+		key := roachpb.Key(keyName)
+		err := MVCCPut(ctx, reader, nil, key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, roachpb.Value{RawBytes: key}, txn1)
+		require.NoError(t, err)
+	}
+
+	tests := []struct {
+		name  string
+		key   string
+		err   bool
+		found bool
+	}{
+		{"found a", "a", false, true},
+		{"found aa", "aa", false, true},
+		{"found b", "b", false, true},
+		{"not found", "c", false, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			intent, err := GetIntent(reader, roachpb.Key(test.key))
+			if test.err {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if test.found {
+					require.NotNil(t, intent)
+				} else {
+					require.Nil(t, intent)
+				}
+			}
+		})
+	}
+}
+
 func TestScanIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
