@@ -22,34 +22,67 @@ import (
 // old primary index starts getting removed, effectively swapping one for the
 // other.
 func init() {
-	newIndex, newIndexTarget, newIndexNode := targetNodeVars("new-index")
-	oldIndex, oldIndexTarget, oldIndexNode := targetNodeVars("old-index")
-	var tableID rel.Var = "table-id"
+	{
+		newIndex, newIndexTarget, newIndexNode := targetNodeVars("new-index")
+		oldIndex, oldIndexTarget, oldIndexNode := targetNodeVars("old-index")
+		var tableID rel.Var = "table-id"
 
-	registerDepRule(
-		"primary index swap",
-		scgraph.SameStagePrecedence,
-		oldIndexNode, newIndexNode,
-		screl.MustQuery(
-			newIndex.Type((*scpb.PrimaryIndex)(nil)),
-			oldIndex.Type((*scpb.PrimaryIndex)(nil)),
-			tableID.Entities(screl.DescID, newIndex, oldIndex),
+		registerDepRule(
+			"primary index swap",
+			scgraph.SameStagePrecedence,
+			oldIndexNode, newIndexNode,
+			screl.MustQuery(
+				newIndex.Type((*scpb.PrimaryIndex)(nil)),
+				oldIndex.Type((*scpb.PrimaryIndex)(nil)),
+				tableID.Entities(screl.DescID, newIndex, oldIndex),
 
-			rel.Filter(
-				"new-primary-index-depends-on-old", newIndex, oldIndex,
-			)(func(add, drop *scpb.PrimaryIndex) bool {
-				return add.SourceIndexID == drop.IndexID
-			}),
+				rel.Filter(
+					"new-primary-index-depends-on-old", newIndex, oldIndex,
+				)(func(add, drop *scpb.PrimaryIndex) bool {
+					return add.SourceIndexID == drop.IndexID
+				}),
 
-			screl.JoinTargetNode(newIndex, newIndexTarget, newIndexNode),
-			newIndexTarget.AttrEq(screl.TargetStatus, scpb.Status_PUBLIC),
-			newIndexNode.AttrEq(screl.CurrentStatus, scpb.Status_PUBLIC),
+				screl.JoinTargetNode(newIndex, newIndexTarget, newIndexNode),
+				newIndexTarget.AttrEq(screl.TargetStatus, scpb.Status_PUBLIC),
+				newIndexNode.AttrEq(screl.CurrentStatus, scpb.Status_PUBLIC),
 
-			screl.JoinTargetNode(oldIndex, oldIndexTarget, oldIndexNode),
-			oldIndexTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			oldIndexNode.AttrEq(screl.CurrentStatus, scpb.Status_VALIDATED),
-		),
-	)
+				screl.JoinTargetNode(oldIndex, oldIndexTarget, oldIndexNode),
+				oldIndexTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+				oldIndexNode.AttrEq(screl.CurrentStatus, scpb.Status_VALIDATED),
+			),
+		)
+	}
+
+	{
+		newIndex, newIndexTarget, newIndexNode := targetNodeVars("new-index")
+		oldIndex, oldIndexTarget, oldIndexNode := targetNodeVars("old-index")
+		var tableID rel.Var = "table-id"
+
+		registerDepRule(
+			"reverting a primary index swap",
+			scgraph.SameStagePrecedence,
+			newIndexNode, oldIndexNode,
+			screl.MustQuery(
+				newIndex.Type((*scpb.PrimaryIndex)(nil)),
+				oldIndex.Type((*scpb.PrimaryIndex)(nil)),
+				tableID.Entities(screl.DescID, newIndex, oldIndex),
+
+				rel.Filter(
+					"new-primary-index-depends-on-old", newIndex, oldIndex,
+				)(func(add, drop *scpb.PrimaryIndex) bool {
+					return add.SourceIndexID == drop.IndexID
+				}),
+
+				screl.JoinTargetNode(newIndex, newIndexTarget, newIndexNode),
+				newIndexTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+				newIndexNode.AttrEq(screl.CurrentStatus, scpb.Status_VALIDATED),
+
+				screl.JoinTargetNode(oldIndex, oldIndexTarget, oldIndexNode),
+				oldIndexTarget.AttrEq(screl.TargetStatus, scpb.Status_PUBLIC),
+				oldIndexNode.AttrEq(screl.CurrentStatus, scpb.Status_PUBLIC),
+			),
+		)
+	}
 }
 
 // These rules ensure that index-dependent elements, like an index's name, its
@@ -119,7 +152,6 @@ func init() {
 		screl.DescID,
 		screl.IndexID,
 	).register()
-
 	depRule(
 		"index named right before index becomes public",
 		scgraph.SameStagePrecedence,
@@ -152,7 +184,6 @@ func init() {
 		screl.DescID,
 		screl.IndexID,
 	).register()
-
 	depRule(
 		"dependents removed before index",
 		scgraph.Precedence,
@@ -225,7 +256,6 @@ func init() {
 		screl.DescID,
 		screl.ColumnID,
 	).register()
-
 	depRule(
 		"column existence precedes column dependents",
 		scgraph.Precedence,
@@ -419,6 +449,9 @@ func init() {
 			columnInList(from.ColumnID, idx.StoringColumnIDs) ||
 			columnInList(from.ColumnID, idx.KeySuffixColumnIDs)
 	}
+	columnInPrimaryIndexSwap := func(from *scpb.Column, to *scpb.PrimaryIndex) bool {
+		return columnInIndex(from, to) && to.SourceIndexID != 0
+	}
 
 	column, columnTarget, columnNode := targetNodeVars("column")
 	index, indexTarget, indexNode := targetNodeVars("index")
@@ -445,7 +478,27 @@ func init() {
 			screl.JoinTargetNode(index, indexTarget, indexNode),
 		),
 	)
+	registerDepRule(
+		"primary index should be cleaned up before newly added column when reverting",
+		scgraph.Precedence,
+		indexNode, columnNode,
+		screl.MustQuery(
+			status.Eq(scpb.Status_WRITE_ONLY),
+			targetStatus.Eq(scpb.Status_ABSENT),
 
+			column.Type((*scpb.Column)(nil)),
+			index.Type((*scpb.PrimaryIndex)(nil)),
+
+			tableID.Entities(screl.DescID, column, index),
+
+			rel.Filter("column-featured-in-index", column, index)(columnInPrimaryIndexSwap),
+			targetStatus.Entities(screl.TargetStatus, columnTarget, indexTarget),
+			status.Entities(screl.CurrentStatus, columnNode, indexNode),
+
+			screl.JoinTargetNode(column, columnTarget, columnNode),
+			screl.JoinTargetNode(index, indexTarget, indexNode),
+		),
+	)
 	depRule(
 		"column existence precedes index existence",
 		scgraph.Precedence,
@@ -481,7 +534,83 @@ func init() {
 			screl.JoinTargetNode(index, indexTarget, indexNode),
 		),
 	)
-
+	primaryIndexHasSecondaryColumns := func(from *scpb.PrimaryIndex, to scpb.Element) bool {
+		switch to := to.(type) {
+		case *scpb.SecondaryIndex:
+			for _, colID := range from.StoringColumnIDs {
+				if columnInList(colID, to.KeyColumnIDs) ||
+					columnInList(colID, to.StoringColumnIDs) ||
+					columnInList(colID, to.KeySuffixColumnIDs) {
+					return true
+				}
+			}
+		case *scpb.TemporaryIndex:
+			if !to.IsUsingSecondaryEncoding {
+				return false
+			}
+			for _, colID := range from.StoringColumnIDs {
+				if columnInList(colID, to.KeyColumnIDs) ||
+					columnInList(colID, to.StoringColumnIDs) ||
+					columnInList(colID, to.KeySuffixColumnIDs) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	secondaryIndexHasPrimarySwapColumns := func(to scpb.Element, from *scpb.PrimaryIndex) bool {
+		if from.SourceIndexID == 0 {
+			return false
+		}
+		switch to := to.(type) {
+		case *scpb.SecondaryIndex:
+			for _, colID := range from.StoringColumnIDs {
+				if columnInList(colID, to.KeyColumnIDs) ||
+					columnInList(colID, to.StoringColumnIDs) ||
+					columnInList(colID, to.KeySuffixColumnIDs) {
+					return true
+				}
+			}
+		case *scpb.TemporaryIndex:
+			if !to.IsUsingSecondaryEncoding {
+				return false
+			}
+			for _, colID := range from.StoringColumnIDs {
+				if columnInList(colID, to.KeyColumnIDs) ||
+					columnInList(colID, to.StoringColumnIDs) ||
+					columnInList(colID, to.KeySuffixColumnIDs) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	depRule(
+		"primary index with new columns should exist before secondary/temp indexes",
+		scgraph.Precedence,
+		scpb.ToPublic,
+		element(scpb.Status_PUBLIC,
+			(*scpb.PrimaryIndex)(nil),
+		),
+		element(scpb.Status_BACKFILL_ONLY,
+			(*scpb.SecondaryIndex)(nil),
+			(*scpb.TemporaryIndex)(nil),
+		),
+		screl.DescID,
+	).withFilter("new-column-featured-in-index", primaryIndexHasSecondaryColumns).register()
+	depRule(
+		"secondary indexes should be cleaned up before any primary index with columns when reverting",
+		scgraph.Precedence,
+		scpb.ToAbsent,
+		element(scpb.Status_ABSENT,
+			(*scpb.SecondaryIndex)(nil),
+			(*scpb.TemporaryIndex)(nil),
+		),
+		element(scpb.Status_VALIDATED,
+			(*scpb.PrimaryIndex)(nil),
+		),
+		screl.DescID,
+	).withFilter("new-column-featured-in-index", secondaryIndexHasPrimarySwapColumns).register()
 }
 
 // This rule ensures that columns depend on each other in increasing order.
