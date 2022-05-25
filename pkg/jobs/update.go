@@ -139,6 +139,12 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 	return j.update(ctx, txn, useReadLock, updateFn)
 }
 
+// UpdateWithLock is similar to Update, but locks the row to prevent race conditions during concurrent update attempts
+func (j *Job) UpdateWithLock(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error {
+	const useReadLock = true
+	return j.update(ctx, txn, useReadLock, updateFn)
+}
+
 func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateFn UpdateFn) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
