@@ -384,6 +384,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					deleteBatchSize,
 					deleteRateLimiter,
 					*aost,
+					t.job,
 				)
 				metrics.RangeTotalDuration.RecordValue(int64(timeutil.Since(start)))
 				if err != nil {
@@ -615,6 +616,7 @@ func runTTLOnRange(
 	selectBatchSize, deleteBatchSize int,
 	deleteRateLimiter *quotapool.RateLimiter,
 	aost tree.DTimestampTZ,
+	job *jobs.Job,
 ) error {
 	metrics.NumActiveRanges.Inc(1)
 	defer metrics.NumActiveRanges.Dec(1)
@@ -643,6 +645,7 @@ func runTTLOnRange(
 		deleteBatchSize,
 	)
 
+	rangeRowCount := int64(0)
 	for {
 		if f := knobs.OnDeleteLoopStart; f != nil {
 			if err := f(); err != nil {
@@ -698,7 +701,6 @@ func runTTLOnRange(
 						desc.GetModificationTime().GoTime().Format(time.RFC3339),
 					)
 				}
-
 				tokens, err := deleteRateLimiter.Acquire(ctx, int64(len(deleteBatch)))
 				if err != nil {
 					return err
@@ -706,9 +708,14 @@ func runTTLOnRange(
 				defer tokens.Consume()
 
 				start := timeutil.Now()
-				err = deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				rowCount, err := deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				if err != nil {
+					return err
+				}
+
 				metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
-				return err
+				rangeRowCount += int64(rowCount)
+				return nil
 			}); err != nil {
 				return errors.Wrapf(err, "error during row deletion")
 			}
@@ -723,7 +730,14 @@ func runTTLOnRange(
 			break
 		}
 	}
-	return nil
+	return db.Txn(ctx, func(_ context.Context, txn *kv.Txn) error {
+		return job.Update(ctx, txn, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			progress := md.Progress
+			progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.RowCount += rangeRowCount
+			ju.UpdateProgress(progress)
+			return nil
+		})
+	})
 }
 
 // keyToDatums translates a RKey on a range for a table to the appropriate datums.

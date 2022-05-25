@@ -907,6 +907,7 @@ message RowLevelTTLDetails {
 }
 
 message RowLevelTTLProgress {
+  int64 row_count = 1;
 }
 
 message Payload {
