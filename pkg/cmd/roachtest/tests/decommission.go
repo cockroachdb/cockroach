@@ -280,17 +280,6 @@ func runDecommission(
 	}
 
 	m.Go(func() error {
-		getNodeID := func(node int) (int, error) {
-			dbNode := c.Conn(ctx, t.L(), node)
-			defer dbNode.Close()
-
-			var nodeID int
-			if err := dbNode.QueryRow(`SELECT node_id FROM crdb_internal.node_runtime_info LIMIT 1`).Scan(&nodeID); err != nil {
-				return 0, err
-			}
-			return nodeID, nil
-		}
-
 		tBegin, whileDown := timeutil.Now(), true
 		node := nodes
 		for timeutil.Since(tBegin) <= duration {
@@ -304,7 +293,7 @@ func runDecommission(
 			}
 
 			t.Status(fmt.Sprintf("decommissioning %d (down=%t)", node, whileDown))
-			nodeID, err := getNodeID(node)
+			nodeID, err := h.getLogicalNodeID(ctx, node)
 			if err != nil {
 				return err
 			}
@@ -1164,6 +1153,20 @@ func newDecommTestHelper(t test.Test, c cluster.Cluster) *decommTestHelper {
 	}
 }
 
+// getLogicalNodeID connects to the nodeIdx-th node in the roachprod cluster to
+// obtain the logical CockroachDB nodeID of this node. This is because nodes can
+// change ID as they are continuously decommissioned, wiped, and started anew.
+func (h *decommTestHelper) getLogicalNodeID(ctx context.Context, nodeIdx int) (int, error) {
+	dbNode := h.c.Conn(ctx, h.t.L(), nodeIdx)
+	defer dbNode.Close()
+
+	var nodeID int
+	if err := dbNode.QueryRow(`SELECT node_id FROM crdb_internal.node_runtime_info LIMIT 1`).Scan(&nodeID); err != nil {
+		return 0, err
+	}
+	return nodeID, nil
+}
+
 // pinRangesOnNode forces all default ranges to be replicated to the target node.
 func (h *decommTestHelper) pinRangesOnNode(ctx context.Context, target, runNode int) error {
 	return h.setPinnedRangesOnNode(ctx, target, runNode, false /* unpin */)
@@ -1239,16 +1242,18 @@ func (h *decommTestHelper) recommission(
 
 // checkDecommissioned validates that a node has successfully decommissioned
 // and has updated its state in gossip.
-func (h *decommTestHelper) checkDecommissioned(ctx context.Context, downNodeID, runNode int) error {
+func (h *decommTestHelper) checkDecommissioned(
+	ctx context.Context, targetLogicalNodeID, runNode int,
+) error {
 	db := h.c.Conn(ctx, h.t.L(), runNode)
 	defer db.Close()
 	var membership string
-	if err := db.QueryRow("SELECT membership FROM crdb_internal.gossip_liveness WHERE node_id = $1", downNodeID).Scan(&membership); err != nil {
+	if err := db.QueryRow("SELECT membership FROM crdb_internal.gossip_liveness WHERE node_id = $1", targetLogicalNodeID).Scan(&membership); err != nil {
 		return err
 	}
 
 	if membership != "decommissioned" {
-		return errors.Newf("node %d not decommissioned", downNodeID)
+		return errors.Newf("node %d not decommissioned", targetLogicalNodeID)
 	}
 
 	return nil
@@ -1257,7 +1262,7 @@ func (h *decommTestHelper) checkDecommissioned(ctx context.Context, downNodeID, 
 // waitReplicatedAwayFrom checks each second until there are no ranges present
 // on a node and all ranges are fully replicated.
 func (h *decommTestHelper) waitReplicatedAwayFrom(
-	ctx context.Context, downNodeID, runNode int,
+	ctx context.Context, targetLogicalNodeID, runNode int,
 ) error {
 	db := h.c.Conn(ctx, h.t.L(), runNode)
 	defer func() {
@@ -1269,7 +1274,7 @@ func (h *decommTestHelper) waitReplicatedAwayFrom(
 		if err := db.QueryRow(
 			// Check if the down node has any replicas.
 			"SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
-			downNodeID,
+			targetLogicalNodeID,
 		).Scan(&count); err != nil {
 			return err
 		}
@@ -1295,7 +1300,7 @@ func (h *decommTestHelper) waitReplicatedAwayFrom(
 // the roachprod node and targetNodeID representing the logical nodeID within
 // the cluster.
 func (h *decommTestHelper) waitUpReplicated(
-	ctx context.Context, targetNodeID, targetNode int, database string,
+	ctx context.Context, targetLogicalNodeID, targetNode int, database string,
 ) error {
 	db := h.c.Conn(ctx, h.t.L(), targetNode)
 	defer func() {
@@ -1308,14 +1313,57 @@ func (h *decommTestHelper) waitUpReplicated(
 		// not part of the replica set.
 		stmtReplicaCount := fmt.Sprintf(
 			`SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, %d) IS NULL and database_name = '%s';`,
-			targetNodeID, database,
+			targetLogicalNodeID, database,
 		)
 		if err := db.QueryRow(stmtReplicaCount).Scan(&count); err != nil {
 			return err
 		}
-		h.t.L().Printf("node%d (n%d) awaiting %d replica(s)", targetNode, targetNodeID, count)
+		h.t.L().Printf("node%d (n%d) awaiting %d replica(s)", targetNode, targetLogicalNodeID, count)
 		if count == 0 {
 			break
+		}
+		time.Sleep(time.Second)
+	}
+	return nil
+}
+
+// waitRangeBalanced checks each second until the range counts on each node are
+// within some threshold of the mean and all nodes in validateNodeIDs are active.
+func (h *decommTestHelper) waitRangeBalanced(
+	ctx context.Context, runNode int, threshold float64, validateLogicalNodeIDs ...int,
+) error {
+	db := h.c.Conn(ctx, h.t.L(), runNode)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	for {
+		var count int
+		if err := db.QueryRow(
+			// Check that all range counts are within the threshold from the mean.
+			`SELECT count(*) FROM
+				crdb_internal.kv_store_status,
+				(SELECT AVG(range_count) mean_range_count, $1 * AVG(range_count) threshold FROM crdb_internal.kv_store_status)
+			WHERE ABS(range_count-mean_range_count) > threshold`, threshold,
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count == 0 {
+			allNodesActive := true
+			var membership string
+			for _, logicalNodeID := range validateLogicalNodeIDs {
+				if err := db.QueryRow("SELECT membership FROM crdb_internal.gossip_liveness WHERE node_id = $1", logicalNodeID).Scan(&membership); err != nil {
+					return err
+				}
+
+				if membership != "active" {
+					allNodesActive = false
+					break
+				}
+			}
+			if allNodesActive {
+				break
+			}
 		}
 		time.Sleep(time.Second)
 	}

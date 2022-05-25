@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	defaultTimeout        = 1 * time.Hour
-	defaultSnapshotRateMb = 32
+	defaultTimeout          = 1 * time.Hour
+	defaultSnapshotRateMb   = 32
+	rangeRebalanceThreshold = 0.05
 )
 
 type decommissionBenchSpec struct {
@@ -42,6 +43,7 @@ type decommissionBenchSpec struct {
 	admissionControl bool
 	whileDown        bool
 	snapshotRate     int
+	duration         time.Duration
 }
 
 // registerDecommissionBench defines all decommission benchmark configurations
@@ -80,6 +82,14 @@ func registerDecommissionBench(r registry.Registry) {
 		{
 			nodes:            4,
 			cpus:             16,
+			warehouses:       100,
+			load:             true,
+			admissionControl: false,
+			duration:         30 * time.Minute,
+		},
+		{
+			nodes:            4,
+			cpus:             16,
 			warehouses:       1000,
 			load:             false,
 			admissionControl: false,
@@ -112,6 +122,11 @@ func registerDecommissionBenchSpec(r registry.Registry, tc decommissionBenchSpec
 		extraNameParts = append(extraNameParts, "no-admission")
 	}
 
+	if tc.duration > 0 {
+		timeout = tc.duration
+		extraNameParts = append(extraNameParts, fmt.Sprintf("duration=%s", tc.duration))
+	}
+
 	extraName := strings.Join(extraNameParts, "/")
 
 	r.Add(registry.TestSpec{
@@ -122,7 +137,11 @@ func registerDecommissionBenchSpec(r registry.Registry, tc decommissionBenchSpec
 		Timeout:           timeout,
 		NonReleaseBlocker: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runDecommissionBench(ctx, t, c, tc, timeout)
+			if tc.duration > 0 {
+				runDecommissionBenchLong(ctx, t, c, tc, timeout)
+			} else {
+				runDecommissionBench(ctx, t, c, tc, timeout)
+			}
 		},
 	})
 }
@@ -134,21 +153,16 @@ type decommBenchTicker struct {
 	post func()
 }
 
-// runDecommissionBench initializes a cluster with TPCC and attempts to
-// benchmark the decommissioning of a single node picked at random. The cluster
-// may or may not be running under load.
-func runDecommissionBench(
+// setupDecommissionBench performs the initial cluster setup needed prior to running a workload and benchmarking decommissioning
+func setupDecommissionBench(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
 	tc decommissionBenchSpec,
-	testTimeout time.Duration,
+	workloadNode int,
+	pinnedNode int,
+	importCmd string,
 ) {
-	// node1 is kept pinned (i.e. not decommissioned/restarted), and is the node
-	// through which we run decommissions. The last node is used for the workload.
-	pinnedNode := 1
-	workloadNode := tc.nodes + 1
-	crdbNodes := c.Range(pinnedNode, tc.nodes)
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	for i := 1; i <= tc.nodes; i++ {
@@ -157,9 +171,6 @@ func runDecommissionBench(
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 	}
 
-	database := "tpcc"
-	importCmd := fmt.Sprintf(`./cockroach workload fixtures import tpcc --warehouses=%d`, tc.warehouses)
-	workloadCmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --duration=%s --histograms=%s/stats.json --tolerate-errors {pgurl:1-%d}", tc.warehouses, testTimeout, t.PerfArtifactsDir(), tc.nodes)
 	t.Status(fmt.Sprintf("initializing cluster with %d warehouses", tc.warehouses))
 	c.Run(ctx, c.Node(pinnedNode), importCmd)
 
@@ -184,6 +195,28 @@ func runDecommissionBench(
 		err := WaitFor3XReplication(ctx, t, db)
 		require.NoError(t, err)
 	}
+}
+
+// runDecommissionBench initializes a cluster with TPCC and attempts to
+// benchmark the decommissioning of a single node picked at random. The cluster
+// may or may not be running under load.
+func runDecommissionBench(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	tc decommissionBenchSpec,
+	testTimeout time.Duration,
+) {
+	// node1 is kept pinned (i.e. not decommissioned/restarted), and is the node
+	// through which we run decommissions. The last node is used for the workload.
+	pinnedNode := 1
+	workloadNode := tc.nodes + 1
+	crdbNodes := c.Range(pinnedNode, tc.nodes)
+
+	database := "tpcc"
+	importCmd := fmt.Sprintf(`./cockroach workload fixtures import tpcc --warehouses=%d`, tc.warehouses)
+	workloadCmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --duration=%s --histograms=%s/stats.json --tolerate-errors {pgurl:1-%d}", tc.warehouses, testTimeout, t.PerfArtifactsDir(), tc.nodes)
+	setupDecommissionBench(ctx, t, c, tc, workloadNode, pinnedNode, importCmd)
 
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
 	m := c.NewMonitor(workloadCtx, crdbNodes)
@@ -235,6 +268,83 @@ func runDecommissionBench(
 	}
 }
 
+// runDecommissionBenchLong initializes a cluster with TPCC and attempts to
+// benchmark the decommissioning of nodes picked at random before subsequently
+// wiping them and re-adding them to the cluster to continually execute the
+// decommissioning process over the runtime of the test. The cluster may or may
+// not be running under load.
+func runDecommissionBenchLong(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	tc decommissionBenchSpec,
+	testTimeout time.Duration,
+) {
+	// node1 is kept pinned (i.e. not decommissioned/restarted), and is the node
+	// through which we run decommissions. The last node is used for the workload.
+	pinnedNode := 1
+	workloadNode := tc.nodes + 1
+	crdbNodes := c.Range(pinnedNode, tc.nodes)
+
+	database := "tpcc"
+	importCmd := fmt.Sprintf(`./cockroach workload fixtures import tpcc --warehouses=%d`, tc.warehouses)
+	workloadCmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --tolerate-errors {pgurl:1-%d}", tc.warehouses, tc.nodes)
+	setupDecommissionBench(ctx, t, c, tc, workloadNode, pinnedNode, importCmd)
+
+	workloadCtx, workloadCancel := context.WithCancel(ctx)
+	m := c.NewMonitor(workloadCtx, crdbNodes)
+
+	if tc.load {
+		m.Go(
+			func(ctx context.Context) error {
+				// Run workload indefinitely, to be later killed by context
+				// cancellation once decommission has completed.
+				err := c.RunE(ctx, c.Node(workloadNode), workloadCmd)
+				if errors.Is(ctx.Err(), context.Canceled) {
+					// Workload intentionally cancelled via context, so don't return error.
+					return nil
+				}
+				if err != nil {
+					t.L().Printf("workload error: %s", err)
+				}
+				return err
+			},
+		)
+	}
+
+	// TODO(sarkesian): initialize perf artifacts
+	decommRecorder := &decommBenchTicker{pre: func() {
+		// noop
+	}, post: func() {
+		// noop
+	}}
+	var upreplicateRecorder *decommBenchTicker
+
+	m.Go(func(ctx context.Context) error {
+		defer workloadCancel()
+
+		h := newDecommTestHelper(t, c)
+		h.blockFromRandNode(workloadNode)
+
+		for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= testTimeout; {
+			m.ExpectDeath()
+			err := runSingleDecommission(ctx, h, pinnedNode, database, tc.whileDown, true /* reuse */, decommRecorder, upreplicateRecorder)
+			m.ResetDeaths()
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err := m.WaitE(); err != nil {
+		t.Fatal(err)
+	}
+
+	// TODO(sarkesian): write out perf artifacts
+}
+
 // runSingleDecommission picks a random node and attempts to decommission that
 // node from the pinned (i.e. first) node, validating and recording the duration.
 // If the reuse flag is passed in, the node will be wiped and re-added to the
@@ -248,7 +358,11 @@ func runSingleDecommission(
 	decommTicker, upreplicateTicker *decommBenchTicker,
 ) error {
 	target := h.getRandNodeOtherThan(pinnedNode)
-	h.t.Status(fmt.Sprintf("targeting node%d (n%d) for decommission", target, target))
+	targetLogicalNodeID, err := h.getLogicalNodeID(ctx, target)
+	if err != nil {
+		return err
+	}
+	h.t.Status(fmt.Sprintf("targeting node%d (n%d) for decommission", target, targetLogicalNodeID))
 
 	// Pin all default ranges (all warehouses) to the node, for uniformity.
 	h.t.Status(fmt.Sprintf("ensuring all default ranges present on node%d", target))
@@ -290,10 +404,10 @@ func runSingleDecommission(
 	if _, err := h.decommission(ctx, h.c.Node(target), pinnedNode, "--wait=all"); err != nil {
 		return err
 	}
-	if err := h.waitReplicatedAwayFrom(ctx, target, pinnedNode); err != nil {
+	if err := h.waitReplicatedAwayFrom(ctx, targetLogicalNodeID, pinnedNode); err != nil {
 		return err
 	}
-	if err := h.checkDecommissioned(ctx, target, pinnedNode); err != nil {
+	if err := h.checkDecommissioned(ctx, targetLogicalNodeID, pinnedNode); err != nil {
 		return err
 	}
 	decommTicker.post()
@@ -304,13 +418,31 @@ func runSingleDecommission(
 
 	if reuse {
 		if !stopFirst {
-			h.t.Status(fmt.Sprintf("gracefully stopping node%d", target))
-			if err := h.stop(ctx, target); err != nil {
-				return err
-			}
+			h.t.Status(fmt.Sprintf("killing node%d", target))
+			h.c.Stop(ctx, h.t.L(), option.DefaultStopOpts(), h.c.Node(target))
 		}
 
-		// TODO(sarkesian): Wipe the node and re-add to cluster.
+		// Wipe the node and re-add to cluster with a new node ID.
+		if err := h.c.RunE(ctx, h.c.Node(target), "rm -rf {store-dir}"); err != nil {
+			return err
+		}
+
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--attrs=node%d", target))
+		if err := h.c.StartE(ctx, h.t.L(), startOpts, install.MakeClusterSettings(), h.c.Node(target)); err != nil {
+			return err
+		}
+
+		newLogicalNodeID, err := h.getLogicalNodeID(ctx, target)
+		if err != nil {
+			return err
+		}
+
+		upreplicateTicker.pre()
+		if err := h.waitRangeBalanced(ctx, pinnedNode, rangeRebalanceThreshold, newLogicalNodeID); err != nil {
+			return err
+		}
+		upreplicateTicker.post()
 	}
 
 	return nil
