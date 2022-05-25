@@ -82,7 +82,8 @@ func indexJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) o
 	// using column equivalencies.
 	indexJoin := expr.(*memo.IndexJoinExpr)
 	rel := indexJoin.Relational()
-	return remapProvided(indexJoin.Input.ProvidedPhysical().Ordering, &rel.FuncDeps, rel.OutputCols)
+	input := indexJoin.Input
+	return remapProvided(input.ProvidedPhysical().Ordering, &input.Relational().FuncDeps, rel.OutputCols)
 }
 
 func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
