@@ -285,7 +285,7 @@ func TestCheckCanReceiveLease(t *testing.T) {
 			rngDesc := roachpb.RangeDescriptor{
 				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
 			}
-			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], &rngDesc)
+			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas())
 			require.Equal(t, tc.eligible, err == nil, "err: %v", err)
 		})
 	}
@@ -293,6 +293,6 @@ func TestCheckCanReceiveLease(t *testing.T) {
 	t.Run("replica not in range desc", func(t *testing.T) {
 		repDesc := roachpb.ReplicaDescriptor{ReplicaID: 1}
 		rngDesc := roachpb.RangeDescriptor{}
-		require.Regexp(t, "replica.*not found", roachpb.CheckCanReceiveLease(repDesc, &rngDesc))
+		require.Regexp(t, "replica.*not found", roachpb.CheckCanReceiveLease(repDesc, rngDesc.Replicas()))
 	})
 }

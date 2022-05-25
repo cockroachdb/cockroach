@@ -1062,7 +1062,7 @@ func (rp *replicaProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLead
 			// lease again, and by then hopefully we will have caught up.
 			leaderEligibleForLease = true
 		} else {
-			err := roachpb.CheckCanReceiveLease(leaderRep, rangeDesc)
+			err := roachpb.CheckCanReceiveLease(leaderRep, rangeDesc.Replicas())
 			leaderEligibleForLease = err == nil
 		}
 	}
