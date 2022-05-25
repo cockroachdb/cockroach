@@ -12378,3 +12378,37 @@ project
       │    └── columns: col0:8
       └── filters
            └── col3:4 = col0:8 [outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ]), fd=(4)==(8), (8)==(4)]
+
+# Regression for #81649
+exec-ddl
+CREATE TABLE t81649 (
+  col0 STRING NULL,
+  col1 DECIMAL NOT NULL,
+  col2 STRING NULL AS (lower(col0)) STORED,
+  col3 DECIMAL NOT NULL AS (col1 + 0:::DECIMAL) VIRTUAL,
+  PRIMARY KEY (col3, col1),
+  UNIQUE (col3 ASC, col1 DESC) STORING (col0));
+----
+
+opt
+SELECT col2 FROM t81649@t81649_col3_col1_key ORDER BY col0 ASC, col3 ASC LIMIT 2;
+----
+index-join t81649
+ ├── columns: col2:3  [hidden: col0:1 col3:4!null]
+ ├── cardinality: [0 - 2]
+ ├── key: (4)
+ ├── fd: (1)-->(3), (4)-->(1,3)
+ ├── ordering: +1,+4
+ └── top-k
+      ├── columns: col0:1 col1:2!null col3:4!null
+      ├── internal-ordering: +1,+(2|4)
+      ├── k: 2
+      ├── cardinality: [0 - 2]
+      ├── key: (4)
+      ├── fd: (2,4)-->(1), (2)==(4), (4)==(2)
+      ├── ordering: +1,+(2|4) [actual: +1,+2]
+      └── scan t81649@t81649_col3_col1_key
+           ├── columns: col0:1 col1:2!null col3:4!null
+           ├── flags: force-index=t81649_col3_col1_key
+           ├── key: (4)
+           └── fd: (2,4)-->(1), (2)==(4), (4)==(2)
