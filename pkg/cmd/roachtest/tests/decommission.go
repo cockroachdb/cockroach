@@ -280,17 +280,6 @@ func runDecommission(
 	}
 
 	m.Go(func() error {
-		getNodeID := func(node int) (int, error) {
-			dbNode := c.Conn(ctx, t.L(), node)
-			defer dbNode.Close()
-
-			var nodeID int
-			if err := dbNode.QueryRow(`SELECT node_id FROM crdb_internal.node_runtime_info LIMIT 1`).Scan(&nodeID); err != nil {
-				return 0, err
-			}
-			return nodeID, nil
-		}
-
 		tBegin, whileDown := timeutil.Now(), true
 		node := nodes
 		for timeutil.Since(tBegin) <= duration {
@@ -304,7 +293,7 @@ func runDecommission(
 			}
 
 			t.Status(fmt.Sprintf("decommissioning %d (down=%t)", node, whileDown))
-			nodeID, err := getNodeID(node)
+			nodeID, err := h.getLogicalNodeID(ctx, node)
 			if err != nil {
 				return err
 			}
@@ -1169,6 +1158,20 @@ func (h *decommTestHelper) stop(ctx context.Context, node int) {
 	h.c.Stop(ctx, h.t.L(), opts, h.c.Node(node))
 }
 
+// getLogicalNodeID connects to the nodeIdx-th node in the roachprod cluster to
+// obtain the logical CockroachDB nodeID of this node. This is because nodes can
+// change ID as they are continuously decommissioned, wiped, and started anew.
+func (h *decommTestHelper) getLogicalNodeID(ctx context.Context, nodeIdx int) (int, error) {
+	dbNode := h.c.Conn(ctx, h.t.L(), nodeIdx)
+	defer dbNode.Close()
+
+	var nodeID int
+	if err := dbNode.QueryRow(`SELECT node_id FROM crdb_internal.node_runtime_info LIMIT 1`).Scan(&nodeID); err != nil {
+		return 0, err
+	}
+	return nodeID, nil
+}
+
 // decommission decommissions the given targetNodes, running the process
 // through the specified runNode.
 func (h *decommTestHelper) decommission(
@@ -1207,17 +1210,21 @@ func (h *decommTestHelper) recommission(
 
 // checkDecommissioned validates that a node has successfully decommissioned
 // and has updated its state in gossip.
-func (h *decommTestHelper) checkDecommissioned(ctx context.Context, downNodeID, runNode int) error {
+func (h *decommTestHelper) checkDecommissioned(
+	ctx context.Context, targetLogicalNodeID, runNode int,
+) error {
 	db := h.c.Conn(ctx, h.t.L(), runNode)
 	defer db.Close()
 	var membership string
-	if err := db.QueryRow("SELECT membership FROM crdb_internal.kv_node_liveness WHERE node_id = $1",
-		downNodeID).Scan(&membership); err != nil {
+	if err := db.QueryRow(
+		"SELECT membership FROM crdb_internal.kv_node_liveness WHERE node_id = $1",
+		targetLogicalNodeID,
+	).Scan(&membership); err != nil {
 		return err
 	}
 
 	if membership != "decommissioned" {
-		return errors.Newf("node %d not decommissioned", downNodeID)
+		return errors.Newf("node %d not decommissioned", targetLogicalNodeID)
 	}
 
 	return nil
@@ -1226,7 +1233,7 @@ func (h *decommTestHelper) checkDecommissioned(ctx context.Context, downNodeID, 
 // waitReplicatedAwayFrom checks each second until there are no ranges present
 // on a node and all ranges are fully replicated.
 func (h *decommTestHelper) waitReplicatedAwayFrom(
-	ctx context.Context, downNodeID, runNode int,
+	ctx context.Context, targetLogicalNodeID, runNode int,
 ) error {
 	db := h.c.Conn(ctx, h.t.L(), runNode)
 	defer func() {
@@ -1234,11 +1241,17 @@ func (h *decommTestHelper) waitReplicatedAwayFrom(
 	}()
 
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		var count int
 		if err := db.QueryRow(
 			// Check if the down node has any replicas.
 			"SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
-			downNodeID,
+			targetLogicalNodeID,
 		).Scan(&count); err != nil {
 			return err
 		}
@@ -1264,7 +1277,7 @@ func (h *decommTestHelper) waitReplicatedAwayFrom(
 // the roachprod node and targetNodeID representing the logical nodeID within
 // the cluster.
 func (h *decommTestHelper) waitUpReplicated(
-	ctx context.Context, targetNodeID, targetNode int, database string,
+	ctx context.Context, targetLogicalNodeID, targetNode int, database string,
 ) error {
 	db := h.c.Conn(ctx, h.t.L(), targetNode)
 	defer func() {
@@ -1273,17 +1286,23 @@ func (h *decommTestHelper) waitUpReplicated(
 
 	var count int
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		// Check to see that there are no ranges where the target node is
 		// not part of the replica set.
 		stmtReplicaCount := fmt.Sprintf(
 			"SELECT count(*) FROM crdb_internal.ranges "+
 				"WHERE array_position(replicas, %d) IS NULL and database_name = '%s';",
-			targetNodeID, database,
+			targetLogicalNodeID, database,
 		)
 		if err := db.QueryRow(stmtReplicaCount).Scan(&count); err != nil {
 			return err
 		}
-		h.t.L().Printf("node%d (n%d) awaiting %d replica(s)", targetNode, targetNodeID, count)
+		h.t.L().Printf("node%d (n%d) awaiting %d replica(s)", targetNode, targetLogicalNodeID, count)
 		if count == 0 {
 			break
 		}
