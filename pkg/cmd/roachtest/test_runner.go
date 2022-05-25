@@ -1060,9 +1060,17 @@ func (r *testRunner) maybePostGithubIssue(
 	// Issues posted from roachtest are identifiable as such and
 	// they are also release blockers (this label may be removed
 	// by a human upon closer investigation).
+	spec := t.Spec().(*registry.TestSpec)
 	labels := []string{"O-roachtest"}
-	if !t.Spec().(*registry.TestSpec).NonReleaseBlocker {
+	if !spec.NonReleaseBlocker {
 		labels = append(labels, "release-blocker")
+	}
+
+	roachtestParam := func(s string) string { return "ROACHTEST_" + s }
+	clusterParams := map[string]string{
+		roachtestParam("cloud"): spec.Cluster.Cloud,
+		roachtestParam("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
+		roachtestParam("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
 	}
 
 	req := issues.PostRequest{
@@ -1088,6 +1096,7 @@ func (r *testRunner) maybePostGithubIssue(
 		context.Background(),
 		issues.UnitTestFormatter,
 		req,
+		clusterParams,
 	); err != nil {
 		shout(ctx, l, stdout, "failed to post issue: %s", err)
 	}
