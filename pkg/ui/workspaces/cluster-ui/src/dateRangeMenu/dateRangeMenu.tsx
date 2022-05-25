@@ -9,26 +9,16 @@
 // licenses/APL.txt.
 
 import React, { useState } from "react";
-import { Alert, DatePicker, Form, Input, Popover, TimePicker } from "antd";
+import { Alert, DatePicker, Icon, TimePicker } from "antd";
 import moment, { Moment } from "moment";
 import classNames from "classnames/bind";
 import { Time as TimeIcon, ErrorCircleFilled } from "@cockroachlabs/icons";
 import { Button } from "src/button";
 import { Text, TextTypes } from "src/text";
 
-import styles from "./dateRange.module.scss";
+import styles from "./dateRangeMenu.module.scss";
 
 const cx = classNames.bind(styles);
-
-function rangeToString(start: Moment, end: Moment): string {
-  const formatStr = "MMM D, H:mm";
-  const formatStrSameDay = "H:mm";
-
-  const isSameDay = start.isSame(end, "day");
-  return `${start.utc().format(formatStr)} - ${end
-    .utc()
-    .format(isSameDay ? formatStrSameDay : formatStr)} (UTC)`;
-}
 
 type DateRangeMenuProps = {
   startInit?: Moment;
@@ -36,6 +26,7 @@ type DateRangeMenuProps = {
   allowedInterval?: [Moment, Moment];
   onSubmit: (start: Moment, end: Moment) => void;
   onCancel: () => void;
+  onReturnToPresetOptionsClick: () => void;
 };
 
 export const dateFormat = "MMMM D, YYYY";
@@ -47,6 +38,7 @@ export function DateRangeMenu({
   allowedInterval,
   onSubmit,
   onCancel,
+  onReturnToPresetOptionsClick,
 }: DateRangeMenuProps): React.ReactElement {
   /**
    * Local startMoment and endMoment state are stored here so that users can change the time before clicking "Apply".
@@ -108,6 +100,12 @@ export function DateRangeMenu({
 
   return (
     <div className={cx("popup-content")}>
+      <div className={cx("return-to-preset-options-wrapper")}>
+        <a onClick={onReturnToPresetOptionsClick}>
+          <Icon type={"arrow-left"} className={cx("icon")} />
+          <Text textType={TextTypes.BodyStrong}>Preset Time Ranges</Text>
+        </a>
+      </div>
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
         Start (UTC)
       </Text>
@@ -167,63 +165,5 @@ export function DateRangeMenu({
         </Button>
       </div>
     </div>
-  );
-}
-
-type DateRangeProps = {
-  start: Moment;
-  end: Moment;
-  allowedInterval?: [Moment, Moment];
-  onSubmit: (start: Moment, end: Moment) => void;
-};
-
-export function DateRange({
-  allowedInterval,
-  start,
-  end,
-  onSubmit,
-}: DateRangeProps): React.ReactElement {
-  const [menuVisible, setMenuVisible] = useState<boolean>(false);
-  const displayStr = rangeToString(start, end);
-
-  const onVisibleChange = (visible: boolean): void => {
-    setMenuVisible(visible);
-  };
-
-  const closeMenu = (): void => {
-    setMenuVisible(false);
-  };
-
-  const _onSubmit = (start: Moment, end: Moment) => {
-    onSubmit(start, end);
-    closeMenu();
-  };
-
-  const menu = (
-    <DateRangeMenu
-      allowedInterval={allowedInterval}
-      startInit={start}
-      endInit={end}
-      onSubmit={_onSubmit}
-      onCancel={closeMenu}
-    />
-  );
-
-  return (
-    <Form className={cx("date-range-form")}>
-      <Form.Item>
-        <Popover
-          destroyTooltipOnHide
-          content={menu}
-          overlayClassName={cx("popup-container")}
-          placement="bottomLeft"
-          visible={menuVisible}
-          onVisibleChange={onVisibleChange}
-          trigger="click"
-        >
-          <Input value={displayStr} prefix={<TimeIcon />} />
-        </Popover>
-      </Form.Item>
-    </Form>
   );
 }

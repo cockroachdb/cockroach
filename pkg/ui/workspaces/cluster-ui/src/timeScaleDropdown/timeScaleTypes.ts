@@ -62,18 +62,6 @@ export interface TimeScaleOptions {
   [key: string]: TimeScaleOption;
 }
 
-export type TimeRangeTitle =
-  | {
-      dateStart: string;
-      dateEnd: string;
-      timeStart: string;
-      timeEnd: string;
-      title: "Custom";
-      timeLabel: string;
-      timeWindow: TimeWindow;
-    }
-  | { title: string; timeLabel: string; timeWindow: TimeWindow };
-
 export enum ArrowDirection {
   LEFT,
   RIGHT,
