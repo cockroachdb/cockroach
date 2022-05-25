@@ -96,9 +96,15 @@ func loadStatementBundle(zipdir string) (*statementBundle, error) {
 	if err != nil {
 		return ret, err
 	}
-	ret.statement, err = ioutil.ReadFile(filepath.Join(zipdir, "statement.txt"))
+	ret.statement, err = ioutil.ReadFile(filepath.Join(zipdir, "statement.sql"))
 	if err != nil {
-		return ret, err
+		// In 21.2 and prior releases, the statement file had 'txt' extension,
+		// let's try that.
+		var newErr error
+		ret.statement, newErr = ioutil.ReadFile(filepath.Join(zipdir, "statement.txt"))
+		if newErr != nil {
+			return ret, errors.CombineErrors(err, newErr)
+		}
 	}
 
 	return ret, filepath.WalkDir(zipdir, func(path string, d fs.DirEntry, _ error) error {
