@@ -35,6 +35,10 @@ import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
 import { timeScaleReducer, TimeScaleState } from "./timeScale";
 import { uiDataReducer, UIDataState } from "./uiData";
 import { loginReducer, LoginAPIState } from "./login";
+import {
+  reducer as keyVizualizerReducer,
+  KeyVizualizerState,
+} from "./keyVizualizer/keyVizualizerReducer";
 import rootSaga from "./sagas";
 
 export interface AdminUIState {
@@ -49,6 +53,7 @@ export interface AdminUIState {
   timeScale: TimeScaleState;
   uiData: UIDataState;
   login: LoginAPIState;
+  keyVizualizer: KeyVizualizerState;
 }
 
 const history = createHashHistory();
@@ -73,6 +78,7 @@ export function createAdminUIStore(historyInst: History<any>) {
       timeScale: timeScaleReducer,
       uiData: uiDataReducer,
       login: loginReducer,
+      keyVizualizer: keyVizualizerReducer,
     }),
     compose(
       applyMiddleware(thunk, sagaMiddleware, routerMiddleware(historyInst)),
