@@ -387,6 +387,7 @@ ALL_TESTS = [
     "//pkg/sql/schemachanger/screl:screl_test",
     "//pkg/sql/schemachanger/scrun:scrun_test",
     "//pkg/sql/schemachanger:schemachanger_test",
+    "//pkg/sql/sem/builtins:builtins_disallowed_imports_test",
     "//pkg/sql/sem/builtins:builtins_test",
     "//pkg/sql/sem/cast:cast_test",
     "//pkg/sql/sem/catconstants:catconstants_disallowed_imports_test",

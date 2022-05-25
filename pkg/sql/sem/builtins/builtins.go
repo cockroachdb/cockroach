@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -5558,14 +5557,11 @@ value if you rely on the HLC for accuracy.`,
 				tableID := int(tree.MustBeDInt(args[0]))
 				indexID := int(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeography(args[2])
-				// TODO(postamar): give the eval.Context a useful interface
-				// instead of cobbling a descs.Collection in this way.
-				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
-				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack), nil /* monitor */)
-				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
+				tableI, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), tableID)
 				if err != nil {
 					return nil, err
 				}
+				tableDesc := tableI.(catalog.TableDescriptor)
 				index, err := tableDesc.FindIndexWithID(descpb.IndexID(indexID))
 				if err != nil {
 					return nil, err
@@ -5596,14 +5592,11 @@ value if you rely on the HLC for accuracy.`,
 				tableID := int(tree.MustBeDInt(args[0]))
 				indexID := int(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeometry(args[2])
-				// TODO(postamar): give the eval.Context a useful interface
-				// instead of cobbling a descs.Collection in this way.
-				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
-				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack), nil /* monitor */)
-				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
+				tableI, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), tableID)
 				if err != nil {
 					return nil, err
 				}
+				tableDesc := tableI.(catalog.TableDescriptor)
 				index, err := tableDesc.FindIndexWithID(descpb.IndexID(indexID))
 				if err != nil {
 					return nil, err
