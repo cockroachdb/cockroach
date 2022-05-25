@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -161,20 +160,15 @@ func resolveDest(
 			// enabled' to true.
 			// - 22.2+: the backup will fail unconditionally.
 			// TODO (msbutler): throw error in 22.2
-			if err := featureflag.CheckEnabled(
-				ctx,
-				execCfg,
-				featureFullBackupUserSubdir,
-				"'Full Backup with user defined subdirectory'",
-			); err != nil {
-				return "", "", "", nil, nil, errors.Wrapf(err,
-					"The full backup cannot get written to %q, a user defined subdirectory. "+
-						"To take a full backup, remove the subdirectory from the backup command, "+
+			if !featureFullBackupUserSubdir.Get(execCfg.SV()) {
+				return "", "", "", nil, nil,
+					errors.Errorf("A full backup cannot be written to %q, a user defined subdirectory. "+
+						"To take a full backup, remove the subdirectory from the backup command "+
 						"(i.e. run 'BACKUP ... INTO <collectionURI>'). "+
 						"Or, to take a full backup at a specific subdirectory, "+
 						"enable the deprecated syntax by switching the %q cluster setting to true; "+
 						"however, note this deprecated syntax will not be available in a future release.",
-					chosenSuffix, featureFullBackupUserSubdir.Key())
+						chosenSuffix, featureFullBackupUserSubdir.Key())
 			}
 		}
 		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
