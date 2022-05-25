@@ -709,14 +709,17 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Uuid),
 			Fn: func(_ *eval.Context, _ tree.Datums) (tree.Datum, error) {
-				uv, err := uuid.NewV1()
+				gen := uuid.NewGenWithHWAF(uuid.RandomHardwareAddrFunc)
+				uv, err := gen.NewV1()
 				if err != nil {
 					return nil, err
 				}
 				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
 			},
 			Info: "Generates a version 1 UUID, and returns it as a value of UUID type. " +
-				"This uses the real MAC address of the server and a timestamp.",
+				"To avoid exposing the server's real MAC address, " +
+				"this uses a random MAC address and a timestamp. " +
+				"Essentially, this is an alias for uuid_generate_v1mc.",
 			Volatility: volatility.Volatile,
 		},
 	),
