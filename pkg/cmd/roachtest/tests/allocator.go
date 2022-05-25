@@ -72,7 +72,7 @@ func registerAllocator(r registry.Registry) {
 		m = c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
-			return waitForRebalance(ctx, t.L(), db, maxStdDev)
+			return waitForRebalance(ctx, t.L(), db, maxStdDev, 3*60 /* stableSeconds */)
 		})
 		m.Wait()
 	}
@@ -214,18 +214,17 @@ func allocatorStats(db *gosql.DB) (s replicationStats, err error) {
 }
 
 // waitForRebalance waits until there's been no recent range adds, removes, and
-// splits. We wait until the cluster is balanced or until `StableInterval`
+// splits. We wait until the cluster is balanced or until `stableSeconds`
 // elapses, whichever comes first. Then, it prints stats about the rebalancing
 // process. If the replica count appears unbalanced, an error is returned.
 //
 // This method is crude but necessary. If we were to wait until range counts
 // were just about even, we'd miss potential post-rebalance thrashing.
 func waitForRebalance(
-	ctx context.Context, l *logger.Logger, db *gosql.DB, maxStdDev float64,
+	ctx context.Context, l *logger.Logger, db *gosql.DB, maxStdDev float64, stableSeconds int64,
 ) error {
 	// const statsInterval = 20 * time.Second
 	const statsInterval = 2 * time.Second
-	const stableSeconds = 3 * 60
 
 	var statsTimer timeutil.Timer
 	defer statsTimer.Stop()
