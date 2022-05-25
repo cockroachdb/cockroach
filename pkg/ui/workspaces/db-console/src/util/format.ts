@@ -21,6 +21,7 @@ export const byteUnits: string[] = [
   "YiB",
 ];
 export const durationUnits: string[] = ["ns", "µs", "ms", "s"];
+export const normalizedScale: string[] = ["", "K", "M", "B", "T"];
 
 interface UnitValue {
   value: number;
@@ -149,6 +150,18 @@ export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
   }
   const n = durationUnits.indexOf(scale);
   return `${(nanoseconds / Math.pow(1000, n)).toFixed(2)} ${scale}`;
+};
+/**
+ * RawToNormalizedValue receives a raw value and returns a UnitValue object
+ * such that it is scaled down according to the normalized scale.
+ * e.g. 100000 -> { value: 100, units: K }
+ */
+export const RawToNormalizedValue = (value: number) => {
+  const scale = ComputePrefixExponent(value, 1000, normalizedScale);
+  return {
+    value: value / Math.pow(1000, scale),
+    units: normalizedScale[scale],
+  };
 };
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
