@@ -11,6 +11,7 @@ package backupccl
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -51,7 +52,7 @@ func (ie intervalSpan) Range() interval.Range {
 // This example is tested in TestRestoreEntryCoverExample.
 func makeSimpleImportSpans(
 	requiredSpans []roachpb.Span,
-	backups []BackupManifest,
+	backups []backuppb.BackupManifest,
 	backupLocalityMap map[int]storeByLocalityKV,
 	lowWaterMark roachpb.Key,
 ) []execinfrapb.RestoreSpanEntry {

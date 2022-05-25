@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -368,7 +369,7 @@ func makeThresholdBlocker(threshold int) thresholdBlocker {
 func getSpansFromManifest(ctx context.Context, t *testing.T, backupPath string) roachpb.Spans {
 	backupManifestBytes, err := ioutil.ReadFile(backupPath + "/" + backupManifestName)
 	require.NoError(t, err)
-	var backupManifest BackupManifest
+	var backupManifest backuppb.BackupManifest
 	decompressedBytes, err := decompressData(ctx, nil, backupManifestBytes)
 	require.NoError(t, err)
 	require.NoError(t, protoutil.Unmarshal(decompressedBytes, &backupManifest))
