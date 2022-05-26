@@ -330,34 +330,10 @@ func (r *Replica) raftLastIndexLocked() (uint64, error) {
 	return (*replicaRaftStorage)(r).LastIndex()
 }
 
-// raftTruncatedStateLocked returns metadata about the log that preceded the
-// first current entry. This includes both entries that have been compacted away
-// and the dummy entries that make up the starting point of an empty log.
-// raftTruncatedStateLocked requires that r.mu is held.
-func (r *Replica) raftTruncatedStateLocked(
-	ctx context.Context,
-) (roachpb.RaftTruncatedState, error) {
-	if r.mu.state.TruncatedState != nil {
-		return *r.mu.state.TruncatedState, nil
-	}
-	ts, err := r.mu.stateLoader.LoadRaftTruncatedState(ctx, r.store.Engine())
-	if err != nil {
-		return ts, err
-	}
-	if ts.Index != 0 {
-		r.mu.state.TruncatedState = &ts
-	}
-	return ts, nil
-}
-
 // FirstIndex implements the raft.Storage interface.
 func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
-	ctx := r.AnnotateCtx(context.TODO())
-	ts, err := (*Replica)(r).raftTruncatedStateLocked(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return ts.Index + 1, nil
+	// TruncatedState is guaranteed to be non-nil.
+	return r.mu.state.TruncatedState.Index + 1, nil
 }
 
 // raftFirstIndexLocked requires that r.mu is held.
