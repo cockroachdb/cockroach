@@ -1,0 +1,297 @@
+exec-ddl
+CREATE TABLE g (
+  id INT PRIMARY KEY,
+  a FLOAT,
+  b BOOL,
+  geog GEOGRAPHY
+);
+----
+
+exec-ddl
+ALTER TABLE g INJECT STATISTICS '[
+  {
+    "columns": [
+      "id"
+    ],
+    "created_at": "2021-01-01 00:00:00",
+    "distinct_count": 500000,
+    "name": "__auto__",
+    "row_count": 500000
+  }
+]';
+----
+
+opt
+SELECT id FROM g
+WHERE st_dwithin(geog, st_makepoint(1.0, 1.0)::geography, 200) = b;
+----
+project
+ ├── columns: id:1!null
+ ├── immutable
+ ├── stats: [rows=165000]
+ ├── cost: 1041674.77
+ ├── key: (1)
+ └── select
+      ├── columns: id:1!null b:3!null geog:4
+      ├── immutable
+      ├── stats: [rows=165000, distinct(3)=3, null(3)=0, avgsize(3)=4]
+      ├── cost: 1040024.75
+      ├── key: (1)
+      ├── fd: (1)-->(3,4), (4)-->(3)
+      ├── scan g
+      │    ├── columns: id:1!null b:3 geog:4
+      │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4, distinct(3)=3, null(3)=5000, avgsize(3)=4]
+      │    ├── cost: 535024.72
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3,4)
+      └── filters
+           └── b:3 = st_dwithin(geog:4, '0101000020E6100000000000000000F03F000000000000F03F', 200.0) [outer=(3,4), immutable, constraints=(/3: (/NULL - ]), fd=(4)-->(3)]
+
+opt
+SELECT id FROM g
+WHERE b = st_dwithin(geog, st_makepoint(1.0, 1.0)::geography, 200);
+----
+project
+ ├── columns: id:1!null
+ ├── immutable
+ ├── stats: [rows=165000]
+ ├── cost: 1041674.77
+ ├── key: (1)
+ └── select
+      ├── columns: id:1!null b:3!null geog:4
+      ├── immutable
+      ├── stats: [rows=165000, distinct(3)=3, null(3)=0, avgsize(3)=4]
+      ├── cost: 1040024.75
+      ├── key: (1)
+      ├── fd: (1)-->(3,4), (4)-->(3)
+      ├── scan g
+      │    ├── columns: id:1!null b:3 geog:4
+      │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4, distinct(3)=3, null(3)=5000, avgsize(3)=4]
+      │    ├── cost: 535024.72
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3,4)
+      └── filters
+           └── b:3 = st_dwithin(geog:4, '0101000020E6100000000000000000F03F000000000000F03F', 200.0) [outer=(3,4), immutable, constraints=(/3: (/NULL - ]), fd=(4)-->(3)]
+
+opt
+SELECT id FROM g
+WHERE st_dwithin(geog, st_makepoint(1.0, 1.0)::geography, 200);
+----
+project
+ ├── columns: id:1!null
+ ├── immutable
+ ├── stats: [rows=55000]
+ ├── cost: 1035574.67
+ ├── key: (1)
+ └── select
+      ├── columns: id:1!null geog:4!null
+      ├── immutable
+      ├── stats: [rows=55000, distinct(4)=50000, null(4)=0, avgsize(4)=4]
+      ├── cost: 1035024.65
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan g
+      │    ├── columns: id:1!null geog:4
+      │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4, distinct(4)=50000, null(4)=5000, avgsize(4)=4]
+      │    ├── cost: 530024.62
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── st_dwithin(geog:4, '0101000020E6100000000000000000F03F000000000000F03F', 200.0) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+opt
+SELECT id FROM g
+WHERE b = st_dwithin(geog, st_makepoint(a, 1.0)::geography, 200);
+----
+project
+ ├── columns: id:1!null
+ ├── immutable
+ ├── stats: [rows=165000]
+ ├── cost: 1546674.87
+ ├── key: (1)
+ └── select
+      ├── columns: id:1!null a:2 b:3!null geog:4
+      ├── immutable
+      ├── stats: [rows=165000, distinct(3)=3, null(3)=0, avgsize(3)=4]
+      ├── cost: 1545024.85
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── scan g
+      │    ├── columns: id:1!null a:2 b:3 geog:4
+      │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4, distinct(3)=3, null(3)=5000, avgsize(3)=4]
+      │    ├── cost: 540024.82
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4)
+      └── filters
+           └── b:3 = st_dwithin(geog:4, st_makepoint(a:2, 1.0)::GEOGRAPHY, 200.0) [outer=(2-4), immutable, constraints=(/3: (/NULL - ])]
+
+opt
+SELECT id FROM g
+WHERE st_distance(geog, st_makepoint(1.0, 1.0)::geography) < 200;
+----
+project
+ ├── columns: id:1!null
+ ├── immutable
+ ├── stats: [rows=55000]
+ ├── cost: 535574.67
+ ├── key: (1)
+ └── select
+      ├── columns: id:1!null geog:4!null
+      ├── immutable
+      ├── stats: [rows=55000, distinct(4)=50000, null(4)=0, avgsize(4)=4]
+      ├── cost: 535024.65
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan g
+      │    ├── columns: id:1!null geog:4
+      │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4, distinct(4)=50000, null(4)=5000, avgsize(4)=4]
+      │    ├── cost: 530024.62
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── st_dwithinexclusive(geog:4, '0101000020E6100000000000000000F03F000000000000F03F', 200.0) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+opt
+SELECT id FROM g
+WHERE st_distance(geog, st_makepoint(a, 1.0)::geography) < 200;
+----
+project
+ ├── columns: id:1!null
+ ├── immutable
+ ├── stats: [rows=55000]
+ ├── cost: 1040574.77
+ ├── key: (1)
+ └── select
+      ├── columns: id:1!null a:2 geog:4!null
+      ├── immutable
+      ├── stats: [rows=55000, distinct(4)=50000, null(4)=0, avgsize(4)=4]
+      ├── cost: 1040024.75
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      ├── scan g
+      │    ├── columns: id:1!null a:2 geog:4
+      │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4, distinct(4)=50000, null(4)=5000, avgsize(4)=4]
+      │    ├── cost: 535024.72
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,4)
+      └── filters
+           └── st_dwithinexclusive(geog:4, st_makepoint(a:2, 1.0)::GEOGRAPHY, 200.0) [outer=(2,4), immutable, constraints=(/4: (/NULL - ])]
+
+opt
+SELECT id FROM g
+WHERE st_intersects(st_makepoint(a, 1.0)::geometry, st_geomfromtext('SRID=4326;POLYGON((-87.906471 43.038902, -95.992775 36.153980, -75.704722 36.076944, -87.906471 43.038902))'));
+----
+project
+ ├── columns: id:1!null
+ ├── immutable
+ ├── stats: [rows=166666.7]
+ ├── cost: 1536691.34
+ ├── key: (1)
+ └── select
+      ├── columns: id:1!null a:2
+      ├── immutable
+      ├── stats: [rows=166666.7]
+      ├── cost: 1535024.65
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan g
+      │    ├── columns: id:1!null a:2
+      │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4]
+      │    ├── cost: 530024.62
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── st_intersects(st_makepoint(a:2, 1.0), '0103000020E610000001000000040000006FF1F09E03FA55C0DFDFA0BDFA844540545227A089FF57C0791EDC9DB513424064B14D2A1AED52C0CCCF0D4DD90942406FF1F09E03FA55C0DFDFA0BDFA844540') [outer=(2), immutable]
+
+opt
+SELECT * FROM g WHERE st_area(geog) < a;
+----
+select
+ ├── columns: id:1!null a:2!null b:3 geog:4
+ ├── immutable
+ ├── stats: [rows=165000, distinct(2)=50000, null(2)=0, avgsize(2)=4]
+ ├── cost: 1045024.85
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan g
+ │    ├── columns: id:1!null a:2 b:3 geog:4
+ │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4, distinct(2)=50000, null(2)=5000, avgsize(2)=4]
+ │    ├── cost: 540024.82
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── a:2 > st_area(geog:4) [outer=(2,4), immutable, constraints=(/2: (/NULL - ])]
+
+opt
+SELECT * FROM g WHERE st_area(geog) > a AND st_area(geog) < 2*a;
+----
+select
+ ├── columns: id:1!null a:2!null b:3 geog:4
+ ├── immutable
+ ├── stats: [rows=55000, distinct(2)=50000, null(2)=0, avgsize(2)=4]
+ ├── cost: 1545024.86
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan g
+ │    ├── columns: id:1!null a:2 b:3 geog:4
+ │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4, distinct(2)=50000, null(2)=5000, avgsize(2)=4]
+ │    ├── cost: 540024.82
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      ├── a:2 < st_area(geog:4) [outer=(2,4), immutable, constraints=(/2: (/NULL - ])]
+      └── st_area(geog:4) < (a:2 * 2.0) [outer=(2,4), immutable]
+
+exec-ddl
+CREATE TABLE x (
+  id INT PRIMARY KEY,
+  a FLOAT,
+  b BOOL,
+  geog GEOGRAPHY
+);
+----
+
+exec-ddl
+ALTER TABLE x INJECT STATISTICS '[
+  {
+    "columns": [
+      "id"
+    ],
+    "created_at": "2021-01-01 00:00:00",
+    "distinct_count": 500000,
+    "name": "__auto__",
+    "row_count": 500000
+  }
+]';
+----
+
+opt
+SELECT * FROM g JOIN x
+ON g.id = x.id
+WHERE st_area(g.geog) > st_area(x.geog);
+----
+inner-join (merge)
+ ├── columns: id:1!null a:2 b:3 geog:4 id:7!null a:8 b:9 geog:10
+ ├── left ordering: +1
+ ├── right ordering: +7
+ ├── immutable
+ ├── stats: [rows=166666.7, distinct(1)=166667, null(1)=0, avgsize(1)=4, distinct(7)=166667, null(7)=0, avgsize(7)=4]
+ ├── cost: 2095049.67
+ ├── key: (7)
+ ├── fd: (1)-->(2-4), (7)-->(8-10), (1)==(7), (7)==(1)
+ ├── scan g
+ │    ├── columns: g.id:1!null g.a:2 g.b:3 g.geog:4
+ │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, avgsize(1)=4]
+ │    ├── cost: 540024.82
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── ordering: +1
+ ├── scan x
+ │    ├── columns: x.id:7!null x.a:8 x.b:9 x.geog:10
+ │    ├── stats: [rows=500000, distinct(7)=500000, null(7)=0, avgsize(7)=4]
+ │    ├── cost: 540024.82
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8-10)
+ │    └── ordering: +7
+ └── filters
+      └── st_area(g.geog:4) > st_area(x.geog:10) [outer=(4,10), immutable]
