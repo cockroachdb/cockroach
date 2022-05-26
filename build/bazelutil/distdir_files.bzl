@@ -972,7 +972,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/bmatcuk-doublestar-v4.0.1-0-gf7a8118.tar.gz": "d11c3b3a45574f89d6a6b2f50e53feea50df60407b35f36193bf5815d32c79d1",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-protobuf-3f5d91f.tar.gz": "6d4e7fe1cbd958dee69ce9becbf8892d567f082b6782d3973a118d0aa00807a8",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_foreign_cc-6f7f1b1.tar.gz": "272ac2cde4efd316c8d7c0140dee411c89da104466701ac179286ef5a89c7b58",
-    "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-117-g3fc3373.tar.gz": "8b4ac0c07e95679766c55dba4b83df3f466fe9e383ae06177bc0e00198ffb907",
+    "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-118-g7336768.tar.gz": "5c30bd2e086ba5e8b6265599c090cac97afac91062c84beb5c36b62961016ba9",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_nodejs-5.5.0-1-g59a92cc.tar.gz": "7f3f747db3f924547b9ffdf86da6c604335ad95e09d4e5a69fdcfdb505099421",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/google-starlark-go-e043a3d.tar.gz": "a35c6468e0e0921833a63290161ff903295eaaf5915200bbce272cbc8dfd1c1c",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/platforms-0.0.4.tar.gz": "079945598e4b6cc075846f7fd6a9d0857c33a7afc0de868c2ccb96405225135d",

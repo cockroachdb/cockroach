@@ -2,7 +2,6 @@ load("@io_bazel_rules_go//go:def.bzl", "GoSource")
 
 def _batch_gen_impl(ctx):
     srcs = [src for src in ctx.attr.src[GoSource].srcs]
-    print(ctx.outputs.out)
     ctx.actions.run(
         outputs = [ctx.outputs.out],
         inputs = srcs,

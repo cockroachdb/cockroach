@@ -26,12 +26,15 @@ run_bazel() {
     vols="${vols} --volume ${root}:/go/src/github.com/cockroachdb/cockroach"
     vols="${vols} --volume ${cache}:/home/roach"
 
+    exit_status=0
     docker run -i ${tty-} --rm --init \
         -u "$(id -u):$(id -g)" \
         --workdir="/go/src/github.com/cockroachdb/cockroach" \
 	${BAZEL_SUPPORT_EXTRA_DOCKER_ARGS:+$BAZEL_SUPPORT_EXTRA_DOCKER_ARGS} \
         ${vols} \
-        $BAZEL_IMAGE "$@"
+        $BAZEL_IMAGE "$@" || exit_status=$?
+    rm -rf _bazel
+    return $exit_status
 }
 
 # local copy of _tc_build_branch from teamcity-support.sh to avoid imports.
